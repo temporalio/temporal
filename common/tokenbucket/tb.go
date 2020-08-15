@@ -29,8 +29,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

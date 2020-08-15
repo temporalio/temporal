@@ -24,7 +24,7 @@
 
 package executions
 
-import "github.com/temporalio/temporal/service/worker/scanner/executor"
+import "go.temporal.io/server/service/worker/scanner/executor"
 
 type handlerStatus = executor.TaskStatus
 
@@ -34,7 +34,7 @@ const (
 	handlerStatusDefer = executor.TaskStatusDefer
 )
 
-const scannerTaskListPrefix = "temporal-sys-executions-scanner"
+const scannerTaskQueuePrefix = "temporal-sys-executions-scanner"
 
 // validateHandler validates a single execution.
 // It operates in two phases: collection step and validation step.

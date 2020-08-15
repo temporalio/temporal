@@ -28,13 +28,12 @@ import (
 	"database/sql"
 	"fmt"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
-	"github.com/temporalio/temporal/common/primitives"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/primitives"
 )
 
 func updateSignalsRequested(
@@ -139,7 +138,7 @@ func updateBufferedEvents(
 		WorkflowID:   workflowID,
 		RunID:        runID,
 		Data:         batch.Data,
-		DataEncoding: string(batch.Encoding),
+		DataEncoding: batch.Encoding.String(),
 	}
 
 	if _, err := tx.InsertIntoBufferedEvents([]sqlplugin.BufferedEventsRow{row}); err != nil {
@@ -167,7 +166,7 @@ func getBufferedEvents(
 	}
 	var result []*serialization.DataBlob
 	for _, row := range rows {
-		result = append(result, p.NewDataBlob(row.Data, common.EncodingType(row.DataEncoding)))
+		result = append(result, p.NewDataBlob(row.Data, row.DataEncoding))
 	}
 	return result, nil
 }

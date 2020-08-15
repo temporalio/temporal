@@ -29,10 +29,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
-	"github.com/temporalio/temporal/common/payload"
+	"go.temporal.io/server/common/payload"
 )
 
 type UtilSuite struct {
@@ -71,7 +71,7 @@ func (s *UtilSuite) TestHashDeterminism() {
 				ShardID:     0,
 				BranchToken: []byte{1, 2, 3},
 				NextEventID: int64(123),
-				Status:      executionpb.WorkflowExecutionStatus_ContinuedAsNew,
+				Status:      enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 				Memo: &commonpb.Memo{
 					Fields: map[string]*commonpb.Payload{
 						"memoKey1": payload.EncodeBytes([]byte{1, 2, 3}),

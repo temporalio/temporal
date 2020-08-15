@@ -6,13 +6,13 @@ Enabling archival is done by using the configuration below. `Region` and `bucket
 ```
 archival:
   history:
-    status: "enabled"
+    state: "enabled"
     enableRead: true
     provider:
       s3store:
         region: "us-east-1"
   visibility:
-    status: "enabled"
+    state: "enabled"
     enableRead: true
     provider:
       s3store:
@@ -21,10 +21,10 @@ archival:
 namespaceDefaults:
   archival:
     history:
-      status: "enabled"
+      state: "enabled"
       URI: "s3://<bucket-name>"
     visibility:
-      status: "enabled"
+      state: "enabled"
       URI: "s3://<bucket-name>"
 ```
 
@@ -79,7 +79,7 @@ s3://<bucket-name>/<namespace-id>/
 ```
 archival:
   history:
-    status: "enabled"
+    state: "enabled"
     enableRead: true
     provider:
       s3store:
@@ -87,7 +87,7 @@ archival:
         endpoint: "http://127.0.0.1:4572"
         s3ForcePathStyle: true
   visibility:
-    status: "enabled"
+    state: "enabled"
     enableRead: true
     provider:
       s3store:
@@ -98,9 +98,9 @@ archival:
 namespaceDefaults:
   archival:
     history:
-      status: "enabled"
+      state: "enabled"
       URI: "s3://temporal-development"
     visibility:
-      status: "enabled"
+      state: "enabled"
       URI: "s3://temporal-development"
 ```

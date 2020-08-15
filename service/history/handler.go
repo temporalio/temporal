@@ -26,33 +26,33 @@ package history
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pborman/uuid"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	namespacegenpb "github.com/temporalio/temporal/.gen/proto/namespace"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/quotas"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/task"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	namespacespb "go.temporal.io/server/api/namespace/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/resource"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/task"
 )
 
 type (
@@ -74,20 +74,25 @@ type (
 	}
 )
 
+const (
+	serviceName = "temporal.api.workflowservice.v1.HistoryService"
+)
+
 var (
 	_ EngineFactory                       = (*Handler)(nil)
 	_ historyservice.HistoryServiceServer = (*Handler)(nil)
 
-	errNamespaceNotSet         = serviceerror.NewInvalidArgument("Namespace not set on request.")
-	errWorkflowExecutionNotSet = serviceerror.NewInvalidArgument("WorkflowExecution not set on request.")
-	errTaskListNotSet          = serviceerror.NewInvalidArgument("Task list not set.")
-	errWorkflowIDNotSet        = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
-	errRunIDNotValid           = serviceerror.NewInvalidArgument("RunId is not valid UUID.")
-	errSourceClusterNotSet     = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
-	errShardIDNotSet           = serviceerror.NewInvalidArgument("ShardId not set on request.")
-	errTimestampNotSet         = serviceerror.NewInvalidArgument("Timestamp not set on request.")
-	errInvalidTaskType         = serviceerror.NewInvalidArgument("Invalid task type")
-	errDeserializeTaskToken    = serviceerror.NewInvalidArgument("Error to deserialize task token. Error: %v.")
+	errNamespaceNotSet              = serviceerror.NewInvalidArgument("Namespace not set on request.")
+	errContinueAsNewInitiatorNotSet = serviceerror.NewInvalidArgument("ContinueAsNewInitiator not set on request.")
+	errWorkflowExecutionNotSet      = serviceerror.NewInvalidArgument("WorkflowExecution not set on request.")
+	errTaskQueueNotSet              = serviceerror.NewInvalidArgument("Task queue not set.")
+	errWorkflowIDNotSet             = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
+	errRunIDNotValid                = serviceerror.NewInvalidArgument("RunId is not valid UUID.")
+	errSourceClusterNotSet          = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
+	errShardIDNotSet                = serviceerror.NewInvalidArgument("ShardId not set on request.")
+	errTimestampNotSet              = serviceerror.NewInvalidArgument("Timestamp not set on request.")
+	errInvalidTaskType              = serviceerror.NewInvalidArgument("Invalid task type")
+	errDeserializeTaskToken         = serviceerror.NewInvalidArgument("Error to deserialize task token. Error: %v.")
 
 	errHistoryHostThrottle = serviceerror.NewResourceExhausted("History host RPS exceeded.")
 	errShuttingDown        = serviceerror.NewInternal("Shutting down")
@@ -230,9 +235,17 @@ func (h *Handler) CreateEngine(
 }
 
 // https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-func (h *Handler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	h.startWG.Wait()
+func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
 	h.GetLogger().Debug("History service health check endpoint (gRPC) reached.")
+
+	h.startWG.Wait()
+
+	if request.Service != serviceName {
+		return &healthpb.HealthCheckResponse{
+			Status: healthpb.HealthCheckResponse_SERVICE_UNKNOWN,
+		}, nil
+	}
+
 	hs := &healthpb.HealthCheckResponse{
 		Status: healthpb.HealthCheckResponse_SERVING,
 	}
@@ -274,7 +287,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 	}
 	workflowID := taskToken.GetWorkflowId()
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -309,7 +322,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, workflowID)
 	}
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -322,18 +335,18 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	return response, nil
 }
 
-// RecordDecisionTaskStarted - Record Decision Task started.
-func (h *Handler) RecordDecisionTaskStarted(ctx context.Context, request *historyservice.RecordDecisionTaskStartedRequest) (_ *historyservice.RecordDecisionTaskStartedResponse, retError error) {
+// RecordWorkflowTaskStarted - Record Workflow Task started.
+func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (_ *historyservice.RecordWorkflowTaskStartedResponse, retError error) {
 
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
-	h.GetLogger().Debug("RecordDecisionTaskStarted",
+	h.GetLogger().Debug("RecordWorkflowTaskStarted",
 		tag.WorkflowNamespaceID(request.GetNamespaceId()),
 		tag.WorkflowID(request.WorkflowExecution.GetWorkflowId()),
 		tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
 		tag.WorkflowScheduleID(request.GetScheduleId()))
 
-	scope := metrics.HistoryRecordDecisionTaskStartedScope
+	scope := metrics.HistoryRecordWorkflowTaskStartedScope
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
@@ -349,13 +362,13 @@ func (h *Handler) RecordDecisionTaskStarted(ctx context.Context, request *histor
 		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, workflowID)
 	}
 
-	if request.PollRequest == nil || request.PollRequest.TaskList.GetName() == "" {
-		return nil, h.error(errTaskListNotSet, scope, namespaceID, workflowID)
+	if request.PollRequest == nil || request.PollRequest.TaskQueue.GetName() == "" {
+		return nil, h.error(errTaskQueueNotSet, scope, namespaceID, workflowID)
 	}
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		h.GetLogger().Error("RecordDecisionTaskStarted failed.",
+		h.GetLogger().Error("RecordWorkflowTaskStarted failed.",
 			tag.Error(err1),
 			tag.WorkflowID(request.WorkflowExecution.GetWorkflowId()),
 			tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
@@ -364,7 +377,7 @@ func (h *Handler) RecordDecisionTaskStarted(ctx context.Context, request *histor
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
-	response, err2 := engine.RecordDecisionTaskStarted(ctx, request)
+	response, err2 := engine.RecordWorkflowTaskStarted(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
@@ -404,7 +417,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 	}
 	workflowID := taskToken.GetWorkflowId()
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -448,7 +461,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	}
 	workflowID := taskToken.GetWorkflowId()
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -492,7 +505,7 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	}
 	workflowID := taskToken.GetWorkflowId()
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -505,12 +518,12 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
 }
 
-// RespondDecisionTaskCompleted - records completion of a decision task
-func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *historyservice.RespondDecisionTaskCompletedRequest) (_ *historyservice.RespondDecisionTaskCompletedResponse, retError error) {
+// RespondWorkflowTaskCompleted - records completion of a workflow task
+func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *historyservice.RespondWorkflowTaskCompletedRequest) (_ *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryRespondDecisionTaskCompletedScope
+	scope := metrics.HistoryRespondWorkflowTaskCompletedScope
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
@@ -525,18 +538,18 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *his
 	}
 
 	completeRequest := request.CompleteRequest
-	if len(completeRequest.Decisions) == 0 {
-		h.GetMetricsClient().IncCounter(scope, metrics.EmptyCompletionDecisionsCounter)
+	if len(completeRequest.Commands) == 0 {
+		h.GetMetricsClient().IncCounter(scope, metrics.EmptyCompletionCommandsCounter)
 	}
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
 		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
 	}
 
-	h.GetLogger().Debug("RespondDecisionTaskCompleted",
-		tag.WorkflowNamespaceIDBytes(token.GetNamespaceId()),
+	h.GetLogger().Debug("RespondWorkflowTaskCompleted",
+		tag.WorkflowNamespaceID(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
-		tag.WorkflowRunIDBytes(token.GetRunId()),
+		tag.WorkflowRunID(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
 	err0 = validateTaskToken(token)
@@ -545,12 +558,12 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *his
 	}
 	workflowID := token.GetWorkflowId()
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
-	response, err2 := engine.RespondDecisionTaskCompleted(ctx, request)
+	response, err2 := engine.RespondWorkflowTaskCompleted(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
@@ -558,13 +571,13 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *his
 	return response, nil
 }
 
-// RespondDecisionTaskFailed - failed response to decision task
-func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *historyservice.RespondDecisionTaskFailedRequest) (_ *historyservice.RespondDecisionTaskFailedResponse, retError error) {
+// RespondWorkflowTaskFailed - failed response to workflow task
+func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *historyservice.RespondWorkflowTaskFailedRequest) (_ *historyservice.RespondWorkflowTaskFailedResponse, retError error) {
 
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryRespondDecisionTaskFailedScope
+	scope := metrics.HistoryRespondWorkflowTaskFailedScope
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
@@ -584,15 +597,15 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
 	}
 
-	h.GetLogger().Debug("RespondDecisionTaskFailed",
-		tag.WorkflowNamespaceIDBytes(token.GetNamespaceId()),
+	h.GetLogger().Debug("RespondWorkflowTaskFailed",
+		tag.WorkflowNamespaceID(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
-		tag.WorkflowRunIDBytes(token.GetRunId()),
+		tag.WorkflowRunID(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
-	if failedRequest != nil && failedRequest.GetCause() == eventpb.DecisionTaskFailedCause_UnhandledDecision {
-		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceIDBytes(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunIDBytes(token.GetRunId()))
-		namespace, err := h.GetNamespaceCache().GetNamespaceName(primitives.UUIDString(token.GetNamespaceId()))
+	if failedRequest.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND {
+		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceID(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()))
+		namespace, err := h.GetNamespaceCache().GetNamespaceName(token.GetNamespaceId())
 		var namespaceTag metrics.Tag
 
 		if err == nil {
@@ -609,17 +622,17 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 	}
 	workflowID := token.GetWorkflowId()
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
-	err2 := engine.RespondDecisionTaskFailed(ctx, request)
+	err2 := engine.RespondWorkflowTaskFailed(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
-	return &historyservice.RespondDecisionTaskFailedResponse{}, nil
+	return &historyservice.RespondWorkflowTaskFailedResponse{}, nil
 }
 
 // StartWorkflowExecution - creates a new workflow execution
@@ -637,6 +650,9 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	if namespaceID == "" {
 		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
+	if request.GetContinueAsNewInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
+		return nil, h.error(errContinueAsNewInitiatorNotSet, scope, namespaceID, "")
+	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
@@ -644,7 +660,7 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 
 	startRequest := request.StartRequest
 	workflowID := startRequest.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -662,7 +678,7 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	numOfItemsInCacheByID, numOfItemsInCacheByName := h.GetNamespaceCache().GetCacheSize()
+	itemsInCacheByIDCount, itemsInCacheByNameCount := h.GetNamespaceCache().GetCacheSize()
 	status := ""
 	switch atomic.LoadInt32(&h.controller.status) {
 	case common.DaemonStatusInitialized:
@@ -674,11 +690,11 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 	}
 
 	resp := &historyservice.DescribeHistoryHostResponse{
-		NumberOfShards: int32(h.controller.numShards()),
-		ShardIds:       h.controller.shardIDs(),
-		NamespaceCache: &namespacegenpb.NamespaceCacheInfo{
-			NumOfItemsInCacheById:   numOfItemsInCacheByID,
-			NumOfItemsInCacheByName: numOfItemsInCacheByName,
+		ShardsNumber: int32(h.controller.numShards()),
+		ShardIds:     h.controller.shardIDs(),
+		NamespaceCache: &namespacespb.NamespaceCacheInfo{
+			ItemsInCacheByIdCount:   itemsInCacheByIDCount,
+			ItemsInCacheByNameCount: itemsInCacheByNameCount,
 		},
 		ShardControllerStatus: status,
 		Address:               h.GetHostInfo().GetAddress(),
@@ -693,17 +709,17 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 		return nil, err
 	}
 
-	switch taskType := common.TaskType(request.GetType()); taskType {
-	case common.TaskTypeTransfer:
+	switch request.GetCategory() {
+	case enumsspb.TASK_CATEGORY_TRANSFER:
 		err = executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
 			TaskID: request.GetTaskId(),
 		})
-	case common.TaskTypeTimer:
+	case enumsspb.TASK_CATEGORY_TIMER:
 		err = executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
-			VisibilityTimestamp: time.Unix(0, request.GetVisibilityTimestamp()),
+			VisibilityTimestamp: timestamp.TimeValue(request.GetVisibilityTime()),
 			TaskID:              request.GetTaskId(),
 		})
-	case common.TaskTypeReplication:
+	case enumsspb.TASK_CATEGORY_REPLICATION:
 		err = executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
 			TaskID: request.GetTaskId(),
 		})
@@ -738,7 +754,7 @@ func (h *Handler) DescribeMutableState(ctx context.Context, request *historyserv
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -771,7 +787,7 @@ func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.G
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -804,7 +820,7 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -837,7 +853,7 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 
 	workflowExecution := request.Request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -880,7 +896,7 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 		tag.WorkflowRunID(cancelRequest.WorkflowExecution.GetRunId()))
 
 	workflowID := cancelRequest.WorkflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -894,7 +910,7 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 }
 
 // SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
-// WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
+// WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
 func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historyservice.SignalWorkflowExecutionRequest) (_ *historyservice.SignalWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
@@ -919,7 +935,7 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 
 	workflowExecution := request.SignalRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -934,9 +950,9 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 
 // SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
 // If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
-// and a decision task being created for the execution.
+// and a workflow task being created for the execution.
 // If workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
-// event recorded in history, and a decision task being created for the execution
+// event recorded in history, and a workflow task being created for the execution
 func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request *historyservice.SignalWithStartWorkflowExecutionRequest) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
@@ -961,7 +977,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 
 	signalWithStartRequest := request.SignalWithStartRequest
 	workflowID := signalWithStartRequest.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -975,7 +991,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 }
 
 // RemoveSignalMutableState is used to remove a signal request ID that was previously recorded.  This is currently
-// used to clean execution info when signal decision finished.
+// used to clean execution info when signal workflow task finished.
 func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *historyservice.RemoveSignalMutableStateRequest) (_ *historyservice.RemoveSignalMutableStateResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
@@ -1000,7 +1016,7 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1039,7 +1055,7 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 
 	workflowExecution := request.TerminateRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1078,7 +1094,7 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 
 	workflowExecution := request.ResetRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1115,7 +1131,7 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 	}
 
 	workflowID := request.GetRequest().GetExecution().GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1128,15 +1144,15 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 	return resp, nil
 }
 
-// ScheduleDecisionTask is used for creating a decision task for already started workflow execution.  This is mainly
+// ScheduleWorkflowTask is used for creating a workflow task for already started workflow execution.  This is mainly
 // used by transfer queue processor during the processing of StartChildWorkflowExecution task, where it first starts
-// child execution without creating the decision task and then calls this API after updating the mutable state of
+// child execution without creating the workflow task and then calls this API after updating the mutable state of
 // parent execution.
-func (h *Handler) ScheduleDecisionTask(ctx context.Context, request *historyservice.ScheduleDecisionTaskRequest) (_ *historyservice.ScheduleDecisionTaskResponse, retError error) {
+func (h *Handler) ScheduleWorkflowTask(ctx context.Context, request *historyservice.ScheduleWorkflowTaskRequest) (_ *historyservice.ScheduleWorkflowTaskResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryScheduleDecisionTaskScope
+	scope := metrics.HistoryScheduleWorkflowTaskScope
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
@@ -1160,17 +1176,17 @@ func (h *Handler) ScheduleDecisionTask(ctx context.Context, request *historyserv
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
-	err2 := engine.ScheduleDecisionTask(ctx, request)
+	err2 := engine.ScheduleWorkflowTask(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
-	return &historyservice.ScheduleDecisionTaskResponse{}, nil
+	return &historyservice.ScheduleWorkflowTaskResponse{}, nil
 }
 
 // RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.
@@ -1203,7 +1219,7 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1216,19 +1232,19 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 	return &historyservice.RecordChildExecutionCompletedResponse{}, nil
 }
 
-// ResetStickyTaskList reset the volatile information in mutable state of a given workflow.
+// ResetStickyTaskQueue reset the volatile information in mutable state of a given workflow.
 // Volatile information are the information related to client, such as:
-// 1. StickyTaskList
+// 1. StickyTaskQueue
 // 2. StickyScheduleToStartTimeout
 // 3. ClientLibraryVersion
 // 4. ClientFeatureVersion
 // 5. ClientImpl
-func (h *Handler) ResetStickyTaskList(ctx context.Context, request *historyservice.ResetStickyTaskListRequest) (_ *historyservice.ResetStickyTaskListResponse, retError error) {
+func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyservice.ResetStickyTaskQueueRequest) (_ *historyservice.ResetStickyTaskQueueResponse, retError error) {
 
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryResetStickyTaskListScope
+	scope := metrics.HistoryResetStickyTaskQueueScope
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
@@ -1247,12 +1263,12 @@ func (h *Handler) ResetStickyTaskList(ctx context.Context, request *historyservi
 	}
 
 	workflowID := request.Execution.GetWorkflowId()
-	engine, err := h.controller.GetEngine(workflowID)
+	engine, err := h.controller.GetEngine(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
 
-	resp, err := engine.ResetStickyTaskList(ctx, request)
+	resp, err := engine.ResetStickyTaskQueue(ctx, request)
 	if err != nil {
 		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
@@ -1285,7 +1301,7 @@ func (h *Handler) ReplicateEvents(ctx context.Context, request *historyservice.R
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1323,7 +1339,7 @@ func (h *Handler) ReplicateRawEvents(ctx context.Context, request *historyservic
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1361,7 +1377,7 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1400,7 +1416,7 @@ func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.S
 		return nil, h.error(errShardIDNotSet, scope, "", "")
 	}
 
-	if request.GetTimestamp() == 0 {
+	if timestamp.TimeValue(request.GetStatusTime()).IsZero() {
 		return nil, h.error(errTimestampNotSet, scope, "", "")
 	}
 
@@ -1450,7 +1466,7 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 	}
 
 	workflowID := request.GetWorkflowId()
-	engine, err := h.controller.GetEngine(workflowID)
+	engine, err := h.controller.GetEngine(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
@@ -1484,7 +1500,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 	result := new(sync.Map)
 
 	for _, token := range request.Tokens {
-		go func(token *replicationgenpb.ReplicationToken) {
+		go func(token *replicationspb.ReplicationToken) {
 			defer wg.Done()
 
 			engine, err := h.controller.getEngineForShard(int(token.GetShardId()))
@@ -1508,17 +1524,17 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 
 	wg.Wait()
 
-	messagesByShard := make(map[int32]*replicationgenpb.ReplicationMessages)
+	messagesByShard := make(map[int32]*replicationspb.ReplicationMessages)
 	result.Range(func(key, value interface{}) bool {
 		shardID := key.(int32)
-		tasks := value.(*replicationgenpb.ReplicationMessages)
+		tasks := value.(*replicationspb.ReplicationMessages)
 		messagesByShard[shardID] = tasks
 		return true
 	})
 
 	h.GetLogger().Debug("GetReplicationMessages succeeded.")
 
-	return &historyservice.GetReplicationMessagesResponse{MessagesByShard: messagesByShard}, nil
+	return &historyservice.GetReplicationMessagesResponse{ShardMessages: messagesByShard}, nil
 }
 
 // GetDLQReplicationMessages is called by remote peers to get replicated messages for DLQ merging
@@ -1535,7 +1551,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 		return nil, errShuttingDown
 	}
 
-	taskInfoPerExecution := map[definition.WorkflowIdentifier][]*replicationgenpb.ReplicationTaskInfo{}
+	taskInfoPerExecution := map[definition.WorkflowIdentifier][]*replicationspb.ReplicationTaskInfo{}
 	// do batch based on workflow ID and run ID
 	for _, taskInfo := range request.GetTaskInfos() {
 		identity := definition.NewWorkflowIdentifier(
@@ -1544,21 +1560,22 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 			taskInfo.GetRunId(),
 		)
 		if _, ok := taskInfoPerExecution[identity]; !ok {
-			taskInfoPerExecution[identity] = []*replicationgenpb.ReplicationTaskInfo{}
+			taskInfoPerExecution[identity] = []*replicationspb.ReplicationTaskInfo{}
 		}
 		taskInfoPerExecution[identity] = append(taskInfoPerExecution[identity], taskInfo)
 	}
 
 	var wg sync.WaitGroup
 	wg.Add(len(taskInfoPerExecution))
-	tasksChan := make(chan *replicationgenpb.ReplicationTask, len(request.GetTaskInfos()))
-	handleTaskInfoPerExecution := func(taskInfos []*replicationgenpb.ReplicationTaskInfo) {
+	tasksChan := make(chan *replicationspb.ReplicationTask, len(request.GetTaskInfos()))
+	handleTaskInfoPerExecution := func(taskInfos []*replicationspb.ReplicationTaskInfo) {
 		defer wg.Done()
 		if len(taskInfos) == 0 {
 			return
 		}
 
 		engine, err := h.controller.GetEngine(
+			taskInfos[0].GetNamespaceId(),
 			taskInfos[0].GetWorkflowId(),
 		)
 		if err != nil {
@@ -1586,7 +1603,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 	wg.Wait()
 	close(tasksChan)
 
-	replicationTasks := make([]*replicationgenpb.ReplicationTask, len(tasksChan))
+	replicationTasks := make([]*replicationspb.ReplicationTask, len(tasksChan))
 	for task := range tasksChan {
 		replicationTasks = append(replicationTasks, task)
 	}
@@ -1611,13 +1628,13 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 
 	namespaceID := request.GetNamespaceId()
 	workflowID := request.GetRequest().GetWorkflowExecution().GetWorkflowId()
-	engine, err := h.controller.GetEngine(workflowID)
+	engine, err := h.controller.GetEngine(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
 	// deserialize history event object
 	historyEvents, err := h.GetPayloadSerializer().DeserializeBatchEvents(&serialization.DataBlob{
-		Encoding: common.EncodingTypeProto3,
+		Encoding: enumspb.ENCODING_TYPE_PROTO3,
 		Data:     request.GetRequest().GetEvents().GetData(),
 	})
 	if err != nil {
@@ -1637,7 +1654,7 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 	return &historyservice.ReapplyEventsResponse{}, nil
 }
 
-func (h *Handler) ReadDLQMessages(ctx context.Context, request *historyservice.ReadDLQMessagesRequest) (_ *historyservice.ReadDLQMessagesResponse, retError error) {
+func (h *Handler) GetDLQMessages(ctx context.Context, request *historyservice.GetDLQMessagesRequest) (_ *historyservice.GetDLQMessagesResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 
 	h.startWG.Wait()
@@ -1657,7 +1674,7 @@ func (h *Handler) ReadDLQMessages(ctx context.Context, request *historyservice.R
 		return nil, err
 	}
 
-	resp, err := engine.ReadDLQMessages(ctx, request)
+	resp, err := engine.GetDLQMessages(ctx, request)
 	if err != nil {
 		err = h.error(err, scope, "", "")
 		return nil, err
@@ -1740,7 +1757,7 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	namespaceID := request.GetNamespaceId()
 	execution := request.GetRequest().GetExecution()
 	workflowID := execution.GetWorkflowId()
-	engine, err := h.controller.GetEngine(workflowID)
+	engine, err := h.controller.GetEngine(namespaceID, workflowID)
 	if err != nil {
 		err = h.error(err, scope, namespaceID, workflowID)
 		return nil, err
@@ -1749,7 +1766,7 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	err = engine.RefreshWorkflowTasks(
 		ctx,
 		namespaceID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowId,
 			RunId:      execution.RunId,
 		},
@@ -1772,9 +1789,9 @@ func (h *Handler) convertError(err error) error {
 		shardID := err.(*persistence.ShardOwnershipLostError).ShardID
 		info, err := h.GetHistoryServiceResolver().Lookup(string(shardID))
 		if err == nil {
-			return createShardOwnershipLostError(h.GetHostInfo().GetAddress(), info.GetAddress())
+			return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), info.GetAddress())
 		}
-		return createShardOwnershipLostError(h.GetHostInfo().GetAddress(), "")
+		return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), "<unknown>")
 	case *persistence.WorkflowExecutionAlreadyStartedError:
 		err := err.(*persistence.WorkflowExecutionAlreadyStartedError)
 		return serviceerror.NewInternal(err.Msg)
@@ -1802,10 +1819,10 @@ func (h *Handler) updateErrorMetric(
 	}
 
 	switch err := err.(type) {
-	case *serviceerror.ShardOwnershipLost:
+	case *serviceerrors.ShardOwnershipLost:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
-	case *serviceerror.EventAlreadyStarted:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrEventAlreadyStartedCounter)
+	case *serviceerrors.TaskAlreadyStarted:
+		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrTaskAlreadyStartedCounter)
 	case *serviceerror.InvalidArgument:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
 	case *serviceerror.NamespaceNotActive:
@@ -1818,9 +1835,9 @@ func (h *Handler) updateErrorMetric(
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrCancellationAlreadyRequestedCounter)
 	case *serviceerror.ResourceExhausted:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
-	case *serviceerror.RetryTask:
+	case *serviceerrors.RetryTask:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
-	case *serviceerror.RetryTaskV2:
+	case *serviceerrors.RetryTaskV2:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
 	case *serviceerror.DeadlineExceeded:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
@@ -1866,15 +1883,7 @@ func (h *Handler) getLoggerWithTags(
 	return logger
 }
 
-func createShardOwnershipLostError(
-	currentHost string,
-	ownerHost string,
-) *serviceerror.ShardOwnershipLost {
-
-	return serviceerror.NewShardOwnershipLost(fmt.Sprintf("Shard is not owned by host: %v", currentHost), ownerHost)
-}
-
-func validateTaskToken(taskToken *tokengenpb.Task) error {
+func validateTaskToken(taskToken *tokenspb.Task) error {
 	if taskToken.GetWorkflowId() == "" {
 		return errWorkflowIDNotSet
 	}

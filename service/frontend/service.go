@@ -30,48 +30,47 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/namespace"
-	"github.com/temporalio/temporal/common/persistence"
-	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
-	espersistence "github.com/temporalio/temporal/common/persistence/elasticsearch"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
+	persistenceClient "go.temporal.io/server/common/persistence/client"
+	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 // Config represents configuration for frontend service
 type Config struct {
-	NumHistoryShards                int
-	PersistenceMaxQPS               dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS         dynamicconfig.IntPropertyFn
-	VisibilityMaxPageSize           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableVisibilitySampling        dynamicconfig.BoolPropertyFn
-	EnableReadFromClosedExecutionV2 dynamicconfig.BoolPropertyFn
-	VisibilityListMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableReadVisibilityFromES      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ESVisibilityListMaxQPS          dynamicconfig.IntPropertyFnWithNamespaceFilter
-	ESIndexMaxResultWindow          dynamicconfig.IntPropertyFn
-	HistoryMaxPageSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	RPS                             dynamicconfig.IntPropertyFn
-	MaxNamespaceRPSPerInstance      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	GlobalNamespaceRPS              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxIDLengthLimit                dynamicconfig.IntPropertyFn
-	EnableClientVersionCheck        dynamicconfig.BoolPropertyFn
-	MinRetentionDays                dynamicconfig.IntPropertyFn
-	DisallowQuery                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration           dynamicconfig.DurationPropertyFn
+	NumHistoryShards           int
+	PersistenceMaxQPS          dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS    dynamicconfig.IntPropertyFn
+	VisibilityMaxPageSize      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableVisibilitySampling   dynamicconfig.BoolPropertyFn
+	VisibilityListMaxQPS       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableReadVisibilityFromES dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ESVisibilityListMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ESIndexMaxResultWindow     dynamicconfig.IntPropertyFn
+	HistoryMaxPageSize         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RPS                        dynamicconfig.IntPropertyFn
+	MaxNamespaceRPSPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalNamespaceRPS         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLengthLimit           dynamicconfig.IntPropertyFn
+	EnableClientVersionCheck   dynamicconfig.BoolPropertyFn
+	MinRetentionDays           dynamicconfig.IntPropertyFn
+	DisallowQuery              dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration      dynamicconfig.DurationPropertyFn
 
 	// Persistence settings
 	HistoryMgrNumConns dynamicconfig.IntPropertyFn
@@ -98,10 +97,17 @@ type Config struct {
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
+	// DefaultWorkflowRetryPolicy represents default values for unset fields on a Workflow's
+	// specified RetryPolicy
+	DefaultWorkflowRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
+
 	// VisibilityArchival system protection
 	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	EnableRPCReplication         dynamicconfig.BoolPropertyFn
+	EnableCleanupReplicationTask dynamicconfig.BoolPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -112,7 +118,6 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		PersistenceGlobalMaxQPS:                dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
 		VisibilityMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
 		EnableVisibilitySampling:               dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
-		EnableReadFromClosedExecutionV2:        dc.GetBoolProperty(dynamicconfig.EnableReadFromClosedExecutionV2, false),
 		VisibilityListMaxQPS:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityListMaxQPS, 1),
 		EnableReadVisibilityFromES:             dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
 		ESVisibilityListMaxQPS:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendESVisibilityListMaxQPS, 3),
@@ -141,6 +146,9 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		VisibilityArchivalQueryMaxPageSize:     dc.GetIntProperty(dynamicconfig.VisibilityArchivalQueryMaxPageSize, 10000),
 		DisallowQuery:                          dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.DisallowQuery, false),
 		SendRawWorkflowHistory:                 dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SendRawWorkflowHistory, false),
+		EnableRPCReplication:                   dc.GetBoolProperty(dynamicconfig.FrontendEnableRPCReplication, false),
+		EnableCleanupReplicationTask:           dc.GetBoolProperty(dynamicconfig.FrontendEnableCleanupReplicationTask, true),
+		DefaultWorkflowRetryPolicy:             dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
 	}
 }
 
@@ -167,9 +175,8 @@ func NewService(
 
 	params.PersistenceConfig.HistoryMaxConns = serviceConfig.HistoryMgrNumConns()
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityListMaxQPS:            serviceConfig.VisibilityListMaxQPS,
-		EnableSampling:                  serviceConfig.EnableVisibilitySampling,
-		EnableReadFromClosedExecutionV2: serviceConfig.EnableReadFromClosedExecutionV2,
+		VisibilityListMaxQPS: serviceConfig.VisibilityListMaxQPS,
+		EnableSampling:       serviceConfig.EnableVisibilitySampling,
 	}
 
 	visibilityManagerInitializer := func(
@@ -231,7 +238,9 @@ func (s *Service) Start() {
 	clusterMetadata := s.GetClusterMetadata()
 	if clusterMetadata.IsGlobalNamespaceEnabled() {
 		consumerConfig := clusterMetadata.GetReplicationConsumerConfig()
-		if consumerConfig != nil && consumerConfig.Type == config.ReplicationConsumerTypeRPC {
+		if consumerConfig != nil &&
+			consumerConfig.Type == config.ReplicationConsumerTypeRPC &&
+			s.config.EnableRPCReplication() {
 			replicationMessageSink = s.GetNamespaceReplicationQueue()
 		} else {
 			var err error
@@ -246,7 +255,12 @@ func (s *Service) Start() {
 		replicationMessageSink.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
 	}
 
-	s.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
+	opts, err := s.params.RPCFactory.GetFrontendGRPCServerOptions()
+	if err != nil {
+		logger.Fatal("creating grpc server options failed", tag.Error(err))
+	}
+	opts = append(opts, grpc.UnaryInterceptor(interceptor))
+	s.server = grpc.NewServer(opts...)
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
 	s.handler = NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
@@ -301,7 +315,8 @@ func (s *Service) Stop() {
 	s.GetLogger().Info("ShutdownHandler: Draining traffic")
 	time.Sleep(requestDrainTime)
 
-	s.server.GracefulStop()
+	// TODO: Change this to GracefulStop when integration tests are refactored.
+	s.server.Stop()
 	s.Resource.Stop()
 	s.params.Logger.Info("frontend stopped")
 }

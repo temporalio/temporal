@@ -25,11 +25,12 @@
 package persistence
 
 import (
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
-	"github.com/temporalio/temporal/common/definition"
+	"go.temporal.io/server/common/definition"
 )
 
 // Interfaces for the Visibility Store.
@@ -44,14 +45,14 @@ type (
 	RecordWorkflowExecutionStartedRequest struct {
 		NamespaceID        string
 		Namespace          string // not persisted, used as config filter key
-		Execution          executionpb.WorkflowExecution
+		Execution          commonpb.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		RunTimeout         int64 // not persisted, used for cassandra ttl
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *commonpb.Memo
-		TaskList           string
+		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
 	}
 
@@ -60,17 +61,17 @@ type (
 	RecordWorkflowExecutionClosedRequest struct {
 		NamespaceID        string
 		Namespace          string // not persisted, used as config filter key
-		Execution          executionpb.WorkflowExecution
+		Execution          commonpb.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		CloseTimestamp     int64
-		Status             executionpb.WorkflowExecutionStatus
+		Status             enumspb.WorkflowExecutionStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *commonpb.Memo
-		TaskList           string
+		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
 	}
 
@@ -78,14 +79,14 @@ type (
 	UpsertWorkflowExecutionRequest struct {
 		NamespaceID        string
 		Namespace          string // not persisted, used as config filter key
-		Execution          executionpb.WorkflowExecution
+		Execution          commonpb.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		WorkflowTimeout    int64 // not persisted, used for cassandra ttl
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *commonpb.Memo
-		TaskList           string
+		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
 	}
 
@@ -115,7 +116,7 @@ type (
 
 	// ListWorkflowExecutionsResponse is the response to ListWorkflowExecutionsRequest
 	ListWorkflowExecutionsResponse struct {
-		Executions []*executionpb.WorkflowExecutionInfo
+		Executions []*workflowpb.WorkflowExecutionInfo
 		// Token to read next page if there are more workflow executions beyond page size.
 		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
 		NextPageToken []byte
@@ -151,19 +152,19 @@ type (
 	// have specific close status
 	ListClosedWorkflowExecutionsByStatusRequest struct {
 		ListWorkflowExecutionsRequest
-		Status executionpb.WorkflowExecutionStatus
+		Status enumspb.WorkflowExecutionStatus
 	}
 
 	// GetClosedWorkflowExecutionRequest is used retrieve the record for a specific execution
 	GetClosedWorkflowExecutionRequest struct {
 		NamespaceID string
 		Namespace   string // namespace name is not persisted, but used as config filter key
-		Execution   executionpb.WorkflowExecution
+		Execution   commonpb.WorkflowExecution
 	}
 
 	// GetClosedWorkflowExecutionResponse is the response to GetClosedWorkflowExecutionRequest
 	GetClosedWorkflowExecutionResponse struct {
-		Execution *executionpb.WorkflowExecutionInfo
+		Execution *workflowpb.WorkflowExecutionInfo
 	}
 
 	// VisibilityDeleteWorkflowExecutionRequest contains the request params for DeleteWorkflowExecution call

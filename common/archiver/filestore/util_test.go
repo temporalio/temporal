@@ -33,12 +33,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/codec"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/codec"
 )
 
 const (
@@ -187,9 +187,10 @@ func (s *UtilSuite) TestListFilesByPrefix() {
 }
 
 func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
-	historyBatches := []*eventpb.History{
+	now := time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)
+	historyBatches := []*historypb.History{
 		{
-			Events: []*eventpb.HistoryEvent{
+			Events: []*historypb.HistoryEvent{
 				{
 					EventId: common.FirstEventID,
 					Version: 1,
@@ -197,16 +198,16 @@ func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
 			},
 		},
 		{
-			Events: []*eventpb.HistoryEvent{
+			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: &now,
 					Version:   1,
 				},
 				{
 					EventId: common.FirstEventID + 2,
 					Version: 2,
-					Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
+					Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 						Identity: "some random identity",
 					}},
 				},
@@ -330,15 +331,15 @@ func (s *UtilSuite) TestExtractCloseFailoverVersion() {
 
 func (s *UtilSuite) TestHistoryMutated() {
 	testCases := []struct {
-		historyBatches []*eventpb.History
+		historyBatches []*historypb.History
 		request        *archiver.ArchiveHistoryRequest
 		isLast         bool
 		isMutated      bool
 	}{
 		{
-			historyBatches: []*eventpb.History{
+			historyBatches: []*historypb.History{
 				{
-					Events: []*eventpb.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							Version: 15,
 						},
@@ -351,9 +352,9 @@ func (s *UtilSuite) TestHistoryMutated() {
 			isMutated: true,
 		},
 		{
-			historyBatches: []*eventpb.History{
+			historyBatches: []*historypb.History{
 				{
-					Events: []*eventpb.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							EventId: 33,
 							Version: 10,
@@ -361,7 +362,7 @@ func (s *UtilSuite) TestHistoryMutated() {
 					},
 				},
 				{
-					Events: []*eventpb.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							EventId: 49,
 							Version: 10,
@@ -381,9 +382,9 @@ func (s *UtilSuite) TestHistoryMutated() {
 			isMutated: true,
 		},
 		{
-			historyBatches: []*eventpb.History{
+			historyBatches: []*historypb.History{
 				{
-					Events: []*eventpb.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							Version: 9,
 						},
@@ -397,9 +398,9 @@ func (s *UtilSuite) TestHistoryMutated() {
 			isMutated: true,
 		},
 		{
-			historyBatches: []*eventpb.History{
+			historyBatches: []*historypb.History{
 				{
-					Events: []*eventpb.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							EventId: 20,
 							Version: 10,
@@ -407,7 +408,7 @@ func (s *UtilSuite) TestHistoryMutated() {
 					},
 				},
 				{
-					Events: []*eventpb.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							EventId: 33,
 							Version: 10,
@@ -475,6 +476,6 @@ func (s *UtilSuite) assertCorrectFileMode(path string) {
 	s.Equal(mode, info.Mode())
 }
 
-func toWorkflowExecutionStatusPtr(in executionpb.WorkflowExecutionStatus) *executionpb.WorkflowExecutionStatus {
+func toWorkflowExecutionStatusPtr(in enumspb.WorkflowExecutionStatus) *enumspb.WorkflowExecutionStatus {
 	return &in
 }

@@ -22,28 +22,29 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskExecutor_mock.go -self_package github.com/temporalio/temporal/service/history
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskExecutor_mock.go -self_package go.temporal.io/server/service/history
 
 package history
 
 import (
 	"context"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/xdc"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/xdc"
 )
 
 type (
 	replicationTaskExecutor interface {
-		execute(sourceCluster string, replicationTask *replicationgenpb.ReplicationTask, forceApply bool) (int, error)
+		execute(sourceCluster string, replicationTask *replicationspb.ReplicationTask, forceApply bool) (int, error)
 	}
 
 	replicationTaskExecutorImpl struct {
@@ -82,26 +83,26 @@ func newReplicationTaskExecutor(
 
 func (e *replicationTaskExecutorImpl) execute(
 	sourceCluster string,
-	replicationTask *replicationgenpb.ReplicationTask,
+	replicationTask *replicationspb.ReplicationTask,
 	forceApply bool,
 ) (int, error) {
 
 	var err error
 	var scope int
 	switch replicationTask.GetTaskType() {
-	case replicationgenpb.ReplicationTaskType_SyncShardStatusTask:
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
 		// Shard status will be sent as part of the Replication message without kafka
 		scope = metrics.SyncShardTaskScope
-	case replicationgenpb.ReplicationTaskType_SyncActivityTask:
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		scope = metrics.SyncActivityTaskScope
 		err = e.handleActivityTask(replicationTask, forceApply)
-	case replicationgenpb.ReplicationTaskType_HistoryTask:
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK:
 		scope = metrics.HistoryReplicationTaskScope
 		err = e.handleHistoryReplicationTask(sourceCluster, replicationTask, forceApply)
-	case replicationgenpb.ReplicationTaskType_HistoryMetadataTask:
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
 		// Without kafka we should not have size limits so we don't necessary need this in the new replication scheme.
 		scope = metrics.HistoryMetadataReplicationTaskScope
-	case replicationgenpb.ReplicationTaskType_HistoryV2Task:
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		scope = metrics.HistoryReplicationV2TaskScope
 		err = e.handleHistoryReplicationTaskV2(replicationTask, forceApply)
 	default:
@@ -114,7 +115,7 @@ func (e *replicationTaskExecutorImpl) execute(
 }
 
 func (e *replicationTaskExecutorImpl) handleActivityTask(
-	task *replicationgenpb.ReplicationTask,
+	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) error {
 
@@ -136,7 +137,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 		LastHeartbeatTime:  attr.LastHeartbeatTime,
 		Details:            attr.Details,
 		Attempt:            attr.Attempt,
-		LastFailureReason:  attr.LastFailureReason,
+		LastFailure:        attr.LastFailure,
 		LastWorkerIdentity: attr.LastWorkerIdentity,
 		VersionHistory:     attr.GetVersionHistory(),
 	}
@@ -144,9 +145,9 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 	defer cancel()
 	err = e.historyEngine.SyncActivity(ctx, request)
 	// Handle resend error
-	retryV2Err, okV2 := e.convertRetryTaskV2Error(err)
-	//TODO: remove handling retry error v1 after 2DC deprecation
-	retryV1Err, okV1 := e.convertRetryTaskError(err)
+	retryV2Err, okV2 := err.(*serviceerrors.RetryTaskV2)
+	// TODO: remove handling retry error v1 after 2DC deprecation
+	retryV1Err, okV1 := err.(*serviceerrors.RetryTask)
 
 	if !okV1 && !okV2 {
 		return err
@@ -194,10 +195,10 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 	return e.historyEngine.SyncActivity(ctx, request)
 }
 
-//TODO: remove this part after 2DC deprecation
+// TODO: remove this part after 2DC deprecation
 func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 	sourceCluster string,
-	task *replicationgenpb.ReplicationTask,
+	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) error {
 
@@ -210,7 +211,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 	request := &historyservice.ReplicateEventsRequest{
 		SourceCluster: sourceCluster,
 		NamespaceId:   attr.NamespaceId,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: attr.WorkflowId,
 			RunId:      attr.RunId,
 		},
@@ -222,13 +223,13 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 		NewRunHistory:     attr.NewRunHistory,
 		ForceBufferEvents: false,
 		ResetWorkflow:     attr.ResetWorkflow,
-		NewRunNDC:         attr.NewRunNDC,
+		NewRunNdc:         attr.NewRunNdc,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
 
 	err = e.historyEngine.ReplicateEvents(ctx, request)
-	retryErr, ok := e.convertRetryTaskError(err)
+	retryErr, ok := err.(*serviceerrors.RetryTask)
 	if !ok || retryErr.RunId == "" {
 		return err
 	}
@@ -255,7 +256,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 }
 
 func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
-	task *replicationgenpb.ReplicationTask,
+	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) error {
 
@@ -267,7 +268,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 
 	request := &historyservice.ReplicateEventsV2Request{
 		NamespaceId: attr.NamespaceId,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: attr.WorkflowId,
 			RunId:      attr.RunId,
 		},
@@ -280,7 +281,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 	defer cancel()
 
 	err = e.historyEngine.ReplicateEventsV2(ctx, request)
-	retryErr, ok := e.convertRetryTaskV2Error(err)
+	retryErr, ok := err.(*serviceerrors.RetryTaskV2)
 	if !ok {
 		return err
 	}
@@ -328,21 +329,4 @@ FilterLoop:
 		}
 	}
 	return shouldProcessTask, nil
-}
-
-//TODO: remove this code after 2DC deprecation
-func (e *replicationTaskExecutorImpl) convertRetryTaskError(
-	err error,
-) (*serviceerror.RetryTask, bool) {
-
-	retError, ok := err.(*serviceerror.RetryTask)
-	return retError, ok
-}
-
-func (e *replicationTaskExecutorImpl) convertRetryTaskV2Error(
-	err error,
-) (*serviceerror.RetryTaskV2, bool) {
-
-	retError, ok := err.(*serviceerror.RetryTaskV2)
-	return retError, ok
 }

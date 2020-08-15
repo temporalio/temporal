@@ -27,12 +27,12 @@ package frontend
 import (
 	"context"
 
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/api/workflowservice/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/common/authorization"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/resource"
+	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/resource"
 )
 
 // TODO(vancexu): add metrics
@@ -161,16 +161,16 @@ func (a *AccessControlledWorkflowHandler) DescribeNamespace(
 	return a.frontendHandler.DescribeNamespace(ctx, request)
 }
 
-// DescribeTaskList API call
-func (a *AccessControlledWorkflowHandler) DescribeTaskList(
+// DescribeTaskQueue API call
+func (a *AccessControlledWorkflowHandler) DescribeTaskQueue(
 	ctx context.Context,
-	request *workflowservice.DescribeTaskListRequest,
-) (*workflowservice.DescribeTaskListResponse, error) {
+	request *workflowservice.DescribeTaskQueueRequest,
+) (*workflowservice.DescribeTaskQueueResponse, error) {
 
-	scope := a.getMetricsScopeWithNamespace(metrics.FrontendDescribeTaskListScope, request.GetNamespace())
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendDescribeTaskQueueScope, request.GetNamespace())
 
 	attr := &authorization.Attributes{
-		APIName:   "DescribeTaskList",
+		APIName:   "DescribeTaskQueue",
 		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
@@ -181,7 +181,7 @@ func (a *AccessControlledWorkflowHandler) DescribeTaskList(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.DescribeTaskList(ctx, request)
+	return a.frontendHandler.DescribeTaskQueue(ctx, request)
 }
 
 // DescribeWorkflowExecution API call
@@ -352,16 +352,16 @@ func (a *AccessControlledWorkflowHandler) ListWorkflowExecutions(
 	return a.frontendHandler.ListWorkflowExecutions(ctx, request)
 }
 
-// PollForActivityTask API call
-func (a *AccessControlledWorkflowHandler) PollForActivityTask(
+// PollActivityTaskQueue API call
+func (a *AccessControlledWorkflowHandler) PollActivityTaskQueue(
 	ctx context.Context,
-	request *workflowservice.PollForActivityTaskRequest,
-) (*workflowservice.PollForActivityTaskResponse, error) {
+	request *workflowservice.PollActivityTaskQueueRequest,
+) (*workflowservice.PollActivityTaskQueueResponse, error) {
 
-	scope := a.getMetricsScopeWithNamespace(metrics.FrontendPollForActivityTaskScope, request.GetNamespace())
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendPollActivityTaskQueueScope, request.GetNamespace())
 
 	attr := &authorization.Attributes{
-		APIName:   "PollForActivityTask",
+		APIName:   "PollActivityTaskQueue",
 		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
@@ -372,19 +372,19 @@ func (a *AccessControlledWorkflowHandler) PollForActivityTask(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.PollForActivityTask(ctx, request)
+	return a.frontendHandler.PollActivityTaskQueue(ctx, request)
 }
 
-// PollForDecisionTask API call
-func (a *AccessControlledWorkflowHandler) PollForDecisionTask(
+// PollWorkflowTaskQueue API call
+func (a *AccessControlledWorkflowHandler) PollWorkflowTaskQueue(
 	ctx context.Context,
-	request *workflowservice.PollForDecisionTaskRequest,
-) (*workflowservice.PollForDecisionTaskResponse, error) {
+	request *workflowservice.PollWorkflowTaskQueueRequest,
+) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
 
-	scope := a.getMetricsScopeWithNamespace(metrics.FrontendPollForDecisionTaskScope, request.GetNamespace())
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendPollWorkflowTaskQueueScope, request.GetNamespace())
 
 	attr := &authorization.Attributes{
-		APIName:   "PollForDecisionTask",
+		APIName:   "PollWorkflowTaskQueue",
 		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
@@ -395,7 +395,7 @@ func (a *AccessControlledWorkflowHandler) PollForDecisionTask(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.PollForDecisionTask(ctx, request)
+	return a.frontendHandler.PollWorkflowTaskQueue(ctx, request)
 }
 
 // QueryWorkflow API call
@@ -492,16 +492,16 @@ func (a *AccessControlledWorkflowHandler) RequestCancelWorkflowExecution(
 	return a.frontendHandler.RequestCancelWorkflowExecution(ctx, request)
 }
 
-// ResetStickyTaskList API call
-func (a *AccessControlledWorkflowHandler) ResetStickyTaskList(
+// ResetStickyTaskQueue API call
+func (a *AccessControlledWorkflowHandler) ResetStickyTaskQueue(
 	ctx context.Context,
-	request *workflowservice.ResetStickyTaskListRequest,
-) (*workflowservice.ResetStickyTaskListResponse, error) {
+	request *workflowservice.ResetStickyTaskQueueRequest,
+) (*workflowservice.ResetStickyTaskQueueResponse, error) {
 
-	scope := a.getMetricsScopeWithNamespace(metrics.FrontendResetStickyTaskListScope, request.GetNamespace())
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendResetStickyTaskQueueScope, request.GetNamespace())
 
 	attr := &authorization.Attributes{
-		APIName:   "ResetStickyTaskList",
+		APIName:   "ResetStickyTaskQueue",
 		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
@@ -512,7 +512,7 @@ func (a *AccessControlledWorkflowHandler) ResetStickyTaskList(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.ResetStickyTaskList(ctx, request)
+	return a.frontendHandler.ResetStickyTaskQueue(ctx, request)
 }
 
 // ResetWorkflowExecution API call
@@ -586,20 +586,20 @@ func (a *AccessControlledWorkflowHandler) RespondActivityTaskFailedById(
 	return a.frontendHandler.RespondActivityTaskFailedById(ctx, request)
 }
 
-// RespondDecisionTaskCompleted API call
-func (a *AccessControlledWorkflowHandler) RespondDecisionTaskCompleted(
+// RespondWorkflowTaskCompleted API call
+func (a *AccessControlledWorkflowHandler) RespondWorkflowTaskCompleted(
 	ctx context.Context,
-	request *workflowservice.RespondDecisionTaskCompletedRequest,
-) (*workflowservice.RespondDecisionTaskCompletedResponse, error) {
-	return a.frontendHandler.RespondDecisionTaskCompleted(ctx, request)
+	request *workflowservice.RespondWorkflowTaskCompletedRequest,
+) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+	return a.frontendHandler.RespondWorkflowTaskCompleted(ctx, request)
 }
 
-// RespondDecisionTaskFailed API call
-func (a *AccessControlledWorkflowHandler) RespondDecisionTaskFailed(
+// RespondWorkflowTaskFailed API call
+func (a *AccessControlledWorkflowHandler) RespondWorkflowTaskFailed(
 	ctx context.Context,
-	request *workflowservice.RespondDecisionTaskFailedRequest,
-) (*workflowservice.RespondDecisionTaskFailedResponse, error) {
-	return a.frontendHandler.RespondDecisionTaskFailed(ctx, request)
+	request *workflowservice.RespondWorkflowTaskFailedRequest,
+) (*workflowservice.RespondWorkflowTaskFailedResponse, error) {
+	return a.frontendHandler.RespondWorkflowTaskFailed(ctx, request)
 }
 
 // RespondQueryTaskCompleted API call
@@ -725,16 +725,16 @@ func (a *AccessControlledWorkflowHandler) TerminateWorkflowExecution(
 	return a.frontendHandler.TerminateWorkflowExecution(ctx, request)
 }
 
-// ListTaskListPartitions API call
-func (a *AccessControlledWorkflowHandler) ListTaskListPartitions(
+// ListTaskQueuePartitions API call
+func (a *AccessControlledWorkflowHandler) ListTaskQueuePartitions(
 	ctx context.Context,
-	request *workflowservice.ListTaskListPartitionsRequest,
-) (*workflowservice.ListTaskListPartitionsResponse, error) {
+	request *workflowservice.ListTaskQueuePartitionsRequest,
+) (*workflowservice.ListTaskQueuePartitionsResponse, error) {
 
-	scope := a.getMetricsScopeWithNamespace(metrics.FrontendListTaskListPartitionsScope, request.GetNamespace())
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendListTaskQueuePartitionsScope, request.GetNamespace())
 
 	attr := &authorization.Attributes{
-		APIName:   "ListTaskListPartitions",
+		APIName:   "ListTaskQueuePartitions",
 		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
@@ -745,7 +745,7 @@ func (a *AccessControlledWorkflowHandler) ListTaskListPartitions(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.ListTaskListPartitions(ctx, request)
+	return a.frontendHandler.ListTaskQueuePartitions(ctx, request)
 }
 
 // UpdateNamespace API call

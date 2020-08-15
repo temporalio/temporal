@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination authority_mock.go -self_package github.com/temporalio/temporal/common/authorization
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination authority_mock.go -self_package go.temporal.io/server/common/authorization
 
 package authorization
 
@@ -37,7 +37,7 @@ const (
 
 type (
 	// Attributes is input for authority to make decision.
-	// It can be extended in future if required auth on resources like WorkflowType and TaskList
+	// It can be extended in future if required auth on resources like WorkflowType and TaskQueue
 	Attributes struct {
 		Actor     string
 		APIName   string

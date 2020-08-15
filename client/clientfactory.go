@@ -27,20 +27,20 @@ package client
 import (
 	"time"
 
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/api/workflowservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/client/admin"
-	"github.com/temporalio/temporal/client/frontend"
-	"github.com/temporalio/temporal/client/history"
-	"github.com/temporalio/temporal/client/matching"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/membership"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client/admin"
+	"go.temporal.io/server/client/frontend"
+	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const (
@@ -119,7 +119,7 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateGRPCConnection(clientKey)
+		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
 		return historyservice.NewHistoryServiceClient(connection), nil
 	}
 
@@ -149,7 +149,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateGRPCConnection(clientKey)
+		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
 		return matchingservice.NewMatchingServiceClient(connection), nil
 	}
 
@@ -177,7 +177,7 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateGRPCConnection(rpcAddress)
+		connection := cf.rpcFactory.CreateFrontendGRPCConnection(rpcAddress)
 		return workflowservice.NewWorkflowServiceClient(connection), nil
 	}
 
@@ -197,7 +197,7 @@ func (cf *rpcClientFactory) NewAdminClientWithTimeout(
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateGRPCConnection(rpcAddress)
+		connection := cf.rpcFactory.CreateFrontendGRPCConnection(rpcAddress)
 		return adminservice.NewAdminServiceClient(connection), nil
 	}
 

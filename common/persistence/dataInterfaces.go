@@ -32,24 +32,17 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/checksum"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
-)
-
-// Namespace status
-const (
-	NamespaceStatusRegistered = iota
-	NamespaceStatusDeprecated
-	NamespaceStatusDeleted
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/checksum"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives"
 )
 
 const (
@@ -115,54 +108,8 @@ const (
 	ConflictResolveWorkflowModeBypassCurrent
 )
 
-// Workflow execution states
-const (
-	WorkflowStateCreated = iota
-	WorkflowStateRunning
-	WorkflowStateCompleted
-	WorkflowStateZombie
-	WorkflowStateVoid
-	WorkflowStateCorrupted
-)
-
-// Transfer task types
-const (
-	TransferTaskTypeDecisionTask = iota
-	TransferTaskTypeActivityTask
-	TransferTaskTypeCloseExecution
-	TransferTaskTypeCancelExecution
-	TransferTaskTypeStartChildExecution
-	TransferTaskTypeSignalExecution
-	TransferTaskTypeRecordWorkflowStarted
-	TransferTaskTypeResetWorkflow
-	TransferTaskTypeUpsertWorkflowSearchAttributes
-)
-
-// Types of replication tasks
-const (
-	ReplicationTaskTypeHistory = iota
-	ReplicationTaskTypeSyncActivity
-)
-
-// Types of timers
-const (
-	TaskTypeDecisionTimeout = iota
-	TaskTypeActivityTimeout
-	TaskTypeUserTimer
-	TaskTypeWorkflowRunTimeout
-	TaskTypeDeleteHistoryEvent
-	TaskTypeActivityRetryTimer
-	TaskTypeWorkflowBackoffTimer
-)
-
 // UnknownNumRowsAffected is returned when the number of rows that an API affected cannot be determined
 const UnknownNumRowsAffected = -1
-
-// Types of workflow backoff timeout
-const (
-	WorkflowBackoffTimeoutTypeRetry = iota
-	WorkflowBackoffTimeoutTypeCron
-)
 
 const (
 	// InitialFailoverNotificationVersion is the initial failover version for a namespace
@@ -210,8 +157,8 @@ type (
 		Msg              string
 		StartRequestID   string
 		RunID            string
-		State            int
-		Status           executionpb.WorkflowExecutionStatus
+		State            enumsspb.WorkflowExecutionState
+		Status           enumspb.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
 
@@ -252,76 +199,61 @@ type (
 
 	// WorkflowExecutionInfo describes a workflow execution
 	WorkflowExecutionInfo struct {
-		NamespaceID                        string
-		WorkflowID                         string
-		RunID                              string
-		ParentNamespaceID                  string
-		ParentWorkflowID                   string
-		ParentRunID                        string
-		InitiatedID                        int64
-		CompletionEventBatchID             int64
-		CompletionEvent                    *eventpb.HistoryEvent
-		TaskList                           string
-		WorkflowTypeName                   string
-		WorkflowRunTimeout                 int32
-		WorkflowExecutionTimeout           int32
-		WorkflowTaskTimeout                int32
-		State                              int
-		Status                             executionpb.WorkflowExecutionStatus
-		LastFirstEventID                   int64
-		LastEventTaskID                    int64
-		NextEventID                        int64
-		LastProcessedEvent                 int64
-		StartTimestamp                     time.Time
-		LastUpdatedTimestamp               time.Time
-		CreateRequestID                    string
-		SignalCount                        int32
-		DecisionVersion                    int64
-		DecisionScheduleID                 int64
-		DecisionStartedID                  int64
-		DecisionRequestID                  string
-		DecisionTimeout                    int32
-		DecisionAttempt                    int64
-		DecisionStartedTimestamp           int64
-		DecisionScheduledTimestamp         int64
-		DecisionOriginalScheduledTimestamp int64
-		CancelRequested                    bool
-		CancelRequestID                    string
-		StickyTaskList                     string
-		StickyScheduleToStartTimeout       int32
-		ClientLibraryVersion               string
-		ClientFeatureVersion               string
-		ClientImpl                         string
-		AutoResetPoints                    *executionpb.ResetPoints
-		Memo                               map[string]*commonpb.Payload
-		SearchAttributes                   map[string]*commonpb.Payload
+		NamespaceID                            string
+		WorkflowID                             string
+		RunID                                  string
+		ParentNamespaceID                      string
+		ParentWorkflowID                       string
+		ParentRunID                            string
+		InitiatedID                            int64
+		CompletionEventBatchID                 int64
+		CompletionEvent                        *historypb.HistoryEvent
+		TaskQueue                              string
+		WorkflowTypeName                       string
+		WorkflowRunTimeout                     int64
+		WorkflowExecutionTimeout               int64
+		DefaultWorkflowTaskTimeout             int64
+		State                                  enumsspb.WorkflowExecutionState
+		Status                                 enumspb.WorkflowExecutionStatus
+		LastFirstEventID                       int64
+		LastEventTaskID                        int64
+		NextEventID                            int64
+		LastProcessedEvent                     int64
+		StartTimestamp                         time.Time
+		LastUpdatedTimestamp                   time.Time
+		CreateRequestID                        string
+		SignalCount                            int64
+		WorkflowTaskVersion                    int64
+		WorkflowTaskScheduleID                 int64
+		WorkflowTaskStartedID                  int64
+		WorkflowTaskRequestID                  string
+		WorkflowTaskTimeout                    int64
+		WorkflowTaskAttempt                    int32
+		WorkflowTaskStartedTimestamp           int64
+		WorkflowTaskScheduledTimestamp         int64
+		WorkflowTaskOriginalScheduledTimestamp int64
+		CancelRequested                        bool
+		CancelRequestID                        string
+		StickyTaskQueue                        string
+		StickyScheduleToStartTimeout           int64
+		ClientLibraryVersion                   string
+		ClientFeatureVersion                   string
+		ClientImpl                             string
+		AutoResetPoints                        *workflowpb.ResetPoints
+		Memo                                   map[string]*commonpb.Payload
+		SearchAttributes                       map[string]*commonpb.Payload
 		// for retry
 		Attempt                int32
 		HasRetryPolicy         bool
-		InitialInterval        int32
+		InitialInterval        int64
 		BackoffCoefficient     float64
-		MaximumInterval        int32
+		MaximumInterval        int64
 		WorkflowExpirationTime time.Time
 		MaximumAttempts        int32
-		NonRetriableErrors     []string
+		NonRetryableErrorTypes []string
 		BranchToken            []byte
 		// Cron
 		CronSchedule string
-	}
-
-	// ExecutionStats is the statistics about workflow execution
-	ExecutionStats struct {
-		HistorySize int64
-	}
-
-	// ReplicationState represents mutable state information for global namespaces.
-	// This information is used by replication protocol when applying events from remote clusters
-	ReplicationState struct {
-		CurrentVersion      int64
-		StartVersion        int64
-		LastWriteVersion    int64
-		LastWriteEventID    int64
-		LastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
 	}
 
 	// ReplicationTaskInfoWrapper describes a replication task.
@@ -331,7 +263,7 @@ type (
 
 	// Task is the generic interface for workflow tasks
 	Task interface {
-		GetType() int
+		GetType() enumsspb.TaskType
 		GetVersion() int64
 		SetVersion(version int64)
 		GetTaskID() int64
@@ -340,11 +272,11 @@ type (
 		SetVisibilityTimestamp(timestamp time.Time)
 	}
 
-	// TaskListKey is the struct used to identity TaskLists
-	TaskListKey struct {
-		NamespaceID primitives.UUID
+	// TaskQueueKey is the struct used to identity TaskQueues
+	TaskQueueKey struct {
+		NamespaceID string
 		Name        string
-		TaskType    tasklistpb.TaskListType
+		TaskType    enumspb.TaskQueueType
 	}
 
 	// ActivityTask identifies a transfer task for activity
@@ -352,17 +284,17 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		NamespaceID         string
-		TaskList            string
+		TaskQueue           string
 		ScheduleID          int64
 		Version             int64
 	}
 
-	// DecisionTask identifies a transfer task for decision
-	DecisionTask struct {
+	// WorkflowTask identifies a transfer task for workflow task
+	WorkflowTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		NamespaceID         string
-		TaskList            string
+		TaskQueue           string
 		ScheduleID          int64
 		Version             int64
 		RecordVisibility    bool
@@ -396,13 +328,13 @@ type (
 		Version             int64
 	}
 
-	// DecisionTimeoutTask identifies a timeout task.
-	DecisionTimeoutTask struct {
+	// WorkflowTaskTimeoutTask identifies a timeout task.
+	WorkflowTaskTimeoutTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
-		ScheduleAttempt     int64
-		TimeoutType         int
+		ScheduleAttempt     int32
+		TimeoutType         enumspb.TimeoutType
 		Version             int64
 	}
 
@@ -460,9 +392,9 @@ type (
 	ActivityTimeoutTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		TimeoutType         int
+		TimeoutType         enumspb.TimeoutType
 		EventID             int64
-		Attempt             int64
+		Attempt             int32
 		Version             int64
 	}
 
@@ -483,13 +415,13 @@ type (
 		Attempt             int32
 	}
 
-	// WorkflowBackoffTimerTask to schedule first decision task for retried workflow
+	// WorkflowBackoffTimerTask to schedule first workflow task for retried workflow
 	WorkflowBackoffTimerTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64 // TODO this attribute is not used?
 		Version             int64
-		TimeoutType         int // 0 for retry, 1 for cron.
+		WorkflowBackoffType enumsspb.WorkflowBackoffType
 	}
 
 	// HistoryReplicationTask is the replication task created for shipping history replication events to other clusters
@@ -504,7 +436,7 @@ type (
 
 		// TODO when 2DC is deprecated remove these 2 attributes
 		ResetWorkflow       bool
-		LastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
+		LastReplicationInfo map[string]*replicationspb.ReplicationInfo
 	}
 
 	// SyncActivityTask is the replication task created for shipping activity info to other clusters
@@ -535,74 +467,27 @@ type (
 
 	// WorkflowMutableState indicates workflow related state
 	WorkflowMutableState struct {
-		ActivityInfos       map[int64]*ActivityInfo
+		ActivityInfos       map[int64]*persistenceblobs.ActivityInfo
 		TimerInfos          map[string]*persistenceblobs.TimerInfo
-		ChildExecutionInfos map[int64]*ChildExecutionInfo
+		ChildExecutionInfos map[int64]*persistenceblobs.ChildExecutionInfo
 		RequestCancelInfos  map[int64]*persistenceblobs.RequestCancelInfo
 		SignalInfos         map[int64]*persistenceblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 		ExecutionInfo       *WorkflowExecutionInfo
-		ExecutionStats      *ExecutionStats
-		ReplicationState    *ReplicationState
-		BufferedEvents      []*eventpb.HistoryEvent
+		ExecutionStats      *persistenceblobs.ExecutionStats
+		ReplicationState    *persistenceblobs.ReplicationState
+		BufferedEvents      []*historypb.HistoryEvent
 		VersionHistories    *VersionHistories
 		Checksum            checksum.Checksum
 	}
 
-	// ActivityInfo details.
-	ActivityInfo struct {
-		Version                  int64
-		ScheduleID               int64
-		ScheduledEventBatchID    int64
-		ScheduledEvent           *eventpb.HistoryEvent
-		ScheduledTime            time.Time
-		StartedID                int64
-		StartedEvent             *eventpb.HistoryEvent
-		StartedTime              time.Time
-		NamespaceID              string
-		ActivityID               string
-		RequestID                string
-		Details                  *commonpb.Payloads
-		ScheduleToStartTimeout   int32
-		ScheduleToCloseTimeout   int32
-		StartToCloseTimeout      int32
-		HeartbeatTimeout         int32
-		CancelRequested          bool
-		CancelRequestID          int64
-		LastHeartBeatUpdatedTime time.Time
-		TimerTaskStatus          int32
-		// For retry
-		Attempt            int32
-		StartedIdentity    string
-		TaskList           string
-		HasRetryPolicy     bool
-		InitialInterval    int32
-		BackoffCoefficient float64
-		MaximumInterval    int32
-		ExpirationTime     time.Time
-		MaximumAttempts    int32
-		NonRetriableErrors []string
-		LastFailureReason  string
-		LastWorkerIdentity string
-		LastFailureDetails *commonpb.Payloads
-		// Not written to database - This is used only for deduping heartbeat timer creation
-		LastHeartbeatTimeoutVisibilityInSeconds int64
-	}
-
-	// ChildExecutionInfo has details for pending child executions.
-	ChildExecutionInfo struct {
-		Version               int64
-		InitiatedID           int64
-		InitiatedEventBatchID int64
-		InitiatedEvent        *eventpb.HistoryEvent
-		StartedID             int64
-		StartedWorkflowID     string
-		StartedRunID          string
-		StartedEvent          *eventpb.HistoryEvent
-		CreateRequestID       string
-		Namespace             string
-		WorkflowTypeName      string
-		ParentClosePolicy     commonpb.ParentClosePolicy
+	// TimerInfo details - metadata about user timer info.
+	TimerInfo struct {
+		Version    int64
+		TimerID    string
+		StartedID  int64
+		ExpiryTime time.Time
+		TaskStatus int64
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
@@ -645,7 +530,7 @@ type (
 	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
 	GetWorkflowExecutionRequest struct {
 		NamespaceID string
-		Execution   executionpb.WorkflowExecution
+		Execution   commonpb.WorkflowExecution
 	}
 
 	// GetWorkflowExecutionResponse is the response to GetworkflowExecutionRequest
@@ -676,8 +561,8 @@ type (
 	GetCurrentExecutionResponse struct {
 		StartRequestID   string
 		RunID            string
-		State            int
-		Status           executionpb.WorkflowExecutionStatus
+		State            enumsspb.WorkflowExecutionState
+		Status           enumspb.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
 
@@ -691,7 +576,7 @@ type (
 
 		NewWorkflowSnapshot *WorkflowSnapshot
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// ConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for a single run
@@ -713,7 +598,7 @@ type (
 		//  basically should use CurrentWorkflowMutation instead
 		CurrentWorkflowCAS *CurrentWorkflowCAS
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// CurrentWorkflowCAS represent a compare and swap on current record
@@ -721,7 +606,7 @@ type (
 	CurrentWorkflowCAS struct {
 		PrevRunID            string
 		PrevLastWriteVersion int64
-		PrevState            int
+		PrevState            enumsspb.WorkflowExecutionState
 	}
 
 	// ResetWorkflowExecutionRequest is used to reset workflow execution state for current run and create new run
@@ -742,7 +627,7 @@ type (
 		// For new mutable state
 		NewWorkflowSnapshot WorkflowSnapshot
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// WorkflowEvents is used as generic workflow history events transaction container
@@ -751,21 +636,21 @@ type (
 		WorkflowID  string
 		RunID       string
 		BranchToken []byte
-		Events      []*eventpb.HistoryEvent
+		Events      []*historypb.HistoryEvent
 	}
 
 	// WorkflowMutation is used as generic workflow execution state mutation
 	WorkflowMutation struct {
 		ExecutionInfo    *WorkflowExecutionInfo
-		ExecutionStats   *ExecutionStats
-		ReplicationState *ReplicationState
+		ExecutionStats   *persistenceblobs.ExecutionStats
+		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *VersionHistories
 
-		UpsertActivityInfos       []*ActivityInfo
+		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
 		DeleteActivityInfos       []int64
 		UpsertTimerInfos          []*persistenceblobs.TimerInfo
 		DeleteTimerInfos          []string
-		UpsertChildExecutionInfos []*ChildExecutionInfo
+		UpsertChildExecutionInfos []*persistenceblobs.ChildExecutionInfo
 		DeleteChildExecutionInfo  *int64
 		UpsertRequestCancelInfos  []*persistenceblobs.RequestCancelInfo
 		DeleteRequestCancelInfo   *int64
@@ -773,7 +658,7 @@ type (
 		DeleteSignalInfo          *int64
 		UpsertSignalRequestedIDs  []string
 		DeleteSignalRequestedID   string
-		NewBufferedEvents         []*eventpb.HistoryEvent
+		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 
 		TransferTasks    []Task
@@ -787,13 +672,13 @@ type (
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
 	WorkflowSnapshot struct {
 		ExecutionInfo    *WorkflowExecutionInfo
-		ExecutionStats   *ExecutionStats
-		ReplicationState *ReplicationState
+		ExecutionStats   *persistenceblobs.ExecutionStats
+		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *VersionHistories
 
-		ActivityInfos       []*ActivityInfo
+		ActivityInfos       []*persistenceblobs.ActivityInfo
 		TimerInfos          []*persistenceblobs.TimerInfo
-		ChildExecutionInfos []*ChildExecutionInfo
+		ChildExecutionInfos []*persistenceblobs.ChildExecutionInfo
 		RequestCancelInfos  []*persistenceblobs.RequestCancelInfo
 		SignalInfos         []*persistenceblobs.SignalInfo
 		SignalRequestedIDs  []string
@@ -820,6 +705,17 @@ type (
 		RunID       string
 	}
 
+	// GetTransferTaskRequest is the request for GetTransferTask
+	GetTransferTaskRequest struct {
+		ShardID int32
+		TaskID  int64
+	}
+
+	// GetTransferTaskResponse is the response to GetTransferTask
+	GetTransferTaskResponse struct {
+		TransferTaskInfo *persistenceblobs.TransferTaskInfo
+	}
+
 	// GetTransferTasksRequest is used to read tasks from the transfer task queue
 	GetTransferTasksRequest struct {
 		ReadLevel     int64
@@ -832,6 +728,17 @@ type (
 	GetTransferTasksResponse struct {
 		Tasks         []*persistenceblobs.TransferTaskInfo
 		NextPageToken []byte
+	}
+
+	// GetReplicationTaskRequest is the request for GetReplicationTask
+	GetReplicationTaskRequest struct {
+		ShardID int32
+		TaskID  int64
+	}
+
+	// GetReplicationTaskResponse is the response to GetReplicationTask
+	GetReplicationTaskResponse struct {
+		ReplicationTaskInfo *persistenceblobs.ReplicationTaskInfo
 	}
 
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
@@ -887,7 +794,7 @@ type (
 		TaskID            int64
 	}
 
-	//RangeDeleteReplicationTaskFromDLQRequest is used to delete replication tasks from DLQ
+	// RangeDeleteReplicationTaskFromDLQRequest is used to delete replication tasks from DLQ
 	RangeDeleteReplicationTaskFromDLQRequest struct {
 		SourceClusterName    string
 		ExclusiveBeginTaskID int64
@@ -909,68 +816,68 @@ type (
 		TaskID              int64
 	}
 
-	// LeaseTaskListRequest is used to request lease of a task list
-	LeaseTaskListRequest struct {
-		NamespaceID  primitives.UUID
-		TaskList     string
-		TaskType     tasklistpb.TaskListType
-		TaskListKind tasklistpb.TaskListKind
-		RangeID      int64
+	// LeaseTaskQueueRequest is used to request lease of a task queue
+	LeaseTaskQueueRequest struct {
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		TaskQueueKind enumspb.TaskQueueKind
+		RangeID       int64
 	}
 
-	// LeaseTaskListResponse is response to LeaseTaskListRequest
-	LeaseTaskListResponse struct {
-		TaskListInfo *PersistedTaskListInfo
+	// LeaseTaskQueueResponse is response to LeaseTaskQueueRequest
+	LeaseTaskQueueResponse struct {
+		TaskQueueInfo *PersistedTaskQueueInfo
 	}
 
-	// UpdateTaskListRequest is used to update task list implementation information
-	UpdateTaskListRequest struct {
-		RangeID      int64
-		TaskListInfo *persistenceblobs.TaskListInfo
+	// UpdateTaskQueueRequest is used to update task queue implementation information
+	UpdateTaskQueueRequest struct {
+		RangeID       int64
+		TaskQueueInfo *persistenceblobs.TaskQueueInfo
 	}
 
-	// UpdateTaskListResponse is the response to UpdateTaskList
-	UpdateTaskListResponse struct {
+	// UpdateTaskQueueResponse is the response to UpdateTaskQueue
+	UpdateTaskQueueResponse struct {
 	}
 
-	// ListTaskListRequest contains the request params needed to invoke ListTaskList API
-	ListTaskListRequest struct {
+	// ListTaskQueueRequest contains the request params needed to invoke ListTaskQueue API
+	ListTaskQueueRequest struct {
 		PageSize  int
 		PageToken []byte
 	}
 
-	// ListTaskListResponse is the response from ListTaskList API
-	ListTaskListResponse struct {
-		Items         []*PersistedTaskListInfo
+	// ListTaskQueueResponse is the response from ListTaskQueue API
+	ListTaskQueueResponse struct {
+		Items         []*PersistedTaskQueueInfo
 		NextPageToken []byte
 	}
 
-	// DeleteTaskListRequest contains the request params needed to invoke DeleteTaskList API
-	DeleteTaskListRequest struct {
-		TaskList *TaskListKey
-		RangeID  int64
+	// DeleteTaskQueueRequest contains the request params needed to invoke DeleteTaskQueue API
+	DeleteTaskQueueRequest struct {
+		TaskQueue *TaskQueueKey
+		RangeID   int64
 	}
 
 	// CreateTasksRequest is used to create a new task for a workflow execution
 	CreateTasksRequest struct {
-		TaskListInfo *PersistedTaskListInfo
-		Tasks        []*persistenceblobs.AllocatedTaskInfo
+		TaskQueueInfo *PersistedTaskQueueInfo
+		Tasks         []*persistenceblobs.AllocatedTaskInfo
 	}
 
 	// CreateTasksResponse is the response to CreateTasksRequest
 	CreateTasksResponse struct {
 	}
 
-	PersistedTaskListInfo struct {
-		Data    *persistenceblobs.TaskListInfo
+	PersistedTaskQueueInfo struct {
+		Data    *persistenceblobs.TaskQueueInfo
 		RangeID int64
 	}
 
-	// GetTasksRequest is used to retrieve tasks of a task list
+	// GetTasksRequest is used to retrieve tasks of a task queue
 	GetTasksRequest struct {
-		NamespaceID  primitives.UUID
-		TaskList     string
-		TaskType     tasklistpb.TaskListType
+		NamespaceID  string
+		TaskQueue    string
+		TaskType     enumspb.TaskQueueType
 		ReadLevel    int64  // range exclusive
 		MaxReadLevel *int64 // optional: range inclusive when specified
 		BatchSize    int
@@ -983,17 +890,29 @@ type (
 
 	// CompleteTaskRequest is used to complete a task
 	CompleteTaskRequest struct {
-		TaskList *TaskListKey
-		TaskID   int64
+		TaskQueue *TaskQueueKey
+		TaskID    int64
 	}
 
 	// CompleteTasksLessThanRequest contains the request params needed to invoke CompleteTasksLessThan API
 	CompleteTasksLessThanRequest struct {
-		NamespaceID  primitives.UUID
-		TaskListName string
-		TaskType     tasklistpb.TaskListType
-		TaskID       int64 // Tasks less than or equal to this ID will be completed
-		Limit        int   // Limit on the max number of tasks that can be completed. Required param
+		NamespaceID   string
+		TaskQueueName string
+		TaskType      enumspb.TaskQueueType
+		TaskID        int64 // Tasks less than or equal to this ID will be completed
+		Limit         int   // Limit on the max number of tasks that can be completed. Required param
+	}
+
+	// GetTimerTaskRequest is the request for GetTimerTask
+	GetTimerTaskRequest struct {
+		ShardID             int32
+		TaskID              int64
+		VisibilityTimestamp time.Time
+	}
+
+	// GetTimerTaskResponse is the response to GetTimerTask
+	GetTimerTaskResponse struct {
+		TimerTaskInfo *persistenceblobs.TimerTaskInfo
 	}
 
 	// GetTimerIndexTasksRequest is the request for GetTimerIndexTasks
@@ -1019,12 +938,12 @@ type (
 
 	// CreateNamespaceResponse is the response for CreateNamespace
 	CreateNamespaceResponse struct {
-		ID primitives.UUID
+		ID string
 	}
 
 	// GetNamespaceRequest is used to read namespace
 	GetNamespaceRequest struct {
-		ID   primitives.UUID
+		ID   string
 		Name string
 	}
 
@@ -1043,7 +962,7 @@ type (
 
 	// DeleteNamespaceRequest is used to delete namespace entry from namespaces table
 	DeleteNamespaceRequest struct {
-		ID primitives.UUID
+		ID string
 	}
 
 	// DeleteNamespaceByNameRequest is used to delete namespace entry from namespaces_by_name table
@@ -1131,11 +1050,11 @@ type (
 		// The branch to be appended
 		BranchToken []byte
 		// The batch of events to be appended. The first eventID will become the nodeID of this batch
-		Events []*eventpb.HistoryEvent
+		Events []*historypb.HistoryEvent
 		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
 		TransactionID int64
 		// optional binary encoding type
-		Encoding common.EncodingType
+		Encoding enumspb.EncodingType
 		// The shard to get history node data
 		ShardID *int
 	}
@@ -1166,7 +1085,7 @@ type (
 	// ReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
 	ReadHistoryBranchResponse struct {
 		// History events
-		HistoryEvents []*eventpb.HistoryEvent
+		HistoryEvents []*historypb.HistoryEvent
 		// Token to read next page if there are more events beyond page size.
 		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
 		// Empty means we have reached the last page, not need to continue
@@ -1180,7 +1099,7 @@ type (
 	// ReadHistoryBranchByBatchResponse is the response to ReadHistoryBranchRequest
 	ReadHistoryBranchByBatchResponse struct {
 		// History events by batch
-		History []*eventpb.History
+		History []*historypb.History
 		// Token to read next page if there are more events beyond page size.
 		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
 		// Empty means we have reached the last page, not need to continue
@@ -1189,6 +1108,8 @@ type (
 		Size int
 		// the first_event_id of last loaded batch
 		LastFirstEventID int64
+		// event id of the last event in the last loaded batch
+		LastEventID int64
 	}
 
 	// ReadRawHistoryBranchResponse is the response to ReadHistoryBranchRequest
@@ -1244,7 +1165,7 @@ type (
 	// GetHistoryTreeRequest is used to retrieve branch info of a history tree
 	GetHistoryTreeRequest struct {
 		// A UUID of a tree
-		TreeID primitives.UUID
+		TreeID string
 		// Get data from this shard
 		ShardID *int
 		// optional: can provide treeID via branchToken if treeID is empty
@@ -1255,7 +1176,7 @@ type (
 	HistoryBranchDetail struct {
 		TreeID   string
 		BranchID string
-		ForkTime time.Time
+		ForkTime *time.Time
 		Info     string
 	}
 
@@ -1372,11 +1293,13 @@ type (
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
 
 		// Transfer task related methods
+		GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error)
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
 		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
 
 		// Replication task related methods
+		GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error)
 		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
 		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
 		RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error
@@ -1386,6 +1309,7 @@ type (
 		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
 
 		// Timer related methods.
+		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
 		CompleteTimerTask(request *CompleteTimerTaskRequest) error
 		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
@@ -1404,10 +1328,10 @@ type (
 	TaskManager interface {
 		Closeable
 		GetName() string
-		LeaseTaskList(request *LeaseTaskListRequest) (*LeaseTaskListResponse, error)
-		UpdateTaskList(request *UpdateTaskListRequest) (*UpdateTaskListResponse, error)
-		ListTaskList(request *ListTaskListRequest) (*ListTaskListResponse, error)
-		DeleteTaskList(request *DeleteTaskListRequest) error
+		LeaseTaskQueue(request *LeaseTaskQueueRequest) (*LeaseTaskQueueResponse, error)
+		UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
+		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
+		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
 		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)
 		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
 		CompleteTask(request *CompleteTaskRequest) error
@@ -1517,8 +1441,8 @@ func IsTimeoutError(err error) bool {
 }
 
 // GetType returns the type of the activity task
-func (a *ActivityTask) GetType() int {
-	return TransferTaskTypeActivityTask
+func (a *ActivityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK
 }
 
 // GetVersion returns the version of the activity task
@@ -1541,7 +1465,7 @@ func (a *ActivityTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (a *ActivityTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -1551,49 +1475,49 @@ func (a *ActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
 }
 
-// GetType returns the type of the decision task
-func (d *DecisionTask) GetType() int {
-	return TransferTaskTypeDecisionTask
+// GetType returns the type of the workflow task
+func (d *WorkflowTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK
 }
 
-// GetVersion returns the version of the decision task
-func (d *DecisionTask) GetVersion() int64 {
+// GetVersion returns the version of the workflow task
+func (d *WorkflowTask) GetVersion() int64 {
 	return d.Version
 }
 
-// SetVersion returns the version of the decision task
-func (d *DecisionTask) SetVersion(version int64) {
+// SetVersion returns the version of the workflow task
+func (d *WorkflowTask) SetVersion(version int64) {
 	d.Version = version
 }
 
-// GetTaskID returns the sequence ID of the decision task.
-func (d *DecisionTask) GetTaskID() int64 {
+// GetTaskID returns the sequence ID of the workflow task.
+func (d *WorkflowTask) GetTaskID() int64 {
 	return d.TaskID
 }
 
-// SetTaskID sets the sequence ID of the decision task
-func (d *DecisionTask) SetTaskID(id int64) {
+// SetTaskID sets the sequence ID of the workflow task
+func (d *WorkflowTask) SetTaskID(id int64) {
 	d.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
-func (d ReplicationTaskInfoWrapper) GetVisibilityTimestamp() *types.Timestamp {
-	return &types.Timestamp{}
+// GetVisibilityTime get the visibility timestamp
+func (d *ReplicationTaskInfoWrapper) GetVisibilityTime() *time.Time {
+	return &time.Time{}
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
-func (d *DecisionTask) GetVisibilityTimestamp() time.Time {
+// GetVisibilityTime get the visibility timestamp
+func (d *WorkflowTask) GetVisibilityTimestamp() time.Time {
 	return d.VisibilityTimestamp
 }
 
 // SetVisibilityTimestamp set the visibility timestamp
-func (d *DecisionTask) SetVisibilityTimestamp(timestamp time.Time) {
+func (d *WorkflowTask) SetVisibilityTimestamp(timestamp time.Time) {
 	d.VisibilityTimestamp = timestamp
 }
 
 // GetType returns the type of the record workflow started task
-func (a *RecordWorkflowStartedTask) GetType() int {
-	return TransferTaskTypeRecordWorkflowStarted
+func (a *RecordWorkflowStartedTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED
 }
 
 // GetVersion returns the version of the record workflow started task
@@ -1616,7 +1540,7 @@ func (a *RecordWorkflowStartedTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (a *RecordWorkflowStartedTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -1627,8 +1551,8 @@ func (a *RecordWorkflowStartedTask) SetVisibilityTimestamp(timestamp time.Time) 
 }
 
 // GetType returns the type of the ResetWorkflowTask
-func (a *ResetWorkflowTask) GetType() int {
-	return TransferTaskTypeResetWorkflow
+func (a *ResetWorkflowTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW
 }
 
 // GetVersion returns the version of the ResetWorkflowTask
@@ -1651,7 +1575,7 @@ func (a *ResetWorkflowTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (a *ResetWorkflowTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -1662,8 +1586,8 @@ func (a *ResetWorkflowTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the close execution task
-func (a *CloseExecutionTask) GetType() int {
-	return TransferTaskTypeCloseExecution
+func (a *CloseExecutionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION
 }
 
 // GetVersion returns the version of the close execution task
@@ -1686,7 +1610,7 @@ func (a *CloseExecutionTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (a *CloseExecutionTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -1697,8 +1621,8 @@ func (a *CloseExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the delete execution task
-func (a *DeleteHistoryEventTask) GetType() int {
-	return TaskTypeDeleteHistoryEvent
+func (a *DeleteHistoryEventTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT
 }
 
 // GetVersion returns the version of the delete execution task
@@ -1721,7 +1645,7 @@ func (a *DeleteHistoryEventTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (a *DeleteHistoryEventTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -1732,43 +1656,43 @@ func (a *DeleteHistoryEventTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the timer task
-func (d *DecisionTimeoutTask) GetType() int {
-	return TaskTypeDecisionTimeout
+func (d *WorkflowTaskTimeoutTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT
 }
 
 // GetVersion returns the version of the timer task
-func (d *DecisionTimeoutTask) GetVersion() int64 {
+func (d *WorkflowTaskTimeoutTask) GetVersion() int64 {
 	return d.Version
 }
 
 // SetVersion returns the version of the timer task
-func (d *DecisionTimeoutTask) SetVersion(version int64) {
+func (d *WorkflowTaskTimeoutTask) SetVersion(version int64) {
 	d.Version = version
 }
 
 // GetTaskID returns the sequence ID.
-func (d *DecisionTimeoutTask) GetTaskID() int64 {
+func (d *WorkflowTaskTimeoutTask) GetTaskID() int64 {
 	return d.TaskID
 }
 
 // SetTaskID sets the sequence ID.
-func (d *DecisionTimeoutTask) SetTaskID(id int64) {
+func (d *WorkflowTaskTimeoutTask) SetTaskID(id int64) {
 	d.TaskID = id
 }
 
-// GetVisibilityTimestamp gets the visibility time stamp
-func (d *DecisionTimeoutTask) GetVisibilityTimestamp() time.Time {
+// GetVisibilityTime gets the visibility time stamp
+func (d *WorkflowTaskTimeoutTask) GetVisibilityTimestamp() time.Time {
 	return d.VisibilityTimestamp
 }
 
 // SetVisibilityTimestamp gets the visibility time stamp
-func (d *DecisionTimeoutTask) SetVisibilityTimestamp(t time.Time) {
+func (d *WorkflowTaskTimeoutTask) SetVisibilityTimestamp(t time.Time) {
 	d.VisibilityTimestamp = t
 }
 
 // GetType returns the type of the timer task
-func (a *ActivityTimeoutTask) GetType() int {
-	return TaskTypeActivityTimeout
+func (a *ActivityTimeoutTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT
 }
 
 // GetVersion returns the version of the timer task
@@ -1791,7 +1715,7 @@ func (a *ActivityTimeoutTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp gets the visibility time stamp
+// GetVisibilityTime gets the visibility time stamp
 func (a *ActivityTimeoutTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -1802,8 +1726,8 @@ func (a *ActivityTimeoutTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the timer task
-func (u *UserTimerTask) GetType() int {
-	return TaskTypeUserTimer
+func (u *UserTimerTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_USER_TIMER
 }
 
 // GetVersion returns the version of the timer task
@@ -1826,7 +1750,7 @@ func (u *UserTimerTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-// GetVisibilityTimestamp gets the visibility time stamp
+// GetVisibilityTime gets the visibility time stamp
 func (u *UserTimerTask) GetVisibilityTimestamp() time.Time {
 	return u.VisibilityTimestamp
 }
@@ -1837,8 +1761,8 @@ func (u *UserTimerTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the retry timer task
-func (r *ActivityRetryTimerTask) GetType() int {
-	return TaskTypeActivityRetryTimer
+func (r *ActivityRetryTimerTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER
 }
 
 // GetVersion returns the version of the retry timer task
@@ -1861,7 +1785,7 @@ func (r *ActivityRetryTimerTask) SetTaskID(id int64) {
 	r.TaskID = id
 }
 
-// GetVisibilityTimestamp gets the visibility time stamp
+// GetVisibilityTime gets the visibility time stamp
 func (r *ActivityRetryTimerTask) GetVisibilityTimestamp() time.Time {
 	return r.VisibilityTimestamp
 }
@@ -1872,8 +1796,8 @@ func (r *ActivityRetryTimerTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the retry timer task
-func (r *WorkflowBackoffTimerTask) GetType() int {
-	return TaskTypeWorkflowBackoffTimer
+func (r *WorkflowBackoffTimerTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER
 }
 
 // GetVersion returns the version of the retry timer task
@@ -1896,7 +1820,7 @@ func (r *WorkflowBackoffTimerTask) SetTaskID(id int64) {
 	r.TaskID = id
 }
 
-// GetVisibilityTimestamp gets the visibility time stamp
+// GetVisibilityTime gets the visibility time stamp
 func (r *WorkflowBackoffTimerTask) GetVisibilityTimestamp() time.Time {
 	return r.VisibilityTimestamp
 }
@@ -1907,8 +1831,8 @@ func (r *WorkflowBackoffTimerTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the timeout task.
-func (u *WorkflowTimeoutTask) GetType() int {
-	return TaskTypeWorkflowRunTimeout
+func (u *WorkflowTimeoutTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT
 }
 
 // GetVersion returns the version of the timeout task
@@ -1931,7 +1855,7 @@ func (u *WorkflowTimeoutTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-// GetVisibilityTimestamp gets the visibility time stamp
+// GetVisibilityTime gets the visibility time stamp
 func (u *WorkflowTimeoutTask) GetVisibilityTimestamp() time.Time {
 	return u.VisibilityTimestamp
 }
@@ -1942,8 +1866,8 @@ func (u *WorkflowTimeoutTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the cancel transfer task
-func (u *CancelExecutionTask) GetType() int {
-	return TransferTaskTypeCancelExecution
+func (u *CancelExecutionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION
 }
 
 // GetVersion returns the version of the cancel transfer task
@@ -1966,7 +1890,7 @@ func (u *CancelExecutionTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (u *CancelExecutionTask) GetVisibilityTimestamp() time.Time {
 	return u.VisibilityTimestamp
 }
@@ -1977,8 +1901,8 @@ func (u *CancelExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the signal transfer task
-func (u *SignalExecutionTask) GetType() int {
-	return TransferTaskTypeSignalExecution
+func (u *SignalExecutionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION
 }
 
 // GetVersion returns the version of the signal transfer task
@@ -2001,7 +1925,7 @@ func (u *SignalExecutionTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (u *SignalExecutionTask) GetVisibilityTimestamp() time.Time {
 	return u.VisibilityTimestamp
 }
@@ -2012,8 +1936,8 @@ func (u *SignalExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the upsert search attributes transfer task
-func (u *UpsertWorkflowSearchAttributesTask) GetType() int {
-	return TransferTaskTypeUpsertWorkflowSearchAttributes
+func (u *UpsertWorkflowSearchAttributesTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES
 }
 
 // GetVersion returns the version of the upsert search attributes transfer task
@@ -2036,7 +1960,7 @@ func (u *UpsertWorkflowSearchAttributesTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (u *UpsertWorkflowSearchAttributesTask) GetVisibilityTimestamp() time.Time {
 	return u.VisibilityTimestamp
 }
@@ -2047,8 +1971,8 @@ func (u *UpsertWorkflowSearchAttributesTask) SetVisibilityTimestamp(timestamp ti
 }
 
 // GetType returns the type of the start child transfer task
-func (u *StartChildExecutionTask) GetType() int {
-	return TransferTaskTypeStartChildExecution
+func (u *StartChildExecutionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION
 }
 
 // GetVersion returns the version of the start child transfer task
@@ -2071,7 +1995,7 @@ func (u *StartChildExecutionTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (u *StartChildExecutionTask) GetVisibilityTimestamp() time.Time {
 	return u.VisibilityTimestamp
 }
@@ -2082,8 +2006,8 @@ func (u *StartChildExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the history replication task
-func (a *HistoryReplicationTask) GetType() int {
-	return ReplicationTaskTypeHistory
+func (a *HistoryReplicationTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_REPLICATION_HISTORY
 }
 
 // GetVersion returns the version of the history replication task
@@ -2106,7 +2030,7 @@ func (a *HistoryReplicationTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (a *HistoryReplicationTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -2117,8 +2041,8 @@ func (a *HistoryReplicationTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the history replication task
-func (a *SyncActivityTask) GetType() int {
-	return ReplicationTaskTypeSyncActivity
+func (a *SyncActivityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY
 }
 
 // GetVersion returns the version of the history replication task
@@ -2141,7 +2065,7 @@ func (a *SyncActivityTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (a *SyncActivityTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -2153,17 +2077,17 @@ func (a *SyncActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
 
 // DBTimestampToUnixNano converts CQL timestamp to UnixNano
 func DBTimestampToUnixNano(milliseconds int64) int64 {
-	return milliseconds * 1000 * 1000 // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-3) - (-9) = 6, so multiply by 10⁶
+	return (time.Duration(milliseconds) * time.Millisecond).Nanoseconds()
 }
 
 // UnixNanoToDBTimestamp converts UnixNano to CQL timestamp
 func UnixNanoToDBTimestamp(timestamp int64) int64 {
-	return timestamp / (1000 * 1000) // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-9) - (-3) = -6, so divide by 10⁶
+	return time.Duration(timestamp).Milliseconds()
 }
 
 // NewHistoryBranchToken return a new branch token
-func NewHistoryBranchToken(treeID []byte) ([]byte, error) {
-	branchID := uuid.NewRandom()
+func NewHistoryBranchToken(treeID string) ([]byte, error) {
+	branchID := primitives.NewUUID().String()
 	bi := &persistenceblobs.HistoryBranch{
 		TreeId:    treeID,
 		BranchId:  branchID,
@@ -2178,7 +2102,7 @@ func NewHistoryBranchToken(treeID []byte) ([]byte, error) {
 }
 
 // NewHistoryBranchTokenByBranchID return a new branch token with treeID/branchID
-func NewHistoryBranchTokenByBranchID(treeID, branchID []byte) ([]byte, error) {
+func NewHistoryBranchTokenByBranchID(treeID, branchID string) ([]byte, error) {
 	bi := &persistenceblobs.HistoryBranch{
 		TreeId:    treeID,
 		BranchId:  branchID,
@@ -2230,7 +2154,7 @@ func NewGetReplicationTasksFromDLQRequest(
 	}
 }
 
-func (r *ReplicationState) GenerateVersionProto() *persistenceblobs.ReplicationVersions {
+func GenerateVersionProto(r *persistenceblobs.ReplicationState) *persistenceblobs.ReplicationVersions {
 	return &persistenceblobs.ReplicationVersions{
 		StartVersion:     &types.Int64Value{Value: r.StartVersion},
 		LastWriteVersion: &types.Int64Value{Value: r.LastWriteVersion},

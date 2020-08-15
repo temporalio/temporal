@@ -1,0 +1,82 @@
+// Copyright (c) 2020 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.cli.v1;
+
+option go_package = "go.temporal.io/server/api/cli/v1;cli";
+
+import "google/protobuf/timestamp.proto";
+
+import "dependencies/gogoproto/gogo.proto";
+
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/enums/v1/workflow.proto";
+import "temporal/api/workflow/v1/message.proto";
+
+message DescribeWorkflowExecutionResponse {
+    temporal.api.workflow.v1.WorkflowExecutionConfig execution_config = 1;
+    WorkflowExecutionInfo workflow_execution_info = 2;
+    repeated PendingActivityInfo pending_activities = 3;
+    repeated temporal.api.workflow.v1.PendingChildExecutionInfo pending_children = 4;
+}
+
+message WorkflowExecutionInfo {
+    temporal.api.common.v1.WorkflowExecution execution = 1;
+    temporal.api.common.v1.WorkflowType type = 2;
+    google.protobuf.Timestamp start_time = 3 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp close_time = 4 [(gogoproto.stdtime) = true];
+    temporal.api.enums.v1.WorkflowExecutionStatus status = 5;
+    int64 history_length = 6;
+    string parent_namespace_id = 7;
+    temporal.api.common.v1.WorkflowExecution parent_execution = 8;
+    google.protobuf.Timestamp execution_time = 9 [(gogoproto.stdtime) = true];
+    temporal.api.common.v1.Memo memo = 10;
+    SearchAttributes search_attributes = 11;
+    temporal.api.workflow.v1.ResetPoints auto_reset_points = 12;
+}
+
+message PendingActivityInfo {
+    string activity_id = 1;
+    temporal.api.common.v1.ActivityType activity_type = 2;
+    temporal.api.enums.v1.PendingActivityState state = 3;
+    string heartbeat_details = 4;
+    google.protobuf.Timestamp last_heartbeat_time = 5 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_started_time = 6 [(gogoproto.stdtime) = true];
+    int32 attempt = 7;
+    int32 maximum_attempts = 8;
+    google.protobuf.Timestamp scheduled_time = 9 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp expiration_time = 10 [(gogoproto.stdtime) = true];
+    Failure last_failure = 11;
+    string last_worker_identity = 12;
+}
+
+message SearchAttributes {
+    map<string, string> indexed_fields = 1;
+}
+
+message Failure {
+    string message = 1;
+    string source = 2;
+    string stack_trace = 3;
+    Failure cause = 4;
+    string failure_type = 5;
+}

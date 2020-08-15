@@ -33,22 +33,22 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/collection"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -128,16 +128,16 @@ func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {
 func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 
 	requestID := uuid.New()
-	events := []*eventpb.HistoryEvent{
+	events := []*historypb.HistoryEvent{
 		{
 			EventId:    1,
-			EventType:  eventpb.EventType_WorkflowExecutionStarted,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
+			EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
 		},
 		{
 			EventId:    2,
-			EventType:  eventpb.EventType_WorkflowExecutionSignaled,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{}},
+			EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{}},
 		},
 	}
 
@@ -147,12 +147,12 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 	mockStateBuilder.EXPECT().applyEvents(
 		s.namespaceID,
 		requestID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
 		events,
-		[]*eventpb.HistoryEvent(nil),
+		[]*historypb.HistoryEvent(nil),
 		true,
 	).Return(nil, nil).Times(1)
 
@@ -166,33 +166,33 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	branchToken := []byte("some random branch token")
 	workflowIdentifier := definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, s.runID)
 
-	event1 := &eventpb.HistoryEvent{
+	event1 := &historypb.HistoryEvent{
 		EventId:    1,
-		EventType:  eventpb.EventType_WorkflowExecutionStarted,
-		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
 	}
-	event2 := &eventpb.HistoryEvent{
+	event2 := &historypb.HistoryEvent{
 		EventId:    2,
-		EventType:  eventpb.EventType_DecisionTaskScheduled,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
 	}
-	event3 := &eventpb.HistoryEvent{
+	event3 := &historypb.HistoryEvent{
 		EventId:    3,
-		EventType:  eventpb.EventType_DecisionTaskStarted,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{}},
 	}
-	event4 := &eventpb.HistoryEvent{
+	event4 := &historypb.HistoryEvent{
 		EventId:    4,
-		EventType:  eventpb.EventType_DecisionTaskCompleted,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
 	}
-	event5 := &eventpb.HistoryEvent{
+	event5 := &historypb.HistoryEvent{
 		EventId:    5,
-		EventType:  eventpb.EventType_ActivityTaskScheduled,
-		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
 	}
-	history1 := []*eventpb.History{{[]*eventpb.HistoryEvent{event1, event2, event3}}}
-	history2 := []*eventpb.History{{[]*eventpb.HistoryEvent{event4, event5}}}
+	history1 := []*historypb.History{{[]*historypb.HistoryEvent{event1, event2, event3}}}
+	history2 := []*historypb.History{{[]*historypb.HistoryEvent{event4, event5}}}
 	history := append(history1, history2...)
 	pageToken := []byte("some random token")
 
@@ -225,11 +225,11 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	paginationFn := s.nDCStateRebuilder.getPaginationFn(workflowIdentifier, firstEventID, nextEventID, branchToken)
 	iter := collection.NewPagingIterator(paginationFn)
 
-	var result []*eventpb.History
+	var result []*historypb.History
 	for iter.HasNext() {
 		item, err := iter.Next()
 		s.NoError(err)
-		result = append(result, item.(*eventpb.History))
+		result = append(result, item.(*historypb.History))
 	}
 
 	s.Equal(history, result)
@@ -241,7 +241,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	lastEventID := int64(2)
 	branchToken := []byte("other random branch token")
 	targetBranchToken := []byte("some other random branch token")
-	now := time.Now()
+	now := time.Now().UTC()
 
 	targetNamespaceID := uuid.New()
 	targetNamespace := "other random namespace name"
@@ -250,32 +250,32 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 
 	firstEventID := common.FirstEventID
 	nextEventID := lastEventID + 1
-	events1 := []*eventpb.HistoryEvent{{
+	events1 := []*historypb.HistoryEvent{{
 		EventId:   1,
 		Version:   version,
-		EventType: eventpb.EventType_WorkflowExecutionStarted,
-		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
-			TaskList:                        &tasklistpb.TaskList{Name: "some random workflow type"},
-			Input:                           payloads.EncodeString("some random input"),
-			WorkflowExecutionTimeoutSeconds: 123,
-			WorkflowRunTimeoutSeconds:       233,
-			WorkflowTaskTimeoutSeconds:      45,
-			Identity:                        "some random identity",
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+			WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: "some random workflow type"},
+			Input:                    payloads.EncodeString("some random input"),
+			WorkflowExecutionTimeout: timestamp.DurationPtr(123 * time.Second),
+			WorkflowRunTimeout:       timestamp.DurationPtr(233 * time.Second),
+			WorkflowTaskTimeout:      timestamp.DurationPtr(45 * time.Second),
+			Identity:                 "some random identity",
 		}},
 	}}
-	events2 := []*eventpb.HistoryEvent{{
+	events2 := []*historypb.HistoryEvent{{
 		EventId:   2,
 		Version:   version,
-		EventType: eventpb.EventType_WorkflowExecutionSignaled,
-		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "some random signal name",
 			Input:      payloads.EncodeString("some random signal input"),
 			Identity:   "some random identity",
 		}},
 	}}
-	history1 := []*eventpb.History{{events1}}
-	history2 := []*eventpb.History{{events2}}
+	history1 := []*historypb.History{{events1}}
+	history2 := []*historypb.History{{events2}}
 	pageToken := []byte("some random pagination token")
 
 	historySize1 := 12345
@@ -307,7 +307,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	}, nil).Once()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(targetNamespaceID), Name: targetNamespace},
+		&persistenceblobs.NamespaceInfo{Id: targetNamespaceID, Name: targetNamespace},
 		&persistenceblobs.NamespaceConfig{},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,

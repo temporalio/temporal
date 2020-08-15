@@ -31,25 +31,25 @@ import (
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
-	adminClient "github.com/temporalio/temporal/client/admin"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/filestore"
-	"github.com/temporalio/temporal/common/archiver/provider"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/elasticsearch"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/namespace"
-	"github.com/temporalio/temporal/common/persistence"
-	pes "github.com/temporalio/temporal/common/persistence/elasticsearch"
-	persistencetests "github.com/temporalio/temporal/common/persistence/persistence-tests"
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin/mysql"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	adminClient "go.temporal.io/server/client/admin"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/filestore"
+	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/elasticsearch"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
+	pes "go.temporal.io/server/common/persistence/elasticsearch"
+	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -57,7 +57,7 @@ type (
 	TestCluster struct {
 		testBase     persistencetests.TestBase
 		archiverBase *ArchiverBase
-		host         Cadence
+		host         Temporal
 	}
 
 	// ArchiverBase is a base struct for archiver provider being used in integration tests
@@ -92,7 +92,7 @@ type (
 		KafkaConfig *messaging.KafkaConfig
 	}
 
-	// WorkerConfig is the config for enabling/disabling cadence worker
+	// WorkerConfig is the config for enabling/disabling Temporal worker
 	WorkerConfig struct {
 		EnableArchiver   bool
 		EnableIndexer    bool
@@ -174,7 +174,8 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 
 	pConfig := testBase.Config()
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
-	cadenceParams := &CadenceParams{
+
+	temporalParams := &TemporalParams{
 		ClusterMetadata:                  clusterMetadata,
 		PersistenceConfig:                pConfig,
 		MessagingClient:                  messagingClient,
@@ -203,7 +204,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		logger.Fatal("Failed to start pprof", tag.Error(err))
 	}
 
-	cluster := NewCadence(cadenceParams)
+	cluster := NewTemporal(temporalParams)
 	if err := cluster.Start(); err != nil {
 		return nil, err
 	}
@@ -222,7 +223,7 @@ func newPProfInitializerImpl(logger log.Logger, port int) common.PProfInitialize
 
 func setupShards(testBase persistencetests.TestBase, numHistoryShards int, logger log.Logger) {
 	// shard 0 is always created, we create additional shards if needed
-	for shardID := 1; shardID < numHistoryShards; shardID++ {
+	for shardID := 1; shardID <= numHistoryShards; shardID++ {
 		err := testBase.CreateShard(int32(shardID), "", 0)
 		if err != nil {
 			logger.Fatal("Failed to create shard", tag.Error(err))
@@ -262,12 +263,12 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 	return &ArchiverBase{
 		metadata: archiver.NewArchivalMetadata(dcCollection, "enabled", true, "enabled", true, &config.ArchivalNamespaceDefaults{
 			History: config.HistoryArchivalNamespaceDefaults{
-				Status: "enabled",
-				URI:    "testScheme://test/history/archive/path",
+				State: "enabled",
+				URI:   "testScheme://test/history/archive/path",
 			},
 			Visibility: config.VisibilityArchivalNamespaceDefaults{
-				Status: "enabled",
-				URI:    "testScheme://test/visibility/archive/path",
+				State: "enabled",
+				URI:   "testScheme://test/visibility/archive/path",
 			},
 		}),
 		provider:                 provider,

@@ -29,9 +29,9 @@ import (
 
 	"github.com/uber-go/tally"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives"
 )
 
 // ClientImpl is used for reporting metrics by various Temporal services
@@ -147,7 +147,7 @@ func GetMetricsServiceIdx(serviceName string, logger log.Logger) ServiceIdx {
 	case primitives.WorkerService:
 		return Worker
 	default:
-		logger.Fatal("Unknown service name '%v' for metrics!", tag.Service(serviceName))
+		logger.Fatal("Unknown service name for metrics!", tag.Service(serviceName))
 	}
 
 	// this should never happen!

@@ -32,36 +32,37 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	filterpb "go.temporal.io/temporal-proto/filter"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
+	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	filterpb "go.temporal.io/api/filter/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/rpc"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/rpc"
 )
 
 func (s *integrationSuite) TestSignalWorkflow() {
 	id := "integration-signal-workflow-test"
 	wt := "integration-signal-workflow-test-type"
-	tl := "integration-signal-workflow-test-tasklist"
+	tl := "integration-signal-workflow-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	// Send a signal to non-exist workflow
 	_, err0 := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      uuid.New(),
 		},
@@ -74,15 +75,15 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -90,71 +91,71 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	workflowComplete := false
 	activityScheduled := false
 	activityData := int32(1)
-	var signalEvent *eventpb.HistoryEvent
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+	var signalEvent *historypb.HistoryEvent
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(1),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 2,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             strconv.Itoa(1),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
-					return []*decisionpb.Decision{}, nil
+					return []*commandpb.Command{}, nil
 				}
 			}
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	// activity handler
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskList:        taskList,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// Make first decision to schedule activity
-	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Make first command to schedule activity
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Send first signal using RunID
@@ -162,7 +163,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	signalInput := payloads.EncodeString("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},
@@ -172,9 +173,9 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	})
 	s.NoError(err)
 
-	// Process signal in decider
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Process signal in workflow
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -188,7 +189,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	signalInput = payloads.EncodeString("another signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 		SignalName: signalName,
@@ -197,9 +198,9 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	})
 	s.NoError(err)
 
-	// Process signal in decider
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Process signal in workflow
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -211,7 +212,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	// Terminate workflow execution
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 		Reason:   "test signal",
@@ -223,7 +224,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	// Send signal to terminated workflow
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},
@@ -238,99 +239,99 @@ func (s *integrationSuite) TestSignalWorkflow() {
 func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	id := "integration-signal-workflow-test-duplicate"
 	wt := "integration-signal-workflow-test-duplicate-type"
-	tl := "integration-signal-workflow-test-duplicate-tasklist"
+	tl := "integration-signal-workflow-test-duplicate-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	workflowComplete := false
 	activityScheduled := false
 	activityData := int32(1)
-	var signalEvent *eventpb.HistoryEvent
+	var signalEvent *historypb.HistoryEvent
 	numOfSignaledEvent := 0
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(1),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 2,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             strconv.Itoa(1),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
 			numOfSignaledEvent = 0
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
 					numOfSignaledEvent++
 				}
 			}
-			return []*decisionpb.Decision{}, nil
+			return []*commandpb.Command{}, nil
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	// activity handler
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskList:        taskList,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// Make first decision to schedule activity
-	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Make first command to schedule activity
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Send first signal
@@ -339,7 +340,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	requestID := uuid.New()
 	signalReqest := &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},
@@ -351,9 +352,9 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), signalReqest)
 	s.NoError(err)
 
-	// Process signal in decider
-	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Process signal in workflow
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -367,9 +368,9 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), signalReqest)
 	s.NoError(err)
 
-	// Process signal in decider
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Process signal in workflow
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -377,27 +378,27 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.Equal(0, numOfSignaledEvent)
 }
 
-func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
+func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
 	id := "integration-signal-external-workflow-test"
 	wt := "integration-signal-external-workflow-test-type"
-	tl := "integration-signal-external-workflow-test-tasklist"
+	tl := "integration-signal-external-workflow-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -405,15 +406,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	foreignRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.foreignNamespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.foreignNamespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(NewContext(), foreignRequest)
 	s.NoError(err0)
@@ -423,33 +424,33 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	activityCounter := int32(0)
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_SignalExternalWorkflowExecution,
-			Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 				Namespace: s.foreignNamespace,
-				Execution: &executionpb.WorkflowExecution{
+				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
 					RunId:      we2.GetRunId(),
 				},
@@ -459,91 +460,91 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 		}}, nil
 	}
 
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskList:        taskList,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	workflowComplete := false
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
-	var signalEvent *eventpb.HistoryEvent
-	foreignDtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+	var signalEvent *historypb.HistoryEvent
+	foreignwtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(foreignActivityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             strconv.Itoa(int(foreignActivityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
-					return []*decisionpb.Decision{}, nil
+					return []*commandpb.Command{}, nil
 				}
 			}
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	foreignPoller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.foreignNamespace,
-		TaskList:        taskList,
-		Identity:        identity,
-		DecisionHandler: foreignDtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.foreignNamespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: foreignwtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// Start both current and foreign workflows to make some progress.
-	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = foreignPoller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("foreign PollAndProcessDecisionTask", tag.Error(err))
+	_, err = foreignPoller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	err = foreignPoller.PollAndProcessActivityTask(false)
 	s.Logger.Info("foreign PollAndProcessActivityTask", tag.Error(err))
 	s.NoError(err)
 
-	// Signal the foreign workflow with this decision request.
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Signal the foreign workflow with this command.
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// in source workflow
@@ -553,7 +554,7 @@ CheckHistoryLoopForSignalSent:
 	for i := 1; i < 10; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -563,7 +564,7 @@ CheckHistoryLoopForSignalSent:
 		//common.PrettyPrintHistory(history, s.Logger)
 
 		signalRequestedEvent := history.Events[len(history.Events)-2]
-		if signalRequestedEvent.GetEventType() != eventpb.EventType_ExternalWorkflowExecutionSignaled {
+		if signalRequestedEvent.GetEventType() != enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED {
 			s.Logger.Info("Signal still not sent")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForSignalSent
@@ -581,9 +582,9 @@ CheckHistoryLoopForSignalSent:
 
 	s.True(signalSent)
 
-	// process signal in decider for foreign workflow
-	_, err = foreignPoller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Process signal in workflow for foreign workflow
+	_, err = foreignPoller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -593,31 +594,31 @@ CheckHistoryLoopForSignalSent:
 	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 }
 
-func (s *integrationSuite) TestSignalWorkflow_Cron_NoDecisionTaskCreated() {
+func (s *integrationSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 	id := "integration-signal-workflow-test-cron"
 	wt := "integration-signal-workflow-test-cron-type"
-	tl := "integration-signal-workflow-test-cron-tasklist"
+	tl := "integration-signal-workflow-test-cron-taskqueue"
 	identity := "worker1"
 	cronSpec := "@every 2s"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
-		CronSchedule:               cronSpec,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
+		CronSchedule:        cronSpec,
 	}
-	now := time.Now()
+	now := time.Now().UTC()
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
@@ -629,7 +630,7 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoDecisionTaskCreated() {
 	signalInput := payloads.EncodeString("my signal input")
 	_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},
@@ -639,58 +640,58 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoDecisionTaskCreated() {
 	})
 	s.NoError(err)
 
-	// decider logic
-	var decisionTaskDelay time.Duration
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
-		decisionTaskDelay = time.Now().Sub(now)
+	// workflow logic
+	var workflowTaskDelay time.Duration
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		workflowTaskDelay = time.Now().UTC().Sub(now)
 
-		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskList:        taskList,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// Make first decision to schedule activity
-	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Make first command to schedule activity
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
-	s.True(decisionTaskDelay > time.Second*2)
+	s.True(workflowTaskDelay > time.Second*2)
 }
 
-func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
+func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 	id := "integration-signal-external-workflow-test-without-run-id"
 	wt := "integration-signal-external-workflow-test-without-run-id-type"
-	tl := "integration-signal-external-workflow-test-without-run-id-tasklist"
+	tl := "integration-signal-external-workflow-test-without-run-id-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -698,15 +699,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	foreignRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.foreignNamespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.foreignNamespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(NewContext(), foreignRequest)
 	s.NoError(err0)
@@ -716,35 +717,35 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	activityCounter := int32(0)
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_SignalExternalWorkflowExecution,
-			Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 				Namespace: s.foreignNamespace,
-				Execution: &executionpb.WorkflowExecution{
+				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
-					// No RunID in decision
+					// No RunID in command
 				},
 				SignalName: signalName,
 				Input:      signalInput,
@@ -752,91 +753,91 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 		}}, nil
 	}
 
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskList:        taskList,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	workflowComplete := false
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
-	var signalEvent *eventpb.HistoryEvent
-	foreignDtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+	var signalEvent *historypb.HistoryEvent
+	foreignwtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(foreignActivityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             strconv.Itoa(int(foreignActivityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
-					return []*decisionpb.Decision{}, nil
+					return []*commandpb.Command{}, nil
 				}
 			}
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	foreignPoller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.foreignNamespace,
-		TaskList:        taskList,
-		Identity:        identity,
-		DecisionHandler: foreignDtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.foreignNamespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: foreignwtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// Start both current and foreign workflows to make some progress.
-	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = foreignPoller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("foreign PollAndProcessDecisionTask", tag.Error(err))
+	_, err = foreignPoller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	err = foreignPoller.PollAndProcessActivityTask(false)
 	s.Logger.Info("foreign PollAndProcessActivityTask", tag.Error(err))
 	s.NoError(err)
 
-	// Signal the foreign workflow with this decision request.
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Signal the foreign workflow with this command.
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// in source workflow
@@ -846,7 +847,7 @@ CheckHistoryLoopForSignalSent:
 	for i := 1; i < 10; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -855,7 +856,7 @@ CheckHistoryLoopForSignalSent:
 		history := historyResponse.History
 
 		signalRequestedEvent := history.Events[len(history.Events)-2]
-		if signalRequestedEvent.GetEventType() != eventpb.EventType_ExternalWorkflowExecutionSignaled {
+		if signalRequestedEvent.GetEventType() != enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED {
 			s.Logger.Info("Signal still not sent")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForSignalSent
@@ -873,9 +874,9 @@ CheckHistoryLoopForSignalSent:
 
 	s.True(signalSent)
 
-	// process signal in decider for foreign workflow
-	_, err = foreignPoller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Process signal in workflow for foreign workflow
+	_, err = foreignPoller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -885,27 +886,27 @@ CheckHistoryLoopForSignalSent:
 	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 }
 
-func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
-	id := "integration-signal-unknown-workflow-decision-test"
-	wt := "integration-signal-unknown-workflow-decision-test-type"
-	tl := "integration-signal-unknown-workflow-decision-test-tasklist"
+func (s *integrationSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
+	id := "integration-signal-unknown-workflow-command-test"
+	wt := "integration-signal-unknown-workflow-command-test-type"
+	tl := "integration-signal-unknown-workflow-command-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
@@ -915,33 +916,33 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 	activityCounter := int32(0)
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_SignalExternalWorkflowExecution,
-			Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 				Namespace: s.foreignNamespace,
-				Execution: &executionpb.WorkflowExecution{
+				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow_not_exist",
 					RunId:      we.GetRunId(),
 				},
@@ -951,30 +952,30 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 		}}, nil
 	}
 
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskList:        taskList,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// Start workflows to make some progress.
-	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	// Signal the foreign workflow with this decision request.
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Signal the foreign workflow with this command.
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	signalSentFailed := false
@@ -983,7 +984,7 @@ CheckHistoryLoopForCancelSent:
 	for i := 1; i < 10; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -992,7 +993,7 @@ CheckHistoryLoopForCancelSent:
 		history := historyResponse.History
 
 		signalFailedEvent := history.Events[len(history.Events)-2]
-		if signalFailedEvent.GetEventType() != eventpb.EventType_SignalExternalWorkflowExecutionFailed {
+		if signalFailedEvent.GetEventType() != enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED {
 			s.Logger.Info("Cancellaton not cancelled yet")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
@@ -1010,27 +1011,27 @@ CheckHistoryLoopForCancelSent:
 	s.True(signalSentFailed)
 }
 
-func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
-	id := "integration-signal-self-workflow-decision-test"
-	wt := "integration-signal-self-workflow-decision-test-type"
-	tl := "integration-signal-self-workflow-decision-test-tasklist"
+func (s *integrationSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
+	id := "integration-signal-self-workflow-command-test"
+	wt := "integration-signal-self-workflow-command-test-type"
+	tl := "integration-signal-self-workflow-command-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
@@ -1040,33 +1041,33 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 	activityCounter := int32(0)
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_SignalExternalWorkflowExecution,
-			Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 				Namespace: s.namespace,
-				Execution: &executionpb.WorkflowExecution{
+				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
@@ -1076,30 +1077,30 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 		}}, nil
 	}
 
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskList:        taskList,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// Start workflows to make some progress.
-	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	// Signal the foreign workflow with this decision request.
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Signal the foreign workflow with this command.
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	signalSentFailed := false
@@ -1108,7 +1109,7 @@ CheckHistoryLoopForCancelSent:
 	for i := 1; i < 10; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -1117,7 +1118,7 @@ CheckHistoryLoopForCancelSent:
 		history := historyResponse.History
 
 		signalFailedEvent := history.Events[len(history.Events)-2]
-		if signalFailedEvent.GetEventType() != eventpb.EventType_SignalExternalWorkflowExecutionFailed {
+		if signalFailedEvent.GetEventType() != enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED {
 			s.Logger.Info("Cancellaton not cancelled yet")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
@@ -1139,13 +1140,13 @@ CheckHistoryLoopForCancelSent:
 func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	id := "integration-signal-with-start-workflow-test"
 	wt := "integration-signal-with-start-workflow-test-type"
-	tl := "integration-signal-with-start-workflow-test-tasklist"
+	tl := "integration-signal-with-start-workflow-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	header := &commonpb.Header{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
@@ -1153,15 +1154,15 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	// Start a workflow
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1169,38 +1170,38 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	workflowComplete := false
 	activityScheduled := false
 	activityData := int32(1)
 	newWorkflowStarted := false
-	var signalEvent, startedEvent *eventpb.HistoryEvent
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+	var signalEvent, startedEvent *historypb.HistoryEvent
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(1),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 2,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             strconv.Itoa(1),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
-					return []*decisionpb.Decision{}, nil
+					return []*commandpb.Command{}, nil
 				}
 			}
 		} else if newWorkflowStarted {
@@ -1208,76 +1209,76 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 			signalEvent = nil
 			startedEvent = nil
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
 				}
-				if event.GetEventType() == eventpb.EventType_WorkflowExecutionStarted {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 					startedEvent = event
 				}
 			}
 			if signalEvent != nil && startedEvent != nil {
-				return []*decisionpb.Decision{}, nil
+				return []*commandpb.Command{}, nil
 			}
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	// activity handler
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskList:        taskList,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// Make first decision to schedule activity
-	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Make first command to schedule activity
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Send a signal
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	wfIDReusePolicy := commonpb.WorkflowIdReusePolicy_AllowDuplicate
+	wfIDReusePolicy := enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		Header:                     header,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		SignalName:                 signalName,
-		SignalInput:                signalInput,
-		Identity:                   identity,
-		WorkflowIdReusePolicy:      wfIDReusePolicy,
+		RequestId:             uuid.New(),
+		Namespace:             s.namespace,
+		WorkflowId:            id,
+		WorkflowType:          workflowType,
+		TaskQueue:             taskQueue,
+		Input:                 nil,
+		Header:                header,
+		WorkflowRunTimeout:    timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout:   timestamp.DurationPtr(1 * time.Second),
+		SignalName:            signalName,
+		SignalInput:           signalInput,
+		Identity:              identity,
+		WorkflowIdReusePolicy: wfIDReusePolicy,
 	}
 	resp, err := s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
 	s.NoError(err)
 	s.Equal(we.GetRunId(), resp.GetRunId())
 
-	// Process signal in decider
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Process signal in workflow
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -1289,7 +1290,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	// Terminate workflow execution
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 		Reason:   "test signal",
@@ -1311,9 +1312,9 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	s.NotEqual(we.GetRunId(), resp.GetRunId())
 	newWorkflowStarted = true
 
-	// Process signal in decider
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Process signal in workflow
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -1336,9 +1337,9 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	s.NotNil(resp.GetRunId())
 	newWorkflowStarted = true
 
-	// Process signal in decider
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Process signal in workflow
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -1352,8 +1353,8 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 		Namespace:       s.namespace,
 		MaximumPageSize: 100,
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: 0,
-			LatestTime:   time.Now().UnixNano(),
+			EarliestTime: timestamp.TimePtr(time.Time{}),
+			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: id,
@@ -1366,7 +1367,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	// Terminate workflow execution and assert visibility is correct
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 		Reason:   "kill workflow",
@@ -1389,8 +1390,8 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 		Namespace:       s.namespace,
 		MaximumPageSize: 100,
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: 0,
-			LatestTime:   time.Now().UnixNano(),
+			EarliestTime: timestamp.TimePtr(time.Time{}),
+			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: id,
@@ -1404,25 +1405,25 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	id := "integration-signal-with-start-workflow-id-reuse-test"
 	wt := "integration-signal-with-start-workflow-id-reuse-test-type"
-	tl := "integration-signal-with-start-workflow-id-reuse-test-tasklist"
+	tl := "integration-signal-with-start-workflow-id-reuse-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	// Start a workflow
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1433,59 +1434,59 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	workflowComplete := false
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskList:        taskList,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// Start workflows, make some progress and complete workflow
-	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
-	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
 
@@ -1493,18 +1494,18 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
 	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		SignalName:                 signalName,
-		SignalInput:                signalInput,
-		Identity:                   identity,
-		WorkflowIdReusePolicy:      commonpb.WorkflowIdReusePolicy_RejectDuplicate,
+		RequestId:             uuid.New(),
+		Namespace:             s.namespace,
+		WorkflowId:            id,
+		WorkflowType:          workflowType,
+		TaskQueue:             taskQueue,
+		Input:                 nil,
+		WorkflowRunTimeout:    timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout:   timestamp.DurationPtr(1 * time.Second),
+		SignalName:            signalName,
+		SignalInput:           signalInput,
+		Identity:              identity,
+		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 	}
 	ctx, _ := rpc.NewContextWithTimeoutAndHeaders(5 * time.Second)
 	resp, err := s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
@@ -1514,7 +1515,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 
 	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly
-	sRequest.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicy_AllowDuplicateFailedOnly
+	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY
 	ctx, _ = rpc.NewContextWithTimeoutAndHeaders(5 * time.Second)
 	resp, err = s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(resp)
@@ -1523,7 +1524,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 
 	// test policy WorkflowIdReusePolicyAllowDuplicate
-	sRequest.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicy_AllowDuplicate
+	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	ctx, _ = rpc.NewContextWithTimeoutAndHeaders(5 * time.Second)
 	resp, err = s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.NoError(err)
@@ -1532,7 +1533,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	// Terminate workflow execution
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 		Reason:   "test WorkflowIdReusePolicyAllowDuplicateFailedOnly",
@@ -1542,7 +1543,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.NoError(err)
 
 	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly success start
-	sRequest.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicy_AllowDuplicateFailedOnly
+	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY
 	resp, err = s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
 	s.NoError(err)
 	s.NotEmpty(resp.GetRunId())

@@ -30,25 +30,25 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/temporalio/temporal/client/frontend"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"go.temporal.io/temporal"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
-	"go.temporal.io/temporal/activity"
-	"go.temporal.io/temporal/workflow"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 	"golang.org/x/time/rate"
+
+	"go.temporal.io/server/client/frontend"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 const (
 	batcherContextKey = "batcherContext"
-	// BatcherTaskListName is the tasklist name
-	BatcherTaskListName = "temporal-sys-batcher-tasklist"
+	// BatcherTaskQueueName is the taskqueue name
+	BatcherTaskQueueName = "temporal-sys-batcher-taskqueue"
 	// BatchWFTypeName is the workflow type
 	BatchWFTypeName   = "temporal-sys-batch-workflow"
 	batchActivityName = "temporal-sys-batch-activity"
@@ -120,7 +120,7 @@ type (
 		// SignalParams is params only for BatchTypeSignal
 		SignalParams SignalParams
 		// RPS of processing. Default to DefaultRPS
-		// TODO we will implement smarter way than this static rate limiter: https://github.com/temporalio/temporal/issues/2138
+		// TODO we will implement smarter way than this static rate limiter: https://go.temporal.io/server/issues/2138
 		RPS int
 		// Number of goroutines running in parallel to process
 		Concurrency int
@@ -147,7 +147,7 @@ type (
 	}
 
 	taskDetail struct {
-		execution executionpb.WorkflowExecution
+		execution commonpb.WorkflowExecution
 		attempts  int
 		// passing along the current heartbeat details to make heartbeat within a task so that it won't timeout
 		hbd HeartBeatDetails
@@ -211,7 +211,7 @@ func setDefaultParams(params BatchParams) BatchParams {
 	if params.Concurrency <= 0 {
 		params.Concurrency = DefaultConcurrency
 	}
-	if params.AttemptsOnRetryableError <= 0 {
+	if params.AttemptsOnRetryableError <= 1 {
 		params.AttemptsOnRetryableError = DefaultAttemptsOnRetryableError
 	}
 	if params.ActivityHeartBeatTimeout <= 0 {
@@ -285,7 +285,7 @@ func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetai
 		for _, wf := range resp.Executions {
 			taskCh <- taskDetail{
 				execution: *wf.Execution,
-				attempts:  0,
+				attempts:  1,
 				hbd:       hbd,
 			}
 		}
@@ -351,7 +351,7 @@ func startTaskProcessor(
 					func(workflowID, runID string) error {
 						_, err := client.TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
 							Namespace: batchParams.Namespace,
-							WorkflowExecution: &executionpb.WorkflowExecution{
+							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
@@ -366,7 +366,7 @@ func startTaskProcessor(
 					func(workflowID, runID string) error {
 						_, err := client.RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
 							Namespace: batchParams.Namespace,
-							WorkflowExecution: &executionpb.WorkflowExecution{
+							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
@@ -380,7 +380,7 @@ func startTaskProcessor(
 					func(workflowID, runID string) error {
 						_, err := client.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 							Namespace: batchParams.Namespace,
-							WorkflowExecution: &executionpb.WorkflowExecution{
+							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
@@ -397,7 +397,7 @@ func startTaskProcessor(
 				getActivityLogger(ctx).Error("Failed to process batch operation task", tag.Error(err))
 
 				_, ok := batchParams._nonRetryableErrors[err.Error()]
-				if ok || task.attempts >= batchParams.AttemptsOnRetryableError {
+				if ok || task.attempts > batchParams.AttemptsOnRetryableError {
 					respCh <- err
 				} else {
 					// put back to the channel if less than attemptsOnError
@@ -421,7 +421,7 @@ func processTask(
 	applyOnChild *bool,
 	procFn func(string, string) error,
 ) error {
-	wfs := []executionpb.WorkflowExecution{task.execution}
+	wfs := []commonpb.WorkflowExecution{task.execution}
 	for len(wfs) > 0 {
 		wf := wfs[0]
 
@@ -441,7 +441,7 @@ func processTask(
 		wfs = wfs[1:]
 		resp, err := client.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: batchParams.Namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: wf.GetWorkflowId(),
 				RunId:      wf.GetRunId(),
 			},
@@ -459,7 +459,7 @@ func processTask(
 		if applyOnChild != nil && *applyOnChild && len(resp.PendingChildren) > 0 {
 			getActivityLogger(ctx).Info("Found more child workflows to process", tag.Number(int64(len(resp.PendingChildren))))
 			for _, ch := range resp.PendingChildren {
-				wfs = append(wfs, executionpb.WorkflowExecution{
+				wfs = append(wfs, commonpb.WorkflowExecution{
 					WorkflowId: ch.GetWorkflowId(),
 					RunId:      ch.GetRunId(),
 				})

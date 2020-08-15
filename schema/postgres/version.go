@@ -24,7 +24,7 @@
 
 package mysql
 
-import "github.com/temporalio/temporal/schema/mysql"
+import "go.temporal.io/server/schema/mysql"
 
 // NOTE: whenever there is a new data base schema update, plz update the following versions
 

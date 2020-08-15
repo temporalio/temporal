@@ -30,18 +30,24 @@ import (
 )
 
 const (
-	readSchemaVersionQuery = `SELECT curr_version from schema_version where db_name=?`
+	readSchemaVersionQuery = `SELECT curr_version from schema_version where version_partition=0 and db_name=?`
 
-	writeSchemaVersionQuery = `REPLACE into schema_version(db_name, creation_time, curr_version, min_compatible_version) VALUES (?,?,?,?)`
+	writeSchemaVersionQuery = `INSERT into schema_version(version_partition, db_name, creation_time, curr_version, min_compatible_version) ` +
+		`VALUES (0,?,?,?,?) ` +
+		`ON DUPLICATE KEY UPDATE ` +
+		`creation_time=VALUES(creation_time), curr_version=VALUES(curr_version), min_compatible_version=VALUES(min_compatible_version)`
 
-	writeSchemaUpdateHistoryQuery = `INSERT into schema_update_history(year, month, update_time, old_version, new_version, manifest_md5, description) VALUES(?,?,?,?,?,?,?)`
+	writeSchemaUpdateHistoryQuery = `INSERT into schema_update_history(version_partition, year, month, update_time, old_version, new_version, manifest_md5, description) VALUES(0,?,?,?,?,?,?,?)`
 
-	createSchemaVersionTableQuery = `CREATE TABLE schema_version(db_name VARCHAR(255) not null PRIMARY KEY, ` +
+	createSchemaVersionTableQuery = `CREATE TABLE schema_version(version_partition INT not null, ` +
+		`db_name VARCHAR(255) not null, ` +
 		`creation_time DATETIME(6), ` +
 		`curr_version VARCHAR(64), ` +
-		`min_compatible_version VARCHAR(64));`
+		`min_compatible_version VARCHAR(64), ` +
+		`PRIMARY KEY (version_partition, db_name));`
 
 	createSchemaUpdateHistoryTableQuery = `CREATE TABLE schema_update_history(` +
+		`version_partition INT not null, ` +
 		`year int not null, ` +
 		`month int not null, ` +
 		`update_time DATETIME(6) not null, ` +
@@ -49,7 +55,7 @@ const (
 		`manifest_md5 VARCHAR(64), ` +
 		`new_version VARCHAR(64), ` +
 		`old_version VARCHAR(64), ` +
-		`PRIMARY KEY (year, month, update_time));`
+		`PRIMARY KEY (version_partition, year, month, update_time));`
 
 	//NOTE we have to use %v because somehow mysql doesn't work with ? here
 	createDatabaseQuery = "CREATE database %v CHARACTER SET UTF8"
@@ -78,7 +84,7 @@ func (mdb *db) ReadSchemaVersion(database string) (string, error) {
 
 // UpdateSchemaVersion updates the schema version for the keyspace
 func (mdb *db) UpdateSchemaVersion(database string, newVersion string, minCompatibleVersion string) error {
-	return mdb.Exec(writeSchemaVersionQuery, database, time.Now(), newVersion, minCompatibleVersion)
+	return mdb.Exec(writeSchemaVersionQuery, database, time.Now().UTC(), newVersion, minCompatibleVersion)
 }
 
 // WriteSchemaUpdateLog adds an entry to the schema update history table

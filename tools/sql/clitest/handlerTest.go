@@ -31,11 +31,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/common/auth"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/environment"
-	"github.com/temporalio/temporal/tools/common/schema"
-	"github.com/temporalio/temporal/tools/sql"
+	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/environment"
+	"go.temporal.io/server/tools/common/schema"
+	"go.temporal.io/server/tools/sql"
 )
 
 type (

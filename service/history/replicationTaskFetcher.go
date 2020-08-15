@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskFetcher_mock.go -self_package github.com/temporalio/temporal/service/history
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskFetcher_mock.go -self_package go.temporal.io/server/service/history
 
 package history
 
@@ -30,17 +30,17 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/client"
-	"github.com/temporalio/temporal/client/admin"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/rpc"
-	serviceConfig "github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/api/adminservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/client/admin"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/rpc"
+	serviceConfig "go.temporal.io/server/common/service/config"
 )
 
 const (
@@ -93,7 +93,7 @@ func NewReplicationTaskFetchers(
 ) *ReplicationTaskFetchersImpl {
 
 	var fetchers []ReplicationTaskFetcher
-	if consumerConfig.Type == serviceConfig.ReplicationConsumerTypeRPC {
+	if consumerConfig.Type == serviceConfig.ReplicationConsumerTypeRPC && config.EnableRPCReplication() {
 		for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
 			if !info.Enabled {
 				continue
@@ -253,7 +253,12 @@ func (f *ReplicationTaskFetcherImpl) fetchAndDistributeTasks(requestByShard map[
 	f.logger.Debug("Successfully fetched replication tasks.", tag.Counter(len(messagesByShard)))
 
 	for shardID, tasks := range messagesByShard {
-		request := requestByShard[shardID]
+		request, ok := requestByShard[shardID]
+
+		if !ok {
+			f.logger.Error("No outstanding request found for shardId.  Skipping Messages.", tag.ShardID(int(shardID)))
+			continue
+		}
 		request.respChan <- tasks
 		close(request.respChan)
 		delete(requestByShard, shardID)
@@ -264,8 +269,8 @@ func (f *ReplicationTaskFetcherImpl) fetchAndDistributeTasks(requestByShard map[
 
 func (f *ReplicationTaskFetcherImpl) getMessages(
 	requestByShard map[int32]*request,
-) (map[int32]*replicationgenpb.ReplicationMessages, error) {
-	var tokens []*replicationgenpb.ReplicationToken
+) (map[int32]*replicationspb.ReplicationMessages, error) {
+	var tokens []*replicationspb.ReplicationToken
 	for _, request := range requestByShard {
 		tokens = append(tokens, request.token)
 	}
@@ -282,7 +287,7 @@ func (f *ReplicationTaskFetcherImpl) getMessages(
 		return nil, err
 	}
 
-	return response.GetMessagesByShard(), err
+	return response.GetShardMessages(), err
 }
 
 // GetSourceCluster returns the source cluster for the fetcher

@@ -30,21 +30,24 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/client/history"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/namespace"
-	"github.com/temporalio/temporal/common/task"
-	"github.com/temporalio/temporal/common/xdc"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/task"
+	"go.temporal.io/server/common/xdc"
 )
 
 type (
@@ -214,23 +217,23 @@ SubmitLoop:
 	for {
 		var scope int
 		switch replicationTask.GetTaskType() {
-		case replicationgenpb.ReplicationTaskType_NamespaceTask:
+		case enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
 			logger = logger.WithTags(tag.WorkflowNamespaceID(replicationTask.GetNamespaceTaskAttributes().GetId()))
 			scope = metrics.NamespaceReplicationTaskScope
 			err = p.handleNamespaceReplicationTask(replicationTask, msg, logger)
-		case replicationgenpb.ReplicationTaskType_SyncShardStatusTask:
+		case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
 			scope = metrics.SyncShardTaskScope
 			err = p.handleSyncShardTask(replicationTask, msg, logger)
-		case replicationgenpb.ReplicationTaskType_SyncActivityTask:
+		case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 			scope = metrics.SyncActivityTaskScope
 			err = p.handleActivityTask(replicationTask, msg, logger)
-		case replicationgenpb.ReplicationTaskType_HistoryTask:
+		case enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK:
 			scope = metrics.HistoryReplicationTaskScope
 			err = p.handleHistoryReplicationTask(replicationTask, msg, logger)
-		case replicationgenpb.ReplicationTaskType_HistoryMetadataTask:
+		case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
 			scope = metrics.HistoryMetadataReplicationTaskScope
 			err = p.handleHistoryMetadataReplicationTask(replicationTask, msg, logger)
-		case replicationgenpb.ReplicationTaskType_HistoryV2Task:
+		case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 			scope = metrics.HistoryReplicationV2TaskScope
 			err = p.handleHistoryReplicationV2Task(replicationTask, msg, logger)
 		default:
@@ -257,7 +260,7 @@ SubmitLoop:
 func (p *replicationTaskProcessor) initLogger(msg messaging.Message) log.Logger {
 	return p.logger.WithTags(tag.KafkaPartition(msg.Partition()),
 		tag.KafkaOffset(msg.Offset()),
-		tag.AttemptStart(time.Now()))
+		tag.AttemptStart(time.Now().UTC()))
 }
 
 func (p *replicationTaskProcessor) ackMsg(msg messaging.Message, logger log.Logger) {
@@ -270,7 +273,7 @@ func (p *replicationTaskProcessor) ackMsg(msg messaging.Message, logger log.Logg
 
 func (p *replicationTaskProcessor) nackMsg(msg messaging.Message, err error, logger log.Logger) {
 	p.updateFailureMetric(metrics.ReplicatorScope, err)
-	logger.Error(ErrDeserializeReplicationTask.Error(), tag.Error(err), tag.AttemptEnd(time.Now()))
+	logger.Error(ErrDeserializeReplicationTask.Error(), tag.Error(err), tag.AttemptEnd(time.Now().UTC()))
 	// the underlying implementation will not return anything other than nil
 	// do logging just in case
 	if err = msg.Nack(); err != nil {
@@ -278,8 +281,8 @@ func (p *replicationTaskProcessor) nackMsg(msg messaging.Message, err error, log
 	}
 }
 
-func (p *replicationTaskProcessor) decodeAndValidateMsg(msg messaging.Message, logger log.Logger) (*replicationgenpb.ReplicationTask, error) {
-	var replicationTask replicationgenpb.ReplicationTask
+func (p *replicationTaskProcessor) decodeAndValidateMsg(msg messaging.Message, logger log.Logger) (*replicationspb.ReplicationTask, error) {
+	var replicationTask replicationspb.ReplicationTask
 	err := replicationTask.Unmarshal(msg.Value())
 	if err != nil {
 		// return InvalidArgument so processWithRetry can nack the message
@@ -289,7 +292,7 @@ func (p *replicationTaskProcessor) decodeAndValidateMsg(msg messaging.Message, l
 	return &replicationTask, nil
 }
 
-func (p *replicationTaskProcessor) handleNamespaceReplicationTask(task *replicationgenpb.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
+func (p *replicationTaskProcessor) handleNamespaceReplicationTask(task *replicationspb.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
 	p.metricsClient.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
@@ -307,7 +310,7 @@ func (p *replicationTaskProcessor) handleNamespaceReplicationTask(task *replicat
 	return nil
 }
 
-func (p *replicationTaskProcessor) handleSyncShardTask(task *replicationgenpb.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
+func (p *replicationTaskProcessor) handleSyncShardTask(task *replicationspb.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
 	p.metricsClient.IncCounter(metrics.SyncShardTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.SyncShardTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
@@ -319,14 +322,15 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicationgenpb.Re
 	}()
 
 	attr := task.GetSyncShardStatusTaskAttributes()
-	if time.Now().Sub(time.Unix(0, attr.GetTimestamp())) > dropSyncShardTaskTimeThreshold {
+	st := timestamp.TimeValue(attr.GetStatusTime())
+	if timestamp.TimeNowPtrUtc().Sub(st) > dropSyncShardTaskTimeThreshold {
 		return nil
 	}
 
 	req := &historyservice.SyncShardStatusRequest{
 		SourceCluster: attr.SourceCluster,
 		ShardId:       attr.ShardId,
-		Timestamp:     attr.Timestamp,
+		StatusTime:    &st,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), p.config.ReplicationTaskContextTimeout())
 	defer cancel()
@@ -335,7 +339,7 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicationgenpb.Re
 }
 
 func (p *replicationTaskProcessor) handleActivityTask(
-	task *replicationgenpb.ReplicationTask,
+	task *replicationspb.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 ) error {
@@ -360,7 +364,7 @@ func (p *replicationTaskProcessor) handleActivityTask(
 }
 
 func (p *replicationTaskProcessor) handleHistoryReplicationTask(
-	task *replicationgenpb.ReplicationTask,
+	task *replicationspb.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 ) error {
@@ -385,7 +389,7 @@ func (p *replicationTaskProcessor) handleHistoryReplicationTask(
 }
 
 func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(
-	task *replicationgenpb.ReplicationTask,
+	task *replicationspb.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 ) error {
@@ -405,12 +409,13 @@ func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(
 		p.historyClient,
 		p.metricsClient,
 		p.historyRereplicator,
+		p.nDCHistoryResender,
 	)
 	return p.sequentialTaskProcessor.Submit(historyMetadataReplicationTask)
 }
 
 func (p *replicationTaskProcessor) handleHistoryReplicationV2Task(
-	task *replicationgenpb.ReplicationTask,
+	task *replicationspb.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 ) error {
@@ -460,7 +465,7 @@ func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {
 
 	// Also update counter to distinguish between type of failures
 	switch err.(type) {
-	case *serviceerror.ShardOwnershipLost:
+	case *serviceerrors.ShardOwnershipLost:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
 	case *serviceerror.InvalidArgument:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
@@ -472,7 +477,7 @@ func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrNotFoundCounter)
 	case *serviceerror.ResourceExhausted:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
-	case *serviceerror.RetryTask:
+	case *serviceerrors.RetryTask:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
 	case *serviceerror.DeadlineExceeded:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)

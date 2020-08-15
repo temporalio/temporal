@@ -29,10 +29,10 @@ package cluster
 import (
 	"fmt"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -103,7 +103,7 @@ func NewMetadata(
 
 	versionToClusterName := make(map[int64]string)
 	for clusterName, info := range clusterInfo {
-		if failoverVersionIncrement <= info.InitialFailoverVersion || info.InitialFailoverVersion < 0 {
+		if failoverVersionIncrement <= info.InitialFailoverVersion || info.InitialFailoverVersion <= 0 {
 			panic(fmt.Sprintf(
 				"Version increment %v is smaller than initial version: %v.",
 				failoverVersionIncrement,
@@ -196,6 +196,11 @@ func (metadata *metadataImpl) ClusterNameForFailoverVersion(failoverVersion int6
 	}
 
 	initialFailoverVersion := failoverVersion % metadata.failoverVersionIncrement
+	// Failover version starts with 1.  Zero is an invalid value for failover version
+	if initialFailoverVersion == common.EmptyVersion {
+		initialFailoverVersion = metadata.failoverVersionIncrement
+	}
+
 	clusterName, ok := metadata.versionToClusterName[initialFailoverVersion]
 	if !ok {
 		panic(fmt.Sprintf(

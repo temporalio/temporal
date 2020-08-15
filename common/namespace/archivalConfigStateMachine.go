@@ -25,8 +25,8 @@
 package namespace
 
 import (
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	"go.temporal.io/temporal-proto/serviceerror"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 )
 
 // namespaceArchivalConfigStateMachine is only used by namespaceHandler.
@@ -35,20 +35,20 @@ import (
 
 type (
 	// ArchivalState represents the state of archival config
-	// the only invalid state is {URI="", status=enabled}
+	// the only invalid state is {URI="", state=enabled}
 	// once URI is set it is immutable
 	ArchivalState struct {
-		Status namespacepb.ArchivalStatus
-		URI    string
+		State enumspb.ArchivalState
+		URI   string
 	}
 
 	// ArchivalEvent represents a change request to archival config state
 	// the only restriction placed on events is that defaultURI is not empty
-	// status can be nil, enabled, or disabled (nil indicates no update by user is being attempted)
+	// state can be nil, enabled, or disabled (nil indicates no update by user is being attempted)
 	ArchivalEvent struct {
 		defaultURI string
 		URI        string
-		status     namespacepb.ArchivalStatus
+		state      enumspb.ArchivalState
 	}
 )
 
@@ -62,8 +62,8 @@ var (
 
 func neverEnabledState() *ArchivalState {
 	return &ArchivalState{
-		URI:    "",
-		Status: namespacepb.ArchivalStatus_Disabled,
+		URI:   "",
+		State: enumspb.ARCHIVAL_STATE_DISABLED,
 	}
 }
 
@@ -75,7 +75,7 @@ func (e *ArchivalEvent) validate() error {
 }
 
 func (s *ArchivalState) validate() error {
-	if s.Status == namespacepb.ArchivalStatus_Enabled && len(s.URI) == 0 {
+	if s.State == enumspb.ARCHIVAL_STATE_ENABLED && len(s.URI) == 0 {
 		return errInvalidState
 	}
 	return nil
@@ -128,17 +128,17 @@ func (s *ArchivalState) getNextState(
 	At this point state and event are both non-nil and valid.
 
 	State can be any one of the following:
-	{status=enabled,  URI="foo"}
-	{status=disabled, URI="foo"}
-	{status=disabled, URI=""}
+	{state=enabled,  URI="foo"}
+	{state=disabled, URI="foo"}
+	{state=disabled, URI=""}
 
 	Event can be any one of the following:
-	{status=enabled,  URI="foo", defaultURI="bar"}
-	{status=enabled,  URI="",    defaultURI="bar"}
-	{status=disabled, URI="foo", defaultURI="bar"}
-	{status=disabled, URI="",    defaultURI="bar"}
-	{status=nil,      URI="foo", defaultURI="bar"}
-	{status=nil,      URI="",    defaultURI="bar"}
+	{state=enabled,  URI="foo", defaultURI="bar"}
+	{state=enabled,  URI="",    defaultURI="bar"}
+	{state=disabled, URI="foo", defaultURI="bar"}
+	{state=disabled, URI="",    defaultURI="bar"}
+	{state=nil,      URI="foo", defaultURI="bar"}
+	{state=nil,      URI="",    defaultURI="bar"}
 	*/
 
 	stateURISet := len(s.URI) != 0
@@ -150,91 +150,91 @@ func (s *ArchivalState) getNextState(
 	}
 
 	// state 1
-	if s.Status == namespacepb.ArchivalStatus_Enabled && stateURISet {
-		if e.status == namespacepb.ArchivalStatus_Enabled && eventURISet {
+	if s.State == enumspb.ARCHIVAL_STATE_ENABLED && stateURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_ENABLED && eventURISet {
 			return s, false, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Enabled && !eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_ENABLED && !eventURISet {
 			return s, false, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Disabled && eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_DISABLED && eventURISet {
 			return &ArchivalState{
-				Status: namespacepb.ArchivalStatus_Disabled,
-				URI:    s.URI,
+				State: enumspb.ARCHIVAL_STATE_DISABLED,
+				URI:   s.URI,
 			}, true, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Disabled && !eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_DISABLED && !eventURISet {
 			return &ArchivalState{
-				Status: namespacepb.ArchivalStatus_Disabled,
-				URI:    s.URI,
+				State: enumspb.ARCHIVAL_STATE_DISABLED,
+				URI:   s.URI,
 			}, true, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Default && eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_UNSPECIFIED && eventURISet {
 			return s, false, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Default && !eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_UNSPECIFIED && !eventURISet {
 			return s, false, nil
 		}
 	}
 
 	// state 2
-	if s.Status == namespacepb.ArchivalStatus_Disabled && stateURISet {
-		if e.status == namespacepb.ArchivalStatus_Enabled && eventURISet {
+	if s.State == enumspb.ARCHIVAL_STATE_DISABLED && stateURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_ENABLED && eventURISet {
 			return &ArchivalState{
-				URI:    s.URI,
-				Status: namespacepb.ArchivalStatus_Enabled,
+				URI:   s.URI,
+				State: enumspb.ARCHIVAL_STATE_ENABLED,
 			}, true, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Enabled && !eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_ENABLED && !eventURISet {
 			return &ArchivalState{
-				Status: namespacepb.ArchivalStatus_Enabled,
-				URI:    s.URI,
+				State: enumspb.ARCHIVAL_STATE_ENABLED,
+				URI:   s.URI,
 			}, true, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Disabled && eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_DISABLED && eventURISet {
 			return s, false, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Disabled && !eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_DISABLED && !eventURISet {
 			return s, false, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Default && eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_UNSPECIFIED && eventURISet {
 			return s, false, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Default && !eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_UNSPECIFIED && !eventURISet {
 			return s, false, nil
 		}
 	}
 
 	// state 3
-	if s.Status == namespacepb.ArchivalStatus_Disabled && !stateURISet {
-		if e.status == namespacepb.ArchivalStatus_Enabled && eventURISet {
+	if s.State == enumspb.ARCHIVAL_STATE_DISABLED && !stateURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_ENABLED && eventURISet {
 			return &ArchivalState{
-				Status: namespacepb.ArchivalStatus_Enabled,
-				URI:    e.URI,
+				State: enumspb.ARCHIVAL_STATE_ENABLED,
+				URI:   e.URI,
 			}, true, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Enabled && !eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_ENABLED && !eventURISet {
 			return &ArchivalState{
-				Status: namespacepb.ArchivalStatus_Enabled,
-				URI:    e.defaultURI,
+				State: enumspb.ARCHIVAL_STATE_ENABLED,
+				URI:   e.defaultURI,
 			}, true, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Disabled && eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_DISABLED && eventURISet {
 			return &ArchivalState{
-				Status: namespacepb.ArchivalStatus_Disabled,
-				URI:    e.URI,
+				State: enumspb.ARCHIVAL_STATE_DISABLED,
+				URI:   e.URI,
 			}, true, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Disabled && !eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_DISABLED && !eventURISet {
 			return s, false, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Default && eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_UNSPECIFIED && eventURISet {
 			return &ArchivalState{
-				Status: namespacepb.ArchivalStatus_Disabled,
-				URI:    e.URI,
+				State: enumspb.ARCHIVAL_STATE_DISABLED,
+				URI:   e.URI,
 			}, true, nil
 		}
-		if e.status == namespacepb.ArchivalStatus_Default && !eventURISet {
+		if e.state == enumspb.ARCHIVAL_STATE_UNSPECIFIED && !eventURISet {
 			return s, false, nil
 		}
 	}

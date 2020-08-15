@@ -30,7 +30,7 @@ import (
 
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
-	eventpb "go.temporal.io/temporal-proto/event"
+	historypb "go.temporal.io/api/history/v1"
 )
 
 type (
@@ -72,26 +72,26 @@ func (e *JSONPBEncoder) Decode(data []byte, pb proto.Message) error {
 }
 
 // Encode HistoryEvent slice to bytes.
-func (e *JSONPBEncoder) EncodeHistoryEvents(historyEvents []*eventpb.HistoryEvent) ([]byte, error) {
+func (e *JSONPBEncoder) EncodeHistoryEvents(historyEvents []*historypb.HistoryEvent) ([]byte, error) {
 	return e.encodeSlice(
 		len(historyEvents),
 		func(i int) proto.Message { return historyEvents[i] })
 }
 
 // Encode History slice to bytes.
-func (e *JSONPBEncoder) EncodeHistories(histories []*eventpb.History) ([]byte, error) {
+func (e *JSONPBEncoder) EncodeHistories(histories []*historypb.History) ([]byte, error) {
 	return e.encodeSlice(
 		len(histories),
 		func(i int) proto.Message { return histories[i] })
 }
 
 // Decode HistoryEvent slice from bytes.
-func (e *JSONPBEncoder) DecodeHistoryEvents(data []byte) ([]*eventpb.HistoryEvent, error) {
-	var historyEvents []*eventpb.HistoryEvent
+func (e *JSONPBEncoder) DecodeHistoryEvents(data []byte) ([]*historypb.HistoryEvent, error) {
+	var historyEvents []*historypb.HistoryEvent
 	err := e.decodeSlice(
 		data,
 		func() proto.Message {
-			historyEvent := &eventpb.HistoryEvent{}
+			historyEvent := &historypb.HistoryEvent{}
 			historyEvents = append(historyEvents, historyEvent)
 			return historyEvent
 		})
@@ -99,12 +99,12 @@ func (e *JSONPBEncoder) DecodeHistoryEvents(data []byte) ([]*eventpb.HistoryEven
 }
 
 // Decode History slice from bytes.
-func (e *JSONPBEncoder) DecodeHistories(data []byte) ([]*eventpb.History, error) {
-	var histories []*eventpb.History
+func (e *JSONPBEncoder) DecodeHistories(data []byte) ([]*historypb.History, error) {
+	var histories []*historypb.History
 	err := e.decodeSlice(
 		data,
 		func() proto.Message {
-			history := &eventpb.History{}
+			history := &historypb.History{}
 			histories = append(histories, history)
 			return history
 		})

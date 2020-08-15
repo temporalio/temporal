@@ -74,7 +74,7 @@ func newAdminWorkflowCommands() []cli.Command {
 			},
 		},
 		{
-			Name:    "refresh-tasks",
+			Name:    "refresh_tasks",
 			Aliases: []string{"rt"},
 			Usage:   "Refreshes all the tasks of a workflow",
 			Flags: []cli.Flag{
@@ -118,7 +118,99 @@ func newAdminWorkflowCommands() []cli.Command {
 func newAdminShardManagementCommands() []cli.Command {
 	return []cli.Command{
 		{
-			Name:    "closeShard",
+			Name:    "describe",
+			Aliases: []string{"d"},
+			Usage:   "Describe shard by Id",
+			Flags: append(
+				getDBFlags(),
+				cli.IntFlag{
+					Name:  FlagShardID,
+					Usage: "The Id of the shard to describe",
+				},
+				cli.StringFlag{
+					Name:  FlagTargetCluster,
+					Value: "active",
+					Usage: "Temporal cluster to use",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminDescribeShard(c)
+			},
+		},
+		{
+			Name:    "describe_task",
+			Aliases: []string{"dt"},
+			Usage:   "Describe a task based on task Id, task type, shard Id and task visibility timestamp",
+			Flags: append(
+				getDBFlags(),
+				cli.IntFlag{
+					Name:  FlagShardID,
+					Usage: "The ID of the shard",
+				},
+				cli.IntFlag{
+					Name:  FlagTaskID,
+					Usage: "The ID of the timer task to describe",
+				},
+				cli.StringFlag{
+					Name:  FlagTaskType,
+					Value: "transfer",
+					Usage: "Task type: transfer (default), timer, replication",
+				},
+				cli.Int64Flag{
+					Name:  FlagTaskVisibilityTimestamp,
+					Usage: "Task visibility timestamp in nano",
+				},
+				cli.StringFlag{
+					Name:  FlagTargetCluster,
+					Value: "active",
+					Usage: "Temporal cluster to use",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminDescribeTask(c)
+			},
+		},
+		{
+			Name:  "list_tasks",
+			Usage: "List tasks for given shard Id and task type",
+			Flags: append(append(
+				getDBFlags(),
+				flagsForPagination...),
+				cli.StringFlag{
+					Name:  FlagTargetCluster,
+					Value: "active",
+					Usage: "Temporal cluster to use",
+				},
+				cli.IntFlag{
+					Name:  FlagShardID,
+					Usage: "The ID of the shard",
+				},
+				cli.StringFlag{
+					Name:  FlagTaskType,
+					Value: "transfer",
+					Usage: "Task type: transfer (default), timer, replication",
+				},
+				cli.StringFlag{
+					Name:  FlagMinVisibilityTimestamp,
+					Value: "2020-01-01T00:00:00+00:00",
+					Usage: "Task visibility min timestamp. Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
+						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
+						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
+				},
+				cli.StringFlag{
+					Name:  FlagMaxVisibilityTimestamp,
+					Value: "2035-01-01T00:00:00+00:00",
+					Usage: "Task visibility max timestamp. Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
+						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
+						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminListTasks(c)
+			},
+		},
+		{
+			Name:    "close_shard",
 			Aliases: []string{"clsh"},
 			Usage:   "close a shard given a shard id",
 			Flags: []cli.Flag{
@@ -132,7 +224,7 @@ func newAdminShardManagementCommands() []cli.Command {
 			},
 		},
 		{
-			Name:    "removeTask",
+			Name:    "remove_task",
 			Aliases: []string{"rmtk"},
 			Usage:   "remove a task based on shardId, task type, taskId, and task visibility timestamp",
 			Flags: []cli.Flag{
@@ -144,9 +236,10 @@ func newAdminShardManagementCommands() []cli.Command {
 					Name:  FlagTaskID,
 					Usage: "taskId",
 				},
-				cli.IntFlag{
+				cli.StringFlag{
 					Name:  FlagTaskType,
-					Usage: "task type : 2 (transfer task), 3 (timer task) or 4 (replication task)",
+					Value: "transfer",
+					Usage: "Task type: transfer (default), timer, replication",
 				},
 				cli.Int64Flag{
 					Name:  FlagTaskVisibilityTimestamp,
@@ -155,6 +248,47 @@ func newAdminShardManagementCommands() []cli.Command {
 			},
 			Action: func(c *cli.Context) {
 				AdminRemoveTask(c)
+			},
+		},
+	}
+}
+
+func newAdminMembershipCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:  "list_gossip",
+			Usage: "List ringpop membership items",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagClusterMembershipRole,
+					Value: "all",
+					Usage: "Membership role filter: all (default), frontend, history, matching, worker",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminListGossipMembers(c)
+			},
+		},
+		{
+			Name:  "list_db",
+			Usage: "List cluster membership items",
+			Flags: append(
+				getDBFlags(),
+				cli.StringFlag{
+					Name:  FlagHeartbeatedWithin,
+					Value: "15m",
+					Usage: "Filter by last heartbeat date time. Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
+						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
+						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
+				},
+				cli.StringFlag{
+					Name:  FlagClusterMembershipRole,
+					Value: "all",
+					Usage: "Membership role filter: all (default), frontend, history, matching, worker",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminListClusterMembership(c)
 			},
 		},
 	}
@@ -189,10 +323,14 @@ func newAdminHistoryHostCommands() []cli.Command {
 			},
 		},
 		{
-			Name:    "getshard",
+			Name:    "get_shardid",
 			Aliases: []string{"gsh"},
-			Usage:   "Get shardId for a workflowId",
+			Usage:   "Get shardId for a namespaceId and workflowId combination",
 			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagNamespaceID,
+					Usage: "NamespaceId",
+				},
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
 					Usage: "WorkflowId",
@@ -211,6 +349,14 @@ func newAdminHistoryHostCommands() []cli.Command {
 
 func newAdminNamespaceCommands() []cli.Command {
 	return []cli.Command{
+		{
+			Name:  "list",
+			Usage: "List namespaces",
+			Flags: append(getDBFlags(), getFlagsForList()...),
+			Action: func(c *cli.Context) {
+				AdminListNamespaces(c)
+			},
+		},
 		{
 			Name:    "register",
 			Aliases: []string{"re"},
@@ -239,7 +385,7 @@ func newAdminNamespaceCommands() []cli.Command {
 			},
 		},
 		{
-			Name:    "getnamespaceidorname",
+			Name:    "get_namespaceidorname",
 			Aliases: []string{"getdn"},
 			Usage:   "Get namespaceId or namespace",
 			Flags: append(getDBFlags(),
@@ -300,7 +446,7 @@ func newAdminKafkaCommands() []cli.Command {
 			},
 		},
 		{
-			Name:    "purgeTopic",
+			Name:    "purge_topic",
 			Aliases: []string{"purge"},
 			Usage:   "purge Kafka topic by consumer group",
 			Flags: []cli.Flag{
@@ -336,7 +482,7 @@ clusters:
 			},
 		},
 		{
-			Name:    "mergeDLQ",
+			Name:    "merge_dlq",
 			Aliases: []string{"mgdlq"},
 			Usage:   "Merge replication tasks to target topic(from input file or DLQ topic)",
 			Flags: []cli.Flag{
@@ -385,6 +531,29 @@ clusters:
 			},
 			Action: func(c *cli.Context) {
 				AdminMergeDLQ(c)
+			},
+		},
+		{
+			Name:  "list_dlq",
+			Usage: "List replication tasks from dlq",
+			Flags: append(append(
+				getDBFlags(),
+				getFlagsForList()...),
+				cli.IntFlag{
+					Name:  FlagShardIDWithAlias,
+					Usage: "ShardId",
+				},
+				cli.StringFlag{
+					Name:  FlagCluster,
+					Usage: "Name of the Kafka cluster for reading DLQ topic for ReplicationTask",
+				},
+				cli.StringFlag{
+					Name:  FlagTopic,
+					Usage: "Topic to publish replication task",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminListDLQ(c)
 			},
 		},
 		{
@@ -489,7 +658,7 @@ func newAdminElasticSearchCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagInputFileWithAlias,
-					Usage: "Input file of indexergenpb.Message in json format, separated by newline",
+					Usage: "Input file of indexerspb.Message in json format, separated by newline",
 				},
 				cli.IntFlag{
 					Name:  FlagBatchSizeWithAlias,
@@ -567,25 +736,56 @@ func newAdminElasticSearchCommands() []cli.Command {
 	}
 }
 
-func newAdminTaskListCommands() []cli.Command {
+func newAdminTaskQueueCommands() []cli.Command {
 	return []cli.Command{
 		{
 			Name:    "describe",
 			Aliases: []string{"desc"},
-			Usage:   "Describe pollers and status information of tasklist",
+			Usage:   "Describe pollers and status information of task queue",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  FlagTaskListWithAlias,
-					Usage: "TaskList description",
+					Name:  FlagTaskQueueWithAlias,
+					Usage: "TaskQueue description",
 				},
 				cli.StringFlag{
-					Name:  FlagTaskListTypeWithAlias,
-					Value: "decision",
-					Usage: "Optional TaskList type [decision|activity]",
+					Name:  FlagTaskQueueTypeWithAlias,
+					Value: "workflow",
+					Usage: "Optional TaskQueue type [workflow|activity]",
 				},
 			},
 			Action: func(c *cli.Context) {
-				AdminDescribeTaskList(c)
+				AdminDescribeTaskQueue(c)
+			},
+		},
+		{
+			Name:  "list_tasks",
+			Usage: "List tasks of a task queue",
+			Flags: append(append(append(getDBFlags(), flagsForExecution...),
+				flagsForPagination...),
+				cli.StringFlag{
+					Name:  FlagNamespaceID,
+					Usage: "Namespace Id",
+				},
+				cli.StringFlag{
+					Name:  FlagTaskQueueType,
+					Value: "activity",
+					Usage: "Taskqueue type: activity, workflow",
+				},
+				cli.StringFlag{
+					Name:  FlagTaskQueue,
+					Usage: "Taskqueue name",
+				},
+				cli.Int64Flag{
+					Name:  FlagMinReadLevel,
+					Usage: "Lower bound of read level",
+				},
+				cli.Int64Flag{
+					Name:  FlagMaxReadLevel,
+					Usage: "Upper bound of read level",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminListTaskQueueTasks(c)
 			},
 		},
 	}
@@ -594,7 +794,7 @@ func newAdminTaskListCommands() []cli.Command {
 func newAdminClusterCommands() []cli.Command {
 	return []cli.Command{
 		{
-			Name:    "add-search-attr",
+			Name:    "add_search_attr",
 			Aliases: []string{"asa"},
 			Usage:   "whitelist search attribute",
 			Flags: []cli.Flag{
@@ -602,10 +802,9 @@ func newAdminClusterCommands() []cli.Command {
 					Name:  FlagSearchAttributesKey,
 					Usage: "Search Attribute key to be whitelisted",
 				},
-				cli.IntFlag{
+				cli.StringFlag{
 					Name:  FlagSearchAttributesType,
-					Value: -1,
-					Usage: "Search Attribute value type. [0:String, 1:Keyword, 2:Int, 3:Double, 4:Bool, 5:Datetime]",
+					Usage: "Search Attribute value type. [string, keyword, int, double, bool, datetime]",
 				},
 				cli.StringFlag{
 					Name:  FlagSecurityTokenWithAlias,
@@ -804,53 +1003,6 @@ func newDBCommands() []cli.Command {
 			Action: func(c *cli.Context) {
 				AdminDBClean(c)
 			},
-		},
-	}
-}
-
-// TODO need to support other database: https://github.com/uber/cadence/issues/2777
-func getDBFlags() []cli.Flag {
-	return []cli.Flag{
-		cli.StringFlag{
-			Name:  FlagDBAddress,
-			Usage: "persistence address(right now only cassandra is supported)",
-		},
-		cli.IntFlag{
-			Name:  FlagDBPort,
-			Value: 9042,
-			Usage: "persistence port",
-		},
-		cli.StringFlag{
-			Name:  FlagUsername,
-			Usage: "cassandra username",
-		},
-		cli.StringFlag{
-			Name:  FlagPassword,
-			Usage: "cassandra password",
-		},
-		cli.StringFlag{
-			Name:  FlagKeyspace,
-			Usage: "cassandra keyspace",
-		},
-		cli.BoolFlag{
-			Name:  FlagEnableTLS,
-			Usage: "enable TLS over cassandra connection",
-		},
-		cli.StringFlag{
-			Name:  FlagTLSCertPath,
-			Usage: "cassandra tls client cert path (tls must be enabled)",
-		},
-		cli.StringFlag{
-			Name:  FlagTLSKeyPath,
-			Usage: "cassandra tls client key path (tls must be enabled)",
-		},
-		cli.StringFlag{
-			Name:  FlagTLSCaPath,
-			Usage: "cassandra tls client ca path (tls must be enabled)",
-		},
-		cli.BoolFlag{
-			Name:  FlagTLSEnableHostVerification,
-			Usage: "cassandra tls verify hostname and server cert (tls must be enabled)",
 		},
 	}
 }

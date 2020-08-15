@@ -34,24 +34,24 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/client"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/xdc"
+	"go.temporal.io/server/api/adminservicemock/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/xdc"
 )
 
 type (
@@ -112,7 +112,7 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 			ShardId:                0,
 			RangeId:                1,
 			ReplicationAckLevel:    0,
-			ReplicationDLQAckLevel: map[string]int64{"test": -1},
+			ReplicationDlqAckLevel: map[string]int64{"test": -1},
 		}},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
@@ -141,30 +141,6 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 func (s *replicationTaskExecutorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockResource.Finish(s.T())
-}
-
-func (s *replicationTaskExecutorSuite) TestConvertRetryTaskError_OK() {
-	err := serviceerror.NewRetryTask("", "", "", "", common.EmptyEventID)
-	_, ok := s.replicationTaskHandler.convertRetryTaskError(err)
-	s.True(ok)
-}
-
-func (s *replicationTaskExecutorSuite) TestConvertRetryTaskError_NotOK() {
-	err := serviceerror.NewRetryTaskV2("", "", "", "", common.EmptyEventID, common.EmptyVersion, common.EmptyEventID, common.EmptyVersion)
-	_, ok := s.replicationTaskHandler.convertRetryTaskError(err)
-	s.False(ok)
-}
-
-func (s *replicationTaskExecutorSuite) TestConvertRetryTaskV2Error_OK() {
-	err := serviceerror.NewRetryTaskV2("", "", "", "", common.EmptyEventID, common.EmptyVersion, common.EmptyEventID, common.EmptyVersion)
-	_, ok := s.replicationTaskHandler.convertRetryTaskV2Error(err)
-	s.True(ok)
-}
-
-func (s *replicationTaskExecutorSuite) TestConvertRetryTaskV2Error_NotOK() {
-	err := serviceerror.NewRetryTask("", "", "", "", common.EmptyEventID)
-	_, ok := s.replicationTaskHandler.convertRetryTaskV2Error(err)
-	s.False(ok)
 }
 
 func (s *replicationTaskExecutorSuite) TestFilterTask() {
@@ -207,13 +183,14 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 	namespaceID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskType_SyncActivityTask,
-		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
+				Attempt:     1,
 			},
 		},
 	}
@@ -223,12 +200,12 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 		RunId:              runID,
 		Version:            0,
 		ScheduledId:        0,
-		ScheduledTime:      0,
+		ScheduledTime:      nil,
 		StartedId:          0,
-		StartedTime:        0,
-		LastHeartbeatTime:  0,
-		Attempt:            0,
-		LastFailureReason:  "",
+		StartedTime:        nil,
+		LastHeartbeatTime:  nil,
+		Attempt:            1,
+		LastFailure:        nil,
 		LastWorkerIdentity: "",
 	}
 
@@ -241,10 +218,10 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 	namespaceID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskType_HistoryTask,
-		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId:  namespaceID,
 				WorkflowId:   workflowID,
 				RunId:        runID,
@@ -256,7 +233,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 	}
 	request := &historyservice.ReplicateEventsRequest{
 		NamespaceId: namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -266,7 +243,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 		NextEventId:       5,
 		Version:           common.EmptyVersion,
 		ResetWorkflow:     false,
-		NewRunNDC:         false,
+		NewRunNdc:         false,
 	}
 
 	s.mockEngine.EXPECT().ReplicateEvents(gomock.Any(), request).Return(nil).Times(1)
@@ -278,10 +255,10 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 	namespaceID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskType_HistoryV2Task,
-		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationgenpb.HistoryTaskV2Attributes{
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
+			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -290,7 +267,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 	}
 	request := &historyservice.ReplicateEventsV2Request{
 		NamespaceId: namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

@@ -32,26 +32,27 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 type (
@@ -102,8 +103,8 @@ func (s *historyRereplicatorSuite) SetupTest() {
 	s.namespace = "some random namespace name"
 	s.targetClusterName = "some random target cluster name"
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(s.namespaceID), Name: s.namespace},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -143,31 +144,31 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 	firstEventID := int64(123)
 	nextEventID := firstEventID + 100
 	pageSize := defaultPageSize
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
 		},
 	}
-	eventBatch := []*eventpb.HistoryEvent{
+	eventBatch := []*historypb.HistoryEvent{
 		{
 			EventId:   2,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_DecisionTaskScheduled,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_DecisionTaskStarted,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
 	blob := s.serializeEvents(eventBatch)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -183,13 +184,13 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob.Data,
 		},
 		NewRunHistory: nil,
@@ -208,7 +209,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	// beginingRunID -> midRunID1; not continue relationship; midRunID2 -> endingRunID
 
 	beginingRunID := "00001111-2222-3333-4444-555566661111"
-	beginingReplicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	beginingReplicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center 1": {
 			Version:     111,
 			LastEventId: 222,
@@ -216,7 +217,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	}
 
 	midRunID1 := "00001111-2222-3333-4444-555566662222"
-	midReplicationInfo1 := map[string]*replicationgenpb.ReplicationInfo{
+	midReplicationInfo1 := map[string]*replicationspb.ReplicationInfo{
 		"random data center 2": {
 			Version:     111,
 			LastEventId: 222,
@@ -224,7 +225,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	}
 
 	midRunID2 := "00001111-2222-3333-4444-555566663333"
-	midReplicationInfo2 := map[string]*replicationgenpb.ReplicationInfo{
+	midReplicationInfo2 := map[string]*replicationspb.ReplicationInfo{
 		"random data center 3": {
 			Version:     111,
 			LastEventId: 222,
@@ -232,95 +233,95 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	}
 
 	endingRunID := "00001111-2222-3333-4444-555566664444"
-	endingReplicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	endingReplicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center 4": {
 			Version:     777,
 			LastEventId: 888,
 		},
 	}
 
-	beginingEventBatch := []*eventpb.HistoryEvent{
+	beginingEventBatch := []*historypb.HistoryEvent{
 		{
 			EventId:   4,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_DecisionTaskCompleted,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:   5,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_WorkflowExecutionContinuedAsNew,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: midRunID1,
 			}},
 		},
 	}
 	beginingBlob := s.serializeEvents(beginingEventBatch)
 
-	midEventBatch1 := []*eventpb.HistoryEvent{
+	midEventBatch1 := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_WorkflowExecutionStarted,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: beginingRunID,
 			}},
 		},
 		{
 			EventId:   5,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_WorkflowExecutionCompleted,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
 	}
 	midBlob1 := s.serializeEvents(midEventBatch1)
 
-	midEventBatch2 := []*eventpb.HistoryEvent{
+	midEventBatch2 := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_WorkflowExecutionStarted,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: "",
 			}},
 		},
 		{
 			EventId:   5,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_WorkflowExecutionContinuedAsNew,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: endingRunID,
 			}},
 		},
 	}
 	midBlob2 := s.serializeEvents(midEventBatch2)
 
-	endingEventBatch := []*eventpb.HistoryEvent{
+	endingEventBatch := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_WorkflowExecutionStarted,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: midRunID2,
 			}},
 		},
 		{
 			EventId:   2,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_DecisionTaskScheduled,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 	}
 	endingBlob := s.serializeEvents(endingEventBatch)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      beginingRunID,
 		},
@@ -336,7 +337,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      midRunID1,
 		},
@@ -352,7 +353,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      midRunID1,
 		},
@@ -368,7 +369,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      endingRunID,
 		},
@@ -384,7 +385,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      midRunID2,
 		},
@@ -400,7 +401,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      midRunID2,
 		},
@@ -416,7 +417,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      endingRunID,
 		},
@@ -432,7 +433,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      endingRunID,
 		},
@@ -459,54 +460,54 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 	runID := uuid.New()
 	nextToken := []byte("some random next token")
 	pageSize := defaultPageSize
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
 		},
 	}
 
-	eventBatch1 := []*eventpb.HistoryEvent{
+	eventBatch1 := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_WorkflowExecutionStarted,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		},
 		{
 			EventId:   2,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_DecisionTaskScheduled,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_DecisionTaskStarted,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
 	blob1 := s.serializeEvents(eventBatch1)
 
-	eventBatch2 := []*eventpb.HistoryEvent{
+	eventBatch2 := []*historypb.HistoryEvent{
 		{
 			EventId:   4,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_DecisionTaskCompleted,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:   5,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_WorkflowExecutionCompleted,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
 	}
 	blob2 := s.serializeEvents(eventBatch2)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -522,7 +523,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -538,13 +539,13 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob1.Data,
 		},
 		NewRunHistory: nil,
@@ -552,13 +553,13 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob2.Data,
 		},
 		NewRunHistory: nil,
@@ -575,67 +576,67 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 	newRunID := uuid.New()
 	nextToken := []byte("some random next token")
 	pageSize := defaultPageSize
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
 		},
 	}
-	replicationInfoNew := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfoNew := map[string]*replicationspb.ReplicationInfo{
 		"random data center": {
 			Version:     222,
 			LastEventId: 111,
 		},
 	}
 
-	eventBatch1 := []*eventpb.HistoryEvent{
+	eventBatch1 := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_WorkflowExecutionStarted,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		},
 		{
 			EventId:   2,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_DecisionTaskScheduled,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_DecisionTaskStarted,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
 	blob1 := s.serializeEvents(eventBatch1)
 
-	eventBatch2 := []*eventpb.HistoryEvent{
+	eventBatch2 := []*historypb.HistoryEvent{
 		{
 			EventId:   4,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_DecisionTaskCompleted,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:   5,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_WorkflowExecutionContinuedAsNew,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: newRunID,
 			}},
 		},
 	}
 	blob2 := s.serializeEvents(eventBatch2)
 
-	eventBatchNew := []*eventpb.HistoryEvent{
+	eventBatchNew := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   223,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_WorkflowExecutionStarted,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: runID,
 			}},
 		},
@@ -644,7 +645,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -660,7 +661,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -676,7 +677,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      newRunID,
 		},
@@ -692,13 +693,13 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob1.Data,
 		},
 		NewRunHistory: nil,
@@ -706,17 +707,17 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob2.Data,
 		},
 		NewRunHistory: &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blobNew.Data,
 		},
 	}).Return(nil, nil).Times(1)
@@ -763,10 +764,10 @@ func (s *historyRereplicatorSuite) TestCreateReplicationRawRequest() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	blob := &commonpb.DataBlob{
-		EncodingType: commonpb.EncodingType_Proto3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         []byte("some random history blob"),
 	}
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
@@ -775,7 +776,7 @@ func (s *historyRereplicatorSuite) TestCreateReplicationRawRequest() {
 
 	s.Equal(&historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -791,22 +792,22 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest() {
 
 	request := &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: "some random workflow ID",
 			RunId:      uuid.New(),
 		},
-		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			"random data center": {
 				Version:     777,
 				LastEventId: 999,
 			},
 		},
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random history blob"),
 		},
 		NewRunHistory: &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random new run history blob"),
 		},
 	}
@@ -819,7 +820,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest() {
 func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_MissingHistory() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
@@ -827,23 +828,23 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 	}
 	request := &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random history blob"),
 		},
 		NewRunHistory: &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random new run history blob"),
 		},
 	}
 
 	rereplicationContext := newHistoryRereplicationContext(s.namespaceID, workflowID, runID, int64(123), uuid.New(), int64(111), s.rereplicator)
-	retryErr := serviceerror.NewRetryTask(
+	retryErr := serviceerrors.NewRetryTask(
 		"retry task status",
 		s.namespaceID,
 		workflowID,
@@ -852,19 +853,19 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), request).Return(nil, retryErr).Times(1)
 
-	missingEventBatch := []*eventpb.HistoryEvent{
+	missingEventBatch := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_WorkflowExecutionStarted,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		},
 	}
 	missingBlob := s.serializeEvents(missingEventBatch)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -879,7 +880,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 	}, nil).Times(1)
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -897,7 +898,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_Err() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
@@ -905,24 +906,24 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_Err() {
 	}
 	request := &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random history blob"),
 		},
 		NewRunHistory: &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random new run history blob"),
 		},
 	}
 
 	rereplicationContext := newHistoryRereplicationContext(s.namespaceID, workflowID, runID, int64(123), uuid.New(), int64(111), s.rereplicator)
 	rereplicationContext.rpcCalls = 1 // so this will be the second API call for rereplication
-	retryErr := serviceerror.NewRetryTask(
+	retryErr := serviceerrors.NewRetryTask(
 		"",
 		s.namespaceID,
 		workflowID,
@@ -940,7 +941,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_SeenMoreThanOnce() {
 	runID := uuid.New()
 	lastVersion := int64(777)
 	lastEventID := int64(999)
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		s.targetClusterName: {
 			Version:     lastVersion,
 			LastEventId: lastEventID,
@@ -958,25 +959,25 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEn
 	runID := uuid.New()
 	lastVersion := int64(777)
 	lastEventID := int64(999)
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		s.targetClusterName: {
 			Version:     lastVersion,
 			LastEventId: lastEventID,
 		},
 	}
-	eventBatch := []*eventpb.HistoryEvent{
+	eventBatch := []*historypb.HistoryEvent{
 		{
 			EventId:   lastEventID + 1,
 			Version:   lastVersion + 1,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_TimerFired,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
 		},
 	}
 	blob := s.serializeEvents(eventBatch)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -992,7 +993,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEn
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -1011,25 +1012,25 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 	runID := uuid.New()
 	lastVersion := int64(777)
 	lastEventID := int64(999)
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"some randon cluster": {
 			Version:     lastVersion,
 			LastEventId: lastEventID,
 		},
 	}
-	eventBatch := []*eventpb.HistoryEvent{
+	eventBatch := []*historypb.HistoryEvent{
 		{
 			EventId:   common.FirstEventID,
 			Version:   1,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_WorkflowExecutionStarted,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		},
 	}
 	blob := s.serializeEvents(eventBatch)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -1045,7 +1046,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -1071,11 +1072,11 @@ func (s *historyRereplicatorSuite) TestGetHistory() {
 
 	response := &adminservice.GetWorkflowExecutionRawHistoryResponse{
 		HistoryBatches: []*commonpb.DataBlob{{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob,
 		}},
 		NextPageToken: nextTokenOut,
-		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			"random data center": {
 				Version:     777,
 				LastEventId: 999,
@@ -1084,7 +1085,7 @@ func (s *historyRereplicatorSuite) TestGetHistory() {
 	}
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -1104,29 +1105,29 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 	currentRunID := uuid.New()
 
 	prepareFn := func(prevRunID string) {
-		eventBatch := []*eventpb.HistoryEvent{
+		eventBatch := []*historypb.HistoryEvent{
 			{
 				EventId:   1,
 				Version:   123,
-				Timestamp: time.Now().UnixNano(),
-				EventType: eventpb.EventType_WorkflowExecutionStarted,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					ContinuedExecutionRunId: prevRunID,
 				}},
 			},
 			{
 				EventId:   2,
 				Version:   223,
-				Timestamp: time.Now().UnixNano(),
-				EventType: eventpb.EventType_DecisionTaskScheduled,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 			},
 		}
-		blob, err := s.serializer.SerializeBatchEvents(eventBatch, common.EncodingTypeProto3)
+		blob, err := s.serializer.SerializeBatchEvents(eventBatch, enumspb.ENCODING_TYPE_PROTO3)
 		s.Nil(err)
 
 		s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      currentRunID,
 			},
@@ -1136,7 +1137,7 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 			NextPageToken:   nil,
 		}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
 			HistoryBatches: []*commonpb.DataBlob{{
-				EncodingType: commonpb.EncodingType_Proto3,
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 				Data:         blob.Data,
 			}},
 		}, nil).Times(1)
@@ -1162,7 +1163,7 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID_EmptyEvents() {
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      currentRunID,
 		},
@@ -1181,28 +1182,28 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID_EmptyEvents() {
 
 func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 	nextRunID := uuid.New()
-	eventBatchIn := []*eventpb.HistoryEvent{
+	eventBatchIn := []*historypb.HistoryEvent{
 		{
 			EventId:   233,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_DecisionTaskCompleted,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:   234,
 			Version:   223,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_WorkflowExecutionContinuedAsNew,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: nextRunID,
 			}},
 		},
 	}
-	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeProto3)
+	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, enumspb.ENCODING_TYPE_PROTO3)
 	s.Nil(err)
 
 	runID, err := s.getDummyRereplicationContext().getNextRunID(&commonpb.DataBlob{
-		EncodingType: commonpb.EncodingType_Proto3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         blob.Data,
 	})
 	s.Nil(err)
@@ -1210,26 +1211,26 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 }
 
 func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
-	eventBatchIn := []*eventpb.HistoryEvent{
+	eventBatchIn := []*historypb.HistoryEvent{
 		{
 			EventId:   233,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_DecisionTaskCompleted,
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:    234,
 			Version:    223,
-			Timestamp:  time.Now().UnixNano(),
-			EventType:  eventpb.EventType_WorkflowExecutionCanceled,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: &eventpb.WorkflowExecutionCancelRequestedEventAttributes{}},
+			EventTime:  timestamp.TimePtr(time.Now().UTC()),
+			EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: &historypb.WorkflowExecutionCancelRequestedEventAttributes{}},
 		},
 	}
-	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeProto3)
+	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, enumspb.ENCODING_TYPE_PROTO3)
 	s.Nil(err)
 
 	runID, err := s.getDummyRereplicationContext().getNextRunID(&commonpb.DataBlob{
-		EncodingType: commonpb.EncodingType_Proto3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         blob.Data,
 	})
 	s.Nil(err)
@@ -1237,39 +1238,39 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
 }
 
 func (s *historyRereplicatorSuite) TestDeserializeBlob() {
-	eventBatchIn := []*eventpb.HistoryEvent{
+	eventBatchIn := []*historypb.HistoryEvent{
 		{
 			EventId:    1,
 			Version:    123,
-			Timestamp:  time.Now().UnixNano(),
-			EventType:  eventpb.EventType_WorkflowExecutionStarted,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
+			EventTime:  timestamp.TimePtr(time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)),
+			EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
 		},
 		{
 			EventId:    2,
 			Version:    223,
-			Timestamp:  time.Now().UnixNano(),
-			EventType:  eventpb.EventType_DecisionTaskScheduled,
-			Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}},
+			EventTime:  timestamp.TimePtr(time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)),
+			EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
 		},
 	}
 
-	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeProto3)
+	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, enumspb.ENCODING_TYPE_PROTO3)
 	s.Nil(err)
 
 	eventBatchOut, err := s.getDummyRereplicationContext().deserializeBlob(&commonpb.DataBlob{
-		EncodingType: commonpb.EncodingType_Proto3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         blob.Data,
 	})
 	s.Nil(err)
 	s.Equal(eventBatchIn, eventBatchOut)
 }
 
-func (s *historyRereplicatorSuite) serializeEvents(events []*eventpb.HistoryEvent) *commonpb.DataBlob {
-	blob, err := s.serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
+func (s *historyRereplicatorSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
+	blob, err := s.serializer.SerializeBatchEvents(events, enumspb.ENCODING_TYPE_PROTO3)
 	s.Nil(err)
 	return &commonpb.DataBlob{
-		EncodingType: commonpb.EncodingType_Proto3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         blob.Data,
 	}
 }

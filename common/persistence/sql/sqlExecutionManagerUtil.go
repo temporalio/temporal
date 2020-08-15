@@ -30,17 +30,19 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
-	"github.com/temporalio/temporal/common/primitives"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func applyWorkflowMutationTx(
@@ -48,15 +50,24 @@ func applyWorkflowMutationTx(
 	shardID int,
 	workflowMutation *p.InternalWorkflowMutation,
 ) error {
-
 	executionInfo := workflowMutation.ExecutionInfo
 	replicationState := workflowMutation.ReplicationState
 	versionHistories := workflowMutation.VersionHistories
 	startVersion := workflowMutation.StartVersion
 	lastWriteVersion := workflowMutation.LastWriteVersion
-	namespaceID := primitives.MustParseUUID(executionInfo.NamespaceID)
+	namespaceID := executionInfo.NamespaceID
 	workflowID := executionInfo.WorkflowID
-	runID := primitives.MustParseUUID(executionInfo.RunID)
+	runID := executionInfo.RunID
+
+	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
+	if err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("uuid parse failed. Error: %v", err))
+	}
+
+	runIDBytes, err := primitives.ParseUUID(runID)
+	if err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("uuid parse failed. Error: %v", err))
+	}
 
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
@@ -68,9 +79,9 @@ func applyWorkflowMutationTx(
 	// TODO Remove me if UPDATE holds the lock to the end of a transaction
 	if err := lockAndCheckNextEventID(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID,
+		runIDBytes,
 		workflowMutation.Condition); err != nil {
 		switch err.(type) {
 		case *p.ConditionFailedError:
@@ -106,9 +117,9 @@ func applyWorkflowMutationTx(
 		workflowMutation.UpsertActivityInfos,
 		workflowMutation.DeleteActivityInfos,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 
@@ -116,9 +127,9 @@ func applyWorkflowMutationTx(
 		workflowMutation.UpsertTimerInfos,
 		workflowMutation.DeleteTimerInfos,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 
@@ -126,9 +137,9 @@ func applyWorkflowMutationTx(
 		workflowMutation.UpsertChildExecutionInfos,
 		workflowMutation.DeleteChildExecutionInfo,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 
@@ -136,9 +147,9 @@ func applyWorkflowMutationTx(
 		workflowMutation.UpsertRequestCancelInfos,
 		workflowMutation.DeleteRequestCancelInfo,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 
@@ -146,9 +157,9 @@ func applyWorkflowMutationTx(
 		workflowMutation.UpsertSignalInfos,
 		workflowMutation.DeleteSignalInfo,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 
@@ -156,18 +167,18 @@ func applyWorkflowMutationTx(
 		workflowMutation.UpsertSignalRequestedIDs,
 		workflowMutation.DeleteSignalRequestedID,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 
 	if workflowMutation.ClearBufferedEvents {
 		if err := deleteBufferedEvents(tx,
 			shardID,
-			namespaceID,
+			namespaceIDBytes,
 			workflowID,
-			runID); err != nil {
+			runIDBytes); err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 		}
 	}
@@ -175,9 +186,9 @@ func applyWorkflowMutationTx(
 	if err := updateBufferedEvents(tx,
 		workflowMutation.NewBufferedEvents,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 	return nil
@@ -194,9 +205,17 @@ func applyWorkflowSnapshotTxAsReset(
 	versionHistories := workflowSnapshot.VersionHistories
 	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	namespaceID := primitives.MustParseUUID(executionInfo.NamespaceID)
 	workflowID := executionInfo.WorkflowID
-	runID := primitives.MustParseUUID(executionInfo.RunID)
+	namespaceID := executionInfo.NamespaceID
+	runID := executionInfo.RunID
+	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
+	if err != nil {
+		return err
+	}
+	runIDBytes, err := primitives.ParseUUID(runID)
+	if err != nil {
+		return err
+	}
 
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
@@ -208,9 +227,9 @@ func applyWorkflowSnapshotTxAsReset(
 	// TODO Is there a way to modify the various map tables without fear of other people adding rows after we delete, without locking the executions row?
 	if err := lockAndCheckNextEventID(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID,
+		runIDBytes,
 		workflowSnapshot.Condition); err != nil {
 		switch err.(type) {
 		case *p.ConditionFailedError:
@@ -244,9 +263,9 @@ func applyWorkflowSnapshotTxAsReset(
 
 	if err := deleteActivityInfoMap(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear activity info map. Error: %v", err))
 	}
 
@@ -254,17 +273,17 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.ActivityInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into activity info map after clearing. Error: %v", err))
 	}
 
 	if err := deleteTimerInfoMap(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear timer info map. Error: %v", err))
 	}
 
@@ -272,17 +291,17 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.TimerInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into timer info map after clearing. Error: %v", err))
 	}
 
 	if err := deleteChildExecutionInfoMap(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear child execution info map. Error: %v", err))
 	}
 
@@ -290,17 +309,17 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.ChildExecutionInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into activity info map after clearing. Error: %v", err))
 	}
 
 	if err := deleteRequestCancelInfoMap(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear request cancel info map. Error: %v", err))
 	}
 
@@ -308,17 +327,17 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.RequestCancelInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into request cancel info map after clearing. Error: %v", err))
 	}
 
 	if err := deleteSignalInfoMap(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear signal info map. Error: %v", err))
 	}
 
@@ -326,17 +345,17 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.SignalInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into signal info map after clearing. Error: %v", err))
 	}
 
 	if err := deleteSignalsRequestedSet(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear signals requested set. Error: %v", err))
 	}
 
@@ -344,17 +363,17 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.SignalRequestedIDs,
 		"",
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into signals requested set after clearing. Error: %v", err))
 	}
 
 	if err := deleteBufferedEvents(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear buffered events. Error: %v", err))
 	}
 	return nil
@@ -371,9 +390,17 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 	versionHistories := workflowSnapshot.VersionHistories
 	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	namespaceID := primitives.MustParseUUID(executionInfo.NamespaceID)
 	workflowID := executionInfo.WorkflowID
-	runID := primitives.MustParseUUID(executionInfo.RunID)
+	namespaceID := executionInfo.NamespaceID
+	runID := executionInfo.RunID
+	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
+	if err != nil {
+		return err
+	}
+	runIDBytes, err := primitives.ParseUUID(runID)
+	if err != nil {
+		return err
+	}
 
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
@@ -408,9 +435,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowSnapshot.ActivityInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into activity info map after clearing. Error: %v", err))
 	}
 
@@ -418,9 +445,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowSnapshot.TimerInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into timer info map after clearing. Error: %v", err))
 	}
 
@@ -428,9 +455,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowSnapshot.ChildExecutionInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into activity info map after clearing. Error: %v", err))
 	}
 
@@ -438,9 +465,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowSnapshot.RequestCancelInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into request cancel info map after clearing. Error: %v", err))
 	}
 
@@ -448,9 +475,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowSnapshot.SignalInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into signal info map after clearing. Error: %v", err))
 	}
 
@@ -458,9 +485,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowSnapshot.SignalRequestedIDs,
 		"",
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into signals requested set after clearing. Error: %v", err))
 	}
 
@@ -470,9 +497,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 func applyTasks(
 	tx sqlplugin.Tx,
 	shardID int,
-	namespaceID primitives.UUID,
+	namespaceID string,
 	workflowID string,
-	runID primitives.UUID,
+	runID string,
 	transferTasks []p.Task,
 	replicationTasks []p.Task,
 	timerTasks []p.Task,
@@ -541,8 +568,8 @@ func createOrUpdateCurrentExecution(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-	state int,
-	status executionpb.WorkflowExecutionStatus,
+	state enumsspb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
 	createRequestID string,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -653,9 +680,9 @@ func createTransferTasks(
 	tx sqlplugin.Tx,
 	transferTasks []p.Task,
 	shardID int,
-	namespaceID primitives.UUID,
+	namespaceID string,
 	workflowID string,
-	runID primitives.UUID,
+	runID string,
 ) error {
 
 	if len(transferTasks) == 0 {
@@ -678,65 +705,60 @@ func createTransferTasks(
 		transferTasksRows[i].TaskID = task.GetTaskID()
 
 		switch task.GetType() {
-		case p.TransferTaskTypeActivityTask:
-			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.ActivityTask).NamespaceID)
-			info.TaskList = task.(*p.ActivityTask).TaskList
+		case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
+			info.TargetNamespaceId = task.(*p.ActivityTask).NamespaceID
+			info.TaskQueue = task.(*p.ActivityTask).TaskQueue
 			info.ScheduleId = task.(*p.ActivityTask).ScheduleID
 
-		case p.TransferTaskTypeDecisionTask:
-			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.DecisionTask).NamespaceID)
-			info.TaskList = task.(*p.DecisionTask).TaskList
-			info.ScheduleId = task.(*p.DecisionTask).ScheduleID
+		case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
+			info.TargetNamespaceId = task.(*p.WorkflowTask).NamespaceID
+			info.TaskQueue = task.(*p.WorkflowTask).TaskQueue
+			info.ScheduleId = task.(*p.WorkflowTask).ScheduleID
 
-		case p.TransferTaskTypeCancelExecution:
-			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.CancelExecutionTask).TargetNamespaceID)
+		case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
+			info.TargetNamespaceId = task.(*p.CancelExecutionTask).TargetNamespaceID
 			info.TargetWorkflowId = task.(*p.CancelExecutionTask).TargetWorkflowID
 			if task.(*p.CancelExecutionTask).TargetRunID != "" {
-				info.TargetRunId = primitives.MustParseUUID(task.(*p.CancelExecutionTask).TargetRunID)
+				info.TargetRunId = task.(*p.CancelExecutionTask).TargetRunID
 			}
 			info.TargetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
 			info.ScheduleId = task.(*p.CancelExecutionTask).InitiatedID
 
-		case p.TransferTaskTypeSignalExecution:
-			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.SignalExecutionTask).TargetNamespaceID)
+		case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
+			info.TargetNamespaceId = task.(*p.SignalExecutionTask).TargetNamespaceID
 			info.TargetWorkflowId = task.(*p.SignalExecutionTask).TargetWorkflowID
 			if task.(*p.SignalExecutionTask).TargetRunID != "" {
-				info.TargetRunId = primitives.MustParseUUID(task.(*p.SignalExecutionTask).TargetRunID)
+				info.TargetRunId = task.(*p.SignalExecutionTask).TargetRunID
 			}
 			info.TargetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
 			info.ScheduleId = task.(*p.SignalExecutionTask).InitiatedID
 
-		case p.TransferTaskTypeStartChildExecution:
-			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.StartChildExecutionTask).TargetNamespaceID)
+		case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
+			info.TargetNamespaceId = task.(*p.StartChildExecutionTask).TargetNamespaceID
 			info.TargetWorkflowId = task.(*p.StartChildExecutionTask).TargetWorkflowID
 			info.ScheduleId = task.(*p.StartChildExecutionTask).InitiatedID
 
-		case p.TransferTaskTypeCloseExecution,
-			p.TransferTaskTypeRecordWorkflowStarted,
-			p.TransferTaskTypeResetWorkflow,
-			p.TransferTaskTypeUpsertWorkflowSearchAttributes:
+		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
+			enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
+			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW,
+			enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 			// No explicit property needs to be set
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("createTransferTasks failed. Unknow transfer type: %v", task.GetType()))
 		}
 
-		info.TaskType = int32(task.GetType())
+		info.TaskType = task.GetType()
 		info.Version = task.GetVersion()
 
-		t, err := types.TimestampProto(task.GetVisibilityTimestamp().UTC())
-		if err != nil {
-			return err
-		}
-
-		info.VisibilityTimestamp = t
+		info.VisibilityTime = timestamp.TimePtr(task.GetVisibilityTimestamp().UTC())
 
 		blob, err := serialization.TransferTaskInfoToBlob(info)
 		if err != nil {
 			return err
 		}
 		transferTasksRows[i].Data = blob.Data
-		transferTasksRows[i].DataEncoding = string(blob.Encoding)
+		transferTasksRows[i].DataEncoding = blob.Encoding.String()
 	}
 
 	result, err := tx.InsertIntoTransferTasks(transferTasksRows)
@@ -760,9 +782,9 @@ func createReplicationTasks(
 	tx sqlplugin.Tx,
 	replicationTasks []p.Task,
 	shardID int,
-	namespaceID primitives.UUID,
+	namespaceID string,
 	workflowID string,
-	runID primitives.UUID,
+	runID string,
 ) error {
 
 	if len(replicationTasks) == 0 {
@@ -776,13 +798,13 @@ func createReplicationTasks(
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion
 		activityScheduleID := common.EmptyEventID
-		var lastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
+		var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
 
 		var branchToken, newRunBranchToken []byte
 		var resetWorkflow bool
 
 		switch task.GetType() {
-		case p.ReplicationTaskTypeHistory:
+		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
 			historyReplicationTask, ok := task.(*p.HistoryReplicationTask)
 			if !ok {
 				return serviceerror.NewInternal(fmt.Sprintf("createReplicationTasks failed. Failed to cast %v to HistoryReplicationTask", task))
@@ -793,15 +815,15 @@ func createReplicationTasks(
 			branchToken = historyReplicationTask.BranchToken
 			newRunBranchToken = historyReplicationTask.NewRunBranchToken
 			resetWorkflow = historyReplicationTask.ResetWorkflow
-			lastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
+			lastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
 			for k, v := range historyReplicationTask.LastReplicationInfo {
-				lastReplicationInfo[k] = &replicationgenpb.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventId}
+				lastReplicationInfo[k] = &replicationspb.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventId}
 			}
 
-		case p.ReplicationTaskTypeSyncActivity:
+		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
-			lastReplicationInfo = map[string]*replicationgenpb.ReplicationInfo{}
+			lastReplicationInfo = map[string]*replicationspb.ReplicationInfo{}
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknown replication task: %v", task.GetType()))
@@ -812,7 +834,7 @@ func createReplicationTasks(
 			NamespaceId:             namespaceID,
 			WorkflowId:              workflowID,
 			RunId:                   runID,
-			TaskType:                int32(task.GetType()),
+			TaskType:                task.GetType(),
 			FirstEventId:            firstEventID,
 			NextEventId:             nextEventID,
 			Version:                 version,
@@ -830,7 +852,7 @@ func createReplicationTasks(
 		replicationTasksRows[i].ShardID = shardID
 		replicationTasksRows[i].TaskID = task.GetTaskID()
 		replicationTasksRows[i].Data = blob.Data
-		replicationTasksRows[i].DataEncoding = string(blob.Encoding)
+		replicationTasksRows[i].DataEncoding = blob.Encoding.String()
 	}
 
 	result, err := tx.InsertIntoReplicationTasks(replicationTasksRows)
@@ -854,9 +876,9 @@ func createTimerTasks(
 	tx sqlplugin.Tx,
 	timerTasks []p.Task,
 	shardID int,
-	namespaceID primitives.UUID,
+	namespaceID string,
 	workflowID string,
-	runID primitives.UUID,
+	runID string,
 ) error {
 
 	if len(timerTasks) > 0 {
@@ -865,14 +887,14 @@ func createTimerTasks(
 		for i, task := range timerTasks {
 			info := &persistenceblobs.TimerTaskInfo{}
 			switch t := task.(type) {
-			case *p.DecisionTimeoutTask:
+			case *p.WorkflowTaskTimeoutTask:
 				info.EventId = t.EventID
-				info.TimeoutType = int32(t.TimeoutType)
+				info.TimeoutType = t.TimeoutType
 				info.ScheduleAttempt = t.ScheduleAttempt
 
 			case *p.ActivityTimeoutTask:
 				info.EventId = t.EventID
-				info.TimeoutType = int32(t.TimeoutType)
+				info.TimeoutType = t.TimeoutType
 				info.ScheduleAttempt = t.Attempt
 
 			case *p.UserTimerTask:
@@ -880,11 +902,11 @@ func createTimerTasks(
 
 			case *p.ActivityRetryTimerTask:
 				info.EventId = t.EventID
-				info.ScheduleAttempt = int64(t.Attempt)
+				info.ScheduleAttempt = t.Attempt
 
 			case *p.WorkflowBackoffTimerTask:
 				info.EventId = t.EventID
-				info.TimeoutType = int32(t.TimeoutType)
+				info.WorkflowBackoffType = t.WorkflowBackoffType
 
 			case *p.WorkflowTimeoutTask:
 				// noop
@@ -900,26 +922,22 @@ func createTimerTasks(
 			info.WorkflowId = workflowID
 			info.RunId = runID
 			info.Version = task.GetVersion()
-			info.TaskType = int32(task.GetType())
+			info.TaskType = task.GetType()
 			info.TaskId = task.GetTaskID()
 
-			goVisTs := task.GetVisibilityTimestamp()
-			protoVisTs, err := types.TimestampProto(goVisTs)
-			if err != nil {
-				return err
-			}
+			goVisTs := timestamp.TimePtr(task.GetVisibilityTimestamp().UTC())
 
-			info.VisibilityTimestamp = protoVisTs
+			info.VisibilityTime = goVisTs
 			blob, err := serialization.TimerTaskInfoToBlob(info)
 			if err != nil {
 				return err
 			}
 
 			timerTasksRows[i].ShardID = shardID
-			timerTasksRows[i].VisibilityTimestamp = goVisTs
+			timerTasksRows[i].VisibilityTimestamp = *goVisTs
 			timerTasksRows[i].TaskID = task.GetTaskID()
 			timerTasksRows[i].Data = blob.Data
-			timerTasksRows[i].DataEncoding = string(blob.Encoding)
+			timerTasksRows[i].DataEncoding = blob.Encoding.String()
 		}
 
 		result, err := tx.InsertIntoTimerTasks(timerTasksRows)
@@ -969,8 +987,8 @@ func assertRunIDAndUpdateCurrentExecution(
 	newRunID primitives.UUID,
 	previousRunID primitives.UUID,
 	createRequestID string,
-	state int,
-	status executionpb.WorkflowExecutionStatus,
+	state enumsspb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
 ) error {
@@ -1000,10 +1018,10 @@ func assertAndUpdateCurrentExecution(
 	newRunID primitives.UUID,
 	previousRunID primitives.UUID,
 	previousLastWriteVersion int64,
-	previousState int,
+	previousState enumsspb.WorkflowExecutionState,
 	createRequestID string,
-	state int,
-	status executionpb.WorkflowExecutionStatus,
+	state enumsspb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
 ) error {
@@ -1077,8 +1095,8 @@ func updateCurrentExecution(
 	workflowID string,
 	runID primitives.UUID,
 	createRequestID string,
-	state int,
-	status executionpb.WorkflowExecutionStatus,
+	state enumsspb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
 ) error {
@@ -1109,8 +1127,8 @@ func updateCurrentExecution(
 
 func buildExecutionRow(
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *p.ReplicationState,
-	versionHistories *serialization.DataBlob,
+	replicationState *persistenceblobs.ReplicationState,
+	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
 	currentVersion int64,
@@ -1132,11 +1150,21 @@ func buildExecutionRow(
 		return nil, err
 	}
 
+	nsBytes, err := primitives.ParseUUID(executionInfo.NamespaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	ridBytes, err := primitives.ParseUUID(executionInfo.RunID)
+	if err != nil {
+		return nil, err
+	}
+
 	return &sqlplugin.ExecutionsRow{
 		ShardID:          shardID,
-		NamespaceID:      primitives.MustParseUUID(executionInfo.NamespaceID),
+		NamespaceID:      nsBytes,
 		WorkflowID:       executionInfo.WorkflowID,
-		RunID:            primitives.MustParseUUID(executionInfo.RunID),
+		RunID:            ridBytes,
 		NextEventID:      executionInfo.NextEventID,
 		LastWriteVersion: lastWriteVersion,
 		Data:             infoBlob.Data,
@@ -1149,8 +1177,8 @@ func buildExecutionRow(
 func (m *sqlExecutionManager) createExecution(
 	tx sqlplugin.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *p.ReplicationState,
-	versionHistories *serialization.DataBlob,
+	replicationState *persistenceblobs.ReplicationState,
+	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
 	currentVersion int64,
@@ -1165,8 +1193,8 @@ func (m *sqlExecutionManager) createExecution(
 	}
 
 	// TODO we should set the start time and last update time on business logic layer
-	executionInfo.StartTimestamp = time.Now()
-	executionInfo.LastUpdatedTimestamp = executionInfo.StartTimestamp
+	executionInfo.StartTimestamp = time.Now().UTC()
+	executionInfo.LastUpdateTimestamp = executionInfo.StartTimestamp
 
 	row, err := buildExecutionRow(
 		executionInfo,
@@ -1208,8 +1236,8 @@ func (m *sqlExecutionManager) createExecution(
 func updateExecution(
 	tx sqlplugin.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *p.ReplicationState,
-	versionHistories *serialization.DataBlob,
+	replicationState *persistenceblobs.ReplicationState,
+	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
 	currentVersion int64,
@@ -1224,7 +1252,7 @@ func updateExecution(
 	}
 
 	// TODO we should set the last update time on business logic layer
-	executionInfo.LastUpdatedTimestamp = time.Now()
+	executionInfo.LastUpdateTimestamp = time.Now().UTC()
 
 	row, err := buildExecutionRow(
 		executionInfo,

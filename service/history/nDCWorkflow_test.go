@@ -34,12 +34,13 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/persistence"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -266,29 +267,28 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastEventVersion, true).Return(nil).AnyTimes()
-	inFlightDecision := &decisionInfo{
+	inFlightWorkflowTask := &workflowTaskInfo{
 		Version:    1234,
 		ScheduleID: 5678,
 		StartedID:  9012,
 	}
-	s.mockMutableState.EXPECT().GetInFlightDecision().Return(inFlightDecision, true).Times(1)
-	s.mockMutableState.EXPECT().AddDecisionTaskFailedEvent(
-		inFlightDecision.ScheduleID,
-		inFlightDecision.StartedID,
-		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
+	s.mockMutableState.EXPECT().GetInFlightWorkflowTask().Return(inFlightWorkflowTask, true).Times(1)
+	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
+		inFlightWorkflowTask.ScheduleID,
+		inFlightWorkflowTask.StartedID,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		identityHistoryService,
 		"",
 		"",
 		"",
-		"",
 		int64(0),
-	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
+	).Return(&historypb.HistoryEvent{}, nil).Times(1)
 	s.mockMutableState.EXPECT().FlushBufferedEvents().Return(nil).Times(1)
 
 	s.mockMutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
 		lastEventID+1, workflowTerminationReason, gomock.Any(), workflowTerminationIdentity,
-	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
+	).Return(&historypb.HistoryEvent{}, nil).Times(1)
 
 	// if workflow is in zombie or finished state, keep as is
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(1)
@@ -311,8 +311,8 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		WorkflowID:      s.workflowID,
 		RunID:           s.runID,
 		LastEventTaskID: lastEventTaskID,
-		State:           persistence.WorkflowStateRunning,
-		Status:          executionpb.WorkflowExecutionStatus_Running,
+		State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	nDCWorkflow := newNDCWorkflow(
@@ -358,6 +358,6 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	policy, err = nDCWorkflow.suppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(transactionPolicyPassive, policy)
-	s.Equal(persistence.WorkflowStateZombie, executionInfo.State)
-	s.EqualValues(executionpb.WorkflowExecutionStatus_Running, executionInfo.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionInfo.State)
+	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, executionInfo.Status)
 }

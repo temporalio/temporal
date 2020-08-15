@@ -25,30 +25,34 @@
 package payload
 
 import (
-	commonpb "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal/encoded"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/sdk/converter"
 )
 
 var (
-	payloadConverter = encoded.GetDefaultPayloadConverter()
+	defaultDataConverter = converter.GetDefaultDataConverter()
 )
 
 func EncodeString(str string) *commonpb.Payload {
 	// Error can be safely ignored here becase string always can be converted to JSON
-	payload, _ := payloadConverter.ToData(str)
-	return payload
+	p, _ := defaultDataConverter.ToPayload(str)
+	return p
 }
 
 func EncodeBytes(bytes []byte) *commonpb.Payload {
 	// Error can be safely ignored here becase []byte always can be raw encoded
-	payload, _ := payloadConverter.ToData(bytes)
-	return payload
+	p, _ := defaultDataConverter.ToPayload(bytes)
+	return p
 }
 
-func Encode(valuePtr interface{}) (*commonpb.Payload, error) {
-	return payloadConverter.ToData(valuePtr)
+func Encode(value interface{}) (*commonpb.Payload, error) {
+	return defaultDataConverter.ToPayload(value)
 }
 
-func Decode(payload *commonpb.Payload, valuePtr interface{}) error {
-	return payloadConverter.FromData(payload, valuePtr)
+func Decode(p *commonpb.Payload, valuePtr interface{}) error {
+	return defaultDataConverter.FromPayload(p, valuePtr)
+}
+
+func ToString(p *commonpb.Payload) string {
+	return defaultDataConverter.ToString(p)
 }

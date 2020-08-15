@@ -43,24 +43,26 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/gogo/protobuf/proto"
+	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	filterpb "go.temporal.io/temporal-proto/filter"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	sdkclient "go.temporal.io/temporal/client"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	sdkclient "go.temporal.io/sdk/client"
 
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/rpc"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/rpc"
 )
 
 // GetHistory helper method to iterate over all pages and return complete list of history events
-func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID, runID string) (*eventpb.History, error) {
+func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID, runID string) (*historypb.History, error) {
 	iter := workflowClient.GetWorkflowHistory(ctx, workflowID, runID, false,
-		filterpb.HistoryEventFilterType_AllEvent)
-	var events []*eventpb.HistoryEvent
+		enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	var events []*historypb.HistoryEvent
 	for iter.HasNext() {
 		event, err := iter.Next()
 		if err != nil {
@@ -69,19 +71,26 @@ func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID
 		events = append(events, event)
 	}
 
-	history := &eventpb.History{}
+	history := &historypb.History{}
 	history.Events = events
 	return history, nil
 }
 
 // HistoryEventToString convert HistoryEvent to string
-func HistoryEventToString(e *eventpb.HistoryEvent, printFully bool, maxFieldLength int) string {
+func HistoryEventToString(e *historypb.HistoryEvent, printFully bool, maxFieldLength int) string {
 	data := getEventAttributes(e)
 	return anyToString(data, printFully, maxFieldLength)
 }
 
 func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 	v := reflect.ValueOf(d)
+	// Time is handled separetely because we don't want to go through it fields.
+	if t, isTime := d.(time.Time); isTime {
+		if t.IsZero() {
+			return "<zero>"
+		}
+		return t.String()
+	}
 	switch v.Kind() {
 	case reflect.Ptr:
 		return anyToString(v.Elem().Interface(), printFully, maxFieldLength)
@@ -94,14 +103,20 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 			if f.Kind() == reflect.Invalid {
 				continue
 			}
+			fieldName := t.Field(i).Name
+
+			// Filter out private fields.
+			if !f.CanInterface() {
+				continue
+			}
+
 			fieldValue := valueToString(f, printFully, maxFieldLength)
-			if len(fieldValue) == 0 {
+			if fieldValue == "" {
 				continue
 			}
 			if buf.Len() > 1 {
 				buf.WriteString(", ")
 			}
-			fieldName := t.Field(i).Name
 			if !isAttributeName(fieldName) {
 				if !printFully {
 					fieldValue = trimTextAndBreakWords(fieldValue, maxFieldLength)
@@ -109,7 +124,10 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 					fieldValue = trimText(fieldValue, maxFieldLength)
 				}
 			}
-			if fieldName == "Reason" || fieldName == "Details" || fieldName == "Cause" {
+			if fieldName == "Reason" ||
+				fieldName == "Cause" ||
+				strings.HasSuffix(fieldName, "Details") ||
+				strings.HasSuffix(fieldName, "Failure") {
 				buf.WriteString(fmt.Sprintf("%s:%s", color.RedString(fieldName), color.MagentaString(fieldValue)))
 			} else {
 				buf.WriteString(fmt.Sprintf("%s:%s", fieldName, fieldValue))
@@ -125,6 +143,9 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string {
 	switch v.Kind() {
 	case reflect.Ptr:
+		if ps, isPayloads := v.Interface().(*commonpb.Payloads); isPayloads {
+			return payloads.ToString(ps)
+		}
 		return valueToString(v.Elem(), printFully, maxFieldLength)
 	case reflect.Struct:
 		return anyToString(v.Interface(), printFully, maxFieldLength)
@@ -148,13 +169,7 @@ func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string 
 			case []byte:
 				str += string(typedV)
 			case *commonpb.Payload:
-				var data string
-				err := payload.Decode(typedV, &data)
-				if err == nil {
-					str += data
-				} else {
-					str += anyToString(*typedV, printFully, maxFieldLength)
-				}
+				str += payload.ToString(typedV)
 			default:
 				str += val.String()
 			}
@@ -213,130 +228,124 @@ func breakLongWords(input string, maxWordLength int) string {
 //   Completed - green
 //   Started - blue
 //   Others - default (white/black)
-func ColorEvent(e *eventpb.HistoryEvent) string {
+func ColorEvent(e *historypb.HistoryEvent) string {
 	var data string
 	switch e.GetEventType() {
-	case eventpb.EventType_WorkflowExecutionStarted:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 		data = color.BlueString(e.EventType.String())
 
-	case eventpb.EventType_WorkflowExecutionCompleted:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		data = color.GreenString(e.EventType.String())
 
-	case eventpb.EventType_WorkflowExecutionFailed:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EventType_WorkflowExecutionTimedOut:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		data = color.YellowString(e.EventType.String())
 
-	case eventpb.EventType_DecisionTaskScheduled:
+	case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_DecisionTaskStarted:
+	case enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_DecisionTaskCompleted:
+	case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_DecisionTaskTimedOut:
+	case enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
 		data = color.YellowString(e.EventType.String())
 
-	case eventpb.EventType_ActivityTaskScheduled:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_ActivityTaskStarted:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_ActivityTaskCompleted:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_ActivityTaskFailed:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EventType_ActivityTaskTimedOut:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
 		data = color.YellowString(e.EventType.String())
 
-	case eventpb.EventType_ActivityTaskCancelRequested:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_RequestCancelActivityTaskFailed:
-		data = color.RedString(e.EventType.String())
-
-	case eventpb.EventType_ActivityTaskCanceled:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_TimerStarted:
+	case enumspb.EVENT_TYPE_TIMER_STARTED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_TimerFired:
+	case enumspb.EVENT_TYPE_TIMER_FIRED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_CancelTimerFailed:
-		data = color.RedString(e.EventType.String())
-
-	case eventpb.EventType_TimerCanceled:
+	case enumspb.EVENT_TYPE_TIMER_CANCELED:
 		data = color.MagentaString(e.EventType.String())
 
-	case eventpb.EventType_WorkflowExecutionCancelRequested:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_WorkflowExecutionCanceled:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		data = color.MagentaString(e.EventType.String())
 
-	case eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated:
+	case enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_RequestCancelExternalWorkflowExecutionFailed:
+	case enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EventType_ExternalWorkflowExecutionCancelRequested:
+	case enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_MarkerRecorded:
+	case enumspb.EVENT_TYPE_MARKER_RECORDED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_WorkflowExecutionSignaled:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_WorkflowExecutionTerminated:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_WorkflowExecutionContinuedAsNew:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
 		data = e.EventType.String()
 
-	case eventpb.EventType_StartChildWorkflowExecutionInitiated:
+	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_StartChildWorkflowExecutionFailed:
+	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EventType_ChildWorkflowExecutionStarted:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
 		data = color.BlueString(e.EventType.String())
 
-	case eventpb.EventType_ChildWorkflowExecutionCompleted:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
 		data = color.GreenString(e.EventType.String())
 
-	case eventpb.EventType_ChildWorkflowExecutionFailed:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EventType_ChildWorkflowExecutionCanceled:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
 		data = color.MagentaString(e.EventType.String())
 
-	case eventpb.EventType_ChildWorkflowExecutionTimedOut:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
 		data = color.YellowString(e.EventType.String())
 
-	case eventpb.EventType_ChildWorkflowExecutionTerminated:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_SignalExternalWorkflowExecutionInitiated:
+	case enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_SignalExternalWorkflowExecutionFailed:
+	case enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EventType_ExternalWorkflowExecutionSignaled:
+	case enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED:
 		data = e.EventType.String()
 
-	case eventpb.EventType_UpsertWorkflowSearchAttributes:
+	case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 		data = e.EventType.String()
 
 	default:
@@ -345,124 +354,121 @@ func ColorEvent(e *eventpb.HistoryEvent) string {
 	return data
 }
 
-func getEventAttributes(e *eventpb.HistoryEvent) interface{} {
+func getEventAttributes(e *historypb.HistoryEvent) interface{} {
 	var data interface{}
 	switch e.GetEventType() {
-	case eventpb.EventType_WorkflowExecutionStarted:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 		data = e.GetWorkflowExecutionStartedEventAttributes()
 
-	case eventpb.EventType_WorkflowExecutionCompleted:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		data = e.GetWorkflowExecutionCompletedEventAttributes()
 
-	case eventpb.EventType_WorkflowExecutionFailed:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		data = e.GetWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EventType_WorkflowExecutionTimedOut:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		data = e.GetWorkflowExecutionTimedOutEventAttributes()
 
-	case eventpb.EventType_DecisionTaskScheduled:
-		data = e.GetDecisionTaskScheduledEventAttributes()
+	case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
+		data = e.GetWorkflowTaskScheduledEventAttributes()
 
-	case eventpb.EventType_DecisionTaskStarted:
-		data = e.GetDecisionTaskStartedEventAttributes()
+	case enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED:
+		data = e.GetWorkflowTaskStartedEventAttributes()
 
-	case eventpb.EventType_DecisionTaskCompleted:
-		data = e.GetDecisionTaskCompletedEventAttributes()
+	case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
+		data = e.GetWorkflowTaskCompletedEventAttributes()
 
-	case eventpb.EventType_DecisionTaskTimedOut:
-		data = e.GetDecisionTaskTimedOutEventAttributes()
+	case enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
+		data = e.GetWorkflowTaskTimedOutEventAttributes()
 
-	case eventpb.EventType_ActivityTaskScheduled:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
 		data = e.GetActivityTaskScheduledEventAttributes()
 
-	case eventpb.EventType_ActivityTaskStarted:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
 		data = e.GetActivityTaskStartedEventAttributes()
 
-	case eventpb.EventType_ActivityTaskCompleted:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
 		data = e.GetActivityTaskCompletedEventAttributes()
 
-	case eventpb.EventType_ActivityTaskFailed:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
 		data = e.GetActivityTaskFailedEventAttributes()
 
-	case eventpb.EventType_ActivityTaskTimedOut:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
 		data = e.GetActivityTaskTimedOutEventAttributes()
 
-	case eventpb.EventType_ActivityTaskCancelRequested:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:
 		data = e.GetActivityTaskCancelRequestedEventAttributes()
 
-	case eventpb.EventType_ActivityTaskCanceled:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
 		data = e.GetActivityTaskCanceledEventAttributes()
 
-	case eventpb.EventType_TimerStarted:
+	case enumspb.EVENT_TYPE_TIMER_STARTED:
 		data = e.GetTimerStartedEventAttributes()
 
-	case eventpb.EventType_TimerFired:
+	case enumspb.EVENT_TYPE_TIMER_FIRED:
 		data = e.GetTimerFiredEventAttributes()
 
-	case eventpb.EventType_CancelTimerFailed:
-		data = e.GetCancelTimerFailedEventAttributes()
-
-	case eventpb.EventType_TimerCanceled:
+	case enumspb.EVENT_TYPE_TIMER_CANCELED:
 		data = e.GetTimerCanceledEventAttributes()
 
-	case eventpb.EventType_WorkflowExecutionCancelRequested:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
 		data = e.GetWorkflowExecutionCancelRequestedEventAttributes()
 
-	case eventpb.EventType_WorkflowExecutionCanceled:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		data = e.GetWorkflowExecutionCanceledEventAttributes()
 
-	case eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated:
+	case enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
 		data = e.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
 
-	case eventpb.EventType_RequestCancelExternalWorkflowExecutionFailed:
+	case enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
 		data = e.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EventType_ExternalWorkflowExecutionCancelRequested:
+	case enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
 		data = e.GetExternalWorkflowExecutionCancelRequestedEventAttributes()
 
-	case eventpb.EventType_MarkerRecorded:
+	case enumspb.EVENT_TYPE_MARKER_RECORDED:
 		data = e.GetMarkerRecordedEventAttributes()
 
-	case eventpb.EventType_WorkflowExecutionSignaled:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 		data = e.GetWorkflowExecutionSignaledEventAttributes()
 
-	case eventpb.EventType_WorkflowExecutionTerminated:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 		data = e.GetWorkflowExecutionTerminatedEventAttributes()
 
-	case eventpb.EventType_WorkflowExecutionContinuedAsNew:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
 		data = e.GetWorkflowExecutionContinuedAsNewEventAttributes()
 
-	case eventpb.EventType_StartChildWorkflowExecutionInitiated:
+	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
 		data = e.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 
-	case eventpb.EventType_StartChildWorkflowExecutionFailed:
+	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
 		data = e.GetStartChildWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EventType_ChildWorkflowExecutionStarted:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
 		data = e.GetChildWorkflowExecutionStartedEventAttributes()
 
-	case eventpb.EventType_ChildWorkflowExecutionCompleted:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
 		data = e.GetChildWorkflowExecutionCompletedEventAttributes()
 
-	case eventpb.EventType_ChildWorkflowExecutionFailed:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
 		data = e.GetChildWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EventType_ChildWorkflowExecutionCanceled:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
 		data = e.GetChildWorkflowExecutionCanceledEventAttributes()
 
-	case eventpb.EventType_ChildWorkflowExecutionTimedOut:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
 		data = e.GetChildWorkflowExecutionTimedOutEventAttributes()
 
-	case eventpb.EventType_ChildWorkflowExecutionTerminated:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
 		data = e.GetChildWorkflowExecutionTerminatedEventAttributes()
 
-	case eventpb.EventType_SignalExternalWorkflowExecutionInitiated:
+	case enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
 		data = e.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 
-	case eventpb.EventType_SignalExternalWorkflowExecutionFailed:
+	case enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
 		data = e.GetSignalExternalWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EventType_ExternalWorkflowExecutionSignaled:
+	case enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED:
 		data = e.GetExternalWorkflowExecutionSignaledEventAttributes()
 
 	default:
@@ -472,12 +478,12 @@ func getEventAttributes(e *eventpb.HistoryEvent) interface{} {
 }
 
 func isAttributeName(name string) bool {
-	for _, eventTypeName := range eventpb.EventType_name {
-		if name == eventTypeName+"EventAttributes" {
-			return true
-		}
+	eventType := strings.TrimSuffix(name, "EventAttributes")
 
+	if _, ok := enumspb.EventType_value[eventType]; ok {
+		return true
 	}
+
 	return false
 }
 
@@ -578,8 +584,7 @@ func getRequiredGlobalOption(c *cli.Context, optionName string) string {
 	return value
 }
 
-func convertTime(unixNano int64, onlyTime bool) string {
-	t := time.Unix(0, unixNano)
+func formatTime(t time.Time, onlyTime bool) string {
 	var result string
 	if onlyTime {
 		result = t.Format(defaultTimeFormat)
@@ -589,7 +594,7 @@ func convertTime(unixNano int64, onlyTime bool) string {
 	return result
 }
 
-func parseTime(timeStr string, defaultValue int64, now time.Time) int64 {
+func parseTime(timeStr string, defaultValue time.Time, now time.Time) time.Time {
 	if len(timeStr) == 0 {
 		return defaultValue
 	}
@@ -597,22 +602,22 @@ func parseTime(timeStr string, defaultValue int64, now time.Time) int64 {
 	// try to parse
 	parsedTime, err := time.Parse(defaultDateTimeFormat, timeStr)
 	if err == nil {
-		return parsedTime.UnixNano()
+		return parsedTime
 	}
 
-	// treat as raw time
+	// treat as raw unix time
 	resultValue, err := strconv.ParseInt(timeStr, 10, 64)
 	if err == nil {
-		return resultValue
+		return time.Unix(0, resultValue).UTC()
 	}
 
 	// treat as time range format
 	parsedTime, err = parseTimeRange(timeStr, now)
 	if err != nil {
-		ErrorAndExit(fmt.Sprintf("Cannot parse time '%s', use UTC format '2006-01-02T15:04:05Z', "+
+		ErrorAndExit(fmt.Sprintf("Cannot parse time '%s', use UTC format '2006-01-02T15:04:05', "+
 			"time range or raw UnixNano directly. See help for more details.", timeStr), err)
 	}
-	return parsedTime.UnixNano()
+	return parsedTime
 }
 
 // parseTimeRange parses a given time duration string (in format X<time-duration>) and
@@ -626,10 +631,10 @@ func parseTime(timeStr string, defaultValue int64, now time.Time) int64 {
 // - month/M
 // - year/y
 // For example, possible input values, and their result:
-// - "3d" or "3day" --> three days --> time.Now().Add(-3 * 24 * time.Hour)
-// - "2m" or "2minute" --> two minutes --> time.Now().Add(-2 * time.Minute)
-// - "1w" or "1week" --> one week --> time.Now().Add(-7 * 24 * time.Hour)
-// - "30s" or "30second" --> thirty seconds --> time.Now().Add(-30 * time.Second)
+// - "3d" or "3day" --> three days --> time.Now().UTC().Add(-3 * 24 * time.Hour)
+// - "2m" or "2minute" --> two minutes --> time.Now().UTC().Add(-2 * time.Minute)
+// - "1w" or "1week" --> one week --> time.Now().UTC().Add(-7 * 24 * time.Hour)
+// - "30s" or "30second" --> thirty seconds --> time.Now().UTC().Add(-30 * time.Second)
 // Note: Duration strings are case-sensitive, and should be used as mentioned above only.
 // Limitation: Value of numerical multiplier, X should be in b/w 0 - 1e6 (1 million), boundary values excluded i.e.
 // 0 < X < 1e6. Also, the maximum time in the past can be 1 January 1970 00:00:00 UTC (epoch time),
@@ -663,7 +668,7 @@ func parseTimeRange(timeRange string, now time.Time) (time.Time, error) {
 	}
 
 	res := now.Add(time.Duration(-num) * dur) // using server's local timezone
-	epochTime := time.Unix(0, 0)
+	epochTime := time.Unix(0, 0).UTC()
 	if res.Before(epochTime) {
 		res = epochTime
 	}
@@ -703,11 +708,11 @@ func parseTimeDuration(duration string) (dur time.Duration, err error) {
 	return
 }
 
-func strToTaskListType(str string) tasklistpb.TaskListType {
+func strToTaskQueueType(str string) enumspb.TaskQueueType {
 	if strings.ToLower(str) == "activity" {
-		return tasklistpb.TaskListType_Activity
+		return enumspb.TASK_QUEUE_TYPE_ACTIVITY
 	}
-	return tasklistpb.TaskListType_Decision
+	return enumspb.TASK_QUEUE_TYPE_WORKFLOW
 }
 
 func getCliIdentity() string {
@@ -744,45 +749,79 @@ func newContextWithTimeout(c *cli.Context, timeout time.Duration) (context.Conte
 }
 
 // process and validate input provided through cmd or file
-func processJSONInput(c *cli.Context) string {
-	return processJSONInputHelper(c, jsonTypeInput)
+func processJSONInput(c *cli.Context) *commonpb.Payloads {
+	jsonsRaw := readJSONInputs(c, jsonTypeInput)
+
+	var jsons []interface{}
+	for _, jsonRaw := range jsonsRaw {
+		if jsonRaw == nil {
+			jsons = append(jsons, nil)
+		} else {
+			var j interface{}
+			if err := json.Unmarshal(jsonRaw, &j); err != nil {
+				ErrorAndExit("Input is not a valid JSON.", err)
+			}
+			jsons = append(jsons, j)
+		}
+
+	}
+	p, err := payloads.Encode(jsons...)
+	if err != nil {
+		ErrorAndExit("Unable to encode input.", err)
+	}
+
+	return p
 }
 
-// process and validate json
-func processJSONInputHelper(c *cli.Context, jType jsonType) string {
-	var flagNameOfRawInput string
-	var flagNameOfInputFileName string
+// read multiple inputs presented in json format
+func readJSONInputs(c *cli.Context, jType jsonType) [][]byte {
+	var flagRawInput string
+	var flagInputFileName string
 
 	switch jType {
 	case jsonTypeInput:
-		flagNameOfRawInput = FlagInput
-		flagNameOfInputFileName = FlagInputFile
+		flagRawInput = FlagInput
+		flagInputFileName = FlagInputFile
 	case jsonTypeMemo:
-		flagNameOfRawInput = FlagMemo
-		flagNameOfInputFileName = FlagMemoFile
+		flagRawInput = FlagMemo
+		flagInputFileName = FlagMemoFile
 	default:
-		return ""
+		return nil
 	}
 
-	var input string
-	if c.IsSet(flagNameOfRawInput) {
-		input = c.String(flagNameOfRawInput)
-	} else if c.IsSet(flagNameOfInputFileName) {
-		inputFile := c.String(flagNameOfInputFileName)
+	if c.IsSet(flagRawInput) {
+		inputsG := c.Generic(flagRawInput)
+
+		var inputs *cli.StringSlice
+		var ok bool
+		if inputs, ok = inputsG.(*cli.StringSlice); !ok {
+			// input could be provided as StringFlag instead of StringSliceFlag
+			ss := make(cli.StringSlice, 1)
+			ss[0] = fmt.Sprintf("%v", inputsG)
+			inputs = &ss
+		}
+
+		var inputsRaw [][]byte
+		for _, i := range *inputs {
+			if strings.EqualFold(i, "null") {
+				inputsRaw = append(inputsRaw, []byte(nil))
+			} else {
+				inputsRaw = append(inputsRaw, []byte(i))
+			}
+		}
+
+		return inputsRaw
+	} else if c.IsSet(flagInputFileName) {
+		inputFile := c.String(flagInputFileName)
 		// This method is purely used to parse input from the CLI. The input comes from a trusted user
 		// #nosec
 		data, err := ioutil.ReadFile(inputFile)
 		if err != nil {
 			ErrorAndExit("Error reading input file", err)
 		}
-		input = string(data)
+		return [][]byte{data}
 	}
-	if input != "" {
-		if err := validateJSONs(input); err != nil {
-			ErrorAndExit("Input is not valid JSON, or JSONs concatenated with spaces/newlines.", err)
-		}
-	}
-	return input
+	return nil
 }
 
 // validate whether str is a valid json or multi valid json concatenated with spaces/newlines
@@ -889,6 +928,96 @@ func showNextPage() bool {
 	var input string
 	_, _ = fmt.Scanln(&input)
 	return strings.Trim(input, " ") == ""
+}
+
+// paginate creates an interactive CLI mode to control the printing of items
+func paginate(c *cli.Context, paginationFn collection.PaginationFn) error {
+	more := c.Bool(FlagMore)
+	isTableView := !c.Bool(FlagPrintJSON)
+	pageSize := c.Int(FlagPageSize)
+	if pageSize == 0 {
+		pageSize = defaultPageSize
+	}
+	iter := collection.NewPagingIterator(paginationFn)
+
+	var pageItems []interface{}
+	for iter.HasNext() {
+		item, err := iter.Next()
+		if err != nil {
+			return err
+		}
+
+		pageItems = append(pageItems, item)
+		if len(pageItems) == pageSize || !iter.HasNext() {
+			if isTableView {
+				printTable(pageItems)
+			} else {
+				prettyPrintJSONObject(pageItems)
+			}
+
+			if !more || !showNextPage() {
+				break
+			}
+			pageItems = pageItems[:0]
+		}
+	}
+
+	return nil
+}
+
+func printTable(items []interface{}) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	e := reflect.ValueOf(items[0])
+	for e.Type().Kind() == reflect.Ptr {
+		e = e.Elem()
+	}
+
+	var fields []string
+	t := e.Type()
+	for i := 0; i < e.NumField(); i++ {
+		fields = append(fields, t.Field(i).Name)
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetBorder(false)
+	table.SetColumnSeparator("|")
+	table.SetHeader(fields)
+	table.SetHeaderLine(false)
+	for i := 0; i < len(items); i++ {
+		item := reflect.ValueOf(items[i])
+		for item.Type().Kind() == reflect.Ptr {
+			item = item.Elem()
+		}
+		var columns []string
+		for j := 0; j < len(fields); j++ {
+			col := item.Field(j)
+			columns = append(columns, fmt.Sprintf("%v", col.Interface()))
+		}
+		table.Append(columns)
+	}
+	table.Render()
+	table.ClearRows()
+
+	return nil
+}
+
+func stringToEnum(search string, candidates map[string]int32) (int32, error) {
+	if search == "" {
+		return 0, nil
+	}
+
+	var candidateNames []string
+	for key, value := range candidates {
+		if strings.EqualFold(key, search) {
+			return value, nil
+		}
+		candidateNames = append(candidateNames, key)
+	}
+
+	return 0, fmt.Errorf("Could not find corresponding candidate for %s. Possible candidates: %q", search, candidateNames)
 }
 
 // prompt will show input msg, then waiting user input y/yes to continue

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination taskPriorityAssigner_mock.go -self_package github.com/temporalio/temporal/service/history
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination taskPriorityAssigner_mock.go -self_package go.temporal.io/server/service/history
 
 package history
 
@@ -30,14 +30,13 @@ import (
 	"strconv"
 	"sync"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/quotas"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (
@@ -107,7 +106,7 @@ func (a *taskPriorityAssignerImpl) Assign(
 	}
 
 	// timer of transfer task, first check if namespace is active or not
-	namespace, active, err := a.getNamespaceInfo(primitives.UUIDString(task.GetNamespaceId()))
+	namespace, active, err := a.getNamespaceInfo(task.GetNamespaceId())
 	if err != nil {
 		return err
 	}

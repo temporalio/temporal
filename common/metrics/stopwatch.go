@@ -41,12 +41,12 @@ type Stopwatch struct {
 // NewStopwatch creates a new immutable stopwatch for recording the start
 // time to a stopwatch reporter.
 func NewStopwatch(timers ...tally.Timer) Stopwatch {
-	return Stopwatch{time.Now(), timers}
+	return Stopwatch{time.Now().UTC(), timers}
 }
 
 // NewTestStopwatch returns a new test stopwatch
 func NewTestStopwatch() Stopwatch {
-	return Stopwatch{time.Now(), []tally.Timer{}}
+	return Stopwatch{time.Now().UTC(), []tally.Timer{}}
 }
 
 // Stop reports time elapsed since the stopwatch start to the recorder.

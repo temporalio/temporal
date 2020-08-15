@@ -30,10 +30,10 @@ import (
 	"context"
 
 	"github.com/pborman/uuid"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/log"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
 )
 
 type (

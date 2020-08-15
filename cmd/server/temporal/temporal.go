@@ -31,15 +31,15 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/primitives"
 
 	"github.com/urfave/cli"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/tools/cassandra"
-	"github.com/temporalio/temporal/tools/sql"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/tools/cassandra"
+	"go.temporal.io/server/tools/sql"
 )
 
 // validServices is the list of all valid temporal services

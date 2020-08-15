@@ -25,7 +25,7 @@
 package frontend
 
 import (
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/api/workflowservice/v1"
 )
 
 // Client is the interface exposed by frontend service client

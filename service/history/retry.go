@@ -28,67 +28,102 @@ import (
 	"math"
 	"time"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/backoff"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
+
+	"go.temporal.io/server/common/backoff"
 )
 
 func getBackoffInterval(
 	now time.Time,
 	expirationTime time.Time,
-	currAttempt int32,
+	currentAttemptCounterValue int32,
 	maxAttempts int32,
-	initInterval int32,
-	maxInterval int32,
+	initInterval time.Duration,
+	maxInterval time.Duration,
 	backoffCoefficient float64,
-	failureReason string,
-	nonRetriableErrors []string,
-) time.Duration {
+	failure *failurepb.Failure,
+	nonRetryableTypes []string,
+) (time.Duration, enumspb.RetryState) {
+
+	// Sanity check to make sure currentAttemptCounterValue started with 1.
+	if currentAttemptCounterValue < 1 {
+		currentAttemptCounterValue = 1
+	}
+
+	if !isRetryable(failure, nonRetryableTypes) {
+		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
+	}
 
 	if maxAttempts == 0 && expirationTime.IsZero() {
-		return backoff.NoBackoff
+		return backoff.NoBackoff, enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET
 	}
 
-	if maxAttempts > 0 && currAttempt >= maxAttempts-1 {
-		// currAttempt starts from 0.
-		// MaximumAttempts is the total attempts, including initial (non-retry) attempt.
-		return backoff.NoBackoff
+	// currentAttemptCounterValue starts from 1.
+	// maxAttempts is the total attempts, including initial (non-retry) attempt.
+	// At this point we are about to make next attempt and all calculations in this func are for this next attempt.
+	// For example, if maxAttempts is set to 2 and we are making 1st retry, currentAttemptCounterValue will be 1
+	// (we made 1 non-retry attempt already) and condition (currentAttemptCounterValue+1 > maxAttempts) will be false.
+	// With 2nd retry, currentAttemptCounterValue will be 2 (1 non-retry + 1 retry attempt already made) and
+	// condition (currentAttemptCounterValue+1 > maxAttempts) will be true (means stop retrying, we tried 2 times already).
+	if maxAttempts > 0 && currentAttemptCounterValue+1 > maxAttempts {
+		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
 	}
 
-	nextInterval := int64(float64(initInterval) * math.Pow(backoffCoefficient, float64(currAttempt)))
-	if nextInterval <= 0 {
+	maxIntervalSeconds := int64(maxInterval.Round(time.Second).Seconds())
+	nextIntervalSeconds := int64(initInterval.Seconds() * math.Pow(backoffCoefficient, float64(currentAttemptCounterValue-1)))
+	if nextIntervalSeconds <= 0 {
 		// math.Pow() could overflow
 		if maxInterval > 0 {
-			nextInterval = int64(maxInterval)
+			nextIntervalSeconds = maxIntervalSeconds
 		} else {
-			return backoff.NoBackoff
+			return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
 		}
 	}
 
-	if maxInterval > 0 && nextInterval > int64(maxInterval) {
+	if maxInterval > 0 && nextIntervalSeconds > maxIntervalSeconds {
 		// cap next interval to MaxInterval
-		nextInterval = int64(maxInterval)
+		nextIntervalSeconds = maxIntervalSeconds
 	}
 
-	backoffInterval := time.Duration(nextInterval) * time.Second
+	backoffInterval := time.Duration(nextIntervalSeconds) * time.Second
 	nextScheduleTime := now.Add(backoffInterval)
 	if !expirationTime.IsZero() && nextScheduleTime.After(expirationTime) {
-		return backoff.NoBackoff
+		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
 	}
 
-	// make sure we don't retry size exceeded error reasons. Note that FailureReasonFailureDetailsExceedsLimit is retryable.
-	if failureReason == common.FailureReasonCancelDetailsExceedsLimit ||
-		failureReason == common.FailureReasonCompleteResultExceedsLimit ||
-		failureReason == common.FailureReasonHeartbeatExceedsLimit ||
-		failureReason == common.FailureReasonDecisionBlobSizeExceedsLimit {
-		return backoff.NoBackoff
+	return backoffInterval, enumspb.RETRY_STATE_IN_PROGRESS
+}
+
+func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
+	if failure == nil {
+		return true
 	}
 
-	// check if error is non-retriable
-	for _, er := range nonRetriableErrors {
-		if er == failureReason {
-			return backoff.NoBackoff
+	if failure.GetTerminatedFailureInfo() != nil || failure.GetCanceledFailureInfo() != nil {
+		return false
+	}
+
+	if failure.GetTimeoutFailureInfo() != nil {
+		return failure.GetTimeoutFailureInfo().GetTimeoutType() == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
+			failure.GetTimeoutFailureInfo().GetTimeoutType() == enumspb.TIMEOUT_TYPE_HEARTBEAT
+	}
+
+	if failure.GetServerFailureInfo() != nil {
+		return !failure.GetServerFailureInfo().GetNonRetryable()
+	}
+
+	if failure.GetApplicationFailureInfo() != nil {
+		if failure.GetApplicationFailureInfo().GetNonRetryable() {
+			return false
+		}
+
+		failureType := failure.GetApplicationFailureInfo().GetType()
+		for _, nrt := range nonRetryableTypes {
+			if nrt == failureType {
+				return false
+			}
 		}
 	}
-
-	return backoffInterval
+	return true
 }

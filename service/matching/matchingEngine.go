@@ -33,29 +33,29 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
-	querypb "go.temporal.io/temporal-proto/query"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
-	"github.com/temporalio/temporal/client/history"
-	"github.com/temporalio/temporal/client/matching"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/headers"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/membership"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 // Implements matching.Engine
@@ -81,8 +81,8 @@ type (
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
 		metricsClient        metrics.Client
-		taskListsLock        sync.RWMutex                   // locks mutation of taskLists
-		taskLists            map[taskListID]taskListManager // Convert to LRU cache
+		taskQueuesLock       sync.RWMutex                     // locks mutation of taskQueues
+		taskQueues           map[taskQueueID]taskQueueManager // Convert to LRU cache
 		config               *Config
 		lockableQueryTaskMap lockableQueryTaskMap
 		namespaceCache       cache.NamespaceCache
@@ -92,16 +92,16 @@ type (
 )
 
 var (
-	// EmptyPollForDecisionTaskResponse is the response when there are no decision tasks to hand out
-	emptyPollForDecisionTaskResponse = &matchingservice.PollForDecisionTaskResponse{}
-	// EmptyPollForActivityTaskResponse is the response when there are no activity tasks to hand out
-	emptyPollForActivityTaskResponse   = &matchingservice.PollForActivityTaskResponse{}
+	// EmptyPollWorkflowTaskQueueResponse is the response when there are no workflow tasks to hand out
+	emptyPollWorkflowTaskQueueResponse = &matchingservice.PollWorkflowTaskQueueResponse{}
+	// EmptyPollActivityTaskQueueResponse is the response when there are no activity tasks to hand out
+	emptyPollActivityTaskQueueResponse = &matchingservice.PollActivityTaskQueueResponse{}
 	persistenceOperationRetryPolicy    = common.CreatePersistanceRetryPolicy()
 	historyServiceOperationRetryPolicy = common.CreateHistoryServiceRetryPolicy()
 
 	// ErrNoTasks is exported temporarily for integration test
 	ErrNoTasks    = errors.New("No tasks")
-	errPumpClosed = errors.New("Task list pump closed its channel")
+	errPumpClosed = errors.New("Task queue pump closed its channel")
 
 	pollerIDKey pollerIDCtxKey = "pollerID"
 	identityKey identityCtxKey = "identity"
@@ -124,7 +124,7 @@ func NewEngine(taskManager persistence.TaskManager,
 		taskManager:          taskManager,
 		historyService:       historyService,
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
-		taskLists:            make(map[taskListID]taskListManager),
+		taskQueues:           make(map[taskQueueID]taskQueueManager),
 		logger:               logger.WithTags(tag.ComponentMatchingEngine),
 		metricsClient:        metricsClient,
 		matchingClient:       matchingClient,
@@ -137,22 +137,22 @@ func NewEngine(taskManager persistence.TaskManager,
 }
 
 func (e *matchingEngineImpl) Start() {
-	// As task lists are initialized lazily nothing is done on startup at this point.
+	// As task queues are initialized lazily nothing is done on startup at this point.
 }
 
 func (e *matchingEngineImpl) Stop() {
-	// Executes Stop() on each task list outside of lock
-	for _, l := range e.getTaskLists(math.MaxInt32) {
+	// Executes Stop() on each task queue outside of lock
+	for _, l := range e.getTaskQueues(math.MaxInt32) {
 		l.Stop()
 	}
 }
 
-func (e *matchingEngineImpl) getTaskLists(maxCount int) (lists []taskListManager) {
-	e.taskListsLock.RLock()
-	defer e.taskListsLock.RUnlock()
-	lists = make([]taskListManager, 0, len(e.taskLists))
+func (e *matchingEngineImpl) getTaskQueues(maxCount int) (lists []taskQueueManager) {
+	e.taskQueuesLock.RLock()
+	defer e.taskQueuesLock.RUnlock()
+	lists = make([]taskQueueManager, 0, len(e.taskQueues))
 	count := 0
-	for _, tlMgr := range e.taskLists {
+	for _, tlMgr := range e.taskQueues {
 		lists = append(lists, tlMgr)
 		count++
 		if count >= maxCount {
@@ -163,235 +163,234 @@ func (e *matchingEngineImpl) getTaskLists(maxCount int) (lists []taskListManager
 }
 
 func (e *matchingEngineImpl) String() string {
-	// Executes taskList.String() on each task list outside of lock
+	// Executes taskQueue.String() on each task queue outside of lock
 	buf := new(bytes.Buffer)
-	for _, l := range e.getTaskLists(1000) {
+	for _, l := range e.getTaskQueues(1000) {
 		fmt.Fprintf(buf, "\n%s", l.String())
 	}
 	return buf.String()
 }
 
-// Returns taskListManager for a task list. If not already cached gets new range from DB and
+// Returns taskQueueManager for a task queue. If not already cached gets new range from DB and
 // if successful creates one.
-func (e *matchingEngineImpl) getTaskListManager(taskList *taskListID, taskListKind tasklistpb.TaskListKind) (taskListManager, error) {
-	// The first check is an optimization so almost all requests will have a task list manager
+func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQueueKind enumspb.TaskQueueKind) (taskQueueManager, error) {
+	// The first check is an optimization so almost all requests will have a task queue manager
 	// and return avoiding the write lock
-	e.taskListsLock.RLock()
-	if result, ok := e.taskLists[*taskList]; ok {
-		e.taskListsLock.RUnlock()
+	e.taskQueuesLock.RLock()
+	if result, ok := e.taskQueues[*taskQueue]; ok {
+		e.taskQueuesLock.RUnlock()
 		return result, nil
 	}
-	e.taskListsLock.RUnlock()
-	// If it gets here, write lock and check again in case a task list is created between the two locks
-	e.taskListsLock.Lock()
-	if result, ok := e.taskLists[*taskList]; ok {
-		e.taskListsLock.Unlock()
+	e.taskQueuesLock.RUnlock()
+	// If it gets here, write lock and check again in case a task queue is created between the two locks
+	e.taskQueuesLock.Lock()
+	if result, ok := e.taskQueues[*taskQueue]; ok {
+		e.taskQueuesLock.Unlock()
 		return result, nil
 	}
-	e.logger.Info("", tag.LifeCycleStarting, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType))
-	mgr, err := newTaskListManager(e, taskList, taskListKind, e.config)
+	e.logger.Info("", tag.LifeCycleStarting, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
+	mgr, err := newTaskQueueManager(e, taskQueue, taskQueueKind, e.config)
 	if err != nil {
-		e.taskListsLock.Unlock()
-		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
+		e.taskQueuesLock.Unlock()
+		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType), tag.Error(err))
 		return nil, err
 	}
-	e.taskLists[*taskList] = mgr
-	e.taskListsLock.Unlock()
+	e.taskQueues[*taskQueue] = mgr
+	e.taskQueuesLock.Unlock()
 	err = mgr.Start()
 	if err != nil {
-		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
+		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType), tag.Error(err))
 		return nil, err
 	}
-	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType))
+	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
 	return mgr, nil
 }
 
 // For use in tests
-func (e *matchingEngineImpl) updateTaskList(taskList *taskListID, mgr taskListManager) {
-	e.taskListsLock.Lock()
-	defer e.taskListsLock.Unlock()
-	e.taskLists[*taskList] = mgr
+func (e *matchingEngineImpl) updateTaskQueue(taskQueue *taskQueueID, mgr taskQueueManager) {
+	e.taskQueuesLock.Lock()
+	defer e.taskQueuesLock.Unlock()
+	e.taskQueues[*taskQueue] = mgr
 }
 
-func (e *matchingEngineImpl) removeTaskListManager(id *taskListID) {
-	e.taskListsLock.Lock()
-	defer e.taskListsLock.Unlock()
-	delete(e.taskLists, *id)
+func (e *matchingEngineImpl) removeTaskQueueManager(id *taskQueueID) {
+	e.taskQueuesLock.Lock()
+	defer e.taskQueuesLock.Unlock()
+	delete(e.taskQueues, *id)
 }
 
-// AddDecisionTask either delivers task directly to waiting poller or save it into task list persistence.
-func (e *matchingEngineImpl) AddDecisionTask(
+// AddWorkflowTask either delivers task directly to waiting poller or save it into task queue persistence.
+func (e *matchingEngineImpl) AddWorkflowTask(
 	hCtx *handlerContext,
-	addRequest *matchingservice.AddDecisionTaskRequest,
+	addRequest *matchingservice.AddWorkflowTaskRequest,
 ) (bool, error) {
 	namespaceID := addRequest.GetNamespaceId()
-	taskListName := addRequest.TaskList.GetName()
-	taskListKind := addRequest.TaskList.GetKind()
+	taskQueueName := addRequest.TaskQueue.GetName()
+	taskQueueKind := addRequest.TaskQueue.GetKind()
 
 	// TODO: use tags
 	e.logger.Debug(
-		fmt.Sprintf("Received AddDecisionTask for taskList=%v, WorkflowId=%v, RunId=%v, ScheduleToStartTimeout=%v",
-			addRequest.TaskList.GetName(),
+		fmt.Sprintf("Received AddWorkflowTask for taskQueue=%v, WorkflowId=%v, RunId=%v, ScheduleToStartTimeout=%v",
+			addRequest.TaskQueue.GetName(),
 			addRequest.Execution.GetWorkflowId(),
 			addRequest.Execution.GetRunId(),
-			addRequest.GetScheduleToStartTimeoutSeconds()))
+			timestamp.DurationValue(addRequest.GetScheduleToStartTimeout())))
 
-	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Decision)
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return false, err
 	}
 
-	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
+	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {
 		return false, err
 	}
 
-	// This needs to move to history see - https://github.com/temporalio/temporal/issues/181
-	now := types.TimestampNow()
-	expiry := types.TimestampNow()
-	expiry.Seconds += int64(addRequest.ScheduleToStartTimeoutSeconds)
+	// This needs to move to history see - https://go.temporal.io/server/issues/181
+	now := timestamp.TimePtr(time.Now().UTC())
+	expiry := now.Add(timestamp.DurationValue(addRequest.GetScheduleToStartTimeout()))
 	taskInfo := &persistenceblobs.TaskInfo{
-		NamespaceId: primitives.MustParseUUID(namespaceID),
-		RunId:       primitives.MustParseUUID(addRequest.Execution.GetRunId()),
+		NamespaceId: namespaceID,
+		RunId:       addRequest.Execution.GetRunId(),
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),
-		Expiry:      expiry,
-		CreatedTime: now,
+		ExpiryTime:  &expiry,
+		CreateTime:  now,
 	}
 
 	return tlMgr.AddTask(hCtx.Context, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
-		forwardedFrom: addRequest.GetForwardedFrom(),
+		forwardedFrom: addRequest.GetForwardedSource(),
 	})
 }
 
-// AddActivityTask either delivers task directly to waiting poller or save it into task list persistence.
+// AddActivityTask either delivers task directly to waiting poller or save it into task queue persistence.
 func (e *matchingEngineImpl) AddActivityTask(
 	hCtx *handlerContext,
 	addRequest *matchingservice.AddActivityTaskRequest,
 ) (bool, error) {
 	namespaceID := addRequest.GetNamespaceId()
-	sourceNamespaceID := primitives.MustParseUUID(addRequest.GetSourceNamespaceId())
-	runID := primitives.MustParseUUID(addRequest.Execution.GetRunId())
-	taskListName := addRequest.TaskList.GetName()
-	taskListKind := addRequest.TaskList.GetKind()
+	sourceNamespaceID := addRequest.GetSourceNamespaceId()
+	runID := addRequest.Execution.GetRunId()
+	taskQueueName := addRequest.TaskQueue.GetName()
+	taskQueueKind := addRequest.TaskQueue.GetKind()
 
 	e.logger.Debug(
-		fmt.Sprintf("Received AddActivityTask for taskList=%v WorkflowId=%v, RunId=%v",
-			taskListName,
+		fmt.Sprintf("Received AddActivityTask for taskQueue=%v WorkflowId=%v, RunId=%v",
+			taskQueueName,
 			addRequest.Execution.WorkflowId,
 			addRequest.Execution.RunId))
 
-	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Activity)
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	if err != nil {
 		return false, err
 	}
 
-	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
+	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {
 		return false, err
 	}
 
-	now := types.TimestampNow()
-	expiry := types.TimestampNow()
-	expiry.Seconds += int64(addRequest.GetScheduleToStartTimeoutSeconds())
+	now := timestamp.TimePtr(time.Now().UTC())
+	expiry := now.Add(timestamp.DurationValue(addRequest.GetScheduleToStartTimeout()))
 	taskInfo := &persistenceblobs.TaskInfo{
 		NamespaceId: sourceNamespaceID,
 		RunId:       runID,
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),
-		CreatedTime: now,
-		Expiry:      expiry,
+		CreateTime:  now,
+		ExpiryTime:  &expiry,
 	}
 
 	return tlMgr.AddTask(hCtx.Context, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
-		forwardedFrom: addRequest.GetForwardedFrom(),
+		forwardedFrom: addRequest.GetForwardedSource(),
 	})
 }
 
-// PollForDecisionTask tries to get the decision task using exponential backoff.
-func (e *matchingEngineImpl) PollForDecisionTask(
+// PollWorkflowTaskQueue tries to get the workflow task using exponential backoff.
+func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	hCtx *handlerContext,
-	req *matchingservice.PollForDecisionTaskRequest,
-) (*matchingservice.PollForDecisionTaskResponse, error) {
+	req *matchingservice.PollWorkflowTaskQueueRequest,
+) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 	namespaceID := req.GetNamespaceId()
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
-	taskListName := request.TaskList.GetName()
-	e.logger.Debug("Received PollForDecisionTask for taskList", tag.WorkflowTaskListName(taskListName))
+	taskQueueName := request.TaskQueue.GetName()
+	e.logger.Debug("Received PollWorkflowTaskQueue for taskQueue", tag.WorkflowTaskQueueName(taskQueueName))
 pollLoop:
 	for {
 		err := common.IsValidContext(hCtx.Context)
 		if err != nil {
 			return nil, err
 		}
-		// Add frontend generated pollerID to context so tasklistMgr can support cancellation of
+		// Add frontend generated pollerID to context so taskqueueMgr can support cancellation of
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(hCtx.Context, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
-		taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Decision)
+		taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		if err != nil {
 			return nil, err
 		}
-		taskListKind := request.TaskList.GetKind()
-		task, err := e.getTask(pollerCtx, taskList, nil, taskListKind)
+		taskQueueKind := request.TaskQueue.GetKind()
+		task, err := e.getTask(pollerCtx, taskQueue, nil, taskQueueKind)
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
 			if err == ErrNoTasks || err == errPumpClosed {
-				return emptyPollForDecisionTaskResponse, nil
+				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 			return nil, err
 		}
 
-		e.emitForwardedFromStats(hCtx.scope, task.isForwarded(), req.GetForwardedFrom())
+		e.emitForwardedSourceStats(hCtx.scope, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
-			return task.pollForDecisionResponse(), nil
+			return task.pollWorkflowTaskQueueResponse(), nil
 		}
 
 		if task.isQuery() {
 			task.finish(nil) // this only means query task sync match succeed.
 
-			// for query task, we don't need to update history to record decision task started. but we need to know
-			// the NextEventID so front end knows what are the history events to load for this decision task.
+			// for query task, we don't need to update history to record workflow task started. but we need to know
+			// the NextEventID so front end knows what are the history events to load for this workflow task.
 			mutableStateResp, err := e.historyService.GetMutableState(hCtx.Context, &historyservice.GetMutableStateRequest{
 				NamespaceId: req.GetNamespaceId(),
 				Execution:   task.workflowExecution(),
 			})
 			if err != nil {
 				// will notify query client that the query task failed
-				e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err}) //nolint:errcheck
-				return emptyPollForDecisionTaskResponse, nil
+				e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err}) // nolint:errcheck
+				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 
 			isStickyEnabled := false
-			if len(mutableStateResp.StickyTaskList.GetName()) != 0 {
+			if len(mutableStateResp.StickyTaskQueue.GetName()) != 0 {
 				isStickyEnabled = true
 			}
-			resp := &historyservice.RecordDecisionTaskStartedResponse{
-				PreviousStartedEventId:    mutableStateResp.PreviousStartedEventId,
-				NextEventId:               mutableStateResp.NextEventId,
-				WorkflowType:              mutableStateResp.WorkflowType,
-				StickyExecutionEnabled:    isStickyEnabled,
-				WorkflowExecutionTaskList: mutableStateResp.TaskList,
-				BranchToken:               mutableStateResp.CurrentBranchToken,
-				StartedEventId:            common.EmptyEventID,
+			resp := &historyservice.RecordWorkflowTaskStartedResponse{
+				PreviousStartedEventId:     mutableStateResp.PreviousStartedEventId,
+				NextEventId:                mutableStateResp.NextEventId,
+				WorkflowType:               mutableStateResp.WorkflowType,
+				StickyExecutionEnabled:     isStickyEnabled,
+				WorkflowExecutionTaskQueue: mutableStateResp.TaskQueue,
+				BranchToken:                mutableStateResp.CurrentBranchToken,
+				StartedEventId:             common.EmptyEventID,
+				Attempt:                    1,
 			}
-			return e.createPollForDecisionTaskResponse(task, resp, hCtx.scope), nil
+			return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.scope), nil
 		}
 
-		resp, err := e.recordDecisionTaskStarted(hCtx.Context, request, task)
+		resp, err := e.recordWorkflowTaskStarted(hCtx.Context, request, task)
 		if err != nil {
 			switch err.(type) {
-			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
-				e.logger.Debug(fmt.Sprintf("Duplicated decision task taskList=%v, taskID=%v",
-					taskListName, task.event.GetTaskId()))
+			case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
+				e.logger.Debug(fmt.Sprintf("Duplicated workflow task taskQueue=%v, taskID=%v",
+					taskQueueName, task.event.GetTaskId()))
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -400,22 +399,22 @@ pollLoop:
 			continue pollLoop
 		}
 		task.finish(nil)
-		return e.createPollForDecisionTaskResponse(task, resp, hCtx.scope), nil
+		return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.scope), nil
 	}
 }
 
 // pollForActivityTaskOperation takes one task from the task manager, update workflow execution history, mark task as
 // completed and return it to user. If a task from task manager is already started, return an empty response, without
 // error. Timeouts handled by the timer queue.
-func (e *matchingEngineImpl) PollForActivityTask(
+func (e *matchingEngineImpl) PollActivityTaskQueue(
 	hCtx *handlerContext,
-	req *matchingservice.PollForActivityTaskRequest,
-) (*matchingservice.PollForActivityTaskResponse, error) {
+	req *matchingservice.PollActivityTaskQueueRequest,
+) (*matchingservice.PollActivityTaskQueueResponse, error) {
 	namespaceID := req.GetNamespaceId()
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
-	taskListName := request.TaskList.GetName()
-	e.logger.Debug("Received PollForActivityTask for taskList", tag.Name(taskListName))
+	taskQueueName := request.TaskQueue.GetName()
+	e.logger.Debug("Received PollActivityTaskQueue for taskQueue", tag.Name(taskQueueName))
 pollLoop:
 	for {
 		err := common.IsValidContext(hCtx.Context)
@@ -423,41 +422,41 @@ pollLoop:
 			return nil, err
 		}
 
-		taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Activity)
+		taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 		if err != nil {
 			return nil, err
 		}
 
 		var maxDispatch *float64
-		if request.TaskListMetadata != nil && request.TaskListMetadata.MaxTasksPerSecond != nil {
-			maxDispatch = &request.TaskListMetadata.MaxTasksPerSecond.Value
+		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
+			maxDispatch = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
 		}
-		// Add frontend generated pollerID to context so tasklistMgr can support cancellation of
+		// Add frontend generated pollerID to context so taskqueueMgr can support cancellation of
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(hCtx.Context, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
-		taskListKind := request.TaskList.GetKind()
-		task, err := e.getTask(pollerCtx, taskList, maxDispatch, taskListKind)
+		taskQueueKind := request.TaskQueue.GetKind()
+		task, err := e.getTask(pollerCtx, taskQueue, maxDispatch, taskQueueKind)
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
 			if err == ErrNoTasks || err == errPumpClosed {
-				return emptyPollForActivityTaskResponse, nil
+				return emptyPollActivityTaskQueueResponse, nil
 			}
 			return nil, err
 		}
 
-		e.emitForwardedFromStats(hCtx.scope, task.isForwarded(), req.GetForwardedFrom())
+		e.emitForwardedSourceStats(hCtx.scope, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
-			return task.pollForActivityResponse(), nil
+			return task.pollActivityTaskQueueResponse(), nil
 		}
 
 		resp, err := e.recordActivityTaskStarted(hCtx.Context, request, task)
 		if err != nil {
 			switch err.(type) {
-			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
-				e.logger.Debug("Duplicated activity task", tag.Name(taskListName), tag.TaskID(task.event.GetTaskId()))
+			case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
+				e.logger.Debug("Duplicated activity task", tag.Name(taskQueueName), tag.TaskID(task.event.GetTaskId()))
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -466,7 +465,7 @@ pollLoop:
 			continue pollLoop
 		}
 		task.finish(nil)
-		return e.createPollForActivityTaskResponse(task, resp, hCtx.scope), nil
+		return e.createPollActivityTaskQueueResponse(task, resp, hCtx.scope), nil
 	}
 }
 
@@ -475,21 +474,21 @@ type queryResult struct {
 	internalError  error
 }
 
-// QueryWorkflow creates a DecisionTask with query data, send it through sync match channel, wait for that DecisionTask
+// QueryWorkflow creates a WorkflowTask with query data, send it through sync match channel, wait for that WorkflowTask
 // to be processed by worker, and then return the query result.
 func (e *matchingEngineImpl) QueryWorkflow(
 	hCtx *handlerContext,
 	queryRequest *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	namespaceID := queryRequest.GetNamespaceId()
-	taskListName := queryRequest.TaskList.GetName()
-	taskListKind := queryRequest.TaskList.GetKind()
-	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Decision)
+	taskQueueName := queryRequest.TaskQueue.GetName()
+	taskQueueKind := queryRequest.TaskQueue.GetKind()
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
 
-	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
+	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {
 		return nil, err
 	}
@@ -516,9 +515,9 @@ func (e *matchingEngineImpl) QueryWorkflow(
 
 		workerResponse := result.workerResponse
 		switch workerResponse.GetCompletedRequest().GetCompletedType() {
-		case querypb.QueryResultType_Answered:
+		case enumspb.QUERY_RESULT_TYPE_ANSWERED:
 			return &matchingservice.QueryWorkflowResponse{QueryResult: workerResponse.GetCompletedRequest().GetQueryResult()}, nil
-		case querypb.QueryResultType_Failed:
+		case enumspb.QUERY_RESULT_TYPE_FAILED:
 			return nil, serviceerror.NewQueryFailed(workerResponse.GetCompletedRequest().GetErrorMessage())
 		default:
 			return nil, serviceerror.NewInternal("unknown query completed type")
@@ -533,7 +532,7 @@ func (e *matchingEngineImpl) RespondQueryTaskCompleted(
 	request *matchingservice.RespondQueryTaskCompletedRequest,
 ) error {
 	if err := e.deliverQueryResult(request.GetTaskId(), &queryResult{workerResponse: request}); err != nil {
-		hCtx.scope.IncCounter(metrics.RespondQueryTaskFailedPerTaskListCounter)
+		hCtx.scope.IncCounter(metrics.RespondQueryTaskFailedPerTaskQueueCounter)
 		return err
 	}
 	return nil
@@ -553,16 +552,16 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 	request *matchingservice.CancelOutstandingPollRequest,
 ) error {
 	namespaceID := request.GetNamespaceId()
-	taskListType := request.GetTaskListType()
-	taskListName := request.TaskList.GetName()
+	taskQueueType := request.GetTaskQueueType()
+	taskQueueName := request.TaskQueue.GetName()
 	pollerID := request.GetPollerId()
 
-	taskList, err := newTaskListID(namespaceID, taskListName, taskListType)
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, taskQueueType)
 	if err != nil {
 		return err
 	}
-	taskListKind := request.TaskList.GetKind()
-	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
+	taskQueueKind := request.TaskQueue.GetKind()
+	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {
 		return err
 	}
@@ -571,71 +570,69 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 	return nil
 }
 
-func (e *matchingEngineImpl) DescribeTaskList(
+func (e *matchingEngineImpl) DescribeTaskQueue(
 	hCtx *handlerContext,
-	request *matchingservice.DescribeTaskListRequest,
-) (*matchingservice.DescribeTaskListResponse, error) {
+	request *matchingservice.DescribeTaskQueueRequest,
+) (*matchingservice.DescribeTaskQueueResponse, error) {
 	namespaceID := request.GetNamespaceId()
-	taskListType := tasklistpb.TaskListType_Decision
-	if request.DescRequest.GetTaskListType() == tasklistpb.TaskListType_Activity {
-		taskListType = tasklistpb.TaskListType_Activity
-	}
-	taskListName := request.DescRequest.TaskList.GetName()
-	taskList, err := newTaskListID(namespaceID, taskListName, taskListType)
+	taskQueueType := request.DescRequest.GetTaskQueueType()
+	taskQueueName := request.DescRequest.TaskQueue.GetName()
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, taskQueueType)
 	if err != nil {
 		return nil, err
 	}
-	taskListKind := request.DescRequest.TaskList.GetKind()
-	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
+	taskQueueKind := request.DescRequest.TaskQueue.GetKind()
+	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {
 		return nil, err
 	}
 
-	return tlMgr.DescribeTaskList(request.DescRequest.GetIncludeTaskListStatus()), nil
+	return tlMgr.DescribeTaskQueue(request.DescRequest.GetIncludeTaskQueueStatus()), nil
 }
 
-func (e *matchingEngineImpl) ListTaskListPartitions(
+func (e *matchingEngineImpl) ListTaskQueuePartitions(
 	hCtx *handlerContext,
-	request *matchingservice.ListTaskListPartitionsRequest,
-) (*matchingservice.ListTaskListPartitionsResponse, error) {
-	activityTaskListInfo, err := e.listTaskListPartitions(request, tasklistpb.TaskListType_Activity)
+	request *matchingservice.ListTaskQueuePartitionsRequest,
+) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
+	activityTaskQueueInfo, err := e.listTaskQueuePartitions(request, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	if err != nil {
 		return nil, err
 	}
-	decisionTaskListInfo, err := e.listTaskListPartitions(request, tasklistpb.TaskListType_Decision)
+	workflowTaskQueueInfo, err := e.listTaskQueuePartitions(request, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
-	resp := matchingservice.ListTaskListPartitionsResponse{
-		ActivityTaskListPartitions: activityTaskListInfo,
-		DecisionTaskListPartitions: decisionTaskListInfo,
+	resp := matchingservice.ListTaskQueuePartitionsResponse{
+		ActivityTaskQueuePartitions: activityTaskQueueInfo,
+		WorkflowTaskQueuePartitions: workflowTaskQueueInfo,
 	}
 	return &resp, nil
 }
 
-func (e *matchingEngineImpl) listTaskListPartitions(request *matchingservice.ListTaskListPartitionsRequest, taskListType tasklistpb.TaskListType) ([]*tasklistpb.TaskListPartitionMetadata, error) {
+func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.ListTaskQueuePartitionsRequest, taskQueueType enumspb.TaskQueueType) ([]*taskqueuepb.TaskQueuePartitionMetadata, error) {
 	partitions, err := e.getAllPartitions(
 		request.GetNamespace(),
-		*request.TaskList,
-		taskListType,
+		*request.TaskQueue,
+		taskQueueType,
 	)
-	if err != nil {
-		return nil, err
-	}
-	partitionHostInfo := make([]*tasklistpb.TaskListPartitionMetadata, len(partitions))
 
 	if err != nil {
 		return nil, err
 	}
-	for _, partition := range partitions {
-		if host, err := e.getHostInfo(partition); err != nil {
-			partitionHostInfo = append(partitionHostInfo,
-				&tasklistpb.TaskListPartitionMetadata{
-					Key:           partition,
-					OwnerHostName: host,
-				})
+
+	partitionHostInfo := make([]*taskqueuepb.TaskQueuePartitionMetadata, len(partitions))
+	for i, partition := range partitions {
+		host, err := e.getHostInfo(partition)
+		if err != nil {
+			return nil, err
+		}
+
+		partitionHostInfo[i] = &taskqueuepb.TaskQueuePartitionMetadata{
+			Key:           partition,
+			OwnerHostName: host,
 		}
 	}
+
 	return partitionHostInfo, nil
 }
 
@@ -649,27 +646,27 @@ func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 
 func (e *matchingEngineImpl) getAllPartitions(
 	namespace string,
-	taskList tasklistpb.TaskList,
-	taskListType tasklistpb.TaskListType,
+	taskQueue taskqueuepb.TaskQueue,
+	taskQueueType enumspb.TaskQueueType,
 ) ([]string, error) {
 	var partitionKeys []string
 	namespaceID, err := e.namespaceCache.GetNamespaceID(namespace)
 	if err != nil {
 		return partitionKeys, err
 	}
-	taskListID, err := newTaskListID(namespaceID, taskList.GetName(), tasklistpb.TaskListType_Decision)
-	rootPartition := taskListID.GetRoot()
+	taskQueueID, err := newTaskQueueID(namespaceID, taskQueue.GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rootPartition := taskQueueID.GetRoot()
 
 	partitionKeys = append(partitionKeys, rootPartition)
 
-	nWritePartitions := e.config.GetTasksBatchSize
-	n := nWritePartitions(namespace, rootPartition, taskListType)
+	nWritePartitions := e.config.NumTaskqueueWritePartitions
+	n := nWritePartitions(namespace, rootPartition, taskQueueType)
 	if n <= 0 {
 		return partitionKeys, nil
 	}
 
 	for i := 1; i < n; i++ {
-		partitionKeys = append(partitionKeys, fmt.Sprintf("%v%v/%v", taskListPartitionPrefix, rootPartition, i))
+		partitionKeys = append(partitionKeys, fmt.Sprintf("%v%v/%v", taskQueuePartitionPrefix, rootPartition, i))
 	}
 
 	return partitionKeys, nil
@@ -677,46 +674,46 @@ func (e *matchingEngineImpl) getAllPartitions(
 
 // Loads a task from persistence and wraps it in a task context
 func (e *matchingEngineImpl) getTask(
-	ctx context.Context, taskList *taskListID, maxDispatchPerSecond *float64, taskListKind tasklistpb.TaskListKind,
+	ctx context.Context, taskQueue *taskQueueID, maxDispatchPerSecond *float64, taskQueueKind enumspb.TaskQueueKind,
 ) (*internalTask, error) {
-	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
+	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {
 		return nil, err
 	}
 	return tlMgr.GetTask(ctx, maxDispatchPerSecond)
 }
 
-func (e *matchingEngineImpl) unloadTaskList(id *taskListID) {
-	e.taskListsLock.Lock()
-	tlMgr, ok := e.taskLists[*id]
+func (e *matchingEngineImpl) unloadTaskQueue(id *taskQueueID) {
+	e.taskQueuesLock.Lock()
+	tlMgr, ok := e.taskQueues[*id]
 	if ok {
-		delete(e.taskLists, *id)
+		delete(e.taskQueues, *id)
 	}
-	e.taskListsLock.Unlock()
+	e.taskQueuesLock.Unlock()
 	if ok {
 		tlMgr.Stop()
 	}
 }
 
-// Populate the decision task response based on context and scheduled/started events.
-func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
+// Populate the workflow task response based on context and scheduled/started events.
+func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	task *internalTask,
-	historyResponse *historyservice.RecordDecisionTaskStartedResponse,
+	historyResponse *historyservice.RecordWorkflowTaskStartedResponse,
 	scope metrics.Scope,
-) *matchingservice.PollForDecisionTaskResponse {
+) *matchingservice.PollWorkflowTaskQueueResponse {
 
 	var serializedToken []byte
 	if task.isQuery() {
 		// for a query task
 		queryRequest := task.query.request
-		taskToken := &tokengenpb.QueryTask{
+		taskToken := &tokenspb.QueryTask{
 			NamespaceId: queryRequest.GetNamespaceId(),
-			TaskList:    queryRequest.TaskList.Name,
+			TaskQueue:   queryRequest.TaskQueue.Name,
 			TaskId:      task.query.taskID,
 		}
 		serializedToken, _ = e.tokenSerializer.SerializeQueryTaskToken(taskToken)
 	} else {
-		taskToken := &tokengenpb.Task{
+		taskToken := &tokenspb.Task{
 			NamespaceId:     task.event.Data.GetNamespaceId(),
 			WorkflowId:      task.event.Data.GetWorkflowId(),
 			RunId:           task.event.Data.GetRunId(),
@@ -725,12 +722,12 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 		}
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
-			ct, _ := types.TimestampFromProto(task.event.Data.CreatedTime)
-			scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskList, time.Since(ct))
+			ct := timestamp.TimeValue(task.event.Data.CreateTime)
+			scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
 		}
 	}
 
-	response := common.CreateMatchingPollForDecisionTaskResponse(
+	response := common.CreateMatchingPollWorkflowTaskQueueResponse(
 		historyResponse,
 		task.workflowExecution(),
 		serializedToken)
@@ -742,11 +739,11 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 }
 
 // Populate the activity task response based on context and scheduled/started events.
-func (e *matchingEngineImpl) createPollForActivityTaskResponse(
+func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	task *internalTask,
 	historyResponse *historyservice.RecordActivityTaskStartedResponse,
 	scope metrics.Scope,
-) *matchingservice.PollForActivityTaskResponse {
+) *matchingservice.PollActivityTaskQueueResponse {
 
 	scheduledEvent := historyResponse.ScheduledEvent
 	if scheduledEvent.GetActivityTaskScheduledEventAttributes() == nil {
@@ -757,11 +754,11 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 		panic("ActivityTaskScheduledEventAttributes.ActivityID is not set")
 	}
 	if task.responseC == nil {
-		ct, _ := types.TimestampFromProto(task.event.Data.CreatedTime)
-		scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskList, time.Since(ct))
+		ct := timestamp.TimeValue(task.event.Data.CreateTime)
+		scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
 	}
 
-	taskToken := &tokengenpb.Task{
+	taskToken := &tokenspb.Task{
 		NamespaceId:     task.event.Data.GetNamespaceId(),
 		WorkflowId:      task.event.Data.GetWorkflowId(),
 		RunId:           task.event.Data.GetRunId(),
@@ -773,48 +770,48 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 
-	return &matchingservice.PollForActivityTaskResponse{
-		ActivityId:                      attributes.ActivityId,
-		ActivityType:                    attributes.ActivityType,
-		Header:                          attributes.Header,
-		Input:                           attributes.Input,
-		WorkflowExecution:               task.workflowExecution(),
-		ScheduledTimestampOfThisAttempt: historyResponse.ScheduledTimestampOfThisAttempt,
-		ScheduledTimestamp:              scheduledEvent.Timestamp,
-		ScheduleToCloseTimeoutSeconds:   attributes.ScheduleToCloseTimeoutSeconds,
-		StartedTimestamp:                historyResponse.StartedTimestamp,
-		StartToCloseTimeoutSeconds:      attributes.StartToCloseTimeoutSeconds,
-		HeartbeatTimeoutSeconds:         attributes.HeartbeatTimeoutSeconds,
-		TaskToken:                       serializedToken,
-		Attempt:                         int32(taskToken.ScheduleAttempt),
-		HeartbeatDetails:                historyResponse.HeartbeatDetails,
-		WorkflowType:                    historyResponse.WorkflowType,
-		WorkflowNamespace:               historyResponse.WorkflowNamespace,
+	return &matchingservice.PollActivityTaskQueueResponse{
+		ActivityId:                  attributes.ActivityId,
+		ActivityType:                attributes.ActivityType,
+		Header:                      attributes.Header,
+		Input:                       attributes.Input,
+		WorkflowExecution:           task.workflowExecution(),
+		CurrentAttemptScheduledTime: historyResponse.CurrentAttemptScheduledTime,
+		ScheduledTime:               scheduledEvent.EventTime,
+		ScheduleToCloseTimeout:      attributes.ScheduleToCloseTimeout,
+		StartedTime:                 historyResponse.StartedTime,
+		StartToCloseTimeout:         attributes.StartToCloseTimeout,
+		HeartbeatTimeout:            attributes.HeartbeatTimeout,
+		TaskToken:                   serializedToken,
+		Attempt:                     int32(taskToken.ScheduleAttempt),
+		HeartbeatDetails:            historyResponse.HeartbeatDetails,
+		WorkflowType:                historyResponse.WorkflowType,
+		WorkflowNamespace:           historyResponse.WorkflowNamespace,
 	}
 }
 
-func (e *matchingEngineImpl) recordDecisionTaskStarted(
+func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	ctx context.Context,
-	pollReq *workflowservice.PollForDecisionTaskRequest,
+	pollReq *workflowservice.PollWorkflowTaskQueueRequest,
 	task *internalTask,
-) (*historyservice.RecordDecisionTaskStartedResponse, error) {
-	request := &historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceId:       primitives.UUIDString(task.event.Data.GetNamespaceId()),
+) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+	request := &historyservice.RecordWorkflowTaskStartedRequest{
+		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
 		ScheduleId:        task.event.Data.GetScheduleId(),
 		TaskId:            task.event.GetTaskId(),
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
 	}
-	var resp *historyservice.RecordDecisionTaskStartedResponse
+	var resp *historyservice.RecordWorkflowTaskStartedResponse
 	op := func() error {
 		var err error
-		resp, err = e.historyService.RecordDecisionTaskStarted(ctx, request)
+		resp, err = e.historyService.RecordWorkflowTaskStarted(ctx, request)
 		return err
 	}
 	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
-		case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
+		case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
 			return false
 		}
 		return true
@@ -824,11 +821,11 @@ func (e *matchingEngineImpl) recordDecisionTaskStarted(
 
 func (e *matchingEngineImpl) recordActivityTaskStarted(
 	ctx context.Context,
-	pollReq *workflowservice.PollForActivityTaskRequest,
+	pollReq *workflowservice.PollActivityTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
 	request := &historyservice.RecordActivityTaskStartedRequest{
-		NamespaceId:       primitives.UUIDString(task.event.Data.GetNamespaceId()),
+		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
 		ScheduleId:        task.event.Data.GetScheduleId(),
 		TaskId:            task.event.GetTaskId(),
@@ -843,7 +840,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	}
 	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
-		case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
+		case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
 			return false
 		}
 		return true
@@ -851,21 +848,21 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	return resp, err
 }
 
-func (e *matchingEngineImpl) emitForwardedFromStats(
+func (e *matchingEngineImpl) emitForwardedSourceStats(
 	scope metrics.Scope,
 	isTaskForwarded bool,
-	pollForwardedFrom string,
+	pollForwardedSource string,
 ) {
-	isPollForwarded := len(pollForwardedFrom) > 0
+	isPollForwarded := len(pollForwardedSource) > 0
 	switch {
 	case isTaskForwarded && isPollForwarded:
-		scope.IncCounter(metrics.RemoteToRemoteMatchPerTaskListCounter)
+		scope.IncCounter(metrics.RemoteToRemoteMatchPerTaskQueueCounter)
 	case isTaskForwarded:
-		scope.IncCounter(metrics.RemoteToLocalMatchPerTaskListCounter)
+		scope.IncCounter(metrics.RemoteToLocalMatchPerTaskQueueCounter)
 	case isPollForwarded:
-		scope.IncCounter(metrics.LocalToRemoteMatchPerTaskListCounter)
+		scope.IncCounter(metrics.LocalToRemoteMatchPerTaskQueueCounter)
 	default:
-		scope.IncCounter(metrics.LocalToLocalMatchPerTaskListCounter)
+		scope.IncCounter(metrics.LocalToLocalMatchPerTaskQueueCounter)
 	}
 }
 

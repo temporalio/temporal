@@ -31,14 +31,15 @@ import (
 	"path/filepath"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/gcloud/connector"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/service/config"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/gcloud/connector"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/service/config"
 )
 
 const (
@@ -49,7 +50,7 @@ const (
 )
 
 var (
-	errRetriable = errors.New("retriable error")
+	errRetryable = errors.New("retryable error")
 )
 
 type (
@@ -101,8 +102,8 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 				scope.IncCounter(metrics.VisibilityArchiverArchiveTransientErrorCount)
 			} else {
 				scope.IncCounter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount)
-				if featureCatalog.NonRetriableError != nil {
-					err = featureCatalog.NonRetriableError()
+				if featureCatalog.NonRetryableError != nil {
+					err = featureCatalog.NonRetryableError()
 				}
 			}
 		}
@@ -115,33 +116,33 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 			logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
 			return err
 		}
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
 		return err
 	}
 
 	if err := archiver.ValidateVisibilityArchivalRequest(request); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidArchiveRequest), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidArchiveRequest), tag.Error(err))
 		return err
 	}
 
 	encodedVisibilityRecord, err := encode(request)
 	if err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeVisibilityRecord), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeVisibilityRecord), tag.Error(err))
 		return err
 	}
 
 	// The filename has the format: closeTimestamp_hash(runID).visibility
 	// This format allows the archiver to sort all records without reading the file contents
-	filename := constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyCloseTimeout, request.CloseTimestamp)
+	filename := constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyCloseTimeout, timestamp.TimeValue(request.CloseTime).UnixNano())
 	if err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord); err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
-		return errRetriable
+		return errRetryable
 	}
 
-	filename = constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyStartTimeout, request.StartTimestamp)
+	filename = constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyStartTimeout, timestamp.TimeValue(request.StartTime).UnixNano())
 	if err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord); err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
-		return errRetriable
+		return errRetryable
 	}
 
 	scope.IncCounter(metrics.VisibilityArchiveSuccessCount)

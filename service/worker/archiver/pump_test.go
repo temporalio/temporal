@@ -31,12 +31,12 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal/testsuite"
-	"go.temporal.io/temporal/workflow"
+	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	mmocks "go.temporal.io/server/common/metrics/mocks"
 )
 
 var (

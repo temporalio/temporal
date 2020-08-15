@@ -32,10 +32,10 @@ import (
 
 	"github.com/gocql/gocql"
 
-	"github.com/temporalio/temporal/common/auth"
-	"github.com/temporalio/temporal/common/cassandra"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/tools/common/schema"
+	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/cassandra"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/tools/common/schema"
 )
 
 type (
@@ -61,11 +61,10 @@ var errNoHosts = errors.New("Cassandra Hosts list is empty or malformed")
 var errGetSchemaVersion = errors.New("Failed to get current schema version from cassandra")
 
 const (
-	defaultTimeout       = 30    // Timeout in seconds
-	cqlProtoVersion      = 4     // default CQL protocol version
-	defaultConsistency   = "ALL" // schema updates must always be ALL
-	defaultCassandraPort = 9042
-	systemKeyspace       = "system"
+	defaultTimeout     = 30    // Timeout in seconds
+	cqlProtoVersion    = 4     // default CQL protocol version
+	defaultConsistency = "ALL" // schema updates must always be ALL
+	systemKeyspace     = "system"
 )
 
 const (
@@ -190,7 +189,7 @@ func (client *cqlClient) ReadSchemaVersion() (string, error) {
 
 // UpdateShemaVersion updates the schema version for the Keyspace
 func (client *cqlClient) UpdateSchemaVersion(newVersion string, minCompatibleVersion string) error {
-	query := client.session.Query(writeSchemaVersionCQL, client.clusterConfig.Keyspace, time.Now(), newVersion, minCompatibleVersion)
+	query := client.session.Query(writeSchemaVersionCQL, client.clusterConfig.Keyspace, time.Now().UTC(), newVersion, minCompatibleVersion)
 	return query.Exec()
 }
 

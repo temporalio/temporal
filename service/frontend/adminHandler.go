@@ -32,30 +32,31 @@ import (
 
 	"github.com/olivere/elastic"
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/serviceerror"
-	versionpb "go.temporal.io/temporal-proto/version"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	versionpb "go.temporal.io/api/version/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	clustergenpb "github.com/temporalio/temporal/.gen/proto/cluster"
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/headers"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/namespace"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/service/history"
+	"go.temporal.io/server/api/adminservice/v1"
+	clusterspb "go.temporal.io/server/api/cluster/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history"
 )
 
 const (
@@ -72,6 +73,7 @@ type (
 		params                *resource.BootstrapParams
 		config                *Config
 		namespaceDLQHandler   namespace.DLQMessageHandler
+		eventSerializder      persistence.PayloadSerializer
 	}
 )
 
@@ -79,6 +81,7 @@ var (
 	_ adminservice.AdminServiceServer = (*AdminHandler)(nil)
 
 	adminServiceRetryPolicy = common.CreateAdminServiceRetryPolicy()
+	resendStartEventID      = int64(0)
 )
 
 // NewAdminHandler creates a gRPC handler for the workflowservice
@@ -102,17 +105,22 @@ func NewAdminHandler(
 			resource.GetNamespaceReplicationQueue(),
 			resource.GetLogger(),
 		),
+		eventSerializder: persistence.NewPayloadSerializer(),
 	}
 }
 
 // Start starts the handler
 func (adh *AdminHandler) Start() {
 	// Start namespace replication queue cleanup
-	adh.Resource.GetNamespaceReplicationQueue().Start()
+	if adh.config.EnableCleanupReplicationTask() {
+		// If the queue does not start, we can still call stop()
+		adh.Resource.GetNamespaceReplicationQueue().Start()
+	}
 }
 
 // Stop stops the handler
 func (adh *AdminHandler) Stop() {
+	// Calling stop if the queue does not start is ok
 	adh.Resource.GetNamespaceReplicationQueue().Stop()
 }
 
@@ -195,7 +203,9 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 		return nil, adh.error(err, scope)
 	}
 
-	shardID := common.WorkflowIDToHistoryShard(request.Execution.WorkflowId, adh.numberOfHistoryShards)
+	namespaceID, err := adh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, request.Execution.WorkflowId, adh.numberOfHistoryShards)
 	shardIDstr := string(shardID)
 	shardIDForOutput := strconv.Itoa(shardID)
 
@@ -203,8 +213,6 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
-
-	namespaceID, err := adh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 
 	historyAddr := historyHost.GetAddress()
 	resp2, err := adh.GetHistoryClient().DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
@@ -216,10 +224,10 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 		return &adminservice.DescribeWorkflowExecutionResponse{}, err
 	}
 	return &adminservice.DescribeWorkflowExecutionResponse{
-		ShardId:                shardIDForOutput,
-		HistoryAddr:            historyAddr,
-		MutableStateInDatabase: resp2.MutableStateInDatabase,
-		MutableStateInCache:    resp2.MutableStateInCache,
+		ShardId:              shardIDForOutput,
+		HistoryAddr:          historyAddr,
+		DatabaseMutableState: resp2.DatabaseMutableState,
+		CacheMutableState:    resp2.CacheMutableState,
 	}, err
 }
 
@@ -234,10 +242,10 @@ func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.R
 		return nil, adh.error(errRequestNotSet, scope)
 	}
 	_, err := adh.GetHistoryClient().RemoveTask(ctx, &historyservice.RemoveTaskRequest{
-		ShardId:             request.GetShardId(),
-		Type:                request.GetType(),
-		TaskId:              request.GetTaskId(),
-		VisibilityTimestamp: request.GetVisibilityTimestamp(),
+		ShardId:        request.GetShardId(),
+		Category:       request.GetCategory(),
+		TaskId:         request.GetTaskId(),
+		VisibilityTime: request.GetVisibilityTime(),
 	})
 	return &adminservice.RemoveTaskResponse{}, err
 }
@@ -263,20 +271,28 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	scope, sw := adh.startRequestProfile(metrics.AdminDescribeHistoryHostScope)
 	defer sw.Stop()
 
-	if request == nil || request.ExecutionForHost == nil {
+	if request == nil || request.WorkflowExecution == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
 
-	if request.ExecutionForHost != nil {
-		if err := validateExecution(request.ExecutionForHost); err != nil {
+	var err error
+	namespaceID := ""
+	if request.WorkflowExecution != nil {
+		namespaceID, err = adh.GetNamespaceCache().GetNamespaceID(request.Namespace)
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+
+		if err := validateExecution(request.WorkflowExecution); err != nil {
 			return nil, adh.error(err, scope)
 		}
 	}
 
 	resp, err := adh.GetHistoryClient().DescribeHistoryHost(ctx, &historyservice.DescribeHistoryHostRequest{
-		HostAddress:      request.GetHostAddress(),
-		ShardIdForHost:   request.GetShardIdForHost(),
-		ExecutionForHost: request.GetExecutionForHost(),
+		HostAddress:       request.GetHostAddress(),
+		ShardId:           request.GetShardId(),
+		NamespaceId:       namespaceID,
+		WorkflowExecution: request.GetWorkflowExecution(),
 	})
 
 	if resp == nil {
@@ -284,7 +300,7 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	}
 
 	return &adminservice.DescribeHistoryHostResponse{
-		NumberOfShards:        resp.GetNumberOfShards(),
+		ShardsNumber:          resp.GetShardsNumber(),
 		ShardIds:              resp.GetShardIds(),
 		NamespaceCache:        resp.GetNamespaceCache(),
 		ShardControllerStatus: resp.GetShardControllerStatus(),
@@ -324,7 +340,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		return nil, errInvalidPageSize
 	}
 
-	var continuationToken *tokengenpb.HistoryContinuation
+	var continuationToken *tokenspb.HistoryContinuation
 	// initialize or validate the token
 	// token will be used as a source of truth
 	if request.NextPageToken != nil {
@@ -346,7 +362,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		// for the rest variables in the token, since we do not do hmac,
 		// the only thing can be done is to trust the token:
 		// IsWorkflowRunning: not used
-		// TransientDecision: not used
+		// TransientWorkflowTask: not used
 		// PersistenceToken: trust
 		// ReplicationInfo: trust
 
@@ -370,7 +386,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		if nextEventID > response.GetNextEventId() {
 			nextEventID = response.GetNextEventId()
 		}
-		continuationToken = &tokengenpb.HistoryContinuation{
+		continuationToken = &tokenspb.HistoryContinuation{
 			RunId:            execution.GetRunId(),
 			BranchToken:      response.CurrentBranchToken,
 			FirstEventId:     firstEventID,
@@ -388,9 +404,10 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		}, nil
 	}
 
-	// TODO need to deal with transient decision if to be used by client getting history
-	var historyBatches []*eventpb.History
-	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), adh.numberOfHistoryShards)
+	// TODO need to deal with transient workflow task if to be used by client getting history
+	var historyBatches []*historypb.History
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(),
+		adh.numberOfHistoryShards)
 	_, historyBatches, continuationToken.PersistenceToken, size, err = history.PaginateHistory(
 		adh.GetHistoryManager(),
 		true, // this means that we are getting history by batch
@@ -421,12 +438,12 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 
 	var blobs []*commonpb.DataBlob
 	for _, historyBatch := range historyBatches {
-		blob, err := adh.GetPayloadSerializer().SerializeBatchEvents(historyBatch.Events, common.EncodingTypeProto3)
+		blob, err := adh.GetPayloadSerializer().SerializeBatchEvents(historyBatch.Events, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return nil, err
 		}
 		blobs = append(blobs, &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob.Data,
 		})
 	}
@@ -466,7 +483,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	scope = scope.Tagged(metrics.NamespaceTag(request.GetNamespace()))
 
 	execution := request.Execution
-	var pageToken *tokengenpb.RawHistoryContinuation
+	var pageToken *tokenspb.RawHistoryContinuation
 	var targetVersionHistory *persistence.VersionHistory
 	if request.NextPageToken == nil {
 		response, err := adh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
@@ -524,6 +541,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	}
 	pageSize := int(request.GetMaximumPageSize())
 	shardID := common.WorkflowIDToHistoryShard(
+		namespaceID,
 		execution.GetWorkflowId(),
 		adh.numberOfHistoryShards,
 	)
@@ -586,14 +604,14 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 	scope, sw := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope)
 	defer sw.Stop()
 
-	membershipInfo := &clustergenpb.MembershipInfo{}
+	membershipInfo := &clusterspb.MembershipInfo{}
 	if monitor := adh.GetMembershipMonitor(); monitor != nil {
 		currentHost, err := monitor.WhoAmI()
 		if err != nil {
 			return nil, adh.error(err, scope)
 		}
 
-		membershipInfo.CurrentHost = &clustergenpb.HostInfo{
+		membershipInfo.CurrentHost = &clusterspb.HostInfo{
 			Identity: currentHost.Identity(),
 		}
 
@@ -604,21 +622,21 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 
 		membershipInfo.ReachableMembers = members
 
-		var rings []*clustergenpb.RingInfo
+		var rings []*clusterspb.RingInfo
 		for _, role := range []string{common.FrontendServiceName, common.HistoryServiceName, common.MatchingServiceName, common.WorkerServiceName} {
 			resolver, err := monitor.GetResolver(role)
 			if err != nil {
 				return nil, adh.error(err, scope)
 			}
 
-			var servers []*clustergenpb.HostInfo
+			var servers []*clusterspb.HostInfo
 			for _, server := range resolver.Members() {
-				servers = append(servers, &clustergenpb.HostInfo{
+				servers = append(servers, &clusterspb.HostInfo{
 					Identity: server.Identity(),
 				})
 			}
 
-			rings = append(rings, &clustergenpb.RingInfo{
+			rings = append(rings, &clusterspb.RingInfo{
 				Role:        role,
 				MemberCount: int32(resolver.MemberCount()),
 				Members:     servers,
@@ -628,7 +646,7 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 	}
 
 	return &adminservice.DescribeClusterResponse{
-		SupportedClientVersions: &versionpb.SupportedClientVersions{
+		SupportedClientVersions: &versionpb.SupportedSDKVersions{
 			GoSdk:   headers.SupportedGoSDKVersion,
 			JavaSdk: headers.SupportedJavaSDKVersion,
 		},
@@ -657,7 +675,7 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
-	return &adminservice.GetReplicationMessagesResponse{MessagesByShard: resp.GetMessagesByShard()}, nil
+	return &adminservice.GetReplicationMessagesResponse{ShardMessages: resp.GetShardMessages()}, nil
 }
 
 // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.
@@ -701,7 +719,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 	}
 
 	return &adminservice.GetNamespaceReplicationMessagesResponse{
-		Messages: &replicationgenpb.ReplicationMessages{
+		Messages: &replicationspb.ReplicationMessages{
 			ReplicationTasks:       replicationTasks,
 			LastRetrievedMessageId: int64(lastMessageID),
 		},
@@ -756,7 +774,7 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	}
 
 	_, err = adh.GetHistoryClient().ReapplyEvents(ctx, &historyservice.ReapplyEventsRequest{
-		NamespaceId: primitives.UUIDString(namespaceEntry.GetInfo().Id),
+		NamespaceId: namespaceEntry.GetInfo().Id,
 		Request:     request,
 	})
 	if err != nil {
@@ -765,11 +783,11 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	return nil, nil
 }
 
-// ReadDLQMessages reads messages from DLQ
-func (adh *AdminHandler) ReadDLQMessages(
+// GetDLQMessages reads messages from DLQ
+func (adh *AdminHandler) GetDLQMessages(
 	ctx context.Context,
-	request *adminservice.ReadDLQMessagesRequest,
-) (resp *adminservice.ReadDLQMessagesResponse, retErr error) {
+	request *adminservice.GetDLQMessagesRequest,
+) (resp *adminservice.GetDLQMessagesResponse, retErr error) {
 
 	defer log.CapturePanic(adh.GetLogger(), &retErr)
 	scope, sw := adh.startRequestProfile(metrics.AdminReadDLQMessagesScope)
@@ -787,12 +805,12 @@ func (adh *AdminHandler) ReadDLQMessages(
 		request.InclusiveEndMessageId = common.EndMessageID
 	}
 
-	var tasks []*replicationgenpb.ReplicationTask
+	var tasks []*replicationspb.ReplicationTask
 	var token []byte
 	var op func() error
 	switch request.GetType() {
-	case commongenpb.DLQType_Replication:
-		resp, err := adh.GetHistoryClient().ReadDLQMessages(ctx, &historyservice.ReadDLQMessagesRequest{
+	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
+		resp, err := adh.GetHistoryClient().GetDLQMessages(ctx, &historyservice.GetDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
 			SourceCluster:         request.GetSourceCluster(),
@@ -805,12 +823,12 @@ func (adh *AdminHandler) ReadDLQMessages(
 			return nil, err
 		}
 
-		return &adminservice.ReadDLQMessagesResponse{
+		return &adminservice.GetDLQMessagesResponse{
 			Type:             resp.GetType(),
 			ReplicationTasks: resp.GetReplicationTasks(),
 			NextPageToken:    resp.GetNextPageToken(),
 		}, err
-	case commongenpb.DLQType_Namespace:
+	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 		op = func() error {
 			select {
 			case <-ctx.Done():
@@ -832,7 +850,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 		return nil, adh.error(retErr, scope)
 	}
 
-	return &adminservice.ReadDLQMessagesResponse{
+	return &adminservice.GetDLQMessagesResponse{
 		ReplicationTasks: tasks,
 		NextPageToken:    token,
 	}, nil
@@ -858,7 +876,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 
 	var op func() error
 	switch request.GetType() {
-	case commongenpb.DLQType_Replication:
+	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.GetHistoryClient().PurgeDLQMessages(ctx, &historyservice.PurgeDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -871,7 +889,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 		}
 
 		return &adminservice.PurgeDLQMessagesResponse{}, err
-	case commongenpb.DLQType_Namespace:
+	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 		op = func() error {
 			select {
 			case <-ctx.Done():
@@ -912,7 +930,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	var token []byte
 	var op func() error
 	switch request.GetType() {
-	case commongenpb.DLQType_Replication:
+	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.GetHistoryClient().MergeDLQMessages(ctx, &historyservice.MergeDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -928,7 +946,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 		return &adminservice.MergeDLQMessagesResponse{
 			NextPageToken: request.GetNextPageToken(),
 		}, nil
-	case commongenpb.DLQType_Namespace:
+	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 
 		op = func() error {
 			select {
@@ -978,13 +996,48 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	}
 
 	_, err = adh.GetHistoryClient().RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
-		NamespaceId: primitives.UUIDString(namespaceEntry.GetInfo().Id),
+		NamespaceId: namespaceEntry.GetInfo().Id,
 		Request:     request,
 	})
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
 	return &adminservice.RefreshWorkflowTasksResponse{}, nil
+}
+
+// ResendReplicationTasks requests replication task from remote cluster
+func (adh *AdminHandler) ResendReplicationTasks(
+	ctx context.Context,
+	request *adminservice.ResendReplicationTasksRequest,
+) (_ *adminservice.ResendReplicationTasksResponse, err error) {
+	defer log.CapturePanic(adh.GetLogger(), &err)
+	scope, sw := adh.startRequestProfile(metrics.AdminResendReplicationTasksScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	resender := xdc.NewNDCHistoryResender(
+		adh.GetNamespaceCache(),
+		adh.GetRemoteAdminClient(request.GetRemoteCluster()),
+		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+			_, err1 := adh.GetHistoryClient().ReplicateEventsV2(ctx, request)
+			return err1
+		},
+		adh.eventSerializder,
+		nil,
+		adh.GetLogger(),
+	)
+	return nil, resender.SendSingleWorkflowHistory(
+		request.GetNamespaceId(),
+		request.GetWorkflowId(),
+		request.GetRunId(),
+		resendStartEventID,
+		request.StartVersion,
+		common.EmptyEventID,
+		common.EmptyVersion,
+	)
 }
 
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
@@ -1143,19 +1196,19 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	return err
 }
 
-func (adh *AdminHandler) convertIndexedValueTypeToESDataType(valueType commonpb.IndexedValueType) string {
+func (adh *AdminHandler) convertIndexedValueTypeToESDataType(valueType enumspb.IndexedValueType) string {
 	switch valueType {
-	case commonpb.IndexedValueType_String:
+	case enumspb.INDEXED_VALUE_TYPE_STRING:
 		return "text"
-	case commonpb.IndexedValueType_Keyword:
+	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
 		return "keyword"
-	case commonpb.IndexedValueType_Int:
+	case enumspb.INDEXED_VALUE_TYPE_INT:
 		return "long"
-	case commonpb.IndexedValueType_Double:
+	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
 		return "double"
-	case commonpb.IndexedValueType_Bool:
+	case enumspb.INDEXED_VALUE_TYPE_BOOL:
 		return "boolean"
-	case commonpb.IndexedValueType_Datetime:
+	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
 		return "date"
 	default:
 		return ""

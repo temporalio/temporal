@@ -31,20 +31,20 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal/activity"
+	"go.temporal.io/sdk/activity"
 	"go.uber.org/zap"
 
-	"go.temporal.io/temporal/testsuite"
-	"go.temporal.io/temporal/worker"
+	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/worker"
 
-	"github.com/temporalio/temporal/common"
-	carchiver "github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/provider"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/metrics"
-	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
-	"github.com/temporalio/temporal/common/mocks"
+	"go.temporal.io/server/common"
+	carchiver "go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/metrics"
+	mmocks "go.temporal.io/server/common/metrics/mocks"
+	"go.temporal.io/server/common/mocks"
 )
 
 const (
@@ -120,10 +120,10 @@ func (s *activitiesSuite) TestUploadHistory_Fail_InvalidURI() {
 		BranchToken:          testBranchToken,
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
-		URI:                  "some invalid URI without scheme",
+		HistoryURI:           "some invalid URI without scheme",
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
-	s.Equal(errUploadNonRetriable.Error(), err.Error())
+	s.Equal(errUploadNonRetryable.Error(), errors.Unwrap(err).Error())
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
@@ -148,16 +148,16 @@ func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
 		BranchToken:          testBranchToken,
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
-		URI:                  testArchivalURI,
+		HistoryURI:           testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
-	s.Equal(errUploadNonRetriable.Error(), err.Error())
+	s.Equal(errUploadNonRetryable.Error(), errors.Unwrap(err).Error())
 }
 
-func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetriableError() {
+func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetryableError() {
 	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
-	s.historyArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errUploadNonRetriable)
+	s.historyArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errUploadNonRetryable)
 	s.archiverProvider.On("GetHistoryArchiver", mock.Anything, common.WorkerServiceName).Return(s.historyArchiver, nil)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
@@ -177,13 +177,13 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetriableError() {
 		BranchToken:          testBranchToken,
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
-		URI:                  testArchivalURI,
+		HistoryURI:           testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
-	s.Equal(errUploadNonRetriable.Error(), err.Error())
+	s.Equal(errUploadNonRetryable.Error(), errors.Unwrap(err).Error())
 }
 
-func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetriableError() {
+func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetryableError() {
 	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
 	testArchiveErr := errors.New("some transient error")
 	s.historyArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(testArchiveErr)
@@ -206,10 +206,10 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetriableError() {
 		BranchToken:          testBranchToken,
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
-		URI:                  testArchivalURI,
+		HistoryURI:           testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
-	s.Equal(testArchiveErr.Error(), err.Error())
+	s.Equal(testArchiveErr.Error(), errors.Unwrap(err).Error())
 }
 
 func (s *activitiesSuite) TestUploadHistory_Success() {
@@ -234,7 +234,7 @@ func (s *activitiesSuite) TestUploadHistory_Success() {
 		BranchToken:          testBranchToken,
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
-		URI:                  testArchivalURI,
+		HistoryURI:           testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
 	s.NoError(err)
@@ -263,10 +263,10 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryabl
 		BranchToken:          testBranchToken,
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
-		URI:                  testArchivalURI,
+		HistoryURI:           testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(deleteHistoryActivity, request)
-	s.Equal(errDeleteNonRetriable.Error(), err.Error())
+	s.Equal(errDeleteNonRetryable.Error(), errors.Unwrap(err).Error())
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_InvalidURI() {
@@ -289,7 +289,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_InvalidURI() {
 		VisibilityURI: "some invalid URI without scheme",
 	}
 	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
-	s.Equal(errArchiveVisibilityNonRetriable.Error(), err.Error())
+	s.Equal(errArchiveVisibilityNonRetryable.Error(), errors.Unwrap(err).Error())
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_GetArchiverError() {
@@ -314,13 +314,13 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_GetArchiverError() 
 		VisibilityURI: testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
-	s.Equal(errArchiveVisibilityNonRetriable.Error(), err.Error())
+	s.Equal(errArchiveVisibilityNonRetryable.Error(), errors.Unwrap(err).Error())
 }
 
-func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetriableError() {
+func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetryableError() {
 	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
-	s.visibilityArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errArchiveVisibilityNonRetriable)
+	s.visibilityArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errArchiveVisibilityNonRetryable)
 	s.archiverProvider.On("GetVisibilityArchiver", mock.Anything, common.WorkerServiceName).Return(s.visibilityArchiver, nil)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
@@ -340,10 +340,10 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetriable
 		VisibilityURI: testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
-	s.Equal(errArchiveVisibilityNonRetriable.Error(), err.Error())
+	s.Equal(errArchiveVisibilityNonRetryable.Error(), errors.Unwrap(err).Error())
 }
 
-func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveRetriableError() {
+func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveRetryableError() {
 	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
 	testArchiveErr := errors.New("some transient error")
 	s.visibilityArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(testArchiveErr)
@@ -366,7 +366,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveRetriableErr
 		VisibilityURI: testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
-	s.Equal(testArchiveErr.Error(), err.Error())
+	s.Equal(testArchiveErr.Error(), errors.Unwrap(err).Error())
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Success() {

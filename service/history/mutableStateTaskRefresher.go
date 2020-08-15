@@ -29,14 +29,15 @@ package history
 import (
 	"time"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 var emptyTasks = []persistence.Task{}
@@ -104,7 +105,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasks(
 		return err
 	}
 
-	if err := r.refreshTasksForDecision(
+	if err := r.refreshWorkflowTaskTasks(
 		now,
 		mutableState,
 		taskGenerator,
@@ -184,8 +185,8 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowStart(
 	}
 
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	if !mutableState.HasProcessedOrPendingDecision() && startAttr.GetFirstDecisionTaskBackoffSeconds() > 0 {
-		if err := taskGenerator.generateDelayedDecisionTasks(
+	if !mutableState.HasProcessedOrPendingWorkflowTask() && timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff()) > 0 {
+		if err := taskGenerator.generateDelayedWorkflowTasks(
 			now,
 			startEvent,
 		); err != nil {
@@ -204,7 +205,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowClose(
 
 	executionInfo := mutableState.GetExecutionInfo()
 
-	if executionInfo.Status != executionpb.WorkflowExecutionStatus_Running {
+	if executionInfo.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return taskGenerator.generateWorkflowCloseTasks(
 			now,
 		)
@@ -226,7 +227,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 
 	executionInfo := mutableState.GetExecutionInfo()
 
-	if executionInfo.Status == executionpb.WorkflowExecutionStatus_Running {
+	if executionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return taskGenerator.generateRecordWorkflowStartedTasks(
 			now,
 			startEvent,
@@ -236,34 +237,34 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 	return nil
 }
 
-func (r *mutableStateTaskRefresherImpl) refreshTasksForDecision(
+func (r *mutableStateTaskRefresherImpl) refreshWorkflowTaskTasks(
 	now time.Time,
 	mutableState mutableState,
 	taskGenerator mutableStateTaskGenerator,
 ) error {
 
-	if !mutableState.HasPendingDecision() {
-		// no decision task at all
+	if !mutableState.HasPendingWorkflowTask() {
+		// no workflow task at all
 		return nil
 	}
 
-	decision, ok := mutableState.GetPendingDecision()
+	workflowTask, ok := mutableState.GetPendingWorkflowTask()
 	if !ok {
-		return serviceerror.NewInternal("it could be a bug, cannot get pending decision")
+		return serviceerror.NewInternal("it could be a bug, cannot get pending workflow task")
 	}
 
-	// decision already started
-	if decision.StartedID != common.EmptyEventID {
-		return taskGenerator.generateDecisionStartTasks(
+	// workflowTask already started
+	if workflowTask.StartedID != common.EmptyEventID {
+		return taskGenerator.generateStartWorkflowTaskTasks(
 			now,
-			decision.ScheduleID,
+			workflowTask.ScheduleID,
 		)
 	}
 
-	// decision only scheduled
-	return taskGenerator.generateDecisionScheduleTasks(
+	// workflowTask only scheduled
+	return taskGenerator.generateScheduleWorkflowTaskTasks(
 		now,
-		decision.ScheduleID,
+		workflowTask.ScheduleID,
 	)
 }
 
@@ -293,7 +294,7 @@ Loop:
 			return err
 		}
 
-		if activityInfo.StartedID != common.EmptyEventID {
+		if activityInfo.StartedId != common.EmptyEventID {
 			continue Loop
 		}
 
@@ -301,8 +302,8 @@ Loop:
 			executionInfo.NamespaceID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
-			activityInfo.ScheduledEventBatchID,
-			activityInfo.ScheduleID,
+			activityInfo.ScheduledEventBatchId,
+			activityInfo.ScheduleId,
 			currentBranchToken,
 		)
 		if err != nil {
@@ -373,7 +374,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForChildWorkflow(
 
 Loop:
 	for _, childWorkflowInfo := range pendingChildWorkflowInfos {
-		if childWorkflowInfo.StartedID != common.EmptyEventID {
+		if childWorkflowInfo.StartedId != common.EmptyEventID {
 			continue Loop
 		}
 
@@ -381,8 +382,8 @@ Loop:
 			executionInfo.NamespaceID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
-			childWorkflowInfo.InitiatedEventBatchID,
-			childWorkflowInfo.InitiatedID,
+			childWorkflowInfo.InitiatedEventBatchId,
+			childWorkflowInfo.InitiatedId,
 			currentBranchToken,
 		)
 		if err != nil {

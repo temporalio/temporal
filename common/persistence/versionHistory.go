@@ -28,10 +28,10 @@ import (
 	"bytes"
 	"fmt"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
-	"github.com/temporalio/temporal/common"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/common"
 )
 
 // NewVersionHistoryItem create a new version history item
@@ -53,7 +53,7 @@ func NewVersionHistoryItem(
 
 // NewVersionHistoryItemFromProto create a new version history item from thrift object
 func NewVersionHistoryItemFromProto(
-	input *eventgenpb.VersionHistoryItem,
+	input *historyspb.VersionHistoryItem,
 ) *VersionHistoryItem {
 
 	if input == nil {
@@ -70,9 +70,9 @@ func (item *VersionHistoryItem) Duplicate() *VersionHistoryItem {
 }
 
 // ToProto returns proto format of version history item
-func (item *VersionHistoryItem) ToProto() *eventgenpb.VersionHistoryItem {
+func (item *VersionHistoryItem) ToProto() *historyspb.VersionHistoryItem {
 
-	return &eventgenpb.VersionHistoryItem{
+	return &historyspb.VersionHistoryItem{
 		EventId: item.EventID,
 		Version: item.Version,
 	}
@@ -117,7 +117,7 @@ func NewVersionHistory(
 
 // NewVersionHistoryFromProto create a new version history from thrift object
 func NewVersionHistoryFromProto(
-	input *eventgenpb.VersionHistory,
+	input *historyspb.VersionHistory,
 ) *VersionHistory {
 
 	if input == nil {
@@ -138,16 +138,16 @@ func (v *VersionHistory) Duplicate() *VersionHistory {
 }
 
 // ToProto returns proto format of version history
-func (v *VersionHistory) ToProto() *eventgenpb.VersionHistory {
+func (v *VersionHistory) ToProto() *historyspb.VersionHistory {
 
 	token := make([]byte, len(v.BranchToken))
 	copy(token, v.BranchToken)
-	var items []*eventgenpb.VersionHistoryItem
+	var items []*historyspb.VersionHistoryItem
 	for _, item := range v.Items {
 		items = append(items, item.ToProto())
 	}
 
-	pHistory := &eventgenpb.VersionHistory{
+	pHistory := &historyspb.VersionHistory{
 		BranchToken: token,
 		Items:       items,
 	}
@@ -383,11 +383,10 @@ func NewVersionHistories(
 
 // NewVersionHistoriesFromProto create a new version histories from thrift object
 func NewVersionHistoriesFromProto(
-	input *eventgenpb.VersionHistories,
+	input *historyspb.VersionHistories,
 ) *VersionHistories {
-
 	if input == nil {
-		panic("version histories is null")
+		return nil
 	}
 	if len(input.Histories) == 0 {
 		panic("version histories cannot have empty")
@@ -426,15 +425,18 @@ func (h *VersionHistories) Duplicate() *VersionHistories {
 }
 
 // ToProto return thrift format of version histories
-func (h *VersionHistories) ToProto() *eventgenpb.VersionHistories {
+func (h *VersionHistories) ToProto() *historyspb.VersionHistories {
+	if h == nil {
+		return nil
+	}
 
 	currentVersionHistoryIndex := h.CurrentVersionHistoryIndex
-	var histories []*eventgenpb.VersionHistory
+	var histories []*historyspb.VersionHistory
 	for _, history := range h.Histories {
 		histories = append(histories, history.ToProto())
 	}
 
-	return &eventgenpb.VersionHistories{
+	return &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: int32(currentVersionHistoryIndex),
 		Histories:                  histories,
 	}

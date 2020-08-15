@@ -29,8 +29,8 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/common/backoff"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/backoff"
 )
 
 var _ Client = (*retryableClient)(nil)
@@ -66,15 +66,15 @@ func (c *retryableClient) AddActivityTask(
 	return resp, err
 }
 
-func (c *retryableClient) AddDecisionTask(
+func (c *retryableClient) AddWorkflowTask(
 	ctx context.Context,
-	addRequest *matchingservice.AddDecisionTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.AddDecisionTaskResponse, error) {
+	addRequest *matchingservice.AddWorkflowTaskRequest,
+	opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
 
-	var resp *matchingservice.AddDecisionTaskResponse
+	var resp *matchingservice.AddWorkflowTaskResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.AddDecisionTask(ctx, addRequest, opts...)
+		resp, err = c.client.AddWorkflowTask(ctx, addRequest, opts...)
 		return err
 	}
 
@@ -82,15 +82,15 @@ func (c *retryableClient) AddDecisionTask(
 	return resp, err
 }
 
-func (c *retryableClient) PollForActivityTask(
+func (c *retryableClient) PollActivityTaskQueue(
 	ctx context.Context,
-	pollRequest *matchingservice.PollForActivityTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.PollForActivityTaskResponse, error) {
+	pollRequest *matchingservice.PollActivityTaskQueueRequest,
+	opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
 
-	var resp *matchingservice.PollForActivityTaskResponse
+	var resp *matchingservice.PollActivityTaskQueueResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.PollForActivityTask(ctx, pollRequest, opts...)
+		resp, err = c.client.PollActivityTaskQueue(ctx, pollRequest, opts...)
 		return err
 	}
 
@@ -98,15 +98,15 @@ func (c *retryableClient) PollForActivityTask(
 	return resp, err
 }
 
-func (c *retryableClient) PollForDecisionTask(
+func (c *retryableClient) PollWorkflowTaskQueue(
 	ctx context.Context,
-	pollRequest *matchingservice.PollForDecisionTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.PollForDecisionTaskResponse, error) {
+	pollRequest *matchingservice.PollWorkflowTaskQueueRequest,
+	opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 
-	var resp *matchingservice.PollForDecisionTaskResponse
+	var resp *matchingservice.PollWorkflowTaskQueueResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.PollForDecisionTask(ctx, pollRequest, opts...)
+		resp, err = c.client.PollWorkflowTaskQueue(ctx, pollRequest, opts...)
 		return err
 	}
 
@@ -162,15 +162,15 @@ func (c *retryableClient) CancelOutstandingPoll(
 	return resp, err
 }
 
-func (c *retryableClient) DescribeTaskList(
+func (c *retryableClient) DescribeTaskQueue(
 	ctx context.Context,
-	request *matchingservice.DescribeTaskListRequest,
-	opts ...grpc.CallOption) (*matchingservice.DescribeTaskListResponse, error) {
+	request *matchingservice.DescribeTaskQueueRequest,
+	opts ...grpc.CallOption) (*matchingservice.DescribeTaskQueueResponse, error) {
 
-	var resp *matchingservice.DescribeTaskListResponse
+	var resp *matchingservice.DescribeTaskQueueResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.DescribeTaskList(ctx, request, opts...)
+		resp, err = c.client.DescribeTaskQueue(ctx, request, opts...)
 		return err
 	}
 
@@ -178,15 +178,15 @@ func (c *retryableClient) DescribeTaskList(
 	return resp, err
 }
 
-func (c *retryableClient) ListTaskListPartitions(
+func (c *retryableClient) ListTaskQueuePartitions(
 	ctx context.Context,
-	request *matchingservice.ListTaskListPartitionsRequest,
-	opts ...grpc.CallOption) (*matchingservice.ListTaskListPartitionsResponse, error) {
+	request *matchingservice.ListTaskQueuePartitionsRequest,
+	opts ...grpc.CallOption) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
 
-	var resp *matchingservice.ListTaskListPartitionsResponse
+	var resp *matchingservice.ListTaskQueuePartitionsResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ListTaskListPartitions(ctx, request, opts...)
+		resp, err = c.client.ListTaskQueuePartitions(ctx, request, opts...)
 		return err
 	}
 

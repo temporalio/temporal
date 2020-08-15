@@ -28,18 +28,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -89,8 +90,8 @@ func newTaskInfo(
 	return &taskInfo{
 		processor:         processor,
 		task:              task,
-		attempt:           0,
-		startTime:         time.Now(), // used for metrics
+		attempt:           1,
+		startTime:         time.Now().UTC(), // used for metrics
 		logger:            logger,
 		shouldProcessTask: true,
 	}
@@ -209,7 +210,7 @@ FilterLoop:
 		err := t.handleTaskError(scope, task, notificationChan, err)
 		if err != nil {
 			task.attempt++
-			if task.attempt >= t.config.TimerTaskMaxRetryCount() {
+			if task.attempt > t.config.TimerTaskMaxRetryCount() {
 				scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(task.attempt))
 				task.logger.Error("Critical error processing task, retrying.",
 					tag.Error(err), tag.OperationCritical, tag.TaskType(task.task.GetTaskType()))
@@ -253,7 +254,7 @@ func (t *taskProcessor) processTaskOnce(
 
 	startTime := t.timeSource.Now()
 	scopeIdx, err := task.processor.process(task)
-	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(primitives.UUIDString(task.task.GetNamespaceId())))
+	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(task.task.GetNamespaceId()))
 	if task.shouldProcessTask {
 		scope.IncCounter(metrics.TaskRequests)
 		scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))
@@ -274,6 +275,15 @@ func (t *taskProcessor) handleTaskError(
 	}
 
 	if _, ok := err.(*serviceerror.NotFound); ok {
+		return nil
+	}
+
+	if transferTask, ok := task.task.(*persistenceblobs.TransferTaskInfo); ok &&
+		transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION &&
+		err == ErrMissingWorkflowStartEvent &&
+		t.config.EnableDropStuckTaskByNamespaceID(task.task.GetNamespaceId()) { // use namespaceID here to avoid accessing namespaceCache
+		scope.IncCounter(metrics.TransferTaskMissingEventCounter)
+		task.logger.Error("Drop close execution transfer task due to corrupted workflow history", tag.Error(err), tag.LifeCycleProcessingFailed)
 		return nil
 	}
 
@@ -319,7 +329,7 @@ func (t *taskProcessor) ackTaskOnce(
 
 	task.processor.complete(task)
 	if task.shouldProcessTask {
-		goVisibilityTime, _ := types.TimestampFromProto(task.task.GetVisibilityTimestamp())
+		goVisibilityTime := timestamp.TimeValue(task.task.GetVisibilityTime())
 		scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(task.attempt))
 		scope.RecordTimer(metrics.TaskLatency, time.Since(task.startTime))
 		scope.RecordTimer(metrics.TaskQueueLatency, time.Since(goVisibilityTime))

@@ -28,20 +28,19 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal/activity"
-	sdkclient "go.temporal.io/temporal/client"
-	"go.temporal.io/temporal/worker"
-	"go.temporal.io/temporal/workflow"
-	"go.uber.org/zap"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/service/worker/scanner/executions"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/service/worker/scanner/executions"
 )
 
 const (
@@ -65,8 +64,8 @@ type (
 		Persistence *config.Persistence
 		// ClusterMetadata contains the metadata for this cluster
 		ClusterMetadata cluster.Metadata
-		// TaskListScannerEnabled indicates if taskList scanner should be started as part of scanner
-		TaskListScannerEnabled dynamicconfig.BoolPropertyFn
+		// TaskQueueScannerEnabled indicates if taskQueue scanner should be started as part of scanner
+		TaskQueueScannerEnabled dynamicconfig.BoolPropertyFn
 		// HistoryScannerEnabled indicates if history scanner should be started as part of scanner
 		HistoryScannerEnabled dynamicconfig.BoolPropertyFn
 		// ExecutionsScannerEnabled indicates if executions scanner should be started as part of scanner
@@ -85,8 +84,7 @@ type (
 	// passed around within the scanner workflows / activities
 	scannerContext struct {
 		resource.Resource
-		cfg       Config
-		zapLogger *zap.Logger
+		cfg Config
 	}
 
 	// Scanner is the background sub-system that does full scans
@@ -108,15 +106,10 @@ func New(
 ) *Scanner {
 
 	cfg := params.Config
-	zapLogger, err := zap.NewProduction()
-	if err != nil {
-		resource.GetLogger().Fatal("failed to initialize zap logger", tag.Error(err))
-	}
 	return &Scanner{
 		context: scannerContext{
-			Resource:  resource,
-			cfg:       cfg,
-			zapLogger: zapLogger,
+			Resource: resource,
+			cfg:      cfg,
 		},
 	}
 }
@@ -124,33 +117,32 @@ func New(
 // Start starts the scanner
 func (s *Scanner) Start() error {
 	workerOpts := worker.Options{
-		Logger:                                 s.context.zapLogger,
 		MaxConcurrentActivityExecutionSize:     maxConcurrentActivityExecutionSize,
-		MaxConcurrentDecisionTaskExecutionSize: maxConcurrentDecisionTaskExecutionSize,
+		MaxConcurrentWorkflowTaskExecutionSize: maxConcurrentWorkflowTaskExecutionSize,
 		BackgroundActivityContext:              context.WithValue(context.Background(), scannerContextKey, s.context),
 	}
 
-	var workerTaskListNames []string
+	var workerTaskQueueNames []string
 	if s.context.cfg.ExecutionsScannerEnabled() {
-		workerTaskListNames = append(workerTaskListNames, executionsScannerTaskListName)
+		workerTaskQueueNames = append(workerTaskQueueNames, executionsScannerTaskQueueName)
 		go s.startWorkflowWithRetry(executionsScannerWFStartOptions, executionsScannerWFTypeName, defaultExecutionsScannerParams)
 	}
 
-	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskListScannerEnabled() {
-		go s.startWorkflowWithRetry(tlScannerWFStartOptions, tlScannerWFTypeName)
-		workerTaskListNames = append(workerTaskListNames, tlScannerTaskListName)
+	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskQueueScannerEnabled() {
+		go s.startWorkflowWithRetry(tlScannerWFStartOptions, tqScannerWFTypeName)
+		workerTaskQueueNames = append(workerTaskQueueNames, tqScannerTaskQueueName)
 	} else if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeCassandra && s.context.cfg.HistoryScannerEnabled() {
 		go s.startWorkflowWithRetry(historyScannerWFStartOptions, historyScannerWFTypeName)
-		workerTaskListNames = append(workerTaskListNames, historyScannerTaskListName)
+		workerTaskQueueNames = append(workerTaskQueueNames, historyScannerTaskQueueName)
 	}
 
-	for _, tl := range workerTaskListNames {
+	for _, tl := range workerTaskQueueNames {
 		work := worker.New(s.context.GetSDKClient(), tl, workerOpts)
 
-		work.RegisterWorkflowWithOptions(TaskListScannerWorkflow, workflow.RegisterOptions{Name: tlScannerWFTypeName})
+		work.RegisterWorkflowWithOptions(TaskQueueScannerWorkflow, workflow.RegisterOptions{Name: tqScannerWFTypeName})
 		work.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
 		work.RegisterWorkflowWithOptions(ExecutionsScannerWorkflow, workflow.RegisterOptions{Name: executionsScannerWFTypeName})
-		work.RegisterActivityWithOptions(TaskListScavengerActivity, activity.RegisterOptions{Name: taskListScavengerActivityName})
+		work.RegisterActivityWithOptions(TaskQueueScavengerActivity, activity.RegisterOptions{Name: taskQueueScavengerActivityName})
 		work.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
 		work.RegisterActivityWithOptions(ExecutionsScavengerActivity, activity.RegisterOptions{Name: executionsScavengerActivityName})
 

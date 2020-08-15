@@ -27,17 +27,17 @@ package batcher
 import (
 	"context"
 
-	"go.temporal.io/temporal/activity"
-	sdkclient "go.temporal.io/temporal/client"
-	"go.temporal.io/temporal/worker"
-	"go.temporal.io/temporal/workflow"
+	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
-	"github.com/temporalio/temporal/client"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -92,7 +92,7 @@ func (s *Batcher) Start() error {
 	workerOpts := worker.Options{
 		BackgroundActivityContext: ctx,
 	}
-	batchWorker := worker.New(s.svcClient, BatcherTaskListName, workerOpts)
+	batchWorker := worker.New(s.svcClient, BatcherTaskQueueName, workerOpts)
 	batchWorker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	batchWorker.RegisterActivityWithOptions(BatchActivity, activity.RegisterOptions{Name: batchActivityName})
 

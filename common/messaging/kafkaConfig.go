@@ -27,7 +27,7 @@ package messaging
 import (
 	"fmt"
 
-	"github.com/temporalio/temporal/common/auth"
+	"go.temporal.io/server/common/auth"
 )
 
 type (
@@ -36,7 +36,7 @@ type (
 		TLS            auth.TLS                 `yaml:"tls"`
 		Clusters       map[string]ClusterConfig `yaml:"clusters"`
 		Topics         map[string]TopicConfig   `yaml:"topics"`
-		ClusterToTopic map[string]TopicList     `yaml:"cadence-cluster-topics"`
+		ClusterToTopic map[string]TopicList     `yaml:"temporal-cluster-topics"`
 		Applications   map[string]TopicList     `yaml:"applications"`
 	}
 
@@ -99,8 +99,8 @@ func (k *KafkaConfig) Validate(checkCluster bool, checkApp bool) {
 	}
 }
 
-func (k *KafkaConfig) getTopicsForCadenceCluster(cadenceCluster string) TopicList {
-	return k.ClusterToTopic[cadenceCluster]
+func (k *KafkaConfig) getTopicsForTemporalCluster(temporalCluster string) TopicList {
+	return k.ClusterToTopic[temporalCluster]
 }
 
 func (k *KafkaConfig) getKafkaClusterForTopic(topic string) string {

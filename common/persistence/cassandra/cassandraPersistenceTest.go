@@ -26,18 +26,19 @@ package cassandra
 
 import (
 	"os"
+	"path"
 	"strings"
 	"time"
 
-	"github.com/temporalio/temporal/common/cassandra"
-
 	"github.com/gocql/gocql"
-	log "github.com/sirupsen/logrus"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/environment"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cassandra"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/environment"
 )
 
 const (
@@ -51,11 +52,13 @@ type TestCluster struct {
 	cluster   *gocql.ClusterConfig
 	session   *gocql.Session
 	cfg       config.Cassandra
+	logger    log.Logger
 }
 
 // NewTestCluster returns a new cassandra test cluster
-func NewTestCluster(keyspace, username, password, host string, port int, schemaDir string) *TestCluster {
+func NewTestCluster(keyspace, username, password, host string, port int, schemaDir string, logger log.Logger) *TestCluster {
 	var result TestCluster
+	result.logger = logger
 	result.keyspace = keyspace
 	if port == 0 {
 		port = environment.GetCassandraPort()
@@ -103,11 +106,11 @@ func (s *TestCluster) SetupTestDatabase() {
 	schemaDir := s.schemaDir + "/"
 
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {
-		cadencePackageDir, err := getCadencePackageDir()
+		temporalPackageDir, err := getTemporalPackageDir()
 		if err != nil {
-			log.Fatal(err)
+			s.logger.Fatal("Unable to get package dir.", tag.Error(err))
 		}
-		schemaDir = cadencePackageDir + schemaDir
+		schemaDir = path.Join(temporalPackageDir, schemaDir)
 	}
 
 	s.LoadSchema([]string{"schema.cql"}, schemaDir)
@@ -134,15 +137,15 @@ func (s *TestCluster) CreateSession() {
 	var err error
 	s.session, err = s.cluster.CreateSession()
 	if err != nil {
-		log.Fatal(`CreateSession`, err)
+		s.logger.Fatal("CreateSession", tag.Error(err))
 	}
 }
 
 // CreateDatabase from PersistenceTestCluster interface
 func (s *TestCluster) CreateDatabase() {
-	err := CreateCassandraKeyspace(s.session, s.DatabaseName(), 1, true)
+	err := CreateCassandraKeyspace(s.session, s.DatabaseName(), 1, true, s.logger)
 	if err != nil {
-		log.Fatal(err)
+		s.logger.Fatal("CreateCassandraKeyspace", tag.Error(err))
 	}
 
 	s.cluster.Keyspace = s.DatabaseName()
@@ -150,39 +153,46 @@ func (s *TestCluster) CreateDatabase() {
 
 // DropDatabase from PersistenceTestCluster interface
 func (s *TestCluster) DropDatabase() {
-	err := DropCassandraKeyspace(s.session, s.DatabaseName())
+	err := DropCassandraKeyspace(s.session, s.DatabaseName(), s.logger)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
-		log.Fatal(err)
+		s.logger.Fatal("DropCassandraKeyspace", tag.Error(err))
 	}
 }
 
 // LoadSchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := schemaDir + "/temporal"
+	workflowSchemaDir := path.Join(schemaDir, "temporal")
 	err := loadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), true, nil)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
-		log.Fatal(err)
+		s.logger.Fatal("loadCassandraSchema", tag.Error(err))
 	}
 }
 
 // LoadVisibilitySchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := schemaDir + "visibility"
+	workflowSchemaDir := path.Join(schemaDir, "visibility")
 	err := loadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), false, nil)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
-		log.Fatal(err)
+		s.logger.Fatal("loadCassandraVisibilitySchema", tag.Error(err))
 	}
 }
 
-func getCadencePackageDir() (string, error) {
-	cadencePackageDir, err := os.Getwd()
-	if err != nil {
-		panic(err)
+func getTemporalPackageDir() (string, error) {
+	var err error
+	temporalPackageDir := os.Getenv("TEMPORAL_ROOT")
+	if temporalPackageDir == "" {
+		temporalPackageDir, err = os.Getwd()
+		if err != nil {
+			panic(err)
+		}
+		temporalIndex := strings.LastIndex(temporalPackageDir, "/temporal/")
+		if temporalIndex == -1 {
+			panic("Unable to find repo path. Use env var TEMPORAL_ROOT or clone the repo into folder named 'temporal'")
+		}
+		temporalPackageDir = temporalPackageDir[:temporalIndex+len("/temporal/")]
+		if err != nil {
+			panic(err)
+		}
 	}
-	cadenceIndex := strings.LastIndex(cadencePackageDir, "/temporal/")
-	cadencePackageDir = cadencePackageDir[:cadenceIndex+len("/temporal/")]
-	if err != nil {
-		panic(err)
-	}
-	return cadencePackageDir, err
+	return temporalPackageDir, err
 }

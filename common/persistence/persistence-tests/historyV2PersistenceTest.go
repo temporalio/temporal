@@ -37,14 +37,14 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/convert"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/serviceerror"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/convert"
+	p "go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -121,7 +121,7 @@ func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 
 // TestScanAllTrees test
 func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
-	// TODO https://github.com/temporalio/temporal/issues/2458
+	// TODO https://go.temporal.io/server/issues/2458
 	if s.HistoryV2Mgr.GetName() != "cassandra" {
 		return
 	}
@@ -137,7 +137,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 	pgSize := 100
 
 	for i := 0; i < totalTrees; i++ {
-		treeID := uuid.NewRandom()
+		treeID := uuid.NewRandom().String()
 		bi, err := s.newHistoryBranch(treeID)
 		s.Nil(err)
 
@@ -155,7 +155,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 		})
 		s.Nil(err)
 		for _, br := range resp.Branches {
-			uuidTreeId := primitives.MustParseUUID(br.TreeID)
+			uuidTreeId := br.TreeID
 			if trees[string(uuidTreeId)] == true {
 				delete(trees, string(uuidTreeId))
 
@@ -178,11 +178,11 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 
 // TestReadBranchByPagination test
 func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
-	treeID := uuid.NewRandom()
+	treeID := uuid.NewRandom().String()
 	bi, err := s.newHistoryBranch(treeID)
 	s.Nil(err)
 
-	historyW := &eventpb.History{}
+	historyW := &historypb.History{}
 	events := s.genRandomEvents([]int64{1, 2, 3}, 0)
 	err = s.appendNewBranchAndFirstNode(bi, events, 1, "branchInfo")
 	s.Nil(err)
@@ -277,7 +277,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	historyW.Events = append(historyW.Events, events...)
 
 	// read branch to verify
-	historyR := &eventpb.History{}
+	historyR := &historypb.History{}
 
 	req = &p.ReadHistoryBranchRequest{
 		BranchToken:   bi2,
@@ -367,7 +367,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 
 // TestConcurrentlyCreateAndAppendBranches test
 func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
-	treeID := uuid.NewRandom()
+	treeID := uuid.NewRandom().String()
 	wg := sync.WaitGroup{}
 	concurrency := 20
 	m := sync.Map{}
@@ -379,7 +379,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			defer wg.Done()
 			bi, err := s.newHistoryBranch(treeID)
 			s.Nil(err)
-			historyW := &eventpb.History{}
+			historyW := &historypb.History{}
 			m.Store(idx, bi)
 
 			events := s.genRandomEvents([]int64{1, 2, 3}, 1)
@@ -403,7 +403,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			historyW.Events = append(historyW.Events, events...)
 
 			// read branch to verify
-			historyR := &eventpb.History{}
+			historyR := &historypb.History{}
 			events = s.read(bi, 1, 21)
 			s.Equal(20, len(events))
 			historyR.Events = events
@@ -486,7 +486,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 // TestConcurrentlyForkAndAppendBranches test
 func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
-	treeID := uuid.NewRandom()
+	treeID := uuid.NewRandom().String()
 	wg := sync.WaitGroup{}
 	concurrency := 10
 	masterBr, err := s.newHistoryBranch(treeID)
@@ -691,12 +691,12 @@ func (s *HistoryV2PersistenceSuite) getIDByKey(m sync.Map, k int) int64 {
 	return id
 }
 
-func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version int64) []*eventpb.HistoryEvent {
-	var events []*eventpb.HistoryEvent
+func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version int64) []*historypb.HistoryEvent {
+	var events []*historypb.HistoryEvent
 
-	timestamp := time.Now().UnixNano()
+	now := time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)
 	for _, eid := range eventIDs {
-		e := &eventpb.HistoryEvent{EventId: eid, Version: version, Timestamp: timestamp}
+		e := &historypb.HistoryEvent{EventId: eid, Version: version, EventTime: &now}
 		events = append(events, e)
 	}
 
@@ -704,7 +704,7 @@ func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version in
 }
 
 // persistence helper
-func (s *HistoryV2PersistenceSuite) newHistoryBranch(treeID []byte) ([]byte, error) {
+func (s *HistoryV2PersistenceSuite) newHistoryBranch(treeID string) ([]byte, error) {
 	return p.NewHistoryBranchToken(treeID)
 }
 
@@ -733,7 +733,7 @@ func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*persistenceblo
 	return resp.Branches
 }
 
-func (s *HistoryV2PersistenceSuite) descTree(treeID []byte) []*persistenceblobs.HistoryBranch {
+func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistenceblobs.HistoryBranch {
 	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
 		TreeID:  treeID,
 		ShardID: convert.IntPtr(int(s.ShardInfo.GetShardId())),
@@ -743,17 +743,17 @@ func (s *HistoryV2PersistenceSuite) descTree(treeID []byte) []*persistenceblobs.
 }
 
 // persistence helper
-func (s *HistoryV2PersistenceSuite) read(branch []byte, minID, maxID int64) []*eventpb.HistoryEvent {
+func (s *HistoryV2PersistenceSuite) read(branch []byte, minID, maxID int64) []*historypb.HistoryEvent {
 	res, err := s.readWithError(branch, minID, maxID)
 	s.Nil(err)
 	return res
 }
 
-func (s *HistoryV2PersistenceSuite) readWithError(branch []byte, minID, maxID int64) ([]*eventpb.HistoryEvent, error) {
+func (s *HistoryV2PersistenceSuite) readWithError(branch []byte, minID, maxID int64) ([]*historypb.HistoryEvent, error) {
 
 	// use small page size to enforce pagination
 	randPageSize := 2
-	res := make([]*eventpb.HistoryEvent, 0)
+	res := make([]*historypb.HistoryEvent, 0)
 	token := []byte{}
 	for {
 		resp, err := s.HistoryV2Mgr.ReadHistoryBranch(&p.ReadHistoryBranchRequest{
@@ -780,9 +780,9 @@ func (s *HistoryV2PersistenceSuite) readWithError(branch []byte, minID, maxID in
 	return res, nil
 }
 
-func (s *HistoryV2PersistenceSuite) appendOneByOne(branch []byte, events []*eventpb.HistoryEvent, txnID int64) error {
+func (s *HistoryV2PersistenceSuite) appendOneByOne(branch []byte, events []*historypb.HistoryEvent, txnID int64) error {
 	for index, e := range events {
-		err := s.append(branch, []*eventpb.HistoryEvent{e}, txnID+int64(index), false, "")
+		err := s.append(branch, []*historypb.HistoryEvent{e}, txnID+int64(index), false, "")
 		if err != nil {
 			return err
 		}
@@ -790,16 +790,16 @@ func (s *HistoryV2PersistenceSuite) appendOneByOne(branch []byte, events []*even
 	return nil
 }
 
-func (s *HistoryV2PersistenceSuite) appendNewNode(branch []byte, events []*eventpb.HistoryEvent, txnID int64) error {
+func (s *HistoryV2PersistenceSuite) appendNewNode(branch []byte, events []*historypb.HistoryEvent, txnID int64) error {
 	return s.append(branch, events, txnID, false, "")
 }
 
-func (s *HistoryV2PersistenceSuite) appendNewBranchAndFirstNode(branch []byte, events []*eventpb.HistoryEvent, txnID int64, branchInfo string) error {
+func (s *HistoryV2PersistenceSuite) appendNewBranchAndFirstNode(branch []byte, events []*historypb.HistoryEvent, txnID int64, branchInfo string) error {
 	return s.append(branch, events, txnID, true, branchInfo)
 }
 
 // persistence helper
-func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*eventpb.HistoryEvent, txnID int64, isNewBranch bool, branchInfo string) error {
+func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*historypb.HistoryEvent, txnID int64, isNewBranch bool, branchInfo string) error {
 
 	var resp *p.AppendHistoryNodesResponse
 
@@ -811,7 +811,7 @@ func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*eventpb.Hist
 			BranchToken:   branch,
 			Events:        events,
 			TransactionID: txnID,
-			Encoding:      common.EncodingTypeProto3,
+			Encoding:      enumspb.ENCODING_TYPE_PROTO3,
 			ShardID:       convert.IntPtr(int(s.ShardInfo.GetShardId())),
 		})
 		return err

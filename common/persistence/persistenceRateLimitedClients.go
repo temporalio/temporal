@@ -25,10 +25,10 @@
 package persistence
 
 import (
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/quotas"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/quotas"
 )
 
 var (
@@ -293,12 +293,30 @@ func (p *workflowExecutionRateLimitedPersistenceClient) ListConcreteExecutions(r
 	return response, err
 }
 
+func (p *workflowExecutionRateLimitedPersistenceClient) GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+
+	response, err := p.persistence.GetTransferTask(request)
+	return response, err
+}
+
 func (p *workflowExecutionRateLimitedPersistenceClient) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
 	response, err := p.persistence.GetTransferTasks(request)
+	return response, err
+}
+
+func (p *workflowExecutionRateLimitedPersistenceClient) GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+
+	response, err := p.persistence.GetReplicationTask(request)
 	return response, err
 }
 
@@ -387,6 +405,15 @@ func (p *workflowExecutionRateLimitedPersistenceClient) RangeDeleteReplicationTa
 	return p.persistence.RangeDeleteReplicationTaskFromDLQ(request)
 }
 
+func (p *workflowExecutionRateLimitedPersistenceClient) GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+
+	response, err := p.persistence.GetTimerTask(request)
+	return response, err
+}
+
 func (p *workflowExecutionRateLimitedPersistenceClient) GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
@@ -456,36 +483,36 @@ func (p *taskRateLimitedPersistenceClient) CompleteTasksLessThan(request *Comple
 	return p.persistence.CompleteTasksLessThan(request)
 }
 
-func (p *taskRateLimitedPersistenceClient) LeaseTaskList(request *LeaseTaskListRequest) (*LeaseTaskListResponse, error) {
+func (p *taskRateLimitedPersistenceClient) LeaseTaskQueue(request *LeaseTaskQueueRequest) (*LeaseTaskQueueResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.LeaseTaskList(request)
+	response, err := p.persistence.LeaseTaskQueue(request)
 	return response, err
 }
 
-func (p *taskRateLimitedPersistenceClient) UpdateTaskList(request *UpdateTaskListRequest) (*UpdateTaskListResponse, error) {
+func (p *taskRateLimitedPersistenceClient) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.UpdateTaskList(request)
+	response, err := p.persistence.UpdateTaskQueue(request)
 	return response, err
 }
 
-func (p *taskRateLimitedPersistenceClient) ListTaskList(request *ListTaskListRequest) (*ListTaskListResponse, error) {
+func (p *taskRateLimitedPersistenceClient) ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return p.persistence.ListTaskList(request)
+	return p.persistence.ListTaskQueue(request)
 }
 
-func (p *taskRateLimitedPersistenceClient) DeleteTaskList(request *DeleteTaskListRequest) error {
+func (p *taskRateLimitedPersistenceClient) DeleteTaskQueue(request *DeleteTaskQueueRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
-	return p.persistence.DeleteTaskList(request)
+	return p.persistence.DeleteTaskQueue(request)
 }
 
 func (p *taskRateLimitedPersistenceClient) Close() {

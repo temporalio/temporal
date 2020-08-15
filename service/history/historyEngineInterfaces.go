@@ -26,15 +26,15 @@ package history
 
 import (
 	"context"
+	"time"
 
-	"github.com/gogo/protobuf/types"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/task"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/task"
 )
 
 type (
@@ -55,11 +55,11 @@ type (
 			ctx context.Context,
 			pollingCluster string,
 			lastReadTaskID int64,
-		) (*replicationgenpb.ReplicationMessages, error)
+		) (*replicationspb.ReplicationMessages, error)
 		getTask(
 			ctx context.Context,
-			taskInfo *replicationgenpb.ReplicationTaskInfo,
-		) (*replicationgenpb.ReplicationTask, error)
+			taskInfo *replicationspb.ReplicationTaskInfo,
+		) (*replicationspb.ReplicationTask, error)
 	}
 
 	queueAckMgr interface {
@@ -74,11 +74,11 @@ type (
 	queueTaskInfo interface {
 		GetVersion() int64
 		GetTaskId() int64
-		GetTaskType() int32
-		GetVisibilityTimestamp() *types.Timestamp
+		GetTaskType() enumsspb.TaskType
+		GetVisibilityTime() *time.Time
 		GetWorkflowId() string
-		GetRunId() []byte
-		GetNamespaceId() []byte
+		GetRunId() string
+		GetNamespaceId() string
 	}
 
 	queueTask interface {

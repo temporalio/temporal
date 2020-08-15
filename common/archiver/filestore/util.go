@@ -33,14 +33,16 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
-	eventpb "go.temporal.io/temporal-proto/event"
+	historypb "go.temporal.io/api/history/v1"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/codec"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 var (
@@ -151,7 +153,7 @@ func encode(message proto.Message) ([]byte, error) {
 	return encoder.Encode(message)
 }
 
-func encodeHistories(histories []*eventpb.History) ([]byte, error) {
+func encodeHistories(histories []*historypb.History) ([]byte, error) {
 	encoder := codec.NewJSONPBEncoder()
 	return encoder.EncodeHistories(histories)
 }
@@ -196,8 +198,8 @@ func constructHistoryFilenamePrefix(namespaceID, workflowID, runID string) strin
 	return strings.Join([]string{hash(namespaceID), hash(workflowID), hash(runID)}, "")
 }
 
-func constructVisibilityFilename(closeTimestamp int64, runID string) string {
-	return fmt.Sprintf("%v_%s.visibility", closeTimestamp, hash(runID))
+func constructVisibilityFilename(closeTimestamp *time.Time, runID string) string {
+	return fmt.Sprintf("%v_%s.visibility", timestamp.TimeValue(closeTimestamp).UnixNano(), hash(runID))
 }
 
 func hash(s string) string {
@@ -235,7 +237,7 @@ func extractCloseFailoverVersion(filename string) (int64, error) {
 	return strconv.ParseInt(filenameParts[1], 10, 64)
 }
 
-func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*eventpb.History, isLast bool) bool {
+func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*historypb.History, isLast bool) bool {
 	lastBatch := historyBatches[len(historyBatches)-1].Events
 	lastEvent := lastBatch[len(lastBatch)-1]
 	lastFailoverVersion := lastEvent.GetVersion()

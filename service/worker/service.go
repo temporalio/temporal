@@ -28,23 +28,23 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/namespace"
-	"github.com/temporalio/temporal/common/persistence"
-	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/service/worker/archiver"
-	"github.com/temporalio/temporal/service/worker/batcher"
-	"github.com/temporalio/temporal/service/worker/indexer"
-	"github.com/temporalio/temporal/service/worker/parentclosepolicy"
-	"github.com/temporalio/temporal/service/worker/replicator"
-	"github.com/temporalio/temporal/service/worker/scanner"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
+	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/service/worker/archiver"
+	"go.temporal.io/server/service/worker/batcher"
+	"go.temporal.io/server/service/worker/indexer"
+	"go.temporal.io/server/service/worker/parentclosepolicy"
+	"go.temporal.io/server/service/worker/replicator"
+	"go.temporal.io/server/service/worker/scanner"
 )
 
 type (
@@ -123,6 +123,7 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 			ReplicationTaskMaxRetryDuration:    dc.GetDurationProperty(dynamicconfig.WorkerReplicationTaskMaxRetryDuration, 15*time.Minute),
 			ReplicationTaskContextTimeout:      dc.GetDurationProperty(dynamicconfig.WorkerReplicationTaskContextDuration, 30*time.Second),
 			ReReplicationContextTimeout:        dc.GetDurationPropertyFilteredByNamespaceID(dynamicconfig.WorkerReReplicationContextTimeout, 0*time.Second),
+			EnableRPCReplication:               dc.GetBoolProperty(dynamicconfig.WorkerEnableRPCReplication, false),
 		},
 		ArchiverConfig: &archiver.Config{
 			ArchiverConcurrency:           dc.GetIntProperty(dynamicconfig.WorkerArchiverConcurrency, 50),
@@ -133,7 +134,7 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 			PersistenceMaxQPS:        dc.GetIntProperty(dynamicconfig.ScannerPersistenceMaxQPS, 100),
 			Persistence:              &params.PersistenceConfig,
 			ClusterMetadata:          params.ClusterMetadata,
-			TaskListScannerEnabled:   dc.GetBoolProperty(dynamicconfig.TaskListScannerEnabled, true),
+			TaskQueueScannerEnabled:  dc.GetBoolProperty(dynamicconfig.TaskQueueScannerEnabled, true),
 			HistoryScannerEnabled:    dc.GetBoolProperty(dynamicconfig.HistoryScannerEnabled, true),
 			ExecutionsScannerEnabled: dc.GetBoolProperty(dynamicconfig.ExecutionsScannerEnabled, false),
 		},
@@ -152,7 +153,7 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 	)
 	if advancedVisWritingMode() != common.AdvancedVisibilityWritingModeOff {
 		config.IndexerCfg = &indexer.Config{
-			IndexerConcurrency:       dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 1000),
+			IndexerConcurrency:       dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 100),
 			ESProcessorNumOfWorkers:  dc.GetIntProperty(dynamicconfig.WorkerESProcessorNumOfWorkers, 1),
 			ESProcessorBulkActions:   dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkActions, 1000),
 			ESProcessorBulkSize:      dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 2<<24), // 16MB

@@ -27,8 +27,8 @@ package history
 import (
 	"sync"
 
-	querypb "go.temporal.io/temporal-proto/query"
-	"go.temporal.io/temporal-proto/serviceerror"
+	querypb "go.temporal.io/api/query/v1"
+	"go.temporal.io/api/serviceerror"
 )
 
 var (

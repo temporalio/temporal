@@ -29,12 +29,13 @@ import (
 	"strconv"
 	"strings"
 
-	p "github.com/temporalio/temporal/common/persistence"
+	p "go.temporal.io/server/common/persistence"
 
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 const constMetadataPartition = 0
+const constMembershipPartition = 0
 const (
 	// ****** CLUSTER_METADATA TABLE ******
 	// One time only for the immutable data, so just use idempotent insert that does nothing if a record exists
@@ -50,19 +51,19 @@ cluster_metadata WHERE metadata_partition = $1`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
 	templateUpsertActiveClusterMembership = `INSERT INTO
-cluster_membership (host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry)
-VALUES($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT(host_id)
+cluster_membership (membership_partition, host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT(membership_partition, host_id)
 DO UPDATE SET 
-host_id = $1, rpc_address = $2, rpc_port = $3, role = $4, session_start = $5, last_heartbeat = $6, record_expiry = $7`
+membership_partition = $1, host_id = $2, rpc_address = $3, rpc_port = $4, role = $5, session_start = $6, last_heartbeat = $7, record_expiry = $8`
 
 	templatePruneStaleClusterMembership = `DELETE FROM
 cluster_membership 
 WHERE host_id = ANY(ARRAY(
-SELECT host_id FROM cluster_membership WHERE record_expiry < $1 LIMIT $2))`
+SELECT host_id FROM cluster_membership WHERE membership_partition = $1 AND record_expiry < $2 LIMIT $3))`
 
-	templateGetClusterMembership = `SELECT host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry, insertion_order FROM
-cluster_membership`
+	templateGetClusterMembership = `SELECT host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry FROM
+cluster_membership WHERE membership_partition = $`
 
 	// ClusterMembership WHERE Suffixes
 	templateWithRoleSuffix           = ` AND role = $`
@@ -70,12 +71,12 @@ cluster_membership`
 	templateWithRecordExpirySuffix   = ` AND record_expiry > $`
 	templateWithRPCAddressSuffix     = ` AND rpc_address = $`
 	templateWithHostIDSuffix         = ` AND host_id = $`
-	templateWithSessionStartSuffix   = ` AND session_start > $`
-	templateWithInsertionOrderSuffix = ` AND insertion_order > $`
+	templateWithHostIDGreaterSuffix  = ` AND host_id > $`
+	templateWithSessionStartSuffix   = ` AND session_start >= $`
 
 	// Generic SELECT Suffixes
-	templateWithLimitSuffix            = ` LIMIT $`
-	templateWithOrderByInsertionSuffix = ` ORDER BY insertion_order ASC`
+	templateWithLimitSuffix               = ` LIMIT $`
+	templateWithOrderBySessionStartSuffix = ` ORDER BY membership_partition ASC, host_id ASC`
 )
 
 // Does not follow traditional lock, select, read, insert as we only expect a single row.
@@ -97,6 +98,7 @@ func (pdb *db) GetClusterMetadata() (*sqlplugin.ClusterMetadataRow, error) {
 
 func (pdb *db) UpsertClusterMembership(row *sqlplugin.ClusterMembershipRow) (sql.Result, error) {
 	return pdb.conn.Exec(templateUpsertActiveClusterMembership,
+		constMembershipPartition,
 		row.HostID,
 		row.RPCAddress,
 		row.RPCPort,
@@ -110,6 +112,8 @@ func (pdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]s
 	var queryString strings.Builder
 	var operands []interface{}
 	queryString.WriteString(templateGetClusterMembership)
+	operands = append(operands, constMembershipPartition)
+	queryString.WriteString(strconv.Itoa(len(operands)))
 
 	if filter.HostIDEquals != nil {
 		queryString.WriteString(templateWithHostIDSuffix)
@@ -147,13 +151,13 @@ func (pdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]s
 		queryString.WriteString(strconv.Itoa(len(operands)))
 	}
 
-	if filter.InsertionOrderGreaterThan > 0 {
-		queryString.WriteString(templateWithInsertionOrderSuffix)
-		operands = append(operands, filter.InsertionOrderGreaterThan)
+	if filter.HostIDGreaterThan != nil {
+		queryString.WriteString(templateWithHostIDGreaterSuffix)
+		operands = append(operands, filter.HostIDGreaterThan)
 		queryString.WriteString(strconv.Itoa(len(operands)))
 	}
 
-	queryString.WriteString(templateWithOrderByInsertionSuffix)
+	queryString.WriteString(templateWithOrderBySessionStartSuffix)
 
 	if filter.MaxRecordCount > 0 {
 		queryString.WriteString(templateWithLimitSuffix)
@@ -161,8 +165,7 @@ func (pdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]s
 		queryString.WriteString(strconv.Itoa(len(operands)))
 	}
 
-	// All suffixes start with AND, replace the first occurrence with WHERE
-	compiledQryString := strings.Replace(queryString.String(), " AND ", " WHERE ", 1)
+	compiledQryString := queryString.String()
 
 	var rows []sqlplugin.ClusterMembershipRow
 	err := pdb.conn.Select(&rows,
@@ -183,6 +186,7 @@ func (pdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]s
 
 func (pdb *db) PruneClusterMembership(filter *sqlplugin.PruneClusterMembershipFilter) (sql.Result, error) {
 	return pdb.conn.Exec(templatePruneStaleClusterMembership,
+		constMembershipPartition,
 		filter.PruneRecordsBefore,
 		filter.MaxRecordsAffected)
 }

@@ -27,7 +27,7 @@ package mocks
 import (
 	"github.com/stretchr/testify/mock"
 
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/persistence"
 )
 
 // ExecutionManager mock implementation
@@ -234,6 +234,29 @@ func (_m *ExecutionManager) ListConcreteExecutions(request *persistence.ListConc
 	return r0, r1
 }
 
+// GetTransferTask provides a mock function with given fields: request
+func (_m *ExecutionManager) GetTransferTask(request *persistence.GetTransferTaskRequest) (*persistence.GetTransferTaskResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.GetTransferTaskResponse
+	if rf, ok := ret.Get(0).(func(*persistence.GetTransferTaskRequest) *persistence.GetTransferTaskResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.GetTransferTaskResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.GetTransferTaskRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetTransferTasks provides a mock function with given fields: request
 func (_m *ExecutionManager) GetTransferTasks(request *persistence.GetTransferTasksRequest) (*persistence.GetTransferTasksResponse, error) {
 	ret := _m.Called(request)
@@ -283,6 +306,29 @@ func (_m *ExecutionManager) RangeCompleteTransferTask(request *persistence.Range
 	}
 
 	return r0
+}
+
+// GetReplicationTask provides a mock function with given fields: request
+func (_m *ExecutionManager) GetReplicationTask(request *persistence.GetReplicationTaskRequest) (*persistence.GetReplicationTaskResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.GetReplicationTaskResponse
+	if rf, ok := ret.Get(0).(func(*persistence.GetReplicationTaskRequest) *persistence.GetReplicationTaskResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.GetReplicationTaskResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.GetReplicationTaskRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // GetReplicationTasks provides a mock function with given fields: request
@@ -405,6 +451,29 @@ func (_m *ExecutionManager) RangeDeleteReplicationTaskFromDLQ(
 	}
 
 	return r0
+}
+
+// GetTimerTask provides a mock function with given fields: request
+func (_m *ExecutionManager) GetTimerTask(request *persistence.GetTimerTaskRequest) (*persistence.GetTimerTaskResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.GetTimerTaskResponse
+	if rf, ok := ret.Get(0).(func(*persistence.GetTimerTaskRequest) *persistence.GetTimerTaskResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.GetTimerTaskResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.GetTimerTaskRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // GetTimerIndexTasks provides a mock function with given fields: request

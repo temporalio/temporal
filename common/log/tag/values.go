@@ -41,16 +41,16 @@ var (
 	WorkflowActionWorkflowRecordMarker           = workflowAction("add-workflow-marker-record-event")
 	WorkflowActionUpsertWorkflowSearchAttributes = workflowAction("add-workflow-upsert-search-attributes-event")
 
-	// decision
-	WorkflowActionDecisionTaskScheduled = workflowAction("add-decisiontask-scheduled-event")
-	WorkflowActionDecisionTaskStarted   = workflowAction("add-decisiontask-started-event")
-	WorkflowActionDecisionTaskCompleted = workflowAction("add-decisiontask-completed-event")
-	WorkflowActionDecisionTaskTimedOut  = workflowAction("add-decisiontask-timedout-event")
-	WorkflowActionDecisionTaskFailed    = workflowAction("add-decisiontask-failed-event")
+	// workflow task
+	WorkflowActionWorkflowTaskScheduled = workflowAction("add-workflowtask-scheduled-event")
+	WorkflowActionWorkflowTaskStarted   = workflowAction("add-workflowtask-started-event")
+	WorkflowActionWorkflowTaskCompleted = workflowAction("add-workflowtask-completed-event")
+	WorkflowActionWorkflowTaskTimedOut  = workflowAction("add-workflowtask-timedout-event")
+	WorkflowActionWorkflowTaskFailed    = workflowAction("add-workflowtask-failed-event")
 
-	// in memory decision
-	WorkflowActionInMemoryDecisionTaskScheduled = workflowAction("add-in-memory-decisiontask-scheduled")
-	WorkflowActionInMemoryDecisionTaskStarted   = workflowAction("add-in-memory-decisiontask-started")
+	// in memory workflow task
+	WorkflowActionInMemoryWorkflowTaskScheduled = workflowAction("add-in-memory-workflowtask-scheduled")
+	WorkflowActionInMemoryWorkflowTaskStarted   = workflowAction("add-in-memory-workflowtask-started")
 
 	// activity
 	WorkflowActionActivityTaskScheduled       = workflowAction("add-activitytask-scheduled-event")
@@ -101,7 +101,7 @@ var (
 
 // Pre-defined values for TagSysComponent
 var (
-	ComponentTaskList                 = component("tasklist")
+	ComponentTaskQueue                = component("taskqueue")
 	ComponentHistoryEngine            = component("history-engine")
 	ComponentHistoryCache             = component("history-cache")
 	ComponentEventsCache              = component("events-cache")
@@ -149,11 +149,11 @@ var (
 	ErrorTypeHistorySerializationError    = errorType("HistorySerializationError")
 	ErrorTypeHistoryDeserializationError  = errorType("HistoryDeserializationError")
 	ErrorTypeDuplicateTask                = errorType("DuplicateTask")
-	ErrorTypeMultipleCompletionDecisions  = errorType("MultipleCompletionDecisions")
+	ErrorTypeMultipleCompletionCommands   = errorType("MultipleCompletionCommands")
 	ErrorTypeDuplicateTransferTask        = errorType("DuplicateTransferTask")
-	ErrorTypeDecisionFailed               = errorType("DecisionFailed")
+	ErrorTypeWorkflowTaskFailed           = errorType("WorkflowTaskFailed")
 	ErrorTypeInvalidMutableStateAction    = errorType("InvalidMutableStateAction")
-	ErrorTypeInvalidMemDecisionTaskAction = errorType("InvalidMemDecisionTaskAction")
+	ErrorTypeInvalidMemWorkflowTaskAction = errorType("InvalidMemWorkflowTaskAction")
 )
 
 // Pre-defined values for SysShardUpdate
@@ -182,6 +182,6 @@ var (
 	StoreOperationDeleteWorkflowExecution = storeOperation("delete-wf-execution")
 	StoreOperationUpdateShard             = storeOperation("update-shard")
 	StoreOperationCreateTask              = storeOperation("create-task")
-	StoreOperationUpdateTaskList          = storeOperation("update-task-list")
-	StoreOperationStopTaskList            = storeOperation("stop-task-list")
+	StoreOperationUpdateTaskQueue         = storeOperation("update-task-queue")
+	StoreOperationStopTaskQueue           = storeOperation("stop-task-queue")
 )

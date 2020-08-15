@@ -28,26 +28,27 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/gcloud/connector/mocks"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/metrics"
 	"github.com/uber-go/tally"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.uber.org/zap"
+
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/gcloud/connector/mocks"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
 	testWorkflowTypeName    = "test-workflow-type"
-	exampleVisibilityRecord = `{"namespaceId":"test-namespace-id","namespace":"test-namespace","workflowId":"test-workflow-id","runId":"test-run-id","workflowTypeName":"test-workflow-type","startTimestamp":1580896574804475000,"executionTimestamp":0,"closeTimestamp":1580896575946478000,"status":"Completed","historyLength":36,"memo":null,"searchAttributes":{},"historyArchivalURI":"gs://my-bucket-cad/temporal_archival/development"}`
+	exampleVisibilityRecord = `{"namespaceId":"test-namespace-id","namespace":"test-namespace","workflowId":"test-workflow-id","runId":"test-run-id","workflowTypeName":"test-workflow-type","startTime":"2020-02-05T09:56:14.804475Z","closeTime":"2020-02-05T09:56:15.946478Z","status":"Completed","historyLength":36,"memo":null,"searchAttributes":{},"historyArchivalUri":"gs://my-bucket-cad/temporal_archival/development"}`
 )
 
 func (s *visibilityArchiverSuite) SetupTest() {
@@ -64,9 +65,9 @@ func (s *visibilityArchiverSuite) SetupTest() {
 			WorkflowId:       testWorkflowID,
 			RunId:            testRunID,
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTimestamp:   1580896574804475000,
-			CloseTimestamp:   1580896575946478000,
-			Status:           executionpb.WorkflowExecutionStatus_Completed,
+			StartTime:        timestamp.UnixOrZeroTimePtr(1580896574804475000),
+			CloseTime:        timestamp.UnixOrZeroTimePtr(1580896575946478000),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			HistoryLength:    36,
 		},
 	}
@@ -181,16 +182,16 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 	s.NoError(err)
 
 	request := &archiverproto.ArchiveVisibilityRequest{
-		Namespace:          testNamespace,
-		NamespaceId:        testNamespaceID,
-		WorkflowId:         testWorkflowID,
-		RunId:              testRunID,
-		WorkflowTypeName:   testWorkflowTypeName,
-		StartTimestamp:     time.Now().UnixNano(),
-		ExecutionTimestamp: 0, // workflow without backoff
-		CloseTimestamp:     time.Now().UnixNano(),
-		Status:             executionpb.WorkflowExecutionStatus_Failed,
-		HistoryLength:      int64(101),
+		Namespace:        testNamespace,
+		NamespaceId:      testNamespaceID,
+		WorkflowId:       testWorkflowID,
+		RunId:            testRunID,
+		WorkflowTypeName: testWorkflowTypeName,
+		StartTime:        timestamp.TimeNowPtrUtc(),
+		ExecutionTime:    nil, // workflow without backoff
+		CloseTime:        timestamp.TimeNowPtrUtc(),
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		HistoryLength:    int64(101),
 	}
 
 	err = visibilityArchiver.Archive(ctx, URI, request)

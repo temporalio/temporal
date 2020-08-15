@@ -31,18 +31,20 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/collection"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/persistence"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -61,7 +63,7 @@ type (
 			resetRequestID string,
 			currentWorkflow nDCWorkflow,
 			resetReason string,
-			additionalReapplyEvents []*eventpb.HistoryEvent,
+			additionalReapplyEvents []*historypb.HistoryEvent,
 		) error
 	}
 
@@ -111,7 +113,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 	resetRequestID string,
 	currentWorkflow nDCWorkflow,
 	resetReason string,
-	additionalReapplyEvents []*eventpb.HistoryEvent,
+	additionalReapplyEvents []*historypb.HistoryEvent,
 ) (retError error) {
 
 	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(namespaceID)
@@ -173,7 +175,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	resetRequestID string,
 	resetWorkflowVersion int64,
 	resetReason string,
-	additionalReapplyEvents []*eventpb.HistoryEvent,
+	additionalReapplyEvents []*historypb.HistoryEvent,
 ) (nDCWorkflow, error) {
 
 	resetWorkflow, err := r.replayResetWorkflow(
@@ -195,7 +197,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	resetMutableState := resetWorkflow.getMutableState()
 	executionInfo := resetMutableState.GetExecutionInfo()
 	if executionInfo.WorkflowExecutionTimeout > 0 {
-		executionInfo.WorkflowExpirationTime = time.Now().Add(time.Duration(executionInfo.WorkflowExecutionTimeout) * time.Second)
+		executionInfo.WorkflowExpirationTime = time.Now().UTC().Add(time.Duration(executionInfo.WorkflowExecutionTimeout) * time.Second)
 	}
 
 	baseLastEventVersion := resetMutableState.GetCurrentVersion()
@@ -209,21 +211,21 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	// TODO add checking of reset until event ID == decision task started ID + 1
-	decision, ok := resetMutableState.GetInFlightDecision()
-	if !ok || decision.StartedID+1 != resetMutableState.GetNextEventID() {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Can only reset workflow to DecisionTaskStarted + 1: %v", baseRebuildLastEventID+1))
+	// TODO add checking of reset until event ID == workflow task started ID + 1
+	workflowTask, ok := resetMutableState.GetInFlightWorkflowTask()
+	if !ok || workflowTask.StartedID+1 != resetMutableState.GetNextEventID() {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Can only reset workflow to WorkflowTaskStarted + 1: %v", baseRebuildLastEventID+1))
 	}
 	if len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Can only reset workflow with pending child workflows"))
 	}
 
-	_, err = resetMutableState.AddDecisionTaskFailedEvent(
-		decision.ScheduleID,
-		decision.StartedID, eventpb.DecisionTaskFailedCause_ResetWorkflow,
-		nil,
+	resetFailure := failure.NewResetWorkflowFailure(resetReason, nil)
+	_, err = resetMutableState.AddWorkflowTaskFailedEvent(
+		workflowTask.ScheduleID,
+		workflowTask.StartedID, enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
+		resetFailure,
 		identityHistoryService,
-		resetReason,
 		"",
 		baseRunID,
 		resetRunID,
@@ -254,7 +256,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	if err := scheduleDecision(resetMutableState); err != nil {
+	if err := scheduleWorkflowTask(resetMutableState); err != nil {
 		return nil, err
 	}
 
@@ -330,7 +332,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 
 	resetContext := newWorkflowExecutionContext(
 		namespaceID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      resetRunID,
 		},
@@ -378,7 +380,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 ) error {
 
 	for _, ai := range mutableState.GetPendingActivityInfos() {
-		switch ai.StartedID {
+		switch ai.StartedId {
 		case common.EmptyEventID:
 			// activity not started, noop
 		case common.TransientEventID:
@@ -387,13 +389,11 @@ func (r *workflowResetterImpl) failInflightActivity(
 			return serviceerror.NewInternal("workflowResetter encounter transient activity")
 		default:
 			if _, err := mutableState.AddActivityTaskFailedEvent(
-				ai.ScheduleID,
-				ai.StartedID,
-				&workflowservice.RespondActivityTaskFailedRequest{
-					Reason:   terminateReason,
-					Details:  ai.Details,
-					Identity: ai.StartedIdentity,
-				},
+				ai.ScheduleId,
+				ai.StartedId,
+				failure.NewResetWorkflowFailure(terminateReason, ai.LastHeartbeatDetails),
+				enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
+				ai.StartedIdentity,
 			); err != nil {
 				return err
 			}
@@ -470,7 +470,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		context, release, err := r.historyCache.getOrCreateWorkflowExecution(
 			ctx,
 			namespaceID,
-			executionpb.WorkflowExecution{
+			commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
@@ -531,14 +531,14 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 	))
 
 	var nextRunID string
-	var lastEvents []*eventpb.HistoryEvent
+	var lastEvents []*historypb.HistoryEvent
 
 	for iter.HasNext() {
 		batch, err := iter.Next()
 		if err != nil {
 			return "", err
 		}
-		lastEvents = batch.(*eventpb.History).Events
+		lastEvents = batch.(*historypb.History).Events
 		if err := r.reapplyEvents(mutableState, lastEvents); err != nil {
 			return "", err
 		}
@@ -546,7 +546,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 
 	if len(lastEvents) > 0 {
 		lastEvent := lastEvents[len(lastEvents)-1]
-		if lastEvent.GetEventType() == eventpb.EventType_WorkflowExecutionContinuedAsNew {
+		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
 			nextRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 		}
 	}
@@ -555,12 +555,12 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 
 func (r *workflowResetterImpl) reapplyEvents(
 	mutableState mutableState,
-	events []*eventpb.HistoryEvent,
+	events []*historypb.HistoryEvent,
 ) error {
 
 	for _, event := range events {
 		switch event.GetEventType() {
-		case eventpb.EventType_WorkflowExecutionSignaled:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			attr := event.GetWorkflowExecutionSignaledEventAttributes()
 			if _, err := mutableState.AddWorkflowExecutionSignaled(
 				attr.GetSignalName(),

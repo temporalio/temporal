@@ -40,17 +40,17 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service/config"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/service/config"
 )
 
 const (
@@ -138,8 +138,8 @@ func (h *historyArchiver) Archive(
 				scope.IncCounter(metrics.HistoryArchiverArchiveTransientErrorCount)
 			} else {
 				scope.IncCounter(metrics.HistoryArchiverArchiveNonRetryableErrorCount)
-				if featureCatalog.NonRetriableError != nil {
-					err = featureCatalog.NonRetriableError()
+				if featureCatalog.NonRetryableError != nil {
+					err = featureCatalog.NonRetryableError()
 				}
 			}
 		}
@@ -148,12 +148,12 @@ func (h *historyArchiver) Archive(
 	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.container.Logger, request, URI.String())
 
 	if err := softValidateURI(URI); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
 		return err
 	}
 
 	if err := archiver.ValidateHistoryArchiveRequest(request); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidArchiveRequest), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidArchiveRequest), tag.Error(err))
 		return err
 	}
 
@@ -169,20 +169,20 @@ func (h *historyArchiver) Archive(
 			if common.IsPersistenceTransientError(err) {
 				logger.Error(archiver.ArchiveTransientErrorMsg)
 			} else {
-				logger.Error(archiver.ArchiveNonRetriableErrorMsg)
+				logger.Error(archiver.ArchiveNonRetryableErrorMsg)
 			}
 			return err
 		}
 
 		if historyMutated(request, historyBlob.Body, historyBlob.Header.IsLast) {
-			logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonHistoryMutated))
+			logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonHistoryMutated))
 			return archiver.ErrHistoryMutated
 		}
 
 		encoder := codec.NewJSONPBEncoder()
 		encodedHistoryBlob, err := encoder.Encode(historyBlob)
 		if err != nil {
-			logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeHistory), tag.Error(err))
+			logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeHistory), tag.Error(err))
 			return err
 		}
 		key := constructHistoryKey(URI.Path(), request.NamespaceID, request.WorkflowID, request.RunID, request.CloseFailoverVersion, progress.BatchIdx)
@@ -193,7 +193,7 @@ func (h *historyArchiver) Archive(
 			if isRetryableError(err) {
 				logger.Error(archiver.ArchiveTransientErrorMsg)
 			} else {
-				logger.Error(archiver.ArchiveNonRetriableErrorMsg)
+				logger.Error(archiver.ArchiveNonRetryableErrorMsg)
 			}
 			return err
 		}
@@ -206,7 +206,7 @@ func (h *historyArchiver) Archive(
 				if isRetryableError(err) {
 					logger.Error(archiver.ArchiveTransientErrorMsg)
 				} else {
-					logger.Error(archiver.ArchiveNonRetriableErrorMsg)
+					logger.Error(archiver.ArchiveNonRetryableErrorMsg)
 				}
 				return err
 			}

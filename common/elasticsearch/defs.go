@@ -25,7 +25,7 @@
 package elasticsearch
 
 import (
-	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 // All legal fields allowed in elastic search index
@@ -41,15 +41,15 @@ const (
 	HistoryLength   = "HistoryLength"
 	Memo            = "Memo"
 	Encoding        = "Encoding"
-	TaskList        = "TaskList"
+	TaskQueue       = "TaskQueue"
 
 	KafkaKey = "KafkaKey"
 )
 
 // Supported field types
 var (
-	FieldTypeString = indexergenpb.FieldType_String
-	FieldTypeInt    = indexergenpb.FieldType_Int
-	FieldTypeBool   = indexergenpb.FieldType_Bool
-	FieldTypeBinary = indexergenpb.FieldType_Binary
+	FieldTypeString = enumsspb.FIELD_TYPE_STRING
+	FieldTypeInt    = enumsspb.FIELD_TYPE_INT
+	FieldTypeBool   = enumsspb.FIELD_TYPE_BOOL
+	FieldTypeBinary = enumsspb.FIELD_TYPE_BINARY
 )

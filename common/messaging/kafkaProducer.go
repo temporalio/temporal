@@ -31,10 +31,11 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/gogo/protobuf/proto"
 
-	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	indexerspb "go.temporal.io/server/api/indexer/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 type (
@@ -92,33 +93,33 @@ func (p *kafkaProducer) serializeProto(input proto.Marshaler) ([]byte, error) {
 	return payload, nil
 }
 
-func (p *kafkaProducer) getKeyForReplicationTask(task *replicationgenpb.ReplicationTask) sarama.Encoder {
+func (p *kafkaProducer) getKeyForReplicationTask(task *replicationspb.ReplicationTask) sarama.Encoder {
 	if task == nil {
 		return nil
 	}
 
 	switch task.GetTaskType() {
-	case replicationgenpb.ReplicationTaskType_HistoryTask:
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK:
 		// Use workflowID as the partition key so all replication tasks for a workflow are dispatched to the same
 		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks at least at
 		// the messaging layer perspective
 		attributes := task.GetHistoryTaskAttributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
-	case replicationgenpb.ReplicationTaskType_HistoryV2Task:
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		// Use workflowID as the partition key so all replication tasks for a workflow are dispatched to the same
 		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks at least at
 		// the messaging layer perspective
 		attributes := task.GetHistoryTaskV2Attributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
-	case replicationgenpb.ReplicationTaskType_SyncActivityTask:
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		// Use workflowID as the partition key so all sync activity tasks for a workflow are dispatched to the same
 		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks atleast at
 		// the messaging layer perspective
 		attributes := task.GetSyncActivityTaskAttributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
-	case replicationgenpb.ReplicationTaskType_HistoryMetadataTask,
-		replicationgenpb.ReplicationTaskType_NamespaceTask,
-		replicationgenpb.ReplicationTaskType_SyncShardStatusTask:
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
+		enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+		enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
 		return nil
 	default:
 		panic(fmt.Sprintf("encounter unsupported replication task type: %v", task.GetTaskType()))
@@ -129,7 +130,7 @@ func (p *kafkaProducer) getKeyForReplicationTask(task *replicationgenpb.Replicat
 
 func (p *kafkaProducer) getProducerMessage(message interface{}) (*sarama.ProducerMessage, error) {
 	switch message := message.(type) {
-	case *replicationgenpb.ReplicationTask:
+	case *replicationspb.ReplicationTask:
 		payload, err := p.serializeProto(message)
 		if err != nil {
 			return nil, err
@@ -141,7 +142,7 @@ func (p *kafkaProducer) getProducerMessage(message interface{}) (*sarama.Produce
 			Value: sarama.ByteEncoder(payload),
 		}
 		return msg, nil
-	case *indexergenpb.Message:
+	case *indexerspb.Message:
 		payload, err := p.serializeProto(message)
 		if err != nil {
 			return nil, err

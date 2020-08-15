@@ -28,7 +28,7 @@ import (
 	"context"
 	"errors"
 
-	"go.temporal.io/temporal/activity"
+	"go.temporal.io/sdk/activity"
 )
 
 type (
@@ -40,11 +40,11 @@ type (
 	// History/Visibility Archiver
 	ArchiveFeatureCatalog struct {
 		ProgressManager   ProgressManager
-		NonRetriableError NonRetriableError
+		NonRetryableError NonRetryableError
 	}
 
-	// NonRetriableError returns an error indicating archiver has encountered an non-retriable error
-	NonRetriableError func() error
+	// NonRetryableError returns an error indicating archiver has encountered an non-retryable error
+	NonRetryableError func() error
 
 	// ProgressManager is used to record and load archive progress
 	ProgressManager interface {
@@ -90,11 +90,11 @@ func (h *heartbeatProgressManager) HasProgress(ctx context.Context) bool {
 	return activity.HasHeartbeatDetails(ctx)
 }
 
-// GetNonRetriableErrorOption returns an ArchiveOption so that archiver knows what should
+// GetNonRetryableErrorOption returns an ArchiveOption so that archiver knows what should
 // be returned when an non-retryable error is encountered.
-func GetNonRetriableErrorOption(nonRetryableErr error) ArchiveOption {
+func GetNonRetryableErrorOption(nonRetryableErr error) ArchiveOption {
 	return func(catalog *ArchiveFeatureCatalog) {
-		catalog.NonRetriableError = func() error {
+		catalog.NonRetryableError = func() error {
 			return nonRetryableErr
 		}
 	}

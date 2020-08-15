@@ -27,21 +27,25 @@ package cache
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -88,9 +92,9 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 	namespaceNotificationVersion := int64(0)
 	namespaceRecord1 := &persistence.GetNamespaceResponse{
 		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{Id: uuid.NewRandom(), Name: "some random namespace name", Data: make(map[string]string)},
+			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "some random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 1,
+				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -110,9 +114,9 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 
 	namespaceRecord2 := &persistence.GetNamespaceResponse{
 		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{Id: uuid.NewRandom(), Name: "another random namespace name", Data: make(map[string]string)},
+			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "another random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 2,
+				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -132,9 +136,9 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 
 	namespaceRecord3 := &persistence.GetNamespaceResponse{
 		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{Id: uuid.NewRandom(), Name: "yet another random namespace name", Data: make(map[string]string)},
+			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "yet another random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 3,
+				Retention: timestamp.DurationFromDays(3),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -180,21 +184,21 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 	entryByName1, err := s.namespaceCache.GetNamespace(namespaceRecord1.Namespace.Info.Name)
 	s.Nil(err)
 	s.Equal(entry1, entryByName1)
-	entryByID1, err := s.namespaceCache.GetNamespaceByID(primitives.UUIDString(namespaceRecord1.Namespace.Info.Id))
+	entryByID1, err := s.namespaceCache.GetNamespaceByID(namespaceRecord1.Namespace.Info.Id)
 	s.Nil(err)
 	s.Equal(entry1, entryByID1)
 
 	entryByName2, err := s.namespaceCache.GetNamespace(namespaceRecord2.Namespace.Info.Name)
 	s.Nil(err)
 	s.Equal(entry2, entryByName2)
-	entryByID2, err := s.namespaceCache.GetNamespaceByID(primitives.UUIDString(namespaceRecord2.Namespace.Info.Id))
+	entryByID2, err := s.namespaceCache.GetNamespaceByID(namespaceRecord2.Namespace.Info.Id)
 	s.Nil(err)
 	s.Equal(entry2, entryByID2)
 
 	allNamespaces := s.namespaceCache.GetAllNamespace()
 	s.Equal(map[string]*NamespaceCacheEntry{
-		primitives.UUIDString(entry1.GetInfo().Id): entry1,
-		primitives.UUIDString(entry2.GetInfo().Id): entry2,
+		entry1.GetInfo().Id: entry1,
+		entry2.GetInfo().Id: entry2,
 	}, allNamespaces)
 }
 
@@ -204,15 +208,15 @@ func (s *namespaceCacheSuite) TestGetNamespace_NonLoaded_GetByName() {
 	s.metadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil)
 	namespaceRecord := &persistence.GetNamespaceResponse{
 		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{Id: uuid.NewRandom(), Name: "some random namespace name", Data: make(map[string]string)},
+			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "some random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 1,
+				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{
 						"abc": {
-							Reason:          "test reason",
-							Operator:        "test operator",
-							CreatedTimeNano: 123,
+							Reason:     "test reason",
+							Operator:   "test operator",
+							CreateTime: timestamp.TimePtr(time.Unix(0, 123).UTC()),
 						},
 					},
 				}},
@@ -250,9 +254,9 @@ func (s *namespaceCacheSuite) TestGetNamespace_NonLoaded_GetByID() {
 	s.metadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil)
 	namespaceRecord := &persistence.GetNamespaceResponse{
 		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{Id: uuid.NewRandom(), Name: "some random namespace name", Data: make(map[string]string)},
+			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "some random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 1,
+				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				},
@@ -277,10 +281,10 @@ func (s *namespaceCacheSuite) TestGetNamespace_NonLoaded_GetByID() {
 		NextPageToken: nil,
 	}, nil).Once()
 
-	entryByID, err := s.namespaceCache.GetNamespaceByID(primitives.UUIDString(namespaceRecord.Namespace.Info.Id))
+	entryByID, err := s.namespaceCache.GetNamespaceByID(namespaceRecord.Namespace.Info.Id)
 	s.Nil(err)
 	s.Equal(entry, entryByID)
-	entryByID, err = s.namespaceCache.GetNamespaceByID(primitives.UUIDString(namespaceRecord.Namespace.Info.Id))
+	entryByID, err = s.namespaceCache.GetNamespaceByID(namespaceRecord.Namespace.Info.Id)
 	s.Nil(err)
 	s.Equal(entry, entryByID)
 }
@@ -289,9 +293,9 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 	namespaceNotificationVersion := int64(0)
 	namespaceRecord1 := &persistence.GetNamespaceResponse{
 		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{Id: uuid.NewRandom(), Name: "some random namespace name", Data: make(map[string]string)},
+			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "some random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 1,
+				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -313,9 +317,9 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 
 	namespaceRecord2 := &persistence.GetNamespaceResponse{
 		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{Id: uuid.NewRandom(), Name: "another random namespace name", Data: make(map[string]string)},
+			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "another random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 2,
+				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -376,9 +380,9 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 	namespaceNotificationVersion := int64(0)
 	namespaceRecord1Old := &persistence.GetNamespaceResponse{
 		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{Id: uuid.NewRandom(), Name: "some random namespace name", Data: make(map[string]string)},
+			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "some random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 1,
+				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -400,9 +404,9 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 
 	namespaceRecord2Old := &persistence.GetNamespaceResponse{
 		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{Id: uuid.NewRandom(), Name: "another random namespace name", Data: make(map[string]string)},
+			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "another random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 2,
+				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -518,12 +522,12 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 	s.clusterMetadata.On("IsGlobalNamespaceEnabled").Return(true)
 	namespaceNotificationVersion := int64(999999) // make this notification version really large for test
 	s.metadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil)
-	id := primitives.UUID(uuid.NewRandom())
+	id := uuid.NewRandom().String()
 	namespaceRecordOld := &persistence.GetNamespaceResponse{
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{Id: id, Name: "some random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 1,
+				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -554,7 +558,7 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 	startChan := make(chan struct{})
 	testGetFn := func() {
 		<-startChan
-		entryNew, err := s.namespaceCache.GetNamespaceByID(primitives.UUIDString(id))
+		entryNew, err := s.namespaceCache.GetNamespaceByID(id)
 		s.Nil(err)
 		// make the config version the same so we can easily compare those
 		entryNew.configVersion = 0
@@ -596,7 +600,7 @@ func Test_GetRetentionDays(t *testing.T) {
 			Data: make(map[string]string),
 		},
 		config: &persistenceblobs.NamespaceConfig{
-			RetentionDays: 7,
+			Retention: timestamp.DurationFromDays(7),
 		},
 	}
 	d.info.Data[SampleRetentionKey] = "30"
@@ -635,7 +639,7 @@ func Test_IsSampledForLongerRetentionEnabled(t *testing.T) {
 			Data: make(map[string]string),
 		},
 		config: &persistenceblobs.NamespaceConfig{
-			RetentionDays: 7,
+			Retention: timestamp.DurationFromDays(7),
 			BadBinaries: &namespacepb.BadBinaries{
 				Binaries: map[string]*namespacepb.BadBinaryInfo{},
 			},
@@ -654,7 +658,7 @@ func Test_IsSampledForLongerRetention(t *testing.T) {
 			Data: make(map[string]string),
 		},
 		config: &persistenceblobs.NamespaceConfig{
-			RetentionDays: 7,
+			Retention: timestamp.DurationFromDays(7),
 			BadBinaries: &namespacepb.BadBinaries{
 				Binaries: map[string]*namespacepb.BadBinaryInfo{},
 			},
@@ -672,4 +676,40 @@ func Test_IsSampledForLongerRetention(t *testing.T) {
 
 	d.info.Data[SampleRateKey] = "invalid-value"
 	require.False(t, d.IsSampledForLongerRetention(wid))
+}
+
+func Test_NamespaceCacheEntry_GetNamespaceNotActiveErr(t *testing.T) {
+	clusterMetadata := cluster.NewMetadata(
+		loggerimpl.NewNopLogger(),
+		dynamicconfig.GetBoolPropertyFn(true),
+		int64(10),
+		cluster.TestCurrentClusterName,
+		cluster.TestCurrentClusterName,
+		cluster.TestAllClusterInfo,
+		&config.ReplicationConsumerConfig{
+			Type: config.ReplicationConsumerTypeRPC,
+		},
+	)
+	namespaceEntry := NewGlobalNamespaceCacheEntryForTest(
+		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		&persistenceblobs.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		1234,
+		clusterMetadata,
+	)
+
+	require.Nil(t, namespaceEntry.GetNamespaceNotActiveErr())
+
+	// update to become not active
+	namespaceEntry.replicationConfig.ActiveClusterName = cluster.TestAlternativeClusterName
+	err := namespaceEntry.GetNamespaceNotActiveErr()
+	require.NotNil(t, err)
+	_, ok := err.(*serviceerror.NamespaceNotActive)
+	require.True(t, ok)
 }

@@ -32,13 +32,13 @@ import (
 
 	"github.com/uber-go/tally"
 
-	"github.com/temporalio/temporal/common/log"
+	"go.temporal.io/server/common/log"
 )
 
 var (
 	// Revision is the VCS revision associated with this build. Overridden using ldflags
 	// at compile time. Example:
-	// $ go build -ldflags "-X github.com/temporalio/temporal/common/metrics.Revision=abcdef" ...
+	// $ go build -ldflags "-X go.temporal.io/server/common/metrics.Revision=abcdef" ...
 	// Adapted from: https://www.atatus.com/blog/golang-auto-build-versioning/
 	Revision = "unknown"
 
@@ -114,7 +114,7 @@ func NewRuntimeMetricsReporter(
 	if err != nil || sec < 0 {
 		sec = 0
 	}
-	rReporter.buildTime = time.Unix(sec, 0)
+	rReporter.buildTime = time.Unix(sec, 0).UTC()
 	return rReporter
 }
 

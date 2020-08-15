@@ -34,18 +34,20 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/persistence"
-	cassp "github.com/temporalio/temporal/common/persistence/cassandra"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/quotas"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/persistence"
+	cassp "go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (
@@ -101,7 +103,7 @@ type (
 		NextEventID                int64
 		TreeID                     primitives.UUID
 		BranchID                   primitives.UUID
-		CloseStatus                executionpb.WorkflowExecutionStatus
+		CloseStatus                enumspb.WorkflowExecutionStatus
 		CorruptedExceptionMetadata CorruptedExceptionMetadata
 	}
 
@@ -184,7 +186,34 @@ type (
 		MaxExecutions     *int64
 		AverageExecutions int64
 	}
+
+	historyBranchByteKey struct {
+		TreeID   []byte
+		BranchID []byte
+	}
 )
+
+func byteKeyFromProto(p *persistenceblobs.HistoryBranch) (*historyBranchByteKey, error) {
+	branchBytes, err := primitives.ParseUUID(p.BranchId)
+	if err != nil {
+		return nil, err
+	}
+
+	treeBytes, err := primitives.ParseUUID(p.TreeId)
+	if err != nil {
+		return nil, err
+	}
+
+	return &historyBranchByteKey{TreeID: treeBytes, BranchID: branchBytes}, nil
+}
+
+func (h *historyBranchByteKey) GetTreeId() primitives.UUID {
+	return h.TreeID
+}
+
+func (h *historyBranchByteKey) GetBranchId() primitives.UUID {
+	return h.BranchID
+}
 
 // AdminDBScan is used to scan over all executions in database and detect corruptions
 func AdminDBScan(c *cli.Context) {
@@ -228,7 +257,7 @@ func AdminDBScan(c *cli.Context) {
 		}(i)
 	}
 
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 	progressReport := &ProgressReport{}
 	for i := 0; i < numShards; i++ {
 		report := <-reports
@@ -382,6 +411,10 @@ func verifyHistoryExists(
 ) (VerificationResult, *persistence.InternalReadHistoryBranchResponse, *persistenceblobs.HistoryBranch) {
 	var branch persistenceblobs.HistoryBranch
 	err := branchDecoder.Decode(execution.BranchToken, &branch)
+	byteBranch, err := byteKeyFromProto(&branch)
+	if err != nil {
+		return VerificationResultCheckFailure, nil, nil
+	}
 	if err != nil {
 		checkFailureWriter.Add(&ExecutionCheckFailure{
 			ShardID:     shardID,
@@ -421,8 +454,8 @@ func verifyHistoryExists(
 				WorkflowID:  execution.WorkflowID,
 				RunID:       execution.RunID,
 				NextEventID: execution.NextEventID,
-				TreeID:      branch.GetTreeId(),
-				BranchID:    branch.GetBranchId(),
+				TreeID:      byteBranch.GetTreeId(),
+				BranchID:    byteBranch.GetBranchId(),
 				CloseStatus: execution.Status,
 				CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 					CorruptionType: HistoryMissing,
@@ -448,8 +481,8 @@ func verifyHistoryExists(
 			WorkflowID:  execution.WorkflowID,
 			RunID:       execution.RunID,
 			NextEventID: execution.NextEventID,
-			TreeID:      branch.GetTreeId(),
-			BranchID:    branch.GetBranchId(),
+			TreeID:      byteBranch.GetTreeId(),
+			BranchID:    byteBranch.GetBranchId(),
 			CloseStatus: execution.Status,
 			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 				CorruptionType: HistoryMissing,
@@ -470,6 +503,10 @@ func verifyFirstHistoryEvent(
 	payloadSerializer persistence.PayloadSerializer,
 	history *persistence.InternalReadHistoryBranchResponse,
 ) VerificationResult {
+	byteBranch, err := byteKeyFromProto(branch)
+	if err != nil {
+		return VerificationResultCheckFailure
+	}
 	firstBatch, err := payloadSerializer.DeserializeBatchEvents(history.History[0])
 	if err != nil || len(firstBatch) == 0 {
 		checkFailureWriter.Add(&ExecutionCheckFailure{
@@ -488,8 +525,8 @@ func verifyFirstHistoryEvent(
 			WorkflowID:  execution.WorkflowID,
 			RunID:       execution.RunID,
 			NextEventID: execution.NextEventID,
-			TreeID:      branch.GetTreeId(),
-			BranchID:    branch.GetBranchId(),
+			TreeID:      byteBranch.GetTreeId(),
+			BranchID:    byteBranch.GetBranchId(),
 			CloseStatus: execution.Status,
 			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 				CorruptionType: InvalidFirstEvent,
@@ -498,20 +535,20 @@ func verifyFirstHistoryEvent(
 			},
 		})
 		return VerificationResultDetectedCorruption
-	} else if firstBatch[0].GetEventType() != eventpb.EventType_WorkflowExecutionStarted {
+	} else if firstBatch[0].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 		corruptedExecutionWriter.Add(&CorruptedExecution{
 			ShardID:     shardID,
 			NamespaceID: execution.NamespaceID,
 			WorkflowID:  execution.WorkflowID,
 			RunID:       execution.RunID,
 			NextEventID: execution.NextEventID,
-			TreeID:      branch.GetTreeId(),
-			BranchID:    branch.GetBranchId(),
+			TreeID:      byteBranch.GetTreeId(),
+			BranchID:    byteBranch.GetBranchId(),
 			CloseStatus: execution.Status,
 			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 				CorruptionType: InvalidFirstEvent,
 				Note:           "got unexpected first eventType",
-				Details:        fmt.Sprintf("expected: %v but got %v", eventpb.EventType_WorkflowExecutionStarted.String(), firstBatch[0].GetEventType().String()),
+				Details:        fmt.Sprintf("expected: %v but got %v", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED.String(), firstBatch[0].GetEventType().String()),
 			},
 		})
 		return VerificationResultDetectedCorruption
@@ -529,6 +566,10 @@ func verifyCurrentExecution(
 	limiter *quotas.DynamicRateLimiter,
 	totalDBRequests *int64,
 ) VerificationResult {
+	byteBranch, err := byteKeyFromProto(branch)
+	if err != nil {
+		return VerificationResultCheckFailure
+	}
 	if !executionOpen(execution) {
 		return VerificationResultNoCorruption
 	}
@@ -557,8 +598,8 @@ func verifyCurrentExecution(
 				WorkflowID:  execution.WorkflowID,
 				RunID:       execution.RunID,
 				NextEventID: execution.NextEventID,
-				TreeID:      branch.GetTreeId(),
-				BranchID:    branch.GetBranchId(),
+				TreeID:      byteBranch.GetTreeId(),
+				BranchID:    byteBranch.GetBranchId(),
 				CloseStatus: execution.Status,
 				CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 					CorruptionType: OpenExecutionInvalidCurrentExecution,
@@ -585,8 +626,8 @@ func verifyCurrentExecution(
 			WorkflowID:  execution.WorkflowID,
 			RunID:       execution.RunID,
 			NextEventID: execution.NextEventID,
-			TreeID:      branch.GetTreeId(),
-			BranchID:    branch.GetBranchId(),
+			TreeID:      byteBranch.GetTreeId(),
+			BranchID:    byteBranch.GetBranchId(),
 			CloseStatus: execution.Status,
 			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 				CorruptionType: OpenExecutionInvalidCurrentExecution,
@@ -607,7 +648,7 @@ func concreteExecutionStillExists(
 ) (*ExecutionCheckFailure, bool) {
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: execution.NamespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowID,
 			RunId:      execution.RunID,
 		},
@@ -642,7 +683,7 @@ func concreteExecutionStillOpen(
 ) (*ExecutionCheckFailure, bool) {
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: execution.NamespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowID,
 			RunId:      execution.RunID,
 		},
@@ -706,7 +747,7 @@ func constructFileNameFromShard(shardID int) string {
 }
 
 func createScanOutputDirectories() *ScanOutputDirectories {
-	now := time.Now().Unix()
+	now := time.Now().UTC().Unix()
 	sod := &ScanOutputDirectories{
 		ShardScanReportDirectoryPath:       fmt.Sprintf("./scan_%v/shard_scan_report", now),
 		ExecutionCheckFailureDirectoryPath: fmt.Sprintf("./scan_%v/execution_check_failure", now),
@@ -742,7 +783,7 @@ func writeToFile(file *os.File, message string) {
 func includeShardInProgressReport(report *ShardScanReport, progressReport *ProgressReport, startTime time.Time) {
 	progressReport.NumberOfShardsFinished++
 	progressReport.Rates.TotalDBRequests += report.TotalDBRequests
-	progressReport.Rates.TimeRunning = time.Now().Sub(startTime).String()
+	progressReport.Rates.TimeRunning = time.Now().UTC().Sub(startTime).String()
 	if report.Failure != nil {
 		progressReport.NumberOfShardScanFailures++
 	}
@@ -772,7 +813,7 @@ func includeShardInProgressReport(report *ShardScanReport, progressReport *Progr
 		progressReport.CorruptionTypeBreakdown.PercentageOpenExecutionInvalidCurrentExecution = math.Round((float64(progressReport.CorruptionTypeBreakdown.TotalOpenExecutionInvalidCurrentExecution) * 100.0) / float64(progressReport.TotalExecutionsCount))
 	}
 
-	pastTime := time.Now().Sub(startTime)
+	pastTime := time.Now().UTC().Sub(startTime)
 	hoursPast := float64(pastTime) / float64(time.Hour)
 	progressReport.Rates.ShardsPerHour = math.Round(float64(progressReport.NumberOfShardsFinished) / hoursPast)
 	progressReport.Rates.ExecutionsPerHour = math.Round(float64(progressReport.TotalExecutionsCount) / hoursPast)
@@ -789,9 +830,9 @@ func getRateLimiter(startRPS int, targetRPS int, scaleUpSeconds int) *quotas.Dyn
 		return quotas.NewDynamicRateLimiter(func() float64 { return float64(targetRPS) })
 	}
 	rpsIncreasePerSecond := (targetRPS - startRPS) / scaleUpSeconds
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 	rpsFn := func() float64 {
-		secondsPast := int(time.Now().Sub(startTime).Seconds())
+		secondsPast := int(time.Now().UTC().Sub(startTime).Seconds())
 		if secondsPast >= scaleUpSeconds {
 			return float64(targetRPS)
 		}
@@ -806,5 +847,5 @@ func preconditionForDBCall(totalDBRequests *int64, limiter *quotas.DynamicRateLi
 }
 
 func executionOpen(execution *persistence.InternalWorkflowExecutionInfo) bool {
-	return execution.State == persistence.WorkflowStateCreated || execution.State == persistence.WorkflowStateRunning
+	return execution.State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED || execution.State == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 }

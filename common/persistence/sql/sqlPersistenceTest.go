@@ -28,14 +28,15 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
-
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/environment"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/environment"
 )
 
 // TestCluster allows executing cassandra operations in testing.
@@ -43,11 +44,13 @@ type TestCluster struct {
 	dbName    string
 	schemaDir string
 	cfg       config.SQL
+	logger    log.Logger
 }
 
 // NewTestCluster returns a new SQL test cluster
-func NewTestCluster(pluginName, dbName, username, password, host string, port int, schemaDir string) *TestCluster {
+func NewTestCluster(pluginName, dbName, username, password, host string, port int, schemaDir string, logger log.Logger) *TestCluster {
 	var result TestCluster
+	result.logger = logger
 	result.dbName = dbName
 	if port == 0 {
 		port = environment.GetMySQLPort()
@@ -57,13 +60,13 @@ func NewTestCluster(pluginName, dbName, username, password, host string, port in
 	}
 	result.schemaDir = schemaDir
 	result.cfg = config.SQL{
-		User:            username,
-		Password:        password,
-		ConnectAddr:     fmt.Sprintf("%v:%v", host, port),
-		ConnectProtocol: "tcp",
-		PluginName:      pluginName,
-		DatabaseName:    dbName,
-		NumShards:       4,
+		User:               username,
+		Password:           password,
+		ConnectAddr:        fmt.Sprintf("%v:%v", host, port),
+		ConnectProtocol:    "tcp",
+		PluginName:         pluginName,
+		DatabaseName:       dbName,
+		TaskScanPartitions: 4,
 	}
 	return &result
 }
@@ -81,9 +84,9 @@ func (s *TestCluster) SetupTestDatabase() {
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {
 		temporalPackageDir, err := getTemporalPackageDir()
 		if err != nil {
-			log.Fatal(err)
+			s.logger.Fatal("Unable to get package dir.", tag.Error(err))
 		}
-		schemaDir = temporalPackageDir + schemaDir
+		schemaDir = path.Join(temporalPackageDir, schemaDir)
 	}
 	s.LoadSchema([]string{"schema.sql"}, schemaDir)
 	s.LoadVisibilitySchema([]string{"schema.sql"}, schemaDir)
@@ -151,29 +154,36 @@ func (s *TestCluster) DropDatabase() {
 
 // LoadSchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := schemaDir + "/temporal"
+	workflowSchemaDir := path.Join(schemaDir, "temporal")
 	err := s.loadDatabaseSchema(workflowSchemaDir, fileNames, true)
 	if err != nil {
-		log.Fatal(err)
+		s.logger.Fatal("loadDatabaseSchema", tag.Error(err))
 	}
 }
 
 // LoadVisibilitySchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := schemaDir + "/visibility"
+	workflowSchemaDir := path.Join(schemaDir, "visibility")
 	err := s.loadDatabaseSchema(workflowSchemaDir, fileNames, true)
 	if err != nil {
-		log.Fatal(err)
+		s.logger.Fatal("loadDatabaseVisibilitySchema", tag.Error(err))
 	}
 }
 
 func getTemporalPackageDir() (string, error) {
-	temporalPackageDir, err := os.Getwd()
-	if err != nil {
-		panic(err)
+	var err error
+	temporalPackageDir := os.Getenv("TEMPORAL_ROOT")
+	if temporalPackageDir == "" {
+		temporalPackageDir, err = os.Getwd()
+		if err != nil {
+			panic(err)
+		}
+		temporalIndex := strings.LastIndex(temporalPackageDir, "/temporal/")
+		if temporalIndex == -1 {
+			panic("Unable to find repo path. Use env var TEMPORAL_ROOT or clone the repo into folder named 'temporal'")
+		}
+		temporalPackageDir = temporalPackageDir[:temporalIndex+len("/temporal/")]
 	}
-	temporalIndex := strings.LastIndex(temporalPackageDir, "/temporal/")
-	temporalPackageDir = temporalPackageDir[:temporalIndex+len("/temporal/")]
 	return temporalPackageDir, err
 }
 

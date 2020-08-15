@@ -32,18 +32,19 @@ import (
 	"math"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/collection"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
-	"github.com/temporalio/temporal/common/primitives"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/primitives"
 )
 
 type sqlExecutionManager struct {
@@ -158,11 +159,11 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 						workflowID, row.LastWriteVersion, request.PreviousLastWriteVersion),
 				}
 			}
-			if row.State != p.WorkflowStateCompleted {
+			if row.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 				return nil, &p.CurrentWorkflowConditionFailedError{
 					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
 						"State: %v, Expected: %v",
-						workflowID, row.State, p.WorkflowStateCompleted),
+						workflowID, row.State, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED),
 				}
 			}
 			runIDStr := row.RunID.String()
@@ -238,27 +239,20 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 	// Build partial from proto
 	executionInfo := p.ProtoWorkflowExecutionToPartialInternalExecution(info, executionState, executionsRow.NextEventID)
 
-	state := &p.InternalWorkflowMutableState{ExecutionInfo: executionInfo}
+	state := &p.InternalWorkflowMutableState{ExecutionInfo: executionInfo, VersionHistories: info.GetVersionHistories()}
 
 	if info.ReplicationData != nil {
-		state.ReplicationState = &p.ReplicationState{}
+		state.ReplicationState = &persistenceblobs.ReplicationState{}
 
 		state.ReplicationState.StartVersion = info.StartVersion
 		state.ReplicationState.CurrentVersion = info.CurrentVersion
 		state.ReplicationState.LastWriteVersion = executionsRow.LastWriteVersion
-		state.ReplicationState.LastWriteEventID = info.ReplicationData.LastWriteEventId
+		state.ReplicationState.LastWriteEventId = info.ReplicationData.LastWriteEventId
 		state.ReplicationState.LastReplicationInfo = info.ReplicationData.LastReplicationInfo
 
 		if state.ReplicationState.LastReplicationInfo == nil {
-			state.ReplicationState.LastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo, 0)
+			state.ReplicationState.LastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo, 0)
 		}
-	}
-
-	if info.GetVersionHistories() != nil {
-		state.VersionHistories = p.NewDataBlob(
-			info.GetVersionHistories(),
-			common.EncodingType(info.GetVersionHistoriesEncoding()),
-		)
 	}
 
 	// Populate Maps
@@ -725,6 +719,30 @@ func (m *sqlExecutionManager) ListConcreteExecutions(
 	return nil, serviceerror.NewUnimplemented("ListConcreteExecutions is not implemented")
 }
 
+func (m *sqlExecutionManager) GetTransferTask(request *persistence.GetTransferTaskRequest) (*persistence.GetTransferTaskResponse, error) {
+	rows, err := m.db.SelectFromTransferTasks(&sqlplugin.TransferTasksFilter{ShardID: int(request.ShardID), TaskID: &request.TaskID})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetTransferTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
+		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTransferTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
+	}
+
+	if len(rows) == 0 {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTransferTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+	}
+
+	transferRow := rows[0]
+	transferInfo, err := serialization.TransferTaskInfoFromBlob(transferRow.Data, transferRow.DataEncoding)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &persistence.GetTransferTaskResponse{TransferTaskInfo: transferInfo}
+
+	return resp, nil
+}
+
 func (m *sqlExecutionManager) GetTransferTasks(
 	request *p.GetTransferTasksRequest,
 ) (*p.GetTransferTasksResponse, error) {
@@ -772,6 +790,30 @@ func (m *sqlExecutionManager) RangeCompleteTransferTask(
 		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err))
 	}
 	return nil
+}
+
+func (m *sqlExecutionManager) GetReplicationTask(request *persistence.GetReplicationTaskRequest) (*persistence.GetReplicationTaskResponse, error) {
+	rows, err := m.db.SelectFromReplicationTasks(&sqlplugin.ReplicationTasksFilter{ShardID: int(request.ShardID), TaskID: request.TaskID})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetReplicationTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
+		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetReplicationTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
+	}
+
+	if len(rows) == 0 {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetReplicationTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+	}
+
+	replicationRow := rows[0]
+	replicationInfo, err := serialization.ReplicationTaskInfoFromBlob(replicationRow.Data, replicationRow.DataEncoding)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &persistence.GetReplicationTaskResponse{ReplicationTaskInfo: replicationInfo}
+
+	return resp, nil
 }
 
 func (m *sqlExecutionManager) GetReplicationTasks(
@@ -829,11 +871,11 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 			return nil, err
 		}
 
-		var lastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
-		if info.GetTaskType() == p.ReplicationTaskTypeHistory {
-			lastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo, len(info.LastReplicationInfo))
+		var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
+		if info.GetTaskType() == enumsspb.TASK_TYPE_REPLICATION_HISTORY {
+			lastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo, len(info.LastReplicationInfo))
 			for k, v := range info.LastReplicationInfo {
-				lastReplicationInfo[k] = &replicationgenpb.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.GetLastEventId()}
+				lastReplicationInfo[k] = &replicationspb.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.GetLastEventId()}
 			}
 		}
 
@@ -956,6 +998,30 @@ func (t *timerTaskPageToken) deserialize(payload []byte) error {
 	return json.Unmarshal(payload, t)
 }
 
+func (m *sqlExecutionManager) GetTimerTask(request *persistence.GetTimerTaskRequest) (*persistence.GetTimerTaskResponse, error) {
+	rows, err := m.db.SelectFromTimerTasks(&sqlplugin.TimerTasksFilter{ShardID: int(request.ShardID), TaskID: int64(request.TaskID), VisibilityTimestamp: &request.VisibilityTimestamp})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetTimerTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
+		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
+	}
+
+	if len(rows) == 0 {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+	}
+
+	timerRow := rows[0]
+	timerInfo, err := serialization.TimerTaskInfoFromBlob(timerRow.Data, timerRow.DataEncoding)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &persistence.GetTimerTaskResponse{TimerTaskInfo: timerInfo}
+
+	return resp, nil
+}
+
 func (m *sqlExecutionManager) GetTimerIndexTasks(
 	request *p.GetTimerIndexTasksRequest,
 ) (*p.GetTimerIndexTasksResponse, error) {
@@ -989,14 +1055,14 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 	}
 
 	if len(resp.Timers) > request.BatchSize {
-		goVisibilityTimestamp, err := types.TimestampFromProto(resp.Timers[request.BatchSize].VisibilityTimestamp)
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: error converting time for page token: %v", err))
+		goVisibilityTimestamp := resp.Timers[request.BatchSize].VisibilityTime
+		if goVisibilityTimestamp == nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: time for page token is nil - TaskId '%v'", resp.Timers[request.BatchSize].TaskId))
 		}
 
 		pageToken = &timerTaskPageToken{
 			TaskID:    resp.Timers[request.BatchSize].GetTaskId(),
-			Timestamp: goVisibilityTimestamp,
+			Timestamp: *goVisibilityTimestamp,
 		}
 		resp.Timers = resp.Timers[:request.BatchSize]
 		nextToken, err := pageToken.serialize()
@@ -1052,7 +1118,7 @@ func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationT
 		ShardID:           m.shardID,
 		TaskID:            replicationTask.GetTaskId(),
 		Data:              blob.Data,
-		DataEncoding:      string(blob.Encoding),
+		DataEncoding:      blob.Encoding.String(),
 	}
 
 	_, err = m.db.InsertIntoReplicationTasksDLQ(row)

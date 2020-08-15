@@ -3,16 +3,15 @@ Quickstart for localhost development
 
 Install [docker](https://docs.docker.com/engine/installation/) and [docker-compose](https://docs.docker.com/compose/install/).
 
-Following steps will bring up the docker container running Temporal server
-along with all its dependencies (cassandra, statsd, graphite). Exposes Temporal
-frontend on port `7233` and grafana metrics frontend on port `8080`.
+The following steps will bring up a docker container that is running the Temporal server
+and its dependencies (cassandra). The Temporal
+frontend is exposed on port `7233`.
 
 ```bash
 $ cd docker
 $ docker-compose up
 ```
 
-View metrics at `localhost:8080/dashboard`.
 View Temporal web UI at `localhost:8088`.
 Use Temporal CLI with `docker run --network=host --rm temporalio/tctl:latest`.
 
@@ -25,11 +24,11 @@ Using a pre-built image
 -----------------------
 With every tagged release of the temporal server, there is also a corresponding
 docker image that's uploaded to docker hub. In addition, the release will also
-contain a **docker.tar.gz** file (docker-compose startup scripts). 
+contain a **docker.tar.gz** file (docker-compose startup scripts).
 [Download](https://github.com/temporalio/temporal/releases/latest) the latest **docker.tar.gz**.
 
 Execute the following
-commands to start a pre-built image along with all dependencies (`cassandra`/`statsd`).
+commands to start a pre-built image along with all dependencies (i.e. `cassandra`, `mysql`, `elasticsearch`, etc).
 
 ```bash
 $ curl -L https://github.com/temporalio/temporal/releases/latest/download/docker.tar.gz | tar -xz
@@ -69,11 +68,11 @@ Run Temporal with ElasticSearch for enhanced visibility queries:
 
 ```bash
 $ docker-compose -f docker-compose-es.yml up
-``` 
+```
 
 Quickstart for production
 =========================
-In a typical production setting, dependencies (`cassandra`, `statsd` server) are
+In a typical production setting, dependencies (`cassandra`) are
 managed/started independently of the `temporal-server`. To use the container in
 a production setting, use the following command:
 
@@ -83,7 +82,6 @@ $ docker run -e CASSANDRA_SEEDS=10.x.x.x                  -- csv of cassandra se
     -e VISIBILITY_KEYSPACE=<visibility_keyspace>        -- Cassandra visibility keyspace
     -e SKIP_SCHEMA_SETUP=true                           -- do not setup cassandra schema during startup
     -e RINGPOP_SEEDS=10.x.x.x,10.x.x.x  \               -- csv of ipaddrs for gossip bootstrap
-    -e STATSD_ENDPOINT=10.x.x.x:8125                    -- statsd server endpoint
     -e NUM_HISTORY_SHARDS=1024  \                       -- Number of history shards
     -e SERVICES=history,matching \                      -- Spinup only the provided services
     -e LOG_LEVEL=debug,info \                           -- Logging level

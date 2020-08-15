@@ -7,7 +7,7 @@ This doc is for contributors to Temporal server (hopefully that's you!)
 ## Installing prerequisites
 
 ### Build prerequisites 
-* [Go Lang](https://golang.org/):
+* [Go Lang](https://golang.org/) (minimum version required is 1.14):
   - Install on OS X with `brew install go`.
   - Install on Ubuntu with `sudo apt install golang`.
 * [Protocol bufffers compiler](https://github.com/protocolbuffers/protobuf/):
@@ -20,7 +20,7 @@ This doc is for contributors to Temporal server (hopefully that's you!)
 
 ## Checking out the code
 
-Clone the repo into the preffered location:
+Temporal uses go modules, there is no dependency on `$GOPATH` variable. Clone the repo into the preffered location:
 ```bash
 $ git clone https://github.com/temporalio/temporal.git
 ```
@@ -34,7 +34,7 @@ $ make
 
 It will install all other build dependencies and build the binaries.
 
-Futher you can build binaries without running test with:
+Futher you can build binaries without running tests with:
 ```bash
 $ make bins
 ```

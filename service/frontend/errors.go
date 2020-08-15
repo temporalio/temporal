@@ -24,13 +24,13 @@
 
 package frontend
 
-import "go.temporal.io/temporal-proto/serviceerror"
+import "go.temporal.io/api/serviceerror"
 
 var (
 	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace not set on request.")
 	errTaskTokenNotSet                                    = serviceerror.NewInvalidArgument("Task token not set on request.")
 	errInvalidTaskToken                                   = serviceerror.NewInvalidArgument("Invalid TaskToken.")
-	errTaskListNotSet                                     = serviceerror.NewInvalidArgument("TaskList is not set on request.")
+	errTaskQueueNotSet                                    = serviceerror.NewInvalidArgument("TaskQueue is not set on request.")
 	errExecutionNotSet                                    = serviceerror.NewInvalidArgument("Execution is not set on request.")
 	errWorkflowIDNotSet                                   = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
 	errActivityIDNotSet                                   = serviceerror.NewInvalidArgument("ActivityId is not set on request.")
@@ -55,10 +55,9 @@ var (
 	errWorkflowTypeTooLong                                = serviceerror.NewInvalidArgument("WorkflowType length exceeds limit.")
 	errWorkflowIDTooLong                                  = serviceerror.NewInvalidArgument("WorkflowId length exceeds limit.")
 	errSignalNameTooLong                                  = serviceerror.NewInvalidArgument("SignalName length exceeds limit.")
-	errTaskListTooLong                                    = serviceerror.NewInvalidArgument("TaskList length exceeds limit.")
+	errTaskQueueTooLong                                   = serviceerror.NewInvalidArgument("TaskQueue length exceeds limit.")
 	errRequestIDTooLong                                   = serviceerror.NewInvalidArgument("RequestId length exceeds limit.")
 	errIdentityTooLong                                    = serviceerror.NewInvalidArgument("Identity length exceeds limit.")
-	errStartTimeFilterNotSet                              = serviceerror.NewInvalidArgument("StartTimeFilter is not set on request.")
 	errEarliestTimeIsGreaterThanLatestTime                = serviceerror.NewInvalidArgument("EarliestTime in StartTimeFilter should not be larger than LatestTime.")
 	errPageSizeTooBig                                     = serviceerror.NewInvalidArgument("PageSize is larger than allowed %d.")
 	errClusterIsNotConfiguredForVisibilityArchival        = serviceerror.NewInvalidArgument("Cluster is not configured for visibility archival.")
@@ -77,6 +76,8 @@ var (
 	errInvalidEventQueryRange                             = serviceerror.NewInvalidArgument("Invalid event query range.")
 	errUnknownValueType                                   = serviceerror.NewInvalidArgument("Unknown value type, %v.")
 	errDLQTypeIsNotSupported                              = serviceerror.NewInvalidArgument("The DLQ type is not supported.")
+	errFailureMustHaveApplicationFailureInfo              = serviceerror.NewInvalidArgument("Failure must have ApplicationFailureInfo.")
+	errStatusFilterMustBeNotRunning                       = serviceerror.NewInvalidArgument("StatusFilter must be specified and must be not Running.")
 	errShuttingDown                                       = serviceerror.NewInternal("Shutting down")
 
 	errFailedUpdateDynamicConfig = serviceerror.NewInternal("Failed to update dynamic config, err: %v.")

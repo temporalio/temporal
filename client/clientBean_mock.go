@@ -32,10 +32,10 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	admin "github.com/temporalio/temporal/client/admin"
-	frontend "github.com/temporalio/temporal/client/frontend"
-	history "github.com/temporalio/temporal/client/history"
-	matching "github.com/temporalio/temporal/client/matching"
+	admin "go.temporal.io/server/client/admin"
+	frontend "go.temporal.io/server/client/frontend"
+	history "go.temporal.io/server/client/history"
+	matching "go.temporal.io/server/client/matching"
 )
 
 // MockBean is a mock of Bean interface.

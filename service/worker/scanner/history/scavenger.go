@@ -28,18 +28,19 @@ import (
 	"context"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal/activity"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/activity"
 	"golang.org/x/time/rate"
+
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -81,11 +82,11 @@ const (
 	rpsPerConcurrency = 50
 	pageSize          = 1000
 	// only clean up history branches that older than this threshold
-	// we double the MaxWorkflowRetentionPeriodInDays to avoid racing condition with history archival.
+	// we double the MaxWorkflowRetentionPeriod to avoid racing condition with history archival.
 	// Our history archiver delete mutable state, and then upload history to blob store and then delete history.
 	// This scanner will face racing condition with archiver because it relys on describe mutable state returning entityNotExist error.
-	// That's why we need to keep MaxWorkflowRetentionPeriodInDays stable and not decreasing all the time.
-	cleanUpThreshold = time.Hour * 24 * common.MaxWorkflowRetentionPeriodInDays * 2
+	// That's why we need to keep MaxWorkflowRetentionPeriod stable and not decreasing all the time.
+	cleanUpThreshold = common.MaxWorkflowRetentionPeriod * 2
 )
 
 // NewScavenger returns an instance of history scavenger daemon
@@ -141,7 +142,7 @@ func (s *Scavenger) Run(ctx context.Context) (ScavengerHeartbeatDetails, error) 
 		errorsOnSplitting := 0
 		// send all tasks
 		for _, br := range resp.Branches {
-			if time.Now().Add(-cleanUpThreshold).Before(br.ForkTime) {
+			if time.Now().UTC().Add(-cleanUpThreshold).Before(timestamp.TimeValue(br.ForkTime)) {
 				batchCount--
 				skips++
 				s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerSkipCount)
@@ -238,7 +239,7 @@ func (s *Scavenger) startTaskProcessor(
 			// if not then the history branch is garbage, we need to delete the history branch
 			_, err = s.client.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
 				NamespaceId: task.namespaceID,
-				Execution: &executionpb.WorkflowExecution{
+				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: task.workflowID,
 					RunId:      task.runID,
 				},
@@ -248,9 +249,7 @@ func (s *Scavenger) startTaskProcessor(
 				if _, ok := err.(*serviceerror.NotFound); ok {
 					//deleting history branch
 					var branchToken []byte
-					branchToken, err = persistence.NewHistoryBranchTokenByBranchID(
-						primitives.MustParseUUID(task.treeID),
-						primitives.MustParseUUID(task.branchID))
+					branchToken, err = persistence.NewHistoryBranchTokenByBranchID(task.treeID, task.branchID)
 					if err != nil {
 						respCh <- err
 						s.logger.Error("encounter error when creating branch token",

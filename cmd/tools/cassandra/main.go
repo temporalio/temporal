@@ -27,7 +27,7 @@ package main
 import (
 	"os"
 
-	"github.com/temporalio/temporal/tools/cassandra"
+	"go.temporal.io/server/tools/cassandra"
 )
 
 func main() {

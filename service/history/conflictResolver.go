@@ -22,20 +22,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination conflictResolver_mock.go -self_package github.com/temporalio/temporal/service/history
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination conflictResolver_mock.go -self_package go.temporal.io/server/service/history
 
 package history
 
 import (
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -43,7 +45,7 @@ type (
 		reset(
 			prevRunID string,
 			prevLastWriteVersion int64,
-			prevState int,
+			prevState enumsspb.WorkflowExecutionState,
 			requestID string,
 			replayEventID int64,
 			info *persistence.WorkflowExecutionInfo,
@@ -75,7 +77,7 @@ func newConflictResolver(shard ShardContext, context workflowExecutionContext, h
 func (r *conflictResolverImpl) reset(
 	prevRunID string,
 	prevLastWriteVersion int64,
-	prevState int,
+	prevState enumsspb.WorkflowExecutionState,
 	requestID string,
 	replayEventID int64,
 	info *persistence.WorkflowExecutionInfo,
@@ -96,7 +98,7 @@ func (r *conflictResolverImpl) reset(
 	var nextPageToken []byte
 	var resetMutableStateBuilder *mutableStateBuilder
 	var sBuilder stateBuilder
-	var history []*eventpb.HistoryEvent
+	var history []*historypb.HistoryEvent
 	var totalSize int64
 
 	eventsToApply := replayNextEventID - common.FirstEventID
@@ -175,7 +177,7 @@ func (r *conflictResolverImpl) reset(
 		resetMutableStateBuilder.AddTransferTasks(&persistence.UpsertWorkflowSearchAttributesTask{})
 	}
 
-	r.logger.Info("All events applied for execution.", tag.WorkflowResetNextEventID(resetMutableStateBuilder.GetNextEventID()))
+	r.logger.Info("All events applied for workflowspb.", tag.WorkflowResetNextEventID(resetMutableStateBuilder.GetNextEventID()))
 	r.context.setHistorySize(totalSize)
 	if err := r.context.conflictResolveWorkflowExecution(
 		startTime,
@@ -197,8 +199,8 @@ func (r *conflictResolverImpl) reset(
 	return r.context.loadWorkflowExecution()
 }
 
-func (r *conflictResolverImpl) getHistory(namespaceID string, execution executionpb.WorkflowExecution, firstEventID,
-	nextEventID int64, nextPageToken []byte, branchToken []byte) ([]*eventpb.HistoryEvent, int, int64, []byte, error) {
+func (r *conflictResolverImpl) getHistory(namespaceID string, execution commonpb.WorkflowExecution, firstEventID,
+	nextEventID int64, nextPageToken []byte, branchToken []byte) ([]*historypb.HistoryEvent, int, int64, []byte, error) {
 
 	response, err := r.historyV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,

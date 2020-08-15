@@ -25,14 +25,15 @@
 package persistence
 
 import (
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	"go.temporal.io/temporal-proto/serviceerror"
+	enumspb "go.temporal.io/api/enums/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -152,17 +153,16 @@ func (m *metadataManagerImpl) InitializeSystemNamespaces(currentClusterName stri
 	_, err := m.CreateNamespace(&CreateNamespaceRequest{
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{
-				Id:          primitives.MustParseUUID(common.SystemNamespaceID),
+				Id:          common.SystemNamespaceID,
 				Name:        common.SystemLocalNamespace,
-				Status:      namespacepb.NamespaceStatus_Registered,
+				State:       enumspb.NAMESPACE_STATE_REGISTERED,
 				Description: "Temporal internal system namespace",
 				Owner:       "temporal-core@temporal.io",
 			},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays:            common.SystemNamespaceRetentionDays,
-				HistoryArchivalStatus:    namespacepb.ArchivalStatus_Disabled,
-				VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
-				EmitMetric:               true,
+				Retention:               timestamp.DurationPtr(common.SystemNamespaceRetentionDays),
+				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
+				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 			},
 			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: currentClusterName,

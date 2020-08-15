@@ -29,8 +29,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	pt "github.com/temporalio/temporal/common/persistence/persistence-tests"
-	"github.com/temporalio/temporal/environment"
+	pt "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/environment"
 )
 
 const (
@@ -107,7 +107,7 @@ func TestClusterMetadataPersistence(t *testing.T) {
 }
 
 // TODO flaky test in buildkite
-// https://github.com/temporalio/temporal/issues/2877
+// https://go.temporal.io/server/issues/2877
 /*
 FAIL: TestSQLQueuePersistence/TestNamespaceReplicationQueue (0.26s)
         queuePersistenceTest.go:102:

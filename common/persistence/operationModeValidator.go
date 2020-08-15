@@ -27,7 +27,9 @@ package persistence
 import (
 	"fmt"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 // NOTE: when modifying this file, plz make each case clear,
@@ -50,8 +52,8 @@ func ValidateCreateWorkflowModeState(
 	case CreateWorkflowModeBrandNew,
 		CreateWorkflowModeWorkflowIDReuse,
 		CreateWorkflowModeContinueAsNew:
-		if workflowState == WorkflowStateZombie ||
-			workflowState == WorkflowStateCompleted {
+		if workflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE ||
+			workflowState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return newInvalidCreateWorkflowMode(
 				mode,
 				workflowState,
@@ -60,9 +62,9 @@ func ValidateCreateWorkflowModeState(
 		return nil
 
 	case CreateWorkflowModeZombie:
-		if workflowState == WorkflowStateCreated ||
-			workflowState == WorkflowStateRunning ||
-			workflowState == WorkflowStateCompleted {
+		if workflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+			workflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
+			workflowState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return newInvalidCreateWorkflowMode(
 				mode,
 				workflowState,
@@ -86,7 +88,7 @@ func ValidateUpdateWorkflowModeState(
 	if err := checkWorkflowState(currentWorkflowState); err != nil {
 		return err
 	}
-	var newWorkflowState *int
+	var newWorkflowState *enumsspb.WorkflowExecutionState
 	if newWorkflowSnapshot != nil {
 		newWorkflowState = &newWorkflowSnapshot.ExecutionInfo.State
 		if err := checkWorkflowState(*newWorkflowState); err != nil {
@@ -105,17 +107,17 @@ func ValidateUpdateWorkflowModeState(
 
 		// case 1
 		if newWorkflowState == nil {
-			if currentWorkflowState == WorkflowStateZombie {
+			if currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 				return newInvalidUpdateWorkflowMode(mode, currentWorkflowState)
 			}
 			return nil
 		}
 
 		// case 2
-		if currentWorkflowState == WorkflowStateCreated ||
-			currentWorkflowState == WorkflowStateRunning ||
-			*newWorkflowState == WorkflowStateZombie ||
-			*newWorkflowState == WorkflowStateCompleted {
+		if currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+			currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
+			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE ||
+			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return newInvalidUpdateWorkflowWithNewMode(mode, currentWorkflowState, *newWorkflowState)
 		}
 		return nil
@@ -130,19 +132,19 @@ func ValidateUpdateWorkflowModeState(
 
 		// case 1
 		if newWorkflowState == nil {
-			if currentWorkflowState == WorkflowStateCreated ||
-				currentWorkflowState == WorkflowStateRunning {
+			if currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+				currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING {
 				return newInvalidUpdateWorkflowMode(mode, currentWorkflowState)
 			}
 			return nil
 		}
 
 		// case 2
-		if currentWorkflowState == WorkflowStateCreated ||
-			currentWorkflowState == WorkflowStateRunning ||
-			*newWorkflowState == WorkflowStateCreated ||
-			*newWorkflowState == WorkflowStateRunning ||
-			*newWorkflowState == WorkflowStateCompleted {
+		if currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+			currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
+			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
+			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return newInvalidUpdateWorkflowWithNewMode(
 				mode,
 				currentWorkflowState,
@@ -168,14 +170,14 @@ func ValidateConflictResolveWorkflowModeState(
 	if err := checkWorkflowState(resetWorkflowState); err != nil {
 		return err
 	}
-	var newWorkflowState *int
+	var newWorkflowState *enumsspb.WorkflowExecutionState
 	if newWorkflowSnapshot != nil {
 		newWorkflowState = &newWorkflowSnapshot.ExecutionInfo.State
 		if err := checkWorkflowState(*newWorkflowState); err != nil {
 			return err
 		}
 	}
-	var currentWorkflowState *int
+	var currentWorkflowState *enumsspb.WorkflowExecutionState
 	if currentWorkflowMutation != nil {
 		currentWorkflowState = &currentWorkflowMutation.ExecutionInfo.State
 		if err := checkWorkflowState(*currentWorkflowState); err != nil {
@@ -208,7 +210,7 @@ func ValidateConflictResolveWorkflowModeState(
 		if currentWorkflowState == nil {
 			// case 1
 			if newWorkflowState == nil {
-				if resetWorkflowState == WorkflowStateZombie {
+				if resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 					return newInvalidConflictResolveWorkflowMode(
 						mode,
 						resetWorkflowState,
@@ -218,11 +220,11 @@ func ValidateConflictResolveWorkflowModeState(
 			}
 
 			// case 2
-			if resetWorkflowState == WorkflowStateCreated ||
-				resetWorkflowState == WorkflowStateRunning ||
-				resetWorkflowState == WorkflowStateZombie ||
-				*newWorkflowState == WorkflowStateZombie ||
-				*newWorkflowState == WorkflowStateCompleted {
+			if resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+				resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
+				resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE ||
+				*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE ||
+				*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 				return newInvalidConflictResolveWorkflowWithNewMode(
 					mode,
 					resetWorkflowState,
@@ -235,9 +237,9 @@ func ValidateConflictResolveWorkflowModeState(
 		// case 3 & 4
 		// case 3
 		if newWorkflowState == nil {
-			if *currentWorkflowState == WorkflowStateCreated ||
-				*currentWorkflowState == WorkflowStateRunning ||
-				resetWorkflowState == WorkflowStateZombie {
+			if *currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+				*currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
+				resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 				return newInvalidConflictResolveWorkflowWithCurrentMode(
 					mode,
 					resetWorkflowState,
@@ -248,13 +250,13 @@ func ValidateConflictResolveWorkflowModeState(
 		}
 
 		// case 4
-		if *currentWorkflowState == WorkflowStateCreated ||
-			*currentWorkflowState == WorkflowStateRunning ||
-			resetWorkflowState == WorkflowStateCreated ||
-			resetWorkflowState == WorkflowStateRunning ||
-			resetWorkflowState == WorkflowStateZombie ||
-			*newWorkflowState == WorkflowStateZombie ||
-			*newWorkflowState == WorkflowStateCompleted {
+		if *currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+			*currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
+			resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+			resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
+			resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE ||
+			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE ||
+			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return newInvalidConflictResolveWorkflowWithCurrentWithNewMode(
 				mode,
 				resetWorkflowState,
@@ -280,8 +282,8 @@ func ValidateConflictResolveWorkflowModeState(
 
 		// case 1
 		if newWorkflowState == nil {
-			if resetWorkflowState == WorkflowStateCreated ||
-				resetWorkflowState == WorkflowStateRunning {
+			if resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+				resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING {
 				return newInvalidConflictResolveWorkflowMode(
 					mode,
 					resetWorkflowState,
@@ -291,12 +293,12 @@ func ValidateConflictResolveWorkflowModeState(
 		}
 
 		// case 2
-		if resetWorkflowState == WorkflowStateCreated ||
-			resetWorkflowState == WorkflowStateRunning ||
-			resetWorkflowState == WorkflowStateZombie ||
-			*newWorkflowState == WorkflowStateCreated ||
-			*newWorkflowState == WorkflowStateRunning ||
-			*newWorkflowState == WorkflowStateCompleted {
+		if resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+			resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
+			resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE ||
+			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
+			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return newInvalidConflictResolveWorkflowWithNewMode(
 				mode,
 				resetWorkflowState,
@@ -310,13 +312,13 @@ func ValidateConflictResolveWorkflowModeState(
 	}
 }
 
-func checkWorkflowState(state int) error {
+func checkWorkflowState(state enumsspb.WorkflowExecutionState) error {
 	switch state {
-	case WorkflowStateCreated,
-		WorkflowStateRunning,
-		WorkflowStateZombie,
-		WorkflowStateCompleted,
-		WorkflowStateCorrupted:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
 		return nil
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
@@ -325,7 +327,7 @@ func checkWorkflowState(state int) error {
 
 func newInvalidCreateWorkflowMode(
 	mode CreateWorkflowMode,
-	workflowState int,
+	workflowState enumsspb.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow create mode %v, state: %v",
@@ -337,7 +339,7 @@ func newInvalidCreateWorkflowMode(
 
 func newInvalidUpdateWorkflowMode(
 	mode UpdateWorkflowMode,
-	currentWorkflowState int,
+	currentWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow update mode %v, state: %v",
@@ -349,8 +351,8 @@ func newInvalidUpdateWorkflowMode(
 
 func newInvalidUpdateWorkflowWithNewMode(
 	mode UpdateWorkflowMode,
-	currentWorkflowState int,
-	newWorkflowState int,
+	currentWorkflowState enumsspb.WorkflowExecutionState,
+	newWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow update mode %v, current state: %v, new state: %v",
@@ -363,7 +365,7 @@ func newInvalidUpdateWorkflowWithNewMode(
 
 func newInvalidConflictResolveWorkflowMode(
 	mode ConflictResolveWorkflowMode,
-	resetWorkflowState int,
+	resetWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v",
@@ -375,8 +377,8 @@ func newInvalidConflictResolveWorkflowMode(
 
 func newInvalidConflictResolveWorkflowWithNewMode(
 	mode ConflictResolveWorkflowMode,
-	resetWorkflowState int,
-	newWorkflowState int,
+	resetWorkflowState enumsspb.WorkflowExecutionState,
+	newWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v",
@@ -389,8 +391,8 @@ func newInvalidConflictResolveWorkflowWithNewMode(
 
 func newInvalidConflictResolveWorkflowWithCurrentMode(
 	mode ConflictResolveWorkflowMode,
-	resetWorkflowState int,
-	currentWorkflowState int,
+	resetWorkflowState enumsspb.WorkflowExecutionState,
+	currentWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, current state: %v",
@@ -403,9 +405,9 @@ func newInvalidConflictResolveWorkflowWithCurrentMode(
 
 func newInvalidConflictResolveWorkflowWithCurrentWithNewMode(
 	mode ConflictResolveWorkflowMode,
-	resetWorkflowState int,
-	newWorkflowState int,
-	currentWorkflowState int,
+	resetWorkflowState enumsspb.WorkflowExecutionState,
+	newWorkflowState enumsspb.WorkflowExecutionState,
+	currentWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v, current state: %v",

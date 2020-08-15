@@ -27,13 +27,13 @@ package config
 import (
 	"fmt"
 	"net/http"
-	"sync/atomic"
-
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
 
 	// DO NOT REMOVE THE LINE BELOW
 	_ "net/http/pprof"
+	"sync/atomic"
+
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 type (

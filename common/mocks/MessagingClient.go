@@ -25,7 +25,7 @@
 package mocks
 
 import (
-	"github.com/temporalio/temporal/common/messaging"
+	"go.temporal.io/server/common/messaging"
 )
 
 type (

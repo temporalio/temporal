@@ -37,5 +37,5 @@ func (n *nopStopwatchRecorder) RecordStopwatch(stopwatchStart time.Time) {}
 
 // NopStopwatch return a fake tally stop watch
 func NopStopwatch() tally.Stopwatch {
-	return tally.NewStopwatch(time.Now(), &nopStopwatchRecorder{})
+	return tally.NewStopwatch(time.Now().UTC(), &nopStopwatchRecorder{})
 }

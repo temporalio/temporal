@@ -31,12 +31,13 @@ import (
 
 	"github.com/urfave/cli"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/collection"
+	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/collection"
 )
 
 const (
@@ -63,7 +64,7 @@ func AdminGetDLQMessages(c *cli.Context) {
 	}
 
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
-		resp, err := adminClient.ReadDLQMessages(ctx, &adminservice.ReadDLQMessagesRequest{
+		resp, err := adminClient.GetDLQMessages(ctx, &adminservice.GetDLQMessagesRequest{
 			Type:                  toQueueType(dlqType),
 			InclusiveEndMessageId: lastMessageID,
 			MaximumPageSize:       defaultPageSize,
@@ -87,7 +88,7 @@ func AdminGetDLQMessages(c *cli.Context) {
 			ErrorAndExit(fmt.Sprintf("fail to read dlq message. Last read message id: %v", lastReadMessageID), err)
 		}
 
-		task := item.(*replicationgenpb.ReplicationTask)
+		task := item.(*replicationspb.ReplicationTask)
 		encoder := codec.NewJSONPBIndentEncoder(" ")
 		taskStr, err := encoder.Encode(task)
 		if err != nil {
@@ -162,16 +163,16 @@ func AdminMergeDLQMessages(c *cli.Context) {
 	fmt.Println("Successfully merged all messages.")
 }
 
-func toQueueType(dlqType string) commongenpb.DLQType {
+func toQueueType(dlqType string) enumsspb.DeadLetterQueueType {
 	switch dlqType {
 	case "namespace":
-		return commongenpb.DLQType_Namespace
+		return enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE
 	case "history":
-		return commongenpb.DLQType_Replication
+		return enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION
 	default:
 		ErrorAndExit("The queue type is not supported.", fmt.Errorf("the queue type is not supported. Type: %v", dlqType))
 	}
-	return commongenpb.DLQType_Namespace
+	return enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE
 }
 
 func confirmOrExit(message string) {

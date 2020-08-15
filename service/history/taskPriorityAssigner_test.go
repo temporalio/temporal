@@ -32,14 +32,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -157,7 +156,7 @@ func (s *taskPriorityAssignerSuite) TestAssign_StandbyTask() {
 
 	mockTask := NewMockqueueTask(s.controller)
 	mockTask.EXPECT().GetQueueType().Return(transferQueueType).Times(1)
-	mockTask.EXPECT().GetNamespaceID().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
+	mockTask.EXPECT().GetNamespaceID().Return(testNamespaceID).Times(1)
 	mockTask.EXPECT().SetPriority(getTaskPriority(taskLowPriorityClass, taskDefaultPrioritySubclass)).Times(1)
 
 	err := s.priorityAssigner.Assign(mockTask)
@@ -169,7 +168,7 @@ func (s *taskPriorityAssignerSuite) TestAssign_TransferTask() {
 
 	mockTask := NewMockqueueTask(s.controller)
 	mockTask.EXPECT().GetQueueType().Return(transferQueueType).AnyTimes()
-	mockTask.EXPECT().GetNamespaceID().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
+	mockTask.EXPECT().GetNamespaceID().Return(testNamespaceID).Times(1)
 	mockTask.EXPECT().SetPriority(getTaskPriority(taskHighPriorityClass, taskDefaultPrioritySubclass)).Times(1)
 
 	err := s.priorityAssigner.Assign(mockTask)
@@ -181,7 +180,7 @@ func (s *taskPriorityAssignerSuite) TestAssign_TimerTask() {
 
 	mockTask := NewMockqueueTask(s.controller)
 	mockTask.EXPECT().GetQueueType().Return(timerQueueType).AnyTimes()
-	mockTask.EXPECT().GetNamespaceID().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
+	mockTask.EXPECT().GetNamespaceID().Return(testNamespaceID).Times(1)
 	mockTask.EXPECT().SetPriority(getTaskPriority(taskHighPriorityClass, taskDefaultPrioritySubclass)).Times(1)
 
 	err := s.priorityAssigner.Assign(mockTask)
@@ -194,7 +193,7 @@ func (s *taskPriorityAssignerSuite) TestAssign_ThrottledTask() {
 	for i := 0; i != s.testTaskProcessRPS*2; i++ {
 		mockTask := NewMockqueueTask(s.controller)
 		mockTask.EXPECT().GetQueueType().Return(timerQueueType).AnyTimes()
-		mockTask.EXPECT().GetNamespaceID().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
+		mockTask.EXPECT().GetNamespaceID().Return(testNamespaceID).Times(1)
 		if i < s.testTaskProcessRPS {
 			mockTask.EXPECT().SetPriority(getTaskPriority(taskHighPriorityClass, taskDefaultPrioritySubclass)).Times(1)
 		} else {

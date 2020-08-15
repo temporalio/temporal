@@ -6,38 +6,32 @@ services:
       - "3306:3306"
     environment:
       - "MYSQL_ROOT_PASSWORD=root"
-  statsd:
-    image: graphiteapp/graphite-statsd
-    ports:
-      - "8080:80"
-      - "2003:2003"
-      - "8125:8125"
-      - "8126:8126"
   temporal:
-    image: temporalio/auto-setup:0.21.1
+    image: temporalio/server:${SERVER_TAG:-0.28.0}
     ports:
      - "7233:7233"
-     - "7234:7234"
-     - "7235:7235"
-     - "7239:7239"
-     - "6933:6933"
-     - "6934:6934"
-     - "6935:6935"
-     - "6939:6939"
     environment:
+      - "AUTO_SETUP=true"
       - "DB=mysql"
       - "MYSQL_USER=root"
       - "MYSQL_PWD=root"
       - "MYSQL_SEEDS=mysql"
-      - "STATSD_ENDPOINT=statsd:8125"
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"
     depends_on:
       - mysql
-      - statsd
+  temporal-admin-tools:
+    image: temporalio/admin-tools:${SERVER_TAG:-0.28.0}
+    stdin_open: true
+    tty: true
+    environment:
+      - "TEMPORAL_CLI_ADDRESS=temporal:7233"
+    depends_on:
+      - temporal
   temporal-web:
-    image: temporalio/web:0.21.1
+    image: temporalio/web:${WEB_TAG:-0.28.1}
     environment:
       - "TEMPORAL_GRPC_ENDPOINT=temporal:7233"
+      - "TEMPORAL_PERMIT_WRITE_API=true"
     ports:
       - "8088:8088"
     depends_on:

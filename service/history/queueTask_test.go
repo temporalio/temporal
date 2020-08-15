@@ -33,17 +33,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/common/task"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/common/task"
 )
 
 type (
@@ -161,10 +161,10 @@ func (s *queueTaskSuite) TestHandleErr_ErrNamespaceNotActive() {
 
 	err := &serviceerror.NamespaceNotActive{}
 
-	queueTaskBase.submitTime = time.Now().Add(-cache.NamespaceCacheRefreshInterval * time.Duration(2))
+	queueTaskBase.submitTime = time.Now().UTC().Add(-cache.NamespaceCacheRefreshInterval * time.Duration(2))
 	s.NoError(queueTaskBase.HandleErr(err))
 
-	queueTaskBase.submitTime = time.Now()
+	queueTaskBase.submitTime = time.Now().UTC()
 	s.Equal(err, queueTaskBase.HandleErr(err))
 }
 

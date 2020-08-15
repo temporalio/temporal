@@ -29,18 +29,18 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"github.com/olivere/elastic"
 	"github.com/uber-go/tally"
 
-	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/collection"
-	es "github.com/temporalio/temporal/common/elasticsearch"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/metrics"
+	indexerspb "go.temporal.io/server/api/indexer/v1"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/collection"
+	es "go.temporal.io/server/common/elasticsearch"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (
@@ -168,7 +168,7 @@ func (p *esProcessorImpl) bulkAfterAction(id int64, requests []elastic.BulkableR
 			switch {
 			case isResponseSuccess(resp.Status):
 				p.ackKafkaMsg(key)
-			case !isResponseRetriable(resp.Status):
+			case !isResponseRetryable(resp.Status):
 				wid, rid, namespaceID := p.getMsgWithInfo(key)
 				p.logger.Error("ES request failed.",
 					tag.ESResponseStatus(resp.Status), tag.ESResponseError(getErrorMsgFromESResp(resp)), tag.WorkflowID(wid), tag.WorkflowRunID(rid),
@@ -223,7 +223,7 @@ func (p *esProcessorImpl) getMsgWithInfo(key string) (wid string, rid string, na
 		return
 	}
 
-	var msg indexergenpb.Message
+	var msg indexerspb.Message
 	if err := p.msgEncoder.Decode(kafkaMsg.message.Value(), &msg); err != nil {
 		p.logger.Error("failed to deserialize kafka message.", tag.Error(err))
 		return
@@ -237,7 +237,10 @@ func (p *esProcessorImpl) hashFn(key interface{}) uint32 {
 		return 0
 	}
 	numOfShards := p.config.IndexerConcurrency()
-	return uint32(common.WorkflowIDToHistoryShard(id, numOfShards))
+
+	idBytes := []byte(id)
+	hash := farm.Hash32(idBytes)
+	return hash % uint32(numOfShards)
 }
 
 func (p *esProcessorImpl) getKeyForKafkaMsg(request elastic.BulkableRequest) string {
@@ -299,14 +302,14 @@ func isResponseSuccess(status int) bool {
 	return false
 }
 
-// isResponseRetriable is complaint with elastic.BulkProcessorService.RetryItemStatusCodes
+// isResponseRetryable is complaint with elastic.BulkProcessorService.RetryItemStatusCodes
 // responses with these status will be kept in queue and retried until success
 // 408 - Request Timeout
 // 429 - Too Many Requests
 // 500 - Node not connected
 // 503 - Service Unavailable
 // 507 - Insufficient Storage
-func isResponseRetriable(status int) bool {
+func isResponseRetryable(status int) bool {
 	switch status {
 	case 408, 429, 500, 503, 507:
 		return true

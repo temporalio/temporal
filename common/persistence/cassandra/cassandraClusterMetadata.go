@@ -29,15 +29,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/pborman/uuid"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cassandra"
-	"github.com/temporalio/temporal/common/log"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/cassandra"
+	"go.temporal.io/server/common/log"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/service/config"
 )
 
 const constMetadataPartition = 0
@@ -85,12 +83,12 @@ type (
 
 var _ p.ClusterMetadataStore = (*cassandraClusterMetadata)(nil)
 
-// newMetadataPersistenceV2 is used to create an instance of HistoryManager implementation
+// newClusterMetadataInstance is used to create an instance of ClusterMetadataStore implementation
 func newClusterMetadataInstance(cfg config.Cassandra, logger log.Logger) (p.ClusterMetadataStore, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = gocql.LocalQuorum
-	cluster.SerialConsistency = gocql.LocalSerial
+	cluster.Consistency = cfg.Consistency.GetConsistency()
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()
@@ -114,7 +112,7 @@ func (m *cassandraClusterMetadata) Close() {
 func (m *cassandraClusterMetadata) InitializeImmutableClusterMetadata(
 	request *p.InternalInitializeImmutableClusterMetadataRequest) (*p.InternalInitializeImmutableClusterMetadataResponse, error) {
 	query := m.session.Query(templateInitImmutableClusterMetadata, constMetadataPartition,
-		request.ImmutableClusterMetadata.Data, request.ImmutableClusterMetadata.Encoding)
+		request.ImmutableClusterMetadata.Data, request.ImmutableClusterMetadata.Encoding.String())
 
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
@@ -159,7 +157,7 @@ func (m *cassandraClusterMetadata) convertPreviousMapToInitializeResponse(previo
 	}
 
 	return &p.InternalInitializeImmutableClusterMetadataResponse{
-		PersistedImmutableMetadata: p.NewDataBlob(imData, common.EncodingType(imDataEncoding)),
+		PersistedImmutableMetadata: p.NewDataBlob(imData, imDataEncoding),
 		RequestApplied:             false,
 	}, nil
 }
@@ -174,7 +172,7 @@ func (m *cassandraClusterMetadata) GetImmutableClusterMetadata() (*p.InternalGet
 	}
 
 	return &p.InternalGetImmutableClusterMetadataResponse{
-		ImmutableClusterMetadata: p.NewDataBlob(immutableMetadata, common.EncodingType(encoding)),
+		ImmutableClusterMetadata: p.NewDataBlob(immutableMetadata, encoding),
 	}, nil
 }
 
@@ -219,8 +217,6 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 		return nil, serviceerror.NewInternal("GetClusterMembers operation failed.  Not able to create query iterator.")
 	}
 
-	pagingToken := iter.PageState()
-
 	rowCount := iter.NumRows()
 	clusterMembers := make([]*p.ClusterMember, 0, rowCount)
 
@@ -246,15 +242,19 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 		clusterMembers = append(clusterMembers, &member)
 	}
 
+	pagingToken := iter.PageState()
+	var pagingTokenCopy []byte
+	// contract of this API expect nil as pagination token instead of empty byte array
+	if len(pagingToken) > 0 {
+		pagingTokenCopy = make([]byte, len(pagingToken))
+		copy(pagingTokenCopy, pagingToken)
+	}
+
 	if err := iter.Close(); err != nil {
 		return nil, convertCommonErrors("GetClusterMembers", err)
 	}
 
-	if len(clusterMembers) == 0 {
-		pagingToken = nil
-	}
-
-	return &p.GetClusterMembersResponse{ActiveMembers: clusterMembers, NextPageToken: pagingToken}, nil
+	return &p.GetClusterMembersResponse{ActiveMembers: clusterMembers, NextPageToken: pagingTokenCopy}, nil
 }
 
 func (m *cassandraClusterMetadata) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {

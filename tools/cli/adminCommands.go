@@ -33,21 +33,25 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/auth"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/persistence"
-	cassp "github.com/temporalio/temporal/common/persistence/cassandra"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/tools/cassandra"
+	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/persistence"
+	cassp "go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/tools/cassandra"
 )
 
 const maxEventID = 9999
@@ -65,8 +69,8 @@ func AdminShowWorkflow(c *cli.Context) {
 	if len(tid) != 0 {
 		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
-			TreeID:    primitives.MustParseUUID(tid),
-			BranchID:  primitives.MustParseUUID(bid),
+			TreeID:    tid,
+			BranchID:  bid,
 			MinNodeID: 1,
 			MaxNodeID: maxEventID,
 			PageSize:  maxEventID,
@@ -84,7 +88,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	if len(history) == 0 {
 		ErrorAndExit("no events", nil)
 	}
-	allEvents := &eventpb.History{}
+	allEvents := &historypb.History{}
 	totalSize := 0
 	for idx, b := range history {
 		totalSize += len(b.Data)
@@ -110,7 +114,7 @@ func AdminShowWorkflow(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit("Failed to serialize history data.", err)
 		}
-		if err := ioutil.WriteFile(outputFileName, data, 0777); err != nil {
+		if err := ioutil.WriteFile(outputFileName, data, 0666); err != nil {
 			ErrorAndExit("Failed to export history data file.", err)
 		}
 	}
@@ -123,10 +127,10 @@ func AdminDescribeWorkflow(c *cli.Context) {
 	prettyPrintJSONObject(resp)
 
 	if resp != nil {
-		msStr := resp.GetMutableStateInDatabase()
+		msStr := resp.GetDatabaseMutableState()
 		ms := persistence.WorkflowMutableState{}
 		// TODO: this won't work for some cases because json.Unmarshal can't be used for proto object
-		// Proper refactoring is required here: resp.GetMutableStateInDatabase() should return proto object.
+		// Proper refactoring is required here: resp.GetDatabaseMutableState() should return proto object.
 		err := json.Unmarshal([]byte(msStr), &ms)
 		if err != nil {
 			ErrorAndExit("json.Unmarshal err", err)
@@ -150,9 +154,9 @@ func AdminDescribeWorkflow(c *cli.Context) {
 		if ms.ExecutionInfo.AutoResetPoints != nil {
 			fmt.Println("auto-reset-points:")
 			for _, p := range ms.ExecutionInfo.AutoResetPoints.Points {
-				createT := time.Unix(0, p.GetCreatedTimeNano())
-				expireT := time.Unix(0, p.GetExpiringTimeNano())
-				fmt.Println(p.GetBinaryChecksum(), p.GetRunId(), p.GetFirstDecisionCompletedId(), p.GetResettable(), createT, expireT)
+				createT := timestamp.TimeValue(p.GetCreateTime())
+				expireT := timestamp.TimeValue(p.GetExpireTime())
+				fmt.Println(p.GetBinaryChecksum(), p.GetRunId(), p.GetFirstWorkflowTaskCompletedId(), p.GetResettable(), createT, expireT)
 			}
 		}
 	}
@@ -170,7 +174,7 @@ func describeMutableState(c *cli.Context) *adminservice.DescribeWorkflowExecutio
 
 	resp, err := adminClient.DescribeWorkflowExecution(ctx, &adminservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -181,13 +185,39 @@ func describeMutableState(c *cli.Context) *adminservice.DescribeWorkflowExecutio
 	return resp
 }
 
+// AdminListNamespaces outputs a list of all namespaces
+func AdminListNamespaces(c *cli.Context) {
+	pFactory := CreatePersistenceFactory(c)
+	metadataManager, err := pFactory.NewMetadataManager()
+	if err != nil {
+		ErrorAndExit("Failed to initialize metadata manager", err)
+	}
+
+	req := &persistence.ListNamespacesRequest{}
+	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+		req.NextPageToken = paginationToken
+		response, err := metadataManager.ListNamespaces(req)
+		if err != nil {
+			return nil, nil, err
+		}
+		token := response.NextPageToken
+
+		var items []interface{}
+		for _, task := range response.Namespaces {
+			items = append(items, task)
+		}
+		return items, token, nil
+	}
+	paginate(c, paginationFunc)
+}
+
 // AdminDeleteWorkflow delete a workflow execution for admin
 func AdminDeleteWorkflow(c *cli.Context) {
 	wid := getRequiredOption(c, FlagWorkflowID)
 	rid := c.String(FlagRunID)
 
 	resp := describeMutableState(c)
-	msStr := resp.GetMutableStateInDatabase()
+	msStr := resp.GetDatabaseMutableState()
 	ms := persistence.WorkflowMutableState{}
 	err := json.Unmarshal([]byte(msStr), &ms)
 	if err != nil {
@@ -212,7 +242,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	}
 
 	for _, branchToken := range branchTokens {
-		branchInfo, err := serialization.HistoryBranchFromBlob(branchToken, common.EncodingTypeProto3.String())
+		branchInfo, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 		if err != nil {
 			ErrorAndExit("HistoryBranchFromBlob decoder err", err)
 		}
@@ -331,7 +361,7 @@ func AdminGetNamespaceIDOrName(c *cli.Context) {
 		fmt.Printf("namespace for namespaceId %v is %v \n", namespaceID, namespaceName)
 	} else {
 		tmpl := "select namespace from namespaces_by_name where name = ?"
-		tmplV2 := "select namespace from namespaces_by_name_v2 where namespaces_partition=0 and name = ?"
+		tmplV2 := "select namespace from namespaces where namespaces_partition=0 and name = ?"
 
 		query := session.Query(tmpl, namespace)
 		res, err := readOneRow(query)
@@ -356,6 +386,7 @@ func AdminGetNamespaceIDOrName(c *cli.Context) {
 
 // AdminGetShardID get shardID
 func AdminGetShardID(c *cli.Context) {
+	namespaceID := getRequiredOption(c, FlagNamespaceID)
 	wid := getRequiredOption(c, FlagWorkflowID)
 	numberOfShards := c.Int(FlagNumberOfShards)
 
@@ -363,19 +394,149 @@ func AdminGetShardID(c *cli.Context) {
 		ErrorAndExit("numberOfShards is required", nil)
 		return
 	}
-	shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
-	fmt.Printf("ShardId for workflowId: %v is %v \n", wid, shardID)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, wid, numberOfShards)
+	fmt.Printf("ShardId for namespace, workflowId: %v, %v is %v \n", namespaceID, wid, shardID)
+}
+
+// AdminDescribeTask outputs the details of a task given Task Id, Task Type, Shard Id and Visibility Timestamp
+func AdminDescribeTask(c *cli.Context) {
+	sid := getRequiredIntOption(c, FlagShardID)
+	tid := getRequiredIntOption(c, FlagTaskID)
+	categoryInt, err := stringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
+	if err != nil {
+		ErrorAndExit("Failed to parse Task Type", err)
+	}
+	category := enumsspb.TaskCategory(categoryInt)
+	if category == enumsspb.TASK_CATEGORY_UNSPECIFIED {
+		ErrorAndExit(fmt.Sprintf("Task type %s is currently not supported", category), nil)
+	}
+
+	pFactory := CreatePersistenceFactory(c)
+	executionManager, err := pFactory.NewExecutionManager(sid)
+	if err != nil {
+		ErrorAndExit("Failed to initialize execution manager", err)
+	}
+
+	if category == enumsspb.TASK_CATEGORY_TIMER {
+		vis := getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
+		req := &persistence.GetTimerTaskRequest{ShardID: int32(sid), TaskID: int64(tid), VisibilityTimestamp: time.Unix(0, vis).UTC()}
+		task, err := executionManager.GetTimerTask(req)
+		if err != nil {
+			ErrorAndExit("Failed to get Timer Task", err)
+		}
+		prettyPrintJSONObject(task)
+	} else if category == enumsspb.TASK_CATEGORY_REPLICATION {
+		req := &persistence.GetReplicationTaskRequest{ShardID: int32(sid), TaskID: int64(tid)}
+		task, err := executionManager.GetReplicationTask(req)
+		if err != nil {
+			ErrorAndExit("Failed to get Replication Task", err)
+		}
+		prettyPrintJSONObject(task)
+	} else if category == enumsspb.TASK_CATEGORY_TRANSFER {
+		req := &persistence.GetTransferTaskRequest{ShardID: int32(sid), TaskID: int64(tid)}
+		task, err := executionManager.GetTransferTask(req)
+		if err != nil {
+			ErrorAndExit("Failed to get Transfer Task", err)
+		}
+		prettyPrintJSONObject(task)
+	} else {
+		ErrorAndExit("Failed to describe task", fmt.Errorf("Unrecognized task type, task_type=%v", category))
+	}
+}
+
+// AdminListTasks outputs a list of a tasks for given Shard and Task Type
+func AdminListTasks(c *cli.Context) {
+	sid := getRequiredIntOption(c, FlagShardID)
+	categoryInt, err := stringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
+	if err != nil {
+		ErrorAndExit("Failed to parse Task Type", err)
+	}
+	category := enumsspb.TaskCategory(categoryInt)
+	if category == enumsspb.TASK_CATEGORY_UNSPECIFIED {
+		ErrorAndExit(fmt.Sprintf("Task type %s is currently not supported", category), nil)
+	}
+
+	pFactory := CreatePersistenceFactory(c)
+	executionManager, err := pFactory.NewExecutionManager(sid)
+	if err != nil {
+		ErrorAndExit("Failed to initialize execution manager", err)
+	}
+
+	if category == enumsspb.TASK_CATEGORY_TRANSFER {
+		req := &persistence.GetTransferTasksRequest{}
+
+		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+			req.NextPageToken = paginationToken
+			response, err := executionManager.GetTransferTasks(req)
+			if err != nil {
+				return nil, nil, err
+			}
+			token := response.NextPageToken
+
+			var items []interface{}
+			for _, task := range response.Tasks {
+				items = append(items, task)
+			}
+			return items, token, nil
+		}
+		paginate(c, paginationFunc)
+	} else if category == enumsspb.TASK_CATEGORY_TIMER {
+		minVis := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now().UTC())
+		maxVis := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now().UTC())
+
+		req := &persistence.GetTimerIndexTasksRequest{MinTimestamp: minVis, MaxTimestamp: maxVis}
+		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+			req.NextPageToken = paginationToken
+			response, err := executionManager.GetTimerIndexTasks(req)
+			if err != nil {
+				return nil, nil, err
+			}
+			token := response.NextPageToken
+
+			var items []interface{}
+			for _, task := range response.Timers {
+				items = append(items, task)
+			}
+			return items, token, nil
+		}
+		paginate(c, paginationFunc)
+	} else if category == enumsspb.TASK_CATEGORY_REPLICATION {
+		req := &persistence.GetReplicationTasksRequest{}
+		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+			req.NextPageToken = paginationToken
+			response, err := executionManager.GetReplicationTasks(req)
+			if err != nil {
+				return nil, nil, err
+			}
+			token := response.NextPageToken
+
+			var items []interface{}
+			for _, task := range response.Tasks {
+				items = append(items, task)
+			}
+			return items, token, nil
+		}
+		paginate(c, paginationFunc)
+	} else {
+		ErrorAndExit("Failed to describe task", fmt.Errorf("Unrecognized task type, task_type=%v", category))
+	}
 }
 
 // AdminRemoveTask describes history host
 func AdminRemoveTask(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
-
 	shardID := getRequiredIntOption(c, FlagShardID)
 	taskID := getRequiredInt64Option(c, FlagTaskID)
-	typeID := getRequiredIntOption(c, FlagTaskType)
+	categoryInt, err := stringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
+	if err != nil {
+		ErrorAndExit("Failed to parse Task Type", err)
+	}
+	category := enumsspb.TaskCategory(categoryInt)
+	if category == enumsspb.TASK_CATEGORY_UNSPECIFIED {
+		ErrorAndExit(fmt.Sprintf("Task type %s is currently not supported", category), nil)
+	}
 	var visibilityTimestamp int64
-	if common.TaskType(typeID) == common.TaskTypeTimer {
+	if category == enumsspb.TASK_CATEGORY_TIMER {
 		visibilityTimestamp = getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
 	}
 
@@ -383,16 +544,32 @@ func AdminRemoveTask(c *cli.Context) {
 	defer cancel()
 
 	req := &adminservice.RemoveTaskRequest{
-		ShardId:             int32(shardID),
-		Type:                int32(typeID),
-		TaskId:              taskID,
-		VisibilityTimestamp: visibilityTimestamp,
+		ShardId:        int32(shardID),
+		Category:       category,
+		TaskId:         taskID,
+		VisibilityTime: timestamp.UnixOrZeroTimePtr(visibilityTimestamp),
 	}
 
-	_, err := adminClient.RemoveTask(ctx, req)
+	_, err = adminClient.RemoveTask(ctx, req)
 	if err != nil {
 		ErrorAndExit("Remove task has failed", err)
 	}
+}
+
+// AdminDescribeShard describes shard by shard id
+func AdminDescribeShard(c *cli.Context) {
+	sid := getRequiredIntOption(c, FlagShardID)
+	pFactory := CreatePersistenceFactory(c)
+	shardManager, err := pFactory.NewShardManager()
+
+	if err != nil {
+		ErrorAndExit("Failed to initialize shard manager", err)
+	}
+
+	getShardReq := &persistence.GetShardRequest{ShardID: int32(sid)}
+	shard, err := shardManager.GetShard(getShardReq)
+
+	prettyPrintJSONObject(shard)
 }
 
 // AdminShardManagement describes history host
@@ -410,6 +587,62 @@ func AdminShardManagement(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Close shard task has failed", err)
 	}
+}
+
+// AdminListGossipMembers outputs a list of gossip members
+func AdminListGossipMembers(c *cli.Context) {
+	roleFlag := c.String(FlagClusterMembershipRole)
+
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	if err != nil {
+		ErrorAndExit("Operation DescribeCluster failed.", err)
+	}
+
+	members := response.MembershipInfo.Rings
+	if roleFlag != primitives.AllServices {
+		all := members
+
+		members = members[:0]
+		for _, v := range all {
+			if roleFlag == v.Role {
+				members = append(members, v)
+			}
+		}
+	}
+
+	prettyPrintJSONObject(members)
+}
+
+// AdminListClusterMembership outputs a list of cluster membership items
+func AdminListClusterMembership(c *cli.Context) {
+	roleFlag := c.String(FlagClusterMembershipRole)
+	role, err := membership.ServiceNameToServiceTypeEnum(roleFlag)
+	if err != nil {
+		ErrorAndExit("Failed to map membership role", err)
+	}
+	// TODO: refactor this: parseTime shouldn't be used for duration.
+	heartbeatFlag := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now().UTC()).UnixNano()
+	heartbeat := time.Duration(heartbeatFlag)
+
+	pFactory := CreatePersistenceFactory(c)
+	manager, err := pFactory.NewClusterMetadataManager()
+	if err != nil {
+		ErrorAndExit("Failed to initialize cluster metadata manager", err)
+	}
+
+	req := &persistence.GetClusterMembersRequest{
+		RoleEquals:          role,
+		LastHeartbeatWithin: heartbeat,
+	}
+	members, err := manager.GetClusterMembers(req)
+	if err != nil {
+		ErrorAndExit("Failed to get cluster members", err)
+	}
+
+	prettyPrintJSONObject(members)
 }
 
 // AdminDescribeHistoryHost describes history host
@@ -431,10 +664,10 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 
 	req := &adminservice.DescribeHistoryHostRequest{}
 	if len(wid) > 0 {
-		req.ExecutionForHost = &executionpb.WorkflowExecution{WorkflowId: wid}
+		req.WorkflowExecution = &commonpb.WorkflowExecution{WorkflowId: wid}
 	}
 	if c.IsSet(FlagShardID) {
-		req.ShardIdForHost = int32(sid)
+		req.ShardId = int32(sid)
 	}
 	if len(addr) > 0 {
 		req.HostAddress = addr
@@ -464,7 +697,7 @@ func AdminRefreshWorkflowTasks(c *cli.Context) {
 
 	_, err := adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},

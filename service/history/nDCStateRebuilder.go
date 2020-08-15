@@ -31,18 +31,19 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/collection"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -126,7 +127,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	if err != nil {
 		return nil, 0, err
 	}
-	firstEventBatch := batch.(*eventpb.History).Events
+	firstEventBatch := batch.(*historypb.History).Events
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		namespaceEntry,
 	)
@@ -139,7 +140,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		if err != nil {
 			return nil, 0, err
 		}
-		events := batch.(*eventpb.History).Events
+		events := batch.(*historypb.History).Events
 		if err := r.applyEvents(targetWorkflowIdentifier, stateBuilder, events, requestID); err != nil {
 			return nil, 0, err
 		}
@@ -202,14 +203,14 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 func (r *nDCStateRebuilderImpl) applyEvents(
 	workflowIdentifier definition.WorkflowIdentifier,
 	stateBuilder stateBuilder,
-	events []*eventpb.HistoryEvent,
+	events []*historypb.HistoryEvent,
 	requestID string,
 ) error {
 
 	_, err := stateBuilder.applyEvents(
 		workflowIdentifier.NamespaceID,
 		requestID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: workflowIdentifier.WorkflowID,
 			RunId:      workflowIdentifier.RunID,
 		},

@@ -26,31 +26,31 @@ package serialization
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
-	commonpb "go.temporal.io/temporal-proto/common"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 )
 
-func validateProto(p string, expected common.EncodingType) error {
-	if common.EncodingType(p) != expected {
-		return fmt.Errorf("invalid encoding type: %v", p)
+func validateProtoEncoding(protoEncodingStr string, expected enumspb.EncodingType) error {
+	if protoEncoding, ok := enumspb.EncodingType_value[protoEncodingStr]; !ok || enumspb.EncodingType(protoEncoding) != expected {
+		return fmt.Errorf("invalid encoding type: %v", protoEncodingStr)
 	}
 	return nil
 }
 
-func encodeErr(encoding common.EncodingType, err error) error {
+func encodeErr(encoding enumspb.EncodingType, err error) error {
 	if err == nil {
 		return nil
 	}
 	return fmt.Errorf("error serializing struct to blob using encoding - %v - : %v", encoding, err)
 }
 
-func decodeErr(encoding common.EncodingType, err error) error {
+func decodeErr(encoding enumspb.EncodingType, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -58,20 +58,20 @@ func decodeErr(encoding common.EncodingType, err error) error {
 }
 
 func proto3Encode(m proto.Marshaler) (DataBlob, error) {
-	blob := DataBlob{Encoding: common.EncodingTypeProto3}
+	blob := DataBlob{Encoding: enumspb.ENCODING_TYPE_PROTO3}
 	data, err := m.Marshal()
 	if err != nil {
-		return blob, encodeErr(common.EncodingTypeProto3, err)
+		return blob, encodeErr(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	blob.Data = data
 	return blob, nil
 }
 
 func proto3Decode(b []byte, proto string, result proto.Unmarshaler) error {
-	if err := validateProto(proto, common.EncodingTypeProto3); err != nil {
+	if err := validateProtoEncoding(proto, enumspb.ENCODING_TYPE_PROTO3); err != nil {
 		return err
 	}
-	return decodeErr(common.EncodingTypeProto3, result.Unmarshal(b))
+	return decodeErr(enumspb.ENCODING_TYPE_PROTO3, result.Unmarshal(b))
 }
 
 func ShardInfoToBlob(info *persistenceblobs.ShardInfo) (DataBlob, error) {
@@ -93,8 +93,8 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 	}
 
 	if len(shardInfo.GetClusterTimerAckLevel()) == 0 {
-		shardInfo.ClusterTimerAckLevel = map[string]*types.Timestamp{
-			clusterName: shardInfo.GetTimerAckLevel(),
+		shardInfo.ClusterTimerAckLevel = map[string]*time.Time{
+			clusterName: shardInfo.GetTimerAckLevelTime(),
 		}
 	}
 
@@ -102,8 +102,8 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 		shardInfo.ClusterReplicationLevel = make(map[string]int64)
 	}
 
-	if shardInfo.GetReplicationDLQAckLevel() == nil {
-		shardInfo.ReplicationDLQAckLevel = make(map[string]int64)
+	if shardInfo.GetReplicationDlqAckLevel() == nil {
+		shardInfo.ReplicationDlqAckLevel = make(map[string]int64)
 	}
 
 	return shardInfo, nil
@@ -208,12 +208,12 @@ func TaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.AllocatedTaskIn
 	return result, proto3Decode(b, proto, result)
 }
 
-func TaskListInfoToBlob(info *persistenceblobs.TaskListInfo) (DataBlob, error) {
+func TaskQueueInfoToBlob(info *persistenceblobs.TaskQueueInfo) (DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func TaskListInfoFromBlob(b []byte, proto string) (*persistenceblobs.TaskListInfo, error) {
-	result := &persistenceblobs.TaskListInfo{}
+func TaskQueueInfoFromBlob(b []byte, proto string) (*persistenceblobs.TaskQueueInfo, error) {
+	result := &persistenceblobs.TaskQueueInfo{}
 	return result, proto3Decode(b, proto, result)
 }
 
@@ -253,6 +253,15 @@ func ReplicationVersionsFromBlob(b []byte, proto string) (*persistenceblobs.Repl
 	return result, proto3Decode(b, proto, result)
 }
 
+func VersionHistoriesToBlob(info *historyspb.VersionHistories) (DataBlob, error) {
+	return proto3Encode(info)
+}
+
+func VersionHistoriesFromBlob(b []byte, proto string) (*historyspb.VersionHistories, error) {
+	result := &historyspb.VersionHistories{}
+	return result, proto3Decode(b, proto, result)
+}
+
 func ChecksumToBlob(info *persistenceblobs.Checksum) (DataBlob, error) {
 	return proto3Encode(info)
 }
@@ -263,42 +272,14 @@ func ChecksumFromBlob(b []byte, proto string) (*persistenceblobs.Checksum, error
 }
 
 type DataBlob struct {
-	Encoding common.EncodingType
+	Encoding enumspb.EncodingType
 	Data     []byte
 }
 
 // ToProto convert data blob to proto representation
 func (d *DataBlob) ToProto() *commonpb.DataBlob {
-	switch d.Encoding {
-	case common.EncodingTypeJSON:
-		return &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_JSON,
-			Data:         d.Data,
-		}
-	case common.EncodingTypeProto3:
-		return &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
-			Data:         d.Data,
-		}
-	default:
-		panic(fmt.Sprintf("DataBlob seeing unsupported enconding type: %v", d.Encoding))
-	}
-}
-
-// GetEncoding returns encoding type
-func (d *DataBlob) GetEncoding() common.EncodingType {
-	encodingStr := string(d.Encoding)
-
-	switch common.EncodingType(encodingStr) {
-	case common.EncodingTypeProto3:
-		return common.EncodingTypeProto3
-	case common.EncodingTypeGob:
-		return common.EncodingTypeGob
-	case common.EncodingTypeJSON:
-		return common.EncodingTypeJSON
-	case common.EncodingTypeEmpty:
-		return common.EncodingTypeEmpty
-	default:
-		return common.EncodingTypeUnknown
+	return &commonpb.DataBlob{
+		EncodingType: d.Encoding,
+		Data:         d.Data,
 	}
 }

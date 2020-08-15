@@ -27,7 +27,7 @@ package main
 import (
 	"os"
 
-	"github.com/temporalio/temporal/tools/cli"
+	"go.temporal.io/server/tools/cli"
 )
 
 // Start using this CLI tool with command

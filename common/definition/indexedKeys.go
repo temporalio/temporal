@@ -25,7 +25,7 @@
 package definition
 
 import (
-	commonpb "go.temporal.io/temporal-proto/common"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 // valid indexed fields on ES
@@ -42,13 +42,13 @@ const (
 	Encoding        = "Encoding"
 	KafkaKey        = "KafkaKey"
 	BinaryChecksums = "BinaryChecksums"
-	TaskList        = "TaskList"
+	TaskQueue       = "TaskQueue"
 
 	CustomStringField     = "CustomStringField"
 	CustomKeywordField    = "CustomKeywordField"
 	CustomIntField        = "CustomIntField"
-	CustomBoolField       = "CustomBoolField"
 	CustomDoubleField     = "CustomDoubleField"
+	CustomBoolField       = "CustomBoolField"
 	CustomDatetimeField   = "CustomDatetimeField"
 	TemporalChangeVersion = "TemporalChangeVersion"
 )
@@ -66,14 +66,14 @@ var defaultIndexedKeys = createDefaultIndexedKeys()
 
 func createDefaultIndexedKeys() map[string]interface{} {
 	defaultIndexedKeys := map[string]interface{}{
-		CustomStringField:     commonpb.IndexedValueType_String,
-		CustomKeywordField:    commonpb.IndexedValueType_Keyword,
-		CustomIntField:        commonpb.IndexedValueType_Int,
-		CustomBoolField:       commonpb.IndexedValueType_Bool,
-		CustomDoubleField:     commonpb.IndexedValueType_Double,
-		CustomDatetimeField:   commonpb.IndexedValueType_Datetime,
-		TemporalChangeVersion: commonpb.IndexedValueType_Keyword,
-		BinaryChecksums:       commonpb.IndexedValueType_Keyword,
+		CustomStringField:     enumspb.INDEXED_VALUE_TYPE_STRING,
+		CustomKeywordField:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		CustomIntField:        enumspb.INDEXED_VALUE_TYPE_INT,
+		CustomDoubleField:     enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		CustomBoolField:       enumspb.INDEXED_VALUE_TYPE_BOOL,
+		CustomDatetimeField:   enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 	for k, v := range systemIndexedKeys {
 		defaultIndexedKeys[k] = v
@@ -88,16 +88,16 @@ func GetDefaultIndexedKeys() map[string]interface{} {
 
 // systemIndexedKeys is Temporal created visibility keys
 var systemIndexedKeys = map[string]interface{}{
-	NamespaceID:     commonpb.IndexedValueType_Keyword,
-	WorkflowID:      commonpb.IndexedValueType_Keyword,
-	RunID:           commonpb.IndexedValueType_Keyword,
-	WorkflowType:    commonpb.IndexedValueType_Keyword,
-	StartTime:       commonpb.IndexedValueType_Int,
-	ExecutionTime:   commonpb.IndexedValueType_Int,
-	CloseTime:       commonpb.IndexedValueType_Int,
-	ExecutionStatus: commonpb.IndexedValueType_Int,
-	HistoryLength:   commonpb.IndexedValueType_Int,
-	TaskList:        commonpb.IndexedValueType_Keyword,
+	NamespaceID:     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	WorkflowID:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	RunID:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	WorkflowType:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	StartTime:       enumspb.INDEXED_VALUE_TYPE_INT,
+	ExecutionTime:   enumspb.INDEXED_VALUE_TYPE_INT,
+	CloseTime:       enumspb.INDEXED_VALUE_TYPE_INT,
+	ExecutionStatus: enumspb.INDEXED_VALUE_TYPE_INT,
+	HistoryLength:   enumspb.INDEXED_VALUE_TYPE_INT,
+	TaskQueue:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 }
 
 // IsSystemIndexedKey return true is key is system added

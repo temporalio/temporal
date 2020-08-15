@@ -32,16 +32,15 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal/activity"
-	"go.temporal.io/temporal/workflow"
-	"go.uber.org/zap"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/workflow"
 
-	"go.temporal.io/temporal/testsuite"
-	"go.temporal.io/temporal/worker"
+	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/worker"
 
-	"github.com/temporalio/temporal/common/metrics"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/resource"
+	"go.temporal.io/server/common/metrics"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resource"
 )
 
 type scannerWorkflowTestSuite struct {
@@ -54,22 +53,22 @@ func TestScannerWorkflowTestSuite(t *testing.T) {
 }
 
 func (s *scannerWorkflowTestSuite) registerWorkflows(env *testsuite.TestWorkflowEnvironment) {
-	env.RegisterWorkflowWithOptions(TaskListScannerWorkflow, workflow.RegisterOptions{Name: tlScannerWFTypeName})
+	env.RegisterWorkflowWithOptions(TaskQueueScannerWorkflow, workflow.RegisterOptions{Name: tqScannerWFTypeName})
 	env.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
-	env.RegisterActivityWithOptions(TaskListScavengerActivity, activity.RegisterOptions{Name: taskListScavengerActivityName})
+	env.RegisterActivityWithOptions(TaskQueueScavengerActivity, activity.RegisterOptions{Name: taskQueueScavengerActivityName})
 	env.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
 }
 
 func (s *scannerWorkflowTestSuite) registerActivities(env *testsuite.TestActivityEnvironment) {
-	env.RegisterActivityWithOptions(TaskListScavengerActivity, activity.RegisterOptions{Name: taskListScavengerActivityName})
+	env.RegisterActivityWithOptions(TaskQueueScavengerActivity, activity.RegisterOptions{Name: taskQueueScavengerActivityName})
 	env.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
 }
 
 func (s *scannerWorkflowTestSuite) TestWorkflow() {
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)
-	env.OnActivity(taskListScavengerActivityName, mock.Anything).Return(nil)
-	env.ExecuteWorkflow(tlScannerWFTypeName)
+	env.OnActivity(taskQueueScavengerActivityName, mock.Anything).Return(nil)
+	env.ExecuteWorkflow(tqScannerWFTypeName)
 	s.True(env.IsWorkflowCompleted())
 }
 
@@ -81,16 +80,15 @@ func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
 	mockResource := resource.NewTest(controller, metrics.Worker)
 	defer mockResource.Finish(s.T())
 
-	mockResource.TaskMgr.On("ListTaskList", mock.Anything).Return(&p.ListTaskListResponse{}, nil)
+	mockResource.TaskMgr.On("ListTaskQueue", mock.Anything).Return(&p.ListTaskQueueResponse{}, nil)
 	ctx := scannerContext{
-		Resource:  mockResource,
-		zapLogger: zap.NewNop(),
+		Resource: mockResource,
 	}
 	env.SetTestTimeout(time.Second * 5)
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), scannerContextKey, ctx),
 	})
 	tlScavengerHBInterval = time.Millisecond * 10
-	_, err := env.ExecuteActivity(taskListScavengerActivityName)
+	_, err := env.ExecuteActivity(taskQueueScavengerActivityName)
 	s.NoError(err)
 }

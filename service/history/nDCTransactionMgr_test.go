@@ -33,16 +33,17 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -111,7 +112,7 @@ func (s *nDCTransactionMgrSuite) TearDownTest() {
 
 func (s *nDCTransactionMgrSuite) TestCreateWorkflow() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 	targetWorkflow := NewMocknDCWorkflow(s.controller)
 
 	s.mockCreateMgr.EXPECT().dispatchForNewWorkflow(
@@ -124,7 +125,7 @@ func (s *nDCTransactionMgrSuite) TestCreateWorkflow() {
 
 func (s *nDCTransactionMgrSuite) TestUpdateWorkflow() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 	isWorkflowRebuilt := true
 	targetWorkflow := NewMocknDCWorkflow(s.controller)
 	newWorkflow := NewMocknDCWorkflow(s.controller)
@@ -139,7 +140,7 @@ func (s *nDCTransactionMgrSuite) TestUpdateWorkflow() {
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 	releaseCalled := false
 	runID := uuid.New()
 
@@ -149,7 +150,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*eventpb.HistoryEvent{{EventId: 1}},
+		Events: []*historypb.HistoryEvent{{EventId: 1}},
 	}
 
 	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
@@ -176,16 +177,16 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
-	lastDecisionTaskStartedEventID := int64(9999)
-	nextEventID := lastDecisionTaskStartedEventID * 2
-	lastDecisionTaskStartedVersion := s.namespaceEntry.GetFailoverVersion()
+	lastWorkflowTaskStartedEventID := int64(9999)
+	nextEventID := lastWorkflowTaskStartedEventID * 2
+	lastWorkflowTaskStartedVersion := s.namespaceEntry.GetFailoverVersion()
 	versionHistory := persistence.NewVersionHistory([]byte("branch token"), []*persistence.VersionHistoryItem{
-		{EventID: lastDecisionTaskStartedEventID, Version: lastDecisionTaskStartedVersion},
+		{EventID: lastWorkflowTaskStartedEventID, Version: lastWorkflowTaskStartedVersion},
 	})
 	histories := persistence.NewVersionHistories(versionHistory)
 
@@ -214,7 +215,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 		RunID:       runID,
 	}).AnyTimes()
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-	mutableState.EXPECT().GetPreviousStartedEventID().Return(lastDecisionTaskStartedEventID).Times(1)
+	mutableState.EXPECT().GetPreviousStartedEventID().Return(lastWorkflowTaskStartedEventID).Times(1)
 	mutableState.EXPECT().GetVersionHistories().Return(histories).Times(1)
 
 	s.mockWorkflowResetter.EXPECT().resetWorkflow(
@@ -223,8 +224,8 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 		workflowID,
 		runID,
 		versionHistory.GetBranchToken(),
-		lastDecisionTaskStartedEventID,
-		lastDecisionTaskStartedVersion,
+		lastWorkflowTaskStartedEventID,
+		lastWorkflowTaskStartedVersion,
 		nextEventID,
 		gomock.Any(),
 		gomock.Any(),
@@ -250,7 +251,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Open() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 	releaseCalled := false
 
 	workflow := NewMocknDCWorkflow(s.controller)
@@ -259,7 +260,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Op
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*eventpb.HistoryEvent{{EventId: 1}},
+		Events: []*historypb.HistoryEvent{{EventId: 1}},
 	}
 
 	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
@@ -284,7 +285,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Op
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Closed() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
@@ -332,7 +333,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Cl
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
@@ -347,8 +348,8 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*eventpb.HistoryEvent{{
-			EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		Events: []*historypb.HistoryEvent{{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		}},
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -386,7 +387,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
@@ -401,8 +402,8 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*eventpb.HistoryEvent{{
-			EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		Events: []*historypb.HistoryEvent{{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		}},
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -446,7 +447,7 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -465,7 +466,7 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesExists() {
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

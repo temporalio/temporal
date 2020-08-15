@@ -29,7 +29,7 @@ package client
 import (
 	"sync"
 
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (

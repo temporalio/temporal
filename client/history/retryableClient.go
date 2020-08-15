@@ -29,8 +29,8 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/common/backoff"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/backoff"
 )
 
 var _ Client = (*retryableClient)(nil)
@@ -162,15 +162,15 @@ func (c *retryableClient) PollMutableState(
 	return resp, err
 }
 
-func (c *retryableClient) ResetStickyTaskList(
+func (c *retryableClient) ResetStickyTaskQueue(
 	ctx context.Context,
-	request *historyservice.ResetStickyTaskListRequest,
-	opts ...grpc.CallOption) (*historyservice.ResetStickyTaskListResponse, error) {
+	request *historyservice.ResetStickyTaskQueueRequest,
+	opts ...grpc.CallOption) (*historyservice.ResetStickyTaskQueueResponse, error) {
 
-	var resp *historyservice.ResetStickyTaskListResponse
+	var resp *historyservice.ResetStickyTaskQueueResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ResetStickyTaskList(ctx, request, opts...)
+		resp, err = c.client.ResetStickyTaskQueue(ctx, request, opts...)
 		return err
 	}
 
@@ -194,15 +194,15 @@ func (c *retryableClient) DescribeWorkflowExecution(
 	return resp, err
 }
 
-func (c *retryableClient) RecordDecisionTaskStarted(
+func (c *retryableClient) RecordWorkflowTaskStarted(
 	ctx context.Context,
-	request *historyservice.RecordDecisionTaskStartedRequest,
-	opts ...grpc.CallOption) (*historyservice.RecordDecisionTaskStartedResponse, error) {
+	request *historyservice.RecordWorkflowTaskStartedRequest,
+	opts ...grpc.CallOption) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 
-	var resp *historyservice.RecordDecisionTaskStartedResponse
+	var resp *historyservice.RecordWorkflowTaskStartedResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.RecordDecisionTaskStarted(ctx, request, opts...)
+		resp, err = c.client.RecordWorkflowTaskStarted(ctx, request, opts...)
 		return err
 	}
 
@@ -226,15 +226,15 @@ func (c *retryableClient) RecordActivityTaskStarted(
 	return resp, err
 }
 
-func (c *retryableClient) RespondDecisionTaskCompleted(
+func (c *retryableClient) RespondWorkflowTaskCompleted(
 	ctx context.Context,
-	request *historyservice.RespondDecisionTaskCompletedRequest,
-	opts ...grpc.CallOption) (*historyservice.RespondDecisionTaskCompletedResponse, error) {
+	request *historyservice.RespondWorkflowTaskCompletedRequest,
+	opts ...grpc.CallOption) (*historyservice.RespondWorkflowTaskCompletedResponse, error) {
 
-	var resp *historyservice.RespondDecisionTaskCompletedResponse
+	var resp *historyservice.RespondWorkflowTaskCompletedResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.RespondDecisionTaskCompleted(ctx, request, opts...)
+		resp, err = c.client.RespondWorkflowTaskCompleted(ctx, request, opts...)
 		return err
 	}
 
@@ -242,15 +242,15 @@ func (c *retryableClient) RespondDecisionTaskCompleted(
 	return resp, err
 }
 
-func (c *retryableClient) RespondDecisionTaskFailed(
+func (c *retryableClient) RespondWorkflowTaskFailed(
 	ctx context.Context,
-	request *historyservice.RespondDecisionTaskFailedRequest,
-	opts ...grpc.CallOption) (*historyservice.RespondDecisionTaskFailedResponse, error) {
+	request *historyservice.RespondWorkflowTaskFailedRequest,
+	opts ...grpc.CallOption) (*historyservice.RespondWorkflowTaskFailedResponse, error) {
 
-	var resp *historyservice.RespondDecisionTaskFailedResponse
+	var resp *historyservice.RespondWorkflowTaskFailedResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.RespondDecisionTaskFailed(ctx, request, opts...)
+		resp, err = c.client.RespondWorkflowTaskFailed(ctx, request, opts...)
 		return err
 	}
 
@@ -418,15 +418,15 @@ func (c *retryableClient) ResetWorkflowExecution(
 	return resp, err
 }
 
-func (c *retryableClient) ScheduleDecisionTask(
+func (c *retryableClient) ScheduleWorkflowTask(
 	ctx context.Context,
-	request *historyservice.ScheduleDecisionTaskRequest,
-	opts ...grpc.CallOption) (*historyservice.ScheduleDecisionTaskResponse, error) {
+	request *historyservice.ScheduleWorkflowTaskRequest,
+	opts ...grpc.CallOption) (*historyservice.ScheduleWorkflowTaskResponse, error) {
 
-	var resp *historyservice.ScheduleDecisionTaskResponse
+	var resp *historyservice.ScheduleWorkflowTaskResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ScheduleDecisionTask(ctx, request, opts...)
+		resp, err = c.client.ScheduleWorkflowTask(ctx, request, opts...)
 		return err
 	}
 
@@ -591,16 +591,16 @@ func (c *retryableClient) ReapplyEvents(
 	return resp, err
 }
 
-func (c *retryableClient) ReadDLQMessages(
+func (c *retryableClient) GetDLQMessages(
 	ctx context.Context,
-	request *historyservice.ReadDLQMessagesRequest,
+	request *historyservice.GetDLQMessagesRequest,
 	opts ...grpc.CallOption,
-) (*historyservice.ReadDLQMessagesResponse, error) {
+) (*historyservice.GetDLQMessagesResponse, error) {
 
-	var resp *historyservice.ReadDLQMessagesResponse
+	var resp *historyservice.GetDLQMessagesResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ReadDLQMessages(ctx, request, opts...)
+		resp, err = c.client.GetDLQMessages(ctx, request, opts...)
 		return err
 	}
 

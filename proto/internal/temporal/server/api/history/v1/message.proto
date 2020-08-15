@@ -1,0 +1,50 @@
+// Copyright (c) 2020 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.history.v1;
+
+option go_package = "go.temporal.io/server/api/history/v1;history";
+
+import "temporal/api/history/v1/message.proto";
+
+message TransientWorkflowTaskInfo {
+    temporal.api.history.v1.HistoryEvent scheduled_event = 1;
+    temporal.api.history.v1.HistoryEvent started_event = 2;
+}
+
+// VersionHistoryItem contains signal eventId and the corresponding version.
+message VersionHistoryItem {
+    int64 event_id = 1;
+    int64 version = 2;
+}
+
+// VersionHistory contains the version history of a branch.
+message VersionHistory {
+    bytes branch_token = 1;
+    repeated VersionHistoryItem items = 2;
+}
+
+// VersionHistories contains all version histories from all branches.
+message VersionHistories {
+    int32 current_version_history_index = 1;
+    repeated VersionHistory histories = 2;
+}

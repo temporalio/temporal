@@ -28,21 +28,20 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/api/common/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/service/worker/archiver"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -129,14 +128,15 @@ func (s *timerQueueTaskExecutorBaseSuite) TearDownTest() {
 
 func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 	task := &persistenceblobs.TimerTaskInfo{
-		TaskId:              12345,
-		VisibilityTimestamp: types.TimestampNow(),
+		ScheduleAttempt: 1,
+		TaskId:          12345,
+		VisibilityTime:  timestamp.TimeNowPtrUtc(),
 	}
-	executionInfo := executionpb.WorkflowExecution{
+	executionInfo := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUIDString(task.GetRunId()),
+		RunId:      task.GetRunId(),
 	}
-	ctx := newWorkflowExecutionContext(primitives.UUIDString(task.GetNamespaceId()), executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
+	ctx := newWorkflowExecutionContext(task.GetNamespaceId(), executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
 
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
@@ -150,7 +150,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFailed() {
-	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistence.ExecutionStats{
+	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistenceblobs.ExecutionStats{
 		HistorySize: 1024,
 	}, nil).Times(1)
 	s.mockWorkflowExecutionContext.EXPECT().clear().Times(1)
@@ -170,12 +170,13 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 	}, nil)
 
 	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistenceblobs.NamespaceInfo{}, &persistenceblobs.NamespaceConfig{}, false, nil, 0, nil)
-	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistenceblobs.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
+	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistenceblobs.TimerTaskInfo{
+		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
 	s.NoError(err)
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
-	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistence.ExecutionStats{
+	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistenceblobs.ExecutionStats{
 		HistorySize: 1024 * 1024 * 1024,
 	}, nil).Times(1)
 
@@ -188,6 +189,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
 	})).Return(nil, errors.New("failed to send signal"))
 
 	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistenceblobs.NamespaceInfo{}, &persistenceblobs.NamespaceConfig{}, false, nil, 0, nil)
-	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistenceblobs.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
+	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistenceblobs.TimerTaskInfo{
+		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
 	s.Error(err)
 }

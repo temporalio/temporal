@@ -29,16 +29,16 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/quotas"
-	"github.com/temporalio/temporal/common/resource"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/resource"
 )
 
 type (
@@ -52,6 +52,10 @@ type (
 		startWG       sync.WaitGroup
 		rateLimiter   quotas.Limiter
 	}
+)
+
+const (
+	serviceName = "temporal.api.workflowservice.v1.MatchingService"
 )
 
 var (
@@ -101,9 +105,17 @@ func (h *Handler) Stop() {
 }
 
 // https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-func (h *Handler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	h.startWG.Wait()
+func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
 	h.GetLogger().Debug("Matching service health check endpoint (gRPC) reached.")
+
+	h.startWG.Wait()
+
+	if request.Service != serviceName {
+		return &healthpb.HealthCheckResponse{
+			Status: healthpb.HealthCheckResponse_SERVICE_UNKNOWN,
+		}, nil
+	}
+
 	hs := &healthpb.HealthCheckResponse{
 		Status: healthpb.HealthCheckResponse_SERVING,
 	}
@@ -116,13 +128,13 @@ func (h *Handler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServe
 func (h *Handler) newHandlerContext(
 	ctx context.Context,
 	namespaceID string,
-	taskList *tasklistpb.TaskList,
+	taskQueue *taskqueuepb.TaskQueue,
 	scope int,
 ) *handlerContext {
 	return newHandlerContext(
 		ctx,
 		h.namespaceName(namespaceID),
-		taskList,
+		taskQueue,
 		h.metricsClient,
 		scope,
 	)
@@ -134,19 +146,19 @@ func (h *Handler) AddActivityTask(
 	request *matchingservice.AddActivityTaskRequest,
 ) (_ *matchingservice.AddActivityTaskResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-	startT := time.Now()
+	startT := time.Now().UTC()
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
-		request.GetTaskList(),
+		request.GetTaskQueue(),
 		metrics.MatchingAddActivityTaskScope,
 	)
 
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
-		hCtx.scope.IncCounter(metrics.ForwardedPerTaskListCounter)
+	if request.GetForwardedSource() != "" {
+		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
@@ -155,62 +167,62 @@ func (h *Handler) AddActivityTask(
 
 	syncMatch, err := h.engine.AddActivityTask(hCtx, request)
 	if syncMatch {
-		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskList, time.Since(startT))
+		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskQueue, time.Since(startT))
 	}
 
 	return &matchingservice.AddActivityTaskResponse{}, hCtx.handleErr(err)
 }
 
-// AddDecisionTask - adds a decision task.
-func (h *Handler) AddDecisionTask(
+// AddWorkflowTask - adds a workflow task.
+func (h *Handler) AddWorkflowTask(
 	ctx context.Context,
-	request *matchingservice.AddDecisionTaskRequest,
-) (_ *matchingservice.AddDecisionTaskResponse, retError error) {
+	request *matchingservice.AddWorkflowTaskRequest,
+) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-	startT := time.Now()
+	startT := time.Now().UTC()
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
-		request.GetTaskList(),
-		metrics.MatchingAddDecisionTaskScope,
+		request.GetTaskQueue(),
+		metrics.MatchingAddWorkflowTaskScope,
 	)
 
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
-		hCtx.scope.IncCounter(metrics.ForwardedPerTaskListCounter)
+	if request.GetForwardedSource() != "" {
+		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return &matchingservice.AddDecisionTaskResponse{}, hCtx.handleErr(errMatchingHostThrottle)
+		return &matchingservice.AddWorkflowTaskResponse{}, hCtx.handleErr(errMatchingHostThrottle)
 	}
 
-	syncMatch, err := h.engine.AddDecisionTask(hCtx, request)
+	syncMatch, err := h.engine.AddWorkflowTask(hCtx, request)
 	if syncMatch {
-		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskList, time.Since(startT))
+		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskQueue, time.Since(startT))
 	}
-	return &matchingservice.AddDecisionTaskResponse{}, hCtx.handleErr(err)
+	return &matchingservice.AddWorkflowTaskResponse{}, hCtx.handleErr(err)
 }
 
-// PollForActivityTask - long poll for an activity task.
-func (h *Handler) PollForActivityTask(
+// PollActivityTaskQueue - long poll for an activity task.
+func (h *Handler) PollActivityTaskQueue(
 	ctx context.Context,
-	request *matchingservice.PollForActivityTaskRequest,
-) (_ *matchingservice.PollForActivityTaskResponse, retError error) {
+	request *matchingservice.PollActivityTaskQueueRequest,
+) (_ *matchingservice.PollActivityTaskQueueResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
-		request.GetPollRequest().GetTaskList(),
-		metrics.MatchingPollForActivityTaskScope,
+		request.GetPollRequest().GetTaskQueue(),
+		metrics.MatchingPollActivityTaskQueueScope,
 	)
 
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
-		hCtx.scope.IncCounter(metrics.ForwardedPerTaskListCounter)
+	if request.GetForwardedSource() != "" {
+		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
@@ -219,34 +231,34 @@ func (h *Handler) PollForActivityTask(
 
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
 		ctx,
-		"PollForActivityTask",
+		"PollActivityTaskQueue",
 		h.Resource.GetThrottledLogger(),
 	); err != nil {
 		return nil, hCtx.handleErr(err)
 	}
 
-	response, err := h.engine.PollForActivityTask(hCtx, request)
+	response, err := h.engine.PollActivityTaskQueue(hCtx, request)
 	return response, hCtx.handleErr(err)
 }
 
-// PollForDecisionTask - long poll for a decision task.
-func (h *Handler) PollForDecisionTask(
+// PollWorkflowTaskQueue - long poll for a workflow task.
+func (h *Handler) PollWorkflowTaskQueue(
 	ctx context.Context,
-	request *matchingservice.PollForDecisionTaskRequest,
-) (_ *matchingservice.PollForDecisionTaskResponse, retError error) {
+	request *matchingservice.PollWorkflowTaskQueueRequest,
+) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
-		request.GetPollRequest().GetTaskList(),
-		metrics.MatchingPollForDecisionTaskScope,
+		request.GetPollRequest().GetTaskQueue(),
+		metrics.MatchingPollWorkflowTaskQueueScope,
 	)
 
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
-		hCtx.scope.IncCounter(metrics.ForwardedPerTaskListCounter)
+	if request.GetForwardedSource() != "" {
+		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
@@ -255,13 +267,13 @@ func (h *Handler) PollForDecisionTask(
 
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
 		ctx,
-		"PollForDecisionTask",
+		"PollWorkflowTaskQueue",
 		h.Resource.GetThrottledLogger(),
 	); err != nil {
 		return nil, hCtx.handleErr(err)
 	}
 
-	response, err := h.engine.PollForDecisionTask(hCtx, request)
+	response, err := h.engine.PollWorkflowTaskQueue(hCtx, request)
 	return response, hCtx.handleErr(err)
 }
 
@@ -274,15 +286,15 @@ func (h *Handler) QueryWorkflow(
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
-		request.GetTaskList(),
+		request.GetTaskQueue(),
 		metrics.MatchingQueryWorkflowScope,
 	)
 
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
-		hCtx.scope.IncCounter(metrics.ForwardedPerTaskListCounter)
+	if request.GetForwardedSource() != "" {
+		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
@@ -302,7 +314,7 @@ func (h *Handler) RespondQueryTaskCompleted(
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
-		request.GetTaskList(),
+		request.GetTaskQueue(),
 		metrics.MatchingRespondQueryTaskCompletedScope,
 	)
 
@@ -323,7 +335,7 @@ func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
-		request.GetTaskList(),
+		request.GetTaskQueue(),
 		metrics.MatchingCancelOutstandingPollScope,
 	)
 
@@ -337,19 +349,19 @@ func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	return &matchingservice.CancelOutstandingPollResponse{}, hCtx.handleErr(err)
 }
 
-// DescribeTaskList returns information about the target task list, right now this API returns the
-// pollers which polled this task list in last few minutes. If includeTaskListStatus field is true,
-// it will also return status of task list's ackManager (readLevel, ackLevel, backlogCountHint and taskIDBlock).
-func (h *Handler) DescribeTaskList(
+// DescribeTaskQueue returns information about the target task queue, right now this API returns the
+// pollers which polled this task queue in last few minutes. If includeTaskQueueStatus field is true,
+// it will also return status of task queue's ackManager (readLevel, ackLevel, backlogCountHint and taskIDBlock).
+func (h *Handler) DescribeTaskQueue(
 	ctx context.Context,
-	request *matchingservice.DescribeTaskListRequest,
-) (_ *matchingservice.DescribeTaskListResponse, retError error) {
+	request *matchingservice.DescribeTaskQueueRequest,
+) (_ *matchingservice.DescribeTaskQueueResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
-		request.GetDescRequest().GetTaskList(),
-		metrics.MatchingDescribeTaskListScope,
+		request.GetDescRequest().GetTaskQueue(),
+		metrics.MatchingDescribeTaskQueueScope,
 	)
 
 	sw := hCtx.startProfiling(&h.startWG)
@@ -359,22 +371,22 @@ func (h *Handler) DescribeTaskList(
 		return nil, hCtx.handleErr(errMatchingHostThrottle)
 	}
 
-	response, err := h.engine.DescribeTaskList(hCtx, request)
+	response, err := h.engine.DescribeTaskQueue(hCtx, request)
 	return response, hCtx.handleErr(err)
 }
 
-// ListTaskListPartitions returns information about partitions for a taskList
-func (h *Handler) ListTaskListPartitions(
+// ListTaskQueuePartitions returns information about partitions for a taskQueue
+func (h *Handler) ListTaskQueuePartitions(
 	ctx context.Context,
-	request *matchingservice.ListTaskListPartitionsRequest,
-) (_ *matchingservice.ListTaskListPartitionsResponse, retError error) {
+	request *matchingservice.ListTaskQueuePartitionsRequest,
+) (_ *matchingservice.ListTaskQueuePartitionsResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := newHandlerContext(
 		ctx,
 		request.GetNamespace(),
-		request.GetTaskList(),
+		request.GetTaskQueue(),
 		h.metricsClient,
-		metrics.MatchingListTaskListPartitionsScope,
+		metrics.MatchingListTaskQueuePartitionsScope,
 	)
 
 	sw := hCtx.startProfiling(&h.startWG)
@@ -384,7 +396,7 @@ func (h *Handler) ListTaskListPartitions(
 		return nil, hCtx.handleErr(errMatchingHostThrottle)
 	}
 
-	response, err := h.engine.ListTaskListPartitions(hCtx, request)
+	response, err := h.engine.ListTaskQueuePartitions(hCtx, request)
 	return response, hCtx.handleErr(err)
 }
 

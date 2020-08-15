@@ -27,12 +27,12 @@ package replicator
 import (
 	"testing"
 
-	"github.com/temporalio/temporal/common/collection"
+	"go.temporal.io/server/common/collection"
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/common/definition"
+	"go.temporal.io/server/common/definition"
 )
 
 type (

@@ -25,7 +25,7 @@
 package common
 
 import (
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
+	tokenspb "go.temporal.io/server/api/token/v1"
 )
 
 type (
@@ -37,28 +37,28 @@ func NewProtoTaskTokenSerializer() TaskTokenSerializer {
 	return &protoTaskTokenSerializer{}
 }
 
-func (j *protoTaskTokenSerializer) Serialize(taskToken *tokengenpb.Task) ([]byte, error) {
+func (j *protoTaskTokenSerializer) Serialize(taskToken *tokenspb.Task) ([]byte, error) {
 	if taskToken == nil {
 		return nil, nil
 	}
 	return taskToken.Marshal()
 }
 
-func (j *protoTaskTokenSerializer) Deserialize(data []byte) (*tokengenpb.Task, error) {
-	taskToken := &tokengenpb.Task{}
+func (j *protoTaskTokenSerializer) Deserialize(data []byte) (*tokenspb.Task, error) {
+	taskToken := &tokenspb.Task{}
 	err := taskToken.Unmarshal(data)
 	return taskToken, err
 }
 
-func (j *protoTaskTokenSerializer) SerializeQueryTaskToken(taskToken *tokengenpb.QueryTask) ([]byte, error) {
+func (j *protoTaskTokenSerializer) SerializeQueryTaskToken(taskToken *tokenspb.QueryTask) ([]byte, error) {
 	if taskToken == nil {
 		return nil, nil
 	}
 	return taskToken.Marshal()
 }
 
-func (j *protoTaskTokenSerializer) DeserializeQueryTaskToken(data []byte) (*tokengenpb.QueryTask, error) {
-	taskToken := tokengenpb.QueryTask{}
+func (j *protoTaskTokenSerializer) DeserializeQueryTaskToken(data []byte) (*tokenspb.QueryTask, error) {
+	taskToken := tokenspb.QueryTask{}
 	err := taskToken.Unmarshal(data)
 	return &taskToken, err
 }

@@ -27,9 +27,9 @@ package matching
 import (
 	"time"
 
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"github.com/temporalio/temporal/common/cache"
+	"go.temporal.io/server/common/cache"
 )
 
 const (
@@ -72,8 +72,8 @@ func (pollers *pollerHistory) updatePollerInfo(id pollerIdentity, ratePerSecond 
 	pollers.history.Put(id, &pollerInfo{ratePerSecond: rps})
 }
 
-func (pollers *pollerHistory) getAllPollerInfo() []*tasklistpb.PollerInfo {
-	var result []*tasklistpb.PollerInfo
+func (pollers *pollerHistory) getAllPollerInfo() []*taskqueuepb.PollerInfo {
+	var result []*taskqueuepb.PollerInfo
 
 	ite := pollers.history.Iterator()
 	defer ite.Close()
@@ -83,9 +83,9 @@ func (pollers *pollerHistory) getAllPollerInfo() []*tasklistpb.PollerInfo {
 		value := entry.Value().(*pollerInfo)
 		// TODO add IP, T1396795
 		lastAccessTime := entry.CreateTime()
-		result = append(result, &tasklistpb.PollerInfo{
+		result = append(result, &taskqueuepb.PollerInfo{
 			Identity:       string(key),
-			LastAccessTime: lastAccessTime.UnixNano(),
+			LastAccessTime: &lastAccessTime,
 			RatePerSecond:  value.ratePerSecond,
 		})
 	}

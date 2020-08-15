@@ -79,7 +79,7 @@ type (
 	}
 )
 
-// SystemClock implements Clock interface that uses time.Now().
+// SystemClock implements Clock interface that uses time.Now().UTC().
 var SystemClock = systemClock{}
 
 // NewExponentialRetryPolicy returns an instance of ExponentialRetryPolicy using the provided initialInterval
@@ -101,7 +101,7 @@ func NewRetrier(policy RetryPolicy, clock Clock) Retrier {
 		policy:         policy,
 		clock:          clock,
 		startTime:      clock.Now(),
-		currentAttempt: 0,
+		currentAttempt: 1,
 	}
 }
 
@@ -137,7 +137,7 @@ func (p *ExponentialRetryPolicy) SetMaximumAttempts(maximumAttempts int) {
 // ComputeNextDelay returns the next delay interval.  This is used by Retrier to delay calling the operation again
 func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, numAttempts int) time.Duration {
 	// Check to see if we ran out of maximum number of attempts
-	if p.maximumAttempts != noMaximumAttempts && numAttempts >= p.maximumAttempts {
+	if p.maximumAttempts != noMaximumAttempts && numAttempts > p.maximumAttempts {
 		return done
 	}
 
@@ -146,7 +146,7 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 		return done
 	}
 
-	nextInterval := float64(p.initialInterval) * math.Pow(p.backoffCoefficient, float64(numAttempts))
+	nextInterval := float64(p.initialInterval) * math.Pow(p.backoffCoefficient, float64(numAttempts-1))
 	// Disallow retries if initialInterval is negative or nextInterval overflows
 	if nextInterval <= 0 {
 		return done
@@ -179,13 +179,13 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 
 // Now returns the current time using the system clock
 func (t systemClock) Now() time.Time {
-	return time.Now()
+	return time.Now().UTC()
 }
 
 // Reset will set the Retrier into initial state
 func (r *retrierImpl) Reset() {
 	r.startTime = r.clock.Now()
-	r.currentAttempt = 0
+	r.currentAttempt = 1
 }
 
 // NextBackOff returns the next delay interval.  This is used by Retry to delay calling the operation again

@@ -28,7 +28,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/temporalio/temporal/common/headers"
+	"go.temporal.io/server/common/headers"
 )
 
 // NewContextWithTimeout creates context with timeout.

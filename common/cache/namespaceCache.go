@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination namespaceCache_mock.go -self_package github.com/temporalio/temporal/common/cache
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination namespaceCache_mock.go -self_package go.temporal.io/server/common/cache
 
 package cache
 
@@ -35,18 +35,18 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	"go.temporal.io/temporal-proto/serviceerror"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // ReplicationPolicy is the namespace's replication policy,
@@ -266,6 +266,7 @@ func (c *namespaceCache) Start() {
 
 // Start start the background refresh of namespace
 func (c *namespaceCache) Stop() {
+
 	if !atomic.CompareAndSwapInt32(&c.status, namespaceCacheStarted, namespaceCacheStopped) {
 		return
 	}
@@ -374,7 +375,7 @@ func (c *namespaceCache) GetNamespaceID(
 	if err != nil {
 		return "", err
 	}
-	return primitives.UUIDString(entry.info.Id), nil
+	return entry.info.Id, nil
 }
 
 // GetNamespaceName returns namespace name given the namespace id
@@ -399,12 +400,11 @@ func (c *namespaceCache) refreshLoop() {
 			return
 		case <-timer.C:
 			for err := c.refreshNamespaces(); err != nil; err = c.refreshNamespaces() {
-				select {
-				case <-c.shutdownChan:
+				c.logger.Error("Error refreshing namespace cache", tag.Error(err))
+				time.Sleep(NamespaceCacheRefreshFailureRetryInterval)
+
+				if _, opened := <-c.shutdownChan; !opened {
 					return
-				default:
-					c.logger.Error("Error refreshing namespace cache", tag.Error(err))
-					time.Sleep(NamespaceCacheRefreshFailureRetryInterval)
 				}
 			}
 		}
@@ -458,8 +458,8 @@ func (c *namespaceCache) refreshNamespacesLocked() error {
 	newCacheNameToID := newNamespaceCache()
 	newCacheByID := newNamespaceCache()
 	for _, namespace := range c.GetAllNamespace() {
-		newCacheNameToID.Put(namespace.info.Name, primitives.UUIDString(namespace.info.Id))
-		newCacheByID.Put(primitives.UUIDString(namespace.info.Id), namespace)
+		newCacheNameToID.Put(namespace.info.Name, namespace.info.Id)
+		newCacheByID.Put(namespace.info.Id, namespace)
 	}
 
 UpdateLoop:
@@ -472,11 +472,11 @@ UpdateLoop:
 			// will be loaded into cache in the next refresh
 			break UpdateLoop
 		}
-		prevEntry, nextEntry, err := c.updateIDToNamespaceCache(newCacheByID, primitives.UUIDString(namespace.info.Id), namespace)
+		prevEntry, nextEntry, err := c.updateIDToNamespaceCache(newCacheByID, namespace.info.Id, namespace)
 		if err != nil {
 			return err
 		}
-		c.updateNameToIDCache(newCacheNameToID, nextEntry.info.Name, primitives.UUIDString(nextEntry.info.Id))
+		c.updateNameToIDCache(newCacheNameToID, nextEntry.info.Name, nextEntry.info.Id)
 
 		if prevEntry != nil {
 			prevEntries = append(prevEntries, prevEntry)
@@ -500,7 +500,7 @@ func (c *namespaceCache) checkNamespaceExists(
 	id string,
 ) error {
 
-	_, err := c.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: name, ID: primitives.MustParseUUID(id)})
+	_, err := c.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: name, ID: id})
 	return err
 }
 
@@ -809,13 +809,18 @@ func (entry *NamespaceCacheEntry) GetRetentionDays(
 	if entry.IsSampledForLongerRetention(workflowID) {
 		if sampledRetentionValue, ok := entry.info.Data[SampleRetentionKey]; ok {
 			sampledRetentionDays, err := strconv.Atoi(sampledRetentionValue)
-			if err != nil || sampledRetentionDays < int(entry.config.RetentionDays) {
-				return entry.config.RetentionDays
+			if err != nil || sampledRetentionDays < timestamp.DaysFromDuration(entry.config.Retention) {
+				return timestamp.DaysInt32FromDuration(entry.config.Retention)
 			}
 			return int32(sampledRetentionDays)
 		}
 	}
-	return entry.config.RetentionDays
+
+	if entry.config.Retention == nil {
+		return 0
+	}
+
+	return timestamp.DaysInt32FromDuration(entry.config.Retention)
 }
 
 // IsSampledForLongerRetentionEnabled return whether sample for longer retention is enabled or not

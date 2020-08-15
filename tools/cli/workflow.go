@@ -28,18 +28,10 @@ import (
 	"strings"
 
 	"github.com/urfave/cli"
-
-	"github.com/temporalio/temporal/service/worker/batcher"
 )
 
 func newWorkflowCommands() []cli.Command {
 	return []cli.Command{
-		{
-			Name:        "activity",
-			Aliases:     []string{"act"},
-			Usage:       "operate activities of workflow",
-			Subcommands: newActivityCommands(),
-		},
 		{
 			Name:  "show",
 			Usage: "show workflow history",
@@ -248,7 +240,7 @@ func newWorkflowCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagEventID,
-					Usage: "The eventId of any event after DecisionTaskStarted you want to reset to (exclusive). It can be DecisionTaskCompleted, DecisionTaskFailed or others",
+					Usage: "The eventId of any event after WorkflowTaskStarted you want to reset to (exclusive). It can be WorkflowTaskCompleted, WorkflowTaskFailed or others",
 				},
 				cli.StringFlag{
 					Name:  FlagReason,
@@ -312,7 +304,7 @@ func newWorkflowCommands() []cli.Command {
 				},
 				cli.BoolFlag{
 					Name:  FlagNonDeterministicOnly,
-					Usage: "Only apply onto workflows whose last event is decisionTaskFailed with non deterministic error.",
+					Usage: "Only apply onto workflows whose last event is workflowTaskFailed with non deterministic error.",
 				},
 				cli.BoolFlag{
 					Name:  FlagDryRun,
@@ -329,169 +321,6 @@ func newWorkflowCommands() []cli.Command {
 			},
 			Action: func(c *cli.Context) {
 				ResetInBatch(c)
-			},
-		},
-		{
-			Name:        "batch",
-			Usage:       "batch operation on a list of workflows from query.",
-			Subcommands: newBatchCommands(),
-		},
-	}
-}
-
-func newActivityCommands() []cli.Command {
-	return []cli.Command{
-		{
-			Name:    "complete",
-			Aliases: []string{"comp"},
-			Usage:   "complete an activity",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowId",
-				},
-				cli.StringFlag{
-					Name:  FlagRunIDWithAlias,
-					Usage: "RunId",
-				},
-				cli.StringFlag{
-					Name:  FlagActivityIDWithAlias,
-					Usage: "The activityId to operate on",
-				},
-				cli.StringFlag{
-					Name:  FlagResult,
-					Usage: "Result of the activity",
-				},
-				cli.StringFlag{
-					Name:  FlagIdentity,
-					Usage: "Identity of the operator",
-				},
-			},
-			Action: func(c *cli.Context) {
-				CompleteActivity(c)
-			},
-		},
-		{
-			Name:  "fail",
-			Usage: "fail an activity",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowId",
-				},
-				cli.StringFlag{
-					Name:  FlagRunIDWithAlias,
-					Usage: "RunId",
-				},
-				cli.StringFlag{
-					Name:  FlagActivityIDWithAlias,
-					Usage: "The activityId to operate on",
-				},
-				cli.StringFlag{
-					Name:  FlagReason,
-					Usage: "Reason to fail the activity",
-				},
-				cli.StringFlag{
-					Name:  FlagDetail,
-					Usage: "Detail to fail the activity",
-				},
-				cli.StringFlag{
-					Name:  FlagIdentity,
-					Usage: "Identity of the operator",
-				},
-			},
-			Action: func(c *cli.Context) {
-				FailActivity(c)
-			},
-		},
-	}
-}
-
-func newBatchCommands() []cli.Command {
-	return []cli.Command{
-		{
-			Name:    "describe",
-			Aliases: []string{"desc"},
-			Usage:   "Describe a batch operation job",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagJobIDWithAlias,
-					Usage: "Batch Job Id",
-				},
-			},
-			Action: func(c *cli.Context) {
-				DescribeBatchJob(c)
-			},
-		},
-		{
-			Name:  "terminate",
-			Usage: "terminate a batch operation job",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagJobIDWithAlias,
-					Usage: "Batch Job Id",
-				},
-				cli.StringFlag{
-					Name:  FlagReasonWithAlias,
-					Usage: "Reason to stop this batch job",
-				},
-			},
-			Action: func(c *cli.Context) {
-				TerminateBatchJob(c)
-			},
-		},
-		{
-			Name:    "list",
-			Aliases: []string{"l"},
-			Usage:   "Describe a batch operation job",
-			Flags: []cli.Flag{
-				cli.IntFlag{
-					Name:  FlagPageSizeWithAlias,
-					Value: 30,
-					Usage: "Result page size",
-				},
-			},
-			Action: func(c *cli.Context) {
-				ListBatchJobs(c)
-			},
-		},
-		{
-			Name:  "start",
-			Usage: "Start a batch operation job",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagListQueryWithAlias,
-					Usage: "Query to get workflows for being executed this batch operation",
-				},
-				cli.StringFlag{
-					Name:  FlagReasonWithAlias,
-					Usage: "Reason to run this batch job",
-				},
-				cli.StringFlag{
-					Name:  FlagBatchTypeWithAlias,
-					Usage: "Types supported: " + strings.Join(batcher.AllBatchTypes, ","),
-				},
-				//below are optional
-				cli.StringFlag{
-					Name:  FlagSignalNameWithAlias,
-					Usage: "Required for batch signal",
-				},
-				cli.StringFlag{
-					Name:  FlagInputWithAlias,
-					Usage: "Optional input of signal",
-				},
-				cli.IntFlag{
-					Name:  FlagRPS,
-					Value: batcher.DefaultRPS,
-					Usage: "RPS of processing",
-				},
-				cli.BoolFlag{
-					Name:  FlagYes,
-					Usage: "Optional flag to disable confirmation prompt",
-				},
-			},
-			Action: func(c *cli.Context) {
-				StartBatchJob(c)
 			},
 		},
 	}

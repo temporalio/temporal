@@ -1,0 +1,57 @@
+// Copyright (c) 2019 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.checksum.v1;
+
+option go_package = "go.temporal.io/server/api/checksum/v1;checksum";
+
+import "temporal/api/enums/v1/workflow.proto";
+
+import "temporal/server/api/history/v1/message.proto";
+import "temporal/server/api/enums/v1/workflow.proto";
+
+message MutableStateChecksumPayload {
+    bool cancel_requested = 1;
+    temporal.server.api.enums.v1.WorkflowExecutionState state = 2;
+    temporal.api.enums.v1.WorkflowExecutionStatus status = 3;
+
+    int64 last_write_version = 4;
+    int64 last_write_event_id = 5;
+    int64 last_first_event_id = 6;
+    int64 next_event_id = 7;
+    int64 last_processed_event_id = 8;
+    int64 signal_count = 9;
+
+    int32 workflow_task_attempt = 10;
+    int64 workflow_task_version = 11;
+    int64 workflow_task_scheduled_id = 12;
+    int64 workflow_task_started_id = 13;
+
+    repeated int64 pending_timer_started_ids = 14;
+    repeated int64 pending_activity_scheduled_ids = 15;
+    repeated int64 pending_signal_initiated_ids = 16;
+    repeated int64 pending_req_cancel_initiated_ids = 17;
+    repeated int64 pending_child_initiated_ids = 18;
+
+    string sticky_task_queue_name = 19;
+    temporal.server.api.history.v1.VersionHistories version_histories = 20;
+}

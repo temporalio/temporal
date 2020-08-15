@@ -27,7 +27,7 @@ package host
 import (
 	"github.com/dgryski/go-farm"
 
-	"github.com/temporalio/temporal/common/membership"
+	"go.temporal.io/server/common/membership"
 )
 
 type simpleResolver struct {

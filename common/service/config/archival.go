@@ -27,16 +27,16 @@ package config
 import (
 	"errors"
 
-	"github.com/temporalio/temporal/common"
+	"go.temporal.io/server/common"
 )
 
 // Validate validates the archival config
 func (a *Archival) Validate(namespaceDefaults *ArchivalNamespaceDefaults) error {
-	if !isArchivalConfigValid(a.History.Status, a.History.EnableRead, namespaceDefaults.History.Status, namespaceDefaults.History.URI, a.History.Provider != nil) {
+	if !isArchivalConfigValid(a.History.State, a.History.EnableRead, namespaceDefaults.History.State, namespaceDefaults.History.URI, a.History.Provider != nil) {
 		return errors.New("Invalid history archival config")
 	}
 
-	if !isArchivalConfigValid(a.Visibility.Status, a.Visibility.EnableRead, namespaceDefaults.Visibility.Status, namespaceDefaults.Visibility.URI, a.Visibility.Provider != nil) {
+	if !isArchivalConfigValid(a.Visibility.State, a.Visibility.EnableRead, namespaceDefaults.Visibility.State, namespaceDefaults.Visibility.URI, a.Visibility.Provider != nil) {
 		return errors.New("Invalid visibility archival config")
 	}
 

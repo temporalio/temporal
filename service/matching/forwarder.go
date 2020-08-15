@@ -30,25 +30,25 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/client/matching"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/quotas"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
+
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (
 	// Forwarder is the type that contains state pertaining to
 	// the api call forwarder component
 	Forwarder struct {
-		cfg          *forwarderConfig
-		taskListID   *taskListID
-		taskListKind tasklistpb.TaskListKind
-		client       matching.Client
+		cfg           *forwarderConfig
+		taskQueueID   *taskQueueID
+		taskQueueKind enumspb.TaskQueueKind
+		client        matching.Client
 
 		// token channels that vend tokens necessary to make
 		// API calls exposed by forwarder. Tokens are used
@@ -77,37 +77,37 @@ type (
 )
 
 var (
-	errNoParent            = errors.New("cannot find parent task list for forwarding")
-	errTaskListKind        = errors.New("forwarding is not supported on sticky task list")
-	errInvalidTaskListType = errors.New("unrecognized task list type")
-	errForwarderSlowDown   = errors.New("limit exceeded")
+	errNoParent             = errors.New("cannot find parent task queue for forwarding")
+	errTaskQueueKind        = errors.New("forwarding is not supported on sticky task queue")
+	errInvalidTaskQueueType = errors.New("unrecognized task queue type")
+	errForwarderSlowDown    = errors.New("limit exceeded")
 )
 
 // noopForwarderTokenC refers to a token channel that blocks forever
 var noopForwarderTokenC <-chan *ForwarderReqToken = make(chan *ForwarderReqToken)
 
 // newForwarder returns an instance of Forwarder object which
-// can be used to forward api request calls from a task list
-// child partition to a task list parent partition. The returned
-// forwarder is tied to a single task list. All of the exposed
+// can be used to forward api request calls from a task queue
+// child partition to a task queue parent partition. The returned
+// forwarder is tied to a single task queue. All of the exposed
 // methods can return the following errors:
 // Returns following errors:
-//  - errNoParent: If this task list doesn't have a parent to forward to
-//  - errTaskListKind: If the task list is a sticky task list. Sticky task lists are never partitioned
+//  - errNoParent: If this task queue doesn't have a parent to forward to
+//  - errTaskQueueKind: If the task queue is a sticky task queue. Sticky task queues are never partitioned
 //  - errForwarderSlowDown: When the rate limit is exceeded
-//  - errInvalidTaskType: If the task list type is invalid
+//  - errInvalidTaskType: If the task queue type is invalid
 func newForwarder(
 	cfg *forwarderConfig,
-	taskListID *taskListID,
-	kind tasklistpb.TaskListKind,
+	taskQueueID *taskQueueID,
+	kind enumspb.TaskQueueKind,
 	client matching.Client,
 ) *Forwarder {
 	rpsFunc := func() float64 { return float64(cfg.ForwarderMaxRatePerSecond()) }
 	fwdr := &Forwarder{
 		cfg:                   cfg,
 		client:                client,
-		taskListID:            taskListID,
-		taskListKind:          kind,
+		taskQueueID:           taskQueueID,
+		taskQueueKind:         kind,
 		outstandingTasksLimit: int32(cfg.ForwarderMaxOutstandingTasks()),
 		outstandingPollsLimit: int32(cfg.ForwarderMaxOutstandingPolls()),
 		limiter:               quotas.NewDynamicRateLimiter(rpsFunc),
@@ -117,13 +117,13 @@ func newForwarder(
 	return fwdr
 }
 
-// ForwardTask forwards an activity or decision task to the parent task list partition if it exist
+// ForwardTask forwards an activity or workflow task to the parent task queue partition if it exist
 func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) error {
-	if fwdr.taskListKind == tasklistpb.TaskListKind_Sticky {
-		return errTaskListKind
+	if fwdr.taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
+		return errTaskQueueKind
 	}
 
-	name := fwdr.taskListID.Parent(fwdr.cfg.ForwarderMaxChildrenPerNode())
+	name := fwdr.taskQueueID.Parent(fwdr.cfg.ForwarderMaxChildrenPerNode())
 	if name == "" {
 		return errNoParent
 	}
@@ -135,88 +135,83 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	var err error
 
 	// todo: Vet recomputing ScheduleToStart and rechecking expiry here
-	expiryGo, err := types.TimestampFromProto(task.event.Data.Expiry)
-	if err != nil {
-		return err
-	}
-
-	newScheduleToStartTimeout := convert.Int32Ceil(time.Until(expiryGo).Seconds())
+	newScheduleToStartTimeout := time.Until(timestamp.TimeValue(task.event.Data.ExpiryTime))
 
 	// Todo - should we noop expired tasks? This will be moot once history stamp absolute time
 	/*if newScheduleToStartTimeout <= 0 {
 		return nil
 	}*/
 
-	switch fwdr.taskListID.taskType {
-	case tasklistpb.TaskListType_Decision:
-		_, err = fwdr.client.AddDecisionTask(ctx, &matchingservice.AddDecisionTaskRequest{
-			NamespaceId: primitives.UUIDString(task.event.Data.GetNamespaceId()),
+	switch fwdr.taskQueueID.taskType {
+	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
+		_, err = fwdr.client.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+			NamespaceId: task.event.Data.GetNamespaceId(),
 			Execution:   task.workflowExecution(),
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: name,
-				Kind: tasklistpb.TaskListKind(fwdr.taskListKind),
+				Kind: fwdr.taskQueueKind,
 			},
-			ScheduleId:                    task.event.Data.GetScheduleId(),
-			Source:                        task.source,
-			ScheduleToStartTimeoutSeconds: newScheduleToStartTimeout,
-			ForwardedFrom:                 fwdr.taskListID.name,
+			ScheduleId:             task.event.Data.GetScheduleId(),
+			Source:                 task.source,
+			ScheduleToStartTimeout: &newScheduleToStartTimeout,
+			ForwardedSource:        fwdr.taskQueueID.name,
 		})
-	case tasklistpb.TaskListType_Activity:
+	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-			NamespaceId:       fwdr.taskListID.namespaceID,
-			SourceNamespaceId: primitives.UUIDString(task.event.Data.GetNamespaceId()),
+			NamespaceId:       fwdr.taskQueueID.namespaceID,
+			SourceNamespaceId: task.event.Data.GetNamespaceId(),
 			Execution:         task.workflowExecution(),
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: name,
-				Kind: tasklistpb.TaskListKind(fwdr.taskListKind),
+				Kind: fwdr.taskQueueKind,
 			},
-			ScheduleId:                    task.event.Data.GetScheduleId(),
-			Source:                        task.source,
-			ScheduleToStartTimeoutSeconds: newScheduleToStartTimeout,
-			ForwardedFrom:                 fwdr.taskListID.name,
+			ScheduleId:             task.event.Data.GetScheduleId(),
+			Source:                 task.source,
+			ScheduleToStartTimeout: &newScheduleToStartTimeout,
+			ForwardedSource:        fwdr.taskQueueID.name,
 		})
 	default:
-		return errInvalidTaskListType
+		return errInvalidTaskQueueType
 	}
 
 	return fwdr.handleErr(err)
 }
 
-// ForwardQueryTask forwards a query task to parent task list partition, if it exist
+// ForwardQueryTask forwards a query task to parent task queue partition, if it exist
 func (fwdr *Forwarder) ForwardQueryTask(
 	ctx context.Context,
 	task *internalTask,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 
-	if fwdr.taskListKind == tasklistpb.TaskListKind_Sticky {
-		return nil, errTaskListKind
+	if fwdr.taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
+		return nil, errTaskQueueKind
 	}
 
-	name := fwdr.taskListID.Parent(fwdr.cfg.ForwarderMaxChildrenPerNode())
+	name := fwdr.taskQueueID.Parent(fwdr.cfg.ForwarderMaxChildrenPerNode())
 	if name == "" {
 		return nil, errNoParent
 	}
 
 	resp, err := fwdr.client.QueryWorkflow(ctx, &matchingservice.QueryWorkflowRequest{
 		NamespaceId: task.query.request.GetNamespaceId(),
-		TaskList: &tasklistpb.TaskList{
+		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: name,
-			Kind: fwdr.taskListKind,
+			Kind: fwdr.taskQueueKind,
 		},
-		QueryRequest:  task.query.request.QueryRequest,
-		ForwardedFrom: fwdr.taskListID.name,
+		QueryRequest:    task.query.request.QueryRequest,
+		ForwardedSource: fwdr.taskQueueID.name,
 	})
 
 	return resp, fwdr.handleErr(err)
 }
 
-// ForwardPoll forwards a poll request to parent task list partition if it exist
+// ForwardPoll forwards a poll request to parent task queue partition if it exist
 func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
-	if fwdr.taskListKind == tasklistpb.TaskListKind_Sticky {
-		return nil, errTaskListKind
+	if fwdr.taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
+		return nil, errTaskQueueKind
 	}
 
-	name := fwdr.taskListID.Parent(fwdr.cfg.ForwarderMaxChildrenPerNode())
+	name := fwdr.taskQueueID.Parent(fwdr.cfg.ForwarderMaxChildrenPerNode())
 	if name == "" {
 		return nil, errNoParent
 	}
@@ -224,36 +219,36 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 	pollerID, _ := ctx.Value(pollerIDKey).(string)
 	identity, _ := ctx.Value(identityKey).(string)
 
-	switch fwdr.taskListID.taskType {
-	case tasklistpb.TaskListType_Decision:
-		resp, err := fwdr.client.PollForDecisionTask(ctx, &matchingservice.PollForDecisionTaskRequest{
-			NamespaceId: fwdr.taskListID.namespaceID,
+	switch fwdr.taskQueueID.taskType {
+	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
+		resp, err := fwdr.client.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
+			NamespaceId: fwdr.taskQueueID.namespaceID,
 			PollerId:    pollerID,
-			PollRequest: &workflowservice.PollForDecisionTaskRequest{
-				TaskList: &tasklistpb.TaskList{
+			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: name,
-					Kind: tasklistpb.TaskListKind(fwdr.taskListKind),
+					Kind: fwdr.taskQueueKind,
 				},
 				Identity: identity,
 			},
-			ForwardedFrom: fwdr.taskListID.name,
+			ForwardedSource: fwdr.taskQueueID.name,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
 		}
-		return newInternalStartedTask(&startedTaskInfo{decisionTaskInfo: resp}), nil
-	case tasklistpb.TaskListType_Activity:
-		resp, err := fwdr.client.PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
-			NamespaceId: fwdr.taskListID.namespaceID,
+		return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: resp}), nil
+	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
+		resp, err := fwdr.client.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
+			NamespaceId: fwdr.taskQueueID.namespaceID,
 			PollerId:    pollerID,
-			PollRequest: &workflowservice.PollForActivityTaskRequest{
-				TaskList: &tasklistpb.TaskList{
+			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: name,
-					Kind: tasklistpb.TaskListKind(fwdr.taskListKind),
+					Kind: fwdr.taskQueueKind,
 				},
 				Identity: identity,
 			},
-			ForwardedFrom: fwdr.taskListID.name,
+			ForwardedSource: fwdr.taskQueueID.name,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
@@ -261,7 +256,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 		return newInternalStartedTask(&startedTaskInfo{activityTaskInfo: resp}), nil
 	}
 
-	return nil, errInvalidTaskListType
+	return nil, errInvalidTaskQueueType
 }
 
 // AddReqTokenC returns a channel that can be used to wait for a token

@@ -27,7 +27,7 @@ package dynamicconfig
 import (
 	"time"
 
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 // These mock functions are for tests to use config properties that are dynamic
@@ -42,9 +42,9 @@ func GetIntPropertyFilteredByNamespace(value int) func(namespace string) int {
 	return func(namespace string) int { return value }
 }
 
-// GetIntPropertyFilteredByTaskListInfo returns value as IntPropertyFnWithTaskListInfoFilters
-func GetIntPropertyFilteredByTaskListInfo(value int) func(namespace string, taskList string, taskType tasklistpb.TaskListType) int {
-	return func(namespace string, taskList string, taskType tasklistpb.TaskListType) int { return value }
+// GetIntPropertyFilteredByTaskQueueInfo returns value as IntPropertyFnWithTaskQueueInfoFilters
+func GetIntPropertyFilteredByTaskQueueInfo(value int) func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int {
+	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int { return value }
 }
 
 // GetFloatPropertyFn returns value as FloatPropertyFn
@@ -72,9 +72,9 @@ func GetDurationPropertyFn(value time.Duration) func(opts ...FilterOption) time.
 	return func(...FilterOption) time.Duration { return value }
 }
 
-// GetDurationPropertyFnFilteredByTaskListInfo returns value as DurationPropertyFnWithTaskListInfoFilters
-func GetDurationPropertyFnFilteredByTaskListInfo(value time.Duration) func(namespace string, taskList string, taskType tasklistpb.TaskListType) time.Duration {
-	return func(namespace string, taskList string, taskType tasklistpb.TaskListType) time.Duration { return value }
+// GetDurationPropertyFnFilteredByTaskQueueInfo returns value as DurationPropertyFnWithTaskQueueInfoFilters
+func GetDurationPropertyFnFilteredByTaskQueueInfo(value time.Duration) func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration {
+	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration { return value }
 }
 
 // GetStringPropertyFn returns value as StringPropertyFn
@@ -85,4 +85,9 @@ func GetStringPropertyFn(value string) func(opts ...FilterOption) string {
 // GetMapPropertyFn returns value as MapPropertyFn
 func GetMapPropertyFn(value map[string]interface{}) func(opts ...FilterOption) map[string]interface{} {
 	return func(...FilterOption) map[string]interface{} { return value }
+}
+
+// GetMapPropertyFnWithNamespaceFilter returns value as MapPropertyFn
+func GetMapPropertyFnWithNamespaceFilter(value map[string]interface{}) func(namespace string) map[string]interface{} {
+	return func(namespace string) map[string]interface{} { return value }
 }

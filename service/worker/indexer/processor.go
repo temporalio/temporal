@@ -32,17 +32,18 @@ import (
 	"time"
 
 	"github.com/olivere/elastic"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/definition"
-	es "github.com/temporalio/temporal/common/elasticsearch"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/metrics"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	indexerspb "go.temporal.io/server/api/indexer/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/definition"
+	es "go.temporal.io/server/common/elasticsearch"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/metrics"
 )
 
 type indexProcessor struct {
@@ -175,7 +176,7 @@ func (p *indexProcessor) messageProcessLoop(workerWG *sync.WaitGroup) {
 }
 
 func (p *indexProcessor) process(kafkaMsg messaging.Message) error {
-	logger := p.logger.WithTags(tag.KafkaPartition(kafkaMsg.Partition()), tag.KafkaOffset(kafkaMsg.Offset()), tag.AttemptStart(time.Now()))
+	logger := p.logger.WithTags(tag.KafkaPartition(kafkaMsg.Partition()), tag.KafkaOffset(kafkaMsg.Offset()), tag.AttemptStart(time.Now().UTC()))
 
 	indexMsg, err := p.deserialize(kafkaMsg.Value())
 	if err != nil {
@@ -187,21 +188,21 @@ func (p *indexProcessor) process(kafkaMsg messaging.Message) error {
 	return p.addMessageToES(indexMsg, kafkaMsg, logger)
 }
 
-func (p *indexProcessor) deserialize(payload []byte) (*indexergenpb.Message, error) {
-	var msg indexergenpb.Message
+func (p *indexProcessor) deserialize(payload []byte) (*indexerspb.Message, error) {
+	var msg indexerspb.Message
 	if err := msg.Unmarshal(payload); err != nil {
 		return nil, err
 	}
 	return &msg, nil
 }
 
-func (p *indexProcessor) addMessageToES(indexMsg *indexergenpb.Message, kafkaMsg messaging.Message, logger log.Logger) error {
+func (p *indexProcessor) addMessageToES(indexMsg *indexerspb.Message, kafkaMsg messaging.Message, logger log.Logger) error {
 	docID := indexMsg.GetWorkflowId() + esDocIDDelimiter + indexMsg.GetRunId()
 
 	var keyToKafkaMsg string
 	var req elastic.BulkableRequest
 	switch indexMsg.GetMessageType() {
-	case indexergenpb.MessageType_Index:
+	case enumsspb.MESSAGE_TYPE_INDEX:
 		keyToKafkaMsg = fmt.Sprintf("%v-%v", kafkaMsg.Partition(), kafkaMsg.Offset())
 		doc := p.generateESDoc(indexMsg, keyToKafkaMsg)
 		req = elastic.NewBulkIndexRequest().
@@ -211,7 +212,7 @@ func (p *indexProcessor) addMessageToES(indexMsg *indexergenpb.Message, kafkaMsg
 			VersionType(versionTypeExternal).
 			Version(indexMsg.GetVersion()).
 			Doc(doc)
-	case indexergenpb.MessageType_Delete:
+	case enumsspb.MESSAGE_TYPE_DELETE:
 		keyToKafkaMsg = docID
 		req = elastic.NewBulkDeleteRequest().
 			Index(p.esIndexName).
@@ -229,7 +230,7 @@ func (p *indexProcessor) addMessageToES(indexMsg *indexergenpb.Message, kafkaMsg
 	return nil
 }
 
-func (p *indexProcessor) generateESDoc(msg *indexergenpb.Message, keyToKafkaMsg string) map[string]interface{} {
+func (p *indexProcessor) generateESDoc(msg *indexerspb.Message, keyToKafkaMsg string) map[string]interface{} {
 	doc := p.dumpFieldsToMap(msg.Fields)
 	fulfillDoc(doc, msg, keyToKafkaMsg)
 	return doc
@@ -245,7 +246,7 @@ func (p *indexProcessor) decodeSearchAttrBinary(bytes []byte, key string) interf
 	return val
 }
 
-func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexergenpb.Field) map[string]interface{} {
+func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexerspb.Field) map[string]interface{} {
 	doc := make(map[string]interface{})
 	attr := make(map[string]interface{})
 	for k, v := range fields {
@@ -256,13 +257,13 @@ func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexergenpb.Field) 
 		}
 
 		switch v.GetType() {
-		case indexergenpb.FieldType_String:
+		case enumsspb.FIELD_TYPE_STRING:
 			doc[k] = v.GetStringData()
-		case indexergenpb.FieldType_Int:
+		case enumsspb.FIELD_TYPE_INT:
 			doc[k] = v.GetIntData()
-		case indexergenpb.FieldType_Bool:
+		case enumsspb.FIELD_TYPE_BOOL:
 			doc[k] = v.GetBoolData()
-		case indexergenpb.FieldType_Binary:
+		case enumsspb.FIELD_TYPE_BINARY:
 			if k == definition.Memo {
 				doc[k] = v.GetBinaryData()
 			} else { // custom search attributes
@@ -287,7 +288,7 @@ func (p *indexProcessor) isValidFieldToES(field string) bool {
 	return false
 }
 
-func fulfillDoc(doc map[string]interface{}, msg *indexergenpb.Message, keyToKafkaMsg string) {
+func fulfillDoc(doc map[string]interface{}, msg *indexerspb.Message, keyToKafkaMsg string) {
 	doc[definition.NamespaceID] = msg.GetNamespaceId()
 	doc[definition.WorkflowID] = msg.GetWorkflowId()
 	doc[definition.RunID] = msg.GetRunId()

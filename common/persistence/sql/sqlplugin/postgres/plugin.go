@@ -28,19 +28,19 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/temporalio/temporal/common/persistence/sql"
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/service/config"
 )
 
 const (
 	// PluginName is the name of the plugin
-	PluginName             = "postgres"
-	dataSourceNamePostgres = "user=%v password=%v host=%v port=%v dbname=%v sslmode=disable "
+	PluginName = "postgres"
 )
 
 var errTLSNotImplemented = errors.New("tls for postgres has not been implemented")
@@ -73,6 +73,23 @@ func (d *plugin) CreateAdminDB(cfg *config.SQL) (sqlplugin.AdminDB, error) {
 	return db, nil
 }
 
+func composeConnectionString(user, password, host, port, dbName string) string {
+	composeSegment := func(paramName string, paramValue string) string {
+		paramValue = strings.TrimSpace(paramValue)
+		if paramValue != "" {
+			return fmt.Sprintf("%s=%s ", paramName, paramValue)
+		}
+		return ""
+	}
+
+	return composeSegment("user", user) +
+		composeSegment("password", password) +
+		composeSegment("host", host) +
+		composeSegment("port", port) +
+		composeSegment("dbname", dbName) +
+		composeSegment("sslmode", "disable")
+}
+
 // CreateDBConnection creates a returns a reference to a logical connection to the
 // underlying SQL database. The returned object is to tied to a single
 // SQL database and the object can be used to perform CRUD operations on
@@ -93,8 +110,8 @@ func (d *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
 	if dbName == "" {
 		dbName = "postgres"
 	}
-	db, err := sqlx.Connect(PluginName, fmt.Sprintf(dataSourceNamePostgres, cfg.User, cfg.Password, host, port, dbName))
 
+	db, err := sqlx.Connect(PluginName, composeConnectionString(cfg.User, cfg.Password, host, port, dbName))
 	if err != nil {
 		return nil, err
 	}

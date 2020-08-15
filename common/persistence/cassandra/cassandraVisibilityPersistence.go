@@ -29,14 +29,13 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cassandra"
-	"github.com/temporalio/temporal/common/log"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/cassandra"
+	"go.temporal.io/server/common/log"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/service/config"
 )
 
 // Fixed namespace values for now
@@ -50,11 +49,11 @@ const (
 
 const (
 	templateCreateWorkflowExecutionStartedWithTTL = `INSERT INTO open_executions (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_list) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
 
 	templateCreateWorkflowExecutionStarted = `INSERT INTO open_executions (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_list) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateDeleteWorkflowExecutionStarted = `DELETE FROM open_executions ` +
@@ -64,36 +63,21 @@ const (
 		`AND run_id = ?`
 
 	templateCreateWorkflowExecutionClosedWithTTL = `INSERT INTO closed_executions (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
 
 	templateCreateWorkflowExecutionClosed = `INSERT INTO closed_executions (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	templateCreateWorkflowExecutionClosedWithTTLV2 = `INSERT INTO closed_executions_v2 (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
-
-	templateCreateWorkflowExecutionClosedV2 = `INSERT INTO closed_executions_v2 (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-
-	templateGetOpenWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_list ` +
+	templateGetOpenWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue ` +
 		`FROM open_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition IN (?) ` +
 		`AND start_time >= ? ` +
 		`AND start_time <= ? `
 
-	templateGetClosedWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list ` +
-		`FROM closed_executions ` +
-		`WHERE namespace_id = ? ` +
-		`AND namespace_partition IN (?) ` +
-		`AND start_time >= ? ` +
-		`AND start_time <= ? `
-
-	templateGetOpenWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_list ` +
+	templateGetOpenWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue ` +
 		`FROM open_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
@@ -101,15 +85,7 @@ const (
 		`AND start_time <= ? ` +
 		`AND workflow_type_name = ? `
 
-	templateGetClosedWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list ` +
-		`FROM closed_executions ` +
-		`WHERE namespace_id = ? ` +
-		`AND namespace_partition = ? ` +
-		`AND start_time >= ? ` +
-		`AND start_time <= ? ` +
-		`AND workflow_type_name = ? `
-
-	templateGetOpenWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_list ` +
+	templateGetOpenWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue ` +
 		`FROM open_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
@@ -117,28 +93,43 @@ const (
 		`AND start_time <= ? ` +
 		`AND workflow_id = ? `
 
-	templateGetClosedWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list ` +
-		`FROM closed_executions ` +
-		`WHERE namespace_id = ? ` +
-		`AND namespace_partition = ? ` +
-		`AND start_time >= ? ` +
-		`AND start_time <= ? ` +
-		`AND workflow_id = ? `
-
-	templateGetClosedWorkflowExecutionsByStatus = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list ` +
-		`FROM closed_executions ` +
-		`WHERE namespace_id = ? ` +
-		`AND namespace_partition = ? ` +
-		`AND start_time >= ? ` +
-		`AND start_time <= ? ` +
-		`AND status = ? `
-
-	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list ` +
+	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
 		`FROM closed_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
 		`AND workflow_id = ? ` +
 		`AND run_id = ? ALLOW FILTERING `
+
+	templateGetClosedWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
+		`FROM closed_executions ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition IN (?) ` +
+		`AND close_time >= ? ` +
+		`AND close_time <= ? `
+
+	templateGetClosedWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
+		`FROM closed_executions ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
+		`AND close_time >= ? ` +
+		`AND close_time <= ? ` +
+		`AND workflow_type_name = ? `
+
+	templateGetClosedWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
+		`FROM closed_executions ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
+		`AND close_time >= ? ` +
+		`AND close_time <= ? ` +
+		`AND workflow_id = ? `
+
+	templateGetClosedWorkflowExecutionsByStatus = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
+		`FROM closed_executions ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
+		`AND close_time >= ? ` +
+		`AND close_time <= ? ` +
+		`AND status = ? `
 )
 
 type (
@@ -152,8 +143,8 @@ type (
 func newVisibilityPersistence(cfg config.Cassandra, logger log.Logger) (p.VisibilityStore, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = gocql.LocalQuorum
-	cluster.SerialConsistency = gocql.LocalSerial
+	cluster.Consistency = cfg.Consistency.GetConsistency()
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()
@@ -189,8 +180,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			request.WorkflowTypeName,
 			request.Memo.Data,
-			string(request.Memo.GetEncoding()),
-			request.TaskList,
+			request.Memo.Encoding.String(),
+			request.TaskQueue,
 		)
 	} else {
 		query = v.session.Query(templateCreateWorkflowExecutionStartedWithTTL,
@@ -202,8 +193,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			request.WorkflowTypeName,
 			request.Memo.Data,
-			string(request.Memo.GetEncoding()),
-			request.TaskList,
+			request.Memo.Encoding.String(),
+			request.TaskQueue,
 			ttl,
 		)
 	}
@@ -252,24 +243,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			request.Status,
 			request.HistoryLength,
 			request.Memo.Data,
-			string(request.Memo.GetEncoding()),
-			request.TaskList,
-		)
-		// duplicate write to v2 to order by close time
-		batch.Query(templateCreateWorkflowExecutionClosedV2,
-			request.NamespaceID,
-			namespacePartition,
-			request.WorkflowID,
-			request.RunID,
-			p.UnixNanoToDBTimestamp(request.StartTimestamp),
-			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
-			p.UnixNanoToDBTimestamp(request.CloseTimestamp),
-			request.WorkflowTypeName,
-			request.Status,
-			request.HistoryLength,
-			request.Memo.Data,
-			string(request.Memo.GetEncoding()),
-			request.TaskList,
+			request.Memo.Encoding.String(),
+			request.TaskQueue,
 		)
 	} else {
 		batch.Query(templateCreateWorkflowExecutionClosedWithTTL,
@@ -284,25 +259,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			request.Status,
 			request.HistoryLength,
 			request.Memo.Data,
-			string(request.Memo.GetEncoding()),
-			request.TaskList,
-			retention,
-		)
-		// duplicate write to v2 to order by close time
-		batch.Query(templateCreateWorkflowExecutionClosedWithTTLV2,
-			request.NamespaceID,
-			namespacePartition,
-			request.WorkflowID,
-			request.RunID,
-			p.UnixNanoToDBTimestamp(request.StartTimestamp),
-			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
-			p.UnixNanoToDBTimestamp(request.CloseTimestamp),
-			request.WorkflowTypeName,
-			request.Status,
-			request.HistoryLength,
-			request.Memo.Data,
-			string(request.Memo.GetEncoding()),
-			request.TaskList,
+			request.Memo.Encoding.String(),
+			request.TaskQueue,
 			retention,
 		)
 	}
@@ -370,40 +328,6 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 	return response, nil
 }
 
-func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
-	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
-	query := v.session.Query(templateGetClosedWorkflowExecutions,
-		request.NamespaceID,
-		namespacePartition,
-		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
-		p.UnixNanoToDBTimestamp(request.LatestStartTime)).Consistency(v.lowConslevel)
-	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	if iter == nil {
-		// TODO: should return serviceerror.InvalidArgument if the token is invalid
-		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutions operation failed.  Not able to create query iterator.")
-	}
-
-	response := &p.InternalListWorkflowExecutionsResponse{}
-	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0)
-	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
-	for has {
-		response.Executions = append(response.Executions, wfexecution)
-		wfexecution, has = readClosedWorkflowExecutionRecord(iter)
-	}
-
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
-	if err := iter.Close(); err != nil {
-		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("ListClosedWorkflowExecutions operation failed. Error: %v", err))
-		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutions operation failed. Error: %v", err))
-	}
-
-	return response, nil
-}
-
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetOpenWorkflowExecutionsByType,
@@ -439,41 +363,6 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 	return response, nil
 }
 
-func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
-	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
-	query := v.session.Query(templateGetClosedWorkflowExecutionsByType,
-		request.NamespaceID,
-		namespacePartition,
-		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
-		p.UnixNanoToDBTimestamp(request.LatestStartTime),
-		request.WorkflowTypeName).Consistency(v.lowConslevel)
-	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	if iter == nil {
-		// TODO: should return serviceerror.InvalidArgument if the token is invalid
-		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutionsByType operation failed.  Not able to create query iterator.")
-	}
-
-	response := &p.InternalListWorkflowExecutionsResponse{}
-	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0)
-	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
-	for has {
-		response.Executions = append(response.Executions, wfexecution)
-		wfexecution, has = readClosedWorkflowExecutionRecord(iter)
-	}
-
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
-	if err := iter.Close(); err != nil {
-		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("ListClosedWorkflowExecutionsByType operation failed. Error: %v", err))
-		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByType operation failed. Error: %v", err))
-	}
-
-	return response, nil
-}
-
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetOpenWorkflowExecutionsByID,
@@ -504,6 +393,75 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID operation failed. Error: %v", err))
 		}
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID operation failed. Error: %v", err))
+	}
+
+	return response, nil
+}
+
+func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
+	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+	query := v.session.Query(templateGetClosedWorkflowExecutions,
+		request.NamespaceID,
+		namespacePartition,
+		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
+		p.UnixNanoToDBTimestamp(request.LatestStartTime)).Consistency(v.lowConslevel)
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
+	if iter == nil {
+		// TODO: should return serviceerror.InvalidArgument if the token is invalid
+		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutions operation failed.  Not able to create query iterator.")
+	}
+
+	response := &p.InternalListWorkflowExecutionsResponse{}
+	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0)
+	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
+	for has {
+		response.Executions = append(response.Executions, wfexecution)
+		wfexecution, has = readClosedWorkflowExecutionRecord(iter)
+	}
+
+	nextPageToken := iter.PageState()
+	response.NextPageToken = make([]byte, len(nextPageToken))
+	copy(response.NextPageToken, nextPageToken)
+	if err := iter.Close(); err != nil {
+		if isThrottlingError(err) {
+			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("ListClosedWorkflowExecutions operation failed. Error: %v", err))
+		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutions operation failed. Error: %v", err))
+	}
+
+	return response, nil
+}
+
+func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
+	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+	query := v.session.Query(templateGetClosedWorkflowExecutionsByType,
+		request.NamespaceID,
+		namespacePartition,
+		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
+		p.UnixNanoToDBTimestamp(request.LatestStartTime),
+		request.WorkflowTypeName).Consistency(v.lowConslevel)
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
+	if iter == nil {
+		// TODO: should return serviceerror.InvalidArgument if the token is invalid
+		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutionsByType operation failed.  Not able to create query iterator.")
+	}
+
+	response := &p.InternalListWorkflowExecutionsResponse{}
+	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0)
+	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
+	for has {
+		response.Executions = append(response.Executions, wfexecution)
+		wfexecution, has = readClosedWorkflowExecutionRecord(iter)
+	}
+
+	nextPageToken := iter.PageState()
+	response.NextPageToken = make([]byte, len(nextPageToken))
+	copy(response.NextPageToken, nextPageToken)
+	if err := iter.Close(); err != nil {
+		if isThrottlingError(err) {
+			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("ListClosedWorkflowExecutionsByType operation failed. Error: %v", err))
+		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByType operation failed. Error: %v", err))
 	}
 
 	return response, nil
@@ -636,16 +594,17 @@ func readOpenWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowExe
 	var executionTime time.Time
 	var memo []byte
 	var encoding string
-	var taskList string
-	if iter.Scan(&workflowID, &runID, &startTime, &executionTime, &typeName, &memo, &encoding, &taskList) {
+	var taskQueue string
+	if iter.Scan(&workflowID, &runID, &startTime, &executionTime, &typeName, &memo, &encoding, &taskQueue) {
 		record := &p.VisibilityWorkflowExecutionInfo{
 			WorkflowID:    workflowID,
 			RunID:         runID.String(),
 			TypeName:      typeName,
 			StartTime:     startTime,
 			ExecutionTime: executionTime,
-			Memo:          p.NewDataBlob(memo, common.EncodingType(encoding)),
-			TaskList:      taskList,
+			Memo:          p.NewDataBlob(memo, encoding),
+			TaskQueue:     taskQueue,
+			Status:        enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		}
 		return record, true
 	}
@@ -659,12 +618,12 @@ func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowE
 	var startTime time.Time
 	var executionTime time.Time
 	var closeTime time.Time
-	var status executionpb.WorkflowExecutionStatus
+	var status enumspb.WorkflowExecutionStatus
 	var historyLength int64
 	var memo []byte
 	var encoding string
-	var taskList string
-	if iter.Scan(&workflowID, &runID, &startTime, &executionTime, &closeTime, &typeName, &status, &historyLength, &memo, &encoding, &taskList) {
+	var taskQueue string
+	if iter.Scan(&workflowID, &runID, &startTime, &executionTime, &closeTime, &typeName, &status, &historyLength, &memo, &encoding, &taskQueue) {
 		record := &p.VisibilityWorkflowExecutionInfo{
 			WorkflowID:    workflowID,
 			RunID:         runID.String(),
@@ -672,10 +631,10 @@ func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowE
 			StartTime:     startTime,
 			ExecutionTime: executionTime,
 			CloseTime:     closeTime,
-			Status:        &status,
+			Status:        status,
 			HistoryLength: historyLength,
-			Memo:          p.NewDataBlob(memo, common.EncodingType(encoding)),
-			TaskList:      taskList,
+			Memo:          p.NewDataBlob(memo, encoding),
+			TaskQueue:     taskQueue,
 		}
 		return record, true
 	}

@@ -27,9 +27,9 @@ package replicator
 import (
 	"github.com/dgryski/go-farm"
 
-	"github.com/temporalio/temporal/common/collection"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/task"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/task"
 )
 
 type (

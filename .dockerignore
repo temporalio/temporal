@@ -1,6 +1,3 @@
-build/
-temporal-canary
-vendor/
 .gobincache/
 .idea/
 .buildkite/

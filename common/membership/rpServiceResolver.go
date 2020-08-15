@@ -31,17 +31,17 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/ringpop-go"
+	"github.com/temporalio/ringpop-go"
 	"github.com/uber/tchannel-go"
 
 	"github.com/dgryski/go-farm"
-	"github.com/uber/ringpop-go/events"
-	"github.com/uber/ringpop-go/hashring"
-	"github.com/uber/ringpop-go/swim"
+	"github.com/temporalio/ringpop-go/events"
+	"github.com/temporalio/ringpop-go/hashring"
+	"github.com/temporalio/ringpop-go/swim"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 const (
@@ -233,7 +233,7 @@ func (r *ringpopServiceResolver) refresh() error {
 func (r *ringpopServiceResolver) refreshWithBackoff() error {
 	r.refreshLock.Lock()
 	defer r.refreshLock.Unlock()
-	if r.lastRefreshTime.After(time.Now().Add(-minRefreshInternal)) {
+	if r.lastRefreshTime.After(time.Now().UTC().Add(-minRefreshInternal)) {
 		// refresh too frequently
 		return nil
 	}
@@ -258,7 +258,7 @@ func (r *ringpopServiceResolver) refreshNoLock() error {
 	}
 
 	r.membersMap = newMembersMap
-	r.lastRefreshTime = time.Now()
+	r.lastRefreshTime = time.Now().UTC()
 	r.ringValue.Store(ring)
 	r.logger.Info("Current reachable members", tag.Addresses(addrs))
 	return nil

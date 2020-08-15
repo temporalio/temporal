@@ -33,8 +33,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (
@@ -53,14 +53,14 @@ func TestExecutionTestSuite(t *testing.T) {
 
 func (s *ExecutorTestSuite) TestStartStop() {
 	e := NewFixedSizePoolExecutor(
-		4, 4, metrics.NewClient(tally.NoopScope, metrics.Worker), metrics.TaskListScavengerScope)
+		4, 4, metrics.NewClient(tally.NoopScope, metrics.Worker), metrics.TaskQueueScavengerScope)
 	e.Start()
 	e.Stop()
 }
 
 func (s *ExecutorTestSuite) TestTaskExecution() {
 	e := NewFixedSizePoolExecutor(
-		32, 100, metrics.NewClient(tally.NoopScope, metrics.Worker), metrics.TaskListScavengerScope)
+		32, 100, metrics.NewClient(tally.NoopScope, metrics.Worker), metrics.TaskQueueScavengerScope)
 	e.Start()
 	var runCounter int64
 	var startWG sync.WaitGroup
@@ -84,8 +84,8 @@ func (s *ExecutorTestSuite) TestTaskExecution() {
 }
 
 func (s *ExecutorTestSuite) awaitCompletion(e Executor) bool {
-	expiry := time.Now().Add(time.Second * 10)
-	for time.Now().Before(expiry) {
+	expiry := time.Now().UTC().Add(time.Second * 10)
+	for time.Now().UTC().Before(expiry) {
 		if e.TaskCount() == 0 {
 			return true
 		}

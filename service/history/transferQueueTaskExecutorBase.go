@@ -29,24 +29,24 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	m "github.com/temporalio/temporal/.gen/proto/matchingservice"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	m "go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/client/matching"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/service/worker/archiver"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/worker/archiver"
 )
 
 const (
@@ -87,63 +87,66 @@ func newTransferQueueTaskExecutorBase(
 
 func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 	task *persistenceblobs.TransferTaskInfo,
-) (string, executionpb.WorkflowExecution) {
+) (string, commonpb.WorkflowExecution) {
 
-	return primitives.UUIDString(task.GetNamespaceId()), executionpb.WorkflowExecution{
+	return task.GetNamespaceId(), commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUIDString(task.GetRunId()),
+		RunId:      task.GetRunId(),
 	}
 }
 
 func (t *transferQueueTaskExecutorBase) pushActivity(
 	task *persistenceblobs.TransferTaskInfo,
-	activityScheduleToStartTimeout int32,
+	activityScheduleToStartTimeout *time.Duration,
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	if task.TaskType != persistence.TransferTaskTypeActivityTask {
+	if task.TaskType != enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK {
 		t.logger.Fatal("Cannot process non activity task", tag.TaskType(task.GetTaskType()))
 	}
 
 	_, err := t.matchingClient.AddActivityTask(ctx, &m.AddActivityTaskRequest{
-		NamespaceId:       primitives.UUIDString(task.GetTargetNamespaceId()),
-		SourceNamespaceId: primitives.UUIDString(task.GetNamespaceId()),
-		Execution: &executionpb.WorkflowExecution{
+		NamespaceId:       task.GetTargetNamespaceId(),
+		SourceNamespaceId: task.GetNamespaceId(),
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
-			RunId:      primitives.UUIDString(task.GetRunId()),
+			RunId:      task.GetRunId(),
 		},
-		TaskList:                      &tasklistpb.TaskList{Name: task.TaskList},
-		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: activityScheduleToStartTimeout,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: task.TaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		ScheduleId:             task.GetScheduleId(),
+		ScheduleToStartTimeout: activityScheduleToStartTimeout,
 	})
 
 	return err
 }
 
-func (t *transferQueueTaskExecutorBase) pushDecision(
+func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	task *persistenceblobs.TransferTaskInfo,
-	tasklist *tasklistpb.TaskList,
-	decisionScheduleToStartTimeout int32,
+	taskqueue *taskqueuepb.TaskQueue,
+	workflowTaskScheduleToStartTimeout *time.Duration,
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	if task.TaskType != persistence.TransferTaskTypeDecisionTask {
-		t.logger.Fatal("Cannot process non decision task", tag.TaskType(task.GetTaskType()))
+	if task.TaskType != enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK {
+		t.logger.Fatal("Cannot process non workflow task", tag.TaskType(task.GetTaskType()))
 	}
 
-	_, err := t.matchingClient.AddDecisionTask(ctx, &m.AddDecisionTaskRequest{
-		NamespaceId: primitives.UUIDString(task.GetNamespaceId()),
-		Execution: &executionpb.WorkflowExecution{
+	_, err := t.matchingClient.AddWorkflowTask(ctx, &m.AddWorkflowTaskRequest{
+		NamespaceId: task.GetNamespaceId(),
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
-			RunId:      primitives.UUIDString(task.GetRunId()),
+			RunId:      task.GetRunId(),
 		},
-		TaskList:                      tasklist,
-		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: decisionScheduleToStartTimeout,
+		TaskQueue:              taskqueue,
+		ScheduleId:             task.GetScheduleId(),
+		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 	})
 	return err
 }
@@ -157,7 +160,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	executionTimeUnixNano int64,
 	runTimeout int32,
 	taskID int64,
-	taskList string,
+	taskQueue string,
 	visibilityMemo *commonpb.Memo,
 	searchAttributes map[string]*commonpb.Payload,
 ) error {
@@ -180,7 +183,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	request := &persistence.RecordWorkflowExecutionStartedRequest{
 		NamespaceID: namespaceID,
 		Namespace:   namespace,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -190,7 +193,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 		RunTimeout:         int64(runTimeout),
 		TaskID:             taskID,
 		Memo:               visibilityMemo,
-		TaskList:           taskList,
+		TaskQueue:          taskQueue,
 		SearchAttributes:   searchAttributes,
 	}
 
@@ -206,7 +209,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	executionTimeUnixNano int64,
 	workflowTimeout int32,
 	taskID int64,
-	taskList string,
+	taskQueue string,
 	visibilityMemo *commonpb.Memo,
 	searchAttributes map[string]*commonpb.Payload,
 ) error {
@@ -224,7 +227,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	request := &persistence.UpsertWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
 		Namespace:   namespace,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -234,7 +237,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 		WorkflowTimeout:    int64(workflowTimeout),
 		TaskID:             taskID,
 		Memo:               visibilityMemo,
-		TaskList:           taskList,
+		TaskQueue:          taskQueue,
 		SearchAttributes:   searchAttributes,
 	}
 
@@ -249,11 +252,11 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	startTimeUnixNano int64,
 	executionTimeUnixNano int64,
 	endTimeUnixNano int64,
-	status executionpb.WorkflowExecutionStatus,
+	status enumspb.WorkflowExecutionStatus,
 	historyLength int64,
 	taskID int64,
 	visibilityMemo *commonpb.Memo,
-	taskList string,
+	taskQueue string,
 	searchAttributes map[string]*commonpb.Payload,
 ) error {
 
@@ -279,7 +282,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		}
 
 		clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
-		namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalStatus == namespacepb.ArchivalStatus_Enabled
+		namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalState == enumspb.ARCHIVAL_STATE_ENABLED
 		archiveVisibility = clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
 	}
 
@@ -287,7 +290,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 			NamespaceID: namespaceID,
 			Namespace:   namespace,
-			Execution: executionpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
@@ -300,7 +303,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 			RetentionSeconds:   retentionSeconds,
 			TaskID:             taskID,
 			Memo:               visibilityMemo,
-			TaskList:           taskList,
+			TaskQueue:          taskQueue,
 			SearchAttributes:   searchAttributes,
 		}); err != nil {
 			return err
@@ -324,8 +327,8 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 				HistoryLength:      historyLength,
 				Memo:               visibilityMemo,
 				SearchAttributes:   searchAttributes,
-				VisibilityURI:      namespaceEntry.GetConfig().VisibilityArchivalURI,
-				URI:                namespaceEntry.GetConfig().HistoryArchivalURI,
+				VisibilityURI:      namespaceEntry.GetConfig().VisibilityArchivalUri,
+				HistoryURI:         namespaceEntry.GetConfig().HistoryArchivalUri,
 				Targets:            []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
 			},
 			CallerService:        common.HistoryServiceName,
@@ -339,19 +342,19 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 // Argument startEvent is to save additional call of msBuilder.GetStartEvent
 func getWorkflowExecutionTimestamp(
 	msBuilder mutableState,
-	startEvent *eventpb.HistoryEvent,
+	startEvent *historypb.HistoryEvent,
 ) time.Time {
 	// Use value 0 to represent workflows that don't need backoff. Since ES doesn't support
 	// comparison between two field, we need a value to differentiate them from cron workflows
 	// or later runs of a workflow that needs retry.
-	executionTimestamp := time.Unix(0, 0)
+	executionTimestamp := time.Unix(0, 0).UTC()
 	if startEvent == nil {
 		return executionTimestamp
 	}
 
-	if backoffSeconds := startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstDecisionTaskBackoffSeconds(); backoffSeconds != 0 {
-		startTimestamp := time.Unix(0, startEvent.GetTimestamp())
-		executionTimestamp = startTimestamp.Add(time.Duration(backoffSeconds) * time.Second)
+	if backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff()); backoffDuration != 0 {
+		startTime := timestamp.TimeValue(startEvent.GetEventTime())
+		executionTimestamp = startTime.Add(backoffDuration)
 	}
 	return executionTimestamp
 }

@@ -30,12 +30,12 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	commonpb "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal/activity"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/sdk/activity"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payload"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
 )
 
 // MaxArchivalIterationTimeout returns the max allowed timeout for a single iteration of archival workflow
@@ -79,7 +79,7 @@ func tagLoggerWithHistoryRequest(logger log.Logger, request *ArchiveRequest) log
 		tag.ArchivalRequestBranchToken(request.BranchToken),
 		tag.ArchivalRequestNextEventID(request.NextEventID),
 		tag.ArchivalRequestCloseFailoverVersion(request.CloseFailoverVersion),
-		tag.ArchivalURI(request.URI),
+		tag.ArchivalURI(request.HistoryURI),
 	)
 }
 
@@ -89,7 +89,7 @@ func tagLoggerWithVisibilityRequest(logger log.Logger, request *ArchiveRequest) 
 		tag.ArchivalRequestNamespace(request.Namespace),
 		tag.ArchivalRequestWorkflowID(request.WorkflowID),
 		tag.ArchivalRequestRunID(request.RunID),
-		tag.ArchivalURI(request.URI),
+		tag.ArchivalURI(request.HistoryURI),
 	)
 }
 

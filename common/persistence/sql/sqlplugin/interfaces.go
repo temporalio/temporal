@@ -28,11 +28,12 @@ import (
 	"database/sql"
 	"time"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
+	enumspb "go.temporal.io/api/enums/v1"
 
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/service/config"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/service/config"
 )
 
 type (
@@ -62,14 +63,14 @@ type (
 
 	// ClusterMembershipFilter is used for GetClusterMembership queries
 	ClusterMembershipFilter struct {
-		RPCAddressEquals          string
-		HostIDEquals              []byte
-		RoleEquals                persistence.ServiceType
-		LastHeartbeatAfter        time.Time
-		RecordExpiryAfter         time.Time
-		SessionStartedAfter       time.Time
-		MaxRecordCount            int
-		InsertionOrderGreaterThan uint64
+		RPCAddressEquals    string
+		HostIDEquals        []byte
+		HostIDGreaterThan   []byte
+		RoleEquals          persistence.ServiceType
+		LastHeartbeatAfter  time.Time
+		RecordExpiryAfter   time.Time
+		SessionStartedAfter time.Time
+		MaxRecordCount      int
 	}
 
 	// PruneClusterMembershipFilter is used for PruneClusterMembership queries
@@ -168,8 +169,8 @@ type (
 		WorkflowID       string
 		RunID            primitives.UUID
 		CreateRequestID  string
-		State            int
-		Status           executionpb.WorkflowExecutionStatus
+		State            enumsspb.WorkflowExecutionState
+		Status           enumspb.WorkflowExecutionStatus
 		LastWriteVersion int64
 		StartVersion     int64
 	}
@@ -204,10 +205,9 @@ type (
 
 	// TasksRow represents a row in tasks table
 	TasksRow struct {
-		NamespaceID  primitives.UUID
-		TaskType     int64
+		RangeHash    uint32
+		TaskQueueID  []byte
 		TaskID       int64
-		TaskListName string
 		Data         []byte
 		DataEncoding string
 	}
@@ -215,9 +215,8 @@ type (
 	// TasksFilter contains the column names within tasks table that
 	// can be used to filter results through a WHERE clause
 	TasksFilter struct {
-		NamespaceID          primitives.UUID
-		TaskListName         string
-		TaskType             int64
+		RangeHash            uint32
+		TaskQueueID          []byte
 		TaskID               *int64
 		MinTaskID            *int64
 		MaxTaskID            *int64
@@ -226,29 +225,25 @@ type (
 		PageSize             *int
 	}
 
-	// TaskListsRow represents a row in task_lists table
-	TaskListsRow struct {
-		ShardID      int
-		NamespaceID  primitives.UUID
-		Name         string
-		TaskType     int64
+	// TaskQueuesRow represents a row in task_queues table
+	TaskQueuesRow struct {
+		RangeHash    uint32
+		TaskQueueID  []byte
 		RangeID      int64
 		Data         []byte
 		DataEncoding string
 	}
 
-	// TaskListsFilter contains the column names within task_lists table that
+	// TaskQueuesFilter contains the column names within task_queues table that
 	// can be used to filter results through a WHERE clause
-	TaskListsFilter struct {
-		ShardID                int
-		NamespaceID            *primitives.UUID
-		Name                   *string
-		TaskType               *int64
-		NamespaceIDGreaterThan *primitives.UUID
-		NameGreaterThan        *string
-		TaskTypeGreaterThan    *int64
-		RangeID                *int64
-		PageSize               *int
+	TaskQueuesFilter struct {
+		RangeHash                   uint32
+		RangeHashGreaterThanEqualTo uint32
+		RangeHashLessThanEqualTo    uint32
+		TaskQueueID                 []byte
+		TaskQueueIDGreaterThan      []byte
+		RangeID                     *int64
+		PageSize                    *int
 	}
 
 	// ReplicationTasksRow represents a row in replication_tasks table
@@ -369,7 +364,7 @@ type (
 	HistoryTreeFilter struct {
 		ShardID  int
 		TreeID   primitives.UUID
-		BranchID *primitives.UUID
+		BranchID primitives.UUID
 	}
 
 	// ActivityInfoMapsRow represents a row in activity_info_maps table
@@ -504,7 +499,7 @@ type (
 		WorkflowID       string
 		StartTime        time.Time
 		ExecutionTime    time.Time
-		Status           *int32
+		Status           int32
 		CloseTime        *time.Time
 		HistoryLength    *int64
 		Memo             []byte
@@ -515,11 +510,10 @@ type (
 	// can be used to filter results through a WHERE clause
 	VisibilityFilter struct {
 		NamespaceID      string
-		Closed           bool
 		RunID            *string
 		WorkflowID       *string
 		WorkflowTypeName *string
-		Status           *int32
+		Status           int32
 		MinStartTime     *time.Time
 		MaxStartTime     *time.Time
 		PageSize         *int
@@ -567,27 +561,27 @@ type (
 
 		InsertIntoTasks(rows []TasksRow) (sql.Result, error)
 		// SelectFromTasks retrieves one or more rows from the tasks table
-		// Required filter params - {namespaceID, tasklistName, taskType, minTaskID, maxTaskID, pageSize}
+		// Required filter params - {namespaceID, taskqueueName, taskType, minTaskID, maxTaskID, pageSize}
 		SelectFromTasks(filter *TasksFilter) ([]TasksRow, error)
 		// DeleteFromTasks deletes a row from tasks table
 		// Required filter params:
 		//  to delete single row
-		//     - {namespaceID, tasklistName, taskType, taskID}
+		//     - {namespaceID, taskqueueName, taskType, taskID}
 		//  to delete multiple rows
-		//    - {namespaceID, tasklistName, taskType, taskIDLessThanEquals, limit }
+		//    - {namespaceID, taskqueueName, taskType, taskIDLessThanEquals, limit }
 		//    - this will delete upto limit number of tasks less than or equal to the given task id
 		DeleteFromTasks(filter *TasksFilter) (sql.Result, error)
 
-		InsertIntoTaskLists(row *TaskListsRow) (sql.Result, error)
-		ReplaceIntoTaskLists(row *TaskListsRow) (sql.Result, error)
-		UpdateTaskLists(row *TaskListsRow) (sql.Result, error)
-		// SelectFromTaskLists returns one or more rows from task_lists table
+		InsertIntoTaskQueues(row *TaskQueuesRow) (sql.Result, error)
+		ReplaceIntoTaskQueues(row *TaskQueuesRow) (sql.Result, error)
+		UpdateTaskQueues(row *TaskQueuesRow) (sql.Result, error)
+		// SelectFromTaskQueues returns one or more rows from task_queues table
 		// Required Filter params:
 		//  to read a single row: {shardID, namespaceID, name, taskType}
 		//  to range read multiple rows: {shardID, namespaceIDGreaterThan, nameGreaterThan, taskTypeGreaterThan, pageSize}
-		SelectFromTaskLists(filter *TaskListsFilter) ([]TaskListsRow, error)
-		DeleteFromTaskLists(filter *TaskListsFilter) (sql.Result, error)
-		LockTaskLists(filter *TaskListsFilter) (int64, error)
+		SelectFromTaskQueues(filter *TaskQueuesFilter) ([]TaskQueuesRow, error)
+		DeleteFromTaskQueues(filter *TaskQueuesFilter) (sql.Result, error)
+		LockTaskQueues(filter *TaskQueuesFilter) (int64, error)
 
 		// eventsV2
 		InsertIntoHistoryNode(row *HistoryNodeRow) (sql.Result, error)

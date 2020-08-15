@@ -29,7 +29,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/temporalio/temporal/common/convert"
+
+	"go.temporal.io/server/common/convert"
 )
 
 type queryParserSuite struct {

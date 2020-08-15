@@ -34,38 +34,39 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
+	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
-	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/provider"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/persistence"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	dc "github.com/temporalio/temporal/common/service/dynamicconfig"
-	warchiver "github.com/temporalio/temporal/service/worker/archiver"
-	"github.com/temporalio/temporal/service/worker/parentclosepolicy"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
+	dc "go.temporal.io/server/common/service/dynamicconfig"
+	warchiver "go.temporal.io/server/service/worker/archiver"
+	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
 
 type (
@@ -135,7 +136,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.childNamespace = testChildNamespace
 	s.childNamespaceEntry = testGlobalChildNamespaceEntry
 	s.version = s.namespaceEntry.GetFailoverVersion()
-	s.now = time.Now()
+	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 
 	s.controller = gomock.NewController(s.T())
@@ -151,7 +152,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardId:          0,
+				ShardId:          1,
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
@@ -197,7 +198,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		logger:               s.logger,
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		metricsClient:        s.mockShard.GetMetricsClient(),
-		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
+		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int { return 1 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
@@ -225,47 +226,51 @@ func (s *transferQueueActiveTaskExecutorSuite) TearDownTest() {
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType: &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: taskQueueName,
+					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+				},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	activityID := "activity-1"
 	activityType := "some random activity type"
-	event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskListName, &commonpb.Payloads{}, 1, 1, 1, 1)
+	event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
-		TargetNamespaceId: primitives.MustParseUUID(testTargetNamespaceID),
+		NamespaceId:       s.namespaceID,
+		TargetNamespaceId: testTargetNamespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
+		RunId:             execution.GetRunId(),
 		TaskId:            taskID,
-		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeActivityTask,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -277,59 +282,56 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) GetNamespaceIDBytes() primitives.UUID {
-	return primitives.MustParseUUID(s.namespaceID)
-}
-
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplication() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	activityID := "activity-1"
 	activityType := "some random activity type"
-	event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskListName, &commonpb.Payloads{}, 1, 1, 1, 1)
+	event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
-		TargetNamespaceId: primitives.MustParseUUID(s.targetNamespaceID),
+		NamespaceId:       s.namespaceID,
+		TargetNamespaceId: s.targetNamespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
+		RunId:             execution.GetRunId(),
 		TaskId:            taskID,
-		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeActivityTask,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
 		ScheduleId:        event.GetEventId(),
 	}
 
 	event = addActivityTaskStartedEvent(mutableState, event.GetEventId(), "")
-	ai.StartedID = event.GetEventId()
-	event = addActivityTaskCompletedEvent(mutableState, ai.ScheduleID, ai.StartedID, nil, "")
+	ai.StartedId = event.GetEventId()
+	event = addActivityTaskCompletedEvent(mutableState, ai.ScheduleId, ai.StartedId, nil, "")
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -338,261 +340,275 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_FirstDecision() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_FirstWorkflowTask() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType: &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: taskQueueName,
+					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+				},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
 	taskID := int64(59)
-	di := addDecisionTaskScheduledEvent(mutableState)
+	di := addWorkflowTaskScheduledEvent(mutableState)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
-		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeDecisionTask,
+		TaskQueue:   taskQueueName,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
+	s.mockMatchingClient.EXPECT().AddWorkflowTask(gomock.Any(), s.createAddWorkflowTaskRequest(transferTask, mutableState)).Return(&matchingservice.AddWorkflowTaskResponse{}, nil).Times(1)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_NonFirstDecision() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_NonFirstWorkflowTask() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType: &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: taskQueueName,
+					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+				},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 	s.NotNil(event)
 
-	// make another round of decision
+	// make another round of workflow task
 	taskID := int64(59)
-	di = addDecisionTaskScheduledEvent(mutableState)
+	di = addWorkflowTaskScheduledEvent(mutableState)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
-		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeDecisionTask,
+		TaskQueue:   taskQueueName,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
+	s.mockMatchingClient.EXPECT().AddWorkflowTask(gomock.Any(), s.createAddWorkflowTaskRequest(transferTask, mutableState)).Return(&matchingservice.AddWorkflowTaskResponse{}, nil).Times(1)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Sticky_NonFirstDecision() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_NonFirstWorkflowTask() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
-	stickyTaskListName := "some random sticky task list"
-	stickyTaskListTimeout := int32(233)
+	taskQueueName := "some random task queue"
+	stickyTaskQueueName := "some random sticky task queue"
+	stickyTaskQueueTimeout := int32(233)
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 	s.NotNil(event)
-	// set the sticky tasklist attr
+	// set the sticky taskqueue attr
 	executionInfo := mutableState.GetExecutionInfo()
-	executionInfo.StickyTaskList = stickyTaskListName
-	executionInfo.StickyScheduleToStartTimeout = stickyTaskListTimeout
+	executionInfo.StickyTaskQueue = stickyTaskQueueName
+	executionInfo.StickyScheduleToStartTimeout = int64(stickyTaskQueueTimeout)
 
-	// make another round of decision
+	// make another round of workflow task
 	taskID := int64(59)
-	di = addDecisionTaskScheduledEvent(mutableState)
+	di = addWorkflowTaskScheduledEvent(mutableState)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
-		TaskList:    stickyTaskListName,
-		TaskType:    persistence.TransferTaskTypeDecisionTask,
+		TaskQueue:   stickyTaskQueueName,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
+	s.mockMatchingClient.EXPECT().AddWorkflowTask(gomock.Any(), s.createAddWorkflowTaskRequest(transferTask, mutableState)).Return(&matchingservice.AddWorkflowTaskResponse{}, nil).Times(1)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_DecisionNotSticky_MutableStateSticky() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_WorkflowTaskNotSticky_MutableStateSticky() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
-	stickyTaskListName := "some random sticky task list"
-	stickyTaskListTimeout := int32(233)
+	taskQueueName := "some random task queue"
+	stickyTaskQueueName := "some random sticky task queue"
+	stickyTaskQueueTimeout := int32(233)
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType: &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: taskQueueName,
+					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+				},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 	s.NotNil(event)
-	// set the sticky tasklist attr
+	// set the sticky taskqueue attr
 	executionInfo := mutableState.GetExecutionInfo()
-	executionInfo.StickyTaskList = stickyTaskListName
-	executionInfo.StickyScheduleToStartTimeout = stickyTaskListTimeout
+	executionInfo.StickyTaskQueue = stickyTaskQueueName
+	executionInfo.StickyScheduleToStartTimeout = int64(stickyTaskQueueTimeout)
 
-	// make another round of decision
+	// make another round of workflow task
 	taskID := int64(59)
-	di = addDecisionTaskScheduledEvent(mutableState)
+	di = addWorkflowTaskScheduledEvent(mutableState)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
-		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeDecisionTask,
+		TaskQueue:   taskQueueName,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
+	s.mockMatchingClient.EXPECT().AddWorkflowTask(gomock.Any(), s.createAddWorkflowTaskRequest(transferTask, mutableState)).Return(&matchingservice.AddWorkflowTaskResponse{}, nil).Times(1)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplication() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Duplication() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
 	taskID := int64(4096)
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
-		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeDecisionTask,
+		TaskQueue:   taskQueueName,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -605,17 +621,17 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplicati
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasParent() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
 	parentNamespaceID := "some random parent namespace ID"
 	parentInitiatedID := int64(3222)
 	parentNamespace := "some random parent namespace Name"
-	parentExecution := &executionpb.WorkflowExecution{
+	parentExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random parent workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -624,14 +640,15 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
-			ParentExecutionInfo: &executiongenpb.ParentExecutionInfo{
+			ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
 				NamespaceId: parentNamespaceID,
 				Namespace:   parentNamespace,
 				Execution:   parentExecution,
@@ -641,22 +658,22 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
-		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeCloseExecution,
+		TaskQueue:   taskQueueName,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -678,44 +695,45 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
-		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeCloseExecution,
+		TaskQueue:   taskQueueName,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -731,72 +749,73 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasFewChildren() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := decisionpb.DecisionType_StartChildWorkflowExecution
-	parentClosePolicy1 := commonpb.ParentClosePolicy_Abandon
-	parentClosePolicy2 := commonpb.ParentClosePolicy_Terminate
-	parentClosePolicy3 := commonpb.ParentClosePolicy_RequestCancel
+	dt := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
+	parentClosePolicy1 := enumspb.PARENT_CLOSE_POLICY_ABANDON
+	parentClosePolicy2 := enumspb.PARENT_CLOSE_POLICY_TERMINATE
+	parentClosePolicy3 := enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL
 
-	event, _ = mutableState.AddDecisionTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondDecisionTaskCompletedRequest{
+	event, _ = mutableState.AddWorkflowTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: "some random identity",
-		Decisions: []*decisionpb.Decision{
+		Commands: []*commandpb.Command{
 			{
-				DecisionType: dt,
-				Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+				CommandType: dt,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 					WorkflowId: "child workflow1",
 					WorkflowType: &commonpb.WorkflowType{
 						Name: "child workflow type",
 					},
-					TaskList:          &tasklistpb.TaskList{Name: taskListName},
+					TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
 					Input:             payloads.EncodeString("random input"),
 					ParentClosePolicy: parentClosePolicy1,
 				}},
 			},
 			{
-				DecisionType: dt,
-				Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+				CommandType: dt,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 					WorkflowId: "child workflow2",
 					WorkflowType: &commonpb.WorkflowType{
 						Name: "child workflow type",
 					},
-					TaskList:          &tasklistpb.TaskList{Name: taskListName},
+					TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
 					Input:             payloads.EncodeString("random input"),
 					ParentClosePolicy: parentClosePolicy2,
 				}},
 			},
 			{
-				DecisionType: dt,
-				Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+				CommandType: dt,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 					WorkflowId: "child workflow3",
 					WorkflowType: &commonpb.WorkflowType{
 						Name: "child workflow type",
 					},
-					TaskList:          &tasklistpb.TaskList{Name: taskListName},
+					TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
 					Input:             payloads.EncodeString("random input"),
 					ParentClosePolicy: parentClosePolicy3,
 				}},
@@ -804,32 +823,32 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		},
 	}, defaultHistoryMaxAutoResetPoints)
 
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		WorkflowId: "child workflow1",
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "child workflow type",
 		},
-		TaskList:          &tasklistpb.TaskList{Name: taskListName},
+		TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
 		Input:             payloads.EncodeString("random input"),
 		ParentClosePolicy: parentClosePolicy1,
 	})
 	s.Nil(err)
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		WorkflowId: "child workflow2",
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "child workflow type",
 		},
-		TaskList:          &tasklistpb.TaskList{Name: taskListName},
+		TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
 		Input:             payloads.EncodeString("random input"),
 		ParentClosePolicy: parentClosePolicy2,
 	})
 	s.Nil(err)
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		WorkflowId: "child workflow3",
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "child workflow type",
 		},
-		TaskList:          &tasklistpb.TaskList{Name: taskListName},
+		TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
 		Input:             payloads.EncodeString("random input"),
 		ParentClosePolicy: parentClosePolicy3,
 	})
@@ -842,12 +861,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
-		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeCloseExecution,
+		TaskQueue:   taskQueueName,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -864,62 +883,63 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasManyChildren() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := decisionpb.DecisionType_StartChildWorkflowExecution
-	parentClosePolicy := commonpb.ParentClosePolicy_Terminate
-	var decisions []*decisionpb.Decision
+	dt := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
+	parentClosePolicy := enumspb.PARENT_CLOSE_POLICY_TERMINATE
+	var commands []*commandpb.Command
 	for i := 0; i < 10; i++ {
-		decisions = append(decisions, &decisionpb.Decision{
-			DecisionType: dt,
-			Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+		commands = append(commands, &commandpb.Command{
+			CommandType: dt,
+			Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 				WorkflowId: "child workflow" + string(i),
 				WorkflowType: &commonpb.WorkflowType{
 					Name: "child workflow type",
 				},
-				TaskList:          &tasklistpb.TaskList{Name: taskListName},
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
 				Input:             payloads.EncodeString("random input"),
 				ParentClosePolicy: parentClosePolicy,
 			}},
 		})
 	}
 
-	event, _ = mutableState.AddDecisionTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondDecisionTaskCompletedRequest{
-		Identity:  "some random identity",
-		Decisions: decisions,
+	event, _ = mutableState.AddWorkflowTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity: "some random identity",
+		Commands: commands,
 	}, defaultHistoryMaxAutoResetPoints)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + string(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
 			},
-			TaskList:          &tasklistpb.TaskList{Name: taskListName},
+			TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
 			Input:             payloads.EncodeString("random input"),
 			ParentClosePolicy: parentClosePolicy,
 		})
@@ -933,12 +953,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
-		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeCloseExecution,
+		TaskQueue:   taskQueueName,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -954,62 +974,63 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasManyAbandonedChildren() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := decisionpb.DecisionType_StartChildWorkflowExecution
-	parentClosePolicy := commonpb.ParentClosePolicy_Abandon
-	var decisions []*decisionpb.Decision
+	dt := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
+	parentClosePolicy := enumspb.PARENT_CLOSE_POLICY_ABANDON
+	var commands []*commandpb.Command
 	for i := 0; i < 10; i++ {
-		decisions = append(decisions, &decisionpb.Decision{
-			DecisionType: dt,
-			Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+		commands = append(commands, &commandpb.Command{
+			CommandType: dt,
+			Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 				WorkflowId: "child workflow" + string(i),
 				WorkflowType: &commonpb.WorkflowType{
 					Name: "child workflow type",
 				},
-				TaskList:          &tasklistpb.TaskList{Name: taskListName},
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
 				Input:             payloads.EncodeString("random input"),
 				ParentClosePolicy: parentClosePolicy,
 			}},
 		})
 	}
 
-	event, _ = mutableState.AddDecisionTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondDecisionTaskCompletedRequest{
-		Identity:  "some random identity",
-		Decisions: decisions,
+	event, _ = mutableState.AddWorkflowTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity: "some random identity",
+		Commands: commands,
 	}, defaultHistoryMaxAutoResetPoints)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + string(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
 			},
-			TaskList:          &tasklistpb.TaskList{Name: taskListName},
+			TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
 			Input:             payloads.EncodeString("random input"),
 			ParentClosePolicy: parentClosePolicy,
 		})
@@ -1023,12 +1044,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
-		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeCloseExecution,
+		TaskQueue:   taskQueueName,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -1043,14 +1064,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Success() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1059,36 +1080,37 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event, rci := addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(s.targetNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: s.targetNamespaceID,
 		TargetWorkflowId:  targetExecution.GetWorkflowId(),
-		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
-		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeCancelExecution,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1105,14 +1127,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failure() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1121,36 +1143,37 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event, rci := addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(s.targetNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: s.targetNamespaceID,
 		TargetWorkflowId:  targetExecution.GetWorkflowId(),
-		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
-		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeCancelExecution,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1167,14 +1190,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplication() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1183,36 +1206,37 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(s.targetNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: s.targetNamespaceID,
 		TargetWorkflowId:  targetExecution.GetWorkflowId(),
-		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
-		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeCancelExecution,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1227,14 +1251,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Success() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1246,21 +1270,22 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event, si := addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
@@ -1268,15 +1293,15 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(s.targetNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: s.targetNamespaceID,
 		TargetWorkflowId:  targetExecution.GetWorkflowId(),
-		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
-		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeSignalExecution,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1288,10 +1313,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.mockHistoryClient.EXPECT().RemoveSignalMutableState(gomock.Any(), &historyservice.RemoveSignalMutableStateRequest{
-		NamespaceId: primitives.UUID(transferTask.GetTargetNamespaceId()).String(),
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		NamespaceId: transferTask.GetTargetNamespaceId(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: transferTask.GetTargetWorkflowId(),
-			RunId:      primitives.UUID(transferTask.GetTargetRunId()).String(),
+			RunId:      transferTask.GetTargetRunId(),
 		},
 		RequestId: si.GetRequestId(),
 	}).Return(nil, nil).Times(1)
@@ -1302,14 +1327,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failure() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1321,21 +1346,22 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event, si := addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
@@ -1343,15 +1369,15 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(s.targetNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: s.targetNamespaceID,
 		TargetWorkflowId:  targetExecution.GetWorkflowId(),
-		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
-		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeSignalExecution,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1368,14 +1394,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplication() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1387,21 +1413,22 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event, _ = addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
@@ -1409,15 +1436,15 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(s.targetNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: s.targetNamespaceID,
 		TargetWorkflowId:  targetExecution.GetWorkflowId(),
-		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
-		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeSignalExecution,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1432,54 +1459,55 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Success() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
 	childWorkflowID := "some random child workflow ID"
 	childRunID := uuid.New()
 	childWorkflowType := "some random child workflow type"
-	childTaskListName := "some random child task list"
+	childTaskQueueName := "some random child task queue"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
-		s.childNamespace, childWorkflowID, childWorkflowType, childTaskListName, nil, 1, 1, 1)
+		s.childNamespace, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(testChildNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: testChildNamespaceID,
 		TargetWorkflowId:  childWorkflowID,
-		TargetRunId:       nil,
+		TargetRunId:       "",
 		TaskId:            taskID,
-		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeStartChildExecution,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1495,13 +1523,13 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockHistoryClient.EXPECT().ScheduleDecisionTask(gomock.Any(), &historyservice.ScheduleDecisionTaskRequest{
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), &historyservice.ScheduleWorkflowTaskRequest{
 		NamespaceId: testChildNamespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: childWorkflowID,
 			RunId:      childRunID,
 		},
-		IsFirstDecision: true,
+		IsFirstWorkflowTask: true,
 	}).Return(nil, nil).Times(1)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
@@ -1510,36 +1538,38 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Failure() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
 	childWorkflowID := "some random child workflow ID"
 	childWorkflowType := "some random child workflow type"
-	childTaskListName := "some random child task list"
+	childTaskQueueName := "some random child task queue"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
+			ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 
@@ -1550,24 +1580,24 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 		s.childNamespace,
 		childWorkflowID,
 		childWorkflowType,
-		childTaskListName,
+		childTaskQueueName,
 		nil,
-		1,
-		1,
-		1,
+		1*time.Second,
+		1*time.Second,
+		1*time.Second,
 	)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(testChildNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: testChildNamespaceID,
 		TargetWorkflowId:  childWorkflowID,
-		TargetRunId:       nil,
+		TargetRunId:       "",
 		TaskId:            taskID,
-		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeStartChildExecution,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1590,37 +1620,38 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Success_Dup() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
 	childWorkflowID := "some random child workflow ID"
 	childRunID := uuid.New()
 	childWorkflowType := "some random child workflow type"
-	childTaskListName := "some random child task list"
+	childTaskQueueName := "some random child task queue"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 
@@ -1631,39 +1662,39 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		s.childNamespace,
 		childWorkflowID,
 		childWorkflowType,
-		childTaskListName,
+		childTaskQueueName,
 		nil,
-		1,
-		1,
-		1,
+		1*time.Second,
+		1*time.Second,
+		1*time.Second,
 	)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(testChildNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: testChildNamespaceID,
 		TargetWorkflowId:  childWorkflowID,
-		TargetRunId:       nil,
+		TargetRunId:       "",
 		TaskId:            taskID,
-		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeStartChildExecution,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
 	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), testChildNamespaceID, childWorkflowID, childRunID, childWorkflowType)
-	ci.StartedID = event.GetEventId()
+	ci.StartedId = event.GetEventId()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockHistoryClient.EXPECT().ScheduleDecisionTask(gomock.Any(), &historyservice.ScheduleDecisionTaskRequest{
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), &historyservice.ScheduleWorkflowTaskRequest{
 		NamespaceId: testChildNamespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: childWorkflowID,
 			RunId:      childRunID,
 		},
-		IsFirstDecision: true,
+		IsFirstWorkflowTask: true,
 	}).Return(nil, nil).Times(1)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
@@ -1672,39 +1703,40 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Duplication() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
-	childExecution := executionpb.WorkflowExecution{
+	childExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random child workflow ID",
 		RunId:      uuid.New(),
 	}
 	childWorkflowType := "some random child workflow type"
-	childTaskListName := "some random child task list"
+	childTaskQueueName := "some random child task queue"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 
@@ -1715,32 +1747,32 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 		s.childNamespace,
 		childExecution.GetWorkflowId(),
 		childWorkflowType,
-		childTaskListName,
+		childTaskQueueName,
 		nil,
-		1,
-		1,
-		1,
+		1*time.Second,
+		1*time.Second,
+		1*time.Second,
 	)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(testChildNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: testChildNamespaceID,
 		TargetWorkflowId:  childExecution.GetWorkflowId(),
-		TargetRunId:       nil,
+		TargetRunId:       "",
 		TaskId:            taskID,
-		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeStartChildExecution,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
 	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), testChildNamespaceID, childExecution.GetWorkflowId(), childExecution.GetRunId(), childWorkflowType)
-	ci.StartedID = event.GetEventId()
-	event = addChildWorkflowExecutionCompletedEvent(mutableState, ci.InitiatedID, &childExecution, &eventpb.WorkflowExecutionCompletedEventAttributes{
+	ci.StartedId = event.GetEventId()
+	event = addChildWorkflowExecutionCompletedEvent(mutableState, ci.InitiatedId, &childExecution, &historypb.WorkflowExecutionCompletedEventAttributes{
 		Result:                       payloads.EncodeString("some random child workflow execution result"),
-		DecisionTaskCompletedEventId: transferTask.GetScheduleId(),
+		WorkflowTaskCompletedEventId: transferTask.GetScheduleId(),
 	})
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -1752,50 +1784,51 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedTask() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 	cronSchedule := "@every 5s"
-	backoffSeconds := int32(5)
+	backoff := 5 * time.Second
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 
 	event, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
-				CronSchedule:                    cronSchedule,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+				CronSchedule:             cronSchedule,
 			},
-			FirstDecisionTaskBackoffSeconds: backoffSeconds,
+			FirstWorkflowTaskBackoff: &backoff,
 		},
 	)
 	s.Nil(err)
 
 	taskID := int64(59)
-	di := addDecisionTaskScheduledEvent(mutableState)
+	di := addWorkflowTaskScheduledEvent(mutableState)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
-		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeRecordWorkflowStarted,
+		TaskQueue:   taskQueueName,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
 		ScheduleId:  event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", s.createRecordWorkflowExecutionStartedRequest(s.namespace, event, transferTask, mutableState, backoffSeconds)).Once().Return(nil)
+	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", s.createRecordWorkflowExecutionStartedRequest(s.namespace, event, transferTask, mutableState, backoff)).Once().Return(nil)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
@@ -1803,40 +1836,41 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedT
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttributes() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
-	taskListName := "some random task list"
+	taskQueueName := "some random task queue"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 
 	event, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
 	s.Nil(err)
 
 	taskID := int64(59)
-	di := addDecisionTaskScheduledEvent(mutableState)
+	di := addWorkflowTaskScheduledEvent(mutableState)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
-		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeUpsertWorkflowSearchAttributes,
+		TaskQueue:   taskQueueName,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -1865,71 +1899,77 @@ func (s *transferQueueActiveTaskExecutorSuite) TestCopySearchAttributes() {
 
 func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 	task *persistenceblobs.TransferTaskInfo,
-	ai *persistence.ActivityInfo,
+	ai *persistenceblobs.ActivityInfo,
 ) *matchingservice.AddActivityTaskRequest {
 	return &matchingservice.AddActivityTaskRequest{
-		NamespaceId:       primitives.UUID(task.GetTargetNamespaceId()).String(),
-		SourceNamespaceId: primitives.UUID(task.GetNamespaceId()).String(),
-		Execution: &executionpb.WorkflowExecution{
+		NamespaceId:       task.GetTargetNamespaceId(),
+		SourceNamespaceId: task.GetNamespaceId(),
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
-			RunId:      primitives.UUID(task.GetRunId()).String(),
+			RunId:      task.GetRunId(),
 		},
-		TaskList:                      &tasklistpb.TaskList{Name: task.TaskList},
-		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: ai.ScheduleToStartTimeout,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: task.TaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		ScheduleId:             task.GetScheduleId(),
+		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
 	}
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) createAddDecisionTaskRequest(
+func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 	task *persistenceblobs.TransferTaskInfo,
 	mutableState mutableState,
-) *matchingservice.AddDecisionTaskRequest {
+) *matchingservice.AddWorkflowTaskRequest {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUID(task.GetRunId()).String(),
+		RunId:      task.GetRunId(),
 	}
-	taskList := &tasklistpb.TaskList{Name: task.TaskList}
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: task.TaskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 	executionInfo := mutableState.GetExecutionInfo()
-	timeout := executionInfo.WorkflowRunTimeout
-	if mutableState.GetExecutionInfo().TaskList != task.TaskList {
-		taskList.Kind = tasklistpb.TaskListKind_Sticky
-		timeout = executionInfo.StickyScheduleToStartTimeout
+	timeout := timestamp.DurationFromSeconds(executionInfo.WorkflowRunTimeout)
+	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
+		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
+		timeout = timestamp.DurationFromSeconds(executionInfo.StickyScheduleToStartTimeout)
 	}
 
-	return &matchingservice.AddDecisionTaskRequest{
-		NamespaceId:                   primitives.UUID(task.GetNamespaceId()).String(),
-		Execution:                     &execution,
-		TaskList:                      taskList,
-		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: timeout,
+	return &matchingservice.AddWorkflowTaskRequest{
+		NamespaceId:            task.GetNamespaceId(),
+		Execution:              &execution,
+		TaskQueue:              taskQueue,
+		ScheduleId:             task.GetScheduleId(),
+		ScheduleToStartTimeout: timeout,
 	}
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStartedRequest(
 	namespace string,
-	startEvent *eventpb.HistoryEvent,
+	startEvent *historypb.HistoryEvent,
 	task *persistenceblobs.TransferTaskInfo,
 	mutableState mutableState,
-	backoffSeconds int32,
+	backoffSeconds time.Duration,
 ) *persistence.RecordWorkflowExecutionStartedRequest {
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUID(task.GetRunId()).String(),
+		RunId:      task.GetRunId(),
 	}
 	executionInfo := mutableState.GetExecutionInfo()
-	executionTimestamp := time.Unix(0, startEvent.GetTimestamp()).Add(time.Duration(backoffSeconds) * time.Second)
+	executionTimestamp := timestamp.TimeValue(startEvent.GetEventTime()).Add(backoffSeconds)
 
 	return &persistence.RecordWorkflowExecutionStartedRequest{
 		Namespace:          namespace,
-		NamespaceID:        primitives.UUID(task.GetNamespaceId()).String(),
+		NamespaceID:        task.GetNamespaceId(),
 		Execution:          *execution,
 		WorkflowTypeName:   executionInfo.WorkflowTypeName,
-		StartTimestamp:     startEvent.GetTimestamp(),
+		StartTimestamp:     timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
 		ExecutionTimestamp: executionTimestamp.UnixNano(),
-		RunTimeout:         int64(executionInfo.WorkflowRunTimeout),
+		RunTimeout:         executionInfo.WorkflowRunTimeout,
 		TaskID:             task.GetTaskId(),
-		TaskList:           task.TaskList,
+		TaskQueue:          task.TaskQueue,
 	}
 }
 
@@ -1939,17 +1979,17 @@ func (s *transferQueueActiveTaskExecutorSuite) createRequestCancelWorkflowExecut
 	rci *persistenceblobs.RequestCancelInfo,
 ) *historyservice.RequestCancelWorkflowExecutionRequest {
 
-	sourceExecution := executionpb.WorkflowExecution{
+	sourceExecution := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUID(task.GetRunId()).String(),
+		RunId:      task.GetRunId(),
 	}
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: task.GetTargetWorkflowId(),
-		RunId:      primitives.UUID(task.GetTargetRunId()).String(),
+		RunId:      task.GetTargetRunId(),
 	}
 
 	return &historyservice.RequestCancelWorkflowExecutionRequest{
-		NamespaceId: primitives.UUID(task.GetTargetNamespaceId()).String(),
+		NamespaceId: task.GetTargetNamespaceId(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			Namespace:         targetNamespace,
 			WorkflowExecution: &targetExecution,
@@ -1969,17 +2009,17 @@ func (s *transferQueueActiveTaskExecutorSuite) createSignalWorkflowExecutionRequ
 	si *persistenceblobs.SignalInfo,
 ) *historyservice.SignalWorkflowExecutionRequest {
 
-	sourceExecution := executionpb.WorkflowExecution{
+	sourceExecution := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUID(task.GetRunId()).String(),
+		RunId:      task.GetRunId(),
 	}
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: task.GetTargetWorkflowId(),
-		RunId:      primitives.UUID(task.GetTargetRunId()).String(),
+		RunId:      task.GetTargetRunId(),
 	}
 
 	return &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceId: primitives.UUID(task.GetTargetNamespaceId()).String(),
+		NamespaceId: task.GetTargetNamespaceId(),
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         targetNamespace,
 			WorkflowExecution: &targetExecution,
@@ -1999,64 +2039,67 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 	childNamespace string,
 	task *persistenceblobs.TransferTaskInfo,
 	mutableState mutableState,
-	ci *persistence.ChildExecutionInfo,
+	ci *persistenceblobs.ChildExecutionInfo,
 ) *historyservice.StartWorkflowExecutionRequest {
 
 	event, err := mutableState.GetChildExecutionInitiatedEvent(task.GetScheduleId())
 	s.NoError(err)
 	attributes := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUID(task.GetRunId()).String(),
+		RunId:      task.GetRunId(),
 	}
-	now := time.Now()
+	now := s.timeSource.Now().UTC()
 	return &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId: primitives.UUID(task.GetTargetNamespaceId()).String(),
+		Attempt:     1,
+		NamespaceId: task.GetTargetNamespaceId(),
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                       childNamespace,
-			WorkflowId:                      attributes.WorkflowId,
-			WorkflowType:                    attributes.WorkflowType,
-			TaskList:                        attributes.TaskList,
-			Input:                           attributes.Input,
-			WorkflowExecutionTimeoutSeconds: attributes.WorkflowExecutionTimeoutSeconds,
-			WorkflowRunTimeoutSeconds:       attributes.WorkflowRunTimeoutSeconds,
-			WorkflowTaskTimeoutSeconds:      attributes.WorkflowTaskTimeoutSeconds,
+			Namespace:                childNamespace,
+			WorkflowId:               attributes.WorkflowId,
+			WorkflowType:             attributes.WorkflowType,
+			TaskQueue:                attributes.TaskQueue,
+			Input:                    attributes.Input,
+			WorkflowExecutionTimeout: attributes.WorkflowExecutionTimeout,
+			WorkflowRunTimeout:       attributes.WorkflowRunTimeout,
+			WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
 			// Use the same request ID to dedupe StartWorkflowExecution calls
-			RequestId:             ci.CreateRequestID,
+			RequestId:             ci.CreateRequestId,
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
 		},
-		ParentExecutionInfo: &executiongenpb.ParentExecutionInfo{
-			NamespaceId: primitives.UUID(task.GetNamespaceId()).String(),
+		ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
+			NamespaceId: task.GetNamespaceId(),
 			Namespace:   testNamespace,
 			Execution:   &execution,
 			InitiatedId: task.GetScheduleId(),
 		},
-		FirstDecisionTaskBackoffSeconds: backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), now, now),
+		FirstWorkflowTaskBackoff:        backoff.GetBackoffForNextScheduleNonNegative(attributes.GetCronSchedule(), now, now),
+		ContinueAsNewInitiator:          enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
+		WorkflowExecutionExpirationTime: timestamp.TimePtr(now.Add(*attributes.WorkflowExecutionTimeout).Round(time.Millisecond)),
 	}
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttributesRequest(
 	namespace string,
-	startEvent *eventpb.HistoryEvent,
+	startEvent *historypb.HistoryEvent,
 	task *persistenceblobs.TransferTaskInfo,
 	mutableState mutableState,
 ) *persistence.UpsertWorkflowExecutionRequest {
 
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUID(task.GetRunId()).String(),
+		RunId:      task.GetRunId(),
 	}
 	executionInfo := mutableState.GetExecutionInfo()
 
 	return &persistence.UpsertWorkflowExecutionRequest{
 		Namespace:        namespace,
-		NamespaceID:      primitives.UUID(task.GetNamespaceId()).String(),
+		NamespaceID:      task.GetNamespaceId(),
 		Execution:        *execution,
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
-		StartTimestamp:   startEvent.GetTimestamp(),
-		WorkflowTimeout:  int64(executionInfo.WorkflowRunTimeout),
+		StartTimestamp:   timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
+		WorkflowTimeout:  executionInfo.WorkflowRunTimeout,
 		TaskID:           task.GetTaskId(),
-		TaskList:         task.TaskList,
+		TaskQueue:        task.TaskQueue,
 	}
 }
 

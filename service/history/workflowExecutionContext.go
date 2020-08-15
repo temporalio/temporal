@@ -31,21 +31,23 @@ import (
 	"fmt"
 	"time"
 
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/locks"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/rpc"
+	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/rpc"
 )
 
 const (
@@ -56,11 +58,11 @@ type (
 	workflowExecutionContext interface {
 		getNamespace() string
 		getNamespaceID() string
-		getExecution() *executionpb.WorkflowExecution
+		getExecution() *commonpb.WorkflowExecution
 
 		loadWorkflowExecution() (mutableState, error)
 		loadWorkflowExecutionForReplication(incomingVersion int64) (mutableState, error)
-		loadExecutionStats() (*persistence.ExecutionStats, error)
+		loadExecutionStats() (*persistenceblobs.ExecutionStats, error)
 		clear()
 
 		lock(ctx context.Context) error
@@ -144,7 +146,7 @@ type (
 type (
 	workflowExecutionContextImpl struct {
 		namespaceID       string
-		workflowExecution executionpb.WorkflowExecution
+		workflowExecution commonpb.WorkflowExecution
 		shard             ShardContext
 		engine            Engine
 		executionManager  persistence.ExecutionManager
@@ -154,7 +156,7 @@ type (
 
 		mutex           locks.Mutex
 		mutableState    mutableState
-		stats           *persistence.ExecutionStats
+		stats           *persistenceblobs.ExecutionStats
 		updateCondition int64
 	}
 )
@@ -167,7 +169,7 @@ var (
 
 func newWorkflowExecutionContext(
 	namespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	shard ShardContext,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
@@ -182,7 +184,7 @@ func newWorkflowExecutionContext(
 		metricsClient:     shard.GetMetricsClient(),
 		timeSource:        shard.GetTimeSource(),
 		mutex:             locks.NewMutex(),
-		stats: &persistence.ExecutionStats{
+		stats: &persistenceblobs.ExecutionStats{
 			HistorySize: 0,
 		},
 	}
@@ -199,7 +201,7 @@ func (c *workflowExecutionContextImpl) unlock() {
 func (c *workflowExecutionContextImpl) clear() {
 	c.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.WorkflowContextCleared)
 	c.mutableState = nil
-	c.stats = &persistence.ExecutionStats{
+	c.stats = &persistenceblobs.ExecutionStats{
 		HistorySize: 0,
 	}
 }
@@ -208,7 +210,7 @@ func (c *workflowExecutionContextImpl) getNamespaceID() string {
 	return c.namespaceID
 }
 
-func (c *workflowExecutionContextImpl) getExecution() *executionpb.WorkflowExecution {
+func (c *workflowExecutionContextImpl) getExecution() *commonpb.WorkflowExecution {
 	return &c.workflowExecution
 }
 
@@ -228,7 +230,7 @@ func (c *workflowExecutionContextImpl) setHistorySize(size int64) {
 	c.stats.HistorySize = size
 }
 
-func (c *workflowExecutionContextImpl) loadExecutionStats() (*persistence.ExecutionStats, error) {
+func (c *workflowExecutionContextImpl) loadExecutionStats() (*persistenceblobs.ExecutionStats, error) {
 	_, err := c.loadWorkflowExecution()
 	if err != nil {
 		return nil, err
@@ -281,7 +283,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 	}
 
 	if lastWriteVersion == incomingVersion {
-		err = c.mutableState.StartTransactionSkipDecisionFail(namespaceEntry)
+		err = c.mutableState.StartTransactionSkipWorkflowTaskFail(namespaceEntry)
 		if err != nil {
 			return nil, err
 		}
@@ -399,7 +401,7 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 
 	historySize += c.getHistorySize()
 	c.setHistorySize(historySize)
-	createRequest.NewWorkflowSnapshot.ExecutionStats = &persistence.ExecutionStats{
+	createRequest.NewWorkflowSnapshot.ExecutionStats = &persistenceblobs.ExecutionStats{
 		HistorySize: historySize,
 	}
 
@@ -450,7 +452,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		resetHistorySize += eventsSize
 	}
 	c.setHistorySize(resetHistorySize)
-	resetWorkflow.ExecutionStats = &persistence.ExecutionStats{
+	resetWorkflow.ExecutionStats = &persistenceblobs.ExecutionStats{
 		HistorySize: resetHistorySize,
 	}
 
@@ -479,7 +481,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		}
 		newWorkflowSizeSize += eventsSize
 		newContext.setHistorySize(newWorkflowSizeSize)
-		newWorkflow.ExecutionStats = &persistence.ExecutionStats{
+		newWorkflow.ExecutionStats = &persistenceblobs.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
 		}
 	}
@@ -510,7 +512,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 			currentWorkflowSize += eventsSize
 		}
 		currentContext.setHistorySize(currentWorkflowSize)
-		currentWorkflow.ExecutionStats = &persistence.ExecutionStats{
+		currentWorkflow.ExecutionStats = &persistenceblobs.ExecutionStats{
 			HistorySize: currentWorkflowSize,
 		}
 	}
@@ -674,7 +676,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		currentWorkflowSize += eventsSize
 	}
 	c.setHistorySize(currentWorkflowSize)
-	currentWorkflow.ExecutionStats = &persistence.ExecutionStats{
+	currentWorkflow.ExecutionStats = &persistenceblobs.ExecutionStats{
 		HistorySize: currentWorkflowSize,
 	}
 
@@ -703,7 +705,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		}
 		newWorkflowSizeSize += eventsSize
 		newContext.setHistorySize(newWorkflowSizeSize)
-		newWorkflow.ExecutionStats = &persistence.ExecutionStats{
+		newWorkflow.ExecutionStats = &persistenceblobs.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
 		}
 	}
@@ -785,10 +787,10 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		resp.MutableStateUpdateSessionStats,
 	)
 	// emit workflow completion stats if any
-	if currentWorkflow.ExecutionInfo.State == persistence.WorkflowStateCompleted {
+	if currentWorkflow.ExecutionInfo.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		if event, err := c.mutableState.GetCompletionEvent(); err == nil {
-			taskList := currentWorkflow.ExecutionInfo.TaskList
-			emitWorkflowCompletionStats(c.metricsClient, namespace, taskList, event)
+			taskQueue := currentWorkflow.ExecutionInfo.TaskQueue
+			emitWorkflowCompletionStats(c.metricsClient, namespace, taskQueue, event)
 		}
 	}
 
@@ -811,7 +813,7 @@ func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
-	if currentWorkflowMutation.ExecutionInfo.Status != executionpb.WorkflowExecutionStatus_ContinuedAsNew {
+	if currentWorkflowMutation.ExecutionInfo.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
 		return nil
 	} else if updateMode == persistence.UpdateWorkflowModeBypassCurrent && newWorkflowSnapshot == nil {
 		// update current workflow as zombie & continue as new without new zombie workflow
@@ -860,7 +862,7 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 	namespaceID := workflowEvents.NamespaceID
 	workflowID := workflowEvents.WorkflowID
 	runID := workflowEvents.RunID
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: workflowEvents.WorkflowID,
 		RunId:      workflowEvents.RunID,
 	}
@@ -890,7 +892,7 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 	}
 
 	namespaceID := workflowEvents.NamespaceID
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: workflowEvents.WorkflowID,
 		RunId:      workflowEvents.RunID,
 	}
@@ -912,7 +914,7 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 
 func (c *workflowExecutionContextImpl) appendHistoryV2EventsWithRetry(
 	namespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	request *persistence.AppendHistoryNodesRequest,
 ) (int64, error) {
 
@@ -1070,7 +1072,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	setTaskInfo(currMutableState.GetCurrentVersion(), now, currTransferTasks, currTimerTasks)
 	setTaskInfo(newMutableState.GetCurrentVersion(), now, newTransferTasks, newTimerTasks)
 
-	// Since we always reset to decision task, there shouldn't be any buffered events.
+	// Since we always reset to workflow task, there shouldn't be any buffered events.
 	// Therefore currently ResetWorkflowExecution persistence API doesn't implement setting buffered events.
 	if newMutableState.HasBufferedEvents() {
 		retError = serviceerror.NewInternal(fmt.Sprintf("reset workflow execution shouldn't have buffered events"))
@@ -1131,7 +1133,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 		}
 		newHistorySize += eventsSize
 	}
-	resetWorkflow.ExecutionStats = &persistence.ExecutionStats{
+	resetWorkflow.ExecutionStats = &persistenceblobs.ExecutionStats{
 		HistorySize: newHistorySize,
 	}
 	resetWorkflow.TransferTasks = newTransferTasks
@@ -1159,17 +1161,17 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	if updateCurr {
 		resetWFReq.CurrentWorkflowMutation = &persistence.WorkflowMutation{
 			ExecutionInfo: currMutableState.GetExecutionInfo(),
-			ExecutionStats: &persistence.ExecutionStats{
+			ExecutionStats: &persistenceblobs.ExecutionStats{
 				HistorySize: c.stats.HistorySize,
 			},
 			ReplicationState: currMutableState.GetReplicationState(),
 			VersionHistories: currMutableState.GetVersionHistories(),
 
-			UpsertActivityInfos:       []*persistence.ActivityInfo{},
+			UpsertActivityInfos:       []*persistenceblobs.ActivityInfo{},
 			DeleteActivityInfos:       []int64{},
 			UpsertTimerInfos:          []*persistenceblobs.TimerInfo{},
 			DeleteTimerInfos:          []string{},
-			UpsertChildExecutionInfos: []*persistence.ChildExecutionInfo{},
+			UpsertChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 			DeleteChildExecutionInfo:  nil,
 			UpsertRequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 			DeleteRequestCancelInfo:   nil,
@@ -1177,7 +1179,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 			DeleteSignalInfo:          nil,
 			UpsertSignalRequestedIDs:  []string{},
 			DeleteSignalRequestedID:   "",
-			NewBufferedEvents:         []*eventpb.HistoryEvent{},
+			NewBufferedEvents:         []*historypb.HistoryEvent{},
 			ClearBufferedEvents:       false,
 
 			TransferTasks:    currTransferTasks,
@@ -1257,7 +1259,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	namespaceID := eventBatches[0].NamespaceID
 	workflowID := eventBatches[0].WorkflowID
 	runID := eventBatches[0].RunID
-	var reapplyEvents []*eventpb.HistoryEvent
+	var reapplyEvents []*historypb.HistoryEvent
 	for _, events := range eventBatches {
 		if events.NamespaceID != namespaceID ||
 			events.WorkflowID != workflowID {
@@ -1267,7 +1269,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 		for _, e := range events.Events {
 			event := e
 			switch event.GetEventType() {
-			case eventpb.EventType_WorkflowExecutionSignaled:
+			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 				reapplyEvents = append(reapplyEvents, event)
 			}
 		}
@@ -1278,7 +1280,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 
 	// Reapply events only reapply to the current run.
 	// The run id is only used for reapply event de-duplication
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
@@ -1308,7 +1310,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	// Use the history from the same cluster to reapply events
 	reapplyEventsDataBlob, err := serializer.SerializeBatchEvents(
 		reapplyEvents,
-		common.EncodingTypeProto3,
+		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	if err != nil {
 		return err

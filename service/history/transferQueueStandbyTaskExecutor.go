@@ -27,17 +27,17 @@ package history
 import (
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/xdc"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/xdc"
 )
 
 type (
@@ -85,31 +85,31 @@ func (t *transferQueueStandbyTaskExecutor) execute(
 	}
 
 	if !shouldProcessTask &&
-		transferTask.TaskType != persistence.TransferTaskTypeCloseExecution {
+		transferTask.TaskType != enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION {
 		// guarantee the processing of workflow execution close
 		return nil
 	}
 
 	switch transferTask.TaskType {
-	case persistence.TransferTaskTypeActivityTask:
+	case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 		return t.processActivityTask(transferTask)
-	case persistence.TransferTaskTypeDecisionTask:
-		return t.processDecisionTask(transferTask)
-	case persistence.TransferTaskTypeCloseExecution:
+	case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
+		return t.processWorkflowTask(transferTask)
+	case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
 		return t.processCloseExecution(transferTask)
-	case persistence.TransferTaskTypeCancelExecution:
+	case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 		return t.processCancelExecution(transferTask)
-	case persistence.TransferTaskTypeSignalExecution:
+	case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
 		return t.processSignalExecution(transferTask)
-	case persistence.TransferTaskTypeStartChildExecution:
+	case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
 		return t.processStartChildExecution(transferTask)
-	case persistence.TransferTaskTypeRecordWorkflowStarted:
+	case enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED:
 		return t.processRecordWorkflowStarted(transferTask)
-	case persistence.TransferTaskTypeResetWorkflow:
+	case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 		// no reset needed for standby
 		// TODO: add error logs
 		return nil
-	case persistence.TransferTaskTypeUpsertWorkflowSearchAttributes:
+	case enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 		return t.processUpsertWorkflowSearchAttributes(transferTask)
 	default:
 		return errUnknownTransferTask
@@ -133,10 +133,8 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			return nil, err
 		}
 
-		if activityInfo.StartedID == common.EmptyEventID {
-			return newPushActivityToMatchingInfo(
-				activityInfo.ScheduleToStartTimeout,
-			), nil
+		if activityInfo.StartedId == common.EmptyEventID {
+			return newPushActivityToMatchingInfo(*activityInfo.ScheduleToStartTimeout), nil
 		}
 
 		return nil, nil
@@ -157,31 +155,31 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 	)
 }
 
-func (t *transferQueueStandbyTaskExecutor) processDecisionTask(
+func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 	transferTask *persistenceblobs.TransferTaskInfo,
 ) error {
 
 	processTaskIfClosed := false
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		decisionInfo, ok := mutableState.GetDecisionInfo(transferTask.GetScheduleId())
+		wtInfo, ok := mutableState.GetWorkflowTaskInfo(transferTask.GetScheduleId())
 		if !ok {
 			return nil, nil
 		}
 
 		executionInfo := mutableState.GetExecutionInfo()
 		workflowTimeout := executionInfo.WorkflowRunTimeout
-		decisionTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
+		wtTimeout := common.MinInt64(workflowTimeout, common.MaxTaskTimeoutSeconds)
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), decisionInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), wtInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
 
-		if decisionInfo.StartedID == common.EmptyEventID {
-			return newPushDecisionToMatchingInfo(
-				decisionTimeout,
-				tasklistpb.TaskList{Name: transferTask.TaskList},
+		if wtInfo.StartedID == common.EmptyEventID {
+			return newPushWorkflowTaskToMatchingInfo(
+				wtTimeout,
+				taskqueuepb.TaskQueue{Name: transferTask.TaskQueue},
 			), nil
 		}
 
@@ -197,8 +195,8 @@ func (t *transferQueueStandbyTaskExecutor) processDecisionTask(
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
-			t.pushDecision,
-			t.pushDecision,
+			t.pushWorkflowTask,
+			t.pushWorkflowTask,
 		),
 	)
 }
@@ -219,18 +217,18 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		if err != nil {
 			return nil, err
 		}
-		wfCloseTime := completionEvent.GetTimestamp()
+		wfCloseTime := timestamp.TimeValue(completionEvent.GetEventTime())
 
 		executionInfo := mutableState.GetExecutionInfo()
 		workflowTypeName := executionInfo.WorkflowTypeName
-		workflowCloseTimestamp := wfCloseTime
+		workflowCloseTime := wfCloseTime
 		workflowStatus := executionInfo.Status
 		workflowHistoryLength := mutableState.GetNextEventID() - 1
 		startEvent, err := mutableState.GetStartEvent()
 		if err != nil {
 			return nil, err
 		}
-		workflowStartTimestamp := startEvent.GetTimestamp()
+		workflowStartTime := timestamp.TimeValue(startEvent.GetEventTime())
 		workflowExecutionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
 		visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 		searchAttr := executionInfo.SearchAttributes
@@ -247,18 +245,18 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		// DO NOT REPLY TO PARENT
 		// since event replication should be done by active cluster
 		return nil, t.recordWorkflowClosed(
-			primitives.UUIDString(transferTask.GetNamespaceId()),
+			transferTask.GetNamespaceId(),
 			transferTask.GetWorkflowId(),
-			primitives.UUIDString(transferTask.GetRunId()),
+			transferTask.GetRunId(),
 			workflowTypeName,
-			workflowStartTimestamp,
+			workflowStartTime.UnixNano(),
 			workflowExecutionTimestamp.UnixNano(),
-			workflowCloseTimestamp,
+			workflowCloseTime.UnixNano(),
 			workflowStatus,
 			workflowHistoryLength,
 			transferTask.GetTaskId(),
 			visibilityMemo,
-			executionInfo.TaskList,
+			executionInfo.TaskQueue,
 			searchAttr,
 		)
 	}
@@ -358,7 +356,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return nil, err
 		}
 
-		if childWorkflowInfo.StartedID != common.EmptyEventID {
+		if childWorkflowInfo.StartedId != common.EmptyEventID {
 			return nil, nil
 		}
 
@@ -430,42 +428,42 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	workflowTimeout := executionInfo.WorkflowRunTimeout
+	workflowTimeout := int32(executionInfo.WorkflowRunTimeout)
 	wfTypeName := executionInfo.WorkflowTypeName
 	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {
 		return err
 	}
-	startTimestamp := startEvent.GetTimestamp()
+	startTime := timestamp.TimeValue(startEvent.GetEventTime())
 	executionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
 
 	if isRecordStart {
 		return t.recordWorkflowStarted(
-			primitives.UUIDString(transferTask.GetNamespaceId()),
+			transferTask.GetNamespaceId(),
 			transferTask.GetWorkflowId(),
-			primitives.UUIDString(transferTask.GetRunId()),
+			transferTask.GetRunId(),
 			wfTypeName,
-			startTimestamp,
+			startTime.UnixNano(),
 			executionTimestamp.UnixNano(),
 			workflowTimeout,
 			transferTask.GetTaskId(),
-			executionInfo.TaskList,
+			executionInfo.TaskQueue,
 			visibilityMemo,
 			searchAttr,
 		)
 	}
 	return t.upsertWorkflowExecution(
-		primitives.UUIDString(transferTask.GetNamespaceId()),
+		transferTask.GetNamespaceId(),
 		transferTask.GetWorkflowId(),
-		primitives.UUIDString(transferTask.GetRunId()),
+		transferTask.GetRunId(),
 		wfTypeName,
-		startTimestamp,
+		startTime.UnixNano(),
 		executionTimestamp.UnixNano(),
 		workflowTimeout,
 		transferTask.GetTaskId(),
-		executionInfo.TaskList,
+		executionInfo.TaskQueue,
 		visibilityMemo,
 		searchAttr,
 	)
@@ -523,15 +521,15 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 		return nil
 	}
 
-	pushActivityInfo := postActionInfo.(*pushActivityToMatchingInfo)
-	timeout := common.MinInt32(pushActivityInfo.activityScheduleToStartTimeout, common.MaxTaskTimeout)
+	pushActivityInfo := postActionInfo.(*pushActivityTaskToMatchingInfo)
+	timeout := common.MinInt64(int64(pushActivityInfo.activityTaskScheduleToStartTimeout), common.MaxTaskTimeoutSeconds)
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		task.(*persistenceblobs.TransferTaskInfo),
-		timeout,
+		timestamp.DurationFromSeconds(timeout),
 	)
 }
 
-func (t *transferQueueStandbyTaskExecutor) pushDecision(
+func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 	task queueTaskInfo,
 	postActionInfo interface{},
 	logger log.Logger,
@@ -541,12 +539,12 @@ func (t *transferQueueStandbyTaskExecutor) pushDecision(
 		return nil
 	}
 
-	pushDecisionInfo := postActionInfo.(*pushDecisionToMatchingInfo)
-	timeout := common.MinInt32(pushDecisionInfo.decisionScheduleToStartTimeout, common.MaxTaskTimeout)
-	return t.transferQueueTaskExecutorBase.pushDecision(
+	pushwtInfo := postActionInfo.(*pushWorkflowTaskToMatchingInfo)
+	timeout := common.MinInt64(pushwtInfo.workflowTaskScheduleToStartTimeout, common.MaxTaskTimeoutSeconds)
+	return t.transferQueueTaskExecutorBase.pushWorkflowTask(
 		task.(*persistenceblobs.TransferTaskInfo),
-		&pushDecisionInfo.tasklist,
-		timeout,
+		&pushwtInfo.taskqueue,
+		timestamp.DurationFromSeconds(timeout),
 	)
 }
 
@@ -570,9 +568,9 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	var err error
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			primitives.UUIDString(transferTask.GetNamespaceId()),
+			transferTask.GetNamespaceId(),
 			transferTask.GetWorkflowId(),
-			primitives.UUIDString(transferTask.GetRunId()),
+			transferTask.GetRunId(),
 			resendInfo.lastEventID,
 			resendInfo.lastEventVersion,
 			0,
@@ -580,11 +578,11 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		)
 	} else if resendInfo.nextEventID != nil {
 		err = t.historyRereplicator.SendMultiWorkflowHistory(
-			primitives.UUIDString(transferTask.GetNamespaceId()),
+			transferTask.GetNamespaceId(),
 			transferTask.GetWorkflowId(),
-			primitives.UUIDString(transferTask.GetRunId()),
+			transferTask.GetRunId(),
 			*resendInfo.nextEventID,
-			primitives.UUIDString(transferTask.GetRunId()),
+			transferTask.GetRunId(),
 			common.EndEventID, // use common.EndEventID since we do not know where is the end
 		)
 	} else {
@@ -596,9 +594,9 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if err != nil {
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shard.GetShardID()),
-			tag.WorkflowNamespaceIDBytes(transferTask.GetNamespaceId()),
+			tag.WorkflowNamespaceID(transferTask.GetNamespaceId()),
 			tag.WorkflowID(transferTask.GetWorkflowId()),
-			tag.WorkflowRunIDBytes(transferTask.GetRunId()),
+			tag.WorkflowRunID(transferTask.GetRunId()),
 			tag.SourceCluster(t.clusterName))
 	}
 

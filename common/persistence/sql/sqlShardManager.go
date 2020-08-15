@@ -28,13 +28,13 @@ import (
 	"database/sql"
 	"fmt"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 type sqlShardManager struct {
@@ -165,6 +165,6 @@ func shardInfoToShardsRow(s persistenceblobs.ShardInfo) (*sqlplugin.ShardsRow, e
 		ShardID:      int64(s.GetShardId()),
 		RangeID:      s.GetRangeId(),
 		Data:         blob.Data,
-		DataEncoding: string(blob.Encoding),
+		DataEncoding: blob.Encoding.String(),
 	}, nil
 }

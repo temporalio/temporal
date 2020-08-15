@@ -28,11 +28,11 @@ import (
 	"context"
 	"strings"
 
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/metrics"
 )
 
 var _ Client = (*metricClient)(nil)
@@ -58,10 +58,10 @@ func (c *metricClient) AddActivityTask(
 	c.metricsClient.IncCounter(metrics.MatchingClientAddActivityTaskScope, metrics.ClientRequests)
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddActivityTaskScope, metrics.ClientLatency)
 
-	c.emitForwardedFromStats(
+	c.emitForwardedSourceStats(
 		metrics.MatchingClientAddActivityTaskScope,
-		request.GetForwardedFrom(),
-		request.TaskList,
+		request.GetForwardedSource(),
+		request.TaskQueue,
 	)
 
 	resp, err := c.client.AddActivityTask(ctx, request, opts...)
@@ -74,77 +74,77 @@ func (c *metricClient) AddActivityTask(
 	return resp, err
 }
 
-func (c *metricClient) AddDecisionTask(
+func (c *metricClient) AddWorkflowTask(
 	ctx context.Context,
-	request *matchingservice.AddDecisionTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.AddDecisionTaskResponse, error) {
+	request *matchingservice.AddWorkflowTaskRequest,
+	opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientAddDecisionTaskScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddDecisionTaskScope, metrics.ClientLatency)
+	c.metricsClient.IncCounter(metrics.MatchingClientAddWorkflowTaskScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddWorkflowTaskScope, metrics.ClientLatency)
 
-	c.emitForwardedFromStats(
-		metrics.MatchingClientAddDecisionTaskScope,
-		request.GetForwardedFrom(),
-		request.TaskList,
+	c.emitForwardedSourceStats(
+		metrics.MatchingClientAddWorkflowTaskScope,
+		request.GetForwardedSource(),
+		request.TaskQueue,
 	)
 
-	resp, err := c.client.AddDecisionTask(ctx, request, opts...)
+	resp, err := c.client.AddWorkflowTask(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientAddDecisionTaskScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientAddWorkflowTaskScope, metrics.ClientFailures)
 	}
 
 	return resp, err
 }
 
-func (c *metricClient) PollForActivityTask(
+func (c *metricClient) PollActivityTaskQueue(
 	ctx context.Context,
-	request *matchingservice.PollForActivityTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.PollForActivityTaskResponse, error) {
+	request *matchingservice.PollActivityTaskQueueRequest,
+	opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientPollForActivityTaskScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollForActivityTaskScope, metrics.ClientLatency)
+	c.metricsClient.IncCounter(metrics.MatchingClientPollActivityTaskQueueScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollActivityTaskQueueScope, metrics.ClientLatency)
 
 	if request.PollRequest != nil {
-		c.emitForwardedFromStats(
-			metrics.MatchingClientPollForActivityTaskScope,
-			request.GetForwardedFrom(),
-			request.PollRequest.TaskList,
+		c.emitForwardedSourceStats(
+			metrics.MatchingClientPollActivityTaskQueueScope,
+			request.GetForwardedSource(),
+			request.PollRequest.TaskQueue,
 		)
 	}
 
-	resp, err := c.client.PollForActivityTask(ctx, request, opts...)
+	resp, err := c.client.PollActivityTaskQueue(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientPollForActivityTaskScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientPollActivityTaskQueueScope, metrics.ClientFailures)
 	}
 
 	return resp, err
 }
 
-func (c *metricClient) PollForDecisionTask(
+func (c *metricClient) PollWorkflowTaskQueue(
 	ctx context.Context,
-	request *matchingservice.PollForDecisionTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.PollForDecisionTaskResponse, error) {
+	request *matchingservice.PollWorkflowTaskQueueRequest,
+	opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientPollForDecisionTaskScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollForDecisionTaskScope, metrics.ClientLatency)
+	c.metricsClient.IncCounter(metrics.MatchingClientPollWorkflowTaskQueueScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollWorkflowTaskQueueScope, metrics.ClientLatency)
 
 	if request.PollRequest != nil {
-		c.emitForwardedFromStats(
-			metrics.MatchingClientPollForDecisionTaskScope,
-			request.GetForwardedFrom(),
-			request.PollRequest.TaskList,
+		c.emitForwardedSourceStats(
+			metrics.MatchingClientPollWorkflowTaskQueueScope,
+			request.GetForwardedSource(),
+			request.PollRequest.TaskQueue,
 		)
 	}
 
-	resp, err := c.client.PollForDecisionTask(ctx, request, opts...)
+	resp, err := c.client.PollWorkflowTaskQueue(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientPollForDecisionTaskScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientPollWorkflowTaskQueueScope, metrics.ClientFailures)
 	}
 
 	return resp, err
@@ -158,10 +158,10 @@ func (c *metricClient) QueryWorkflow(
 	c.metricsClient.IncCounter(metrics.MatchingClientQueryWorkflowScope, metrics.ClientRequests)
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientQueryWorkflowScope, metrics.ClientLatency)
 
-	c.emitForwardedFromStats(
+	c.emitForwardedSourceStats(
 		metrics.MatchingClientQueryWorkflowScope,
-		request.GetForwardedFrom(),
-		request.TaskList,
+		request.GetForwardedSource(),
+		request.TaskQueue,
 	)
 
 	resp, err := c.client.QueryWorkflow(ctx, request, opts...)
@@ -210,53 +210,53 @@ func (c *metricClient) CancelOutstandingPoll(
 	return resp, err
 }
 
-func (c *metricClient) DescribeTaskList(
+func (c *metricClient) DescribeTaskQueue(
 	ctx context.Context,
-	request *matchingservice.DescribeTaskListRequest,
-	opts ...grpc.CallOption) (*matchingservice.DescribeTaskListResponse, error) {
+	request *matchingservice.DescribeTaskQueueRequest,
+	opts ...grpc.CallOption) (*matchingservice.DescribeTaskQueueResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskListScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskQueueScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientDescribeTaskListScope, metrics.ClientLatency)
-	resp, err := c.client.DescribeTaskList(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientDescribeTaskQueueScope, metrics.ClientLatency)
+	resp, err := c.client.DescribeTaskQueue(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskListScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskQueueScope, metrics.ClientFailures)
 	}
 
 	return resp, err
 }
 
-func (c *metricClient) ListTaskListPartitions(
+func (c *metricClient) ListTaskQueuePartitions(
 	ctx context.Context,
-	request *matchingservice.ListTaskListPartitionsRequest,
-	opts ...grpc.CallOption) (*matchingservice.ListTaskListPartitionsResponse, error) {
+	request *matchingservice.ListTaskQueuePartitionsRequest,
+	opts ...grpc.CallOption) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientListTaskListPartitionsScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.MatchingClientListTaskQueuePartitionsScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientListTaskListPartitionsScope, metrics.ClientLatency)
-	resp, err := c.client.ListTaskListPartitions(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientListTaskQueuePartitionsScope, metrics.ClientLatency)
+	resp, err := c.client.ListTaskQueuePartitions(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientListTaskListPartitionsScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientListTaskQueuePartitionsScope, metrics.ClientFailures)
 	}
 
 	return resp, err
 }
 
-func (c *metricClient) emitForwardedFromStats(scope int, forwardedFrom string, taskList *tasklistpb.TaskList) {
-	if taskList == nil {
+func (c *metricClient) emitForwardedSourceStats(scope int, forwardedFrom string, taskQueue *taskqueuepb.TaskQueue) {
+	if taskQueue == nil {
 		return
 	}
-	isChildPartition := strings.HasPrefix(taskList.GetName(), taskListPartitionPrefix)
+	isChildPartition := strings.HasPrefix(taskQueue.GetName(), taskQueuePartitionPrefix)
 	switch {
 	case forwardedFrom != "":
 		c.metricsClient.IncCounter(scope, metrics.MatchingClientForwardedCounter)
 	default:
 		if isChildPartition {
-			c.metricsClient.IncCounter(scope, metrics.MatchingClientInvalidTaskListName)
+			c.metricsClient.IncCounter(scope, metrics.MatchingClientInvalidTaskQueueName)
 		}
 	}
 }

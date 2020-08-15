@@ -29,43 +29,43 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
-	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
-	espersistence "github.com/temporalio/temporal/common/persistence/elasticsearch"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/common/task"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
+	persistenceClient "go.temporal.io/server/common/persistence/client"
+	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/common/task"
 )
 
 // Config represents configuration for history service
 type Config struct {
 	NumberOfShards int
 
-	EnableNDC                       dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	RPS                             dynamicconfig.IntPropertyFn
-	MaxIDLengthLimit                dynamicconfig.IntPropertyFn
-	PersistenceMaxQPS               dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS         dynamicconfig.IntPropertyFn
-	EnableVisibilitySampling        dynamicconfig.BoolPropertyFn
-	EnableReadFromClosedExecutionV2 dynamicconfig.BoolPropertyFn
-	VisibilityOpenMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	VisibilityClosedMaxQPS          dynamicconfig.IntPropertyFnWithNamespaceFilter
-	AdvancedVisibilityWritingMode   dynamicconfig.StringPropertyFn
-	EmitShardDiffLog                dynamicconfig.BoolPropertyFn
-	MaxAutoResetPoints              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	ThrottledLogRPS                 dynamicconfig.IntPropertyFn
-	EnableStickyQuery               dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration           dynamicconfig.DurationPropertyFn
+	EnableNDC                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	RPS                           dynamicconfig.IntPropertyFn
+	MaxIDLengthLimit              dynamicconfig.IntPropertyFn
+	PersistenceMaxQPS             dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
+	EnableVisibilitySampling      dynamicconfig.BoolPropertyFn
+	VisibilityOpenMaxQPS          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	VisibilityClosedMaxQPS        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	AdvancedVisibilityWritingMode dynamicconfig.StringPropertyFn
+	EmitShardDiffLog              dynamicconfig.BoolPropertyFn
+	MaxAutoResetPoints            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ThrottledLogRPS               dynamicconfig.IntPropertyFn
+	EnableStickyQuery             dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration         dynamicconfig.DurationPropertyFn
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
@@ -199,15 +199,23 @@ type Config struct {
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	// Decision settings
-	// StickyTTL is to expire a sticky tasklist if no update more than this duration
-	// TODO https://github.com/temporalio/temporal/issues/2357
+	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
+	// none is configured on the Activity by the user.
+	DefaultActivityRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
+
+	// DefaultWorkflowRetryPolicy specifies the out-of-box retry policy for
+	// any unset fields on a RetryPolicy configured on a Workflow
+	DefaultWorkflowRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
+
+	// Workflow task settings
+	// StickyTTL is to expire a sticky taskqueue if no update more than this duration
+	// TODO https://go.temporal.io/server/issues/2357
 	StickyTTL dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	// DefaultWorkflowTaskTimeout the default decision task timeout
+	// DefaultWorkflowTaskTimeout the default workflow task timeout
 	DefaultWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	// DecisionHeartbeatTimeout is to timeout behavior of: RespondDecisionTaskComplete with ForceCreateNewDecisionTask == true without any decisions
-	// So that decision will be scheduled to another worker(by clear stickyness)
-	DecisionHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	// WorkflowTaskHeartbeatTimeout is to timeout behavior of: RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true without any workflow tasks
+	// So that workflow task will be scheduled to another worker(by clear stickyness)
+	WorkflowTaskHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// The execution timeout a workflow execution defaults to if not specified
 	DefaultWorkflowExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// The run timeout a workflow run defaults to if not specified
@@ -216,7 +224,7 @@ type Config struct {
 	MaxWorkflowExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// Maximum workflow run timeout permitted by the service
 	MaxWorkflowRunTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	// MaxWorkflowTaskTimeout is the maximum allowed value for a decision task timeout
+	// MaxWorkflowTaskTimeout is the maximum allowed value for a workflow task timeout
 	MaxWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 	// The following is used by the new RPC replication stack
@@ -224,16 +232,18 @@ type Config struct {
 	ReplicationTaskFetcherAggregationInterval        dynamicconfig.DurationPropertyFn
 	ReplicationTaskFetcherTimerJitterCoefficient     dynamicconfig.FloatPropertyFn
 	ReplicationTaskFetcherErrorRetryWait             dynamicconfig.DurationPropertyFn
-	ReplicationTaskProcessorErrorRetryWait           dynamicconfig.DurationPropertyFn
-	ReplicationTaskProcessorErrorRetryMaxAttempts    dynamicconfig.IntPropertyFn
-	ReplicationTaskProcessorNoTaskRetryWait          dynamicconfig.DurationPropertyFn
-	ReplicationTaskProcessorCleanupInterval          dynamicconfig.DurationPropertyFn
-	ReplicationTaskProcessorCleanupJitterCoefficient dynamicconfig.FloatPropertyFn
+	ReplicationTaskProcessorErrorRetryWait           dynamicconfig.DurationPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorErrorRetryMaxAttempts    dynamicconfig.IntPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorNoTaskRetryWait          dynamicconfig.DurationPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorCleanupInterval          dynamicconfig.DurationPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorCleanupJitterCoefficient dynamicconfig.FloatPropertyFnWithShardIDFilter
+
+	EnableKafkaReplication       dynamicconfig.BoolPropertyFn
+	EnableRPCReplication         dynamicconfig.BoolPropertyFn
+	EnableCleanupReplicationTask dynamicconfig.BoolPropertyFn
 
 	// The following are used by consistent query
-	EnableConsistentQuery            dynamicconfig.BoolPropertyFn
-	EnableConsistentQueryByNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	MaxBufferedQueryCount            dynamicconfig.IntPropertyFn
+	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
 
 	// Data integrity check related config knobs
 	MutableStateChecksumGenProbability    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -242,6 +252,9 @@ type Config struct {
 
 	//Crocess DC Replication configuration
 	ReplicationEventsFromCurrentCluster dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	EnableDropStuckTaskByNamespaceID dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
+	SkipReapplicationByNamespaceId   dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
 }
 
 const (
@@ -259,7 +272,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		PersistenceGlobalMaxQPS:              dc.GetIntProperty(dynamicconfig.HistoryPersistenceGlobalMaxQPS, 0),
 		ShutdownDrainDuration:                dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0),
 		EnableVisibilitySampling:             dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
-		EnableReadFromClosedExecutionV2:      dc.GetBoolProperty(dynamicconfig.EnableReadFromClosedExecutionV2, false),
 		VisibilityOpenMaxQPS:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryVisibilityOpenMaxQPS, 300),
 		VisibilityClosedMaxQPS:               dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryVisibilityClosedMaxQPS, 300),
 		MaxAutoResetPoints:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, defaultHistoryMaxAutoResetPoints),
@@ -280,7 +292,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		StandbyTaskMissingEventsResendDelay:  dc.GetDurationProperty(dynamicconfig.StandbyTaskMissingEventsResendDelay, 15*time.Minute),
 		StandbyTaskMissingEventsDiscardDelay: dc.GetDurationProperty(dynamicconfig.StandbyTaskMissingEventsDiscardDelay, 25*time.Minute),
 
-		TaskProcessRPS:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskProcessRPS, 1000),
+		TaskProcessRPS: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskProcessRPS, 1000),
+
 		EnablePriorityTaskProcessor:    dc.GetBoolProperty(dynamicconfig.EnablePriorityTaskProcessor, false),
 		TaskSchedulerType:              dc.GetIntProperty(dynamicconfig.TaskSchedulerType, int(task.SchedulerTypeWRR)),
 		TaskSchedulerWorkerCount:       dc.GetIntProperty(dynamicconfig.TaskSchedulerWorkerCount, 20),
@@ -347,9 +360,9 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ShardSyncTimerJitterCoefficient: dc.GetFloat64Property(dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient, 0.15),
 
 		// history client: client/history/client.go set the client timeout 30s
-		// TODO: Return this value to the client: github.com/temporalio/temporal/issues/294
+		// TODO: Return this value to the client: go.temporal.io/server/issues/294
 		LongPollExpirationInterval:          dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, time.Second*20),
-		EventEncodingType:                   dc.GetStringPropertyFnWithNamespaceFilter(dynamicconfig.DefaultEventEncoding, string(common.EncodingTypeProto3)),
+		EventEncodingType:                   dc.GetStringPropertyFnWithNamespaceFilter(dynamicconfig.DefaultEventEncoding, enumspb.ENCODING_TYPE_PROTO3.String()),
 		EnableParentClosePolicy:             dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableParentClosePolicy, true),
 		NumParentClosePolicySystemWorkflows: dc.GetIntProperty(dynamicconfig.NumParentClosePolicySystemWorkflows, 10),
 		EnableParentClosePolicyWorker:       dc.GetBoolProperty(dynamicconfig.EnableParentClosePolicyWorker, true),
@@ -368,12 +381,14 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ThrottledLogRPS:   dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 4),
 		EnableStickyQuery: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableStickyQuery, true),
 
+		DefaultActivityRetryPolicy:                       dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultActivityRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
+		DefaultWorkflowRetryPolicy:                       dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
 		ValidSearchAttributes:                            dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
 		SearchAttributesNumberOfKeysLimit:                dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
 		SearchAttributesTotalSizeLimit:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
 		StickyTTL:                                        dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.StickyTTL, time.Hour*24*365),
-		DecisionHeartbeatTimeout:                         dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DecisionHeartbeatTimeout, time.Minute*30),
+		WorkflowTaskHeartbeatTimeout:                     dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.WorkflowTaskHeartbeatTimeout, time.Minute*30),
 		DefaultWorkflowExecutionTimeout:                  dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowExecutionTimeout, time.Hour*24*365*10),
 		DefaultWorkflowRunTimeout:                        dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowRunTimeout, time.Hour*24*365*10),
 		MaxWorkflowExecutionTimeout:                      dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxWorkflowExecutionTimeout, time.Hour*24*365*10),
@@ -382,28 +397,32 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ReplicationTaskFetcherAggregationInterval:        dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherAggregationInterval, 2*time.Second),
 		ReplicationTaskFetcherTimerJitterCoefficient:     dc.GetFloat64Property(dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient, 0.15),
 		ReplicationTaskFetcherErrorRetryWait:             dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherErrorRetryWait, time.Second),
-		ReplicationTaskProcessorErrorRetryWait:           dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorErrorRetryWait, time.Second),
-		ReplicationTaskProcessorErrorRetryMaxAttempts:    dc.GetIntProperty(dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts, 20),
-		ReplicationTaskProcessorNoTaskRetryWait:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorNoTaskInitialWait, 2*time.Second),
-		ReplicationTaskProcessorCleanupInterval:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorCleanupInterval, 1*time.Minute),
-		ReplicationTaskProcessorCleanupJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorCleanupJitterCoefficient, 0.15),
+		ReplicationTaskProcessorErrorRetryWait:           dc.GetDurationPropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorErrorRetryWait, time.Second),
+		ReplicationTaskProcessorErrorRetryMaxAttempts:    dc.GetIntPropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts, 20),
+		ReplicationTaskProcessorNoTaskRetryWait:          dc.GetDurationPropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorNoTaskInitialWait, 2*time.Second),
+		ReplicationTaskProcessorCleanupInterval:          dc.GetDurationPropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorCleanupInterval, 1*time.Minute),
+		ReplicationTaskProcessorCleanupJitterCoefficient: dc.GetFloat64PropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorCleanupJitterCoefficient, 0.15),
+		EnableRPCReplication:                             dc.GetBoolProperty(dynamicconfig.HistoryEnableRPCReplication, false),
+		EnableKafkaReplication:                           dc.GetBoolProperty(dynamicconfig.HistoryEnableKafkaReplication, true),
+		EnableCleanupReplicationTask:                     dc.GetBoolProperty(dynamicconfig.HistoryEnableCleanupReplicationTask, true),
 
-		EnableConsistentQuery:                 dc.GetBoolProperty(dynamicconfig.EnableConsistentQuery, true),
-		EnableConsistentQueryByNamespace:      dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableConsistentQueryByNamespace, false),
 		MaxBufferedQueryCount:                 dc.GetIntProperty(dynamicconfig.MaxBufferedQueryCount, 1),
 		MutableStateChecksumGenProbability:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MutableStateChecksumGenProbability, 0),
 		MutableStateChecksumVerifyProbability: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MutableStateChecksumVerifyProbability, 0),
 		MutableStateChecksumInvalidateBefore:  dc.GetFloat64Property(dynamicconfig.MutableStateChecksumInvalidateBefore, 0),
 
 		ReplicationEventsFromCurrentCluster: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.ReplicationEventsFromCurrentCluster, false),
+
+		EnableDropStuckTaskByNamespaceID: dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.EnableDropStuckTaskByNamespaceID, false),
+		SkipReapplicationByNamespaceId:   dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.SkipReapplicationByNamespaceId, false),
 	}
 
 	return cfg
 }
 
-// GetShardID return the corresponding shard ID for a given workflow ID
-func (config *Config) GetShardID(workflowID string) int {
-	return common.WorkflowIDToHistoryShard(workflowID, config.NumberOfShards)
+// GetShardID return the corresponding shard ID for a given namespaceID and workflowID pair
+func (config *Config) GetShardID(namespaceID, workflowID string) int {
+	return common.WorkflowIDToHistoryShard(namespaceID, workflowID, config.NumberOfShards)
 }
 
 // Service represents the history service
@@ -429,10 +448,9 @@ func NewService(
 
 	params.PersistenceConfig.HistoryMaxConns = serviceConfig.HistoryMgrNumConns()
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityOpenMaxQPS:            serviceConfig.VisibilityOpenMaxQPS,
-		VisibilityClosedMaxQPS:          serviceConfig.VisibilityClosedMaxQPS,
-		EnableSampling:                  serviceConfig.EnableVisibilitySampling,
-		EnableReadFromClosedExecutionV2: serviceConfig.EnableReadFromClosedExecutionV2,
+		VisibilityOpenMaxQPS:   serviceConfig.VisibilityOpenMaxQPS,
+		VisibilityClosedMaxQPS: serviceConfig.VisibilityClosedMaxQPS,
+		EnableSampling:         serviceConfig.EnableVisibilitySampling,
 	}
 
 	visibilityManagerInitializer := func(
@@ -494,7 +512,12 @@ func (s *Service) Start() {
 	s.Resource.Start()
 	s.handler.Start()
 
-	s.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
+	opts, err := s.params.RPCFactory.GetInternodeGRPCServerOptions()
+	if err != nil {
+		logger.Fatal("creating grpc server options failed", tag.Error(err))
+	}
+	opts = append(opts, grpc.UnaryInterceptor(interceptor))
+	s.server = grpc.NewServer(opts...)
 	nilCheckHandler := NewNilCheckHandler(s.handler)
 	historyservice.RegisterHistoryServiceServer(s.server, nilCheckHandler)
 	healthpb.RegisterHealthServer(s.server, s.handler)
@@ -544,7 +567,8 @@ func (s *Service) Stop() {
 	s.handler.PrepareToStop()
 	remainingTime = s.sleep(gracePeriod, remainingTime)
 
-	s.server.GracefulStop()
+	// TODO: Change this to GracefulStop when integration tests are refactored.
+	s.server.Stop()
 
 	s.handler.Stop()
 	s.Resource.Stop()

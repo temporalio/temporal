@@ -28,9 +28,9 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common/log/tag"
+	"go.temporal.io/server/common/log/tag"
 )
 
 var errDefaultPanic = fmt.Errorf("panic object is not error")

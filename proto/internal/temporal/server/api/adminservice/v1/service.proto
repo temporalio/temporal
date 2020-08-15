@@ -1,0 +1,101 @@
+// Copyright (c) 2019 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.adminservice.v1;
+option go_package = "go.temporal.io/server/api/adminservice/v1;adminservice";
+
+import "temporal/server/api/adminservice/v1/request_response.proto";
+
+// AdminService provides advanced APIs for debugging and analysis with admin privilege
+service AdminService {
+
+    // DescribeWorkflowExecution returns information about the internal states of workflow execution.
+    rpc DescribeWorkflowExecution (DescribeWorkflowExecutionRequest) returns (DescribeWorkflowExecutionResponse) {
+    }
+
+    // DescribeHistoryHost returns information about the internal states of a history host
+    rpc DescribeHistoryHost (DescribeHistoryHostRequest) returns (DescribeHistoryHostResponse) {
+    }
+
+    rpc CloseShard (CloseShardRequest) returns (CloseShardResponse) {
+    }
+
+    rpc RemoveTask (RemoveTaskRequest) returns (RemoveTaskResponse) {
+    }
+
+    // Returns the raw history of specified workflow execution.  It fails with 'NotFound' if specified workflow
+    // execution in unknown to the service.
+    rpc GetWorkflowExecutionRawHistory (GetWorkflowExecutionRawHistoryRequest) returns (GetWorkflowExecutionRawHistoryResponse) {
+    }
+
+    // Returns the raw history of specified workflow execution.  It fails with 'NotFound' if specified workflow
+    // execution in unknown to the service.
+    // StartEventId defines the beginning of the event to fetch. The first event is inclusive.
+    // EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
+    rpc GetWorkflowExecutionRawHistoryV2 (GetWorkflowExecutionRawHistoryV2Request) returns (GetWorkflowExecutionRawHistoryV2Response) {
+    }
+
+    // GetReplicationMessages returns new replication tasks since the read level provided in the token.
+    rpc GetReplicationMessages (GetReplicationMessagesRequest) returns (GetReplicationMessagesResponse) {
+    }
+
+    // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task Id.
+    rpc GetNamespaceReplicationMessages (GetNamespaceReplicationMessagesRequest) returns (GetNamespaceReplicationMessagesResponse) {
+    }
+
+    // GetDLQReplicationMessages return replication messages based on DLQ info.
+    rpc GetDLQReplicationMessages(GetDLQReplicationMessagesRequest) returns (GetDLQReplicationMessagesResponse){
+    }
+
+    // ReapplyEvents applies stale events to the current workflow and current run.
+    rpc ReapplyEvents (ReapplyEventsRequest) returns (ReapplyEventsResponse) {
+    }
+
+    // AddSearchAttribute whitelist search attribute in request.
+    rpc AddSearchAttribute (AddSearchAttributeRequest) returns (AddSearchAttributeResponse) {
+    }
+
+    // DescribeCluster returns information about Temporal cluster.
+    rpc DescribeCluster(DescribeClusterRequest) returns (DescribeClusterResponse) {
+    }
+
+    // GetDLQMessages returns messages from DLQ.
+    rpc GetDLQMessages(GetDLQMessagesRequest) returns (GetDLQMessagesResponse) {
+    }
+
+    // PurgeDLQMessages purges messages from DLQ.
+    rpc PurgeDLQMessages(PurgeDLQMessagesRequest) returns (PurgeDLQMessagesResponse) {
+    }
+
+    // MergeDLQMessages merges messages from DLQ.
+    rpc MergeDLQMessages(MergeDLQMessagesRequest) returns (MergeDLQMessagesResponse) {
+    }
+
+    // RefreshWorkflowTasks refreshes all tasks of a workflow.
+    rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
+    }
+
+    // ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
+    rpc ResendReplicationTasks(ResendReplicationTasksRequest) returns (ResendReplicationTasksResponse) {
+    }
+}
+

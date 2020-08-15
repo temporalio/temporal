@@ -28,19 +28,21 @@ package history
 
 import (
 	"context"
-	"time"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 
-	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
@@ -87,7 +89,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	// no sync activity task will be sent when active side fail / timeout activity,
 	// since standby side does not have activity retry timer
 	namespaceID := request.GetNamespaceId()
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.WorkflowId,
 		RunId:      request.RunId,
 	}
@@ -149,8 +151,8 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 			return nil
 		}
 		if ai.Attempt == request.GetAttempt() {
-			lastHeartbeatTime := time.Unix(0, request.GetLastHeartbeatTime())
-			if ai.LastHeartBeatUpdatedTime.After(lastHeartbeatTime) {
+			lastHeartbeatTime := request.GetLastHeartbeatTime()
+			if ai.LastHeartbeatUpdateTime != nil && ai.LastHeartbeatUpdateTime.After(timestamp.TimeValue(lastHeartbeatTime)) {
 				// this should not retry, can be caused by out of order delivery
 				return nil
 			}
@@ -177,16 +179,18 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 
 	// see whether we need to refresh the activity timer
-	eventTime := request.GetScheduledTime()
-	if eventTime < request.GetStartedTime() {
-		eventTime = request.GetStartedTime()
+	eventTime := timestamp.TimeValue(request.GetScheduledTime())
+	startedTime := timestamp.TimeValue(request.GetStartedTime())
+	lhTime := timestamp.TimeValue(request.GetLastHeartbeatTime())
+	if eventTime.Before(startedTime) {
+		eventTime = startedTime
 	}
-	if eventTime < request.GetLastHeartbeatTime() {
-		eventTime = request.GetLastHeartbeatTime()
+	if eventTime.Before(lhTime) {
+		eventTime = lhTime
 	}
 
 	// passive logic need to explicitly call create timer
-	now := time.Unix(0, eventTime)
+	now := eventTime
 	if _, err := newTimerSequence(
 		clock.NewEventTimeSource().Update(now),
 		mutableState,
@@ -195,7 +199,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 
 	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
-	if state, _ := mutableState.GetWorkflowStateStatus(); state == persistence.WorkflowStateZombie {
+	if state, _ := mutableState.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		updateMode = persistence.UpdateWorkflowModeBypassCurrent
 	}
 
@@ -216,7 +220,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 	scheduleID int64,
 	activityVersion int64,
 	mutableState mutableState,
-	incomingRawVersionHistory *eventgenpb.VersionHistory,
+	incomingRawVersionHistory *historyspb.VersionHistory,
 ) (bool, error) {
 
 	if mutableState.GetVersionHistories() != nil {
@@ -251,7 +255,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 		if currentVersionHistory.IsLCAAppendable(lcaItem) || incomingVersionHistory.IsLCAAppendable(lcaItem) {
 			// case 1
 			if scheduleID > lcaItem.GetEventID() {
-				return false, newNDCRetryTaskErrorWithHint(
+				return false, serviceerrors.NewRetryTaskV2(
 					resendMissingEventMessage,
 					namespaceID,
 					workflowID,
@@ -269,7 +273,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 				return false, nil
 			} else if lastIncomingItem.GetVersion() > lastLocalItem.GetVersion() {
 				// case 2-2
-				return false, newNDCRetryTaskErrorWithHint(
+				return false, serviceerrors.NewRetryTaskV2(
 					resendHigherVersionMessage,
 					namespaceID,
 					workflowID,
@@ -282,7 +286,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			}
 		}
 
-		if state, _ := mutableState.GetWorkflowStateStatus(); state == persistence.WorkflowStateCompleted {
+		if state, _ := mutableState.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return false, nil
 		}
 	} else if mutableState.GetReplicationState() != nil {
@@ -303,7 +307,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			}
 			// version >= last write version
 			// this can happen if out of order delivery happens
-			return false, newRetryTaskErrorWithHint(
+			return false, serviceerrors.NewRetryTask(
 				ErrRetrySyncActivityMsg,
 				namespaceID,
 				workflowID,

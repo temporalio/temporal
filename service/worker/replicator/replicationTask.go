@@ -28,20 +28,22 @@ import (
 	"context"
 	"time"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/client/history"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/task"
-	"github.com/temporalio/temporal/common/xdc"
+	"go.temporal.io/server/api/historyservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/metrics"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/task"
+	"go.temporal.io/server/common/xdc"
 )
 
 type (
@@ -79,7 +81,9 @@ type (
 		sourceCluster       string
 		firstEventID        int64
 		nextEventID         int64
+		version             int64
 		historyRereplicator xdc.HistoryRereplicator
+		nDCHistoryResender  xdc.NDCHistoryResender
 	}
 
 	historyReplicationV2Task struct {
@@ -99,7 +103,7 @@ const (
 )
 
 func newActivityReplicationTask(
-	replicationTask *replicationgenpb.ReplicationTask,
+	replicationTask *replicationspb.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 	config *Config,
@@ -125,7 +129,7 @@ func newActivityReplicationTask(
 				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetScheduledId(),
-			attempt:       0,
+			attempt:       1,
 			kafkaMsg:      msg,
 			logger:        logger,
 			state:         task.TaskStatePending,
@@ -146,9 +150,8 @@ func newActivityReplicationTask(
 			LastHeartbeatTime:  attr.LastHeartbeatTime,
 			Details:            attr.Details,
 			Attempt:            attr.Attempt,
-			LastFailureReason:  attr.LastFailureReason,
+			LastFailure:        attr.LastFailure,
 			LastWorkerIdentity: attr.LastWorkerIdentity,
-			LastFailureDetails: attr.LastFailureDetails,
 			VersionHistory:     attr.VersionHistory,
 		},
 		historyRereplicator: historyRereplicator,
@@ -157,7 +160,7 @@ func newActivityReplicationTask(
 }
 
 func newHistoryReplicationTask(
-	replicationTask *replicationgenpb.ReplicationTask,
+	replicationTask *replicationspb.ReplicationTask,
 	msg messaging.Message,
 	sourceCluster string,
 	logger log.Logger,
@@ -183,7 +186,7 @@ func newHistoryReplicationTask(
 				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetFirstEventId(),
-			attempt:       0,
+			attempt:       1,
 			kafkaMsg:      msg,
 			logger:        logger,
 			state:         task.TaskStatePending,
@@ -195,7 +198,7 @@ func newHistoryReplicationTask(
 		req: &historyservice.ReplicateEventsRequest{
 			SourceCluster: sourceCluster,
 			NamespaceId:   attr.NamespaceId,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: attr.WorkflowId,
 				RunId:      attr.RunId,
 			},
@@ -207,14 +210,14 @@ func newHistoryReplicationTask(
 			NewRunHistory:     attr.NewRunHistory,
 			ForceBufferEvents: false,
 			ResetWorkflow:     attr.ResetWorkflow,
-			NewRunNDC:         attr.NewRunNDC,
+			NewRunNdc:         attr.NewRunNdc,
 		},
 		historyRereplicator: historyRereplicator,
 	}
 }
 
 func newHistoryMetadataReplicationTask(
-	replicationTask *replicationgenpb.ReplicationTask,
+	replicationTask *replicationspb.ReplicationTask,
 	msg messaging.Message,
 	sourceCluster string,
 	logger log.Logger,
@@ -223,6 +226,7 @@ func newHistoryMetadataReplicationTask(
 	historyClient history.Client,
 	metricsClient metrics.Client,
 	historyRereplicator xdc.HistoryRereplicator,
+	nDCHistoryResender xdc.NDCHistoryResender,
 ) *historyMetadataReplicationTask {
 
 	attr := replicationTask.GetHistoryMetadataTaskAttributes()
@@ -231,6 +235,7 @@ func newHistoryMetadataReplicationTask(
 		tag.WorkflowRunID(attr.GetRunId()),
 		tag.WorkflowFirstEventID(attr.GetFirstEventId()),
 		tag.WorkflowNextEventID(attr.GetNextEventId()))
+
 	return &historyMetadataReplicationTask{
 		workflowReplicationTask: workflowReplicationTask{
 			metricsScope: metrics.HistoryMetadataReplicationTaskScope,
@@ -239,7 +244,7 @@ func newHistoryMetadataReplicationTask(
 				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetFirstEventId(),
-			attempt:       0,
+			attempt:       1,
 			kafkaMsg:      msg,
 			logger:        logger,
 			state:         task.TaskStatePending,
@@ -251,12 +256,14 @@ func newHistoryMetadataReplicationTask(
 		sourceCluster:       sourceCluster,
 		firstEventID:        attr.GetFirstEventId(),
 		nextEventID:         attr.GetNextEventId(),
+		version:             attr.GetVersion(),
 		historyRereplicator: historyRereplicator,
+		nDCHistoryResender:  nDCHistoryResender,
 	}
 }
 
 func newHistoryReplicationV2Task(
-	replicationTask *replicationgenpb.ReplicationTask,
+	replicationTask *replicationspb.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 	config *Config,
@@ -279,7 +286,7 @@ func newHistoryReplicationV2Task(
 				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetTaskId(),
-			attempt:       0,
+			attempt:       1,
 			kafkaMsg:      msg,
 			logger:        logger,
 			state:         task.TaskStatePending,
@@ -290,7 +297,7 @@ func newHistoryReplicationV2Task(
 		},
 		req: &historyservice.ReplicateEventsV2Request{
 			NamespaceId: attr.NamespaceId,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: attr.WorkflowId,
 				RunId:      attr.RunId,
 			},
@@ -312,12 +319,12 @@ func (t *activityReplicationTask) Execute() error {
 func (t *activityReplicationTask) HandleErr(
 	err error,
 ) error {
-	if t.attempt < t.config.ReplicatorActivityBufferRetryCount() {
+	if t.attempt <= t.config.ReplicatorActivityBufferRetryCount() {
 		return err
 	}
 
-	retryV1Err, okV1 := t.convertRetryTaskError(err)
-	retryV2Err, okV2 := t.convertRetryTaskV2Error(err)
+	retryV1Err, okV1 := err.(*serviceerrors.RetryTask)
+	retryV2Err, okV2 := err.(*serviceerrors.RetryTaskV2)
 
 	if !okV1 && !okV2 {
 		return err
@@ -381,11 +388,11 @@ func (t *historyReplicationTask) Execute() error {
 func (t *historyReplicationTask) HandleErr(
 	err error,
 ) error {
-	if t.attempt < t.config.ReplicatorHistoryBufferRetryCount() {
+	if t.attempt <= t.config.ReplicatorHistoryBufferRetryCount() {
 		return err
 	}
 
-	retryErr, ok := t.convertRetryTaskError(err)
+	retryErr, ok := err.(*serviceerrors.RetryTask)
 	if !ok || retryErr.RunId == "" {
 		return err
 	}
@@ -417,17 +424,28 @@ func (t *historyMetadataReplicationTask) Execute() error {
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryMetadataReplicationScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
-	return t.historyRereplicator.SendMultiWorkflowHistory(
-		t.queueID.NamespaceID, t.queueID.WorkflowID,
-		t.queueID.RunID, t.firstEventID,
-		t.queueID.RunID, t.nextEventID,
-	)
+	if t.version != common.EmptyVersion {
+		return t.nDCHistoryResender.SendSingleWorkflowHistory(
+			t.queueID.NamespaceID,
+			t.queueID.WorkflowID,
+			t.queueID.RunID,
+			t.firstEventID-1, //NDC resend API is exclusive-exclusive.
+			t.version,
+			t.nextEventID,
+			t.version)
+	} else {
+		return t.historyRereplicator.SendMultiWorkflowHistory(
+			t.queueID.NamespaceID, t.queueID.WorkflowID,
+			t.queueID.RunID, t.firstEventID,
+			t.queueID.RunID, t.nextEventID,
+		)
+	}
 }
 
 func (t *historyMetadataReplicationTask) HandleErr(
 	err error,
 ) error {
-	retryErr, ok := t.convertRetryTaskError(err)
+	retryErr, ok := err.(*serviceerrors.RetryTask)
 	if !ok || retryErr.RunId == "" {
 		return err
 	}
@@ -462,11 +480,11 @@ func (t *historyReplicationV2Task) Execute() error {
 }
 
 func (t *historyReplicationV2Task) HandleErr(err error) error {
-	if t.attempt < t.config.ReplicatorHistoryBufferRetryCount() {
+	if t.attempt <= t.config.ReplicatorHistoryBufferRetryCount() {
 		return err
 	}
 
-	retryErr, ok := t.convertRetryTaskV2Error(err)
+	retryErr, ok := err.(*serviceerrors.RetryTaskV2)
 	if !ok {
 		return err
 	}
@@ -540,20 +558,4 @@ func (t *workflowReplicationTask) Nack() {
 	if err != nil {
 		t.logger.Error("Unable to nack.")
 	}
-}
-
-func (t *workflowReplicationTask) convertRetryTaskError(
-	err error,
-) (*serviceerror.RetryTask, bool) {
-
-	retError, ok := err.(*serviceerror.RetryTask)
-	return retError, ok
-}
-
-func (t *workflowReplicationTask) convertRetryTaskV2Error(
-	err error,
-) (*serviceerror.RetryTaskV2, bool) {
-
-	retError, ok := err.(*serviceerror.RetryTaskV2)
-	return retError, ok
 }

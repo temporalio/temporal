@@ -24,7 +24,13 @@
 
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"reflect"
+	"strings"
+
+	"github.com/gocql/gocql"
+)
 
 const (
 	// StoreTypeSQL refers to sql based storage as persistence store
@@ -55,8 +61,13 @@ func (c *Persistence) Validate() error {
 		if ds.SQL != nil && ds.Cassandra != nil {
 			return fmt.Errorf("persistence config: datastore %v: only one of SQL or cassandra can be specified", st)
 		}
-		if ds.SQL != nil && ds.SQL.NumShards == 0 {
-			ds.SQL.NumShards = 1
+		if ds.SQL != nil && ds.SQL.TaskScanPartitions == 0 {
+			ds.SQL.TaskScanPartitions = 1
+		}
+		if ds.Cassandra != nil {
+			if err := ds.Cassandra.validate(); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -65,4 +76,90 @@ func (c *Persistence) Validate() error {
 // IsAdvancedVisibilityConfigExist returns whether user specified advancedVisibilityStore in config
 func (c *Persistence) IsAdvancedVisibilityConfigExist() bool {
 	return len(c.AdvancedVisibilityStore) != 0
+}
+
+// GetConsistency returns the gosql.Consistency setting from the configuration for the given store type
+func (c *CassandraStoreConsistency) GetConsistency() gocql.Consistency {
+	return gocql.ParseConsistency(c.getConsistencySettings().Consistency)
+}
+
+// GetSerialConsistency returns the gosql.SerialConsistency setting from the configuration for the store
+func (c *CassandraStoreConsistency) GetSerialConsistency() gocql.SerialConsistency {
+	res, err := parseSerialConsistency(c.getConsistencySettings().SerialConsistency)
+	if err != nil {
+		panic(fmt.Sprintf("unable to decode cassandra serial consistency: %v", err))
+	}
+	return res
+}
+
+func (c *CassandraStoreConsistency) getConsistencySettings() *CassandraConsistencySettings {
+	return ensureStoreConsistencyNotNil(c).Default
+}
+
+func ensureStoreConsistencyNotNil(c *CassandraStoreConsistency) *CassandraStoreConsistency {
+	if c == nil {
+		c = &CassandraStoreConsistency{}
+	}
+	if c.Default == nil {
+		c.Default = &CassandraConsistencySettings{}
+	}
+	if c.Default.Consistency == "" {
+		c.Default.Consistency = "LOCAL_QUORUM"
+	}
+	if c.Default.SerialConsistency == "" {
+		c.Default.SerialConsistency = "LOCAL_SERIAL"
+	}
+
+	return c
+}
+
+func (c *Cassandra) validate() error {
+	return c.Consistency.validate()
+}
+
+func (c *CassandraStoreConsistency) validate() error {
+	if c == nil {
+		return nil
+	}
+
+	v := reflect.ValueOf(*c)
+
+	for i := 0; i < v.NumField(); i++ {
+		s, ok := v.Field(i).Interface().(*CassandraConsistencySettings)
+		if ok {
+			if err := s.validate(); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *CassandraConsistencySettings) validate() error {
+	if c == nil {
+		return nil
+	}
+
+	if c.Consistency != "" {
+		_, err := gocql.ParseConsistencyWrapper(c.Consistency)
+		if err != nil {
+			return fmt.Errorf("bad cassandra consistency: %v", err)
+		}
+	}
+
+	if c.SerialConsistency != "" {
+		_, err := parseSerialConsistency(c.SerialConsistency)
+		if err != nil {
+			return fmt.Errorf("bad cassandra serial consistency: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func parseSerialConsistency(serialConsistency string) (gocql.SerialConsistency, error) {
+	var s gocql.SerialConsistency
+	err := s.UnmarshalText([]byte(strings.ToUpper(serialConsistency)))
+	return s, err
 }

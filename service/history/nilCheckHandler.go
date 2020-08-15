@@ -27,7 +27,7 @@ package history
 import (
 	"context"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"go.temporal.io/server/api/historyservice/v1"
 )
 
 // Disable lint due to missing comments.
@@ -77,18 +77,18 @@ func (h *NilCheckHandler) PollMutableState(ctx context.Context, request *history
 	return resp, err
 }
 
-func (h *NilCheckHandler) ResetStickyTaskList(ctx context.Context, request *historyservice.ResetStickyTaskListRequest) (_ *historyservice.ResetStickyTaskListResponse, retError error) {
-	resp, err := h.parentHandler.ResetStickyTaskList(ctx, request)
+func (h *NilCheckHandler) ResetStickyTaskQueue(ctx context.Context, request *historyservice.ResetStickyTaskQueueRequest) (_ *historyservice.ResetStickyTaskQueueResponse, retError error) {
+	resp, err := h.parentHandler.ResetStickyTaskQueue(ctx, request)
 	if resp == nil && err == nil {
-		resp = &historyservice.ResetStickyTaskListResponse{}
+		resp = &historyservice.ResetStickyTaskQueueResponse{}
 	}
 	return resp, err
 }
 
-func (h *NilCheckHandler) RecordDecisionTaskStarted(ctx context.Context, request *historyservice.RecordDecisionTaskStartedRequest) (_ *historyservice.RecordDecisionTaskStartedResponse, retError error) {
-	resp, err := h.parentHandler.RecordDecisionTaskStarted(ctx, request)
+func (h *NilCheckHandler) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (_ *historyservice.RecordWorkflowTaskStartedResponse, retError error) {
+	resp, err := h.parentHandler.RecordWorkflowTaskStarted(ctx, request)
 	if resp == nil && err == nil {
-		resp = &historyservice.RecordDecisionTaskStartedResponse{}
+		resp = &historyservice.RecordWorkflowTaskStartedResponse{}
 	}
 	return resp, err
 }
@@ -101,18 +101,18 @@ func (h *NilCheckHandler) RecordActivityTaskStarted(ctx context.Context, request
 	return resp, err
 }
 
-func (h *NilCheckHandler) RespondDecisionTaskCompleted(ctx context.Context, request *historyservice.RespondDecisionTaskCompletedRequest) (_ *historyservice.RespondDecisionTaskCompletedResponse, retError error) {
-	resp, err := h.parentHandler.RespondDecisionTaskCompleted(ctx, request)
+func (h *NilCheckHandler) RespondWorkflowTaskCompleted(ctx context.Context, request *historyservice.RespondWorkflowTaskCompletedRequest) (_ *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
+	resp, err := h.parentHandler.RespondWorkflowTaskCompleted(ctx, request)
 	if resp == nil && err == nil {
-		resp = &historyservice.RespondDecisionTaskCompletedResponse{}
+		resp = &historyservice.RespondWorkflowTaskCompletedResponse{}
 	}
 	return resp, err
 }
 
-func (h *NilCheckHandler) RespondDecisionTaskFailed(ctx context.Context, request *historyservice.RespondDecisionTaskFailedRequest) (_ *historyservice.RespondDecisionTaskFailedResponse, retError error) {
-	resp, err := h.parentHandler.RespondDecisionTaskFailed(ctx, request)
+func (h *NilCheckHandler) RespondWorkflowTaskFailed(ctx context.Context, request *historyservice.RespondWorkflowTaskFailedRequest) (_ *historyservice.RespondWorkflowTaskFailedResponse, retError error) {
+	resp, err := h.parentHandler.RespondWorkflowTaskFailed(ctx, request)
 	if resp == nil && err == nil {
-		resp = &historyservice.RespondDecisionTaskFailedResponse{}
+		resp = &historyservice.RespondWorkflowTaskFailedResponse{}
 	}
 	return resp, err
 }
@@ -197,10 +197,10 @@ func (h *NilCheckHandler) RequestCancelWorkflowExecution(ctx context.Context, re
 	return resp, err
 }
 
-func (h *NilCheckHandler) ScheduleDecisionTask(ctx context.Context, request *historyservice.ScheduleDecisionTaskRequest) (_ *historyservice.ScheduleDecisionTaskResponse, retError error) {
-	resp, err := h.parentHandler.ScheduleDecisionTask(ctx, request)
+func (h *NilCheckHandler) ScheduleWorkflowTask(ctx context.Context, request *historyservice.ScheduleWorkflowTaskRequest) (_ *historyservice.ScheduleWorkflowTaskResponse, retError error) {
+	resp, err := h.parentHandler.ScheduleWorkflowTask(ctx, request)
 	if resp == nil && err == nil {
-		resp = &historyservice.ScheduleDecisionTaskResponse{}
+		resp = &historyservice.ScheduleWorkflowTaskResponse{}
 	}
 	return resp, err
 }
@@ -325,10 +325,10 @@ func (h *NilCheckHandler) ReapplyEvents(ctx context.Context, request *historyser
 	return resp, err
 }
 
-func (h *NilCheckHandler) ReadDLQMessages(ctx context.Context, request *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error) {
-	resp, err := h.parentHandler.ReadDLQMessages(ctx, request)
+func (h *NilCheckHandler) GetDLQMessages(ctx context.Context, request *historyservice.GetDLQMessagesRequest) (*historyservice.GetDLQMessagesResponse, error) {
+	resp, err := h.parentHandler.GetDLQMessages(ctx, request)
 	if resp == nil && err == nil {
-		resp = &historyservice.ReadDLQMessagesResponse{}
+		resp = &historyservice.GetDLQMessagesResponse{}
 	}
 	return resp, err
 }

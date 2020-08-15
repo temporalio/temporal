@@ -28,13 +28,13 @@ import (
 	"errors"
 	"sync/atomic"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -44,7 +44,7 @@ type (
 	}
 
 	writeTaskRequest struct {
-		execution  *executionpb.WorkflowExecution
+		execution  *commonpb.WorkflowExecution
 		taskInfo   *persistenceblobs.TaskInfo
 		responseCh chan<- *writeTaskResponse
 	}
@@ -56,9 +56,9 @@ type (
 
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
-		tlMgr        *taskListManagerImpl
-		config       *taskListConfig
-		taskListID   *taskListID
+		tlMgr        *taskQueueManagerImpl
+		config       *taskQueueConfig
+		taskQueueID  *taskQueueID
 		appendCh     chan *writeTaskRequest
 		taskIDBlock  taskIDBlock
 		maxReadLevel int64
@@ -68,17 +68,17 @@ type (
 	}
 )
 
-// errShutdown indicates that the task list is shutting down
-var errShutdown = errors.New("task list shutting down")
+// errShutdown indicates that the task queue is shutting down
+var errShutdown = errors.New("task queue shutting down")
 
-func newTaskWriter(tlMgr *taskListManagerImpl) *taskWriter {
+func newTaskWriter(tlMgr *taskQueueManagerImpl) *taskWriter {
 	return &taskWriter{
-		tlMgr:      tlMgr,
-		config:     tlMgr.config,
-		taskListID: tlMgr.taskListID,
-		stopCh:     make(chan struct{}),
-		appendCh:   make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold()),
-		logger:     tlMgr.logger,
+		tlMgr:       tlMgr,
+		config:      tlMgr.config,
+		taskQueueID: tlMgr.taskQueueID,
+		stopCh:      make(chan struct{}),
+		appendCh:    make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold()),
+		logger:      tlMgr.logger,
 	}
 }
 
@@ -99,7 +99,7 @@ func (w *taskWriter) isStopped() bool {
 	return atomic.LoadInt64(&w.stopped) == 1
 }
 
-func (w *taskWriter) appendTask(execution *executionpb.WorkflowExecution,
+func (w *taskWriter) appendTask(execution *commonpb.WorkflowExecution,
 	taskInfo *persistenceblobs.TaskInfo) (*persistence.CreateTasksResponse, error) {
 
 	if w.isStopped() {
@@ -124,7 +124,7 @@ func (w *taskWriter) appendTask(execution *executionpb.WorkflowExecution,
 			return nil, errShutdown
 		}
 	default: // channel is full, throttle
-		return nil, serviceerror.NewResourceExhausted("Too many outstanding appends to the TaskList")
+		return nil, serviceerror.NewResourceExhausted("Too many outstanding appends to the TaskQueue")
 	}
 }
 
@@ -182,8 +182,8 @@ writerLoop:
 					w.logger.Error("Persistent store operation failure",
 						tag.StoreOperationCreateTask,
 						tag.Error(err),
-						tag.WorkflowTaskListName(w.taskListID.name),
-						tag.WorkflowTaskListType(w.taskListID.taskType),
+						tag.WorkflowTaskQueueName(w.taskQueueID.name),
+						tag.WorkflowTaskQueueType(w.taskQueueID.taskType),
 						tag.Number(taskIDs[0]),
 						tag.NextNumber(taskIDs[batchSize-1]),
 					)

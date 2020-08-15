@@ -26,13 +26,13 @@ package cli
 
 import (
 	"github.com/urfave/cli"
-	"go.temporal.io/temporal-proto/workflowservice"
-	sdkclient "go.temporal.io/temporal/client"
+	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/common/rpc"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/rpc"
 )
 
 // ClientFactory is used to construct rpc clients
@@ -82,6 +82,9 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
 		HostPort:  hostPort,
 		Namespace: namespace,
+		ConnectionOptions: sdkclient.ConnectionOptions{
+			DisableHealthCheck: true,
+		},
 	})
 	if err != nil {
 		b.logger.Fatal("Failed to create SDK client", zap.Error(err))
@@ -95,7 +98,7 @@ func (b *clientFactory) createGRPCConnection(hostPort string) *grpc.ClientConn {
 		hostPort = localHostPort
 	}
 
-	connection, err := rpc.Dial(hostPort)
+	connection, err := rpc.Dial(hostPort, nil)
 	if err != nil {
 		b.logger.Fatal("Failed to create connection", zap.Error(err))
 		return nil

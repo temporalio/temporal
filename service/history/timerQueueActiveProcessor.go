@@ -27,17 +27,16 @@ package history
 import (
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/pborman/uuid"
 
-	"github.com/temporalio/temporal/client/matching"
-	"github.com/temporalio/temporal/common/collection"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+
+	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -75,7 +74,7 @@ func newTimerQueueActiveProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyActiveTask(primitives.UUID(timer.GetNamespaceId()).String(), timer)
+		return taskAllocator.verifyActiveTask(timer.GetNamespaceId(), timer)
 	}
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
@@ -190,7 +189,7 @@ func newTimerQueueFailoverProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, primitives.UUID(timer.GetNamespaceId()).String(), timer)
+		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, timer.GetNamespaceId(), timer)
 	}
 
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(

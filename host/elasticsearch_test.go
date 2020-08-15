@@ -42,20 +42,22 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 
-	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	filterpb "go.temporal.io/temporal-proto/filter"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
+	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	filterpb "go.temporal.io/api/filter/v1"
+	historypb "go.temporal.io/api/history/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/payloads"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -105,7 +107,7 @@ func TestElasticsearchIntegrationSuite(t *testing.T) {
 func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 	id := "es-integration-start-workflow-test"
 	wt := "es-integration-start-workflow-test-type"
-	tl := "es-integration-start-workflow-test-tasklist"
+	tl := "es-integration-start-workflow-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
@@ -116,15 +118,15 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 	}
 	request.SearchAttributes = searchAttr
 
-	startTime := time.Now().UnixNano()
+	startTime := time.Now().UTC()
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
 	startFilter := &filterpb.StartTimeFilter{}
-	startFilter.EarliestTime = startTime
-	var openExecution *executionpb.WorkflowExecutionInfo
+	startFilter.EarliestTime = &startTime
+	var openExecution *workflowpb.WorkflowExecutionInfo
 	for i := 0; i < numOfRetry; i++ {
-		startFilter.LatestTime = time.Now().UnixNano()
+		startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
 		resp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 			Namespace:       s.namespace,
 			MaximumPageSize: defaultTestValueOfESIndexMaxResultWindow,
@@ -148,7 +150,7 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 func (s *elasticsearchIntegrationSuite) TestListWorkflow() {
 	id := "es-integration-list-workflow-test"
 	wt := "es-integration-list-workflow-test-type"
-	tl := "es-integration-list-workflow-test-tasklist"
+	tl := "es-integration-list-workflow-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -161,7 +163,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow() {
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_ExecutionTime() {
 	id := "es-integration-list-workflow-execution-time-test"
 	wt := "es-integration-list-workflow-execution-time-test-type"
-	tl := "es-integration-list-workflow-execution-time-test-tasklist"
+	tl := "es-integration-list-workflow-execution-time-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -174,7 +176,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_ExecutionTime() {
 	weCron, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
-	query := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") and ExecutionTime < %v`, id, cronID, time.Now().UnixNano()+int64(time.Minute))
+	query := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") and ExecutionTime < %v`, id, cronID, time.Now().UTC().UnixNano()+int64(time.Minute))
 	s.testHelperForReadOnce(weCron.GetRunId(), query, false)
 
 	query = fmt.Sprintf(`WorkflowId = "%s"`, id)
@@ -184,7 +186,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_ExecutionTime() {
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	id := "es-integration-list-workflow-by-search-attr-test"
 	wt := "es-integration-list-workflow-by-search-attr-test-type"
-	tl := "es-integration-list-workflow-by-search-attr-test-tasklist"
+	tl := "es-integration-list-workflow-by-search-attr-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
@@ -201,40 +203,40 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 
 	// test upsert
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		upsertDecision := &decisionpb.Decision{
-			DecisionType: decisionpb.DecisionType_UpsertWorkflowSearchAttributes,
-			Attributes: &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{
+		upsertCommand := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
 				SearchAttributes: getUpsertSearchAttributes(),
 			}}}
 
-		return []*decisionpb.Decision{upsertDecision}, nil
+		return []*commandpb.Command{upsertCommand}, nil
 	}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskList:        taskList,
-		StickyTaskList:  taskList,
-		Identity:        "worker1",
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		StickyTaskQueue:     taskQueue,
+		Identity:            "worker1",
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
-	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
 		false,
 		false,
 		true,
 		true,
-		int64(0),
+		0,
 		1,
 		true,
 		nil)
 	s.NoError(err)
 	s.NotNil(newTask)
-	s.NotNil(newTask.DecisionTask)
+	s.NotNil(newTask.WorkflowTask)
 
 	time.Sleep(waitForESToSettle)
 
@@ -249,7 +251,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	// verify DescribeWorkflowExecution
 	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}
@@ -262,7 +264,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_PageToken() {
 	id := "es-integration-list-workflow-token-test"
 	wt := "es-integration-list-workflow-token-test-type"
-	tl := "es-integration-list-workflow-token-test-tasklist"
+	tl := "es-integration-list-workflow-token-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	numOfWorkflows := defaultTestValueOfESIndexMaxResultWindow - 1 // == 4
@@ -274,7 +276,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_PageToken() {
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAfter() {
 	id := "es-integration-list-workflow-searchAfter-test"
 	wt := "es-integration-list-workflow-searchAfter-test-type"
-	tl := "es-integration-list-workflow-searchAfter-test-tasklist"
+	tl := "es-integration-list-workflow-searchAfter-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	numOfWorkflows := defaultTestValueOfESIndexMaxResultWindow + 1 // == 6
@@ -286,7 +288,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAfter() {
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 	id := "es-integration-list-workflow-or-query-test"
 	wt := "es-integration-list-workflow-or-query-test-type"
-	tl := "es-integration-list-workflow-or-query-test-tasklist"
+	tl := "es-integration-list-workflow-or-query-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	// start 3 workflows
@@ -319,7 +321,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 
 	// query 1 workflow with search attr
 	query1 := fmt.Sprintf(`CustomIntField = %d`, 1)
-	var openExecution *executionpb.WorkflowExecutionInfo
+	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
@@ -336,7 +338,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(openExecution.GetExecutionTime() >= openExecution.GetStartTime().GetValue())
+	s.GreaterOrEqual(openExecution.GetExecutionTime().UnixNano(), openExecution.GetStartTime().UnixNano())
 	searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[key]
 	var searchVal int
 	payload.Decode(searchValBytes, &searchVal)
@@ -345,7 +347,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 	// query with or clause
 	query2 := fmt.Sprintf(`CustomIntField = %d or CustomIntField = %d`, 1, 2)
 	listRequest.Query = query2
-	var openExecutions []*executionpb.WorkflowExecutionInfo
+	var openExecutions []*workflowpb.WorkflowExecutionInfo
 	for i := 0; i < numOfRetry; i++ {
 		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 		s.NoError(err)
@@ -394,7 +396,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
 	id := "es-integration-list-workflow-max-window-size-test"
 	wt := "es-integration-list-workflow-max-window-size-test-type"
-	tl := "es-integration-list-workflow-max-window-size-test-tasklist"
+	tl := "es-integration-list-workflow-max-window-size-test-taskqueue"
 	startRequest := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	for i := 0; i < defaultTestValueOfESIndexMaxResultWindow; i++ {
@@ -439,7 +441,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 	id := "es-integration-list-workflow-order-by-test"
 	wt := "es-integration-list-workflow-order-by-test-type"
-	tl := "es-integration-list-workflow-order-by-test-tasklist"
+	tl := "es-integration-list-workflow-order-by-test-taskqueue"
 	startRequest := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	for i := 0; i < defaultTestValueOfESIndexMaxResultWindow+1; i++ { // start 6
@@ -450,7 +452,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 			intVal, _ := payload.Encode(i)
 			doubleVal, _ := payload.Encode(float64(i))
 			strVal, _ := payload.Encode(strconv.Itoa(i))
-			timeVal, _ := payload.Encode(time.Now())
+			timeVal, _ := payload.Encode(time.Now().UTC())
 			searchAttr := &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
 					definition.CustomIntField:      intVal,
@@ -477,7 +479,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 
 	// order by CloseTime asc
 	query1 := fmt.Sprintf(queryTemplate, wt, definition.CloseTime, asc)
-	var openExecutions []*executionpb.WorkflowExecutionInfo
+	var openExecutions []*workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  pageSize,
@@ -497,8 +499,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 		e1 := openExecutions[i-1]
 		e2 := openExecutions[i]
 		if e2.GetCloseTime() != nil {
-			s.NotEqual(0, e1.GetCloseTime().GetValue())
-			s.GreaterOrEqual(e2.GetCloseTime().GetValue(), e1.GetCloseTime().GetValue())
+			s.NotEqual(0, e1.GetCloseTime().UnixNano())
+			s.GreaterOrEqual(e2.GetCloseTime().UnixNano(), e1.GetCloseTime().UnixNano())
 		}
 	}
 
@@ -587,7 +589,7 @@ func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, p
 
 	time.Sleep(waitForESToSettle)
 
-	var openExecutions []*executionpb.WorkflowExecutionInfo
+	var openExecutions []*workflowpb.WorkflowExecutionInfo
 	var nextPageToken []byte
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
@@ -661,7 +663,7 @@ func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, p
 }
 
 func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(runID, query string, isScan bool) {
-	var openExecution *executionpb.WorkflowExecutionInfo
+	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
@@ -693,7 +695,7 @@ func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(runID, query strin
 	}
 	s.NotNil(openExecution)
 	s.Equal(runID, openExecution.GetExecution().GetRunId())
-	s.True(openExecution.GetExecutionTime() >= openExecution.GetStartTime().GetValue())
+	s.GreaterOrEqual(openExecution.GetExecutionTime().UnixNano(), openExecution.GetStartTime().UnixNano())
 	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
 		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
 		var searchVal string
@@ -705,23 +707,23 @@ func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(runID, query strin
 func (s *elasticsearchIntegrationSuite) TestScanWorkflow() {
 	id := "es-integration-scan-workflow-test"
 	wt := "es-integration-scan-workflow-test-type"
-	tl := "es-integration-scan-workflow-test-tasklist"
+	tl := "es-integration-scan-workflow-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -733,7 +735,7 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow() {
 func (s *elasticsearchIntegrationSuite) TestScanWorkflow_SearchAttribute() {
 	id := "es-integration-scan-workflow-search-attr-test"
 	wt := "es-integration-scan-workflow-search-attr-test-type"
-	tl := "es-integration-scan-workflow-search-attr-test-tasklist"
+	tl := "es-integration-scan-workflow-search-attr-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
@@ -753,21 +755,21 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow_SearchAttribute() {
 func (s *elasticsearchIntegrationSuite) TestScanWorkflow_PageToken() {
 	id := "es-integration-scan-workflow-token-test"
 	wt := "es-integration-scan-workflow-token-test-type"
-	tl := "es-integration-scan-workflow-token-test-tasklist"
+	tl := "es-integration-scan-workflow-token-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                  s.namespace,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		Namespace:           s.namespace,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	numOfWorkflows := 4
@@ -779,7 +781,7 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow_PageToken() {
 func (s *elasticsearchIntegrationSuite) TestCountWorkflow() {
 	id := "es-integration-count-workflow-test"
 	wt := "es-integration-count-workflow-test-type"
-	tl := "es-integration-count-workflow-test-tasklist"
+	tl := "es-integration-count-workflow-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
@@ -819,17 +821,17 @@ func (s *elasticsearchIntegrationSuite) TestCountWorkflow() {
 func (s *elasticsearchIntegrationSuite) createStartWorkflowExecutionRequest(id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 	return request
 }
@@ -837,23 +839,23 @@ func (s *elasticsearchIntegrationSuite) createStartWorkflowExecutionRequest(id, 
 func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 	id := "es-integration-upsert-workflow-test"
 	wt := "es-integration-upsert-workflow-test-type"
-	tl := "es-integration-upsert-workflow-test-tasklist"
+	tl := "es-integration-upsert-workflow-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -861,17 +863,17 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	decisionCount := 0
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+	commandCount := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		upsertDecision := &decisionpb.Decision{
-			DecisionType: decisionpb.DecisionType_UpsertWorkflowSearchAttributes,
-			Attributes:   &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{}}}
+		upsertCommand := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+			Attributes:  &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{}}}
 
 		// handle first upsert
-		if decisionCount == 0 {
-			decisionCount++
+		if commandCount == 0 {
+			commandCount++
 
 			attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
 			upsertSearchAttr := &commonpb.SearchAttributes{
@@ -879,55 +881,55 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 					s.testSearchAttributeKey: attrValBytes,
 				},
 			}
-			upsertDecision.GetUpsertWorkflowSearchAttributesDecisionAttributes().SearchAttributes = upsertSearchAttr
-			return []*decisionpb.Decision{upsertDecision}, nil
+			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = upsertSearchAttr
+			return []*commandpb.Command{upsertCommand}, nil
 		}
 		// handle second upsert, which update existing field and add new field
-		if decisionCount == 1 {
-			decisionCount++
-			upsertDecision.GetUpsertWorkflowSearchAttributesDecisionAttributes().SearchAttributes = getUpsertSearchAttributes()
-			return []*decisionpb.Decision{upsertDecision}, nil
+		if commandCount == 1 {
+			commandCount++
+			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = getUpsertSearchAttributes()
+			return []*commandpb.Command{upsertCommand}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskList:        taskList,
-		StickyTaskList:  taskList,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		StickyTaskQueue:     taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// process 1st decision and assert decision is handled correctly.
-	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+	// process 1st workflow task and assert workflow task is handled correctly.
+	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
 		false,
 		false,
 		true,
 		true,
-		int64(0),
+		0,
 		1,
 		true,
 		nil)
 	s.NoError(err)
 	s.NotNil(newTask)
-	s.NotNil(newTask.DecisionTask)
-	s.Equal(int64(3), newTask.DecisionTask.GetPreviousStartedEventId())
-	s.Equal(int64(7), newTask.DecisionTask.GetStartedEventId())
-	s.Equal(4, len(newTask.DecisionTask.History.Events))
-	s.Equal(eventpb.EventType_DecisionTaskCompleted, newTask.DecisionTask.History.Events[0].GetEventType())
-	s.Equal(eventpb.EventType_UpsertWorkflowSearchAttributes, newTask.DecisionTask.History.Events[1].GetEventType())
-	s.Equal(eventpb.EventType_DecisionTaskScheduled, newTask.DecisionTask.History.Events[2].GetEventType())
-	s.Equal(eventpb.EventType_DecisionTaskStarted, newTask.DecisionTask.History.Events[3].GetEventType())
+	s.NotNil(newTask.WorkflowTask)
+	s.Equal(int64(3), newTask.WorkflowTask.GetPreviousStartedEventId())
+	s.Equal(int64(7), newTask.WorkflowTask.GetStartedEventId())
+	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.WorkflowTask.History.Events[1].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
 	time.Sleep(waitForESToSettle)
 
@@ -958,24 +960,24 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 	}
 	s.True(verified)
 
-	// process 2nd decision and assert decision is handled correctly.
-	_, newTask, err = poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+	// process 2nd workflow task and assert workflow task is handled correctly.
+	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
 		false,
 		false,
 		true,
 		true,
-		int64(0),
+		0,
 		1,
 		true,
 		nil)
 	s.NoError(err)
 	s.NotNil(newTask)
-	s.NotNil(newTask.DecisionTask)
-	s.Equal(4, len(newTask.DecisionTask.History.Events))
-	s.Equal(eventpb.EventType_DecisionTaskCompleted, newTask.DecisionTask.History.Events[0].GetEventType())
-	s.Equal(eventpb.EventType_UpsertWorkflowSearchAttributes, newTask.DecisionTask.History.Events[1].GetEventType())
-	s.Equal(eventpb.EventType_DecisionTaskScheduled, newTask.DecisionTask.History.Events[2].GetEventType())
-	s.Equal(eventpb.EventType_DecisionTaskStarted, newTask.DecisionTask.History.Events[3].GetEventType())
+	s.NotNil(newTask.WorkflowTask)
+	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.WorkflowTask.History.Events[1].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
 	time.Sleep(waitForESToSettle)
 
@@ -1037,23 +1039,23 @@ func getUpsertSearchAttributes() *commonpb.SearchAttributes {
 func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey() {
 	id := "es-integration-upsert-workflow-failed-test"
 	wt := "es-integration-upsert-workflow-failed-test-type"
-	tl := "es-integration-upsert-workflow-failed-test-tasklist"
+	tl := "es-integration-upsert-workflow-failed-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1061,49 +1063,49 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		upsertDecision := &decisionpb.Decision{
-			DecisionType: decisionpb.DecisionType_UpsertWorkflowSearchAttributes,
-			Attributes: &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{
+		upsertCommand := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
 						"INVALIDKEY": payload.EncodeBytes([]byte("1")),
 					},
 				},
 			}}}
-		return []*decisionpb.Decision{upsertDecision}, nil
+		return []*commandpb.Command{upsertCommand}, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskList:        taskList,
-		StickyTaskList:  taskList,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		StickyTaskQueue:     taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},
 	})
 	s.NoError(err)
 	history := historyResponse.History
-	decisionFailedEvent := history.GetEvents()[3]
-	s.Equal(eventpb.EventType_DecisionTaskFailed, decisionFailedEvent.GetEventType())
-	failedDecisionAttr := decisionFailedEvent.GetDecisionTaskFailedEventAttributes()
-	s.Equal(eventpb.DecisionTaskFailedCause_BadSearchAttributes, failedDecisionAttr.GetCause())
-	s.NotNil(failedDecisionAttr.GetDetails())
+	workflowTaskFailedEvent := history.GetEvents()[3]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, workflowTaskFailedEvent.GetEventType())
+	failedEventAttr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, failedEventAttr.GetCause())
+	s.NotNil(failedEventAttr.GetFailure())
 }
 
 func (s *elasticsearchIntegrationSuite) putIndexSettings(indexName string, maxResultWindowSize int) {

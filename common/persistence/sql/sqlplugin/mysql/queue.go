@@ -28,8 +28,8 @@ import (
 	"database/sql"
 	"encoding/json"
 
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 const (

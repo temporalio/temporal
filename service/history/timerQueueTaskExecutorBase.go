@@ -27,18 +27,18 @@ package history
 import (
 	"context"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/service/worker/archiver"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -96,12 +96,12 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return err
 	}
 
-	namespaceCacheEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(primitives.UUIDString(task.GetNamespaceId()))
+	namespaceCacheEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(task.GetNamespaceId())
 	if err != nil {
 		return err
 	}
 	clusterConfiguredForHistoryArchival := t.shard.GetService().GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
-	namespaceConfiguredForHistoryArchival := namespaceCacheEntry.GetConfig().HistoryArchivalStatus == namespacepb.ArchivalStatus_Enabled
+	namespaceConfiguredForHistoryArchival := namespaceCacheEntry.GetConfig().HistoryArchivalState == enumspb.ARCHIVAL_STATE_ENABLED
 	archiveHistory := clusterConfiguredForHistoryArchival && namespaceConfiguredForHistoryArchival
 
 	// TODO: @ycyang once archival backfill is in place cluster:paused && namespace:enabled should be a nop rather than a delete
@@ -158,13 +158,13 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 
 	req := &archiver.ClientRequest{
 		ArchiveRequest: &archiver.ArchiveRequest{
-			NamespaceID:          primitives.UUIDString(task.GetNamespaceId()),
+			NamespaceID:          task.GetNamespaceId(),
 			WorkflowID:           task.GetWorkflowId(),
-			RunID:                primitives.UUIDString(task.GetRunId()),
+			RunID:                task.GetRunId(),
 			Namespace:            namespaceCacheEntry.GetInfo().Name,
 			ShardID:              t.shard.GetShardID(),
 			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
-			URI:                  namespaceCacheEntry.GetConfig().HistoryArchivalURI,
+			HistoryURI:           namespaceCacheEntry.GetConfig().HistoryArchivalUri,
 			NextEventID:          msBuilder.GetNextEventID(),
 			BranchToken:          branchToken,
 			CloseFailoverVersion: closeFailoverVersion,
@@ -214,9 +214,9 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowExecution(
 
 	op := func() error {
 		return t.shard.GetExecutionManager().DeleteWorkflowExecution(&persistence.DeleteWorkflowExecutionRequest{
-			NamespaceID: primitives.UUIDString(task.GetNamespaceId()),
+			NamespaceID: task.GetNamespaceId(),
 			WorkflowID:  task.GetWorkflowId(),
-			RunID:       primitives.UUIDString(task.GetRunId()),
+			RunID:       task.GetRunId(),
 		})
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
@@ -228,9 +228,9 @@ func (t *timerQueueTaskExecutorBase) deleteCurrentWorkflowExecution(
 
 	op := func() error {
 		return t.shard.GetExecutionManager().DeleteCurrentWorkflowExecution(&persistence.DeleteCurrentWorkflowExecutionRequest{
-			NamespaceID: primitives.UUIDString(task.GetNamespaceId()),
+			NamespaceID: task.GetNamespaceId(),
 			WorkflowID:  task.GetWorkflowId(),
-			RunID:       primitives.UUIDString(task.GetRunId()),
+			RunID:       task.GetRunId(),
 		})
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
@@ -261,9 +261,9 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 
 	op := func() error {
 		request := &persistence.VisibilityDeleteWorkflowExecutionRequest{
-			NamespaceID: primitives.UUIDString(task.GetNamespaceId()),
+			NamespaceID: task.GetNamespaceId(),
 			WorkflowID:  task.GetWorkflowId(),
-			RunID:       primitives.UUIDString(task.GetRunId()),
+			RunID:       task.GetRunId(),
 			TaskID:      task.GetTaskId(),
 		}
 		// TODO: expose GetVisibilityManager method on shardContext interface
@@ -274,10 +274,10 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 
 func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 	task *persistenceblobs.TimerTaskInfo,
-) (string, executionpb.WorkflowExecution) {
+) (string, commonpb.WorkflowExecution) {
 
-	return primitives.UUIDString(task.GetNamespaceId()), executionpb.WorkflowExecution{
+	return task.GetNamespaceId(), commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUIDString(task.GetRunId()),
+		RunId:      task.GetRunId(),
 	}
 }

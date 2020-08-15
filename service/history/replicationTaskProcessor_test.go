@@ -33,23 +33,26 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/client"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/resource"
+	"go.temporal.io/server/api/adminservicemock/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
+
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resource"
 )
 
 type (
@@ -149,29 +152,30 @@ func (s *replicationTaskProcessorSuite) TestSendFetchMessageRequest() {
 }
 
 func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
-	now := time.Now()
+	now := timestamp.TimeNowPtrUtc()
 	s.mockEngine.EXPECT().SyncShardStatus(gomock.Any(), &historyservice.SyncShardStatusRequest{
 		SourceCluster: "standby",
 		ShardId:       0,
-		Timestamp:     now.UnixNano(),
+		StatusTime:    now,
 	}).Return(nil).Times(1)
 
-	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationgenpb.SyncShardStatus{
-		Timestamp: now.UnixNano(),
+	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationspb.SyncShardStatus{
+		StatusTime: now,
 	})
 	s.NoError(err)
 }
 
 func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivityReplicationTask() {
-	namespaceID := uuid.NewRandom()
+	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
-	runID := uuid.NewRandom()
-	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskType_SyncActivityTask,
-		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
-			NamespaceId: namespaceID.String(),
+	runID := uuid.NewRandom().String()
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
+			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
-			RunId:       runID.String(),
+			RunId:       runID,
+			Attempt:     1,
 		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
@@ -180,7 +184,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
-			TaskType:    persistence.ReplicationTaskTypeSyncActivity,
+			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		},
 	}
 	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
@@ -189,15 +193,15 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 }
 
 func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryReplicationTask() {
-	namespaceID := uuid.NewRandom()
+	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
-	runID := uuid.NewRandom()
-	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskType_HistoryTask,
-		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{
-			NamespaceId: namespaceID.String(),
+	runID := uuid.NewRandom().String()
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
+			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
-			RunId:       runID.String(),
+			RunId:       runID,
 		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
@@ -206,7 +210,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
-			TaskType:    persistence.ReplicationTaskTypeHistory,
+			TaskType:    enumsspb.TASK_TYPE_REPLICATION_HISTORY,
 		},
 	}
 	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
@@ -215,26 +219,26 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 }
 
 func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2ReplicationTask() {
-	namespaceID := uuid.NewRandom()
+	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
-	runID := uuid.NewRandom()
-	events := []*eventpb.HistoryEvent{
+	runID := uuid.NewRandom().String()
+	events := []*historypb.HistoryEvent{
 		{
 			EventId: 1,
 			Version: 1,
 		},
 	}
 	serializer := s.mockResource.GetPayloadSerializer()
-	data, err := serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
+	data, err := serializer.SerializeBatchEvents(events, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
-	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskType_HistoryV2Task,
-		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replicationgenpb.HistoryTaskV2Attributes{
-			NamespaceId: namespaceID.String(),
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
-			RunId:       runID.String(),
+			RunId:       runID,
 			Events: &commonpb.DataBlob{
-				EncodingType: commonpb.EncodingType_Proto3,
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 				Data:         data.Data,
 			},
 		}},
@@ -245,7 +249,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 			NamespaceId:  namespaceID,
 			WorkflowId:   workflowID,
 			RunId:        runID,
-			TaskType:     persistence.ReplicationTaskTypeHistory,
+			TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
 			FirstEventId: 1,
 			NextEventId:  1,
 			Version:      1,

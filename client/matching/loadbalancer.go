@@ -29,113 +29,116 @@ import (
 	"math/rand"
 	"strings"
 
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
 	// LoadBalancer is the interface for implementers of
 	// component that distributes add/poll api calls across
-	// available task list partitions when possible
+	// available task queue partitions when possible
 	LoadBalancer interface {
-		// PickWritePartition returns the task list partition for adding
-		// an activity or decision task. The input is the name of the
-		// original task list (with no partition info). When forwardedFrom
+		// PickWritePartition returns the task queue partition for adding
+		// an activity or workflow task. The input is the name of the
+		// original task queue (with no partition info). When forwardedFrom
 		// is non-empty, this call is forwardedFrom from a child partition
 		// to a parent partition in which case, no load balancing should be
 		// performed
 		PickWritePartition(
 			namespaceID string,
-			taskList tasklistpb.TaskList,
-			taskListType tasklistpb.TaskListType,
+			taskQueue taskqueuepb.TaskQueue,
+			taskQueueType enumspb.TaskQueueType,
 			forwardedFrom string,
 		) string
 
-		// PickReadPartition returns the task list partition to send a poller to.
-		// Input is name of the original task list as specified by caller. When
+		// PickReadPartition returns the task queue partition to send a poller to.
+		// Input is name of the original task queue as specified by caller. When
 		// forwardedFrom is non-empty, no load balancing should be done.
 		PickReadPartition(
 			namespaceID string,
-			taskList tasklistpb.TaskList,
-			taskListType tasklistpb.TaskListType,
+			taskQueue taskqueuepb.TaskQueue,
+			taskQueueType enumspb.TaskQueueType,
 			forwardedFrom string,
 		) string
 	}
 
 	defaultLoadBalancer struct {
-		nReadPartitions   dynamicconfig.IntPropertyFnWithTaskListInfoFilters
-		nWritePartitions  dynamicconfig.IntPropertyFnWithTaskListInfoFilters
+		nReadPartitions   dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		nWritePartitions  dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		namespaceIDToName func(string) (string, error)
 	}
 )
 
 const (
-	taskListPartitionPrefix = "/__temporal_sys/"
+	taskQueuePartitionPrefix = "/_sys/"
 )
 
 // NewLoadBalancer returns an instance of matching load balancer that
-// can help distribute api calls across task list partitions
+// can help distribute api calls across task queue partitions
 func NewLoadBalancer(
 	namespaceIDToName func(string) (string, error),
 	dc *dynamicconfig.Collection,
 ) LoadBalancer {
 	return &defaultLoadBalancer{
 		namespaceIDToName: namespaceIDToName,
-		nReadPartitions:   dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingNumTasklistReadPartitions, 1),
-		nWritePartitions:  dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingNumTasklistWritePartitions, 1),
+		nReadPartitions: dc.GetIntPropertyFilteredByTaskQueueInfo(
+			dynamicconfig.MatchingNumTaskqueueReadPartitions, dynamicconfig.DefaultNumTaskQueuePartitions),
+		nWritePartitions: dc.GetIntPropertyFilteredByTaskQueueInfo(
+			dynamicconfig.MatchingNumTaskqueueWritePartitions, dynamicconfig.DefaultNumTaskQueuePartitions),
 	}
 }
 
 func (lb *defaultLoadBalancer) PickWritePartition(
 	namespaceID string,
-	taskList tasklistpb.TaskList,
-	taskListType tasklistpb.TaskListType,
+	taskQueue taskqueuepb.TaskQueue,
+	taskQueueType enumspb.TaskQueueType,
 	forwardedFrom string,
 ) string {
-	return lb.pickPartition(namespaceID, taskList, taskListType, forwardedFrom, lb.nWritePartitions)
+	return lb.pickPartition(namespaceID, taskQueue, taskQueueType, forwardedFrom, lb.nWritePartitions)
 }
 
 func (lb *defaultLoadBalancer) PickReadPartition(
 	namespaceID string,
-	taskList tasklistpb.TaskList,
-	taskListType tasklistpb.TaskListType,
+	taskQueue taskqueuepb.TaskQueue,
+	taskQueueType enumspb.TaskQueueType,
 	forwardedFrom string,
 ) string {
-	return lb.pickPartition(namespaceID, taskList, taskListType, forwardedFrom, lb.nReadPartitions)
+	return lb.pickPartition(namespaceID, taskQueue, taskQueueType, forwardedFrom, lb.nReadPartitions)
 }
 
 func (lb *defaultLoadBalancer) pickPartition(
 	namespaceID string,
-	taskList tasklistpb.TaskList,
-	taskListType tasklistpb.TaskListType,
+	taskQueue taskqueuepb.TaskQueue,
+	taskQueueType enumspb.TaskQueueType,
 	forwardedFrom string,
-	nPartitions dynamicconfig.IntPropertyFnWithTaskListInfoFilters,
+	nPartitions dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters,
 ) string {
 
-	if forwardedFrom != "" || taskList.GetKind() == tasklistpb.TaskListKind_Sticky {
-		return taskList.GetName()
+	if forwardedFrom != "" || taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+		return taskQueue.GetName()
 	}
 
-	if strings.HasPrefix(taskList.GetName(), taskListPartitionPrefix) {
+	if strings.HasPrefix(taskQueue.GetName(), taskQueuePartitionPrefix) {
 		// this should never happen when forwardedFrom is empty
-		return taskList.GetName()
+		return taskQueue.GetName()
 	}
 
 	namespace, err := lb.namespaceIDToName(namespaceID)
 	if err != nil {
-		return taskList.GetName()
+		return taskQueue.GetName()
 	}
 
-	n := nPartitions(namespace, taskList.GetName(), taskListType)
+	n := nPartitions(namespace, taskQueue.GetName(), taskQueueType)
 	if n <= 0 {
-		return taskList.GetName()
+		return taskQueue.GetName()
 	}
 
 	p := rand.Intn(n)
 	if p == 0 {
-		return taskList.GetName()
+		return taskQueue.GetName()
 	}
 
-	return fmt.Sprintf("%v%v/%v", taskListPartitionPrefix, taskList.GetName(), p)
+	return fmt.Sprintf("%v%v/%v", taskQueuePartitionPrefix, taskQueue.GetName(), p)
 }

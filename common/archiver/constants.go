@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	// ArchiveNonRetriableErrorMsg is the log message when the Archive() method encounters a non-retriable error
-	ArchiveNonRetriableErrorMsg = "Archive method encountered an non-retriable error."
+	// ArchiveNonRetryableErrorMsg is the log message when the Archive() method encounters a non-retryable error
+	ArchiveNonRetryableErrorMsg = "Archive method encountered an non-retryable error."
 	// ArchiveTransientErrorMsg is the log message when the Archive() method encounters a transient error
 	ArchiveTransientErrorMsg = "Archive method encountered a transient error."
 

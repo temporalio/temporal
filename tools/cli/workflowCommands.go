@@ -33,6 +33,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -43,24 +44,27 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	filterpb "go.temporal.io/temporal-proto/filter"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	querypb "go.temporal.io/temporal-proto/query"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
-	"go.temporal.io/temporal/client"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
+	filterpb "go.temporal.io/api/filter/v1"
+	historypb "go.temporal.io/api/history/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	querypb "go.temporal.io/api/query/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/client"
 
-	cliproto "github.com/temporalio/temporal/.gen/proto/cli"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/service/history"
+	clispb "go.temporal.io/server/api/cli/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history"
 )
 
 // ShowHistory shows the history of given workflow execution based on workflowID and runID.
@@ -104,11 +108,11 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 		ErrorAndExit(fmt.Sprintf("Failed to get history on workflow id: %s, run id: %s.", wid, rid), err)
 	}
 
-	prevEvent := eventpb.HistoryEvent{}
+	prevEvent := historypb.HistoryEvent{}
 	if printFully { // dump everything
 		for _, e := range history.Events {
 			if resetPointsOnly {
-				if prevEvent.GetEventType() != eventpb.EventType_DecisionTaskStarted {
+				if prevEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
 					prevEvent = *e
 					continue
 				}
@@ -129,7 +133,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 		table.SetColumnSeparator("")
 		for _, e := range history.Events {
 			if resetPointsOnly {
-				if prevEvent.GetEventType() != eventpb.EventType_DecisionTaskStarted {
+				if prevEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
 					prevEvent = *e
 					continue
 				}
@@ -140,9 +144,9 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 			columns = append(columns, strconv.FormatInt(e.GetEventId(), 10))
 
 			if printRawTime {
-				columns = append(columns, strconv.FormatInt(e.GetTimestamp(), 10))
+				columns = append(columns, strconv.FormatInt(timestamp.TimeValue(e.GetEventTime()).UnixNano(), 10))
 			} else if printDateTime {
-				columns = append(columns, convertTime(e.GetTimestamp(), false))
+				columns = append(columns, formatTime(timestamp.TimeValue(e.GetEventTime()), false))
 			}
 			if printVersion {
 				columns = append(columns, fmt.Sprintf("(Version: %v)", e.Version))
@@ -160,7 +164,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 		if err != nil {
 			ErrorAndExit("Failed to serialize history data.", err)
 		}
-		if err := ioutil.WriteFile(outputFileName, data, 0777); err != nil {
+		if err := ioutil.WriteFile(outputFileName, data, 0666); err != nil {
 			ErrorAndExit("Failed to export history data file.", err)
 		}
 	}
@@ -180,20 +184,24 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	serviceClient := cFactory.FrontendClient(c)
 
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
-	taskList := getRequiredOption(c, FlagTaskList)
+	taskQueue := getRequiredOption(c, FlagTaskQueue)
 	workflowType := getRequiredOption(c, FlagWorkflowType)
 	et := c.Int(FlagExecutionTimeout)
 	if et == 0 {
 		ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagExecutionTimeout), nil)
 	}
-	dt := c.Int(FlagDecisionTimeout)
+	dt := c.Int(FlagWorkflowTaskTimeout)
 	wid := c.String(FlagWorkflowID)
 	if len(wid) == 0 {
 		wid = uuid.New()
 	}
 	reusePolicy := defaultWorkflowIDReusePolicy
 	if c.IsSet(FlagWorkflowIDReusePolicy) {
-		reusePolicy = getWorkflowIDReusePolicy(c.Int(FlagWorkflowIDReusePolicy))
+		reusePolicyInt, err := stringToEnum(c.String(FlagWorkflowIDReusePolicy), enumspb.WorkflowIdReusePolicy_value)
+		if err != nil {
+			ErrorAndExit("Failed to parse Reuse Policy", err)
+		}
+		reusePolicy = enumspb.WorkflowIdReusePolicy(reusePolicyInt)
 	}
 
 	input := processJSONInput(c)
@@ -204,14 +212,15 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		WorkflowType: &commonpb.WorkflowType{
 			Name: workflowType,
 		},
-		TaskList: &tasklistpb.TaskList{
-			Name: taskList,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		Input:                           payloads.EncodeString(input),
-		WorkflowExecutionTimeoutSeconds: int32(et),
-		WorkflowTaskTimeoutSeconds:      int32(dt),
-		Identity:                        getCliIdentity(),
-		WorkflowIdReusePolicy:           reusePolicy,
+		Input:                    input,
+		WorkflowExecutionTimeout: timestamp.DurationPtr(time.Duration(et) * time.Second),
+		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(dt) * time.Second),
+		Identity:                 getCliIdentity(),
+		WorkflowIdReusePolicy:    reusePolicy,
 	}
 	if c.IsSet(FlagCronSchedule) {
 		startRequest.CronSchedule = c.String(FlagCronSchedule)
@@ -256,8 +265,8 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 			{"Run Id", resp.GetRunId()},
 			{"Type", workflowType},
 			{"Namespace", namespace},
-			{"Task List", taskList},
-			{"Args", truncate(input)}, // in case of large input
+			{"Task Queue", taskQueue},
+			{"Args", truncate(payloads.ToString(input))}, // in case of large input
 		}
 		table.SetBorder(false)
 		table.SetColumnSeparator(":")
@@ -314,7 +323,16 @@ func processMemo(c *cli.Context) map[string]*commonpb.Payload {
 		memoKeys = strings.Split(rawMemoKey, " ")
 	}
 
-	rawMemoValue := processJSONInputHelper(c, jsonTypeMemo)
+	jsonsRaw := readJSONInputs(c, jsonTypeMemo)
+	if len(jsonsRaw) == 0 {
+		return nil
+	}
+	rawMemoValue := string(jsonsRaw[0]) // StringFlag may contain up to one json
+
+	if err := validateJSONs(rawMemoValue); err != nil {
+		ErrorAndExit("Input is not valid JSON, or JSONs concatenated with spaces/newlines.", err)
+	}
+
 	var memoValues []string
 
 	var sc fastjson.Scanner
@@ -368,7 +386,7 @@ func printWorkflowProgress(c *cli.Context, wid, rid string) {
 	timeElapse := 1
 	isTimeElapseExist := false
 	doneChan := make(chan bool)
-	var lastEvent *eventpb.HistoryEvent // used for print result of this run
+	var lastEvent *historypb.HistoryEvent // used for print result of this run
 	ticker := time.NewTicker(time.Second).C
 
 	tcCtx, cancel := newIndefiniteContext(c)
@@ -381,7 +399,7 @@ func printWorkflowProgress(c *cli.Context, wid, rid string) {
 	}
 
 	go func() {
-		iter := wfClient.GetWorkflowHistory(tcCtx, wid, rid, true, filterpb.HistoryEventFilterType_AllEvent)
+		iter := wfClient.GetWorkflowHistory(tcCtx, wid, rid, true, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for iter.HasNext() {
 			event, err := iter.Next()
 			if err != nil {
@@ -392,9 +410,9 @@ func printWorkflowProgress(c *cli.Context, wid, rid string) {
 				isTimeElapseExist = false
 			}
 			if showDetails {
-				fmt.Printf("  %d, %s, %s, %s\n", event.GetEventId(), convertTime(event.GetTimestamp(), false), ColorEvent(event), HistoryEventToString(event, true, maxFieldLength))
+				fmt.Printf("  %d, %s, %s, %s\n", event.GetEventId(), formatTime(timestamp.TimeValue(event.GetEventTime()), false), ColorEvent(event), HistoryEventToString(event, true, maxFieldLength))
 			} else {
-				fmt.Printf("  %d, %s, %s\n", event.GetEventId(), convertTime(event.GetTimestamp(), false), ColorEvent(event))
+				fmt.Printf("  %d, %s, %s\n", event.GetEventId(), formatTime(timestamp.TimeValue(event.GetEventTime()), false), ColorEvent(event))
 			}
 			lastEvent = event
 		}
@@ -470,12 +488,12 @@ func SignalWorkflow(c *cli.Context) {
 	defer cancel()
 	_, err := serviceClient.SignalWorkflowExecution(tcCtx, &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
 		SignalName: name,
-		Input:      payloads.EncodeString(input),
+		Input:      input,
 		Identity:   getCliIdentity(),
 	})
 
@@ -512,7 +530,7 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 	defer cancel()
 	queryRequest := &workflowservice.QueryWorkflowRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -520,32 +538,20 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 			QueryType: queryType,
 		},
 	}
-	if input != "" {
-		queryRequest.Query.QueryArgs = payloads.EncodeString(input)
+	if input != nil {
+		queryRequest.Query.QueryArgs = input
 	}
 	if c.IsSet(FlagQueryRejectCondition) {
-		var rejectCondition querypb.QueryRejectCondition
+		var rejectCondition enumspb.QueryRejectCondition
 		switch c.String(FlagQueryRejectCondition) {
 		case "not_open":
-			rejectCondition = querypb.QueryRejectCondition_NotOpen
+			rejectCondition = enumspb.QUERY_REJECT_CONDITION_NOT_OPEN
 		case "not_completed_cleanly":
-			rejectCondition = querypb.QueryRejectCondition_NotCompletedCleanly
+			rejectCondition = enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY
 		default:
 			ErrorAndExit(fmt.Sprintf("invalid reject condition %v, valid values are \"not_open\" and \"not_completed_cleanly\"", c.String(FlagQueryRejectCondition)), nil)
 		}
 		queryRequest.QueryRejectCondition = rejectCondition
-	}
-	if c.IsSet(FlagQueryConsistencyLevel) {
-		var consistencyLevel querypb.QueryConsistencyLevel
-		switch c.String(FlagQueryConsistencyLevel) {
-		case "eventual":
-			consistencyLevel = querypb.QueryConsistencyLevel_Eventual
-		case "strong":
-			consistencyLevel = querypb.QueryConsistencyLevel_Strong
-		default:
-			ErrorAndExit(fmt.Sprintf("invalid query consistency level %v, valid values are \"eventual\" and \"strong\"", c.String(FlagQueryConsistencyLevel)), nil)
-		}
-		queryRequest.QueryConsistencyLevel = consistencyLevel
 	}
 	queryResponse, err := serviceClient.QueryWorkflow(tcCtx, queryRequest)
 	if err != nil {
@@ -556,11 +562,7 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 	if queryResponse.QueryRejected != nil {
 		fmt.Printf("Query was rejected, workflow has status: %v\n", queryResponse.QueryRejected.GetStatus())
 	} else {
-		var queryResult string
-		err = payloads.Decode(queryResponse.QueryResult, &queryResult)
-		if err != nil {
-			ErrorAndExit("Unable to decode query result.", err)
-		}
+		queryResult := payloads.ToString(queryResponse.QueryResult)
 		fmt.Printf("Query result:\n%v\n", queryResult)
 	}
 }
@@ -617,7 +619,7 @@ func ListAllWorkflow(c *cli.Context) {
 	printDecodedRaw := c.Bool(FlagPrintFullyDetail)
 
 	if printJSON || printDecodedRaw {
-		var results []*executionpb.WorkflowExecutionInfo
+		var results []*workflowpb.WorkflowExecutionInfo
 		var nextPageToken []byte
 		fmt.Println("[")
 		for {
@@ -650,7 +652,7 @@ func ScanAllWorkflow(c *cli.Context) {
 	printDecodedRaw := c.Bool(FlagPrintFullyDetail)
 
 	if printJSON || printDecodedRaw {
-		var results []*executionpb.WorkflowExecutionInfo
+		var results []*workflowpb.WorkflowExecutionInfo
 		var nextPageToken []byte
 		fmt.Println("[")
 		for {
@@ -741,7 +743,7 @@ func ListArchivedWorkflow(c *cli.Context) {
 	}
 
 	var table *tablewriter.Table
-	var printFn func([]*executionpb.WorkflowExecutionInfo, bool)
+	var printFn func([]*workflowpb.WorkflowExecutionInfo, bool)
 	var prePrintFn func()
 	var postPrintFn func()
 	printRawTime := c.Bool(FlagPrintRawTime)
@@ -750,14 +752,14 @@ func ListArchivedWorkflow(c *cli.Context) {
 	printSearchAttr := c.Bool(FlagPrintSearchAttr)
 	if printJSON || printDecodedRaw {
 		prePrintFn = func() { fmt.Println("[") }
-		printFn = func(execution []*executionpb.WorkflowExecutionInfo, more bool) {
+		printFn = func(execution []*workflowpb.WorkflowExecutionInfo, more bool) {
 			printListResults(execution, printJSON, more)
 		}
 		postPrintFn = func() { fmt.Println("]") }
 	} else {
 		table = createTableForListWorkflow(c, false, false)
 		prePrintFn = func() { table.ClearRows() }
-		printFn = func(execution []*executionpb.WorkflowExecutionInfo, _ bool) {
+		printFn = func(execution []*workflowpb.WorkflowExecutionInfo, _ bool) {
 			appendWorkflowExecutionsToTable(
 				table,
 				execution,
@@ -840,7 +842,7 @@ func describeWorkflowHelper(c *cli.Context, wid, rid string) {
 
 	resp, err := frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -874,9 +876,9 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 		for _, pt := range resp.WorkflowExecutionInfo.AutoResetPoints.Points {
 			var row []string
 			row = append(row, pt.GetBinaryChecksum())
-			row = append(row, time.Unix(0, pt.GetCreatedTimeNano()).String())
+			row = append(row, timestamp.TimeValue(pt.GetCreateTime()).String())
 			row = append(row, pt.GetRunId())
-			row = append(row, strconv.FormatInt(pt.GetFirstDecisionCompletedId(), 10))
+			row = append(row, strconv.FormatInt(pt.GetFirstWorkflowTaskCompletedId(), 10))
 			table.Append(row)
 		}
 	}
@@ -884,14 +886,14 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 }
 
 func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWorkflowExecutionResponse,
-	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *cliproto.DescribeWorkflowExecutionResponse {
+	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *clispb.DescribeWorkflowExecutionResponse {
 
 	info := resp.WorkflowExecutionInfo
-	executionInfo := &cliproto.WorkflowExecutionInfo{
+	executionInfo := &clispb.WorkflowExecutionInfo{
 		Execution:         info.GetExecution(),
 		Type:              info.GetType(),
-		CloseTime:         convertTime(info.GetCloseTime().GetValue(), false),
-		StartTime:         convertTime(info.GetStartTime().GetValue(), false),
+		CloseTime:         info.GetCloseTime(),
+		StartTime:         info.GetStartTime(),
 		Status:            info.GetStatus(),
 		HistoryLength:     info.GetHistoryLength(),
 		ParentNamespaceId: info.GetParentNamespaceId(),
@@ -901,53 +903,45 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 		AutoResetPoints:   info.GetAutoResetPoints(),
 	}
 
-	var pendingActs []*cliproto.PendingActivityInfo
-	var tmpAct *cliproto.PendingActivityInfo
+	var pendingActs []*clispb.PendingActivityInfo
+	var tmpAct *clispb.PendingActivityInfo
 	for _, pa := range resp.PendingActivities {
-		tmpAct = &cliproto.PendingActivityInfo{
-			ActivityId:             pa.GetActivityId(),
-			ActivityType:           pa.GetActivityType(),
-			State:                  pa.GetState(),
-			ScheduledTimestamp:     convertTime(pa.GetScheduledTimestamp(), false),
-			LastStartedTimestamp:   convertTime(pa.GetLastStartedTimestamp(), false),
-			LastHeartbeatTimestamp: convertTime(pa.GetLastHeartbeatTimestamp(), false),
-			Attempt:                pa.GetAttempt(),
-			MaximumAttempts:        pa.GetMaximumAttempts(),
-			ExpirationTimestamp:    convertTime(pa.GetExpirationTimestamp(), false),
-			LastFailureReason:      pa.GetLastFailureReason(),
-			LastWorkerIdentity:     pa.GetLastWorkerIdentity(),
+		tmpAct = &clispb.PendingActivityInfo{
+			ActivityId:         pa.GetActivityId(),
+			ActivityType:       pa.GetActivityType(),
+			State:              pa.GetState(),
+			ScheduledTime:      pa.GetScheduledTime(),
+			LastStartedTime:    pa.GetLastStartedTime(),
+			LastHeartbeatTime:  pa.GetLastHeartbeatTime(),
+			Attempt:            pa.GetAttempt(),
+			MaximumAttempts:    pa.GetMaximumAttempts(),
+			ExpirationTime:     pa.GetExpirationTime(),
+			LastFailure:        convertFailure(pa.GetLastFailure()),
+			LastWorkerIdentity: pa.GetLastWorkerIdentity(),
 		}
+
 		if pa.HeartbeatDetails != nil {
-			err := payloads.Decode(pa.HeartbeatDetails, &tmpAct.HeartbeatDetails)
-			if err != nil {
-				ErrorAndExit("Unable to decode heartbeat details.", err)
-			}
-		}
-		if pa.LastFailureDetails != nil {
-			err := payloads.Decode(pa.LastFailureDetails, &tmpAct.LastFailureDetails)
-			if err != nil {
-				ErrorAndExit("Unable to decode last failure details.", err)
-			}
+			tmpAct.HeartbeatDetails = payloads.ToString(pa.HeartbeatDetails)
 		}
 		pendingActs = append(pendingActs, tmpAct)
 	}
 
-	return &cliproto.DescribeWorkflowExecutionResponse{
-		ExecutionConfiguration: resp.ExecutionConfiguration,
-		WorkflowExecutionInfo:  executionInfo,
-		PendingActivities:      pendingActs,
-		PendingChildren:        resp.PendingChildren,
+	return &clispb.DescribeWorkflowExecutionResponse{
+		ExecutionConfig:       resp.ExecutionConfig,
+		WorkflowExecutionInfo: executionInfo,
+		PendingActivities:     pendingActs,
+		PendingChildren:       resp.PendingChildren,
 	}
 }
 
 func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes,
-	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *cliproto.SearchAttributes {
+	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *clispb.SearchAttributes {
 
 	if searchAttributes == nil || len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil
 	}
 
-	result := &cliproto.SearchAttributes{
+	result := &clispb.SearchAttributes{
 		IndexedFields: map[string]string{},
 	}
 	ctx, cancel := newContext(c)
@@ -971,11 +965,25 @@ func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes,
 	return result
 }
 
+func convertFailure(failure *failurepb.Failure) *clispb.Failure {
+	if failure == nil {
+		return nil
+	}
+
+	return &clispb.Failure{
+		Message:     failure.GetMessage(),
+		Source:      failure.GetSource(),
+		StackTrace:  failure.GetStackTrace(),
+		Cause:       convertFailure(failure.GetCause()),
+		FailureType: reflect.TypeOf(failure.GetFailureInfo()).Elem().Name(),
+	}
+}
+
 func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *tablewriter.Table {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	header := []string{"Workflow Type", "Workflow Id", "Run Id", "Task List", "Start Time", "Execution Time"}
+	header := []string{"Workflow Type", "Workflow Id", "Run Id", "Task Queue", "Start Time", "Execution Time"}
 	headerColor := []tablewriter.Colors{tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue}
 	if !queryOpen {
 		header = append(header, "End Time")
@@ -1000,8 +1008,8 @@ func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *t
 func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func([]byte) ([]byte, int) {
 	wfClient := getWorkflowClient(c)
 
-	earliestTime := parseTime(c.String(FlagEarliestTime), 0, time.Now())
-	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UnixNano(), time.Now())
+	earliestTime := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now().UTC())
+	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UTC(), time.Now().UTC())
 	workflowID := c.String(FlagWorkflowID)
 	workflowType := c.String(FlagWorkflowType)
 	printRawTime := c.Bool(FlagPrintRawTime)
@@ -1013,7 +1021,7 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 		pageSize = defaultPageSizeForList
 	}
 
-	var workflowStatus executionpb.WorkflowExecutionStatus
+	var workflowStatus enumspb.WorkflowExecutionStatus
 	if c.IsSet(FlagWorkflowStatus) {
 		if queryOpen {
 			ErrorAndExit(optionErr, errors.New("you can only filter on status for closed workflow, not open workflow"))
@@ -1028,7 +1036,7 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 	}
 
 	prepareTable := func(next []byte) ([]byte, int) {
-		var result []*executionpb.WorkflowExecutionInfo
+		var result []*workflowpb.WorkflowExecutionInfo
 		var nextPageToken []byte
 		if c.IsSet(FlagListQuery) {
 			listQuery := c.String(FlagListQuery)
@@ -1056,7 +1064,7 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 
 func appendWorkflowExecutionsToTable(
 	table *tablewriter.Table,
-	executions []*executionpb.WorkflowExecutionInfo,
+	executions []*workflowpb.WorkflowExecutionInfo,
 	queryOpen bool,
 	printRawTime bool,
 	printDateTime bool,
@@ -1066,15 +1074,15 @@ func appendWorkflowExecutionsToTable(
 	for _, e := range executions {
 		var startTime, executionTime, closeTime string
 		if printRawTime {
-			startTime = fmt.Sprintf("%d", e.GetStartTime().GetValue())
-			executionTime = fmt.Sprintf("%d", e.GetExecutionTime())
-			closeTime = fmt.Sprintf("%d", e.GetCloseTime().GetValue())
+			startTime = fmt.Sprintf("%v", timestamp.TimeValue(e.GetStartTime()))
+			executionTime = fmt.Sprintf("%v", e.GetExecutionTime())
+			closeTime = fmt.Sprintf("%v", timestamp.TimeValue(e.GetCloseTime()))
 		} else {
-			startTime = convertTime(e.GetStartTime().GetValue(), !printDateTime)
-			executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
-			closeTime = convertTime(e.GetCloseTime().GetValue(), !printDateTime)
+			startTime = formatTime(timestamp.TimeValue(e.GetStartTime()), !printDateTime)
+			executionTime = formatTime(timestamp.TimeValue(e.GetExecutionTime()), !printDateTime)
+			closeTime = formatTime(timestamp.TimeValue(e.GetCloseTime()), !printDateTime)
 		}
-		row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), e.GetTaskList(), startTime, executionTime}
+		row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), e.GetTaskQueue(), startTime, executionTime}
 		if !queryOpen {
 			row = append(row, closeTime)
 		}
@@ -1088,35 +1096,21 @@ func appendWorkflowExecutionsToTable(
 	}
 }
 
-func printRunStatus(event *eventpb.HistoryEvent) {
+func printRunStatus(event *historypb.HistoryEvent) {
 	switch event.GetEventType() {
-	case eventpb.EventType_WorkflowExecutionCompleted:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		fmt.Printf("  Status: %s\n", colorGreen("COMPLETED"))
-		var result string
-		err := payloads.Decode(event.GetWorkflowExecutionCompletedEventAttributes().GetResult(), &result)
-		if err != nil {
-			ErrorAndExit("Unable ot decode WorkflowExecutionCompletedEventAttributes.Result.", err)
-		}
+		result := payloads.ToString(event.GetWorkflowExecutionCompletedEventAttributes().GetResult())
 		fmt.Printf("  Output: %s\n", result)
-	case eventpb.EventType_WorkflowExecutionFailed:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		fmt.Printf("  Status: %s\n", colorRed("FAILED"))
-		fmt.Printf("  Reason: %s\n", event.GetWorkflowExecutionFailedEventAttributes().GetReason())
-		var details string
-		err := payloads.Decode(event.GetWorkflowExecutionFailedEventAttributes().GetDetails(), &details)
-		if err != nil {
-			ErrorAndExit("Unable ot decode WorkflowExecutionFailedEventAttributes.Details.", err)
-		}
-		fmt.Printf("  Detail: %s\n", details)
-	case eventpb.EventType_WorkflowExecutionTimedOut:
+		fmt.Printf("  Failure: %s\n", convertFailure(event.GetWorkflowExecutionFailedEventAttributes().GetFailure()).String())
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		fmt.Printf("  Status: %s\n", colorRed("TIMEOUT"))
-		fmt.Printf("  Timeout Type: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetTimeoutType())
-	case eventpb.EventType_WorkflowExecutionCanceled:
+		fmt.Printf("  Retry status: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetRetryState())
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		fmt.Printf("  Status: %s\n", colorRed("CANCELED"))
-		var details string
-		err := payloads.Decode(event.GetWorkflowExecutionCanceledEventAttributes().GetDetails(), &details)
-		if err != nil {
-			ErrorAndExit("Unable ot decode WorkflowExecutionCanceledEventAttributes.Details.", err)
-		}
+		details := payloads.ToString(event.GetWorkflowExecutionCanceledEventAttributes().GetDetails())
 		fmt.Printf("  Detail: %s\n", details)
 	}
 }
@@ -1137,7 +1131,7 @@ func trimWorkflowType(str string) string {
 }
 
 func listWorkflowExecutions(client client.Client, pageSize int, nextPageToken []byte, query string, c *cli.Context) (
-	[]*executionpb.WorkflowExecutionInfo, []byte) {
+	[]*workflowpb.WorkflowExecutionInfo, []byte) {
 
 	request := &workflowservice.ListWorkflowExecutionsRequest{
 		PageSize:      int32(pageSize),
@@ -1154,15 +1148,15 @@ func listWorkflowExecutions(client client.Client, pageSize int, nextPageToken []
 	return response.Executions, response.NextPageToken
 }
 
-func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string,
-	nextPageToken []byte, c *cli.Context) ([]*executionpb.WorkflowExecutionInfo, []byte) {
+func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTime time.Time, workflowID, workflowType string,
+	nextPageToken []byte, c *cli.Context) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
 
 	request := &workflowservice.ListOpenWorkflowExecutionsRequest{
 		MaximumPageSize: int32(pageSize),
 		NextPageToken:   nextPageToken,
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: earliestTime,
-			LatestTime:   latestTime,
+			EarliestTime: &earliestTime,
+			LatestTime:   &latestTime,
 		},
 	}
 	if len(workflowID) > 0 {
@@ -1182,15 +1176,15 @@ func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTi
 	return response.Executions, response.NextPageToken
 }
 
-func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string,
-	workflowStatus executionpb.WorkflowExecutionStatus, nextPageToken []byte, c *cli.Context) ([]*executionpb.WorkflowExecutionInfo, []byte) {
+func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latestTime time.Time, workflowID, workflowType string,
+	workflowStatus enumspb.WorkflowExecutionStatus, nextPageToken []byte, c *cli.Context) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
 
 	request := &workflowservice.ListClosedWorkflowExecutionsRequest{
 		MaximumPageSize: int32(pageSize),
 		NextPageToken:   nextPageToken,
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: earliestTime,
-			LatestTime:   latestTime,
+			EarliestTime: &earliestTime,
+			LatestTime:   &latestTime,
 		},
 	}
 	if len(workflowID) > 0 {
@@ -1212,11 +1206,11 @@ func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latest
 	return response.Executions, response.NextPageToken
 }
 
-func getListResultInRaw(c *cli.Context, queryOpen bool, nextPageToken []byte) ([]*executionpb.WorkflowExecutionInfo, []byte) {
+func getListResultInRaw(c *cli.Context, queryOpen bool, nextPageToken []byte) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
 	wfClient := getWorkflowClient(c)
 
-	earliestTime := parseTime(c.String(FlagEarliestTime), 0, time.Now())
-	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UnixNano(), time.Now())
+	earliestTime := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now().UTC())
+	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UTC(), time.Now().UTC())
 	workflowID := c.String(FlagWorkflowID)
 	workflowType := c.String(FlagWorkflowType)
 	pageSize := c.Int(FlagPageSize)
@@ -1224,7 +1218,7 @@ func getListResultInRaw(c *cli.Context, queryOpen bool, nextPageToken []byte) ([
 		pageSize = defaultPageSizeForList
 	}
 
-	var workflowStatus executionpb.WorkflowExecutionStatus
+	var workflowStatus enumspb.WorkflowExecutionStatus
 	if c.IsSet(FlagWorkflowStatus) {
 		if queryOpen {
 			ErrorAndExit(optionErr, errors.New("you can only filter on status for closed workflow, not open workflow"))
@@ -1238,7 +1232,7 @@ func getListResultInRaw(c *cli.Context, queryOpen bool, nextPageToken []byte) ([
 		ErrorAndExit(optionErr, errors.New("you can filter on workflow_id or workflow_type, but not on both"))
 	}
 
-	var result []*executionpb.WorkflowExecutionInfo
+	var result []*workflowpb.WorkflowExecutionInfo
 	if c.IsSet(FlagListQuery) {
 		listQuery := c.String(FlagListQuery)
 		result, nextPageToken = listWorkflowExecutions(wfClient, pageSize, nextPageToken, listQuery, c)
@@ -1251,7 +1245,7 @@ func getListResultInRaw(c *cli.Context, queryOpen bool, nextPageToken []byte) ([
 	return result, nextPageToken
 }
 
-func getScanResultInRaw(c *cli.Context, nextPageToken []byte) ([]*executionpb.WorkflowExecutionInfo, []byte) {
+func getScanResultInRaw(c *cli.Context, nextPageToken []byte) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
 	wfClient := getWorkflowClient(c)
 	listQuery := c.String(FlagListQuery)
 	pageSize := c.Int(FlagPageSize)
@@ -1262,7 +1256,7 @@ func getScanResultInRaw(c *cli.Context, nextPageToken []byte) ([]*executionpb.Wo
 	return scanWorkflowExecutions(wfClient, pageSize, nextPageToken, listQuery, c)
 }
 
-func scanWorkflowExecutions(client client.Client, pageSize int, nextPageToken []byte, query string, c *cli.Context) ([]*executionpb.WorkflowExecutionInfo, []byte) {
+func scanWorkflowExecutions(client client.Client, pageSize int, nextPageToken []byte, query string, c *cli.Context) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
 
 	request := &workflowservice.ScanWorkflowExecutionsRequest{
 		PageSize:      int32(pageSize),
@@ -1292,7 +1286,7 @@ func scanWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 	}
 
 	prepareTable := func(next []byte) ([]byte, int) {
-		var result []*executionpb.WorkflowExecutionInfo
+		var result []*workflowpb.WorkflowExecutionInfo
 		var nextPageToken []byte
 		listQuery := c.String(FlagListQuery)
 		result, nextPageToken = scanWorkflowExecutions(wfClient, pageSize, next, listQuery, c)
@@ -1300,13 +1294,13 @@ func scanWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 		for _, e := range result {
 			var startTime, executionTime, closeTime string
 			if printRawTime {
-				startTime = fmt.Sprintf("%d", e.GetStartTime().GetValue())
-				executionTime = fmt.Sprintf("%d", e.GetExecutionTime())
-				closeTime = fmt.Sprintf("%d", e.GetCloseTime().GetValue())
+				startTime = fmt.Sprintf("%v", timestamp.TimeValue(e.GetStartTime()))
+				executionTime = fmt.Sprintf("%v", e.GetExecutionTime())
+				closeTime = fmt.Sprintf("%v", timestamp.TimeValue(e.GetCloseTime()))
 			} else {
-				startTime = convertTime(e.GetStartTime().GetValue(), !printDateTime)
-				executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
-				closeTime = convertTime(e.GetCloseTime().GetValue(), !printDateTime)
+				startTime = formatTime(timestamp.TimeValue(e.GetStartTime()), !printDateTime)
+				executionTime = formatTime(timestamp.TimeValue(e.GetExecutionTime()), !printDateTime)
+				closeTime = formatTime(timestamp.TimeValue(e.GetCloseTime()), !printDateTime)
 			}
 			row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), startTime, executionTime}
 			if !queryOpen {
@@ -1325,7 +1319,7 @@ func scanWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 	}
 	return prepareTable
 }
-func getWorkflowStatus(statusStr string) executionpb.WorkflowExecutionStatus {
+func getWorkflowStatus(statusStr string) enumspb.WorkflowExecutionStatus {
 	if status, ok := workflowClosedStatusMap[strings.ToLower(statusStr)]; ok {
 		return status
 	}
@@ -1334,17 +1328,8 @@ func getWorkflowStatus(statusStr string) executionpb.WorkflowExecutionStatus {
 	return 0
 }
 
-func getWorkflowIDReusePolicy(value int) commonpb.WorkflowIdReusePolicy {
-	if value >= 0 && value <= len(commonpb.WorkflowIdReusePolicy_value) {
-		return commonpb.WorkflowIdReusePolicy(value)
-	}
-	// At this point, the policy should return if the value is valid
-	ErrorAndExit(fmt.Sprintf("Option %v value is not in supported range.", FlagWorkflowIDReusePolicy), nil)
-	return commonpb.WorkflowIdReusePolicy_AllowDuplicateFailedOnly //doesn't really matter
-}
-
 // default will print decoded raw
-func printListResults(executions []*executionpb.WorkflowExecutionInfo, inJSON bool, more bool) {
+func printListResults(executions []*workflowpb.WorkflowExecutionInfo, inJSON bool, more bool) {
 	encoder := codec.NewJSONPBEncoder()
 	for i, execution := range executions {
 		if inJSON {
@@ -1376,16 +1361,16 @@ func ObserveHistory(c *cli.Context) {
 func ResetWorkflow(c *cli.Context) {
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	wid := getRequiredOption(c, FlagWorkflowID)
-	rid := getRequiredOption(c, FlagRunID)
 	reason := getRequiredOption(c, FlagReason)
 	if len(reason) == 0 {
 		ErrorAndExit("wrong reason", fmt.Errorf("reason cannot be empty"))
 	}
+	rid := c.String(FlagRunID)
 	eventID := c.Int64(FlagEventID)
 	resetType := c.String(FlagResetType)
 	extraForResetType, ok := resetTypesMap[resetType]
 	if !ok && eventID <= 0 {
-		ErrorAndExit("Must specify valid eventId or valid resetType", nil)
+		ErrorAndExit(fmt.Sprintf("must specify either valid event_id or reset_type (one of %s)", strings.Join(mapKeysToArray(resetTypesMap), ", ")), nil)
 	}
 	if ok && len(extraForResetType) > 0 {
 		getRequiredOption(c, extraForResetType)
@@ -1397,23 +1382,23 @@ func ResetWorkflow(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
 
 	resetBaseRunID := rid
-	decisionFinishID := eventID
+	workflowTaskFinishID := eventID
 	var err error
 	if resetType != "" {
-		resetBaseRunID, decisionFinishID, err = getResetEventIDByType(ctx, c, resetType, namespace, wid, rid, frontendClient)
+		resetBaseRunID, workflowTaskFinishID, err = getResetEventIDByType(ctx, c, resetType, namespace, wid, rid, frontendClient)
 		if err != nil {
 			ErrorAndExit("getResetEventIDByType failed", err)
 		}
 	}
 	resp, err := frontendClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      resetBaseRunID,
 		},
-		Reason:                fmt.Sprintf("%v:%v", getCurrentUserFromEnv(), reason),
-		DecisionFinishEventId: decisionFinishID,
-		RequestId:             uuid.New(),
+		Reason:                    fmt.Sprintf("%v:%v", getCurrentUserFromEnv(), reason),
+		WorkflowTaskFinishEventId: workflowTaskFinishID,
+		RequestId:                 uuid.New(),
 	})
 	if err != nil {
 		ErrorAndExit("reset failed", err)
@@ -1421,7 +1406,7 @@ func ResetWorkflow(c *cli.Context) {
 	prettyPrintJSONObject(resp)
 }
 
-func processResets(c *cli.Context, namespace string, wes chan executionpb.WorkflowExecution, done chan bool, wg *sync.WaitGroup, params batchResetParamsType) {
+func processResets(c *cli.Context, namespace string, wes chan commonpb.WorkflowExecution, done chan bool, wg *sync.WaitGroup, params batchResetParamsType) {
 	for {
 		select {
 		case we := <-wes:
@@ -1493,7 +1478,7 @@ func ResetInBatch(c *cli.Context) {
 
 	wg := &sync.WaitGroup{}
 
-	wes := make(chan executionpb.WorkflowExecution)
+	wes := make(chan commonpb.WorkflowExecution)
 	done := make(chan bool)
 	for i := 0; i < parallel; i++ {
 		wg.Add(1)
@@ -1562,7 +1547,7 @@ func ResetInBatch(c *cli.Context) {
 				continue
 			}
 
-			wes <- executionpb.WorkflowExecution{
+			wes <- commonpb.WorkflowExecution{
 				WorkflowId: wid,
 				RunId:      rid,
 			}
@@ -1571,7 +1556,7 @@ func ResetInBatch(c *cli.Context) {
 		wfClient := getWorkflowClient(c)
 		pageSize := 1000
 		var nextPageToken []byte
-		var result []*executionpb.WorkflowExecutionInfo
+		var result []*workflowpb.WorkflowExecutionInfo
 		for {
 			result, nextPageToken = scanWorkflowExecutions(wfClient, pageSize, nextPageToken, query, c)
 			for _, we := range result {
@@ -1583,7 +1568,7 @@ func ResetInBatch(c *cli.Context) {
 					continue
 				}
 
-				wes <- executionpb.WorkflowExecution{
+				wes <- commonpb.WorkflowExecution{
 					WorkflowId: wid,
 					RunId:      rid,
 				}
@@ -1625,7 +1610,7 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 	frontendClient := cFactory.FrontendClient(c)
 	resp, err := frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 		},
 	})
@@ -1642,43 +1627,43 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 		rid = currentRunID
 	}
 
-	if resp.WorkflowExecutionInfo.GetStatus() == executionpb.WorkflowExecutionStatus_Running || resp.WorkflowExecutionInfo.CloseTime == nil {
+	if resp.WorkflowExecutionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING || resp.WorkflowExecutionInfo.CloseTime == nil {
 		if params.skipOpen {
 			fmt.Println("skip because current run is open: ", wid, rid, currentRunID)
-			//skip and not terminate current if open
+			// skip and not terminate current if open
 			return nil
 		}
 	}
 
 	if params.nonDeterministicOnly {
-		isLDN, err := isLastEventDecisionTaskFailedWithNonDeterminism(ctx, namespace, wid, rid, frontendClient)
+		isLDN, err := isLastEventWorkflowTaskFailedWithNonDeterminism(ctx, namespace, wid, rid, frontendClient)
 		if err != nil {
-			return printErrorAndReturn("check isLastEventDecisionTaskFailedWithNonDeterminism failed", err)
+			return printErrorAndReturn("check isLastEventWorkflowTaskFailedWithNonDeterminism failed", err)
 		}
 		if !isLDN {
-			fmt.Println("skip because last event is not DecisionTaskFailedWithNonDeterminism")
+			fmt.Println("skip because last event is not WorkflowTaskFailedWithNonDeterminism")
 			return nil
 		}
 	}
 
-	resetBaseRunID, decisionFinishID, err := getResetEventIDByType(ctx, c, params.resetType, namespace, wid, rid, frontendClient)
+	resetBaseRunID, workflowTaskFinishID, err := getResetEventIDByType(ctx, c, params.resetType, namespace, wid, rid, frontendClient)
 	if err != nil {
 		return printErrorAndReturn("getResetEventIDByType failed", err)
 	}
-	fmt.Println("DecisionFinishEventId for reset:", wid, rid, resetBaseRunID, decisionFinishID)
+	fmt.Println("WorkflowTaskFinishEventId for reset:", wid, rid, resetBaseRunID, workflowTaskFinishID)
 
 	if params.dryRun {
-		fmt.Printf("dry run to reset wid: %v, rid:%v to baseRunId:%v, eventId:%v \n", wid, rid, resetBaseRunID, decisionFinishID)
+		fmt.Printf("dry run to reset wid: %v, rid:%v to baseRunId:%v, eventId:%v \n", wid, rid, resetBaseRunID, workflowTaskFinishID)
 	} else {
 		resp2, err := frontendClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 			Namespace: namespace,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: wid,
 				RunId:      resetBaseRunID,
 			},
-			DecisionFinishEventId: decisionFinishID,
-			RequestId:             uuid.New(),
-			Reason:                fmt.Sprintf("%v:%v", getCurrentUserFromEnv(), params.reason),
+			WorkflowTaskFinishEventId: workflowTaskFinishID,
+			RequestId:                 uuid.New(),
+			Reason:                    fmt.Sprintf("%v:%v", getCurrentUserFromEnv(), params.reason),
 		})
 
 		if err != nil {
@@ -1690,10 +1675,10 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 	return nil
 }
 
-func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (bool, error) {
+func isLastEventWorkflowTaskFailedWithNonDeterminism(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (bool, error) {
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -1701,7 +1686,7 @@ func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namesp
 		NextPageToken:   nil,
 	}
 
-	var firstEvent, decisionFailed *eventpb.HistoryEvent
+	var firstEvent, workflowTaskFailedEvent *historypb.HistoryEvent
 	for {
 		resp, err := frontendClient.GetWorkflowExecutionHistory(ctx, req)
 		if err != nil {
@@ -1711,10 +1696,10 @@ func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namesp
 			if firstEvent == nil {
 				firstEvent = e
 			}
-			if e.GetEventType() == eventpb.EventType_DecisionTaskFailed {
-				decisionFailed = e
-			} else if e.GetEventType() == eventpb.EventType_DecisionTaskCompleted {
-				decisionFailed = nil
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
+				workflowTaskFailedEvent = e
+			} else if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+				workflowTaskFailedEvent = nil
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
@@ -1724,18 +1709,12 @@ func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namesp
 		}
 	}
 
-	if decisionFailed != nil {
-		attr := decisionFailed.GetDecisionTaskFailedEventAttributes()
+	if workflowTaskFailedEvent != nil {
+		attr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
 
-		var details string
-		err := payloads.Decode(attr.GetDetails(), &details)
-		if err != nil {
-			ErrorAndExit("Unable to decode details.", err)
-		}
-
-		if attr.GetCause() == eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure ||
-			strings.Contains(details, "nondeterministic") {
-			fmt.Printf("found non determnistic workflow wid:%v, rid:%v, orignalStartTime:%v \n", wid, rid, time.Unix(0, firstEvent.GetTimestamp()))
+		if attr.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE ||
+			strings.Contains(attr.GetFailure().GetMessage(), "nondeterministic") {
+			fmt.Printf("found non determnistic workflow wid:%v, rid:%v, orignalStartTime:%v \n", wid, rid, timestamp.TimeValue(firstEvent.GetEventTime()))
 			return true, nil
 		}
 	}
@@ -1743,27 +1722,27 @@ func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namesp
 	return false, nil
 }
 
-func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskFinishID int64, err error) {
 	fmt.Println("resetType:", resetType)
 	switch resetType {
-	case "LastDecisionCompleted":
-		resetBaseRunID, decisionFinishID, err = getLastDecisionCompletedID(ctx, namespace, wid, rid, frontendClient)
+	case "LastWorkflowTask":
+		resetBaseRunID, workflowTaskFinishID, err = getLastWorkflowTaskEventID(ctx, namespace, wid, rid, frontendClient)
 		if err != nil {
 			return
 		}
 	case "LastContinuedAsNew":
-		resetBaseRunID, decisionFinishID, err = getLastContinueAsNewID(ctx, namespace, wid, rid, frontendClient)
+		resetBaseRunID, workflowTaskFinishID, err = getLastContinueAsNewID(ctx, namespace, wid, rid, frontendClient)
 		if err != nil {
 			return
 		}
-	case "FirstDecisionCompleted":
-		resetBaseRunID, decisionFinishID, err = getFirstDecisionCompletedID(ctx, namespace, wid, rid, frontendClient)
+	case "FirstWorkflowTask":
+		resetBaseRunID, workflowTaskFinishID, err = getFirstWorkflowTaskEventID(ctx, namespace, wid, rid, frontendClient)
 		if err != nil {
 			return
 		}
 	case "BadBinary":
 		binCheckSum := c.String(FlagResetBadBinaryChecksum)
-		resetBaseRunID, decisionFinishID, err = getBadDecisionCompletedID(ctx, namespace, wid, rid, binCheckSum, frontendClient)
+		resetBaseRunID, workflowTaskFinishID, err = getBadWorkflowTaskCompletedID(ctx, namespace, wid, rid, binCheckSum, frontendClient)
 		if err != nil {
 			return
 		}
@@ -1773,11 +1752,12 @@ func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, names
 	return
 }
 
-func getLastDecisionCompletedID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+// Returns event id of the last completed task or id of the next event after scheduled task.
+func getLastWorkflowTaskEventID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskEventID int64, err error) {
 	resetBaseRunID = rid
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -1791,8 +1771,10 @@ func getLastDecisionCompletedID(ctx context.Context, namespace, wid, rid string,
 			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
-			if e.GetEventType() == eventpb.EventType_DecisionTaskCompleted {
-				decisionFinishID = e.GetEventId()
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+				workflowTaskEventID = e.GetEventId()
+			} else if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+				workflowTaskEventID = e.GetEventId() + 1
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
@@ -1801,17 +1783,17 @@ func getLastDecisionCompletedID(ctx context.Context, namespace, wid, rid string,
 			break
 		}
 	}
-	if decisionFinishID == 0 {
-		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", fmt.Errorf("no DecisionFinishID"))
+	if workflowTaskEventID == 0 {
+		return "", 0, printErrorAndReturn("Get LastWorkflowTaskID failed", fmt.Errorf("unable to find any scheduled or completed task"))
 	}
 	return
 }
 
-func getBadDecisionCompletedID(ctx context.Context, namespace, wid, rid, binChecksum string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getBadWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid, binChecksum string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskCompletedID int64, err error) {
 	resetBaseRunID = rid
 	resp, err := frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -1826,36 +1808,41 @@ func getBadDecisionCompletedID(ctx context.Context, namespace, wid, rid, binChec
 		},
 	}, resp.WorkflowExecutionInfo.AutoResetPoints)
 	if p != nil {
-		decisionFinishID = p.GetFirstDecisionCompletedId()
+		workflowTaskCompletedID = p.GetFirstWorkflowTaskCompletedId()
 	}
 
-	if decisionFinishID == 0 {
-		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", serviceerror.NewInvalidArgument("no DecisionFinishID"))
+	if workflowTaskCompletedID == 0 {
+		return "", 0, printErrorAndReturn("Get BadWorkflowTaskCompletedID failed", serviceerror.NewInvalidArgument("no WorkflowTaskCompletedID"))
 	}
 	return
 }
 
-func getFirstDecisionCompletedID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+// Returns id of the first workflow task completed event or if it doesn't exist then id of the event after task scheduled event.
+func getFirstWorkflowTaskEventID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskEventID int64, err error) {
 	resetBaseRunID = rid
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
 		MaximumPageSize: 1000,
 		NextPageToken:   nil,
 	}
-
 	for {
 		resp, err := frontendClient.GetWorkflowExecutionHistory(ctx, req)
 		if err != nil {
 			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
-			if e.GetEventType() == eventpb.EventType_DecisionTaskCompleted {
-				decisionFinishID = e.GetEventId()
-				return resetBaseRunID, decisionFinishID, nil
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+				workflowTaskEventID = e.GetEventId()
+				return resetBaseRunID, workflowTaskEventID, nil
+			}
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+				if workflowTaskEventID == 0 {
+					workflowTaskEventID = e.GetEventId() + 1
+				}
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
@@ -1864,17 +1851,17 @@ func getFirstDecisionCompletedID(ctx context.Context, namespace, wid, rid string
 			break
 		}
 	}
-	if decisionFinishID == 0 {
-		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", fmt.Errorf("no DecisionFinishID"))
+	if workflowTaskEventID == 0 {
+		return "", 0, printErrorAndReturn("Get FirstWorkflowTaskID failed", fmt.Errorf("unable to find any scheduled or completed task"))
 	}
 	return
 }
 
-func getLastContinueAsNewID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getLastContinueAsNewID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskCompletedID int64, err error) {
 	// get first event
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -1893,7 +1880,7 @@ func getLastContinueAsNewID(ctx context.Context, namespace, wid, rid string, fro
 
 	req = &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      resetBaseRunID,
 		},
@@ -1906,8 +1893,8 @@ func getLastContinueAsNewID(ctx context.Context, namespace, wid, rid string, fro
 			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
-			if e.GetEventType() == eventpb.EventType_DecisionTaskCompleted {
-				decisionFinishID = e.GetEventId()
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+				workflowTaskCompletedID = e.GetEventId()
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
@@ -1916,8 +1903,8 @@ func getLastContinueAsNewID(ctx context.Context, namespace, wid, rid string, fro
 			break
 		}
 	}
-	if decisionFinishID == 0 {
-		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", fmt.Errorf("no DecisionFinishID"))
+	if workflowTaskCompletedID == 0 {
+		return "", 0, printErrorAndReturn("Get LastContinueAsNewID failed", fmt.Errorf("no WorkflowTaskCompletedID"))
 	}
 	return
 }
@@ -1973,9 +1960,15 @@ func FailActivity(c *cli.Context) {
 		WorkflowId: wid,
 		RunId:      rid,
 		ActivityId: activityID,
-		Reason:     reason,
-		Details:    payloads.EncodeString(detail),
-		Identity:   identity,
+		Failure: &failurepb.Failure{
+			Message: reason,
+			Source:  "CLI",
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				NonRetryable: true,
+				Details:      payloads.EncodeString(detail),
+			}},
+		},
+		Identity: identity,
 	})
 	if err != nil {
 		ErrorAndExit("Failing activity failed", err)

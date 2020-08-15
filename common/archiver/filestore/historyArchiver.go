@@ -45,16 +45,16 @@ import (
 	"path"
 	"strconv"
 
-	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/serviceerror"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/service/config"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/service/config"
 )
 
 const (
@@ -126,20 +126,20 @@ func (h *historyArchiver) Archive(
 ) (err error) {
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	defer func() {
-		if err != nil && !common.IsPersistenceTransientError(err) && featureCatalog.NonRetriableError != nil {
-			err = featureCatalog.NonRetriableError()
+		if err != nil && !common.IsPersistenceTransientError(err) && featureCatalog.NonRetryableError != nil {
+			err = featureCatalog.NonRetryableError()
 		}
 	}()
 
 	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.container.Logger, request, URI.String())
 
 	if err := h.ValidateURI(URI); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
 		return err
 	}
 
 	if err := archiver.ValidateHistoryArchiveRequest(request); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidArchiveRequest), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidArchiveRequest), tag.Error(err))
 		return err
 	}
 
@@ -148,13 +148,13 @@ func (h *historyArchiver) Archive(
 		historyIterator = archiver.NewHistoryIterator(request, h.container.HistoryV2Manager, targetHistoryBlobSize)
 	}
 
-	var historyBatches []*eventpb.History
+	var historyBatches []*historypb.History
 	for historyIterator.HasNext() {
 		historyBlob, err := getNextHistoryBlob(ctx, historyIterator)
 		if err != nil {
 			logger := logger.WithTags(tag.ArchivalArchiveFailReason(archiver.ErrReasonReadHistory), tag.Error(err))
 			if !common.IsPersistenceTransientError(err) {
-				logger.Error(archiver.ArchiveNonRetriableErrorMsg)
+				logger.Error(archiver.ArchiveNonRetryableErrorMsg)
 			} else {
 				logger.Error(archiver.ArchiveTransientErrorMsg)
 			}
@@ -162,7 +162,7 @@ func (h *historyArchiver) Archive(
 		}
 
 		if historyMutated(request, historyBlob.Body, historyBlob.Header.IsLast) {
-			logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonHistoryMutated))
+			logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonHistoryMutated))
 			return archiver.ErrHistoryMutated
 		}
 
@@ -172,19 +172,19 @@ func (h *historyArchiver) Archive(
 	encoder := codec.NewJSONPBEncoder()
 	encodedHistoryBatches, err := encoder.EncodeHistories(historyBatches)
 	if err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeHistory), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeHistory), tag.Error(err))
 		return err
 	}
 
 	dirPath := URI.Path()
 	if err = mkdirAll(dirPath, h.dirMode); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errMakeDirectory), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errMakeDirectory), tag.Error(err))
 		return err
 	}
 
 	filename := constructHistoryFilename(request.NamespaceID, request.WorkflowID, request.RunID, request.CloseFailoverVersion)
 	if err := writeFile(path.Join(dirPath, filename), encodedHistoryBatches, h.fileMode); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return err
 	}
 

@@ -29,13 +29,13 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/cassandra"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cassandra"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/service/config"
 )
 
 const (
@@ -43,15 +43,16 @@ const (
 )
 
 const (
-	templateEnqueueMessageQuery      = `INSERT INTO queue (queue_type, message_id, message_payload) VALUES(?, ?, ?) IF NOT EXISTS`
-	templateGetLastMessageIDQuery    = `SELECT message_id FROM queue WHERE queue_type=? ORDER BY message_id DESC LIMIT 1`
-	templateGetMessagesQuery         = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? LIMIT ?`
-	templateGetMessagesFromDLQQuery  = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
-	templateDeleteMessagesQuery      = `DELETE FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
-	templateDeleteMessageQuery       = `DELETE FROM queue WHERE queue_type = ? and message_id = ?`
-	templateGetQueueMetadataQuery    = `SELECT cluster_ack_level, version FROM queue_metadata WHERE queue_type = ?`
-	templateInsertQueueMetadataQuery = `INSERT INTO queue_metadata (queue_type, cluster_ack_level, version) VALUES(?, ?, ?) IF NOT EXISTS`
-	templateUpdateQueueMetadataQuery = `UPDATE queue_metadata SET cluster_ack_level = ?, version = ? WHERE queue_type = ? IF version = ?`
+	templateEnqueueMessageQuery       = `INSERT INTO queue (queue_type, message_id, message_payload) VALUES(?, ?, ?) IF NOT EXISTS`
+	templateGetLastMessageIDQuery     = `SELECT message_id FROM queue WHERE queue_type=? ORDER BY message_id DESC LIMIT 1`
+	templateGetMessagesQuery          = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? LIMIT ?`
+	templateGetMessagesFromDLQQuery   = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
+	templateDeleteMessagesBeforeQuery = `DELETE FROM queue WHERE queue_type = ? and message_id < ?`
+	templateDeleteMessagesQuery       = `DELETE FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
+	templateDeleteMessageQuery        = `DELETE FROM queue WHERE queue_type = ? and message_id = ?`
+	templateGetQueueMetadataQuery     = `SELECT cluster_ack_level, version FROM queue_metadata WHERE queue_type = ?`
+	templateInsertQueueMetadataQuery  = `INSERT INTO queue_metadata (queue_type, cluster_ack_level, version) VALUES(?, ?, ?) IF NOT EXISTS`
+	templateUpdateQueueMetadataQuery  = `UPDATE queue_metadata SET cluster_ack_level = ?, version = ? WHERE queue_type = ? IF version = ?`
 )
 
 type (
@@ -79,8 +80,8 @@ func newQueue(
 ) (persistence.Queue, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = gocql.LocalQuorum
-	cluster.SerialConsistency = gocql.LocalSerial
+	cluster.Consistency = cfg.Consistency.GetConsistency()
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()
@@ -199,7 +200,7 @@ func (q *cassandraQueue) ReadMessages(
 	lastMessageID int64,
 	maxCount int,
 ) ([]*persistence.QueueMessage, error) {
-	// Reading replication tasks need to be quorum level consistent, otherwise we could loose task
+	// Reading replication tasks need to be quorum level consistent, otherwise we could lose tasks
 	query := q.session.Query(templateGetMessagesQuery,
 		q.queueType,
 		lastMessageID,
@@ -233,7 +234,7 @@ func (q *cassandraQueue) ReadMessagesFromDLQ(
 	pageSize int,
 	pageToken []byte,
 ) ([]*persistence.QueueMessage, []byte, error) {
-	// Reading replication tasks need to be quorum level consistent, otherwise we could loose task
+	// Reading replication tasks need to be quorum level consistent, otherwise we could lose tasks
 	// Use negative queue type as the dlq type
 	query := q.session.Query(templateGetMessagesFromDLQQuery,
 		q.getDLQTypeFromQueueType(),
@@ -283,11 +284,10 @@ func (q *cassandraQueue) DeleteMessagesBefore(
 	messageID int64,
 ) error {
 
-	query := q.session.Query(templateDeleteMessagesQuery, q.queueType, messageID)
+	query := q.session.Query(templateDeleteMessagesBeforeQuery, q.queueType, messageID)
 	if err := query.Exec(); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err))
 	}
-
 	return nil
 }
 

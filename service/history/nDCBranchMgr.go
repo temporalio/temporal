@@ -30,12 +30,14 @@ import (
 	"context"
 
 	"github.com/pborman/uuid"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/persistence"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
@@ -210,7 +212,7 @@ func (r *nDCBranchMgrImpl) verifyEventsOrder(
 	}
 	if incomingFirstEventID > nextEventID {
 		executionInfo := r.mutableState.GetExecutionInfo()
-		return false, newNDCRetryTaskErrorWithHint(
+		return false, serviceerrors.NewRetryTaskV2(
 			outOfOrderDeliveryMessage,
 			executionInfo.NamespaceID,
 			executionInfo.WorkflowID,

@@ -28,43 +28,43 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 const (
 	createNamespaceQuery = `INSERT INTO 
- namespaces (id, name, is_global, data, data_encoding, notification_version)
- VALUES($1, $2, $3, $4, $5, $6)`
+ namespaces (partition_id, id, name, is_global, data, data_encoding, notification_version)
+ VALUES($1, $2, $3, $4, $5, $6, $7)`
 
 	updateNamespaceQuery = `UPDATE namespaces 
  SET name = $1, data = $2, data_encoding = $3, notification_version = $4
- WHERE shard_id=54321 AND id = $5`
+ WHERE partition_id=54321 AND id = $5`
 
 	getNamespacePart = `SELECT id, name, is_global, data, data_encoding, notification_version FROM namespaces`
 
-	getNamespaceByIDQuery   = getNamespacePart + ` WHERE shard_id=$1 AND id = $2`
-	getNamespaceByNameQuery = getNamespacePart + ` WHERE shard_id=$1 AND name = $2`
+	getNamespaceByIDQuery   = getNamespacePart + ` WHERE partition_id=$1 AND id = $2`
+	getNamespaceByNameQuery = getNamespacePart + ` WHERE partition_id=$1 AND name = $2`
 
-	listNamespacesQuery      = getNamespacePart + ` WHERE shard_id=$1 ORDER BY id LIMIT $2`
-	listNamespacesRangeQuery = getNamespacePart + ` WHERE shard_id=$1 AND id > $2 ORDER BY id LIMIT $3`
+	listNamespacesQuery      = getNamespacePart + ` WHERE partition_id=$1 ORDER BY id LIMIT $2`
+	listNamespacesRangeQuery = getNamespacePart + ` WHERE partition_id=$1 AND id > $2 ORDER BY id LIMIT $3`
 
-	deleteNamespaceByIDQuery   = `DELETE FROM namespaces WHERE shard_id=$1 AND id = $2`
-	deleteNamespaceByNameQuery = `DELETE FROM namespaces WHERE shard_id=$1 AND name = $2`
+	deleteNamespaceByIDQuery   = `DELETE FROM namespaces WHERE partition_id=$1 AND id = $2`
+	deleteNamespaceByNameQuery = `DELETE FROM namespaces WHERE partition_id=$1 AND name = $2`
 
-	getNamespaceMetadataQuery    = `SELECT notification_version FROM namespace_metadata`
-	lockNamespaceMetadataQuery   = `SELECT notification_version FROM namespace_metadata FOR UPDATE`
-	updateNamespaceMetadataQuery = `UPDATE namespace_metadata SET notification_version = $1 WHERE notification_version = $2`
+	getNamespaceMetadataQuery    = `SELECT notification_version FROM namespace_metadata WHERE partition_id=$1`
+	lockNamespaceMetadataQuery   = `SELECT notification_version FROM namespace_metadata WHERE partition_id=$1 FOR UPDATE`
+	updateNamespaceMetadataQuery = `UPDATE namespace_metadata SET notification_version = $1 WHERE notification_version = $2 AND partition_id=$3`
 )
 
 const (
-	shardID = 54321
+	partitionID = 54321
 )
 
 var errMissingArgs = errors.New("missing one or more args for API")
 
 // InsertIntoNamespace inserts a single row into namespaces table
 func (pdb *db) InsertIntoNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) {
-	return pdb.conn.Exec(createNamespaceQuery, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding, row.NotificationVersion)
+	return pdb.conn.Exec(createNamespaceQuery, partitionID, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding, row.NotificationVersion)
 }
 
 // UpdateNamespace updates a single row in namespaces table
@@ -89,9 +89,9 @@ func (pdb *db) selectFromNamespace(filter *sqlplugin.NamespaceFilter) ([]sqlplug
 	var row sqlplugin.NamespaceRow
 	switch {
 	case filter.ID != nil:
-		err = pdb.conn.Get(&row, getNamespaceByIDQuery, shardID, *filter.ID)
+		err = pdb.conn.Get(&row, getNamespaceByIDQuery, partitionID, *filter.ID)
 	case filter.Name != nil:
-		err = pdb.conn.Get(&row, getNamespaceByNameQuery, shardID, *filter.Name)
+		err = pdb.conn.Get(&row, getNamespaceByNameQuery, partitionID, *filter.Name)
 	}
 	if err != nil {
 		return nil, err
@@ -104,9 +104,9 @@ func (pdb *db) selectAllFromNamespace(filter *sqlplugin.NamespaceFilter) ([]sqlp
 	var rows []sqlplugin.NamespaceRow
 	switch {
 	case filter.GreaterThanID != nil:
-		err = pdb.conn.Select(&rows, listNamespacesRangeQuery, shardID, *filter.GreaterThanID, *filter.PageSize)
+		err = pdb.conn.Select(&rows, listNamespacesRangeQuery, partitionID, *filter.GreaterThanID, *filter.PageSize)
 	default:
-		err = pdb.conn.Select(&rows, listNamespacesQuery, shardID, filter.PageSize)
+		err = pdb.conn.Select(&rows, listNamespacesQuery, partitionID, filter.PageSize)
 	}
 	return rows, err
 }
@@ -117,9 +117,9 @@ func (pdb *db) DeleteFromNamespace(filter *sqlplugin.NamespaceFilter) (sql.Resul
 	var result sql.Result
 	switch {
 	case filter.ID != nil:
-		result, err = pdb.conn.Exec(deleteNamespaceByIDQuery, shardID, filter.ID)
+		result, err = pdb.conn.Exec(deleteNamespaceByIDQuery, partitionID, filter.ID)
 	default:
-		result, err = pdb.conn.Exec(deleteNamespaceByNameQuery, shardID, filter.Name)
+		result, err = pdb.conn.Exec(deleteNamespaceByNameQuery, partitionID, filter.Name)
 	}
 	return result, err
 }
@@ -127,18 +127,18 @@ func (pdb *db) DeleteFromNamespace(filter *sqlplugin.NamespaceFilter) (sql.Resul
 // LockNamespaceMetadata acquires a write lock on a single row in namespace_metadata table
 func (pdb *db) LockNamespaceMetadata() error {
 	var row sqlplugin.NamespaceMetadataRow
-	err := pdb.conn.Get(&row.NotificationVersion, lockNamespaceMetadataQuery)
+	err := pdb.conn.Get(&row.NotificationVersion, lockNamespaceMetadataQuery, partitionID)
 	return err
 }
 
 // SelectFromNamespaceMetadata reads a single row in namespace_metadata table
 func (pdb *db) SelectFromNamespaceMetadata() (*sqlplugin.NamespaceMetadataRow, error) {
 	var row sqlplugin.NamespaceMetadataRow
-	err := pdb.conn.Get(&row.NotificationVersion, getNamespaceMetadataQuery)
+	err := pdb.conn.Get(&row.NotificationVersion, getNamespaceMetadataQuery, partitionID)
 	return &row, err
 }
 
 // UpdateNamespaceMetadata updates a single row in namespace_metadata table
 func (pdb *db) UpdateNamespaceMetadata(row *sqlplugin.NamespaceMetadataRow) (sql.Result, error) {
-	return pdb.conn.Exec(updateNamespaceMetadataQuery, row.NotificationVersion+1, row.NotificationVersion)
+	return pdb.conn.Exec(updateNamespaceMetadataQuery, row.NotificationVersion+1, row.NotificationVersion, partitionID)
 }

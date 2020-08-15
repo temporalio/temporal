@@ -29,18 +29,18 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
-	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
+	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 // Service represents the matching service
@@ -50,6 +50,7 @@ type Service struct {
 	status  int32
 	handler *Handler
 	config  *Config
+	params  *resource.BootstrapParams
 
 	server *grpc.Server
 }
@@ -81,6 +82,7 @@ func NewService(
 		Resource: serviceResource,
 		status:   common.DaemonStatusInitialized,
 		config:   serviceConfig,
+		params:   params,
 	}, nil
 }
 
@@ -99,7 +101,12 @@ func (s *Service) Start() {
 	s.Resource.Start()
 	s.handler.Start()
 
-	s.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
+	opts, err := s.params.RPCFactory.GetInternodeGRPCServerOptions()
+	if err != nil {
+		logger.Fatal("creating grpc server options failed", tag.Error(err))
+	}
+	opts = append(opts, grpc.UnaryInterceptor(interceptor))
+	s.server = grpc.NewServer(opts...)
 	nilCheckHandler := NewNilCheckHandler(s.handler)
 	matchingservice.RegisterMatchingServiceServer(s.server, nilCheckHandler)
 	healthpb.RegisterHealthServer(s.server, s.handler)
@@ -123,7 +130,8 @@ func (s *Service) Stop() {
 	s.GetLogger().Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	time.Sleep(s.config.ShutdownDrainDuration())
 
-	s.server.GracefulStop()
+	// TODO: Change this to GracefulStop when integration tests are refactored.
+	s.server.Stop()
 
 	s.handler.Stop()
 	s.Resource.Stop()

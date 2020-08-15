@@ -31,18 +31,19 @@ import (
 	"math/rand"
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	sdkclient "go.temporal.io/temporal/client"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	sdkclient "go.temporal.io/sdk/client"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
-	carchiver "github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/provider"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/quotas"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	carchiver "go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -70,14 +71,14 @@ type (
 		BranchToken          []byte
 		NextEventID          int64
 		CloseFailoverVersion int64
-		URI                  string // should be historyURI, but keep the existing name for backward compatibility
+		HistoryURI           string
 
 		// visibility archival
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		CloseTimestamp     int64
-		Status             executionpb.WorkflowExecutionStatus
+		Status             enumspb.WorkflowExecutionStatus
 		HistoryLength      int64
 		Memo               *commonpb.Memo
 		SearchAttributes   map[string]*commonpb.Payload
@@ -202,7 +203,7 @@ func (c *client) archiveHistoryInline(ctx context.Context, request *ClientReques
 		errCh <- err
 	}()
 	c.metricsScope.IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
-	URI, err := carchiver.NewURI(request.ArchiveRequest.URI)
+	URI, err := carchiver.NewURI(request.ArchiveRequest.HistoryURI)
 	if err != nil {
 		return
 	}
@@ -252,14 +253,14 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		WorkflowId:         request.ArchiveRequest.WorkflowID,
 		RunId:              request.ArchiveRequest.RunID,
 		WorkflowTypeName:   request.ArchiveRequest.WorkflowTypeName,
-		StartTimestamp:     request.ArchiveRequest.StartTimestamp,
-		ExecutionTimestamp: request.ArchiveRequest.ExecutionTimestamp,
-		CloseTimestamp:     request.ArchiveRequest.CloseTimestamp,
+		StartTime:          timestamp.UnixOrZeroTimePtr(request.ArchiveRequest.StartTimestamp),
+		ExecutionTime:      timestamp.UnixOrZeroTimePtr(request.ArchiveRequest.ExecutionTimestamp),
+		CloseTime:          timestamp.UnixOrZeroTimePtr(request.ArchiveRequest.CloseTimestamp),
 		Status:             request.ArchiveRequest.Status,
 		HistoryLength:      request.ArchiveRequest.HistoryLength,
 		Memo:               request.ArchiveRequest.Memo,
 		SearchAttributes:   convertSearchAttributesToString(request.ArchiveRequest.SearchAttributes),
-		HistoryArchivalURI: request.ArchiveRequest.URI,
+		HistoryArchivalUri: request.ArchiveRequest.HistoryURI,
 	})
 }
 
@@ -274,10 +275,10 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 	workflowID := fmt.Sprintf("%v-%v", workflowIDPrefix, rand.Intn(c.numWorkflows()))
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                       workflowID,
-		TaskList:                 decisionTaskList,
+		TaskQueue:                workflowTaskQueue,
 		WorkflowExecutionTimeout: workflowRunTimeout,
 		WorkflowTaskTimeout:      workflowTaskTimeout,
-		WorkflowIDReusePolicy:    sdkclient.WorkflowIDReusePolicyAllowDuplicate,
+		WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()

@@ -27,9 +27,9 @@ package history
 import (
 	"fmt"
 
-	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/checksum"
+	checksumproto "go.temporal.io/server/api/checksum/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/checksum"
 )
 
 const (
@@ -60,22 +60,22 @@ func newMutableStateChecksumPayload(ms mutableState) *checksumproto.MutableState
 	executionInfo := ms.GetExecutionInfo()
 	replicationState := ms.GetReplicationState()
 	payload := &checksumproto.MutableStateChecksumPayload{
-		CancelRequested:      executionInfo.CancelRequested,
-		State:                int32(executionInfo.State),
-		LastFirstEventId:     executionInfo.LastFirstEventID,
-		NextEventId:          executionInfo.NextEventID,
-		LastProcessedEventId: executionInfo.LastProcessedEvent,
-		SignalCount:          int64(executionInfo.SignalCount),
-		DecisionAttempt:      int32(executionInfo.DecisionAttempt),
-		DecisionScheduledId:  executionInfo.DecisionScheduleID,
-		DecisionStartedId:    executionInfo.DecisionStartedID,
-		DecisionVersion:      executionInfo.DecisionVersion,
-		StickyTaskListName:   executionInfo.StickyTaskList,
+		CancelRequested:         executionInfo.CancelRequested,
+		State:                   executionInfo.State,
+		LastFirstEventId:        executionInfo.LastFirstEventID,
+		NextEventId:             executionInfo.NextEventID,
+		LastProcessedEventId:    executionInfo.LastProcessedEvent,
+		SignalCount:             int64(executionInfo.SignalCount),
+		WorkflowTaskAttempt:     int32(executionInfo.WorkflowTaskAttempt),
+		WorkflowTaskScheduledId: executionInfo.WorkflowTaskScheduleID,
+		WorkflowTaskStartedId:   executionInfo.WorkflowTaskStartedID,
+		WorkflowTaskVersion:     executionInfo.WorkflowTaskVersion,
+		StickyTaskQueueName:     executionInfo.StickyTaskQueue,
 	}
 
 	if replicationState != nil {
 		payload.LastWriteVersion = replicationState.LastWriteVersion
-		payload.LastWriteEventId = replicationState.LastWriteEventID
+		payload.LastWriteEventId = replicationState.LastWriteEventId
 	}
 
 	versionHistories := ms.GetVersionHistories()

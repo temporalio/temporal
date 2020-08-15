@@ -25,8 +25,8 @@
 package history
 
 import (
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/persistence"
 )
 
 type transactionPolicy int
@@ -45,10 +45,10 @@ func (policy transactionPolicy) ptr() *transactionPolicy {
 // always use make(type, 0, len(input))
 
 func convertPendingActivityInfos(
-	inputs map[int64]*persistence.ActivityInfo,
-) []*persistence.ActivityInfo {
+	inputs map[int64]*persistenceblobs.ActivityInfo,
+) []*persistenceblobs.ActivityInfo {
 
-	outputs := make([]*persistence.ActivityInfo, 0, len(inputs))
+	outputs := make([]*persistenceblobs.ActivityInfo, 0, len(inputs))
 	for _, item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -56,10 +56,10 @@ func convertPendingActivityInfos(
 }
 
 func convertUpdateActivityInfos(
-	inputs map[*persistence.ActivityInfo]struct{},
-) []*persistence.ActivityInfo {
+	inputs map[*persistenceblobs.ActivityInfo]struct{},
+) []*persistenceblobs.ActivityInfo {
 
-	outputs := make([]*persistence.ActivityInfo, 0, len(inputs))
+	outputs := make([]*persistenceblobs.ActivityInfo, 0, len(inputs))
 	for item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -78,7 +78,7 @@ func convertDeleteActivityInfos(
 }
 
 func convertSyncActivityInfos(
-	activityInfos map[int64]*persistence.ActivityInfo,
+	activityInfos map[int64]*persistenceblobs.ActivityInfo,
 	inputs map[int64]struct{},
 ) []persistence.Task {
 	outputs := make([]persistence.Task, 0, len(inputs))
@@ -87,7 +87,7 @@ func convertSyncActivityInfos(
 		if ok {
 			outputs = append(outputs, &persistence.SyncActivityTask{
 				Version:     activityInfo.Version,
-				ScheduledID: activityInfo.ScheduleID,
+				ScheduledID: activityInfo.ScheduleId,
 			})
 		}
 	}
@@ -128,10 +128,10 @@ func convertDeleteTimerInfos(
 }
 
 func convertPendingChildExecutionInfos(
-	inputs map[int64]*persistence.ChildExecutionInfo,
-) []*persistence.ChildExecutionInfo {
+	inputs map[int64]*persistenceblobs.ChildExecutionInfo,
+) []*persistenceblobs.ChildExecutionInfo {
 
-	outputs := make([]*persistence.ChildExecutionInfo, 0, len(inputs))
+	outputs := make([]*persistenceblobs.ChildExecutionInfo, 0, len(inputs))
 	for _, item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -139,10 +139,10 @@ func convertPendingChildExecutionInfos(
 }
 
 func convertUpdateChildExecutionInfos(
-	inputs map[*persistence.ChildExecutionInfo]struct{},
-) []*persistence.ChildExecutionInfo {
+	inputs map[*persistenceblobs.ChildExecutionInfo]struct{},
+) []*persistenceblobs.ChildExecutionInfo {
 
-	outputs := make([]*persistence.ChildExecutionInfo, 0, len(inputs))
+	outputs := make([]*persistenceblobs.ChildExecutionInfo, 0, len(inputs))
 	for item := range inputs {
 		outputs = append(outputs, item)
 	}

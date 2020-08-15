@@ -25,7 +25,7 @@
 package dynamicconfig
 
 import (
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 // Key represents a key/property stored in dynamic config
@@ -44,30 +44,29 @@ var keys = map[Key]string{
 	unknownKey: "unknownKey",
 
 	// tests keys
-	testGetPropertyKey:                               "testGetPropertyKey",
-	testGetIntPropertyKey:                            "testGetIntPropertyKey",
-	testGetFloat64PropertyKey:                        "testGetFloat64PropertyKey",
-	testGetDurationPropertyKey:                       "testGetDurationPropertyKey",
-	testGetBoolPropertyKey:                           "testGetBoolPropertyKey",
-	testGetStringPropertyKey:                         "testGetStringPropertyKey",
-	testGetMapPropertyKey:                            "testGetMapPropertyKey",
-	testGetIntPropertyFilteredByNamespaceKey:         "testGetIntPropertyFilteredByNamespaceKey",
-	testGetDurationPropertyFilteredByNamespaceKey:    "testGetDurationPropertyFilteredByNamespaceKey",
-	testGetIntPropertyFilteredByTaskListInfoKey:      "testGetIntPropertyFilteredByTaskListInfoKey",
-	testGetDurationPropertyFilteredByTaskListInfoKey: "testGetDurationPropertyFilteredByTaskListInfoKey",
-	testGetBoolPropertyFilteredByTaskListInfoKey:     "testGetBoolPropertyFilteredByTaskListInfoKey",
+	testGetPropertyKey:                                "testGetPropertyKey",
+	testGetIntPropertyKey:                             "testGetIntPropertyKey",
+	testGetFloat64PropertyKey:                         "testGetFloat64PropertyKey",
+	testGetDurationPropertyKey:                        "testGetDurationPropertyKey",
+	testGetBoolPropertyKey:                            "testGetBoolPropertyKey",
+	testGetStringPropertyKey:                          "testGetStringPropertyKey",
+	testGetMapPropertyKey:                             "testGetMapPropertyKey",
+	testGetIntPropertyFilteredByNamespaceKey:          "testGetIntPropertyFilteredByNamespaceKey",
+	testGetDurationPropertyFilteredByNamespaceKey:     "testGetDurationPropertyFilteredByNamespaceKey",
+	testGetIntPropertyFilteredByTaskQueueInfoKey:      "testGetIntPropertyFilteredByTaskQueueInfoKey",
+	testGetDurationPropertyFilteredByTaskQueueInfoKey: "testGetDurationPropertyFilteredByTaskQueueInfoKey",
+	testGetBoolPropertyFilteredByNamespaceIDKey:       "testGetBoolPropertyFilteredByNamespaceIDKey",
+	testGetBoolPropertyFilteredByTaskQueueInfoKey:     "testGetBoolPropertyFilteredByTaskQueueInfoKey",
 
 	// system settings
 	EnableGlobalNamespace:                  "system.enableGlobalNamespace",
 	EnableNDC:                              "system.enableNDC",
-	EnableNewKafkaClient:                   "system.enableNewKafkaClient",
 	EnableVisibilitySampling:               "system.enableVisibilitySampling",
-	EnableReadFromClosedExecutionV2:        "system.enableReadFromClosedExecutionV2",
 	AdvancedVisibilityWritingMode:          "system.advancedVisibilityWritingMode",
 	EnableReadVisibilityFromES:             "system.enableReadVisibilityFromES",
-	HistoryArchivalStatus:                  "system.historyArchivalStatus",
+	HistoryArchivalState:                   "system.historyArchivalState",
 	EnableReadFromHistoryArchival:          "system.enableReadFromHistoryArchival",
-	VisibilityArchivalStatus:               "system.visibilityArchivalStatus",
+	VisibilityArchivalState:                "system.visibilityArchivalState",
 	EnableReadFromVisibilityArchival:       "system.enableReadFromVisibilityArchival",
 	EnableNamespaceNotActiveAutoForwarding: "system.enableNamespaceNotActiveAutoForwarding",
 	TransactionSizeLimit:                   "system.transactionSizeLimit",
@@ -78,6 +77,7 @@ var keys = map[Key]string{
 	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
 	EnableStickyQuery:                      "system.enableStickyQuery",
 	EnablePriorityTaskProcessor:            "system.enablePriorityTaskProcessor",
+	EnableAuthorization:                    "system.enableAuthorization",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -107,6 +107,8 @@ var keys = map[Key]string{
 	EnableClientVersionCheck:              "frontend.enableClientVersionCheck",
 	ValidSearchAttributes:                 "frontend.validSearchAttributes",
 	SendRawWorkflowHistory:                "frontend.sendRawWorkflowHistory",
+	FrontendEnableRPCReplication:          "frontend.enableRPCReplication",
+	FrontendEnableCleanupReplicationTask:  "frontend.enableCleanupReplicationTask",
 	SearchAttributesNumberOfKeysLimit:     "frontend.searchAttributesNumberOfKeysLimit",
 	SearchAttributesSizeOfValueLimit:      "frontend.searchAttributesSizeOfValueLimit",
 	SearchAttributesTotalSizeLimit:        "frontend.searchAttributesTotalSizeLimit",
@@ -123,14 +125,14 @@ var keys = map[Key]string{
 	MatchingLongPollExpirationInterval:      "matching.longPollExpirationInterval",
 	MatchingEnableSyncMatch:                 "matching.enableSyncMatch",
 	MatchingUpdateAckInterval:               "matching.updateAckInterval",
-	MatchingIdleTasklistCheckInterval:       "matching.idleTasklistCheckInterval",
-	MaxTasklistIdleTime:                     "matching.maxTasklistIdleTime",
+	MatchingIdleTaskqueueCheckInterval:      "matching.idleTaskqueueCheckInterval",
+	MaxTaskqueueIdleTime:                    "matching.maxTaskqueueIdleTime",
 	MatchingOutstandingTaskAppendsThreshold: "matching.outstandingTaskAppendsThreshold",
 	MatchingMaxTaskBatchSize:                "matching.maxTaskBatchSize",
 	MatchingMaxTaskDeleteBatchSize:          "matching.maxTaskDeleteBatchSize",
 	MatchingThrottledLogRPS:                 "matching.throttledLogRPS",
-	MatchingNumTasklistWritePartitions:      "matching.numTasklistWritePartitions",
-	MatchingNumTasklistReadPartitions:       "matching.numTasklistReadPartitions",
+	MatchingNumTaskqueueWritePartitions:     "matching.numTaskqueueWritePartitions",
+	MatchingNumTaskqueueReadPartitions:      "matching.numTaskqueueReadPartitions",
 	MatchingForwarderMaxOutstandingPolls:    "matching.forwarderMaxOutstandingPolls",
 	MatchingForwarderMaxOutstandingTasks:    "matching.forwarderMaxOutstandingTasks",
 	MatchingForwarderMaxRatePerSecond:       "matching.forwarderMaxRatePerSecond",
@@ -181,7 +183,7 @@ var keys = map[Key]string{
 	TimerProcessorEnablePriorityTaskProcessor:              "history.timerProcessorEnablePriorityTaskProcessor",
 	TimerProcessorMaxTimeShift:                             "history.timerProcessorMaxTimeShift",
 	TimerProcessorHistoryArchivalSizeLimit:                 "history.timerProcessorHistoryArchivalSizeLimit",
-	TimerProcessorArchivalTimeLimit:                        "history.TimerProcessorArchivalTimeLimit",
+	TimerProcessorArchivalTimeLimit:                        "history.timerProcessorArchivalTimeLimit",
 	TransferTaskBatchSize:                                  "history.transferTaskBatchSize",
 	TransferProcessorFailoverMaxPollRPS:                    "history.transferProcessorFailoverMaxPollRPS",
 	TransferProcessorMaxPollRPS:                            "history.transferProcessorMaxPollRPS",
@@ -232,7 +234,7 @@ var keys = map[Key]string{
 	DefaultWorkflowRunTimeout:                              "history.defaultWorkflowRunTimeout",
 	MaxWorkflowExecutionTimeout:                            "history.maximumWorkflowExecutionTimeout",
 	MaxWorkflowRunTimeout:                                  "history.maximumWorkflowRunTimeout",
-	DecisionHeartbeatTimeout:                               "history.decisionHeartbeatTimeout",
+	WorkflowTaskHeartbeatTimeout:                           "history.workflowTaskHeartbeatTimeout",
 	DefaultWorkflowTaskTimeout:                             "history.defaultWorkflowTaskTimeout",
 	ParentClosePolicyThreshold:                             "history.parentClosePolicyThreshold",
 	NumParentClosePolicySystemWorkflows:                    "history.numParentClosePolicySystemWorkflows",
@@ -245,13 +247,18 @@ var keys = map[Key]string{
 	ReplicationTaskProcessorNoTaskInitialWait:              "history.ReplicationTaskProcessorNoTaskInitialWait",
 	ReplicationTaskProcessorCleanupInterval:                "history.ReplicationTaskProcessorCleanupInterval",
 	ReplicationTaskProcessorCleanupJitterCoefficient:       "history.ReplicationTaskProcessorCleanupJitterCoefficient",
-	EnableConsistentQuery:                                  "history.EnableConsistentQuery",
-	EnableConsistentQueryByNamespace:                       "history.EnableConsistentQueryByNamespace",
+	HistoryEnableRPCReplication:                            "history.EnableRPCReplication",
+	HistoryEnableKafkaReplication:                          "history.EnableKafkaReplication",
+	HistoryEnableCleanupReplicationTask:                    "history.EnableCleanupReplicationTask",
 	MaxBufferedQueryCount:                                  "history.MaxBufferedQueryCount",
 	MutableStateChecksumGenProbability:                     "history.mutableStateChecksumGenProbability",
 	MutableStateChecksumVerifyProbability:                  "history.mutableStateChecksumVerifyProbability",
 	MutableStateChecksumInvalidateBefore:                   "history.mutableStateChecksumInvalidateBefore",
 	ReplicationEventsFromCurrentCluster:                    "history.ReplicationEventsFromCurrentCluster",
+	EnableDropStuckTaskByNamespaceID:                       "history.DropStuckTaskByNamespace",
+	SkipReapplicationByNamespaceId:                         "history.SkipReapplicationByNamespaceId",
+	DefaultActivityRetryPolicy:                             "history.defaultActivityRetryPolicy",
+	DefaultWorkflowRetryPolicy:                             "history.defaultWorkflowRetryPolicy",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -264,6 +271,7 @@ var keys = map[Key]string{
 	WorkerReplicationTaskMaxRetryDuration:           "worker.replicationTaskMaxRetryDuration",
 	WorkerReplicationTaskContextDuration:            "worker.replicationTaskContextDuration",
 	WorkerReReplicationContextTimeout:               "worker.workerReReplicationContextTimeout",
+	WorkerEnableRPCReplication:                      "worker.enableWorkerRPCReplication",
 	WorkerIndexerConcurrency:                        "worker.indexerConcurrency",
 	WorkerESProcessorNumOfWorkers:                   "worker.ESProcessorNumOfWorkers",
 	WorkerESProcessorBulkActions:                    "worker.ESProcessorBulkActions",
@@ -279,7 +287,7 @@ var keys = map[Key]string{
 	WorkerTimeLimitPerArchivalIteration:             "worker.TimeLimitPerArchivalIteration",
 	WorkerThrottledLogRPS:                           "worker.throttledLogRPS",
 	ScannerPersistenceMaxQPS:                        "worker.scannerPersistenceMaxQPS",
-	TaskListScannerEnabled:                          "worker.taskListScannerEnabled",
+	TaskQueueScannerEnabled:                         "worker.taskQueueScannerEnabled",
 	HistoryScannerEnabled:                           "worker.historyScannerEnabled",
 	ExecutionsScannerEnabled:                        "worker.executionsScannerEnabled",
 }
@@ -297,20 +305,17 @@ const (
 	testGetMapPropertyKey
 	testGetIntPropertyFilteredByNamespaceKey
 	testGetDurationPropertyFilteredByNamespaceKey
-	testGetIntPropertyFilteredByTaskListInfoKey
-	testGetDurationPropertyFilteredByTaskListInfoKey
-	testGetBoolPropertyFilteredByTaskListInfoKey
+	testGetIntPropertyFilteredByTaskQueueInfoKey
+	testGetDurationPropertyFilteredByTaskQueueInfoKey
+	testGetBoolPropertyFilteredByNamespaceIDKey
+	testGetBoolPropertyFilteredByTaskQueueInfoKey
 
 	// EnableGlobalNamespace is key for enable global namespace
 	EnableGlobalNamespace
 	// EnableNDC is key for enable N data center events replication
 	EnableNDC
-	// EnableNewKafkaClient is key for using New Kafka client
-	EnableNewKafkaClient
 	// EnableVisibilitySampling is key for enable visibility sampling
 	EnableVisibilitySampling
-	// EnableReadFromClosedExecutionV2 is key for enable read from temporal_visibility.closed_executions_v2
-	EnableReadFromClosedExecutionV2
 	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
 	AdvancedVisibilityWritingMode
 	// EmitShardDiffLog whether emit the shard diff log
@@ -319,12 +324,12 @@ const (
 	EnableReadVisibilityFromES
 	// DisableListVisibilityByFilter is config to disable list open/close workflow using filter
 	DisableListVisibilityByFilter
-	// HistoryArchivalStatus is key for the status of history archival
-	HistoryArchivalStatus
+	// HistoryArchivalState is key for the state of history archival
+	HistoryArchivalState
 	// EnableReadFromHistoryArchival is key for enabling reading history from archival store
 	EnableReadFromHistoryArchival
-	// VisibilityArchivalStatus is key for the status of visibility archival
-	VisibilityArchivalStatus
+	// VisibilityArchivalState is key for the state of visibility archival
+	VisibilityArchivalState
 	// EnableReadFromVisibilityArchival is key for enabling reading visibility from archival store
 	EnableReadFromVisibilityArchival
 	// EnableNamespaceNotActiveAutoForwarding whether enabling DC auto forwarding to active cluster
@@ -334,13 +339,14 @@ const (
 	TransactionSizeLimit
 	// MinRetentionDays is the minimal allowed retention days for namespace
 	MinRetentionDays
-	// MaxWorkflowTaskTimeout  is the maximum allowed decision start to close timeout
+	// MaxWorkflowTaskTimeout  is the maximum allowed workflow task start to close timeout
 	MaxWorkflowTaskTimeout
 	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery
 	// EnablePriorityTaskProcessor is the key for enabling priority task processor
 	EnablePriorityTaskProcessor
-
+	// EnableAuthorization is the key to enable authorization for a namespace
+	EnableAuthorization
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning
@@ -354,7 +360,7 @@ const (
 	// HistoryCountLimitWarn is the per workflow execution history event count limit for warning
 	HistoryCountLimitWarn
 
-	// MaxIDLengthLimit is the length limit for various IDs, including: Namespace, TaskList, WorkflowID, ActivityID, TimerID,
+	// MaxIDLengthLimit is the length limit for various IDs, including: Namespace, TaskQueue, WorkflowID, ActivityID, TimerID,
 	// WorkflowType, ActivityType, SignalName, MarkerName, ErrorReason/FailureReason/CancelCause, Identity, RequestID
 	MaxIDLengthLimit
 
@@ -395,6 +401,10 @@ const (
 	ValidSearchAttributes
 	// SendRawWorkflowHistory is whether to enable raw history retrieving
 	SendRawWorkflowHistory
+	// FrontendEnableRPCReplication is a feature flag for rpc replication
+	FrontendEnableRPCReplication
+	// FrontendEnableCleanupReplicationTask is a feature flag for rpc replication cleanup
+	FrontendEnableCleanupReplicationTask
 	// SearchAttributesNumberOfKeysLimit is the limit of number of keys
 	SearchAttributesNumberOfKeysLimit
 	// SearchAttributesSizeOfValueLimit is the size limit of each value
@@ -416,7 +426,7 @@ const (
 	MatchingPersistenceMaxQPS
 	// MatchingPersistenceGlobalMaxQPS is the max qps matching cluster can query DB
 	MatchingPersistenceGlobalMaxQPS
-	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task list throttling
+	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task queue throttling
 	MatchingMinTaskThrottlingBurstSize
 	// MatchingGetTasksBatchSize is the maximum batch size to fetch from the task buffer
 	MatchingGetTasksBatchSize
@@ -426,10 +436,10 @@ const (
 	MatchingEnableSyncMatch
 	// MatchingUpdateAckInterval is the interval for update ack
 	MatchingUpdateAckInterval
-	// MatchingIdleTasklistCheckInterval is the IdleTasklistCheckInterval
-	MatchingIdleTasklistCheckInterval
-	// MaxTasklistIdleTime is the max time tasklist being idle
-	MaxTasklistIdleTime
+	// MatchingIdleTaskqueueCheckInterval is the IdleTaskqueueCheckInterval
+	MatchingIdleTaskqueueCheckInterval
+	// MaxTaskqueueIdleTime is the max time taskqueue being idle
+	MaxTaskqueueIdleTime
 	// MatchingOutstandingTaskAppendsThreshold is the threshold for outstanding task appends
 	MatchingOutstandingTaskAppendsThreshold
 	// MatchingMaxTaskBatchSize is max batch size for task writer
@@ -438,17 +448,17 @@ const (
 	MatchingMaxTaskDeleteBatchSize
 	// MatchingThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	MatchingThrottledLogRPS
-	// MatchingNumTasklistWritePartitions is the number of write partitions for a task list
-	MatchingNumTasklistWritePartitions
-	// MatchingNumTasklistReadPartitions is the number of read partitions for a task list
-	MatchingNumTasklistReadPartitions
+	// MatchingNumTaskqueueWritePartitions is the number of write partitions for a task queue
+	MatchingNumTaskqueueWritePartitions
+	// MatchingNumTaskqueueReadPartitions is the number of read partitions for a task queue
+	MatchingNumTaskqueueReadPartitions
 	// MatchingForwarderMaxOutstandingPolls is the max number of inflight polls from the forwarder
 	MatchingForwarderMaxOutstandingPolls
 	// MatchingForwarderMaxOutstandingTasks is the max number of inflight addTask/queryTask from the forwarder
 	MatchingForwarderMaxOutstandingTasks
 	// MatchingForwarderMaxRatePerSecond is the max rate at which add/query can be forwarded
 	MatchingForwarderMaxRatePerSecond
-	// MatchingForwarderMaxChildrenPerNode is the max number of children per node in the task list partition tree
+	// MatchingForwarderMaxChildrenPerNode is the max number of children per node in the task queue partition tree
 	MatchingForwarderMaxChildrenPerNode
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration
@@ -623,6 +633,12 @@ const (
 	NumArchiveSystemWorkflows
 	// ArchiveRequestRPS is the rate limit on the number of archive request per second
 	ArchiveRequestRPS
+	// DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
+	// the user has not specified an explicit RetryPolicy
+	DefaultActivityRetryPolicy
+	// DefaultWorkflowRetryPolicy represents the out-of-box retry policy for unset fields
+	// where the user has set an explicit RetryPolicy, but not specified all the fields
+	DefaultWorkflowRetryPolicy
 
 	// EnableAdminProtection is whether to enable admin checking
 	EnableAdminProtection
@@ -641,10 +657,10 @@ const (
 
 	// HistoryThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	HistoryThrottledLogRPS
-	// StickyTTL is to expire a sticky tasklist if no update more than this duration
+	// StickyTTL is to expire a sticky taskqueue if no update more than this duration
 	StickyTTL
-	// DecisionHeartbeatTimeout for decision heartbeat
-	DecisionHeartbeatTimeout
+	// WorkflowTaskHeartbeatTimeout for workflow task heartbeat
+	WorkflowTaskHeartbeatTimeout
 	// DefaultWorkflowExecutionTimeout for a workflow execution
 	DefaultWorkflowExecutionTimeout
 	// DefaultWorkflowRunTimeout for a workflow run
@@ -653,8 +669,13 @@ const (
 	MaxWorkflowExecutionTimeout
 	// MaxWorkflowRunTimeout maximum allowed workflow run timeout
 	MaxWorkflowRunTimeout
-	// DefaultWorkflowTaskTimeout for a decision task
+	// DefaultWorkflowTaskTimeout for a workflow task
 	DefaultWorkflowTaskTimeout
+
+	// EnableDropStuckTaskByNamespaceID is whether stuck timer/transfer task should be dropped for a namespace
+	EnableDropStuckTaskByNamespaceID
+	// SkipReapplicationByNameSpaceId is whether skipping a event re-application for a namespace
+	SkipReapplicationByNamespaceId
 
 	// key for worker
 
@@ -680,6 +701,8 @@ const (
 	WorkerReplicationTaskContextDuration
 	// WorkerReReplicationContextTimeout is the context timeout for end to end  re-replication process
 	WorkerReReplicationContextTimeout
+	// WorkerEnableRPCReplication is the feature flag for RPC replication
+	WorkerEnableRPCReplication
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time
 	WorkerIndexerConcurrency
 	// WorkerESProcessorNumOfWorkers is num of workers for esProcessor
@@ -710,8 +733,8 @@ const (
 	WorkerThrottledLogRPS
 	// ScannerPersistenceMaxQPS is the maximum rate of persistence calls from worker.Scanner
 	ScannerPersistenceMaxQPS
-	// TaskListScannerEnabled indicates if task list scanner should be started as part of worker.Scanner
-	TaskListScannerEnabled
+	// TaskQueueScannerEnabled indicates if task queue scanner should be started as part of worker.Scanner
+	TaskQueueScannerEnabled
 	// HistoryScannerEnabled indicates if history scanner should be started as part of worker.Scanner
 	HistoryScannerEnabled
 	// ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner
@@ -723,7 +746,7 @@ const (
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
 	EnableStickyQuery
 
-	//ReplicationTaskFetcherParallelism determines how many go routines we spin up for fetching tasks
+	// ReplicationTaskFetcherParallelism determines how many go routines we spin up for fetching tasks
 	ReplicationTaskFetcherParallelism
 	// ReplicationTaskFetcherAggregationInterval determines how frequently the fetch requests are sent
 	ReplicationTaskFetcherAggregationInterval
@@ -741,11 +764,13 @@ const (
 	ReplicationTaskProcessorCleanupInterval
 	// ReplicationTaskProcessorCleanupJitterCoefficient is the jitter for cleanup timer
 	ReplicationTaskProcessorCleanupJitterCoefficient
+	// HistoryEnableRPCReplication is the feature flag for RPC replication
+	HistoryEnableRPCReplication
+	// HistoryEnableKafkaReplication is the migration flag for Kafka replication
+	HistoryEnableKafkaReplication
+	// HistoryEnableCleanupReplicationTask is the migration flag for Kafka replication
+	HistoryEnableCleanupReplicationTask
 	// EnableConsistentQuery indicates if consistent query is enabled for the cluster
-	EnableConsistentQuery
-	// EnableConsistentQueryByNamespace indicates if consistent query is enabled for a namespace
-	EnableConsistentQueryByNamespace
-	// MaxBufferedQueryCount indicates the maximum number of queries which can be buffered at a given time for a single workflow
 	MaxBufferedQueryCount
 	// MutableStateChecksumGenProbability is the probability [0-100] that checksum will be generated for mutable state
 	MutableStateChecksumGenProbability
@@ -754,7 +779,7 @@ const (
 	// MutableStateChecksumInvalidateBefore is the epoch timestamp before which all checksums are to be discarded
 	MutableStateChecksumInvalidateBefore
 
-	//ReplicationEventsFromCurrentCluster is a feature flag to allow cross DC replicate events that generated from the current cluster
+	// ReplicationEventsFromCurrentCluster is a feature flag to allow cross DC replicate events that generated from the current cluster
 	ReplicationEventsFromCurrentCluster
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
@@ -775,32 +800,37 @@ var filters = []string{
 	"unknownFilter",
 	"namespace",
 	"namespaceID",
-	"taskListName",
+	"taskQueueName",
 	"taskType",
+	"shardID",
 }
 
 const (
 	unknownFilter Filter = iota
 	// Namespace is the namespace name
 	Namespace
-	// NamespaceID is the namespace id
+	// NamespaceID is the namespace Id
 	NamespaceID
-	// TaskListName is the tasklist name
-	TaskListName
-	// TaskType is the task type (0:Decision, 1:Activity)
+	// TaskQueueName is the taskqueue name
+	TaskQueueName
+	// TaskType is the task type (0:Workflow, 1:Activity)
 	TaskType
+	// RangeHash is the shard id
+	ShardID
 
 	// lastFilterTypeForTest must be the last one in this const group for testing purpose
 	lastFilterTypeForTest
 )
 
+const DefaultNumTaskQueuePartitions = 4
+
 // FilterOption is used to provide filters for dynamic config keys
 type FilterOption func(filterMap map[Filter]interface{})
 
-// TaskListFilter filters by task list name
-func TaskListFilter(name string) FilterOption {
+// TaskQueueFilter filters by task queue name
+func TaskQueueFilter(name string) FilterOption {
 	return func(filterMap map[Filter]interface{}) {
-		filterMap[TaskListName] = name
+		filterMap[TaskQueueName] = name
 	}
 }
 
@@ -819,8 +849,15 @@ func NamespaceIDFilter(namespaceID string) FilterOption {
 }
 
 // TaskTypeFilter filters by task type
-func TaskTypeFilter(taskType tasklistpb.TaskListType) FilterOption {
+func TaskTypeFilter(taskType enumspb.TaskQueueType) FilterOption {
 	return func(filterMap map[Filter]interface{}) {
 		filterMap[TaskType] = taskType
+	}
+}
+
+// ShardIDFilter filters by shard id
+func ShardIDFilter(shardID int) FilterOption {
+	return func(filterMap map[Filter]interface{}) {
+		filterMap[ShardID] = shardID
 	}
 }

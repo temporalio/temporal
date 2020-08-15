@@ -27,7 +27,7 @@ package messaging
 import (
 	uberKafka "github.com/uber-go/kafka-client/kafka"
 
-	"github.com/temporalio/temporal/common/log"
+	"go.temporal.io/server/common/log"
 )
 
 const rcvBufferSize = 2 * 1024

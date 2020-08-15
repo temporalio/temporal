@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskProcessor_mock.go -self_package github.com/temporalio/temporal/service/history
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskProcessor_mock.go -self_package go.temporal.io/server/service/history
 
 package history
 
@@ -34,18 +34,20 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
@@ -83,7 +85,7 @@ type (
 		lastRetrievedMessageID int64
 
 		requestChan   chan<- *request
-		syncShardChan chan *replicationgenpb.SyncShardStatus
+		syncShardChan chan *replicationspb.SyncShardStatus
 		done          chan struct{}
 	}
 
@@ -93,8 +95,8 @@ type (
 	}
 
 	request struct {
-		token    *replicationgenpb.ReplicationToken
-		respChan chan<- *replicationgenpb.ReplicationMessages
+		token    *replicationspb.ReplicationToken
+		respChan chan<- *replicationspb.ReplicationMessages
 	}
 )
 
@@ -107,14 +109,15 @@ func NewReplicationTaskProcessor(
 	replicationTaskFetcher ReplicationTaskFetcher,
 	replicationTaskExecutor replicationTaskExecutor,
 ) *ReplicationTaskProcessorImpl {
-	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait())
+	shardID := shard.GetShardID()
+	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID))
 	taskRetryPolicy.SetBackoffCoefficient(taskErrorRetryBackoffCoefficient)
-	taskRetryPolicy.SetMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts())
+	taskRetryPolicy.SetMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID))
 
 	dlqRetryPolicy := backoff.NewExponentialRetryPolicy(dlqErrorRetryWait)
 	dlqRetryPolicy.SetExpirationInterval(backoff.NoInterval)
 
-	noTaskBackoffPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorNoTaskRetryWait())
+	noTaskBackoffPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorNoTaskRetryWait(shardID))
 	noTaskBackoffPolicy.SetBackoffCoefficient(1)
 	noTaskBackoffPolicy.SetExpirationInterval(backoff.NoInterval)
 	noTaskRetrier := backoff.NewRetrier(noTaskBackoffPolicy, backoff.SystemClock)
@@ -132,7 +135,7 @@ func NewReplicationTaskProcessor(
 		taskRetryPolicy:         taskRetryPolicy,
 		noTaskRetrier:           noTaskRetrier,
 		requestChan:             replicationTaskFetcher.GetRequestChan(),
-		syncShardChan:           make(chan *replicationgenpb.SyncShardStatus),
+		syncShardChan:           make(chan *replicationspb.SyncShardStatus),
 		done:                    make(chan struct{}),
 		lastProcessedMessageID:  emptyMessageID,
 		lastRetrievedMessageID:  emptyMessageID,
@@ -202,9 +205,10 @@ Loop:
 
 func (p *ReplicationTaskProcessorImpl) cleanupReplicationTaskLoop() {
 
+	shardID := p.shard.GetShardID()
 	timer := time.NewTimer(backoff.JitDuration(
-		p.config.ReplicationTaskProcessorCleanupInterval(),
-		p.config.ReplicationTaskProcessorCleanupJitterCoefficient(),
+		p.config.ReplicationTaskProcessorCleanupInterval(shardID),
+		p.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
 	))
 	for {
 		select {
@@ -212,14 +216,16 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTaskLoop() {
 			timer.Stop()
 			return
 		case <-timer.C:
-			err := p.cleanupAckedReplicationTasks()
-			if err != nil {
-				p.logger.Error("Failed to clean up replication messages.", tag.Error(err))
-				p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupFailure)
+			if p.config.EnableCleanupReplicationTask() {
+				err := p.cleanupAckedReplicationTasks()
+				if err != nil {
+					p.logger.Error("Failed to clean up replication messages.", tag.Error(err))
+					p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupFailure)
+				}
 			}
 			timer.Reset(backoff.JitDuration(
-				p.config.ShardSyncMinInterval(),
-				p.config.ShardSyncTimerJitterCoefficient(),
+				p.config.ReplicationTaskProcessorCleanupInterval(shardID),
+				p.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
 			))
 		}
 	}
@@ -258,11 +264,11 @@ func (p *ReplicationTaskProcessorImpl) cleanupAckedReplicationTasks() error {
 	)
 }
 
-func (p *ReplicationTaskProcessorImpl) sendFetchMessageRequest() <-chan *replicationgenpb.ReplicationMessages {
-	respChan := make(chan *replicationgenpb.ReplicationMessages, 1)
+func (p *ReplicationTaskProcessorImpl) sendFetchMessageRequest() <-chan *replicationspb.ReplicationMessages {
+	respChan := make(chan *replicationspb.ReplicationMessages, 1)
 	// TODO: when we support prefetching, LastRetrievedMessageId can be different than LastProcessedMessageId
 	p.requestChan <- &request{
-		token: &replicationgenpb.ReplicationToken{
+		token: &replicationspb.ReplicationToken{
 			ShardId:                int32(p.shard.GetShardID()),
 			LastRetrievedMessageId: p.lastRetrievedMessageID,
 			LastProcessedMessageId: p.lastProcessedMessageID,
@@ -272,7 +278,7 @@ func (p *ReplicationTaskProcessorImpl) sendFetchMessageRequest() <-chan *replica
 	return respChan
 }
 
-func (p *ReplicationTaskProcessorImpl) processResponse(response *replicationgenpb.ReplicationMessages) {
+func (p *ReplicationTaskProcessorImpl) processResponse(response *replicationspb.ReplicationMessages) {
 
 	p.syncShardChan <- response.GetSyncShardStatus()
 	// Note here we check replication tasks instead of hasMore. The expectation is that in a steady state
@@ -305,7 +311,7 @@ func (p *ReplicationTaskProcessorImpl) syncShardStatusLoop() {
 		p.config.ShardSyncMinInterval(),
 		p.config.ShardSyncTimerJitterCoefficient(),
 	))
-	var syncShardTask *replicationgenpb.SyncShardStatus
+	var syncShardTask *replicationspb.SyncShardStatus
 	for {
 		select {
 		case syncShardRequest := <-p.syncShardChan:
@@ -329,12 +335,12 @@ func (p *ReplicationTaskProcessorImpl) syncShardStatusLoop() {
 }
 
 func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
-	status *replicationgenpb.SyncShardStatus,
+	status *replicationspb.SyncShardStatus,
 ) error {
 
 	if status == nil ||
 		p.shard.GetTimeSource().Now().Sub(
-			time.Unix(0, status.GetTimestamp())) > dropSyncShardTaskTimeThreshold {
+			timestamp.TimeValue(status.GetStatusTime())) > dropSyncShardTaskTimeThreshold {
 		return nil
 	}
 	p.metricsClient.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteCounter)
@@ -343,11 +349,11 @@ func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
 	return p.historyEngine.SyncShardStatus(ctx, &historyservice.SyncShardStatusRequest{
 		SourceCluster: p.sourceCluster,
 		ShardId:       int64(p.shard.GetShardID()),
-		Timestamp:     status.Timestamp,
+		StatusTime:    status.StatusTime,
 	})
 }
 
-func (p *ReplicationTaskProcessorImpl) processSingleTask(replicationTask *replicationgenpb.ReplicationTask) error {
+func (p *ReplicationTaskProcessorImpl) processSingleTask(replicationTask *replicationspb.ReplicationTask) error {
 	err := backoff.Retry(func() error {
 		return p.processTaskOnce(replicationTask)
 	}, p.taskRetryPolicy, isTransientRetryableError)
@@ -365,7 +371,7 @@ func (p *ReplicationTaskProcessorImpl) processSingleTask(replicationTask *replic
 	return nil
 }
 
-func (p *ReplicationTaskProcessorImpl) processTaskOnce(replicationTask *replicationgenpb.ReplicationTask) error {
+func (p *ReplicationTaskProcessorImpl) processTaskOnce(replicationTask *replicationspb.ReplicationTask) error {
 	scope, err := p.replicationTaskExecutor.execute(
 		p.sourceCluster,
 		replicationTask,
@@ -384,7 +390,7 @@ func (p *ReplicationTaskProcessorImpl) processTaskOnce(replicationTask *replicat
 	return err
 }
 
-func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *replicationgenpb.ReplicationTask) error {
+func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *replicationspb.ReplicationTask) error {
 	request, err := p.generateDLQRequest(replicationTask)
 	if err != nil {
 		p.logger.Error("Failed to generate DLQ replication task.", tag.Error(err))
@@ -392,9 +398,9 @@ func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *
 		return nil
 	}
 	p.logger.Info("Put history replication to DLQ",
-		tag.WorkflowNamespaceIDBytes(request.TaskInfo.GetNamespaceId()),
+		tag.WorkflowNamespaceID(request.TaskInfo.GetNamespaceId()),
 		tag.WorkflowID(request.TaskInfo.GetWorkflowId()),
-		tag.WorkflowRunIDBytes(request.TaskInfo.GetRunId()),
+		tag.WorkflowRunID(request.TaskInfo.GetRunId()),
 		tag.TaskID(request.TaskInfo.GetTaskId()),
 	)
 
@@ -418,33 +424,33 @@ func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *
 }
 
 func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
-	replicationTask *replicationgenpb.ReplicationTask,
+	replicationTask *replicationspb.ReplicationTask,
 ) (*persistence.PutReplicationTaskToDLQRequest, error) {
 	switch replicationTask.TaskType {
-	case replicationgenpb.ReplicationTaskType_SyncActivityTask:
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		taskAttributes := replicationTask.GetSyncActivityTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-				NamespaceId: primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
+				NamespaceId: taskAttributes.GetNamespaceId(),
 				WorkflowId:  taskAttributes.GetWorkflowId(),
-				RunId:       primitives.MustParseUUID(taskAttributes.GetRunId()),
+				RunId:       taskAttributes.GetRunId(),
 				TaskId:      replicationTask.GetSourceTaskId(),
-				TaskType:    persistence.ReplicationTaskTypeSyncActivity,
+				TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 				ScheduledId: taskAttributes.GetScheduledId(),
 			},
 		}, nil
 
-	case replicationgenpb.ReplicationTaskType_HistoryTask:
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK:
 		taskAttributes := replicationTask.GetHistoryTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-				NamespaceId:         primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
+				NamespaceId:         taskAttributes.GetNamespaceId(),
 				WorkflowId:          taskAttributes.GetWorkflowId(),
-				RunId:               primitives.MustParseUUID(taskAttributes.GetRunId()),
+				RunId:               taskAttributes.GetRunId(),
 				TaskId:              replicationTask.GetSourceTaskId(),
-				TaskType:            persistence.ReplicationTaskTypeHistory,
+				TaskType:            enumsspb.TASK_TYPE_REPLICATION_HISTORY,
 				FirstEventId:        taskAttributes.GetFirstEventId(),
 				NextEventId:         taskAttributes.GetNextEventId(),
 				Version:             taskAttributes.GetVersion(),
@@ -452,7 +458,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 				ResetWorkflow:       taskAttributes.GetResetWorkflow(),
 			},
 		}, nil
-	case replicationgenpb.ReplicationTaskType_HistoryV2Task:
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		taskAttributes := replicationTask.GetHistoryTaskV2Attributes()
 
 		eventsDataBlob := persistence.NewDataBlobFromProto(taskAttributes.GetEvents())
@@ -469,11 +475,11 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-				NamespaceId:  primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
+				NamespaceId:  taskAttributes.GetNamespaceId(),
 				WorkflowId:   taskAttributes.GetWorkflowId(),
-				RunId:        primitives.MustParseUUID(taskAttributes.GetRunId()),
+				RunId:        taskAttributes.GetRunId(),
 				TaskId:       replicationTask.GetSourceTaskId(),
-				TaskType:     persistence.ReplicationTaskTypeHistory,
+				TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
 				FirstEventId: events[0].GetEventId(),
 				NextEventId:  events[len(events)-1].GetEventId(),
 				Version:      events[0].GetVersion(),
@@ -513,7 +519,7 @@ func (p *ReplicationTaskProcessorImpl) updateFailureMetric(scope int, err error)
 
 	// Also update counter to distinguish between type of failures
 	switch err.(type) {
-	case *serviceerror.ShardOwnershipLost:
+	case *serviceerrors.ShardOwnershipLost:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
 	case *serviceerror.InvalidArgument:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
@@ -525,7 +531,7 @@ func (p *ReplicationTaskProcessorImpl) updateFailureMetric(scope int, err error)
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrNotFoundCounter)
 	case *serviceerror.ResourceExhausted:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
-	case *serviceerror.RetryTask:
+	case *serviceerrors.RetryTask:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
 	case *serviceerror.DeadlineExceeded:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)

@@ -27,7 +27,7 @@ package matching
 import (
 	"context"
 
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"go.temporal.io/server/api/matchingservice/v1"
 )
 
 // Disable lint due to missing comments.
@@ -53,26 +53,26 @@ func NewNilCheckHandler(
 	return handler
 }
 
-func (h *NilCheckHandler) PollForDecisionTask(ctx context.Context, request *matchingservice.PollForDecisionTaskRequest) (*matchingservice.PollForDecisionTaskResponse, error) {
-	resp, err := h.parentHandler.PollForDecisionTask(ctx, request)
+func (h *NilCheckHandler) PollWorkflowTaskQueue(ctx context.Context, request *matchingservice.PollWorkflowTaskQueueRequest) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+	resp, err := h.parentHandler.PollWorkflowTaskQueue(ctx, request)
 	if resp == nil && err == nil {
-		resp = &matchingservice.PollForDecisionTaskResponse{}
+		resp = &matchingservice.PollWorkflowTaskQueueResponse{}
 	}
 	return resp, err
 }
 
-func (h *NilCheckHandler) PollForActivityTask(ctx context.Context, request *matchingservice.PollForActivityTaskRequest) (*matchingservice.PollForActivityTaskResponse, error) {
-	resp, err := h.parentHandler.PollForActivityTask(ctx, request)
+func (h *NilCheckHandler) PollActivityTaskQueue(ctx context.Context, request *matchingservice.PollActivityTaskQueueRequest) (*matchingservice.PollActivityTaskQueueResponse, error) {
+	resp, err := h.parentHandler.PollActivityTaskQueue(ctx, request)
 	if resp == nil && err == nil {
-		resp = &matchingservice.PollForActivityTaskResponse{}
+		resp = &matchingservice.PollActivityTaskQueueResponse{}
 	}
 	return resp, err
 }
 
-func (h *NilCheckHandler) AddDecisionTask(ctx context.Context, request *matchingservice.AddDecisionTaskRequest) (*matchingservice.AddDecisionTaskResponse, error) {
-	resp, err := h.parentHandler.AddDecisionTask(ctx, request)
+func (h *NilCheckHandler) AddWorkflowTask(ctx context.Context, request *matchingservice.AddWorkflowTaskRequest) (*matchingservice.AddWorkflowTaskResponse, error) {
+	resp, err := h.parentHandler.AddWorkflowTask(ctx, request)
 	if resp == nil && err == nil {
-		resp = &matchingservice.AddDecisionTaskResponse{}
+		resp = &matchingservice.AddWorkflowTaskResponse{}
 	}
 	return resp, err
 }
@@ -109,18 +109,18 @@ func (h *NilCheckHandler) CancelOutstandingPoll(ctx context.Context, request *ma
 	return resp, err
 }
 
-func (h *NilCheckHandler) DescribeTaskList(ctx context.Context, request *matchingservice.DescribeTaskListRequest) (*matchingservice.DescribeTaskListResponse, error) {
-	resp, err := h.parentHandler.DescribeTaskList(ctx, request)
+func (h *NilCheckHandler) DescribeTaskQueue(ctx context.Context, request *matchingservice.DescribeTaskQueueRequest) (*matchingservice.DescribeTaskQueueResponse, error) {
+	resp, err := h.parentHandler.DescribeTaskQueue(ctx, request)
 	if resp == nil && err == nil {
-		resp = &matchingservice.DescribeTaskListResponse{}
+		resp = &matchingservice.DescribeTaskQueueResponse{}
 	}
 	return resp, err
 }
 
-func (h *NilCheckHandler) ListTaskListPartitions(ctx context.Context, request *matchingservice.ListTaskListPartitionsRequest) (*matchingservice.ListTaskListPartitionsResponse, error) {
-	resp, err := h.parentHandler.ListTaskListPartitions(ctx, request)
+func (h *NilCheckHandler) ListTaskQueuePartitions(ctx context.Context, request *matchingservice.ListTaskQueuePartitionsRequest) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
+	resp, err := h.parentHandler.ListTaskQueuePartitions(ctx, request)
 	if resp == nil && err == nil {
-		resp = &matchingservice.ListTaskListPartitionsResponse{}
+		resp = &matchingservice.ListTaskQueuePartitionsResponse{}
 	}
 	return resp, err
 }

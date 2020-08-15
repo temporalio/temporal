@@ -30,10 +30,10 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	eventpb "go.temporal.io/temporal-proto/event"
+	historypb "go.temporal.io/api/history/v1"
 
-	"github.com/temporalio/temporal/common/persistence"
-	test "github.com/temporalio/temporal/common/testing"
+	"go.temporal.io/server/common/persistence"
+	test "go.temporal.io/server/common/testing"
 )
 
 func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
@@ -41,16 +41,16 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 	workflowID := "replication-message-test" + uuid.New()
 	runID := uuid.New()
 	workflowType := "event-generator-workflow-type"
-	tasklist := "event-generator-taskList"
+	taskqueue := "event-generator-taskQueue"
 
-	var historyBatch []*eventpb.History
-	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
+	var historyBatch []*historypb.History
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 2)
 
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
-		historyEvents := &eventpb.History{}
+		historyEvents := &historypb.History{}
 		for _, event := range events {
-			historyEvents.Events = append(historyEvents.Events, event.GetData().(*eventpb.HistoryEvent))
+			historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 		}
 		historyBatch = append(historyBatch, historyEvents)
 	}
@@ -61,7 +61,7 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory,
 		historyBatch,
 	)
@@ -84,15 +84,15 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 	workflowID := "replication-message-dlq-test" + uuid.New()
 	runID := uuid.New()
 	workflowType := "event-generator-workflow-type"
-	tasklist := "event-generator-taskList"
+	taskqueue := "event-generator-taskQueue"
 
-	var historyBatch []*eventpb.History
+	var historyBatch []*historypb.History
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
 
 	events := s.generator.GetNextVertices()
-	historyEvents := &eventpb.History{}
+	historyEvents := &historypb.History{}
 	for _, event := range events {
-		historyEvents.Events = append(historyEvents.Events, event.GetData().(*eventpb.HistoryEvent))
+		historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 	}
 	historyBatch = append(historyBatch, historyEvents)
 
@@ -105,13 +105,13 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory,
 		historyBatch,
 	)
 
 	execMgrFactory := s.active.GetExecutionManagerFactory()
-	executionManager, err := execMgrFactory.NewExecutionManager(0)
+	executionManager, err := execMgrFactory.NewExecutionManager(1)
 	s.NoError(err)
 
 	expectedDLQMsgs := map[int64]bool{}

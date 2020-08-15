@@ -40,19 +40,20 @@ import (
 	"github.com/cch123/elasticsql"
 	"github.com/olivere/elastic"
 	"github.com/valyala/fastjson"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
-	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/definition"
-	es "github.com/temporalio/temporal/common/elasticsearch"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/messaging"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service/config"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	indexerspb "go.temporal.io/server/api/indexer/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
+	es "go.temporal.io/server/common/elasticsearch"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/messaging"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/service/config"
 )
 
 const (
@@ -85,11 +86,11 @@ type (
 		StartTime       int64
 		ExecutionTime   int64
 		CloseTime       int64
-		ExecutionStatus executionpb.WorkflowExecutionStatus
+		ExecutionStatus enumspb.WorkflowExecutionStatus
 		HistoryLength   int64
 		Memo            []byte
 		Encoding        string
-		TaskList        string
+		TaskQueue       string
 		Attr            map[string]interface{}
 	}
 )
@@ -124,12 +125,12 @@ func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRe
 		request.WorkflowID,
 		request.RunID,
 		request.WorkflowTypeName,
-		request.TaskList,
+		request.TaskQueue,
 		request.StartTimestamp,
 		request.ExecutionTimestamp,
 		request.TaskID,
 		request.Memo.Data,
-		request.Memo.GetEncoding(),
+		request.Memo.Encoding,
 		request.SearchAttributes,
 	)
 	return v.producer.Publish(msg)
@@ -149,8 +150,8 @@ func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRec
 		request.HistoryLength,
 		request.TaskID,
 		request.Memo.Data,
-		request.TaskList,
-		request.Memo.GetEncoding(),
+		request.TaskQueue,
+		request.Memo.Encoding,
 		request.SearchAttributes,
 	)
 	return v.producer.Publish(msg)
@@ -163,12 +164,12 @@ func (v *esVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWor
 		request.WorkflowID,
 		request.RunID,
 		request.WorkflowTypeName,
-		request.TaskList,
+		request.TaskQueue,
 		request.StartTimestamp,
 		request.ExecutionTimestamp,
 		request.TaskID,
 		request.Memo.Data,
-		request.Memo.GetEncoding(),
+		request.Memo.Encoding,
 		request.SearchAttributes,
 	)
 	return v.producer.Publish(msg)
@@ -632,7 +633,7 @@ func (v *esVisibilityStore) processSortField(dsl *fastjson.Value) (string, error
 		obj.Visit(func(k []byte, v *fastjson.Value) { // visit is only way to get object key in fastjson
 			sortField = string(k)
 		})
-		if v.getFieldType(sortField) == commonpb.IndexedValueType_String {
+		if v.getFieldType(sortField) == enumspb.INDEXED_VALUE_TYPE_STRING {
 			return "", errors.New("not able to sort by IndexedValueTypeString field, use IndexedValueTypeKeyword field")
 		}
 		// add RunID as tie-breaker
@@ -642,7 +643,7 @@ func (v *esVisibilityStore) processSortField(dsl *fastjson.Value) (string, error
 	return sortField, nil
 }
 
-func (v *esVisibilityStore) getFieldType(fieldName string) commonpb.IndexedValueType {
+func (v *esVisibilityStore) getFieldType(fieldName string) enumspb.IndexedValueType {
 	if strings.HasPrefix(fieldName, definition.Attr) {
 		fieldName = fieldName[len(definition.Attr)+1:] // remove prefix
 	}
@@ -662,7 +663,7 @@ func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageT
 	var sortVal interface{}
 	var err error
 	switch v.getFieldType(sortField) {
-	case commonpb.IndexedValueType_Int, commonpb.IndexedValueType_Datetime, commonpb.IndexedValueType_Bool:
+	case enumspb.INDEXED_VALUE_TYPE_INT, enumspb.INDEXED_VALUE_TYPE_DATETIME, enumspb.INDEXED_VALUE_TYPE_BOOL:
 		sortVal, err = token.SortValue.(json.Number).Int64()
 		if err != nil {
 			err, ok := err.(*strconv.NumError) // field not present, ES will return big int +-9223372036854776000
@@ -675,7 +676,7 @@ func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageT
 				sortVal = math.MaxInt64
 			}
 		}
-	case commonpb.IndexedValueType_Double:
+	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
 		switch token.SortValue.(type) {
 		case json.Number:
 			sortVal, err = token.SortValue.(json.Number).Float64()
@@ -685,7 +686,7 @@ func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageT
 		case string: // field not present, ES will return "-Infinity" or "Infinity"
 			sortVal = fmt.Sprintf(`"%s"`, token.SortValue.(string))
 		}
-	case commonpb.IndexedValueType_Keyword:
+	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
 		if token.SortValue != nil {
 			sortVal = fmt.Sprintf(`"%s"`, token.SortValue.(string))
 		} else { // field not present, ES will return null (so token.SortValue is nil)
@@ -878,44 +879,44 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 		WorkflowID:       source.WorkflowID,
 		RunID:            source.RunID,
 		TypeName:         source.WorkflowType,
-		StartTime:        time.Unix(0, source.StartTime),
-		ExecutionTime:    time.Unix(0, source.ExecutionTime),
-		Memo:             p.NewDataBlob(source.Memo, common.EncodingType(source.Encoding)),
-		TaskList:         source.TaskList,
+		StartTime:        time.Unix(0, source.StartTime).UTC(),
+		ExecutionTime:    time.Unix(0, source.ExecutionTime).UTC(),
+		Memo:             p.NewDataBlob(source.Memo, source.Encoding),
+		TaskQueue:        source.TaskQueue,
 		SearchAttributes: source.Attr,
+		Status:           source.ExecutionStatus,
 	}
 	if source.CloseTime != 0 {
-		record.CloseTime = time.Unix(0, source.CloseTime)
-		record.Status = &source.ExecutionStatus
+		record.CloseTime = time.Unix(0, source.CloseTime).UTC()
 		record.HistoryLength = source.HistoryLength
 	}
 
 	return record
 }
 
-func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string, taskList string,
-	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding common.EncodingType,
-	searchAttributes map[string]*commonpb.Payload) *indexergenpb.Message {
+func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string, taskQueue string,
+	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding enumspb.EncodingType,
+	searchAttributes map[string]*commonpb.Payload) *indexerspb.Message {
 
-	msgType := indexergenpb.MessageType_Index
-	fields := map[string]*indexergenpb.Field{
-		es.WorkflowType:  {Type: es.FieldTypeString, StringData: workflowTypeName},
-		es.StartTime:     {Type: es.FieldTypeInt, IntData: startTimeUnixNano},
-		es.ExecutionTime: {Type: es.FieldTypeInt, IntData: executionTimeUnixNano},
-		es.TaskList:      {Type: es.FieldTypeString, StringData: taskList},
+	msgType := enumsspb.MESSAGE_TYPE_INDEX
+	fields := map[string]*indexerspb.Field{
+		es.WorkflowType:  {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: workflowTypeName}},
+		es.StartTime:     {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: startTimeUnixNano}},
+		es.ExecutionTime: {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: executionTimeUnixNano}},
+		es.TaskQueue:     {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: taskQueue}},
 	}
 	if len(memo) != 0 {
-		fields[es.Memo] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: memo}
-		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, StringData: string(encoding)}
+		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
+		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: encoding.String()}}
 	}
 	for k, v := range searchAttributes {
 		// TODO: current implementation assumes that payload is JSON.
 		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
 		data := v.GetData() // content must always be JSON
-		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: data}
+		fields[k] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: data}}
 	}
 
-	msg := &indexergenpb.Message{
+	msg := &indexerspb.Message{
 		MessageType: msgType,
 		NamespaceId: namespaceID,
 		WorkflowId:  wid,
@@ -927,32 +928,32 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 }
 
 func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, workflowTypeName string,
-	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, status executionpb.WorkflowExecutionStatus,
-	historyLength int64, taskID int64, memo []byte, taskList string, encoding common.EncodingType,
-	searchAttributes map[string]*commonpb.Payload) *indexergenpb.Message {
+	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, status enumspb.WorkflowExecutionStatus,
+	historyLength int64, taskID int64, memo []byte, taskQueue string, encoding enumspb.EncodingType,
+	searchAttributes map[string]*commonpb.Payload) *indexerspb.Message {
 
-	msgType := indexergenpb.MessageType_Index
-	fields := map[string]*indexergenpb.Field{
-		es.WorkflowType:    {Type: es.FieldTypeString, StringData: workflowTypeName},
-		es.StartTime:       {Type: es.FieldTypeInt, IntData: startTimeUnixNano},
-		es.ExecutionTime:   {Type: es.FieldTypeInt, IntData: executionTimeUnixNano},
-		es.CloseTime:       {Type: es.FieldTypeInt, IntData: endTimeUnixNano},
-		es.ExecutionStatus: {Type: es.FieldTypeInt, IntData: int64(status)},
-		es.HistoryLength:   {Type: es.FieldTypeInt, IntData: historyLength},
-		es.TaskList:        {Type: es.FieldTypeString, StringData: taskList},
+	msgType := enumsspb.MESSAGE_TYPE_INDEX
+	fields := map[string]*indexerspb.Field{
+		es.WorkflowType:    {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: workflowTypeName}},
+		es.StartTime:       {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: startTimeUnixNano}},
+		es.ExecutionTime:   {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: executionTimeUnixNano}},
+		es.CloseTime:       {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: endTimeUnixNano}},
+		es.ExecutionStatus: {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: int64(status)}},
+		es.HistoryLength:   {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: historyLength}},
+		es.TaskQueue:       {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: taskQueue}},
 	}
 	if len(memo) != 0 {
-		fields[es.Memo] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: memo}
-		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, StringData: string(encoding)}
+		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
+		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: encoding.String()}}
 	}
 	for k, v := range searchAttributes {
 		// TODO: current implementation assumes that payload is JSON.
 		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
 		data := v.GetData() // content must always be JSON
-		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: data}
+		fields[k] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: data}}
 	}
 
-	msg := &indexergenpb.Message{
+	msg := &indexerspb.Message{
 		MessageType: msgType,
 		NamespaceId: namespaceID,
 		WorkflowId:  wid,
@@ -963,9 +964,9 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 	return msg
 }
 
-func getVisibilityMessageForDeletion(namespaceID, workflowID, runID string, docVersion int64) *indexergenpb.Message {
-	msgType := indexergenpb.MessageType_Delete
-	msg := &indexergenpb.Message{
+func getVisibilityMessageForDeletion(namespaceID, workflowID, runID string, docVersion int64) *indexerspb.Message {
+	msgType := enumsspb.MESSAGE_TYPE_DELETE
+	msg := &indexerspb.Message{
 		MessageType: msgType,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,

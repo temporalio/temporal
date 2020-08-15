@@ -30,21 +30,21 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
 	"github.com/urfave/cli"
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/api/workflowservice/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/provider"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/namespace"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/client"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const (
@@ -89,16 +89,16 @@ var (
 			Usage: "Optional token for security check",
 		},
 		cli.StringFlag{
-			Name:  FlagHistoryArchivalStatusWithAlias,
-			Usage: "Flag to set history archival status, valid values are \"disabled\" and \"enabled\"",
+			Name:  FlagHistoryArchivalStateWithAlias,
+			Usage: "Flag to set history archival state, valid values are \"disabled\" and \"enabled\"",
 		},
 		cli.StringFlag{
 			Name:  FlagHistoryArchivalURIWithAlias,
 			Usage: "Optionally specify history archival URI (cannot be changed after first time archival is enabled)",
 		},
 		cli.StringFlag{
-			Name:  FlagVisibilityArchivalStatusWithAlias,
-			Usage: "Flag to set visibility archival status, valid values are \"disabled\" and \"enabled\"",
+			Name:  FlagVisibilityArchivalStateWithAlias,
+			Usage: "Flag to set visibility archival state, valid values are \"disabled\" and \"enabled\"",
 		},
 		cli.StringFlag{
 			Name:  FlagVisibilityArchivalURIWithAlias,
@@ -139,16 +139,16 @@ var (
 			Usage: "Optional token for security check",
 		},
 		cli.StringFlag{
-			Name:  FlagHistoryArchivalStatusWithAlias,
-			Usage: "Flag to set history archival status, valid values are \"disabled\" and \"enabled\"",
+			Name:  FlagHistoryArchivalStateWithAlias,
+			Usage: "Flag to set history archival state, valid values are \"disabled\" and \"enabled\"",
 		},
 		cli.StringFlag{
 			Name:  FlagHistoryArchivalURIWithAlias,
 			Usage: "Optionally specify history archival URI (cannot be changed after first time archival is enabled)",
 		},
 		cli.StringFlag{
-			Name:  FlagVisibilityArchivalStatusWithAlias,
-			Usage: "Flag to set visibility archival status, valid values are \"disabled\" and \"enabled\"",
+			Name:  FlagVisibilityArchivalStateWithAlias,
+			Usage: "Flag to set visibility archival state, valid values are \"disabled\" and \"enabled\"",
 		},
 		cli.StringFlag{
 			Name:  FlagVisibilityArchivalURIWithAlias,
@@ -289,9 +289,8 @@ func initializeMetadataMgr(
 
 	pConfig := serviceConfig.Persistence
 	pConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityListMaxQPS:            dynamicconfig.GetIntPropertyFilteredByNamespace(dependencyMaxQPS),
-		EnableSampling:                  dynamicconfig.GetBoolPropertyFn(false), // not used by namespace operation
-		EnableReadFromClosedExecutionV2: dynamicconfig.GetBoolPropertyFn(false), // not used by namespace operation
+		VisibilityListMaxQPS: dynamicconfig.GetIntPropertyFilteredByNamespace(dependencyMaxQPS),
+		EnableSampling:       dynamicconfig.GetBoolPropertyFn(false), // not used by namespace operation
 	}
 	pFactory := client.NewFactory(
 		&pConfig,
@@ -332,9 +331,9 @@ func initializeArchivalMetadata(
 
 	return archiver.NewArchivalMetadata(
 		dynamicConfig,
-		serviceConfig.Archival.History.Status,
+		serviceConfig.Archival.History.State,
 		serviceConfig.Archival.History.EnableRead,
-		serviceConfig.Archival.Visibility.Status,
+		serviceConfig.Archival.Visibility.State,
 		serviceConfig.Archival.Visibility.EnableRead,
 		&serviceConfig.NamespaceDefaults.Archival,
 	)

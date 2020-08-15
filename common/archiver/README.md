@@ -118,8 +118,8 @@ func (a *Archiver) Archive(
 
   err := youArchiverImpl()
   if nonRetryableErr(err) {
-    if featureCatalog.NonRetriableError != nil {
-	  return featureCatalog.NonRetriableError() // when the caller gets this error type back it will not retry anymore.
+    if featureCatalog.NonRetryableError != nil {
+	  return featureCatalog.NonRetryableError() // when the caller gets this error type back it will not retry anymore.
     }
   }
 }

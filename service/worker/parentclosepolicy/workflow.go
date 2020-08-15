@@ -28,24 +28,24 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/temporal"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
-	"go.temporal.io/temporal/activity"
-	"go.temporal.io/temporal/workflow"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 const (
 	processorContextKey = "processorContext"
-	// processorTaskListName is the tasklist name
-	processorTaskListName = "temporal-sys-processor-parent-close-policy"
+	// processorTaskQueueName is the taskqueue name
+	processorTaskQueueName = "temporal-sys-processor-parent-close-policy"
 	// processorWFTypeName is the workflow type
 	processorWFTypeName   = "temporal-sys-parent-close-policy-workflow"
 	processorActivityName = "temporal-sys-parent-close-policy-activity"
@@ -58,7 +58,7 @@ type (
 	RequestDetail struct {
 		WorkflowID string
 		RunID      string
-		Policy     commonpb.ParentClosePolicy
+		Policy     enumspb.ParentClosePolicy
 	}
 
 	// Request defines the request for parent close policy
@@ -106,15 +106,15 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 	for _, execution := range request.Executions {
 		var err error
 		switch execution.Policy {
-		case commonpb.ParentClosePolicy_Abandon:
+		case enumspb.PARENT_CLOSE_POLICY_ABANDON:
 			//no-op
 			continue
-		case commonpb.ParentClosePolicy_Terminate:
-			_, err = client.TerminateWorkflowExecution(nil, &historyservice.TerminateWorkflowExecutionRequest{
+		case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
+			_, err = client.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 				NamespaceId: request.NamespaceID,
 				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 					Namespace: request.Namespace,
-					WorkflowExecution: &executionpb.WorkflowExecution{
+					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
 						RunId:      execution.RunID,
 					},
@@ -122,12 +122,12 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 					Identity: processorWFTypeName,
 				},
 			})
-		case commonpb.ParentClosePolicy_RequestCancel:
-			_, err = client.RequestCancelWorkflowExecution(nil, &historyservice.RequestCancelWorkflowExecutionRequest{
+		case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
+			_, err = client.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
 				NamespaceId: request.NamespaceID,
 				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 					Namespace: request.Namespace,
-					WorkflowExecution: &executionpb.WorkflowExecution{
+					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
 						RunId:      execution.RunID,
 					},

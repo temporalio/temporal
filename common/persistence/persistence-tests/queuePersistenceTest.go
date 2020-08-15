@@ -33,7 +33,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 )
 
 type (
@@ -71,13 +72,13 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 
 	messageChan := make(chan interface{})
 
-	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
+	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	go func() {
 		for i := 0; i < numMessages; i++ {
-			messageChan <- &replicationgenpb.ReplicationTask{
+			messageChan <- &replicationspb.ReplicationTask{
 				TaskType: taskType,
-				Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
-					NamespaceTaskAttributes: &replicationgenpb.NamespaceTaskAttributes{
+				Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
+					NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
 						Id: fmt.Sprintf("message-%v", i),
 					},
 				},
@@ -147,13 +148,13 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 
 	messageChan := make(chan interface{})
 
-	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
+	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	go func() {
 		for i := 0; i < numMessages; i++ {
-			messageChan <- &replicationgenpb.ReplicationTask{
+			messageChan <- &replicationspb.ReplicationTask{
 				TaskType: taskType,
-				Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
-					NamespaceTaskAttributes: &replicationgenpb.NamespaceTaskAttributes{
+				Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
+					NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
 						Id: fmt.Sprintf("message-%v", i),
 					},
 				},

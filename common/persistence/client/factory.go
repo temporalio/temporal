@@ -27,14 +27,14 @@ package client
 import (
 	"sync"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/cassandra"
-	"github.com/temporalio/temporal/common/persistence/sql"
-	"github.com/temporalio/temporal/common/quotas"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -268,15 +268,13 @@ func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	visConfig := f.config.VisibilityConfig
-	if visConfig != nil && visConfig.EnableReadFromClosedExecutionV2() && f.isCassandra() {
-		store, err = cassandra.NewVisibilityPersistenceV2(store, f.getCassandraConfig(), f.logger)
-	}
 
 	result := p.NewVisibilityManagerImpl(store, f.logger)
 	if ds.ratelimit != nil {
 		result = p.NewVisibilityPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
+
+	visConfig := f.config.VisibilityConfig
 	if visConfig != nil && visConfig.EnableSampling() {
 		result = p.NewVisibilitySamplingClient(result, visConfig, f.metricsClient, f.logger)
 	}

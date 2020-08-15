@@ -27,7 +27,7 @@ package frontend
 import (
 	"context"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"go.temporal.io/server/api/adminservice/v1"
 )
 
 var _ adminservice.AdminServiceServer = (*AdminNilCheckHandler)(nil)
@@ -162,11 +162,11 @@ func (adh *AdminNilCheckHandler) ReapplyEvents(ctx context.Context, request *adm
 	return resp, err
 }
 
-// ReadDLQMessages returns messages from DLQ
-func (adh *AdminNilCheckHandler) ReadDLQMessages(ctx context.Context, request *adminservice.ReadDLQMessagesRequest) (*adminservice.ReadDLQMessagesResponse, error) {
-	resp, err := adh.parentHandler.ReadDLQMessages(ctx, request)
+// GetDLQMessages returns messages from DLQ
+func (adh *AdminNilCheckHandler) GetDLQMessages(ctx context.Context, request *adminservice.GetDLQMessagesRequest) (*adminservice.GetDLQMessagesResponse, error) {
+	resp, err := adh.parentHandler.GetDLQMessages(ctx, request)
 	if resp == nil && err == nil {
-		resp = &adminservice.ReadDLQMessagesResponse{}
+		resp = &adminservice.GetDLQMessagesResponse{}
 	}
 	return resp, err
 }
@@ -194,6 +194,15 @@ func (adh *AdminNilCheckHandler) RefreshWorkflowTasks(ctx context.Context, reque
 	resp, err := adh.parentHandler.RefreshWorkflowTasks(ctx, request)
 	if resp == nil && err == nil {
 		resp = &adminservice.RefreshWorkflowTasksResponse{}
+	}
+	return resp, err
+}
+
+// ResendReplicationTasks requests replication task from remote cluster
+func (adh *AdminNilCheckHandler) ResendReplicationTasks(ctx context.Context, request *adminservice.ResendReplicationTasksRequest) (_ *adminservice.ResendReplicationTasksResponse, err error) {
+	resp, err := adh.parentHandler.ResendReplicationTasks(ctx, request)
+	if resp == nil && err == nil {
+		resp = &adminservice.ResendReplicationTasksResponse{}
 	}
 	return resp, err
 }

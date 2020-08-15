@@ -33,11 +33,11 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/api/common/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -91,7 +91,7 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 	s.cache = newHistoryCache(s.mockShard)
 
 	namespaceID := "test_namespace_id"
-	execution1 := executionpb.WorkflowExecution{
+	execution1 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -105,7 +105,7 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 	s.Equal(mockMS1, context.(*workflowExecutionContextImpl).mutableState)
 	release(nil)
 
-	execution2 := executionpb.WorkflowExecution{
+	execution2 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -119,7 +119,7 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(2)
 	namespaceID := "test_namespace_id"
 	s.cache = newHistoryCache(s.mockShard)
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",
 		RunId:      uuid.New(),
 	}
@@ -127,7 +127,7 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 	context, release, err := s.cache.getOrCreateWorkflowExecutionForBackground(namespaceID, we)
 	s.Nil(err)
 
-	we2 := executionpb.WorkflowExecution{
+	we2 := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",
 		RunId:      uuid.New(),
 	}
@@ -154,7 +154,7 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	namespaceID := "test_namespace_id"
 	s.cache = newHistoryCache(s.mockShard)
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-clear",
 		RunId:      uuid.New(),
 	}
@@ -185,7 +185,7 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	namespaceID := "test_namespace_id"
 	s.cache = newHistoryCache(s.mockShard)
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",
 		RunId:      uuid.New(),
 	}

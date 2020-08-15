@@ -25,7 +25,7 @@
 package admin
 
 import (
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"go.temporal.io/server/api/adminservice/v1"
 )
 
 // Client is the interface exposed by admin service client

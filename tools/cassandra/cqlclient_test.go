@@ -30,9 +30,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/environment"
-	"github.com/temporalio/temporal/tools/common/schema/test"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/environment"
+	"go.temporal.io/server/tools/common/schema/test"
 )
 
 type (
@@ -79,7 +79,7 @@ func (s *CQLClientTestSuite) TestCQLClient() {
 func newTestCQLClient(keyspace string) (*cqlClient, error) {
 	return newCQLClient(&CQLClientConfig{
 		Hosts:       environment.GetCassandraAddress(),
-		Port:        defaultCassandraPort,
+		Port:        environment.GetCassandraPort(),
 		Keyspace:    keyspace,
 		Timeout:     defaultTimeout,
 		numReplicas: 1,
@@ -108,14 +108,14 @@ CREATE TABLE events (
 -- Stores activity or workflow tasks
 CREATE TABLE tasks (
   namespace_id        uuid,
-  task_list_name   text,
-  task_list_type   int, -- enum TaskListType {ActivityTask, DecisionTask}
-  type             int, -- enum rowType {Task, TaskList}
+  task_queue_name   text,
+  task_queue_type   int, -- enum TaskQueueType {ActivityTask, WorkflowTask}
+  type             int, -- enum rowType {Task, TaskQueue}
   task_id          bigint,  -- unique identifier for tasks, monotonically increasing
   range_id         bigint static, -- Used to ensure that only one process can write to the table
   task             text,
-  task_list        text,
-  PRIMARY KEY ((namespace_id, task_list_name, task_list_type), type, task_id)
+  task_queue        text,
+  PRIMARY KEY ((namespace_id, task_queue_name, task_queue_type), type, task_id)
 );
 
 `

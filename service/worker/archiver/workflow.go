@@ -27,12 +27,12 @@ package archiver
 import (
 	"time"
 
-	"go.temporal.io/temporal/workflow"
+	"go.temporal.io/sdk/workflow"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 type dynamicConfigResult struct {
@@ -61,7 +61,7 @@ func archivalWorkflowHelper(
 	logger = logger.WithTags(
 		tag.WorkflowID(workflowInfo.WorkflowExecution.ID),
 		tag.WorkflowRunID(workflowInfo.WorkflowExecution.RunID),
-		tag.WorkflowTaskListName(workflowInfo.TaskListName),
+		tag.WorkflowTaskQueueName(workflowInfo.TaskQueueName),
 		tag.WorkflowType(workflowInfo.WorkflowType.Name))
 	logger = loggerimpl.NewReplayLogger(logger, ctx, false)
 

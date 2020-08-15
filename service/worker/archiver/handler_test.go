@@ -33,16 +33,15 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal/activity"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 
-	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/testsuite"
-	"go.temporal.io/temporal/workflow"
-
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	mmocks "go.temporal.io/server/common/metrics/mocks"
 )
 
 var (
@@ -102,7 +101,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_UploadFails_ExpireRetryTimeout()
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
 	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
-	timeoutErr := workflow.NewTimeoutError(eventpb.TimeoutType_StartToClose)
+	timeoutErr := temporal.NewTimeoutError(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, nil)
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(timeoutErr)
@@ -138,7 +137,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_DeleteFails_NonRetryableError() 
 	s.registerWorkflows(env)
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(func(context.Context, ArchiveRequest) error {
-		return temporal.NewCustomError(errDeleteNonRetriable.Error())
+		return temporal.NewNonRetryableApplicationError(errDeleteNonRetryable.Error(), "", nil)
 	})
 	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveRequest{})
 

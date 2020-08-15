@@ -25,18 +25,18 @@
 package frontend
 
 import (
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/adminservice/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common/persistence"
 )
 
 func generatePaginationToken(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 	versionHistories *persistence.VersionHistories,
-) *tokengenpb.RawHistoryContinuation {
+) *tokenspb.RawHistoryContinuation {
 
 	execution := request.Execution
-	return &tokengenpb.RawHistoryContinuation{
+	return &tokenspb.RawHistoryContinuation{
 		Namespace:         request.GetNamespace(),
 		WorkflowId:        execution.GetWorkflowId(),
 		RunId:             execution.GetRunId(),
@@ -51,7 +51,7 @@ func generatePaginationToken(
 
 func validatePaginationToken(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
-	token *tokengenpb.RawHistoryContinuation,
+	token *tokenspb.RawHistoryContinuation,
 ) error {
 
 	execution := request.Execution
@@ -67,7 +67,7 @@ func validatePaginationToken(
 	return nil
 }
 
-func serializeRawHistoryToken(token *tokengenpb.RawHistoryContinuation) ([]byte, error) {
+func serializeRawHistoryToken(token *tokenspb.RawHistoryContinuation) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}
@@ -75,13 +75,13 @@ func serializeRawHistoryToken(token *tokengenpb.RawHistoryContinuation) ([]byte,
 	return token.Marshal()
 }
 
-func deserializeRawHistoryToken(bytes []byte) (*tokengenpb.RawHistoryContinuation, error) {
-	token := &tokengenpb.RawHistoryContinuation{}
+func deserializeRawHistoryToken(bytes []byte) (*tokenspb.RawHistoryContinuation, error) {
+	token := &tokenspb.RawHistoryContinuation{}
 	err := token.Unmarshal(bytes)
 	return token, err
 }
 
-func serializeHistoryToken(token *tokengenpb.HistoryContinuation) ([]byte, error) {
+func serializeHistoryToken(token *tokenspb.HistoryContinuation) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}
@@ -89,8 +89,8 @@ func serializeHistoryToken(token *tokengenpb.HistoryContinuation) ([]byte, error
 	return token.Marshal()
 }
 
-func deserializeHistoryToken(bytes []byte) (*tokengenpb.HistoryContinuation, error) {
-	token := &tokengenpb.HistoryContinuation{}
+func deserializeHistoryToken(bytes []byte) (*tokenspb.HistoryContinuation, error) {
+	token := &tokenspb.HistoryContinuation{}
 	err := token.Unmarshal(bytes)
 	return token, err
 }

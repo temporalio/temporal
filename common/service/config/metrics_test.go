@@ -33,7 +33,7 @@ import (
 	"github.com/uber-go/tally/m3"
 	"github.com/uber-go/tally/prometheus"
 
-	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"go.temporal.io/server/common/log/loggerimpl"
 )
 
 type MetricsSuite struct {

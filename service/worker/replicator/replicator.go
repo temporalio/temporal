@@ -28,24 +28,24 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/client"
-	"github.com/temporalio/temporal/client/admin"
-	"github.com/temporalio/temporal/client/history"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/membership"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/namespace"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/common/task"
-	"github.com/temporalio/temporal/common/xdc"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/client/admin"
+	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/common/task"
+	"go.temporal.io/server/common/xdc"
 )
 
 type (
@@ -80,6 +80,7 @@ type (
 		ReplicationTaskMaxRetryDuration    dynamicconfig.DurationPropertyFn
 		ReplicationTaskContextTimeout      dynamicconfig.DurationPropertyFn
 		ReReplicationContextTimeout        dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
+		EnableRPCReplication               dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -127,7 +128,7 @@ func (r *Replicator) Start() error {
 		}
 
 		if clusterName != currentClusterName {
-			if replicationConsumerConfig.Type == config.ReplicationConsumerTypeRPC {
+			if replicationConsumerConfig.Type == config.ReplicationConsumerTypeRPC && r.config.EnableRPCReplication() {
 				processor := newNamespaceReplicationMessageProcessor(
 					clusterName,
 					r.logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
@@ -192,6 +193,7 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 			return err
 		},
 		r.historySerializer,
+		r.config.ReReplicationContextTimeout,
 		logger,
 	)
 	r.processors = append(r.processors, newReplicationTaskProcessor(

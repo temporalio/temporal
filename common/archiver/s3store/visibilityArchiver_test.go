@@ -37,20 +37,22 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/s3store/mocks"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/payload"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/s3store/mocks"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	"github.com/uber-go/tally"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/api/common/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.uber.org/zap"
 )
 
@@ -158,16 +160,16 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 	URI, err := archiver.NewURI("wrongscheme://")
 	s.NoError(err)
 	request := &archiverproto.ArchiveVisibilityRequest{
-		Namespace:          testNamespace,
-		NamespaceId:        testNamespaceID,
-		WorkflowId:         testWorkflowID,
-		RunId:              testRunID,
-		WorkflowTypeName:   testWorkflowTypeName,
-		StartTimestamp:     time.Now().UnixNano(),
-		ExecutionTimestamp: 0, // workflow without backoff
-		CloseTimestamp:     time.Now().UnixNano(),
-		Status:             executionpb.WorkflowExecutionStatus_Failed,
-		HistoryLength:      int64(101),
+		Namespace:        testNamespace,
+		NamespaceId:      testNamespaceID,
+		WorkflowId:       testWorkflowID,
+		RunId:            testRunID,
+		WorkflowTypeName: testWorkflowTypeName,
+		StartTime:        timestamp.TimeNowPtrUtc(),
+		ExecutionTime:    nil, // workflow without backoff
+		CloseTime:        timestamp.TimeNowPtrUtc(),
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		HistoryLength:    int64(101),
 	}
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
 	s.Error(err)
@@ -179,34 +181,34 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidRequest() {
 	s.Error(err)
 }
 
-func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
+func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
-	nonRetriableErr := errors.New("some non-retryable error")
+	nonRetryableErr := errors.New("some non-retryable error")
 	err := visibilityArchiver.Archive(
 		context.Background(),
 		s.testArchivalURI,
 		&archiverproto.ArchiveVisibilityRequest{
 			NamespaceId: testNamespaceID,
 		},
-		archiver.GetNonRetriableErrorOption(nonRetriableErr),
+		archiver.GetNonRetryableErrorOption(nonRetryableErr),
 	)
-	s.Equal(nonRetriableErr, err)
+	s.Equal(nonRetryableErr, err)
 }
 
 func (s *visibilityArchiverSuite) TestArchive_Success() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
-	closeTimestamp := time.Now()
+	closeTimestamp := timestamp.TimeNowPtrUtc()
 	request := &archiverproto.ArchiveVisibilityRequest{
-		NamespaceId:        testNamespaceID,
-		Namespace:          testNamespace,
-		WorkflowId:         testWorkflowID,
-		RunId:              testRunID,
-		WorkflowTypeName:   testWorkflowTypeName,
-		StartTimestamp:     closeTimestamp.Add(-time.Hour).UnixNano(),
-		ExecutionTimestamp: 0, // workflow without backoff
-		CloseTimestamp:     closeTimestamp.UnixNano(),
-		Status:             executionpb.WorkflowExecutionStatus_Failed,
-		HistoryLength:      int64(101),
+		NamespaceId:      testNamespaceID,
+		Namespace:        testNamespace,
+		WorkflowId:       testWorkflowID,
+		RunId:            testRunID,
+		WorkflowTypeName: testWorkflowTypeName,
+		StartTime:        timestamp.TimePtr(closeTimestamp.Add(-time.Hour)),
+		ExecutionTime:    nil, // workflow without backoff
+		CloseTime:        closeTimestamp,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		HistoryLength:    int64(101),
 		Memo: &commonpb.Memo{
 			Fields: map[string]*commonpb.Payload{
 				"testFields": payload.EncodeBytes([]byte{1, 2, 3}),
@@ -435,9 +437,9 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 			WorkflowId:       testWorkflowID,
 			RunId:            fmt.Sprintf("%s-%d", testRunID, i),
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTimestamp:   testData.day*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second),
-			CloseTimestamp:   (testData.day+30)*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second),
-			Status:           executionpb.WorkflowExecutionStatus_Failed,
+			StartTime:        timestamp.UnixOrZeroTimePtr(testData.day*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second)),
+			CloseTime:        timestamp.UnixOrZeroTimePtr((testData.day+30)*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second)),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		}
 		err := visibilityArchiver.Archive(context.Background(), URI, &record)
@@ -523,7 +525,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 		PageSize:    1,
 		Query:       "parsed by mockParser",
 	}
-	executions := []*executionpb.WorkflowExecutionInfo{}
+	executions := []*workflowpb.WorkflowExecutionInfo{}
 	var first = true
 	for first || request.NextPageToken != nil {
 		response, err := visibilityArchiver.Query(context.Background(), URI, request)
@@ -548,7 +550,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 		PageSize:    1,
 		Query:       "parsed by mockParser",
 	}
-	executions = []*executionpb.WorkflowExecutionInfo{}
+	executions = []*workflowpb.WorkflowExecutionInfo{}
 	first = true
 	for first || request.NextPageToken != nil {
 		response, err := visibilityArchiver.Query(context.Background(), URI, request)
@@ -572,9 +574,9 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowId:       testWorkflowID,
 			RunId:            testRunID,
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTimestamp:   1,
-			CloseTimestamp:   int64(1 * time.Hour),
-			Status:           executionpb.WorkflowExecutionStatus_Failed,
+			StartTime:        timestamp.UnixOrZeroTimePtr(1),
+			CloseTime:        timestamp.UnixOrZeroTimePtr(time.Hour.Nanoseconds()),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		},
 		{
@@ -583,9 +585,9 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowId:       testWorkflowID,
 			RunId:            testRunID + "1",
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTimestamp:   1,
-			CloseTimestamp:   int64(1*time.Hour + 30*time.Minute),
-			Status:           executionpb.WorkflowExecutionStatus_Failed,
+			StartTime:        timestamp.UnixOrZeroTimePtr(1),
+			CloseTime:        timestamp.UnixOrZeroTimePtr(time.Hour.Nanoseconds() + 30*time.Minute.Nanoseconds()),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		},
 		{
@@ -594,9 +596,9 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowId:       testWorkflowID,
 			RunId:            testRunID + "1",
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTimestamp:   1,
-			CloseTimestamp:   int64(3 * time.Hour),
-			Status:           executionpb.WorkflowExecutionStatus_Failed,
+			StartTime:        timestamp.UnixOrZeroTimePtr(1),
+			CloseTime:        timestamp.UnixOrZeroTimePtr(3 * time.Hour.Nanoseconds()),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		},
 	}

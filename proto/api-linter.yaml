@@ -1,0 +1,35 @@
+- included_paths:
+    - '**/*.proto'
+  disabled_rules:
+    - 'core::0192::has-comments'
+    - 'core::0191::java-outer-classname'
+    - 'core::0191::java-multiple-files'
+    - 'core::0191::java-package'
+
+- included_paths:
+    - '**/message.proto'
+  disabled_rules:
+    - 'core::0122::name-suffix'
+    - 'core::0123::resource-annotation'
+
+- included_paths:
+    - '**/*service/v1/request_response.proto'
+  disabled_rules:
+    - 'core::0122::name-suffix'
+    - 'core::0131::request-name-required'
+    - 'core::0131::request-unknown-fields'
+    - 'core::0132::request-parent-required'
+    - 'core::0132::request-unknown-fields'
+    - 'core::0132::response-unknown-fields'
+    - 'core::0158::response-next-page-token-field'
+    - 'core::0158::response-plural-first-field'
+    - 'core::0158::response-repeated-first-field'
+    - 'core::0158::request-page-token-field'
+    - 'core::0158::request-page-size-field'
+
+- included_paths:
+    - '**/*service/v1/service.proto'
+  disabled_rules:
+    - 'core::0127::http-annotation'
+    - 'core::0131::method-signature'
+    - 'core::0131::response-message-name'

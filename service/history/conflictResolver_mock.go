@@ -32,7 +32,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	persistence "github.com/temporalio/temporal/common/persistence"
+	enums "go.temporal.io/server/api/enums/v1"
+	persistence "go.temporal.io/server/common/persistence"
 )
 
 // MockconflictResolver is a mock of conflictResolver interface.
@@ -59,7 +60,7 @@ func (m *MockconflictResolver) EXPECT() *MockconflictResolverMockRecorder {
 }
 
 // reset mocks base method.
-func (m *MockconflictResolver) reset(prevRunID string, prevLastWriteVersion int64, prevState int, requestID string, replayEventID int64, info *persistence.WorkflowExecutionInfo, updateCondition int64) (mutableState, error) {
+func (m *MockconflictResolver) reset(prevRunID string, prevLastWriteVersion int64, prevState enums.WorkflowExecutionState, requestID string, replayEventID int64, info *persistence.WorkflowExecutionInfo, updateCondition int64) (mutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "reset", prevRunID, prevLastWriteVersion, prevState, requestID, replayEventID, info, updateCondition)
 	ret0, _ := ret[0].(mutableState)

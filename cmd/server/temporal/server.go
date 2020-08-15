@@ -28,32 +28,34 @@ import (
 	"log"
 	"time"
 
-	sdkclient "go.temporal.io/temporal/client"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/provider"
-	"github.com/temporalio/temporal/common/authorization"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/elasticsearch"
-	l "github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/config/ringpop"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/service/frontend"
-	"github.com/temporalio/temporal/service/history"
-	"github.com/temporalio/temporal/service/matching"
-	"github.com/temporalio/temporal/service/worker"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/elasticsearch"
+	l "go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/config/ringpop"
+	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/service/frontend"
+	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/matching"
+	"go.temporal.io/server/service/worker"
 )
 
 type (
@@ -118,9 +120,20 @@ func (s *server) startService() common.Daemon {
 	}
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
 
+	err = ringpop.ValidateRingpopConfig(&s.cfg.Global.Membership)
+	if err != nil {
+		log.Fatalf("Ringpop config validation error - %v", err)
+	}
+
+	tlsFactory, err := encryption.NewTLSConfigProviderFromConfig(s.cfg.Global.TLS)
+
+	if err != nil {
+		log.Fatalf("error initializing TLS provider: %v", err)
+	}
+
 	svcCfg := s.cfg.Services[s.name]
 	params.MetricScope = svcCfg.Metrics.NewScope(params.Logger)
-	params.RPCFactory = svcCfg.RPC.NewFactory(params.Name, params.Logger)
+	params.RPCFactory = rpc.NewFactory(&svcCfg.RPC, params.Name, params.Logger, tlsFactory)
 
 	// Ringpop uses a different port to register handlers, this map is needed to resolve
 	// services to correct addresses used by clients through ServiceResolver lookup API
@@ -164,13 +177,27 @@ func (s *server) startService() common.Daemon {
 	)
 
 	if s.cfg.PublicClient.HostPort == "" {
-		log.Fatalf("need to provide an endpoint config for PublicClient")
+		log.Fatal("need to provide an endpoint config for PublicClient")
 	} else {
-		var err error
+		zapLogger, err := zap.NewProduction()
+		if err != nil {
+			log.Fatalf("failed to initialize zap logger: %v", err)
+		}
+
+		options, err := tlsFactory.GetFrontendClientConfig()
+		if err != nil {
+			log.Fatalf("unable to load frontend tls configuration: %v", err)
+		}
+
 		params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
 			HostPort:     s.cfg.PublicClient.HostPort,
 			Namespace:    common.SystemLocalNamespace,
 			MetricsScope: params.MetricScope,
+			Logger:       l.NewZapAdapter(zapLogger),
+			ConnectionOptions: sdkclient.ConnectionOptions{
+				TLS:                options,
+				DisableHealthCheck: true,
+			},
 		})
 		if err != nil {
 			log.Fatalf("failed to create public client: %v", err)
@@ -214,9 +241,9 @@ func (s *server) startService() common.Daemon {
 
 	params.ArchivalMetadata = archiver.NewArchivalMetadata(
 		dc,
-		s.cfg.Archival.History.Status,
+		s.cfg.Archival.History.State,
 		s.cfg.Archival.History.EnableRead,
-		s.cfg.Archival.Visibility.Status,
+		s.cfg.Archival.Visibility.State,
 		s.cfg.Archival.Visibility.EnableRead,
 		&s.cfg.NamespaceDefaults.Archival,
 	)

@@ -29,18 +29,19 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 var (
@@ -192,7 +193,7 @@ func (r *nDCHistoryReplicatorImpl) ApplyEvents(
 	request *historyservice.ReplicateEventsV2Request,
 ) (retError error) {
 
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 	task, err := newNDCReplicationTask(
 		r.clusterMetadata,
 		r.historySerializer,
@@ -232,7 +233,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 	}()
 
 	switch task.getFirstEvent().GetEventType() {
-	case eventpb.EventType_WorkflowExecutionStarted:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 		return r.applyStartEvents(ctx, context, releaseFn, task)
 
 	default:
@@ -366,7 +367,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareBranch(
 	switch err.(type) {
 	case nil:
 		return doContinue, versionHistoryIndex, nil
-	case *serviceerror.RetryTaskV2:
+	case *serviceerrors.RetryTaskV2:
 		// replication message can arrive out of order
 		// do not log
 		return false, 0, err
@@ -444,7 +445,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		newExecutionInfo := newMutableState.GetExecutionInfo()
 		newContext := newWorkflowExecutionContext(
 			newExecutionInfo.NamespaceID,
-			executionpb.WorkflowExecution{
+			commonpb.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowID,
 				RunId:      newExecutionInfo.RunID,
 			},
@@ -580,7 +581,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithCon
 	releaseFn(nil)
 
 	// step 2
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 	task, newTask, err := task.splitTask(startTime)
 	if err != nil {
 		return err
@@ -613,7 +614,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 	// for non reset workflow execution replication task, just do re-replication
 	if !task.isWorkflowReset() {
 		firstEvent := task.getFirstEvent()
-		return nil, newNDCRetryTaskErrorWithHint(
+		return nil, serviceerrors.NewRetryTaskV2(
 			mutableStateMissingMessage,
 			task.getNamespaceID(),
 			task.getWorkflowID(),
@@ -625,10 +626,10 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 		)
 	}
 
-	decisionTaskFailedEvent := task.getFirstEvent()
-	attr := decisionTaskFailedEvent.GetDecisionTaskFailedEventAttributes()
+	workflowTaskFailedEvent := task.getFirstEvent()
+	attr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
 	baseRunID := attr.GetBaseRunId()
-	baseEventID := decisionTaskFailedEvent.GetEventId() - 1
+	baseEventID := workflowTaskFailedEvent.GetEventId() - 1
 	baseEventVersion := attr.GetForkEventVersion()
 	newRunID := attr.GetNewRunId()
 
@@ -720,27 +721,4 @@ func (r *nDCHistoryReplicatorImpl) notify(
 	}
 	now = now.Add(-r.shard.GetConfig().StandbyClusterDelay())
 	r.shard.SetCurrentTime(clusterName, now)
-}
-
-func newNDCRetryTaskErrorWithHint(
-	message string,
-	namespaceID string,
-	workflowID string,
-	runID string,
-	startEventID int64,
-	startEventVersion int64,
-	endEventID int64,
-	endEventVersion int64,
-) error {
-
-	return serviceerror.NewRetryTaskV2(
-		message,
-		namespaceID,
-		workflowID,
-		runID,
-		startEventID,
-		startEventVersion,
-		endEventID,
-		endEventVersion,
-	)
 }

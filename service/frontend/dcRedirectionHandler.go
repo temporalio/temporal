@@ -28,16 +28,14 @@ import (
 	"context"
 	"time"
 
-	querypb "go.temporal.io/temporal-proto/query"
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/api/workflowservice/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/config"
 )
 
 var _ Handler = (*DCRedirectionHandlerImpl)(nil)
@@ -197,17 +195,17 @@ func (handler *DCRedirectionHandlerImpl) UpdateNamespace(
 
 // Other APIs
 
-// DescribeTaskList API call
-func (handler *DCRedirectionHandlerImpl) DescribeTaskList(
+// DescribeTaskQueue API call
+func (handler *DCRedirectionHandlerImpl) DescribeTaskQueue(
 	ctx context.Context,
-	request *workflowservice.DescribeTaskListRequest,
-) (resp *workflowservice.DescribeTaskListResponse, retError error) {
+	request *workflowservice.DescribeTaskQueueRequest,
+) (resp *workflowservice.DescribeTaskQueueResponse, retError error) {
 
-	var apiName = "DescribeTaskList"
+	var apiName = "DescribeTaskQueue"
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeTaskListScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeTaskQueueScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -216,10 +214,10 @@ func (handler *DCRedirectionHandlerImpl) DescribeTaskList(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.DescribeTaskList(ctx, request)
+			resp, err = handler.frontendHandler.DescribeTaskQueue(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.DescribeTaskList(ctx, request)
+			resp, err = remoteClient.DescribeTaskQueue(ctx, request)
 		}
 		return err
 	})
@@ -482,17 +480,17 @@ func (handler *DCRedirectionHandlerImpl) GetSearchAttributes(
 	return handler.frontendHandler.GetSearchAttributes(ctx, request)
 }
 
-// PollForActivityTask API call
-func (handler *DCRedirectionHandlerImpl) PollForActivityTask(
+// PollActivityTaskQueue API call
+func (handler *DCRedirectionHandlerImpl) PollActivityTaskQueue(
 	ctx context.Context,
-	request *workflowservice.PollForActivityTaskRequest,
-) (resp *workflowservice.PollForActivityTaskResponse, retError error) {
+	request *workflowservice.PollActivityTaskQueueRequest,
+) (resp *workflowservice.PollActivityTaskQueueResponse, retError error) {
 
-	var apiName = "PollForActivityTask"
+	var apiName = "PollActivityTaskQueue"
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionPollForActivityTaskScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionPollActivityTaskQueueScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -501,10 +499,10 @@ func (handler *DCRedirectionHandlerImpl) PollForActivityTask(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.PollForActivityTask(ctx, request)
+			resp, err = handler.frontendHandler.PollActivityTaskQueue(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.PollForActivityTask(ctx, request)
+			resp, err = remoteClient.PollActivityTaskQueue(ctx, request)
 		}
 		return err
 	})
@@ -512,17 +510,17 @@ func (handler *DCRedirectionHandlerImpl) PollForActivityTask(
 	return resp, err
 }
 
-// PollForDecisionTask API call
-func (handler *DCRedirectionHandlerImpl) PollForDecisionTask(
+// PollWorkflowTaskQueue API call
+func (handler *DCRedirectionHandlerImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
-	request *workflowservice.PollForDecisionTaskRequest,
-) (resp *workflowservice.PollForDecisionTaskResponse, retError error) {
+	request *workflowservice.PollWorkflowTaskQueueRequest,
+) (resp *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 
-	var apiName = "PollForDecisionTask"
+	var apiName = "PollWorkflowTaskQueue"
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionPollForDecisionTaskScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionPollWorkflowTaskQueueScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -531,10 +529,10 @@ func (handler *DCRedirectionHandlerImpl) PollForDecisionTask(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.PollForDecisionTask(ctx, request)
+			resp, err = handler.frontendHandler.PollWorkflowTaskQueue(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.PollForDecisionTask(ctx, request)
+			resp, err = remoteClient.PollWorkflowTaskQueue(ctx, request)
 		}
 		return err
 	})
@@ -563,15 +561,8 @@ func (handler *DCRedirectionHandlerImpl) QueryWorkflow(
 		case targetDC == handler.currentClusterName:
 			resp, err = handler.frontendHandler.QueryWorkflow(ctx, request)
 		default:
-			// Only autofoward consistent queries, this is done for two reasons:
-			// 1. Query is meant to be fast, autoforwarding all queries will increase latency.
-			// 2. If eventual consistency was requested then the results from running out of local dc will be fine.
-			if request.GetQueryConsistencyLevel() == querypb.QueryConsistencyLevel_Strong {
-				remoteClient := handler.GetRemoteFrontendClient(targetDC)
-				resp, err = remoteClient.QueryWorkflow(ctx, request)
-			} else {
-				resp, err = handler.frontendHandler.QueryWorkflow(ctx, request)
-			}
+			remoteClient := handler.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.QueryWorkflow(ctx, request)
 		}
 		return err
 	})
@@ -599,7 +590,7 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeat(
 		return nil, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, primitives.UUIDString(token.GetNamespaceId()), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -674,17 +665,17 @@ func (handler *DCRedirectionHandlerImpl) RequestCancelWorkflowExecution(
 	return resp, err
 }
 
-// ResetStickyTaskList API call
-func (handler *DCRedirectionHandlerImpl) ResetStickyTaskList(
+// ResetStickyTaskQueue API call
+func (handler *DCRedirectionHandlerImpl) ResetStickyTaskQueue(
 	ctx context.Context,
-	request *workflowservice.ResetStickyTaskListRequest,
-) (resp *workflowservice.ResetStickyTaskListResponse, retError error) {
+	request *workflowservice.ResetStickyTaskQueueRequest,
+) (resp *workflowservice.ResetStickyTaskQueueResponse, retError error) {
 
-	var apiName = "ResetStickyTaskList"
+	var apiName = "ResetStickyTaskQueue"
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionResetStickyTaskListScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionResetStickyTaskQueueScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -693,10 +684,10 @@ func (handler *DCRedirectionHandlerImpl) ResetStickyTaskList(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.ResetStickyTaskList(ctx, request)
+			resp, err = handler.frontendHandler.ResetStickyTaskQueue(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.ResetStickyTaskList(ctx, request)
+			resp, err = remoteClient.ResetStickyTaskQueue(ctx, request)
 		}
 		return err
 	})
@@ -754,7 +745,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceled(
 		return resp, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, primitives.UUIDString(token.GetNamespaceId()), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -819,7 +810,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompleted(
 		return resp, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, primitives.UUIDString(token.GetNamespaceId()), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -884,7 +875,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailed(
 		return resp, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, primitives.UUIDString(token.GetNamespaceId()), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -929,17 +920,17 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailedById(
 	return resp, err
 }
 
-// RespondDecisionTaskCompleted API call
-func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskCompleted(
+// RespondWorkflowTaskCompleted API call
+func (handler *DCRedirectionHandlerImpl) RespondWorkflowTaskCompleted(
 	ctx context.Context,
-	request *workflowservice.RespondDecisionTaskCompletedRequest,
-) (resp *workflowservice.RespondDecisionTaskCompletedResponse, retError error) {
+	request *workflowservice.RespondWorkflowTaskCompletedRequest,
+) (resp *workflowservice.RespondWorkflowTaskCompletedResponse, retError error) {
 
-	var apiName = "RespondDecisionTaskCompleted"
+	var apiName = "RespondWorkflowTaskCompleted"
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondDecisionTaskCompletedScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondWorkflowTaskCompletedScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -949,14 +940,14 @@ func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskCompleted(
 		return nil, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, primitives.UUIDString(token.GetNamespaceId()), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.RespondDecisionTaskCompleted(ctx, request)
+			resp, err = handler.frontendHandler.RespondWorkflowTaskCompleted(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.RespondDecisionTaskCompleted(ctx, request)
+			resp, err = remoteClient.RespondWorkflowTaskCompleted(ctx, request)
 		}
 		return err
 	})
@@ -964,17 +955,17 @@ func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskCompleted(
 	return resp, err
 }
 
-// RespondDecisionTaskFailed API call
-func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskFailed(
+// RespondWorkflowTaskFailed API call
+func (handler *DCRedirectionHandlerImpl) RespondWorkflowTaskFailed(
 	ctx context.Context,
-	request *workflowservice.RespondDecisionTaskFailedRequest,
-) (resp *workflowservice.RespondDecisionTaskFailedResponse, retError error) {
+	request *workflowservice.RespondWorkflowTaskFailedRequest,
+) (resp *workflowservice.RespondWorkflowTaskFailedResponse, retError error) {
 
-	var apiName = "RespondDecisionTaskFailed"
+	var apiName = "RespondWorkflowTaskFailed"
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondDecisionTaskFailedScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondWorkflowTaskFailedScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -984,14 +975,14 @@ func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskFailed(
 		return resp, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, primitives.UUIDString(token.GetNamespaceId()), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.RespondDecisionTaskFailed(ctx, request)
+			resp, err = handler.frontendHandler.RespondWorkflowTaskFailed(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.RespondDecisionTaskFailed(ctx, request)
+			resp, err = remoteClient.RespondWorkflowTaskFailed(ctx, request)
 		}
 		return err
 	})
@@ -1153,17 +1144,17 @@ func (handler *DCRedirectionHandlerImpl) TerminateWorkflowExecution(
 	return resp, err
 }
 
-// ListTaskListPartitions API call
-func (handler *DCRedirectionHandlerImpl) ListTaskListPartitions(
+// ListTaskQueuePartitions API call
+func (handler *DCRedirectionHandlerImpl) ListTaskQueuePartitions(
 	ctx context.Context,
-	request *workflowservice.ListTaskListPartitionsRequest,
-) (resp *workflowservice.ListTaskListPartitionsResponse, retError error) {
+	request *workflowservice.ListTaskQueuePartitionsRequest,
+) (resp *workflowservice.ListTaskQueuePartitionsResponse, retError error) {
 
-	var apiName = "ListTaskListPartitions"
+	var apiName = "ListTaskQueuePartitions"
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionListTaskListPartitionsScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListTaskQueuePartitionsScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1172,10 +1163,10 @@ func (handler *DCRedirectionHandlerImpl) ListTaskListPartitions(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.ListTaskListPartitions(ctx, request)
+			resp, err = handler.frontendHandler.ListTaskQueuePartitions(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.ListTaskListPartitions(ctx, request)
+			resp, err = remoteClient.ListTaskQueuePartitions(ctx, request)
 		}
 		return err
 	})

@@ -28,15 +28,16 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/activity"
-	cclient "go.temporal.io/temporal/client"
-	"go.temporal.io/temporal/workflow"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/service/worker/scanner/executions"
-	"github.com/temporalio/temporal/service/worker/scanner/history"
-	"github.com/temporalio/temporal/service/worker/scanner/tasklist"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/service/worker/scanner/executions"
+	"go.temporal.io/server/service/worker/scanner/history"
+	"go.temporal.io/server/service/worker/scanner/taskqueue"
 )
 
 type (
@@ -47,22 +48,22 @@ const (
 	scannerContextKey = contextKey(0)
 
 	maxConcurrentActivityExecutionSize     = 10
-	maxConcurrentDecisionTaskExecutionSize = 10
+	maxConcurrentWorkflowTaskExecutionSize = 10
 	infiniteDuration                       = 20 * 365 * 24 * time.Hour
 
-	tlScannerWFID                 = "temporal-sys-tl-scanner"
-	tlScannerWFTypeName           = "temporal-sys-tl-scanner-workflow"
-	tlScannerTaskListName         = "temporal-sys-tl-scanner-tasklist-0"
-	taskListScavengerActivityName = "temporal-sys-tl-scanner-scvg-activity"
+	tqScannerWFID                  = "temporal-sys-tq-scanner"
+	tqScannerWFTypeName            = "temporal-sys-tq-scanner-workflow"
+	tqScannerTaskQueueName         = "temporal-sys-tq-scanner-taskqueue-0"
+	taskQueueScavengerActivityName = "temporal-sys-tq-scanner-scvg-activity"
 
 	historyScannerWFID           = "temporal-sys-history-scanner"
 	historyScannerWFTypeName     = "temporal-sys-history-scanner-workflow"
-	historyScannerTaskListName   = "temporal-sys-history-scanner-tasklist-0"
+	historyScannerTaskQueueName  = "temporal-sys-history-scanner-taskqueue-0"
 	historyScavengerActivityName = "temporal-sys-history-scanner-scvg-activity"
 
 	executionsScannerWFID           = "temporal-sys-executions-scanner"
 	executionsScannerWFTypeName     = "temporal-sys-executions-scanner-workflow"
-	executionsScannerTaskListName   = "temporal-sys-executions-scanner-tasklist-0"
+	executionsScannerTaskQueueName  = "temporal-sys-executions-scanner-taskqueue-0"
 	executionsScavengerActivityName = "temporal-sys-executions-scanner-scvg-activity"
 )
 
@@ -81,33 +82,33 @@ var (
 		HeartbeatTimeout:       5 * time.Minute,
 		RetryPolicy:            &activityRetryPolicy,
 	}
-	tlScannerWFStartOptions = cclient.StartWorkflowOptions{
-		ID:                    tlScannerWFID,
-		TaskList:              tlScannerTaskListName,
+	tlScannerWFStartOptions = client.StartWorkflowOptions{
+		ID:                    tqScannerWFID,
+		TaskQueue:             tqScannerTaskQueueName,
 		WorkflowRunTimeout:    5 * 24 * time.Hour,
-		WorkflowIDReusePolicy: cclient.WorkflowIDReusePolicyAllowDuplicate,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		CronSchedule:          "0 */12 * * *",
 	}
-	historyScannerWFStartOptions = cclient.StartWorkflowOptions{
+	historyScannerWFStartOptions = client.StartWorkflowOptions{
 		ID:                    historyScannerWFID,
-		TaskList:              historyScannerTaskListName,
-		WorkflowIDReusePolicy: cclient.WorkflowIDReusePolicyAllowDuplicate,
+		TaskQueue:             historyScannerTaskQueueName,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		CronSchedule:          "0 */12 * * *",
 	}
-	executionsScannerWFStartOptions = cclient.StartWorkflowOptions{
+	executionsScannerWFStartOptions = client.StartWorkflowOptions{
 		ID:                    executionsScannerWFID,
-		TaskList:              executionsScannerTaskListName,
-		WorkflowIDReusePolicy: cclient.WorkflowIDReusePolicyAllowDuplicate,
+		TaskQueue:             executionsScannerTaskQueueName,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		CronSchedule:          "0 */12 * * *",
 	}
 )
 
-// TaskListScannerWorkflow is the workflow that runs the task-list scanner background daemon
-func TaskListScannerWorkflow(
+// TaskQueueScannerWorkflow is the workflow that runs the task queue scanner background daemon
+func TaskQueueScannerWorkflow(
 	ctx workflow.Context,
 ) error {
 
-	future := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, activityOptions), taskListScavengerActivityName)
+	future := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, activityOptions), taskQueueScavengerActivityName)
 	return future.Get(ctx, nil)
 }
 
@@ -159,14 +160,14 @@ func HistoryScavengerActivity(
 	return scavenger.Run(activityCtx)
 }
 
-// TaskListScavengerActivity is the activity that runs task list scavenger
-func TaskListScavengerActivity(
+// TaskQueueScavengerActivity is the activity that runs task queue scavenger
+func TaskQueueScavengerActivity(
 	activityCtx context.Context,
 ) error {
 
 	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
-	scavenger := tasklist.NewScavenger(ctx.GetTaskManager(), ctx.GetMetricsClient(), ctx.GetLogger())
-	ctx.GetLogger().Info("Starting task list scavenger")
+	scavenger := taskqueue.NewScavenger(ctx.GetTaskManager(), ctx.GetMetricsClient(), ctx.GetLogger())
+	ctx.GetLogger().Info("Starting task queue scavenger")
 	scavenger.Start()
 	for scavenger.Alive() {
 		activity.RecordHeartbeat(activityCtx)

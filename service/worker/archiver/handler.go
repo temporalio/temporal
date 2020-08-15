@@ -27,12 +27,12 @@ package archiver
 import (
 	"time"
 
-	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/workflow"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (
@@ -105,13 +105,8 @@ func (h *handler) Finished() []uint64 {
 }
 
 func (h *handler) handleRequest(ctx workflow.Context, request *ArchiveRequest) {
-	// For backward compatibility
-	targets := request.Targets
-	if len(targets) == 0 {
-		targets = append(targets, ArchiveTargetHistory)
-	}
-	pendingRequests := []workflow.Channel{}
-	for _, target := range targets {
+	var pendingRequests []workflow.Channel
+	for _, target := range request.Targets {
 		doneCh := workflow.NewChannel(ctx)
 		pendingRequests = append(pendingRequests, doneCh)
 		switch target {
@@ -142,9 +137,8 @@ func (h *handler) handleHistoryRequest(ctx workflow.Context, request *ArchiveReq
 		ScheduleToCloseTimeout: 5 * time.Minute,
 		StartToCloseTimeout:    1 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:          time.Second,
-			BackoffCoefficient:       2.0,
-			NonRetriableErrorReasons: uploadHistoryActivityNonRetryableErrors,
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
 		},
 	}
 	actCtx := workflow.WithActivityOptions(ctx, ao)
@@ -162,9 +156,8 @@ func (h *handler) handleHistoryRequest(ctx workflow.Context, request *ArchiveReq
 		ScheduleToCloseTimeout: 5 * time.Minute,
 		StartToCloseTimeout:    time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:          time.Second,
-			BackoffCoefficient:       2.0,
-			NonRetriableErrorReasons: deleteHistoryActivityNonRetryableErrors,
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
 		},
 	}
 
@@ -188,9 +181,8 @@ func (h *handler) handleVisibilityRequest(ctx workflow.Context, request *Archive
 		ScheduleToCloseTimeout: 5 * time.Minute,
 		StartToCloseTimeout:    1 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:          time.Second,
-			BackoffCoefficient:       2.0,
-			NonRetriableErrorReasons: uploadHistoryActivityNonRetryableErrors,
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
 		},
 	}
 	actCtx := workflow.WithActivityOptions(ctx, ao)

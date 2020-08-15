@@ -25,16 +25,14 @@
 package sql
 
 import (
-	"encoding/binary"
 	"net"
 	"time"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/common/log"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 type sqlClusterMetadataManager struct {
@@ -70,7 +68,7 @@ func (s *sqlClusterMetadataManager) InsertImmutableDataIfNotExists(request *p.In
 	// or even move to a lock mechanism, but that doesn't appear worth the extra lines of code.
 	_, err := s.db.InsertIfNotExistsIntoClusterMetadata(&sqlplugin.ClusterMetadataRow{
 		ImmutableData:         request.ImmutableClusterMetadata.Data,
-		ImmutableDataEncoding: *convert.StringPtr(string(request.ImmutableClusterMetadata.Encoding)),
+		ImmutableDataEncoding: request.ImmutableClusterMetadata.Encoding.String(),
 	})
 
 	if err != nil {
@@ -91,15 +89,18 @@ func (s *sqlClusterMetadataManager) GetImmutableClusterMetadata() (*p.InternalGe
 	}
 
 	return &p.InternalGetImmutableClusterMetadataResponse{
-		ImmutableClusterMetadata: p.NewDataBlob(row.ImmutableData, common.EncodingType(row.ImmutableDataEncoding)),
+		ImmutableClusterMetadata: p.NewDataBlob(row.ImmutableData, row.ImmutableDataEncoding),
 	}, nil
 }
 
 func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
-	pageToken := uint64(0)
-	if len(request.NextPageToken) > 0 {
-		pageToken = binary.LittleEndian.Uint64(request.NextPageToken)
+	var lastSeenHostId []byte
+	if len(request.NextPageToken) == 16 {
+		lastSeenHostId = request.NextPageToken
+	} else if len(request.NextPageToken) > 0 {
+		return nil, serviceerror.NewInternal("page token is corrupted.")
 	}
+
 	now := time.Now().UTC()
 	filter := &sqlplugin.ClusterMembershipFilter{
 		HostIDEquals:        request.HostIDEquals,
@@ -109,16 +110,16 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembe
 		MaxRecordCount:      request.PageSize,
 	}
 
+	if lastSeenHostId != nil && filter.HostIDEquals == nil {
+		filter.HostIDGreaterThan = lastSeenHostId
+	}
+
 	if request.LastHeartbeatWithin > 0 {
 		filter.LastHeartbeatAfter = now.Add(-request.LastHeartbeatWithin)
 	}
 
 	if request.RPCAddressEquals != nil {
 		filter.RPCAddressEquals = request.RPCAddressEquals.String()
-	}
-
-	if pageToken > 0 {
-		filter.InsertionOrderGreaterThan = pageToken
 	}
 
 	rows, err := s.db.GetClusterMembers(filter)
@@ -142,8 +143,8 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembe
 
 	var nextPageToken []byte
 	if request.PageSize > 0 && len(rows) == request.PageSize {
-		nextPageToken = make([]byte, 8)
-		binary.LittleEndian.PutUint64(nextPageToken, rows[len(rows)-1].InsertionOrder)
+		lastRow := rows[len(rows)-1]
+		nextPageToken = lastRow.HostID
 	}
 
 	return &p.GetClusterMembersResponse{ActiveMembers: convertedRows, NextPageToken: nextPageToken}, nil

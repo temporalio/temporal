@@ -28,8 +28,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 var (
@@ -38,16 +38,19 @@ var (
 		dynamicconfig.FrontendRPS:                                   3000,
 		dynamicconfig.FrontendVisibilityListMaxQPS:                  100,
 		dynamicconfig.FrontendESIndexMaxResultWindow:                defaultTestValueOfESIndexMaxResultWindow,
-		dynamicconfig.MatchingNumTasklistWritePartitions:            3,
-		dynamicconfig.MatchingNumTasklistReadPartitions:             3,
+		dynamicconfig.MatchingNumTaskqueueWritePartitions:           3,
+		dynamicconfig.MatchingNumTaskqueueReadPartitions:            3,
 		dynamicconfig.TimerProcessorHistoryArchivalSizeLimit:        5 * 1024,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts: 1,
 		dynamicconfig.AdvancedVisibilityWritingMode:                 common.AdvancedVisibilityWritingModeOff,
-		dynamicconfig.DecisionHeartbeatTimeout:                      5 * time.Second,
+		dynamicconfig.WorkflowTaskHeartbeatTimeout:                  5 * time.Second,
 		dynamicconfig.ReplicationTaskFetcherAggregationInterval:     200 * time.Millisecond,
 		dynamicconfig.ReplicationTaskFetcherErrorRetryWait:          50 * time.Millisecond,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryWait:        time.Millisecond,
-		dynamicconfig.EnableConsistentQueryByNamespace:              true,
+		dynamicconfig.FrontendEnableRPCReplication:                  true,
+		dynamicconfig.HistoryEnableRPCReplication:                   true,
+		dynamicconfig.HistoryEnableKafkaReplication:                 false,
+		dynamicconfig.WorkerEnableRPCReplication:                    true,
 	}
 )
 

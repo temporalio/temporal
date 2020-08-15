@@ -37,11 +37,11 @@ In Temporal, we use "close" to describe the opposite status of “open”. For a
 
 * The decision state machine must be **Scheduled->Started->Closed** 
 
-* The first decision task is triggered by server. Starting from that, the rest decision task is triggered by some events of workflow itself -- when those events mean something the workflow could be waiting for. For example, Signaled, ActivityClosed, ChildWorkflowClosed, TimerFired events. Events like ActivityStarted won’t trigger decisions.  
+* The first workflow task is triggered by server. Starting from that, the rest workflow task is triggered by some events of workflow itself -- when those events mean something the workflow could be waiting for. For example, Signaled, ActivityClosed, ChildWorkflowClosed, TimerFired events. Events like ActivityStarted won’t trigger decisions.  
 
 * When a decision is started(internally called in flight), there cannot be any other events written into history before a decision is closed. Those events will be put into a buffer until the decision is closed -- flush buffer will write the events into history.
 
-* **In executing mode**, a decision task will try to complete with some entities: Activities/Timers/Childworkflows/etc Scheduled. 
+* **In executing mode**, a workflow task will try to complete with some entities: Activities/Timers/Childworkflows/etc Scheduled. 
 
 * **In history replay mode**, decisions use all of those above to rebuild a stack. **Activities/ChildWorkflows/Timers/etc will not be re-executed during history replay.** 
 
@@ -55,7 +55,7 @@ In Temporal, we use "close" to describe the opposite status of “open”. For a
 
 * But Activity with RetryPolicy is a special case. Temporal will only write down Started event when Activity is finally closed. 
 
-* Activity completed/failed by worker, or timeouted by server -- they all consider activity closed, and it will trigger a decision task if no decision task on going. 
+* Activity completed/failed by worker, or timeouted by server -- they all consider activity closed, and it will trigger a workflow task if no workflow task on going. 
 
 * Like in the above, only ActivityClose events could trigger a decision.
 
@@ -133,31 +133,31 @@ The history will be the follow if everything runs smoothly (no errors, timeouts,
 
 ```
 ID:1		Workflow Started
-ID:2		DecisionTaskScheduled : first decision triggered by server
-ID:3		DecisionTaskStarted
-ID:4		DecisionTaskCompleted
+ID:2		WorkflowTaskScheduled : first decision triggered by server
+ID:3		WorkflowTaskStarted
+ID:4		WorkflowTaskCompleted
 ID:5		ActivityTaskScheduled : activityA is scheduled by decision
 ID:6		ActivityTaskStarted   : started by worker 
 ID:7		ActivityTaskCompleted : completed with result of var a
-ID:8		DecisionTaskScheduled : triggered by ActivityCompleted
-ID:9		DecisionTaskStarted
-ID:10		DecisionTaskCompleted
+ID:8		WorkflowTaskScheduled : triggered by ActivityCompleted
+ID:9		WorkflowTaskStarted
+ID:10		WorkflowTaskCompleted
 ID:11		TimerStarted : decision scheduled a timer for 1 minute
 ID:12		TimerFired : fired after 1 minute
-ID:13		DecisionTaskScheduled : triggered by TimerFired
-ID:14		DecisionTaskStarted
-ID:15		DecisionTaskCompleted
+ID:13		WorkflowTaskScheduled : triggered by TimerFired
+ID:14		WorkflowTaskStarted
+ID:15		WorkflowTaskCompleted
 ID:16		ActivityTaskScheduled: activityB scheduled by decision with param a 
 ID:17		ActivityTaskStarted : started by worker
 ID:18		ActivityTaskCompleted : completed with nil as error
-ID:19		DecisionTaskScheduled : triggered by ActivityCompleted
-ID:20		DecisionTaskStarted
-ID:21		DecisionTaskCompleted
+ID:19		WorkflowTaskScheduled : triggered by ActivityCompleted
+ID:20		WorkflowTaskStarted
+ID:21		WorkflowTaskCompleted
 ID:22		TimerStarted : decision scheduled a timer for 1 hour
 ID:23		TimerFired : fired after 1 hour
-ID:24		DecisionTaskScheduled : triggered by TimerFired
-ID:25		DecisionTaskStarted
-ID:26		DecisionTaskCompleted 
+ID:24		WorkflowTaskScheduled : triggered by TimerFired
+ID:25		WorkflowTaskStarted
+ID:26		WorkflowTaskCompleted 
 ID:27		WorkflowCompleted     : completed by decision
 ```
 
@@ -244,7 +244,7 @@ This usually means workflow history is corrupted due to some bug. For example, t
 
 * Changing duration of timer 
 
-* Using time.Now() instead of workflow.Now()
+* Using time.Now().UTC() instead of workflow.Now()
 
 * Use golang builtin "go" to start goroutine in workflow, instead of “workflow.Go”
 
@@ -307,7 +307,7 @@ Another option is **NonDeterministicWorkflowPolicyFailWorkflow** which will fail
 
 It defaults to false which means all workflows will stay in stickyCache unless there is memory pressure which causes them to be evicted. This is the desired behavior in production as it saves replay efforts. However it could hide potential non-deterministic errors exactly because of this reason. 
 
-When troubleshooting it might be helpful to let a small number of workers run with stickiness disabled, so that it always replays the whole history when execution decision tasks. 
+When troubleshooting it might be helpful to let a small number of workers run with stickiness disabled, so that it always replays the whole history when execution workflow tasks. 
 
 ## GetVersion() & SideEffect()
 

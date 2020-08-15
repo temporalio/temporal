@@ -27,15 +27,15 @@ package archiver
 import (
 	"context"
 
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	historypb "go.temporal.io/api/history/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
-	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -63,7 +63,7 @@ type (
 
 	// GetHistoryResponse is the response of Get archived history
 	GetHistoryResponse struct {
-		HistoryBatches []*eventpb.History
+		HistoryBatches []*historypb.History
 		NextPageToken  []byte
 	}
 
@@ -101,13 +101,13 @@ type (
 
 	// QueryVisibilityResponse is the response of querying archived visibility records
 	QueryVisibilityResponse struct {
-		Executions    []*executionpb.WorkflowExecutionInfo
+		Executions    []*workflowpb.WorkflowExecutionInfo
 		NextPageToken []byte
 	}
 
 	// VisibilityArchiver is used to archive visibility and read archived visibility
 	VisibilityArchiver interface {
-		Archive(context.Context, URI, *archivergenpb.ArchiveVisibilityRequest, ...ArchiveOption) error
+		Archive(context.Context, URI, *archiverspb.ArchiveVisibilityRequest, ...ArchiveOption) error
 		Query(context.Context, URI, *QueryVisibilityRequest) (*QueryVisibilityResponse, error)
 		ValidateURI(URI) error
 	}

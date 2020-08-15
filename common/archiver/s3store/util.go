@@ -38,16 +38,15 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.uber.org/multierr"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/codec"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/codec"
 )
 
 // encoding & decoding util
@@ -151,7 +150,7 @@ func constructHistoryKeyPrefix(path, namespaceID, workflowID, runID string) stri
 }
 
 func constructTimeBasedSearchKey(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, timestamp int64, precision string) string {
-	t := time.Unix(0, timestamp).In(time.UTC)
+	t := time.Unix(0, timestamp).UTC()
 	var timeFormat = ""
 	switch precision {
 	case PrecisionSecond:
@@ -171,7 +170,7 @@ func constructTimeBasedSearchKey(path, namespaceID, primaryIndexKey, primaryInde
 }
 
 func constructTimestampIndex(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, timestamp int64, runID string) string {
-	t := time.Unix(0, timestamp).In(time.UTC)
+	t := time.Unix(0, timestamp).UTC()
 	return fmt.Sprintf("%s/%s/%s", constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), t.Format(time.RFC3339), runID)
 }
 
@@ -239,7 +238,7 @@ func download(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key st
 	return body, nil
 }
 
-func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*eventpb.History, isLast bool) bool {
+func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*historypb.History, isLast bool) bool {
 	lastBatch := historyBatches[len(historyBatches)-1].Events
 	lastEvent := lastBatch[len(lastBatch)-1]
 	lastFailoverVersion := lastEvent.GetVersion()
@@ -263,20 +262,18 @@ func contextExpired(ctx context.Context) bool {
 	}
 }
 
-func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *executionpb.WorkflowExecutionInfo {
-	return &executionpb.WorkflowExecutionInfo{
-		Execution: &executionpb.WorkflowExecution{
+func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *workflowpb.WorkflowExecutionInfo {
+	return &workflowpb.WorkflowExecutionInfo{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
 			RunId:      record.GetRunId(),
 		},
 		Type: &commonpb.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
-		StartTime: &types.Int64Value{
-			Value: record.StartTimestamp},
-		ExecutionTime: record.ExecutionTimestamp,
-		CloseTime: &types.Int64Value{
-			Value: record.CloseTimestamp},
+		StartTime:     record.StartTime,
+		ExecutionTime: record.ExecutionTime,
+		CloseTime:     record.CloseTime,
 		Status:        record.Status,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,

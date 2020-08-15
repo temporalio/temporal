@@ -30,16 +30,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/metrics"
-	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
-	"github.com/temporalio/temporal/common/mocks"
-	p "github.com/temporalio/temporal/common/persistence"
-	c "github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/metrics"
+	mmocks "go.temporal.io/server/common/metrics/mocks"
+	"go.temporal.io/server/common/mocks"
+	p "go.temporal.io/server/common/persistence"
+	c "go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type VisibilitySamplingSuite struct {
@@ -53,7 +54,7 @@ type VisibilitySamplingSuite struct {
 var (
 	testNamespaceUUID     = "fb15e4b5-356f-466d-8c6d-a29223e5c536"
 	testNamespace         = "test-namespace"
-	testWorkflowExecution = executionpb.WorkflowExecution{
+	testWorkflowExecution = commonpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test",
 		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",
 	}
@@ -106,14 +107,14 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionClosed() {
 		Namespace:        testNamespace,
 		Execution:        testWorkflowExecution,
 		WorkflowTypeName: testWorkflowTypeName,
-		Status:           executionpb.WorkflowExecutionStatus_Completed,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	}
 	request2 := &p.RecordWorkflowExecutionClosedRequest{
 		NamespaceID:      testNamespaceUUID,
 		Namespace:        testNamespace,
 		Execution:        testWorkflowExecution,
 		WorkflowTypeName: testWorkflowTypeName,
-		Status:           executionpb.WorkflowExecutionStatus_Failed,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 	}
 
 	s.persistence.On("RecordWorkflowExecutionClosed", request).Return(nil).Once()
@@ -253,7 +254,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByStatus() {
 	}
 	request := &p.ListClosedWorkflowExecutionsByStatusRequest{
 		ListWorkflowExecutionsRequest: req,
-		Status:                        executionpb.WorkflowExecutionStatus_Failed,
+		Status:                        enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 	}
 	s.persistence.On("ListClosedWorkflowExecutionsByStatus", request).Return(nil, nil).Once()
 	_, err := s.client.ListClosedWorkflowExecutionsByStatus(request)

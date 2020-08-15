@@ -28,12 +28,13 @@ import (
 	"database/sql"
 	"strings"
 
-	p "github.com/temporalio/temporal/common/persistence"
+	p "go.temporal.io/server/common/persistence"
 
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 const constMetadataPartition = 0
+const constMembershipPartition = 0
 const (
 	// ****** CLUSTER_METADATA TABLE ******
 	// One time only for the immutable data, so lets just use insert ignore
@@ -45,16 +46,18 @@ VALUES(?, ?, ?)`
 cluster_metadata WHERE metadata_partition = ?`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
-	templateUpsertActiveClusterMembership = `REPLACE INTO
-cluster_membership (host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry)
-VALUES(?, ?, ?, ?, ?, ?, ?)`
+	templateUpsertActiveClusterMembership = `INSERT INTO
+cluster_membership (membership_partition, host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?) 
+ON DUPLICATE KEY UPDATE 
+session_start=VALUES(session_start), last_heartbeat=VALUES(last_heartbeat), record_expiry=VALUES(record_expiry)`
 
 	templatePruneStaleClusterMembership = `DELETE FROM
 cluster_membership 
-WHERE record_expiry < ? LIMIT ?`
+WHERE membership_partition = ? AND record_expiry < ? LIMIT ?`
 
-	templateGetClusterMembership = `SELECT host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry, insertion_order FROM
-cluster_membership`
+	templateGetClusterMembership = `SELECT host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry FROM
+cluster_membership WHERE membership_partition = ?`
 
 	// ClusterMembership WHERE Suffixes
 	templateWithRoleSuffix           = ` AND role = ?`
@@ -62,12 +65,12 @@ cluster_membership`
 	templateWithRecordExpirySuffix   = ` AND record_expiry > ?`
 	templateWithRPCAddressSuffix     = ` AND rpc_address = ?`
 	templateWithHostIDSuffix         = ` AND host_id = ?`
-	templateWithSessionStartSuffix   = ` AND session_start > ?`
-	templateWithInsertionOrderSuffix = ` AND insertion_order > ?`
+	templateWithHostIDGreaterSuffix  = ` AND host_id > ?`
+	templateWithSessionStartSuffix   = ` AND session_start >= ?`
 
 	// Generic SELECT Suffixes
-	templateWithLimitSuffix            = ` LIMIT ?`
-	templateWithOrderByInsertionSuffix = ` ORDER BY insertion_order ASC`
+	templateWithLimitSuffix               = ` LIMIT ?`
+	templateWithOrderBySessionStartSuffix = ` ORDER BY membership_partition ASC, host_id ASC`
 )
 
 // Does not follow traditional lock, select, read, insert as we only expect a single row.
@@ -89,6 +92,7 @@ func (mdb *db) GetClusterMetadata() (*sqlplugin.ClusterMetadataRow, error) {
 
 func (mdb *db) UpsertClusterMembership(row *sqlplugin.ClusterMembershipRow) (sql.Result, error) {
 	return mdb.conn.Exec(templateUpsertActiveClusterMembership,
+		constMembershipPartition,
 		row.HostID,
 		row.RPCAddress,
 		row.RPCPort,
@@ -102,6 +106,7 @@ func (mdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]s
 	var queryString strings.Builder
 	var operands []interface{}
 	queryString.WriteString(templateGetClusterMembership)
+	operands = append(operands, constMembershipPartition)
 
 	if filter.HostIDEquals != nil {
 		queryString.WriteString(templateWithHostIDSuffix)
@@ -133,20 +138,19 @@ func (mdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]s
 		operands = append(operands, filter.SessionStartedAfter)
 	}
 
-	if filter.InsertionOrderGreaterThan > 0 {
-		queryString.WriteString(templateWithInsertionOrderSuffix)
-		operands = append(operands, filter.InsertionOrderGreaterThan)
+	if filter.HostIDGreaterThan != nil {
+		queryString.WriteString(templateWithHostIDGreaterSuffix)
+		operands = append(operands, filter.HostIDGreaterThan)
 	}
 
-	queryString.WriteString(templateWithOrderByInsertionSuffix)
+	queryString.WriteString(templateWithOrderBySessionStartSuffix)
 
 	if filter.MaxRecordCount > 0 {
 		queryString.WriteString(templateWithLimitSuffix)
 		operands = append(operands, filter.MaxRecordCount)
 	}
 
-	// All suffixes start with AND, replace the first occurrence with WHERE
-	compiledQryString := strings.Replace(queryString.String(), " AND ", " WHERE ", 1)
+	compiledQryString := queryString.String()
 
 	var rows []sqlplugin.ClusterMembershipRow
 	err := mdb.conn.Select(&rows,
@@ -160,6 +164,7 @@ func (mdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]s
 
 func (mdb *db) PruneClusterMembership(filter *sqlplugin.PruneClusterMembershipFilter) (sql.Result, error) {
 	return mdb.conn.Exec(templatePruneStaleClusterMembership,
+		constMembershipPartition,
 		mdb.converter.ToMySQLDateTime(filter.PruneRecordsBefore),
 		filter.MaxRecordsAffected)
 }

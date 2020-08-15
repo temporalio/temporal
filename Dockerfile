@@ -6,7 +6,7 @@ ARG GOPROXY
 # Build Temporal binaries
 FROM golang:1.14-alpine AS builder
 
-RUN apk add --update --no-cache ca-certificates make curl git mercurial bzr protobuf
+RUN apk add --update --no-cache ca-certificates make curl git mercurial protobuf
 
 # Making sure that dependency is not touched
 ENV GOFLAGS="-mod=readonly"
@@ -73,7 +73,7 @@ WORKDIR /etc/temporal
 
 ENV SERVICES="history,matching,frontend,worker"
 
-EXPOSE 7933 7934 7935 7939 6933 6934 6935 6939 7233 7234 7235 7239
+EXPOSE 6933 6934 6935 6939 7233 7234 7235 7239
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD /start.sh
 

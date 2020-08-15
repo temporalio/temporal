@@ -32,7 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	replication "github.com/temporalio/temporal/.gen/proto/replication"
+	repication "go.temporal.io/server/api/replication/v1"
 )
 
 // MockDLQMessageHandler is a mock of DLQMessageHandler interface.
@@ -59,10 +59,10 @@ func (m *MockDLQMessageHandler) EXPECT() *MockDLQMessageHandlerMockRecorder {
 }
 
 // Read mocks base method.
-func (m *MockDLQMessageHandler) Read(lastMessageID int64, pageSize int, pageToken []byte) ([]*replication.ReplicationTask, []byte, error) {
+func (m *MockDLQMessageHandler) Read(lastMessageID int64, pageSize int, pageToken []byte) ([]*repication.ReplicationTask, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Read", lastMessageID, pageSize, pageToken)
-	ret0, _ := ret[0].([]*replication.ReplicationTask)
+	ret0, _ := ret[0].([]*repication.ReplicationTask)
 	ret1, _ := ret[1].([]byte)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

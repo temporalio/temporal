@@ -29,8 +29,8 @@ package mocks
 import (
 	context "context"
 
-	archiver "github.com/temporalio/temporal/common/archiver"
-	connector "github.com/temporalio/temporal/common/archiver/gcloud/connector"
+	archiver "go.temporal.io/server/common/archiver"
+	connector "go.temporal.io/server/common/archiver/gcloud/connector"
 
 	mock "github.com/stretchr/testify/mock"
 )

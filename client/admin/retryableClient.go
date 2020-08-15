@@ -29,8 +29,8 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/common/backoff"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/backoff"
 )
 
 var _ Client = (*retryableClient)(nil)
@@ -238,16 +238,16 @@ func (c *retryableClient) ReapplyEvents(
 	return resp, err
 }
 
-func (c *retryableClient) ReadDLQMessages(
+func (c *retryableClient) GetDLQMessages(
 	ctx context.Context,
-	request *adminservice.ReadDLQMessagesRequest,
+	request *adminservice.GetDLQMessagesRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.ReadDLQMessagesResponse, error) {
+) (*adminservice.GetDLQMessagesResponse, error) {
 
-	var resp *adminservice.ReadDLQMessagesResponse
+	var resp *adminservice.GetDLQMessagesResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ReadDLQMessages(ctx, request, opts...)
+		resp, err = c.client.GetDLQMessages(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -296,6 +296,22 @@ func (c *retryableClient) RefreshWorkflowTasks(
 	op := func() error {
 		var err error
 		resp, err = c.client.RefreshWorkflowTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ResendReplicationTasks(
+	ctx context.Context,
+	request *adminservice.ResendReplicationTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ResendReplicationTasksResponse, error) {
+
+	var resp *adminservice.ResendReplicationTasksResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.ResendReplicationTasks(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)

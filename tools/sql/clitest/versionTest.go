@@ -34,16 +34,16 @@ import (
 	"strconv"
 	"time"
 
-	persistencetests "github.com/temporalio/temporal/common/persistence/persistence-tests"
+	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/environment"
-	"github.com/temporalio/temporal/tools/sql"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/environment"
+	"go.temporal.io/server/tools/sql"
 )
 
 type (

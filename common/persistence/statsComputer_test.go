@@ -29,9 +29,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	commonpb "go.temporal.io/api/common/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 )
 
 type (
@@ -67,24 +66,24 @@ func (s *statsComputerSuite) createRequest() *InternalUpdateWorkflowExecutionReq
 func (s *statsComputerSuite) TestStatsWithStartedEvent() {
 	ms := s.createRequest()
 	namespaceID := "A"
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "test-workflow-id",
 		RunId:      "run_id",
 	}
 	workflowType := &commonpb.WorkflowType{
 		Name: "test-workflow-type-name",
 	}
-	taskList := &tasklistpb.TaskList{
-		Name: "test-tasklist",
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: "test-taskqueue",
 	}
 
 	ms.UpdateWorkflowMutation.ExecutionInfo.NamespaceID = namespaceID
 	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowID = execution.GetWorkflowId()
 	ms.UpdateWorkflowMutation.ExecutionInfo.RunID = execution.GetRunId()
 	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowTypeName = workflowType.GetName()
-	ms.UpdateWorkflowMutation.ExecutionInfo.TaskList = taskList.GetName()
+	ms.UpdateWorkflowMutation.ExecutionInfo.TaskQueue = taskQueue.GetName()
 
-	expectedSize := len(execution.GetWorkflowId()) + len(workflowType.GetName()) + len(taskList.GetName())
+	expectedSize := len(execution.GetWorkflowId()) + len(workflowType.GetName()) + len(taskQueue.GetName())
 
 	stats := s.sc.computeMutableStateUpdateStats(ms)
 	s.Equal(stats.ExecutionInfoSize, expectedSize)

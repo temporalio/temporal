@@ -27,7 +27,7 @@ package elasticsearch
 import (
 	"net/url"
 
-	"github.com/temporalio/temporal/common"
+	"go.temporal.io/server/common"
 )
 
 // Config for connecting to ElasticSearch

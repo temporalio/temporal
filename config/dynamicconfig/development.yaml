@@ -4,9 +4,6 @@ frontend.enableClientVersionCheck:
 system.minRetentionDays:
 - value: 0
   constraints: {}
-history.EnableConsistentQueryByNamespace:
-- value: true
-  constraints: {}
 history.persistenceMaxQPS:
 - value: 3000
   constraints: {}
@@ -25,6 +22,15 @@ history.historyMgrNumConns:
 system.advancedVisibilityWritingMode:
 - value: "off"
   constraints: {}
-matching.numTasklistReadPartitions:
-- value: 1
-  constraints: {}
+history.defaultActivityRetryPolicy:
+- value:
+    InitialIntervalInSeconds: 1
+    MaximumIntervalCoefficient: 100.0
+    BackoffCoefficient: 2.0
+    MaximumAttempts: 0
+history.defaultWorkflowRetryPolicy:
+- value:
+    InitialIntervalInSeconds: 1
+    MaximumIntervalCoefficient: 100.0
+    BackoffCoefficient: 2.0
+    MaximumAttempts: 0

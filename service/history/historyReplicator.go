@@ -30,24 +30,27 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/serialization"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 type (
@@ -74,10 +77,10 @@ type (
 var (
 	// ErrRetryEntityNotExists is returned to indicate workflow execution is not created yet and replicator should
 	// try this task again after a small delay.
-	ErrRetryEntityNotExists = serviceerror.NewRetryTask("entity not exists", "", "", "", common.EmptyEventID)
+	ErrRetryEntityNotExists = serviceerrors.NewRetryTask("entity not exists", "", "", "", common.EmptyEventID)
 	// ErrRetryRaceCondition is returned to indicate logic race condition encountered and replicator should
 	// try this task again after a small delay.
-	ErrRetryRaceCondition = serviceerror.NewRetryTask("encounter race condition, retry", "", "", "", common.EmptyEventID)
+	ErrRetryRaceCondition = serviceerrors.NewRetryTask("encounter race condition, retry", "", "", "", common.EmptyEventID)
 	// ErrRetrySyncActivityMsg is returned when sync activity replication tasks are arriving out of order, should retry
 	ErrRetrySyncActivityMsg = "retry on applying sync activity"
 	// ErrRetryBufferEventsMsg is returned when events are arriving out of order, should retry, or specify force apply
@@ -90,11 +93,11 @@ var (
 	// this error can be return if we encounter race condition, i.e. terminating the target workflow while
 	// the target workflow has done continue as new.
 	// try this task again after a small delay.
-	ErrRetryExecutionAlreadyStarted = serviceerror.NewRetryTask("another workflow execution is running", "", "", "", common.EmptyEventID)
+	ErrRetryExecutionAlreadyStarted = serviceerrors.NewRetryTask("another workflow execution is running", "", "", "", common.EmptyEventID)
 	// ErrCorruptedReplicationInfo is returned when replication task has corrupted replication information from source cluster
 	ErrCorruptedReplicationInfo = serviceerror.NewInvalidArgument("replication task is has corrupted cluster replication info")
-	// ErrCorruptedMutableStateDecision is returned when mutable state decision is corrupted
-	ErrCorruptedMutableStateDecision = serviceerror.NewInvalidArgument("mutable state decision is corrupted")
+	// ErrCorruptedMutableStateWorkflowTask is returned when mutable state workflow task is corrupted
+	ErrCorruptedMutableStateWorkflowTask = serviceerror.NewInvalidArgument("mutable state workflow task is corrupted")
 	// ErrMoreThan2DC is returned when there are more than 2 data center
 	ErrMoreThan2DC = serviceerror.NewInvalidArgument("more than 2 data center")
 	// ErrImpossibleLocalRemoteMissingReplicationInfo is returned when replication task is missing replication info, as well as local replication info being empty
@@ -109,8 +112,8 @@ var (
 	ErrUnknownEncodingType = serviceerror.NewInvalidArgument("unknown encoding type")
 	// ErrUnreappliableEvent indicate that the event is not reappliable
 	ErrUnreappliableEvent = serviceerror.NewInvalidArgument("event is not reappliable")
-	// ErrWorkflowMutationDecision indicate that something is wrong with mutating workflow, i.e. adding decision to workflow
-	ErrWorkflowMutationDecision = serviceerror.NewInvalidArgument("error encountered when mutating workflow adding decision")
+	// ErrWorkflowMutationWorkflowTask indicate that something is wrong with mutating workflow, i.e. adding workflow task to workflow
+	ErrWorkflowMutationWorkflowTask = serviceerror.NewInvalidArgument("error encountered when mutating workflow adding workflow task")
 	// ErrWorkflowMutationSignal indicate that something is wrong with mutating workflow, i.e. adding signal to workflow
 	ErrWorkflowMutationSignal = serviceerror.NewInvalidArgument("error encountered when mutating workflow adding signal")
 )
@@ -169,8 +172,8 @@ func (r *historyReplicator) ApplyRawEvents(
 ) (retError error) {
 
 	var err error
-	var events []*eventpb.HistoryEvent
-	var newRunEvents []*eventpb.HistoryEvent
+	var events []*historypb.HistoryEvent
+	var newRunEvents []*historypb.HistoryEvent
 
 	events, err = r.deserializeBlob(requestIn.History)
 	if err != nil {
@@ -190,7 +193,7 @@ func (r *historyReplicator) ApplyRawEvents(
 		NextEventId:       nextEventID,
 		Version:           version,
 		ReplicationInfo:   requestIn.ReplicationInfo,
-		History:           &eventpb.History{Events: events},
+		History:           &historypb.History{Events: events},
 		NewRunHistory:     nil,
 	}
 
@@ -199,7 +202,7 @@ func (r *historyReplicator) ApplyRawEvents(
 		if err != nil {
 			return err
 		}
-		requestOut.NewRunHistory = &eventpb.History{Events: newRunEvents}
+		requestOut.NewRunHistory = &historypb.History{Events: newRunEvents}
 	}
 
 	return r.ApplyEvents(ctx, requestOut)
@@ -264,7 +267,7 @@ func (r *historyReplicator) ApplyEvents(
 
 	firstEvent := request.History.Events[0]
 	switch firstEvent.GetEventType() {
-	case eventpb.EventType_WorkflowExecutionStarted:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 		_, err := weContext.loadWorkflowExecution()
 		if err == nil {
 			// Workflow execution already exist, looks like a duplicate start event, it is safe to ignore it
@@ -291,7 +294,7 @@ func (r *historyReplicator) ApplyEvents(
 		if r.shard.GetConfig().ReplicationEventsFromCurrentCluster(namespaceEntry.GetInfo().Name) {
 			// this branch is used when replicating events (generated from current cluster)from remote cluster to current cluster.
 			// this could happen when the events are lost in current cluster and plan to recover them from remote cluster.
-			// if the incoming version equals last write version, skip to fail in-flight decision.
+			// if the incoming version equals last write version, skip to fail in-flight workflow task.
 			mutableState, err = weContext.loadWorkflowExecutionForReplication(request.GetVersion())
 		} else {
 			mutableState, err = weContext.loadWorkflowExecution()
@@ -355,7 +358,7 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
+		return serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
 	}
 	defer func() { currentRelease(retError) }()
 
@@ -388,7 +391,7 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 		if request.GetResetWorkflow() {
 			return r.resetor.ApplyResetEvent(ctx, request, namespaceID, workflowID, currentRunID)
 		}
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
+		return serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
 	}
 
 	// currentLastWriteVersion == incomingVersion
@@ -397,14 +400,14 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 			// versions are the same, so not necessary to re-apply signals
 			return nil
 		}
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, currentRunID, currentNextEventID)
+		return serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, currentRunID, currentNextEventID)
 	}
 
 	if request.GetResetWorkflow() {
 		//Note that at this point, current run is already closed and currentLastWriteVersion <= incomingVersion
 		return r.resetor.ApplyResetEvent(ctx, request, namespaceID, workflowID, currentRunID)
 	}
-	return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
+	return serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
 }
 
 func (r *historyReplicator) ApplyOtherEventsVersionChecking(
@@ -452,7 +455,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 	}
 
 	if rState.LastWriteVersion == incomingVersion {
-		// for ri.GetLastEventId() == rState.LastWriteEventID, ideally we should not do anything
+		// for ri.GetLastEventId() == rState.LastWriteEventId, ideally we should not do anything
 		return msBuilder, nil
 	}
 
@@ -503,7 +506,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 
 		// NOTE: this conflict resolution do not handle fast >= 2 failover
 		lastEvent := request.History.Events[len(request.History.Events)-1]
-		incomingTimestamp := lastEvent.GetTimestamp()
+		incomingTimestamp := timestamp.TimeValue(lastEvent.GetEventTime())
 		return r.resetMutableState(ctx, context, msBuilder, lastValidEventID, incomingVersion, incomingTimestamp, logger)
 	}
 	if rState.LastWriteVersion < ri.GetVersion() {
@@ -514,7 +517,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 
 	// remote replication info last write version is the same as local last write version, check reset
 	// Detect conflict
-	if ri.GetLastEventId() > rState.LastWriteEventID {
+	if ri.GetLastEventId() > rState.LastWriteEventId {
 		// if there is any bug in the replication protocol or implementation, this case can happen
 		logError(logger, "Conflict detected, but cannot resolve.", ErrCorruptedReplicationInfo)
 		// Returning InvalidArgument to force the message to land into DLQ
@@ -526,14 +529,14 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 		return nil, err
 	}
 
-	if ri.GetLastEventId() < msBuilder.GetReplicationState().LastWriteEventID {
+	if ri.GetLastEventId() < msBuilder.GetReplicationState().LastWriteEventId {
 		// the reason to reset mutable state if mutable state has buffered events
 		// is: what buffered event actually do is delay generation of event ID,
 		// the actual action of those buffered event are already applied to mutable state.
 
 		logger.Info("Conflict detected.")
 		lastEvent := request.History.Events[len(request.History.Events)-1]
-		incomingTimestamp := lastEvent.GetTimestamp()
+		incomingTimestamp := timestamp.TimeValue(lastEvent.GetEventTime())
 		return r.resetMutableState(ctx, context, msBuilder, ri.GetLastEventId(), incomingVersion, incomingTimestamp, logger)
 	}
 
@@ -564,7 +567,7 @@ func (r *historyReplicator) ApplyOtherEvents(
 			return nil
 		}
 
-		return newRetryTaskErrorWithHint(
+		return serviceerrors.NewRetryTask(
 			ErrRetryBufferEventsMsg,
 			context.getNamespaceID(),
 			context.getExecution().GetWorkflowId(),
@@ -607,14 +610,14 @@ func (r *historyReplicator) ApplyReplicationTask(
 
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	sBuilder := r.getNewStateBuilder(msBuilder, logger)
-	var newRunHistory []*eventpb.HistoryEvent
+	var newRunHistory []*historypb.HistoryEvent
 	if request.NewRunHistory != nil {
 		newRunHistory = request.NewRunHistory.Events
 	}
 
 	// directly use stateBuilder to apply events for other events(including continueAsNew)
 	newMutableState, err := sBuilder.applyEvents(
-		namespaceID, requestID, execution, request.History.Events, newRunHistory, request.GetNewRunNDC(),
+		namespaceID, requestID, execution, request.History.Events, newRunHistory, request.GetNewRunNdc(),
 	)
 	if err != nil {
 		return err
@@ -622,16 +625,16 @@ func (r *historyReplicator) ApplyReplicationTask(
 
 	firstEvent := request.History.Events[0]
 	switch firstEvent.GetEventType() {
-	case eventpb.EventType_WorkflowExecutionStarted:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 		err = r.replicateWorkflowStarted(ctx, context, msBuilder, request.History, sBuilder, logger)
 	default:
-		now := time.Unix(0, lastEvent.GetTimestamp())
+		now := timestamp.TimeValue(lastEvent.GetEventTime())
 		var newContext workflowExecutionContext
 		if newMutableState != nil {
 			newExecutionInfo := newMutableState.GetExecutionInfo()
 			newContext = newWorkflowExecutionContext(
 				newExecutionInfo.NamespaceID,
-				executionpb.WorkflowExecution{
+				commonpb.WorkflowExecution{
 					WorkflowId: newExecutionInfo.WorkflowID,
 					RunId:      newExecutionInfo.RunID,
 				},
@@ -644,7 +647,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 	}
 
 	if err == nil {
-		now := time.Unix(0, lastEvent.GetTimestamp())
+		now := timestamp.TimeValue(lastEvent.GetEventTime())
 		notify(r.shard, request.GetSourceCluster(), now)
 	}
 
@@ -655,14 +658,14 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
-	history *eventpb.History,
+	history *historypb.History,
 	sBuilder stateBuilder,
 	logger log.Logger,
 ) (retError error) {
 
 	executionInfo := msBuilder.GetExecutionInfo()
 	namespaceID := executionInfo.NamespaceID
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: executionInfo.WorkflowID,
 		RunId:      executionInfo.RunID,
 	}
@@ -670,7 +673,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	incomingVersion := firstEvent.GetVersion()
 	lastEvent := history.Events[len(history.Events)-1]
 
-	now := time.Unix(0, lastEvent.GetTimestamp())
+	now := timestamp.TimeValue(lastEvent.GetEventTime())
 	newWorkflow, workflowEventsSeq, err := msBuilder.CloseTransactionAsSnapshot(
 		now,
 		transactionPolicyPassive,
@@ -727,7 +730,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	}
 
 	// current workflow is completed
-	if currentState == persistence.WorkflowStateCompleted {
+	if currentState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// allow the application of workflow creation if currentLastWriteVersion > incomingVersion
 		// because this can be caused by the combination of missing replication events and failovers
 		// proceed to create workflow
@@ -772,7 +775,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 			// versions are the same, so not necessary to re-apply signals
 			return nil
 		}
-		return newRetryTaskErrorWithHint(
+		return serviceerrors.NewRetryTask(
 			ErrRetryExistingWorkflowMsg,
 			namespaceID,
 			execution.GetWorkflowId(),
@@ -818,9 +821,9 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 	ctx context.Context,
 	msBuilder mutableState,
 	incomingVersion int64,
-	incomingTimestamp int64,
+	incomingTime time.Time,
 	logger log.Logger,
-) (string, int64, int, error) {
+) (string, int64, enumsspb.WorkflowExecutionState, error) {
 
 	// this function aims to solve the edge case when this workflow, when going through
 	// reset, has already started a next generation (continue as new-ed workflow)
@@ -864,7 +867,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 		return "", 0, 0, nil
 	}
 
-	if currentStatus != executionpb.WorkflowExecutionStatus_Running {
+	if currentStatus != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		// current workflow finished
 		// note, it is impossible that a current workflow ends with continue as new as close status
 		logger.Info("Conflict resolution current workflow finished.")
@@ -885,7 +888,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 		logError(logger, "Conflict resolution err terminating current workflow.", err)
 		return "", 0, 0, err
 	}
-	return currentRunID, currentLastWriteVetsion, persistence.WorkflowStateCompleted, nil
+	return currentRunID, currentLastWriteVetsion, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, nil
 }
 
 func (r *historyReplicator) getCurrentWorkflowMutableState(
@@ -897,7 +900,7 @@ func (r *historyReplicator) getCurrentWorkflowMutableState(
 	context, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx,
 		namespaceID,
 		// only use the workflow ID, to get the current running one
-		executionpb.WorkflowExecution{WorkflowId: workflowID},
+		commonpb.WorkflowExecution{WorkflowId: workflowID},
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -933,7 +936,7 @@ func (r *historyReplicator) terminateWorkflow(
 ) (int64, error) {
 
 	// same workflow ID, same shard
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
@@ -951,7 +954,7 @@ func (r *historyReplicator) terminateWorkflow(
 				return err
 			}
 			if incomingVersion <= currentLastWriteVersion {
-				return newRetryTaskErrorWithHint(
+				return serviceerrors.NewRetryTask(
 					ErrRetryExistingWorkflowMsg,
 					namespaceID,
 					workflowID,
@@ -970,7 +973,7 @@ func (r *historyReplicator) terminateWorkflow(
 			// if last write version indicates not from current cluster, need to fetch from remote
 			sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(currentLastWriteVersion)
 			if sourceCluster != r.clusterMetadata.GetCurrentClusterName() {
-				return newRetryTaskErrorWithHint(
+				return serviceerrors.NewRetryTask(
 					ErrRetryExistingWorkflowMsg,
 					namespaceID,
 					workflowID,
@@ -1007,8 +1010,8 @@ func (r *historyReplicator) terminateWorkflow(
 }
 
 func (r *historyReplicator) getLatestCheckpoint(
-	replicationInfoRemote map[string]*replicationgenpb.ReplicationInfo,
-	replicationInfoLocal map[string]*replicationgenpb.ReplicationInfo,
+	replicationInfoRemote map[string]*replicationspb.ReplicationInfo,
+	replicationInfoLocal map[string]*replicationspb.ReplicationInfo,
 ) (int64, int64) {
 
 	// this only applies to 2 data center case
@@ -1039,7 +1042,7 @@ func (r *historyReplicator) resetMutableState(
 	msBuilder mutableState,
 	lastEventID int64,
 	incomingVersion int64,
-	incomingTimestamp int64,
+	incomingTime time.Time,
 	logger log.Logger,
 ) (mutableState, error) {
 
@@ -1051,7 +1054,7 @@ func (r *historyReplicator) resetMutableState(
 		ctx,
 		msBuilder,
 		incomingVersion,
-		incomingTimestamp,
+		incomingTime,
 		logger,
 	)
 	if err != nil {
@@ -1084,13 +1087,13 @@ func (r *historyReplicator) resetMutableState(
 
 func (r *historyReplicator) deserializeBlob(
 	blob *commonpb.DataBlob,
-) ([]*eventpb.HistoryEvent, error) {
+) ([]*historypb.HistoryEvent, error) {
 
-	if blob.GetEncodingType() != commonpb.EncodingType_Proto3 {
+	if blob.GetEncodingType() != enumspb.ENCODING_TYPE_PROTO3 {
 		return nil, ErrUnknownEncodingType
 	}
 	historyEvents, err := r.historySerializer.DeserializeBatchEvents(&serialization.DataBlob{
-		Encoding: common.EncodingTypeProto3,
+		Encoding: enumspb.ENCODING_TYPE_PROTO3,
 		Data:     blob.Data,
 	})
 	if err != nil {
@@ -1115,16 +1118,15 @@ func (r *historyReplicator) flushEventsBuffer(
 		return err
 	}
 
-	decision, ok := msBuilder.GetInFlightDecision()
+	workflowTask, ok := msBuilder.GetInFlightWorkflowTask()
 	if !ok {
-		return ErrCorruptedMutableStateDecision
+		return ErrCorruptedMutableStateWorkflowTask
 	}
-	if _, err = msBuilder.AddDecisionTaskFailedEvent(
-		decision.ScheduleID,
-		decision.StartedID,
-		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
+	if _, err = msBuilder.AddWorkflowTaskFailedEvent(
+		workflowTask.ScheduleID,
+		workflowTask.StartedID,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil, identityHistoryService,
-		"",
 		"",
 		"",
 		"",
@@ -1140,14 +1142,14 @@ func (r *historyReplicator) reapplyEvents(
 	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
-	events []*eventpb.HistoryEvent,
+	events []*historypb.HistoryEvent,
 	logger log.Logger,
 ) error {
 
-	var reapplyEvents []*eventpb.HistoryEvent
+	var reapplyEvents []*historypb.HistoryEvent
 	for _, event := range events {
 		switch event.GetEventType() {
-		case eventpb.EventType_WorkflowExecutionSignaled:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			reapplyEvents = append(reapplyEvents, event)
 		}
 	}
@@ -1167,7 +1169,7 @@ func (r *historyReplicator) reapplyEventsToCurrentRunningWorkflow(
 	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
-	events []*eventpb.HistoryEvent,
+	events []*historypb.HistoryEvent,
 	logger log.Logger,
 ) error {
 
@@ -1179,7 +1181,7 @@ func (r *historyReplicator) reapplyEventsToCurrentRunningWorkflow(
 	numSignals := 0
 	for _, event := range events {
 		switch event.GetEventType() {
-		case eventpb.EventType_WorkflowExecutionSignaled:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			attr := event.GetWorkflowExecutionSignaledEventAttributes()
 			if _, err := msBuilder.AddWorkflowExecutionSignaled(
 				attr.GetSignalName(),
@@ -1202,7 +1204,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
-	events []*eventpb.HistoryEvent,
+	events []*historypb.HistoryEvent,
 	logger log.Logger,
 ) (retError error) {
 
@@ -1216,18 +1218,18 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 
 	resetRequestID := uuid.New()
 	// workflow event buffer guarantee that the event immediately
-	// after the decision task started is decision task finished event
-	lastDecisionTaskStartEventID := msBuilder.GetPreviousStartedEventID()
-	if lastDecisionTaskStartEventID == common.EmptyEventID {
-		// TODO when https://github.com/temporalio/temporal/issues/2420 is finished
+	// after the workflow task started is workflow task finished event
+	lastWorkflowTaskStartEventID := msBuilder.GetPreviousStartedEventID()
+	if lastWorkflowTaskStartEventID == common.EmptyEventID {
+		// TODO when https://go.temporal.io/server/issues/2420 is finished
 		//  reset to workflow finish event
-		errStr := "cannot reapply signal due to workflow missing decision"
+		errStr := "cannot reapply signal due to workflow missing workflow task"
 		logger.Error(errStr)
 		return serviceerror.NewInvalidArgument(errStr)
 
 	}
 
-	resetDecisionFinishID := lastDecisionTaskStartEventID + 1
+	resetWorkflowTaskFinishID := lastWorkflowTaskStartEventID + 1
 
 	baseContext := context
 	baseMutableState := msBuilder
@@ -1236,11 +1238,11 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 	resp, err := r.resetor.ResetWorkflowExecution(
 		ctx,
 		&workflowservice.ResetWorkflowExecutionRequest{
-			Namespace:             namespaceEntry.GetInfo().Name,
-			WorkflowExecution:     context.getExecution(),
-			Reason:                workflowResetReason,
-			DecisionFinishEventId: resetDecisionFinishID,
-			RequestId:             resetRequestID,
+			Namespace:                 namespaceEntry.GetInfo().Name,
+			WorkflowExecution:         context.getExecution(),
+			Reason:                    workflowResetReason,
+			WorkflowTaskFinishEventId: resetWorkflowTaskFinishID,
+			RequestId:                 resetRequestID,
 		},
 		baseContext,
 		baseMutableState,
@@ -1254,7 +1256,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 		return err
 	}
 
-	resetNewExecution := executionpb.WorkflowExecution{
+	resetNewExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      resp.GetRunId(),
 	}
@@ -1329,10 +1331,10 @@ func (r *historyReplicator) persistWorkflowMutation(
 	timerTasks []persistence.Task,
 ) error {
 
-	if !msBuilder.HasPendingDecision() {
-		_, err := msBuilder.AddDecisionTaskScheduledEvent(false)
+	if !msBuilder.HasPendingWorkflowTask() {
+		_, err := msBuilder.AddWorkflowTaskScheduledEvent(false)
 		if err != nil {
-			return ErrWorkflowMutationDecision
+			return ErrWorkflowMutationWorkflowTask
 		}
 	}
 
@@ -1346,23 +1348,6 @@ func logError(
 	err error,
 ) {
 	logger.Error(msg, tag.Error(err))
-}
-
-func newRetryTaskErrorWithHint(
-	msg string,
-	namespaceID string,
-	workflowID string,
-	runID string,
-	nextEventID int64,
-) *serviceerror.RetryTask {
-
-	return serviceerror.NewRetryTask(
-		msg,
-		namespaceID,
-		workflowID,
-		runID,
-		nextEventID,
-	)
 }
 
 func notify(

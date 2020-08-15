@@ -29,200 +29,204 @@ package history
 import (
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/workflowservice"
+	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/persistence"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
 	// TODO: This should be part of persistence layer
-	decisionInfo struct {
-		Version         int64
-		ScheduleID      int64
-		StartedID       int64
-		RequestID       string
-		DecisionTimeout int32
-		TaskList        string // This is only needed to communicate tasklist used after AddDecisionTaskScheduledEvent
-		Attempt         int64
-		// Scheduled and Started timestamps are useful for transient decision: when transient decision finally completes,
+	workflowTaskInfo struct {
+		Version             int64
+		ScheduleID          int64
+		StartedID           int64
+		RequestID           string
+		WorkflowTaskTimeout int64
+		TaskQueue           *taskqueuepb.TaskQueue // This is only needed to communicate task queue used after AddWorkflowTaskScheduledEvent
+		Attempt             int32
+		// Scheduled and Started timestamps are useful for transient workflow task: when transient workflow task finally completes,
 		// use these timestamp to create scheduled/started events.
 		// Also used for recording latency metrics
 		ScheduledTimestamp int64
 		StartedTimestamp   int64
-		// OriginalScheduledTimestamp is to record the first scheduled decision during decision heartbeat.
-		// Client may heartbeat decision by RespondDecisionTaskComplete with ForceCreateNewDecisionTask == true
+		// OriginalScheduledTimestamp is to record the first scheduled workflow task during workflow task heartbeat.
+		// Client may heartbeat workflow task by RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true
 		// In this case, OriginalScheduledTimestamp won't change. Then when current time - OriginalScheduledTimestamp exceeds
-		// some threshold, server can interrupt the heartbeat by enforcing to timeout the decision.
+		// some threshold, server can interrupt the heartbeat by enforcing to timeout the workflow task.
 		OriginalScheduledTimestamp int64
 	}
 
 	mutableState interface {
-		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*eventpb.HistoryEvent, *persistence.ActivityInfo, error)
-		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*eventpb.HistoryEvent, error)
-		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*eventpb.HistoryEvent, error)
-		AddActivityTaskFailedEvent(int64, int64, *workflowservice.RespondActivityTaskFailedRequest) (*eventpb.HistoryEvent, error)
-		AddActivityTaskScheduledEvent(int64, *decisionpb.ScheduleActivityTaskDecisionAttributes) (*eventpb.HistoryEvent, *persistence.ActivityInfo, error)
-		AddActivityTaskStartedEvent(*persistence.ActivityInfo, int64, string, string) (*eventpb.HistoryEvent, error)
-		AddActivityTaskTimedOutEvent(int64, int64, eventpb.TimeoutType, *commonpb.Payloads) (*eventpb.HistoryEvent, error)
-		AddCancelTimerFailedEvent(int64, *decisionpb.CancelTimerDecisionAttributes, string) (*eventpb.HistoryEvent, error)
-		AddChildWorkflowExecutionCanceledEvent(int64, *executionpb.WorkflowExecution, *eventpb.WorkflowExecutionCanceledEventAttributes) (*eventpb.HistoryEvent, error)
-		AddChildWorkflowExecutionCompletedEvent(int64, *executionpb.WorkflowExecution, *eventpb.WorkflowExecutionCompletedEventAttributes) (*eventpb.HistoryEvent, error)
-		AddChildWorkflowExecutionFailedEvent(int64, *executionpb.WorkflowExecution, *eventpb.WorkflowExecutionFailedEventAttributes) (*eventpb.HistoryEvent, error)
-		AddChildWorkflowExecutionStartedEvent(string, *executionpb.WorkflowExecution, *commonpb.WorkflowType, int64, *commonpb.Header) (*eventpb.HistoryEvent, error)
-		AddChildWorkflowExecutionTerminatedEvent(int64, *executionpb.WorkflowExecution, *eventpb.WorkflowExecutionTerminatedEventAttributes) (*eventpb.HistoryEvent, error)
-		AddChildWorkflowExecutionTimedOutEvent(int64, *executionpb.WorkflowExecution, *eventpb.WorkflowExecutionTimedOutEventAttributes) (*eventpb.HistoryEvent, error)
-		AddCompletedWorkflowEvent(int64, *decisionpb.CompleteWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, error)
-		AddContinueAsNewEvent(int64, int64, string, *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, mutableState, error)
-		AddDecisionTaskCompletedEvent(int64, int64, *workflowservice.RespondDecisionTaskCompletedRequest, int) (*eventpb.HistoryEvent, error)
-		AddDecisionTaskFailedEvent(scheduleEventID int64, startedEventID int64, cause eventpb.DecisionTaskFailedCause, details *commonpb.Payloads, identity, reason, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*eventpb.HistoryEvent, error)
-		AddDecisionTaskScheduleToStartTimeoutEvent(int64) (*eventpb.HistoryEvent, error)
-		AddFirstDecisionTaskScheduled(*eventpb.HistoryEvent) error
-		AddDecisionTaskScheduledEvent(bypassTaskGeneration bool) (*decisionInfo, error)
-		AddDecisionTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp int64) (*decisionInfo, error)
-		AddDecisionTaskStartedEvent(int64, string, *workflowservice.PollForDecisionTaskRequest) (*eventpb.HistoryEvent, *decisionInfo, error)
-		AddDecisionTaskTimedOutEvent(int64, int64) (*eventpb.HistoryEvent, error)
-		AddExternalWorkflowExecutionCancelRequested(int64, string, string, string) (*eventpb.HistoryEvent, error)
-		AddExternalWorkflowExecutionSignaled(int64, string, string, string, string) (*eventpb.HistoryEvent, error)
-		AddFailWorkflowEvent(int64, *decisionpb.FailWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, error)
-		AddRecordMarkerEvent(int64, *decisionpb.RecordMarkerDecisionAttributes) (*eventpb.HistoryEvent, error)
-		AddRequestCancelExternalWorkflowExecutionFailedEvent(int64, int64, string, string, string, eventpb.WorkflowExecutionFailedCause) (*eventpb.HistoryEvent, error)
-		AddRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, string, *decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, *persistenceblobs.RequestCancelInfo, error)
-		AddSignalExternalWorkflowExecutionFailedEvent(int64, int64, string, string, string, string, eventpb.WorkflowExecutionFailedCause) (*eventpb.HistoryEvent, error)
-		AddSignalExternalWorkflowExecutionInitiatedEvent(int64, string, *decisionpb.SignalExternalWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, *persistenceblobs.SignalInfo, error)
+		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*historypb.HistoryEvent, *persistenceblobs.ActivityInfo, error)
+		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*historypb.HistoryEvent, error)
+		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*historypb.HistoryEvent, error)
+		AddActivityTaskFailedEvent(int64, int64, *failurepb.Failure, enumspb.RetryState, string) (*historypb.HistoryEvent, error)
+		AddActivityTaskScheduledEvent(int64, *commandpb.ScheduleActivityTaskCommandAttributes) (*historypb.HistoryEvent, *persistenceblobs.ActivityInfo, error)
+		AddActivityTaskStartedEvent(*persistenceblobs.ActivityInfo, int64, string, string) (*historypb.HistoryEvent, error)
+		AddActivityTaskTimedOutEvent(int64, int64, *failurepb.Failure, enumspb.RetryState) (*historypb.HistoryEvent, error)
+		AddChildWorkflowExecutionCanceledEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCanceledEventAttributes) (*historypb.HistoryEvent, error)
+		AddChildWorkflowExecutionCompletedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCompletedEventAttributes) (*historypb.HistoryEvent, error)
+		AddChildWorkflowExecutionFailedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionFailedEventAttributes) (*historypb.HistoryEvent, error)
+		AddChildWorkflowExecutionStartedEvent(string, *commonpb.WorkflowExecution, *commonpb.WorkflowType, int64, *commonpb.Header) (*historypb.HistoryEvent, error)
+		AddChildWorkflowExecutionTerminatedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTerminatedEventAttributes) (*historypb.HistoryEvent, error)
+		AddChildWorkflowExecutionTimedOutEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTimedOutEventAttributes) (*historypb.HistoryEvent, error)
+		AddCompletedWorkflowEvent(int64, *commandpb.CompleteWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, error)
+		AddContinueAsNewEvent(int64, int64, string, *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, mutableState, error)
+		AddWorkflowTaskCompletedEvent(int64, int64, *workflowservice.RespondWorkflowTaskCompletedRequest, int) (*historypb.HistoryEvent, error)
+		AddWorkflowTaskFailedEvent(scheduleEventID int64, startedEventID int64, cause enumspb.WorkflowTaskFailedCause, failure *failurepb.Failure, identity, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*historypb.HistoryEvent, error)
+		AddWorkflowTaskScheduleToStartTimeoutEvent(int64) (*historypb.HistoryEvent, error)
+		AddFirstWorkflowTaskScheduled(*historypb.HistoryEvent) error
+		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool) (*workflowTaskInfo, error)
+		AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp int64) (*workflowTaskInfo, error)
+		AddWorkflowTaskStartedEvent(int64, string, *workflowservice.PollWorkflowTaskQueueRequest) (*historypb.HistoryEvent, *workflowTaskInfo, error)
+		AddWorkflowTaskTimedOutEvent(int64, int64) (*historypb.HistoryEvent, error)
+		AddExternalWorkflowExecutionCancelRequested(int64, string, string, string) (*historypb.HistoryEvent, error)
+		AddExternalWorkflowExecutionSignaled(int64, string, string, string, string) (*historypb.HistoryEvent, error)
+		AddFailWorkflowEvent(int64, enumspb.RetryState, *commandpb.FailWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, error)
+		AddRecordMarkerEvent(int64, *commandpb.RecordMarkerCommandAttributes) (*historypb.HistoryEvent, error)
+		AddRequestCancelExternalWorkflowExecutionFailedEvent(int64, int64, string, string, string, enumspb.CancelExternalWorkflowExecutionFailedCause) (*historypb.HistoryEvent, error)
+		AddRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, string, *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, *persistenceblobs.RequestCancelInfo, error)
+		AddSignalExternalWorkflowExecutionFailedEvent(int64, int64, string, string, string, string, enumspb.SignalExternalWorkflowExecutionFailedCause) (*historypb.HistoryEvent, error)
+		AddSignalExternalWorkflowExecutionInitiatedEvent(int64, string, *commandpb.SignalExternalWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, *persistenceblobs.SignalInfo, error)
 		AddSignalRequested(requestID string)
-		AddStartChildWorkflowExecutionFailedEvent(int64, eventpb.WorkflowExecutionFailedCause, *eventpb.StartChildWorkflowExecutionInitiatedEventAttributes) (*eventpb.HistoryEvent, error)
-		AddStartChildWorkflowExecutionInitiatedEvent(int64, string, *decisionpb.StartChildWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, *persistence.ChildExecutionInfo, error)
-		AddTimeoutWorkflowEvent(int64) (*eventpb.HistoryEvent, error)
-		AddTimerCanceledEvent(int64, *decisionpb.CancelTimerDecisionAttributes, string) (*eventpb.HistoryEvent, error)
-		AddTimerFiredEvent(string) (*eventpb.HistoryEvent, error)
-		AddTimerStartedEvent(int64, *decisionpb.StartTimerDecisionAttributes) (*eventpb.HistoryEvent, *persistenceblobs.TimerInfo, error)
-		AddUpsertWorkflowSearchAttributesEvent(int64, *decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes) (*eventpb.HistoryEvent, error)
-		AddWorkflowExecutionCancelRequestedEvent(string, *historyservice.RequestCancelWorkflowExecutionRequest) (*eventpb.HistoryEvent, error)
-		AddWorkflowExecutionCanceledEvent(int64, *decisionpb.CancelWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, error)
-		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payloads, identity string) (*eventpb.HistoryEvent, error)
-		AddWorkflowExecutionStartedEvent(executionpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*eventpb.HistoryEvent, error)
-		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string) (*eventpb.HistoryEvent, error)
+		AddStartChildWorkflowExecutionFailedEvent(int64, enumspb.StartChildWorkflowExecutionFailedCause, *historypb.StartChildWorkflowExecutionInitiatedEventAttributes) (*historypb.HistoryEvent, error)
+		AddStartChildWorkflowExecutionInitiatedEvent(int64, string, *commandpb.StartChildWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, *persistenceblobs.ChildExecutionInfo, error)
+		AddTimeoutWorkflowEvent(int64, enumspb.RetryState) (*historypb.HistoryEvent, error)
+		AddTimerCanceledEvent(int64, *commandpb.CancelTimerCommandAttributes, string) (*historypb.HistoryEvent, error)
+		AddTimerFiredEvent(string) (*historypb.HistoryEvent, error)
+		AddTimerStartedEvent(int64, *commandpb.StartTimerCommandAttributes) (*historypb.HistoryEvent, *persistenceblobs.TimerInfo, error)
+		AddUpsertWorkflowSearchAttributesEvent(int64, *commandpb.UpsertWorkflowSearchAttributesCommandAttributes) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionCancelRequestedEvent(string, *historyservice.RequestCancelWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionCanceledEvent(int64, *commandpb.CancelWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payloads, identity string) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionStartedEvent(commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string) (*historypb.HistoryEvent, error)
 		ClearStickyness()
 		CheckResettable() error
 		CopyToPersistence() *persistence.WorkflowMutableState
-		RetryActivity(ai *persistence.ActivityInfo, failureReason string, failureDetails *commonpb.Payloads) (bool, error)
-		CreateNewHistoryEvent(eventType eventpb.EventType) *eventpb.HistoryEvent
-		CreateNewHistoryEventWithTimestamp(eventType eventpb.EventType, timestamp int64) *eventpb.HistoryEvent
-		CreateTransientDecisionEvents(di *decisionInfo, identity string) (*eventpb.HistoryEvent, *eventpb.HistoryEvent)
-		DeleteDecision()
+		RetryActivity(ai *persistenceblobs.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
+		CreateNewHistoryEvent(eventType enumspb.EventType) *historypb.HistoryEvent
+		CreateNewHistoryEventWithTime(eventType enumspb.EventType, time time.Time) *historypb.HistoryEvent
+		CreateTransientWorkflowTaskEvents(di *workflowTaskInfo, identity string) (*historypb.HistoryEvent, *historypb.HistoryEvent)
+		DeleteWorkflowTask()
 		DeleteSignalRequested(requestID string)
-		FailDecision(bool)
+		FailWorkflowTask(bool)
 		FlushBufferedEvents() error
-		GetActivityByActivityID(string) (*persistence.ActivityInfo, bool)
-		GetActivityInfo(int64) (*persistence.ActivityInfo, bool)
-		GetActivityScheduledEvent(int64) (*eventpb.HistoryEvent, error)
-		GetChildExecutionInfo(int64) (*persistence.ChildExecutionInfo, bool)
-		GetChildExecutionInitiatedEvent(int64) (*eventpb.HistoryEvent, error)
-		GetCompletionEvent() (*eventpb.HistoryEvent, error)
-		GetDecisionInfo(int64) (*decisionInfo, bool)
+		GetActivityByActivityID(string) (*persistenceblobs.ActivityInfo, bool)
+		GetActivityInfo(int64) (*persistenceblobs.ActivityInfo, bool)
+		GetActivityInfoWithTimerHeartbeat(scheduleEventID int64) (*persistenceblobs.ActivityInfo, time.Time, bool)
+		GetActivityScheduledEvent(int64) (*historypb.HistoryEvent, error)
+		GetChildExecutionInfo(int64) (*persistenceblobs.ChildExecutionInfo, bool)
+		GetChildExecutionInitiatedEvent(int64) (*historypb.HistoryEvent, error)
+		GetCompletionEvent() (*historypb.HistoryEvent, error)
+		GetWorkflowTaskInfo(int64) (*workflowTaskInfo, bool)
 		GetNamespaceEntry() *cache.NamespaceCacheEntry
-		GetStartEvent() (*eventpb.HistoryEvent, error)
+		GetStartEvent() (*historypb.HistoryEvent, error)
 		GetCurrentBranchToken() ([]byte, error)
 		GetVersionHistories() *persistence.VersionHistories
 		GetCurrentVersion() int64
 		GetExecutionInfo() *persistence.WorkflowExecutionInfo
 		GetHistoryBuilder() *historyBuilder
-		GetInFlightDecision() (*decisionInfo, bool)
-		GetPendingDecision() (*decisionInfo, bool)
+		GetInFlightWorkflowTask() (*workflowTaskInfo, bool)
+		GetPendingWorkflowTask() (*workflowTaskInfo, bool)
 		GetLastFirstEventID() int64
 		GetLastWriteVersion() (int64, error)
 		GetNextEventID() int64
 		GetPreviousStartedEventID() int64
-		GetPendingActivityInfos() map[int64]*persistence.ActivityInfo
+		GetPendingActivityInfos() map[int64]*persistenceblobs.ActivityInfo
 		GetPendingTimerInfos() map[string]*persistenceblobs.TimerInfo
-		GetPendingChildExecutionInfos() map[int64]*persistence.ChildExecutionInfo
+		GetPendingChildExecutionInfos() map[int64]*persistenceblobs.ChildExecutionInfo
 		GetPendingRequestCancelExternalInfos() map[int64]*persistenceblobs.RequestCancelInfo
 		GetPendingSignalExternalInfos() map[int64]*persistenceblobs.SignalInfo
-		GetReplicationState() *persistence.ReplicationState
+		GetReplicationState() *persistenceblobs.ReplicationState
 		GetRequestCancelInfo(int64) (*persistenceblobs.RequestCancelInfo, bool)
-		GetRetryBackoffDuration(errReason string) time.Duration
+		GetRetryBackoffDuration(failure *failurepb.Failure) (time.Duration, enumspb.RetryState)
 		GetCronBackoffDuration() (time.Duration, error)
 		GetSignalInfo(int64) (*persistenceblobs.SignalInfo, bool)
 		GetStartVersion() (int64, error)
 		GetUserTimerInfoByEventID(int64) (*persistenceblobs.TimerInfo, bool)
 		GetUserTimerInfo(string) (*persistenceblobs.TimerInfo, bool)
 		GetWorkflowType() *commonpb.WorkflowType
-		GetWorkflowStateStatus() (int, executionpb.WorkflowExecutionStatus)
+		GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus)
 		GetQueryRegistry() queryRegistry
 		HasBufferedEvents() bool
-		HasInFlightDecision() bool
+		HasInFlightWorkflowTask() bool
 		HasParentExecution() bool
-		HasPendingDecision() bool
-		HasProcessedOrPendingDecision() bool
+		HasPendingWorkflowTask() bool
+		HasProcessedOrPendingWorkflowTask() bool
 		IsCancelRequested() (bool, string)
 		IsCurrentWorkflowGuaranteed() bool
 		IsSignalRequested(requestID string) bool
-		IsStickyTaskListEnabled() bool
+		IsStickyTaskQueueEnabled() bool
 		IsWorkflowExecutionRunning() bool
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
 		Load(*persistence.WorkflowMutableState)
 		ReplicateActivityInfo(*historyservice.SyncActivityRequest, bool) error
-		ReplicateActivityTaskCancelRequestedEvent(*eventpb.HistoryEvent) error
-		ReplicateActivityTaskCanceledEvent(*eventpb.HistoryEvent) error
-		ReplicateActivityTaskCompletedEvent(*eventpb.HistoryEvent) error
-		ReplicateActivityTaskFailedEvent(*eventpb.HistoryEvent) error
-		ReplicateActivityTaskScheduledEvent(int64, *eventpb.HistoryEvent) (*persistence.ActivityInfo, error)
-		ReplicateActivityTaskStartedEvent(*eventpb.HistoryEvent) error
-		ReplicateActivityTaskTimedOutEvent(*eventpb.HistoryEvent) error
-		ReplicateChildWorkflowExecutionCanceledEvent(*eventpb.HistoryEvent) error
-		ReplicateChildWorkflowExecutionCompletedEvent(*eventpb.HistoryEvent) error
-		ReplicateChildWorkflowExecutionFailedEvent(*eventpb.HistoryEvent) error
-		ReplicateChildWorkflowExecutionStartedEvent(*eventpb.HistoryEvent) error
-		ReplicateChildWorkflowExecutionTerminatedEvent(*eventpb.HistoryEvent) error
-		ReplicateChildWorkflowExecutionTimedOutEvent(*eventpb.HistoryEvent) error
-		ReplicateDecisionTaskCompletedEvent(*eventpb.HistoryEvent) error
-		ReplicateDecisionTaskFailedEvent() error
-		ReplicateDecisionTaskScheduledEvent(int64, int64, string, int32, int64, int64, int64) (*decisionInfo, error)
-		ReplicateDecisionTaskStartedEvent(*decisionInfo, int64, int64, int64, string, int64) (*decisionInfo, error)
-		ReplicateDecisionTaskTimedOutEvent(eventpb.TimeoutType) error
-		ReplicateExternalWorkflowExecutionCancelRequested(*eventpb.HistoryEvent) error
-		ReplicateExternalWorkflowExecutionSignaled(*eventpb.HistoryEvent) error
-		ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(*eventpb.HistoryEvent) error
-		ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, *eventpb.HistoryEvent, string) (*persistenceblobs.RequestCancelInfo, error)
-		ReplicateSignalExternalWorkflowExecutionFailedEvent(*eventpb.HistoryEvent) error
-		ReplicateSignalExternalWorkflowExecutionInitiatedEvent(int64, *eventpb.HistoryEvent, string) (*persistenceblobs.SignalInfo, error)
-		ReplicateStartChildWorkflowExecutionFailedEvent(*eventpb.HistoryEvent) error
-		ReplicateStartChildWorkflowExecutionInitiatedEvent(int64, *eventpb.HistoryEvent, string) (*persistence.ChildExecutionInfo, error)
-		ReplicateTimerCanceledEvent(*eventpb.HistoryEvent) error
-		ReplicateTimerFiredEvent(*eventpb.HistoryEvent) error
-		ReplicateTimerStartedEvent(*eventpb.HistoryEvent) (*persistenceblobs.TimerInfo, error)
-		ReplicateTransientDecisionTaskScheduled() (*decisionInfo, error)
-		ReplicateUpsertWorkflowSearchAttributesEvent(*eventpb.HistoryEvent)
-		ReplicateWorkflowExecutionCancelRequestedEvent(*eventpb.HistoryEvent) error
-		ReplicateWorkflowExecutionCanceledEvent(int64, *eventpb.HistoryEvent) error
-		ReplicateWorkflowExecutionCompletedEvent(int64, *eventpb.HistoryEvent) error
-		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, string, *eventpb.HistoryEvent) error
-		ReplicateWorkflowExecutionFailedEvent(int64, *eventpb.HistoryEvent) error
-		ReplicateWorkflowExecutionSignaled(*eventpb.HistoryEvent) error
-		ReplicateWorkflowExecutionStartedEvent(string, executionpb.WorkflowExecution, string, *eventpb.HistoryEvent) error
-		ReplicateWorkflowExecutionTerminatedEvent(int64, *eventpb.HistoryEvent) error
-		ReplicateWorkflowExecutionTimedoutEvent(int64, *eventpb.HistoryEvent) error
+		ReplicateActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error
+		ReplicateActivityTaskCanceledEvent(*historypb.HistoryEvent) error
+		ReplicateActivityTaskCompletedEvent(*historypb.HistoryEvent) error
+		ReplicateActivityTaskFailedEvent(*historypb.HistoryEvent) error
+		ReplicateActivityTaskScheduledEvent(int64, *historypb.HistoryEvent) (*persistenceblobs.ActivityInfo, error)
+		ReplicateActivityTaskStartedEvent(*historypb.HistoryEvent) error
+		ReplicateActivityTaskTimedOutEvent(*historypb.HistoryEvent) error
+		ReplicateChildWorkflowExecutionCanceledEvent(*historypb.HistoryEvent) error
+		ReplicateChildWorkflowExecutionCompletedEvent(*historypb.HistoryEvent) error
+		ReplicateChildWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
+		ReplicateChildWorkflowExecutionStartedEvent(*historypb.HistoryEvent) error
+		ReplicateChildWorkflowExecutionTerminatedEvent(*historypb.HistoryEvent) error
+		ReplicateChildWorkflowExecutionTimedOutEvent(*historypb.HistoryEvent) error
+		ReplicateWorkflowTaskCompletedEvent(*historypb.HistoryEvent) error
+		ReplicateWorkflowTaskFailedEvent() error
+		ReplicateWorkflowTaskScheduledEvent(int64, int64, *taskqueuepb.TaskQueue, int32, int32, int64, int64) (*workflowTaskInfo, error)
+		ReplicateWorkflowTaskStartedEvent(*workflowTaskInfo, int64, int64, int64, string, int64) (*workflowTaskInfo, error)
+		ReplicateWorkflowTaskTimedOutEvent(enumspb.TimeoutType) error
+		ReplicateExternalWorkflowExecutionCancelRequested(*historypb.HistoryEvent) error
+		ReplicateExternalWorkflowExecutionSignaled(*historypb.HistoryEvent) error
+		ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
+		ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent, string) (*persistenceblobs.RequestCancelInfo, error)
+		ReplicateSignalExternalWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
+		ReplicateSignalExternalWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent, string) (*persistenceblobs.SignalInfo, error)
+		ReplicateStartChildWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
+		ReplicateStartChildWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent, string) (*persistenceblobs.ChildExecutionInfo, error)
+		ReplicateTimerCanceledEvent(*historypb.HistoryEvent) error
+		ReplicateTimerFiredEvent(*historypb.HistoryEvent) error
+		ReplicateTimerStartedEvent(*historypb.HistoryEvent) (*persistenceblobs.TimerInfo, error)
+		ReplicateTransientWorkflowTaskScheduled() (*workflowTaskInfo, error)
+		ReplicateUpsertWorkflowSearchAttributesEvent(*historypb.HistoryEvent)
+		ReplicateWorkflowExecutionCancelRequestedEvent(*historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionCanceledEvent(int64, *historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionCompletedEvent(int64, *historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, string, *historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionFailedEvent(int64, *historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionSignaled(*historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionStartedEvent(string, commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionTerminatedEvent(int64, *historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
 		SetCurrentBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *historyBuilder)
-		SetHistoryTree(treeID []byte) error
+		SetHistoryTree(treeID string) error
 		SetVersionHistories(*persistence.VersionHistories) error
-		UpdateActivity(*persistence.ActivityInfo) error
-		UpdateActivityProgress(ai *persistence.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
-		UpdateDecision(*decisionInfo)
+		UpdateActivity(*persistenceblobs.ActivityInfo) error
+		UpdateActivityWithTimerHeartbeat(*persistenceblobs.ActivityInfo, time.Time) error
+		UpdateActivityProgress(ai *persistenceblobs.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
+		UpdateWorkflowTask(*workflowTaskInfo)
 		UpdateReplicationStateVersion(int64, bool)
 		UpdateReplicationStateLastEventID(int64, int64)
 		UpdateUserTimer(*persistenceblobs.TimerInfo) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
-		UpdateWorkflowStateStatus(state int, status executionpb.WorkflowExecutionStatus) error
+		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error
 
 		AddTransferTasks(transferTasks ...persistence.Task)
 		AddTimerTasks(timerTasks ...persistence.Task)
@@ -230,7 +234,7 @@ type (
 		GetUpdateCondition() int64
 
 		StartTransaction(entry *cache.NamespaceCacheEntry) (bool, error)
-		StartTransactionSkipDecisionFail(entry *cache.NamespaceCacheEntry) error
+		StartTransactionSkipWorkflowTaskFail(entry *cache.NamespaceCacheEntry) error
 		CloseTransactionAsMutation(now time.Time, transactionPolicy transactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(now time.Time, transactionPolicy transactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
 	}

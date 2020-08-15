@@ -28,20 +28,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -101,11 +100,11 @@ func (s *queueAckMgrSuite) SetupTest() {
 		s.controller,
 		&p.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardId: 0,
+				ShardId: 1,
 				RangeId: 1,
-				ClusterTimerAckLevel: map[string]*types.Timestamp{
-					cluster.TestCurrentClusterName:     gogoProtoTimestampNowAddDuration(-8),
-					cluster.TestAlternativeClusterName: gogoProtoTimestampNowAddDuration(-10),
+				ClusterTimerAckLevel: map[string]*time.Time{
+					cluster.TestCurrentClusterName:     timestamp.TimeNowPtrUtcAddSeconds(-8),
+					cluster.TestAlternativeClusterName: timestamp.TimeNowPtrUtcAddSeconds(-10),
 				}},
 		},
 		config,
@@ -137,9 +136,9 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID1,
-			TaskList:    "some random tasklist",
+			TaskQueue:   "some random taskqueue",
 			TaskType:    1,
 			ScheduleId:  28,
 		},
@@ -159,9 +158,9 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID2,
-			TaskList:    "some random tasklist",
+			TaskQueue:   "some random taskqueue",
 			TaskType:    1,
 			ScheduleId:  29,
 		},
@@ -187,9 +186,9 @@ func (s *queueAckMgrSuite) TestReadCompleteTimerTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID,
-			TaskList:    "some random tasklist",
+			TaskQueue:   "some random taskqueue",
 			TaskType:    1,
 			ScheduleId:  28,
 		},
@@ -220,27 +219,27 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID1,
-			TaskList:    "some random tasklist",
+			TaskQueue:   "some random taskqueue",
 			TaskType:    1,
 			ScheduleId:  28,
 		},
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID2,
-			TaskList:    "some random tasklist",
+			TaskQueue:   "some random taskqueue",
 			TaskType:    1,
 			ScheduleId:  28,
 		},
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID3,
-			TaskList:    "some random tasklist",
+			TaskQueue:   "some random taskqueue",
 			TaskType:    1,
 			ScheduleId:  28,
 		},
@@ -290,11 +289,11 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 		s.controller,
 		&p.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardId: 0,
+				ShardId: 1,
 				RangeId: 1,
-				ClusterTimerAckLevel: map[string]*types.Timestamp{
-					cluster.TestCurrentClusterName:     types.TimestampNow(),
-					cluster.TestAlternativeClusterName: gogoProtoTimestampNowAddDuration(-10),
+				ClusterTimerAckLevel: map[string]*time.Time{
+					cluster.TestCurrentClusterName:     timestamp.TimeNowPtrUtc(),
+					cluster.TestAlternativeClusterName: timestamp.TimeNowPtrUtcAddSeconds(-10),
 				}},
 		},
 		config,
@@ -326,9 +325,9 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID1,
-			TaskList:    "some random tasklist",
+			TaskQueue:   "some random taskqueue",
 			TaskType:    1,
 			ScheduleId:  28,
 		},
@@ -349,9 +348,9 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID2,
-			TaskList:    "some random tasklist",
+			TaskQueue:   "some random taskqueue",
 			TaskType:    1,
 			ScheduleId:  29,
 		},
@@ -379,18 +378,18 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID1,
-			TaskList:    "some random tasklist",
+			TaskQueue:   "some random taskqueue",
 			TaskType:    1,
 			ScheduleId:  28,
 		},
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID2,
-			TaskList:    "some random tasklist",
+			TaskQueue:   "some random taskqueue",
 			TaskType:    2,
 			ScheduleId:  29,
 		},

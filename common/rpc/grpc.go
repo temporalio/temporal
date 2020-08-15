@@ -26,12 +26,14 @@ package rpc
 
 import (
 	"context"
+	"crypto/tls"
 
 	"github.com/gogo/status"
-	"go.temporal.io/temporal-proto/serviceerror"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
-	"github.com/temporalio/temporal/common/headers"
+	"go.temporal.io/server/common/headers"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
@@ -45,9 +47,15 @@ const (
 // The hostName syntax is defined in
 // https://github.com/grpc/grpc/blob/master/doc/naming.md.
 // e.g. to use dns resolver, a "dns:///" prefix should be applied to the target.
-func Dial(hostName string) (*grpc.ClientConn, error) {
+func Dial(hostName string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
+	// Default to insecure
+	grpcSecureOpt := grpc.WithInsecure()
+	if tlsConfig != nil {
+		grpcSecureOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
+	}
+
 	return grpc.Dial(hostName,
-		grpc.WithInsecure(),
+		grpcSecureOpt,
 		grpc.WithChainUnaryInterceptor(
 			versionHeadersInterceptor,
 			errorInterceptor),
@@ -58,7 +66,7 @@ func Dial(hostName string) (*grpc.ClientConn, error) {
 
 func errorInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 	err := invoker(ctx, method, req, reply, cc, opts...)
-	err = serviceerror.FromStatus(status.Convert(err))
+	err = serviceerrors.FromStatus(status.Convert(err))
 	return err
 }
 

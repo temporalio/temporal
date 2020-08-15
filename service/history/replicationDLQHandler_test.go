@@ -35,18 +35,18 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/client"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/resource"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resource"
 )
 
 type (
@@ -99,7 +99,7 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 		shardInfo: &persistence.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{
 			ShardId:                0,
 			RangeId:                1,
-			ReplicationDLQAckLevel: map[string]int64{"test": -1},
+			ReplicationDlqAckLevel: map[string]int64{"test": -1},
 		}},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
@@ -133,9 +133,9 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	resp := &persistence.GetReplicationTasksFromDLQResponse{
 		Tasks: []*persistenceblobs.ReplicationTaskInfo{
 			&persistenceblobs.ReplicationTaskInfo{
-				NamespaceId: primitives.MustParseUUID(uuid.New()),
+				NamespaceId: uuid.New(),
 				WorkflowId:  uuid.New(),
-				RunId:       primitives.MustParseUUID(uuid.New()),
+				RunId:       uuid.New(),
 				TaskId:      0,
 				TaskType:    1,
 			},
@@ -155,7 +155,7 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	s.adminClient.EXPECT().
 		GetDLQReplicationMessages(ctx, gomock.Any()).
 		Return(&adminservice.GetDLQReplicationMessagesResponse{}, nil)
-	tasks, token, err := s.replicationMessageHandler.readMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken)
+	tasks, token, err := s.replicationMessageHandler.getMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)
 	s.Nil(token)
 	s.Nil(tasks)
@@ -187,9 +187,9 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages_OK() {
 	resp := &persistence.GetReplicationTasksFromDLQResponse{
 		Tasks: []*persistenceblobs.ReplicationTaskInfo{
 			&persistenceblobs.ReplicationTaskInfo{
-				NamespaceId: primitives.MustParseUUID(uuid.New()),
+				NamespaceId: uuid.New(),
 				WorkflowId:  uuid.New(),
-				RunId:       primitives.MustParseUUID(uuid.New()),
+				RunId:       uuid.New(),
 				TaskId:      0,
 				TaskType:    1,
 			},
@@ -206,17 +206,17 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages_OK() {
 	}).Return(resp, nil).Times(1)
 
 	s.mockClientBean.EXPECT().GetRemoteAdminClient(sourceCluster).Return(s.adminClient).AnyTimes()
-	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:     replicationgenpb.ReplicationTaskType_HistoryTask,
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
 		SourceTaskId: lastMessageID,
-		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{},
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{},
 		},
 	}
 	s.adminClient.EXPECT().
 		GetDLQReplicationMessages(ctx, gomock.Any()).
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
-			ReplicationTasks: []*replicationgenpb.ReplicationTask{
+			ReplicationTasks: []*replicationspb.ReplicationTask{
 				replicationTask,
 			},
 		}, nil)

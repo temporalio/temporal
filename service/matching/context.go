@@ -28,10 +28,12 @@ import (
 	"context"
 	"sync"
 
-	"github.com/temporalio/temporal/common/metrics"
+	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	"go.temporal.io/server/common/metrics"
+
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 )
 
 type handlerContext struct {
@@ -39,47 +41,47 @@ type handlerContext struct {
 	scope metrics.Scope
 }
 
-var stickyTaskListMetricTag = metrics.TaskListTag("__sticky__")
+var stickyTaskQueueMetricTag = metrics.TaskQueueTag("__sticky__")
 
 func newHandlerContext(
 	ctx context.Context,
 	namespace string,
-	taskList *tasklistpb.TaskList,
+	taskQueue *taskqueuepb.TaskQueue,
 	metricsClient metrics.Client,
 	metricsScope int,
 ) *handlerContext {
 	return &handlerContext{
 		Context: ctx,
-		scope:   newPerTaskListScope(namespace, taskList.GetName(), taskList.GetKind(), metricsClient, metricsScope),
+		scope:   newPerTaskQueueScope(namespace, taskQueue.GetName(), taskQueue.GetKind(), metricsClient, metricsScope),
 	}
 }
 
-func newPerTaskListScope(
+func newPerTaskQueueScope(
 	namespace string,
-	taskListName string,
-	taskListKind tasklistpb.TaskListKind,
+	taskQueueName string,
+	taskQueueKind enumspb.TaskQueueKind,
 	client metrics.Client,
 	scopeIdx int,
 ) metrics.Scope {
 	namespaceTag := metrics.NamespaceUnknownTag()
-	taskListTag := metrics.TaskListUnknownTag()
+	taskQueueTag := metrics.TaskQueueUnknownTag()
 	if namespace != "" {
 		namespaceTag = metrics.NamespaceTag(namespace)
 	}
-	if taskListName != "" && taskListKind != tasklistpb.TaskListKind_Sticky {
-		taskListTag = metrics.TaskListTag(taskListName)
+	if taskQueueName != "" && taskQueueKind != enumspb.TASK_QUEUE_KIND_STICKY {
+		taskQueueTag = metrics.TaskQueueTag(taskQueueName)
 	}
-	if taskListKind == tasklistpb.TaskListKind_Sticky {
-		taskListTag = stickyTaskListMetricTag
+	if taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
+		taskQueueTag = stickyTaskQueueMetricTag
 	}
-	return client.Scope(scopeIdx, namespaceTag, taskListTag)
+	return client.Scope(scopeIdx, namespaceTag, taskQueueTag)
 }
 
 // startProfiling initiates recording of request metrics
 func (reqCtx *handlerContext) startProfiling(wg *sync.WaitGroup) metrics.Stopwatch {
 	wg.Wait()
-	sw := reqCtx.scope.StartTimer(metrics.ServiceLatencyPerTaskList)
-	reqCtx.scope.IncCounter(metrics.ServiceRequestsPerTaskList)
+	sw := reqCtx.scope.StartTimer(metrics.ServiceLatencyPerTaskQueue)
+	reqCtx.scope.IncCounter(metrics.ServiceRequestsPerTaskQueue)
 	return sw
 }
 
@@ -92,31 +94,31 @@ func (reqCtx *handlerContext) handleErr(err error) error {
 
 	switch err.(type) {
 	case *serviceerror.Internal:
-		scope.IncCounter(metrics.ServiceFailuresPerTaskList)
+		scope.IncCounter(metrics.ServiceFailuresPerTaskQueue)
 		return err
 	case *serviceerror.InvalidArgument:
-		scope.IncCounter(metrics.ServiceErrInvalidArgumentPerTaskListCounter)
+		scope.IncCounter(metrics.ServiceErrInvalidArgumentPerTaskQueueCounter)
 		return err
 	case *serviceerror.NotFound:
-		scope.IncCounter(metrics.ServiceErrNotFoundPerTaskListCounter)
+		scope.IncCounter(metrics.ServiceErrNotFoundPerTaskQueueCounter)
 		return err
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
-		scope.IncCounter(metrics.ServiceErrExecutionAlreadyStartedPerTaskListCounter)
+		scope.IncCounter(metrics.ServiceErrExecutionAlreadyStartedPerTaskQueueCounter)
 		return err
 	case *serviceerror.NamespaceAlreadyExists:
-		scope.IncCounter(metrics.ServiceErrNamespaceAlreadyExistsPerTaskListCounter)
+		scope.IncCounter(metrics.ServiceErrNamespaceAlreadyExistsPerTaskQueueCounter)
 		return err
 	case *serviceerror.QueryFailed:
-		scope.IncCounter(metrics.ServiceErrQueryFailedPerTaskListCounter)
+		scope.IncCounter(metrics.ServiceErrQueryFailedPerTaskQueueCounter)
 		return err
 	case *serviceerror.ResourceExhausted:
-		scope.IncCounter(metrics.ServiceErrResourceExhaustedPerTaskListCounter)
+		scope.IncCounter(metrics.ServiceErrResourceExhaustedPerTaskQueueCounter)
 		return err
 	case *serviceerror.NamespaceNotActive:
-		scope.IncCounter(metrics.ServiceErrNamespaceNotActivePerTaskListCounter)
+		scope.IncCounter(metrics.ServiceErrNamespaceNotActivePerTaskQueueCounter)
 		return err
 	default:
-		scope.IncCounter(metrics.ServiceFailuresPerTaskList)
+		scope.IncCounter(metrics.ServiceFailuresPerTaskQueue)
 		return serviceerror.NewInternal(err.Error())
 	}
 }

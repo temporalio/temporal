@@ -30,13 +30,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/service/config"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"go.temporal.io/server/common/log/loggerimpl"
 )
 
 type RingpopSuite struct {
@@ -59,7 +59,7 @@ func (s *RingpopSuite) TestHostsMode() {
 	s.Equal("test", cfg.Name)
 	s.Equal("1.2.3.4", cfg.BroadcastAddress)
 	s.Equal(time.Second*30, cfg.MaxJoinDuration)
-	err = validateRingpopConfig(&cfg)
+	err = ValidateRingpopConfig(&cfg)
 	s.Nil(err)
 	f, err := NewRingpopFactory(&cfg, nil, "test", nil, loggerimpl.NewNopLogger(), nil)
 	s.Nil(err)
@@ -80,11 +80,11 @@ func (resolver *mockResolver) LookupHost(ctx context.Context, host string) ([]st
 
 func (s *RingpopSuite) TestInvalidConfig() {
 	var cfg config.Membership
-	s.Error(validateRingpopConfig(&cfg))
+	s.Error(ValidateRingpopConfig(&cfg))
 	cfg.Name = "test"
-	s.NoError(validateRingpopConfig(&cfg))
+	s.NoError(ValidateRingpopConfig(&cfg))
 	cfg.BroadcastAddress = "sjhdfskdjhf"
-	s.Error(validateRingpopConfig(&cfg))
+	s.Error(ValidateRingpopConfig(&cfg))
 }
 
 func getHostsConfig() string {

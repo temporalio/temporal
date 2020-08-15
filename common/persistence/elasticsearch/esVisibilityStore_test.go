@@ -39,21 +39,21 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/valyala/fastjson"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
-	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/definition"
-	es "github.com/temporalio/temporal/common/elasticsearch"
-	esMocks "github.com/temporalio/temporal/common/elasticsearch/mocks"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/mocks"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	indexerspb "go.temporal.io/server/api/indexer/v1"
+	"go.temporal.io/server/common/definition"
+	es "go.temporal.io/server/common/elasticsearch"
+	esMocks "go.temporal.io/server/common/elasticsearch/mocks"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/mocks"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type ESVisibilitySuite struct {
@@ -76,7 +76,7 @@ var (
 	testWorkflowType = "test-wf-type"
 	testWorkflowID   = "test-wid"
 	testRunID        = "1601da05-4db9-4eeb-89e4-da99481bdfc9"
-	testStatus       = executionpb.WorkflowExecutionStatus_Failed
+	testStatus       = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 
 	testRequest = &p.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceID,
@@ -133,8 +133,8 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	request.ExecutionTimestamp = int64(321)
 	request.TaskID = int64(111)
 	memoBytes := []byte(`test bytes`)
-	request.Memo = p.NewDataBlob(memoBytes, common.EncodingTypeProto3)
-	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexergenpb.Message) bool {
+	request.Memo = p.NewDataBlob(memoBytes, enumspb.ENCODING_TYPE_PROTO3.String())
+	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexerspb.Message) bool {
 		fields := input.Fields
 		s.Equal(request.NamespaceID, input.GetNamespaceId())
 		s.Equal(request.WorkflowID, input.GetWorkflowId())
@@ -144,7 +144,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 		s.Equal(request.StartTimestamp, fields[es.StartTime].GetIntData())
 		s.Equal(request.ExecutionTimestamp, fields[es.ExecutionTime].GetIntData())
 		s.Equal(memoBytes, fields[es.Memo].GetBinaryData())
-		s.Equal(string(common.EncodingTypeProto3), fields[es.Encoding].GetStringData())
+		s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), fields[es.Encoding].GetStringData())
 		return true
 	})).Return(nil).Once()
 	err := s.visibilityStore.RecordWorkflowExecutionStarted(request)
@@ -156,8 +156,8 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 	request := &p.InternalRecordWorkflowExecutionStartedRequest{
 		Memo: &serialization.DataBlob{},
 	}
-	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexergenpb.Message) bool {
-		s.Equal(indexergenpb.MessageType_Index, input.GetMessageType())
+	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexerspb.Message) bool {
+		s.Equal(enumsspb.MESSAGE_TYPE_INDEX, input.GetMessageType())
 		_, ok := input.Fields[es.Memo]
 		s.False(ok)
 		_, ok = input.Fields[es.Encoding]
@@ -179,11 +179,11 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	request.ExecutionTimestamp = int64(321)
 	request.TaskID = int64(111)
 	memoBytes := []byte(`test bytes`)
-	request.Memo = p.NewDataBlob(memoBytes, common.EncodingTypeProto3)
+	request.Memo = p.NewDataBlob(memoBytes, enumspb.ENCODING_TYPE_PROTO3.String())
 	request.CloseTimestamp = int64(999)
-	request.Status = executionpb.WorkflowExecutionStatus_Terminated
+	request.Status = enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
 	request.HistoryLength = int64(20)
-	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexergenpb.Message) bool {
+	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexerspb.Message) bool {
 		fields := input.Fields
 		s.Equal(request.NamespaceID, input.GetNamespaceId())
 		s.Equal(request.WorkflowID, input.GetWorkflowId())
@@ -193,7 +193,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 		s.Equal(request.StartTimestamp, fields[es.StartTime].GetIntData())
 		s.Equal(request.ExecutionTimestamp, fields[es.ExecutionTime].GetIntData())
 		s.Equal(memoBytes, fields[es.Memo].GetBinaryData())
-		s.Equal(string(common.EncodingTypeProto3), fields[es.Encoding].GetStringData())
+		s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), fields[es.Encoding].GetStringData())
 		s.Equal(request.CloseTimestamp, fields[es.CloseTime].GetIntData())
 		s.EqualValues(request.Status, fields[es.ExecutionStatus].GetIntData())
 		s.Equal(request.HistoryLength, fields[es.HistoryLength].GetIntData())
@@ -208,8 +208,8 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 	request := &p.InternalRecordWorkflowExecutionClosedRequest{
 		Memo: &serialization.DataBlob{},
 	}
-	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexergenpb.Message) bool {
-		s.Equal(indexergenpb.MessageType_Index, input.GetMessageType())
+	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexerspb.Message) bool {
+		s.Equal(enumsspb.MESSAGE_TYPE_INDEX, input.GetMessageType())
 		_, ok := input.Fields[es.Memo]
 		s.False(ok)
 		_, ok = input.Fields[es.Encoding]
@@ -379,7 +379,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
 	})).Return(testSearchResult, nil).Once()
 	request := &p.GetClosedWorkflowExecutionRequest{
 		NamespaceID: testNamespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: testWorkflowID,
 			RunId:      testRunID,
 		},
@@ -405,7 +405,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution_NoRunID() {
 	})).Return(testSearchResult, nil).Once()
 	request := &p.GetClosedWorkflowExecutionRequest{
 		NamespaceID: testNamespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: testWorkflowID,
 		},
 	}
@@ -655,7 +655,7 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 	s.Equal("TestWorkflowExecute", info.TypeName)
 	s.Equal(int64(1547596872371000000), info.StartTime.UnixNano())
 	s.Equal(int64(1547596872817380000), info.CloseTime.UnixNano())
-	s.Equal(executionpb.WorkflowExecutionStatus_Completed, *info.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.Status)
 	s.Equal(int64(29), info.HistoryLength)
 
 	// test for error case
@@ -1029,8 +1029,8 @@ func (s *ESVisibilitySuite) TestProcessAllValuesForKey() {
 }
 
 func (s *ESVisibilitySuite) TestGetFieldType() {
-	s.Equal(commonpb.IndexedValueType_Int, s.visibilityStore.getFieldType("StartTime"))
-	s.Equal(commonpb.IndexedValueType_Datetime, s.visibilityStore.getFieldType("Attr.CustomDatetimeField"))
+	s.Equal(enumspb.INDEXED_VALUE_TYPE_INT, s.visibilityStore.getFieldType("StartTime"))
+	s.Equal(enumspb.INDEXED_VALUE_TYPE_DATETIME, s.visibilityStore.getFieldType("Attr.CustomDatetimeField"))
 }
 
 func (s *ESVisibilitySuite) TestGetValueOfSearchAfterInJSON() {

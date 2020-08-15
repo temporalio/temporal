@@ -31,7 +31,7 @@ import (
 const (
 	// Version is the controlled version string. It should be updated every time
 	// before we release a new version.
-	Version = "0.20.0"
+	Version = "0.28.0"
 )
 
 // SetFactory is used to set the ClientFactory global
@@ -84,10 +84,21 @@ func NewCliApp() *cli.App {
 			Subcommands: newWorkflowCommands(),
 		},
 		{
-			Name:        "tasklist",
-			Aliases:     []string{"tl"},
-			Usage:       "Operate Temporal task list",
-			Subcommands: newTaskListCommands(),
+			Name:        "activity",
+			Aliases:     []string{"act"},
+			Usage:       "operate activities of workflow",
+			Subcommands: newActivityCommands(),
+		},
+		{
+			Name:        "taskqueue",
+			Aliases:     []string{"tq"},
+			Usage:       "Operate Temporal task queue",
+			Subcommands: newTaskQueueCommands(),
+		},
+		{
+			Name:        "batch",
+			Usage:       "batch operation on a list of workflows from query.",
+			Subcommands: newBatchCommands(),
 		},
 		{
 			Name:    "admin",
@@ -131,10 +142,15 @@ func NewCliApp() *cli.App {
 					Subcommands: newAdminElasticSearchCommands(),
 				},
 				{
-					Name:        "tasklist",
-					Aliases:     []string{"tl"},
-					Usage:       "Run admin operation on taskList",
-					Subcommands: newAdminTaskListCommands(),
+					Name:        "taskqueue",
+					Aliases:     []string{"tq"},
+					Usage:       "Run admin operation on taskQueue",
+					Subcommands: newAdminTaskQueueCommands(),
+				},
+				{
+					Name:        "membership",
+					Usage:       "Run admin operation on membership",
+					Subcommands: newAdminMembershipCommands(),
 				},
 				{
 					Name:        "cluster",

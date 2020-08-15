@@ -29,7 +29,8 @@ import (
 
 	"github.com/urfave/cli"
 
-	"github.com/temporalio/temporal/tools/common/schema"
+	"go.temporal.io/server/environment"
+	"go.temporal.io/server/tools/common/schema"
 )
 
 // RunTool runs the temporal-cassandra-tool command line tool
@@ -75,7 +76,7 @@ func buildCLIOptions() *cli.App {
 		},
 		cli.IntFlag{
 			Name:   schema.CLIFlagPort,
-			Value:  defaultCassandraPort,
+			Value:  environment.GetCassandraPort(),
 			Usage:  "Port of cassandra host to connect to",
 			EnvVar: "CASSANDRA_PORT",
 		},

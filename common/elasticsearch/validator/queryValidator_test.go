@@ -28,10 +28,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/api/workflowservice/v1"
 
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type queryValidatorSuite struct {

@@ -32,20 +32,21 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
+	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -59,12 +60,12 @@ func (s *integrationSuite) TestArchival_TimerQueueProcessor() {
 	namespaceID := s.getNamespaceID(s.archivalNamespace)
 	workflowID := "archival-timer-queue-processor-workflow-id"
 	workflowType := "archival-timer-queue-processor-type"
-	taskList := "archival-timer-queue-processor-task-list"
+	taskQueue := "archival-timer-queue-processor-task-queue"
 	numActivities := 1
 	numRuns := 1
-	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalNamespace, namespaceID, numActivities, numRuns)[0]
+	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, namespaceID, numActivities, numRuns)[0]
 
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
@@ -79,13 +80,13 @@ func (s *integrationSuite) TestArchival_ContinueAsNew() {
 	namespaceID := s.getNamespaceID(s.archivalNamespace)
 	workflowID := "archival-continueAsNew-workflow-id"
 	workflowType := "archival-continueAsNew-workflow-type"
-	taskList := "archival-continueAsNew-task-list"
+	taskQueue := "archival-continueAsNew-task-queue"
 	numActivities := 1
 	numRuns := 5
-	runIDs := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalNamespace, namespaceID, numActivities, numRuns)
+	runIDs := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, namespaceID, numActivities, numRuns)
 
 	for _, runID := range runIDs {
-		execution := &executionpb.WorkflowExecution{
+		execution := &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		}
@@ -101,11 +102,11 @@ func (s *integrationSuite) TestArchival_ArchiverWorker() {
 	namespaceID := s.getNamespaceID(s.archivalNamespace)
 	workflowID := "archival-archiver-worker-workflow-id"
 	workflowType := "archival-archiver-worker-workflow-type"
-	taskList := "archival-archiver-worker-task-list"
+	taskQueue := "archival-archiver-worker-task-queue"
 	numActivities := 10
-	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalNamespace, namespaceID, numActivities, 1)[0]
+	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, namespaceID, numActivities, 1)[0]
 
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
@@ -120,18 +121,18 @@ func (s *integrationSuite) TestVisibilityArchival() {
 	namespaceID := s.getNamespaceID(s.archivalNamespace)
 	workflowID := "archival-visibility-workflow-id"
 	workflowType := "archival-visibility-workflow-type"
-	taskList := "archival-visibility-task-list"
+	taskQueue := "archival-visibility-task-queue"
 	numActivities := 3
 	numRuns := 5
 	startTime := time.Now().UnixNano()
-	s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalNamespace, namespaceID, numActivities, numRuns)
-	s.startAndFinishWorkflow("some other workflowID", "some other workflow type", taskList, s.archivalNamespace, namespaceID, numActivities, numRuns)
+	s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, namespaceID, numActivities, numRuns)
+	s.startAndFinishWorkflow("some other workflowID", "some other workflow type", taskQueue, s.archivalNamespace, namespaceID, numActivities, numRuns)
 	endTime := time.Now().UnixNano()
 
-	var executions []*executionpb.WorkflowExecutionInfo
+	var executions []*workflowpb.WorkflowExecutionInfo
 
 	for i := 0; i != retryLimit; i++ {
-		executions = []*executionpb.WorkflowExecutionInfo{}
+		executions = []*workflowpb.WorkflowExecutionInfo{}
 		request := &workflowservice.ListArchivedWorkflowExecutionsRequest{
 			Namespace: s.archivalNamespace,
 			PageSize:  2,
@@ -153,9 +154,9 @@ func (s *integrationSuite) TestVisibilityArchival() {
 	for _, execution := range executions {
 		s.Equal(workflowID, execution.GetExecution().GetWorkflowId())
 		s.Equal(workflowType, execution.GetType().GetName())
-		s.NotZero(execution.StartTime.Value)
+		s.NotZero(execution.StartTime)
 		s.NotZero(execution.ExecutionTime)
-		s.NotZero(execution.CloseTime.Value)
+		s.NotZero(execution.CloseTime)
 	}
 }
 
@@ -167,7 +168,7 @@ func (s *integrationSuite) getNamespaceID(namespace string) string {
 	return namespaceResp.NamespaceInfo.GetId()
 }
 
-func (s *integrationSuite) isHistoryArchived(namespace string, execution *executionpb.WorkflowExecution) bool {
+func (s *integrationSuite) isHistoryArchived(namespace string, execution *commonpb.WorkflowExecution) bool {
 	request := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.archivalNamespace,
 		Execution: execution,
@@ -183,10 +184,12 @@ func (s *integrationSuite) isHistoryArchived(namespace string, execution *execut
 	return false
 }
 
-func (s *integrationSuite) isHistoryDeleted(execution *executionpb.WorkflowExecution) bool {
-	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), s.testClusterConfig.HistoryConfig.NumHistoryShards)
+func (s *integrationSuite) isHistoryDeleted(execution *commonpb.WorkflowExecution) bool {
+	namespaceID := s.getNamespaceID(s.archivalNamespace)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(),
+		s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	request := &persistence.GetHistoryTreeRequest{
-		TreeID:  primitives.MustParseUUID(execution.GetRunId()),
+		TreeID:  execution.GetRunId(),
 		ShardID: convert.IntPtr(shardID),
 	}
 	for i := 0; i < retryLimit; i++ {
@@ -200,10 +203,10 @@ func (s *integrationSuite) isHistoryDeleted(execution *executionpb.WorkflowExecu
 	return false
 }
 
-func (s *integrationSuite) isMutableStateDeleted(namespaceID string, execution *executionpb.WorkflowExecution) bool {
+func (s *integrationSuite) isMutableStateDeleted(namespaceID string, execution *commonpb.WorkflowExecution) bool {
 	request := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowId,
 			RunId:      execution.RunId,
 		},
@@ -219,25 +222,25 @@ func (s *integrationSuite) isMutableStateDeleted(namespaceID string, execution *
 	return false
 }
 
-func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespaceID string, numActivities, numRuns int) []string {
+func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceID string, numActivities, numRuns int) []string {
 	identity := "worker1"
 	activityName := "activity_type1"
 	workflowType := &commonpb.WorkflowType{
 		Name: wt,
 	}
-	taskList := &tasklistpb.TaskList{
-		Name: tl,
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tq,
 	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskList:                   taskList,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
@@ -250,29 +253,29 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 	expectedActivityID := int32(1)
 	runCounter := 1
 
-	dtHandler := func(
-		execution *executionpb.WorkflowExecution,
+	wtHandler := func(
+		execution *commonpb.WorkflowExecution,
 		wt *commonpb.WorkflowType,
 		previousStartedEventID int64,
 		startedEventID int64,
-		history *eventpb.History,
-	) ([]*decisionpb.Decision, error) {
+		history *historypb.History,
+	) ([]*commandpb.Command, error) {
 		runIDs[runCounter-1] = execution.GetRunId()
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
-			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -281,29 +284,29 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 			activityCounter = int32(0)
 			expectedActivityID = int32(1)
 			runCounter++
-			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
-				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
-					WorkflowType:               workflowType,
-					TaskList:                   &tasklistpb.TaskList{Name: tl},
-					Input:                      nil,
-					WorkflowRunTimeoutSeconds:  100,
-					WorkflowTaskTimeoutSeconds: 1,
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+					WorkflowType:        workflowType,
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: tq},
+					Input:               nil,
+					WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+					WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
 				}},
 			}}, nil
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(
-		execution *executionpb.WorkflowExecution,
+		execution *commonpb.WorkflowExecution,
 		activityType *commonpb.ActivityType,
 		activityID string,
 		input *commonpb.Payloads,
@@ -325,19 +328,19 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       namespace,
-		TaskList:        taskList,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 	for run := 0; run < numRuns; run++ {
 		for i := 0; i < numActivities; i++ {
-			_, err := poller.PollAndProcessDecisionTask(false, false)
-			s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+			_, err := poller.PollAndProcessWorkflowTask(false, false)
+			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 			s.NoError(err)
 			if i%2 == 0 {
 				err = poller.PollAndProcessActivityTask(false)
@@ -348,7 +351,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 			s.NoError(err)
 		}
 
-		_, err = poller.PollAndProcessDecisionTask(true, false)
+		_, err = poller.PollAndProcessWorkflowTask(true, false)
 		s.NoError(err)
 	}
 

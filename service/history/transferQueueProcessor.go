@@ -33,15 +33,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/client/history"
-	"github.com/temporalio/temporal/client/matching"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/xdc"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/xdc"
 )
 
 var (
@@ -120,6 +120,7 @@ func newTransferQueueProcessor(
 					return historyService.ReplicateEventsV2(ctx, request)
 				},
 				shard.GetService().GetPayloadSerializer(),
+				nil,
 				logger,
 			)
 			standbyTaskProcessors[clusterName] = newTransferQueueStandbyProcessor(
@@ -292,7 +293,7 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 			return
 		case <-timer.C:
 		CompleteLoop:
-			for attempt := 0; attempt < t.config.TransferProcessorCompleteTransferFailureRetryCount(); attempt++ {
+			for attempt := 1; attempt <= t.config.TransferProcessorCompleteTransferFailureRetryCount(); attempt++ {
 				err := t.completeTransfer()
 				if err != nil {
 					t.logger.Info("Failed to complete transfer task", tag.Error(err))
@@ -301,7 +302,7 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 						t.Stop()
 						return
 					}
-					backoff := time.Duration(attempt * 100)
+					backoff := time.Duration((attempt - 1) * 100)
 					time.Sleep(backoff * time.Millisecond)
 				} else {
 					break CompleteLoop

@@ -26,10 +26,10 @@ package frontend
 
 import (
 	"github.com/pborman/uuid"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/api/common/v1"
 )
 
-func validateExecution(w *executionpb.WorkflowExecution) error {
+func validateExecution(w *commonpb.WorkflowExecution) error {
 	if w == nil {
 		return errExecutionNotSet
 	}

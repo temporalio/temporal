@@ -36,17 +36,17 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
-	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/collection"
-	es "github.com/temporalio/temporal/common/elasticsearch"
-	esMocks "github.com/temporalio/temporal/common/elasticsearch/mocks"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	msgMocks "github.com/temporalio/temporal/common/messaging/mocks"
-	"github.com/temporalio/temporal/common/metrics"
-	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/service/worker/indexer/mocks"
+	indexerspb "go.temporal.io/server/api/indexer/v1"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/collection"
+	es "go.temporal.io/server/common/elasticsearch"
+	esMocks "go.temporal.io/server/common/elasticsearch/mocks"
+	"go.temporal.io/server/common/log/loggerimpl"
+	msgMocks "go.temporal.io/server/common/messaging/mocks"
+	"go.temporal.io/server/common/metrics"
+	mmocks "go.temporal.io/server/common/metrics/mocks"
+	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/service/worker/indexer/mocks"
 )
 
 type esProcessorSuite struct {
@@ -332,7 +332,7 @@ func (s *esProcessorSuite) TestHashFn() {
 }
 
 func (s *esProcessorSuite) getEncodedMsg(wid string, rid string, namespaceID string) []byte {
-	indexMsg := &indexergenpb.Message{
+	indexMsg := &indexerspb.Message{
 		NamespaceId: namespaceID,
 		WorkflowId:  wid,
 		RunId:       rid,
@@ -365,10 +365,10 @@ func (s *esProcessorSuite) TestGetMsgInfo_Error() {
 	mockKafkaMsg.On("Value").Return([]byte{}).Once()
 	mapVal := newKafkaMessageWithMetrics(mockKafkaMsg, &testStopWatch)
 	s.esProcessor.mapToKafkaMsg.Put(testKey, mapVal)
-	wid, rid, domainID := s.esProcessor.getMsgWithInfo(testKey)
+	wid, rid, namespaceID := s.esProcessor.getMsgWithInfo(testKey)
 	s.Equal("", wid)
 	s.Equal("", rid)
-	s.Equal("", domainID)
+	s.Equal("", namespaceID)
 }
 
 func (s *esProcessorSuite) TestGetKeyForKafkaMsg() {
@@ -422,10 +422,10 @@ func (s *esProcessorSuite) TestIsResponseSuccess() {
 	}
 }
 
-func (s *esProcessorSuite) TestIsResponseRetriable() {
+func (s *esProcessorSuite) TestIsResponseRetryable() {
 	status := []int{408, 429, 500, 503, 507}
 	for _, code := range status {
-		s.True(isResponseRetriable(code))
+		s.True(isResponseRetryable(code))
 	}
 }
 

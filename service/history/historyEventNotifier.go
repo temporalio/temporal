@@ -29,14 +29,16 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/collection"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/metrics"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
 )
 
 const (
@@ -51,8 +53,8 @@ type (
 		previousStartedEventID int64
 		timestamp              time.Time
 		currentBranchToken     []byte
-		workflowState          int
-		workflowStatus         executionpb.WorkflowExecutionStatus
+		workflowState          enumsspb.WorkflowExecutionState
+		workflowStatus         enumspb.WorkflowExecutionStatus
 	}
 
 	historyEventNotifierImpl struct {
@@ -64,8 +66,8 @@ type (
 		closeChan chan bool
 		// this channel will never close
 		eventsChan chan *historyEventNotification
-		// function which calculate the shard ID from given workflow ID
-		workflowIDToShardID func(string) int
+		// function which calculate the shard ID from given namespaceID and workflowID pair
+		workflowIDToShardID func(string, string) int
 
 		// concurrent map with key workflowIdentifier, value map[string]chan *historyEventNotification.
 		// the reason for the second map being non thread safe:
@@ -79,13 +81,13 @@ var _ historyEventNotifier = (*historyEventNotifierImpl)(nil)
 
 func newHistoryEventNotification(
 	namespaceID string,
-	workflowExecution *executionpb.WorkflowExecution,
+	workflowExecution *commonpb.WorkflowExecution,
 	lastFirstEventID int64,
 	nextEventID int64,
 	previousStartedEventID int64,
 	currentBranchToken []byte,
-	workflowState int,
-	workflowStatus executionpb.WorkflowExecutionStatus,
+	workflowState enumsspb.WorkflowExecutionState,
+	workflowStatus enumspb.WorkflowExecutionStatus,
 ) *historyEventNotification {
 
 	return &historyEventNotification{
@@ -106,7 +108,7 @@ func newHistoryEventNotification(
 func newHistoryEventNotifier(
 	timeSource clock.TimeSource,
 	metrics metrics.Client,
-	workflowIDToShardID func(string) int,
+	workflowIDToShardID func(string, string) int,
 ) *historyEventNotifierImpl {
 
 	hashFn := func(key interface{}) uint32 {
@@ -114,7 +116,7 @@ func newHistoryEventNotifier(
 		if !ok {
 			return 0
 		}
-		return uint32(workflowIDToShardID(notification.id.WorkflowID))
+		return uint32(workflowIDToShardID(notification.id.NamespaceID, notification.id.WorkflowID))
 	}
 	return &historyEventNotifierImpl{
 		timeSource: timeSource,

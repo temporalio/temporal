@@ -30,10 +30,11 @@ import (
 
 	"github.com/urfave/cli"
 
-	"github.com/temporalio/temporal/common/auth"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/schema/cassandra"
-	"github.com/temporalio/temporal/tools/common/schema"
+	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/environment"
+	"go.temporal.io/server/schema/cassandra"
+	"go.temporal.io/server/tools/common/schema"
 )
 
 const defaultNumReplicas = 1
@@ -216,7 +217,7 @@ func validateCQLClientConfig(config *CQLClientConfig, isDryRun bool) error {
 		config.Keyspace = schema.DryrunDBName
 	}
 	if config.Port == 0 {
-		config.Port = defaultCassandraPort
+		config.Port = environment.GetCassandraPort()
 	}
 	if config.numReplicas == 0 {
 		config.numReplicas = defaultNumReplicas

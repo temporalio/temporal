@@ -30,13 +30,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/membership"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/resource"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resource"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
@@ -113,7 +114,7 @@ func newHistoryShardsItem(
 ) (*historyShardsItem, error) {
 
 	hostIdentity := resource.GetHostInfo().Identity()
-	return &historyShardsItem{
+	shardItem := &historyShardsItem{
 		Resource:        resource,
 		shardID:         shardID,
 		status:          historyShardsItemStatusInitialized,
@@ -121,7 +122,11 @@ func newHistoryShardsItem(
 		config:          config,
 		logger:          resource.GetLogger().WithTags(tag.ShardID(shardID), tag.Address(hostIdentity)),
 		throttledLogger: resource.GetThrottledLogger().WithTags(tag.ShardID(shardID), tag.Address(hostIdentity)),
-	}, nil
+	}
+	shardItem.logger = shardItem.logger.WithTags(tag.ShardItem(shardItem))
+	shardItem.throttledLogger = shardItem.throttledLogger.WithTags(tag.ShardItem(shardItem))
+
+	return shardItem, nil
 }
 
 func (c *shardController) Start() {
@@ -169,8 +174,8 @@ func (c *shardController) isShuttingDown() bool {
 	return atomic.LoadInt32(&c.shuttingDown) != 0
 }
 
-func (c *shardController) GetEngine(workflowID string) (Engine, error) {
-	shardID := c.config.GetShardID(workflowID)
+func (c *shardController) GetEngine(namespaceID, workflowID string) (Engine, error) {
+	shardID := c.config.GetShardID(namespaceID, workflowID)
 	return c.getEngineForShard(shardID)
 }
 
@@ -187,13 +192,17 @@ func (c *shardController) getEngineForShard(shardID int) (Engine, error) {
 func (c *shardController) removeEngineForShard(shardID int, shardItem *historyShardsItem) {
 	sw := c.metricsScope.StartTimer(metrics.RemoveEngineForShardLatency)
 	defer sw.Stop()
-	item, _ := c.removeHistoryShardItem(shardID)
-	// the shardItem comparison is just a defensive check to make sure we are deleting
-	// what we intend to delete. In the event that multiple callers call removeEngine / getEngine
-	// concurrently, it is possible to reorder a delete/delete/add sequence into a delete/add/delete
-	// sequence. This check is to protect against those scenarios.
-	if item != nil && (item == shardItem || shardItem == nil) {
-		item.stopEngine()
+	currentShardItem, _ := c.removeHistoryShardItem(shardID, shardItem)
+	if shardItem != nil {
+		// if shardItem is not nil, then currentShardItem either equals to shardItem or is nil
+		// in both cases, we need to stop the engine in shardItem
+		shardItem.stopEngine()
+		return
+	}
+
+	// if shardItem is nil, then stop the engine for the current shardItem, if exists
+	if currentShardItem != nil {
+		currentShardItem.stopEngine()
 	}
 }
 
@@ -249,25 +258,31 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShar
 		return shardItem, nil
 	}
 
-	return nil, createShardOwnershipLostError(c.GetHostInfo().Identity(), info.GetAddress())
+	return nil, serviceerrors.NewShardOwnershipLost(c.GetHostInfo().Identity(), info.GetAddress())
 }
 
-func (c *shardController) removeHistoryShardItem(shardID int) (*historyShardsItem, error) {
+func (c *shardController) removeHistoryShardItem(shardID int, shardItem *historyShardsItem) (*historyShardsItem, error) {
 	nShards := 0
 	c.Lock()
-	shardItem, ok := c.historyShards[shardID]
+	defer c.Unlock()
+
+	currentShardItem, ok := c.historyShards[shardID]
 	if !ok {
-		c.Unlock()
 		return nil, fmt.Errorf("No item found to remove for shard: %v", shardID)
 	}
+	if shardItem != nil && currentShardItem != shardItem {
+		// the shardItem comparison is a defensive check to make sure we are deleting
+		// what we intend to delete.
+		return nil, fmt.Errorf("Current shardItem doesn't match the one we intend to delete for shard: %v", shardID)
+	}
+
 	delete(c.historyShards, shardID)
 	nShards = len(c.historyShards)
-	c.Unlock()
 
 	c.metricsScope.IncCounter(metrics.ShardItemRemovedCounter)
 
-	shardItem.logger.Info("", tag.LifeCycleStopped, tag.ComponentShardItem, tag.Number(int64(nShards)))
-	return shardItem, nil
+	currentShardItem.logger.Info("", tag.LifeCycleStopped, tag.ComponentShardItem, tag.Number(int64(nShards)))
+	return currentShardItem, nil
 }
 
 // shardManagementPump is the main event loop for
@@ -337,7 +352,7 @@ func (c *shardController) acquireShards() {
 		}()
 	}
 	// Submit tasks to the channel.
-	for shardID := 0; shardID < c.config.NumberOfShards; shardID++ {
+	for shardID := 1; shardID <= c.config.NumberOfShards; shardID++ {
 		shardActionCh <- shardID
 		if c.isShuttingDown() {
 			return
@@ -396,6 +411,10 @@ func (i *historyShardsItem) getOrCreateEngine(
 		i.logger.Info("", tag.LifeCycleStarting, tag.ComponentShardEngine)
 		context, err := acquireShard(i, closeCallback)
 		if err != nil {
+			// invalidate the shardItem so that the same shardItem won't be
+			// used to create another shardContext
+			i.logger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
+			i.status = historyShardsItemStatusStopped
 			return nil, err
 		}
 		if context.PreviousShardOwnerWasDifferent() {
@@ -457,7 +476,12 @@ func (i *historyShardsItem) logInvalidStatus() string {
 	return msg
 }
 
-func isShardOwnershiptLostError(err error) bool {
+func (i *historyShardsItem) String() string {
+	// use memory address as shard item's identity
+	return fmt.Sprintf("%p", i)
+}
+
+func isShardOwnershipLostError(err error) bool {
 	switch err.(type) {
 	case *persistence.ShardOwnershipLostError:
 		return true

@@ -35,19 +35,22 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/payload"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
@@ -77,22 +80,30 @@ const (
 	retryKafkaOperationMaxInterval        = 10 * time.Second
 	retryKafkaOperationExpirationInterval = 30 * time.Second
 
+	defaultInitialInterval            = time.Second
+	defaultMaximumIntervalCoefficient = 100.0
+	defaultBackoffCoefficient         = 2.0
+	defaultMaximumAttempts            = 0
+
+	initialIntervalInSecondsConfigKey   = "InitialIntervalInSeconds"
+	maximumIntervalCoefficientConfigKey = "MaximumIntervalCoefficient"
+	backoffCoefficientConfigKey         = "BackoffCoefficient"
+	maximumAttemptsConfigKey            = "MaximumAttempts"
+
 	contextExpireThreshold = 10 * time.Millisecond
 
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
-	FailureReasonCompleteResultExceedsLimit = "COMPLETE_RESULT_EXCEEDS_LIMIT"
+	FailureReasonCompleteResultExceedsLimit = "Complete result exceeds size limit."
 	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit
-	FailureReasonFailureDetailsExceedsLimit = "FAILURE_DETAILS_EXCEEDS_LIMIT"
+	FailureReasonFailureExceedsLimit = "Failure exceeds size limit."
 	// FailureReasonCancelDetailsExceedsLimit is failureReason for cancel details exceeds limit
-	FailureReasonCancelDetailsExceedsLimit = "CANCEL_DETAILS_EXCEEDS_LIMIT"
+	FailureReasonCancelDetailsExceedsLimit = "Cancel details exceed size limit."
 	// FailureReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
-	FailureReasonHeartbeatExceedsLimit = "HEARTBEAT_EXCEEDS_LIMIT"
-	// FailureReasonDecisionBlobSizeExceedsLimit is the failureReason for decision blob exceeds size limit
-	FailureReasonDecisionBlobSizeExceedsLimit = "DECISION_BLOB_SIZE_EXCEEDS_LIMIT"
+	FailureReasonHeartbeatExceedsLimit = "Heartbeat details exceed size limit."
 	// FailureReasonSizeExceedsLimit is reason to fail workflow when history size or count exceed limit
-	FailureReasonSizeExceedsLimit = "HISTORY_EXCEEDS_LIMIT"
+	FailureReasonSizeExceedsLimit = "Workflow history size / count exceeds limit."
 	// FailureReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit
-	FailureReasonTransactionSizeExceedsLimit = "TRANSACTION_SIZE_EXCEEDS_LIMIT"
+	FailureReasonTransactionSizeExceedsLimit = "Transaction size exceeds limit."
 )
 
 var (
@@ -228,7 +239,7 @@ func IsWhitelistServiceTransientError(err error) bool {
 	switch err.(type) {
 	case *serviceerror.Internal,
 		*serviceerror.ResourceExhausted,
-		*serviceerror.ShardOwnershipLost,
+		*serviceerrors.ShardOwnershipLost,
 		*serviceerror.DeadlineExceeded,
 		*serviceerror.Unavailable:
 		return true
@@ -237,14 +248,15 @@ func IsWhitelistServiceTransientError(err error) bool {
 	return false
 }
 
-// WorkflowIDToHistoryShard is used to map workflowID to a shardID
-func WorkflowIDToHistoryShard(workflowID string, numberOfShards int) int {
-	hash := farm.Fingerprint32([]byte(workflowID))
-	return int(hash % uint32(numberOfShards))
+// WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID
+func WorkflowIDToHistoryShard(namespaceID, workflowID string, numberOfShards int) int {
+	idBytes := []byte(namespaceID + "_" + workflowID)
+	hash := farm.Fingerprint32(idBytes)
+	return int(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
 // PrettyPrintHistory prints history in human readable format
-func PrettyPrintHistory(history *eventpb.History, logger log.Logger) {
+func PrettyPrintHistory(history *historypb.History, logger log.Logger) {
 	fmt.Println("******************************************")
 	fmt.Println("History", proto.MarshalTextString(history))
 	fmt.Println("******************************************")
@@ -281,24 +293,24 @@ func GenerateRandomString(n int) string {
 	return string(b)
 }
 
-// CreateMatchingPollForDecisionTaskResponse create response for matching's PollForDecisionTask
-func CreateMatchingPollForDecisionTaskResponse(historyResponse *historyservice.RecordDecisionTaskStartedResponse, workflowExecution *executionpb.WorkflowExecution, token []byte) *matchingservice.PollForDecisionTaskResponse {
-	matchingResp := &matchingservice.PollForDecisionTaskResponse{
-		TaskToken:                 token,
-		WorkflowExecution:         workflowExecution,
-		WorkflowType:              historyResponse.WorkflowType,
-		PreviousStartedEventId:    historyResponse.PreviousStartedEventId,
-		StartedEventId:            historyResponse.StartedEventId,
-		Attempt:                   historyResponse.GetAttempt(),
-		NextEventId:               historyResponse.NextEventId,
-		StickyExecutionEnabled:    historyResponse.StickyExecutionEnabled,
-		DecisionInfo:              historyResponse.DecisionInfo,
-		WorkflowExecutionTaskList: historyResponse.WorkflowExecutionTaskList,
-		EventStoreVersion:         historyResponse.EventStoreVersion,
-		BranchToken:               historyResponse.BranchToken,
-		ScheduledTimestamp:        historyResponse.ScheduledTimestamp,
-		StartedTimestamp:          historyResponse.StartedTimestamp,
-		Queries:                   historyResponse.Queries,
+// CreateMatchingPollWorkflowTaskQueueResponse create response for matching's PollWorkflowTaskQueue
+func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice.RecordWorkflowTaskStartedResponse, workflowExecution *commonpb.WorkflowExecution, token []byte) *matchingservice.PollWorkflowTaskQueueResponse {
+	matchingResp := &matchingservice.PollWorkflowTaskQueueResponse{
+		TaskToken:                  token,
+		WorkflowExecution:          workflowExecution,
+		WorkflowType:               historyResponse.WorkflowType,
+		PreviousStartedEventId:     historyResponse.PreviousStartedEventId,
+		StartedEventId:             historyResponse.StartedEventId,
+		Attempt:                    historyResponse.GetAttempt(),
+		NextEventId:                historyResponse.NextEventId,
+		StickyExecutionEnabled:     historyResponse.StickyExecutionEnabled,
+		WorkflowTaskInfo:           historyResponse.WorkflowTaskInfo,
+		WorkflowExecutionTaskQueue: historyResponse.WorkflowExecutionTaskQueue,
+		EventStoreVersion:          historyResponse.EventStoreVersion,
+		BranchToken:                historyResponse.BranchToken,
+		ScheduledTime:              historyResponse.ScheduledTime,
+		StartedTime:                historyResponse.StartedTime,
+		Queries:                    historyResponse.Queries,
 	}
 
 	return matchingResp
@@ -368,23 +380,48 @@ func SortInt64Slice(slice []int64) {
 	})
 }
 
+// EnsureRetryPolicyDefaults ensures the policy subfields, if not explicitly set, are set to the specified defaults
+func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSettings DefaultRetrySettings) {
+	if originalPolicy.GetMaximumAttempts() == 0 {
+		originalPolicy.MaximumAttempts = defaultSettings.MaximumAttempts
+	}
+
+	if timestamp.DurationValue(originalPolicy.GetInitialInterval()) == 0 {
+		originalPolicy.InitialInterval = timestamp.DurationPtr(defaultSettings.InitialInterval)
+	}
+
+	if timestamp.DurationValue(originalPolicy.GetMaximumInterval()) == 0 {
+		originalPolicy.MaximumInterval = timestamp.DurationPtr(time.Duration(defaultSettings.MaximumIntervalCoefficient) * timestamp.DurationValue(originalPolicy.GetInitialInterval()))
+	}
+
+	if originalPolicy.GetBackoffCoefficient() == 0 {
+		originalPolicy.BackoffCoefficient = defaultSettings.BackoffCoefficient
+	}
+}
+
 // ValidateRetryPolicy validates a retry policy
 func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 	if policy == nil {
 		// nil policy is valid which means no retry
 		return nil
 	}
-	if policy.GetInitialIntervalInSeconds() < 0 {
-		return serviceerror.NewInvalidArgument("InitialIntervalInSeconds cannot be negative on retry policy.")
+
+	if policy.GetMaximumAttempts() == 1 {
+		// One maximum attempt effectively disable retries. Validating the
+		// rest of the arguments is pointless
+		return nil
+	}
+	if timestamp.DurationValue(policy.GetInitialInterval()) < 0 {
+		return serviceerror.NewInvalidArgument("InitialInterval cannot be negative on retry policy.")
 	}
 	if policy.GetBackoffCoefficient() < 1 {
 		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be less than 1 on retry policy.")
 	}
-	if policy.GetMaximumIntervalInSeconds() < 0 {
-		return serviceerror.NewInvalidArgument("MaximumIntervalInSeconds cannot be negative on retry policy.")
+	if timestamp.DurationValue(policy.GetMaximumInterval()) < 0 {
+		return serviceerror.NewInvalidArgument("MaximumInterval cannot be negative on retry policy.")
 	}
-	if policy.GetMaximumIntervalInSeconds() > 0 && policy.GetMaximumIntervalInSeconds() < policy.GetInitialIntervalInSeconds() {
-		return serviceerror.NewInvalidArgument("MaximumIntervalInSeconds cannot be less than InitialIntervalInSeconds on retry policy.")
+	if timestamp.DurationValue(policy.GetMaximumInterval()) > 0 && timestamp.DurationValue(policy.GetMaximumInterval()) < timestamp.DurationValue(policy.GetInitialInterval()) {
+		return serviceerror.NewInvalidArgument("MaximumInterval cannot be less than InitialInterval on retry policy.")
 	}
 	if policy.GetMaximumAttempts() < 0 {
 		return serviceerror.NewInvalidArgument("MaximumAttempts cannot be negative on retry policy.")
@@ -392,22 +429,67 @@ func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 	return nil
 }
 
+func GetDefaultRetryPolicyConfigOptions() map[string]interface{} {
+	return map[string]interface{}{
+		initialIntervalInSecondsConfigKey:   int(defaultInitialInterval.Seconds()),
+		maximumIntervalCoefficientConfigKey: defaultMaximumIntervalCoefficient,
+		backoffCoefficientConfigKey:         defaultBackoffCoefficient,
+		maximumAttemptsConfigKey:            defaultMaximumAttempts,
+	}
+}
+
+func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRetrySettings {
+	defaultSettings := DefaultRetrySettings{
+		InitialInterval:            defaultInitialInterval,
+		MaximumIntervalCoefficient: defaultMaximumIntervalCoefficient,
+		BackoffCoefficient:         defaultBackoffCoefficient,
+		MaximumAttempts:            defaultMaximumAttempts,
+	}
+
+	initialIntervalInSeconds, ok := options[initialIntervalInSecondsConfigKey]
+	if ok {
+		defaultSettings.InitialInterval = time.Duration(initialIntervalInSeconds.(int)) * time.Second
+	}
+
+	maximumIntervalCoefficient, ok := options[maximumIntervalCoefficientConfigKey]
+	if ok {
+		defaultSettings.MaximumIntervalCoefficient = maximumIntervalCoefficient.(float64)
+	}
+
+	backoffCoefficient, ok := options[backoffCoefficientConfigKey]
+	if ok {
+		defaultSettings.BackoffCoefficient = backoffCoefficient.(float64)
+	}
+
+	maximumAttempts, ok := options[maximumAttemptsConfigKey]
+	if ok {
+		defaultSettings.MaximumAttempts = int32(maximumAttempts.(int))
+	}
+
+	return defaultSettings
+}
+
 // CreateHistoryStartWorkflowRequest create a start workflow request for history
 func CreateHistoryStartWorkflowRequest(
 	namespaceID string,
 	startRequest *workflowservice.StartWorkflowExecutionRequest,
+	parentExecutionInfo *workflowspb.ParentExecutionInfo,
+	now time.Time,
 ) *historyservice.StartWorkflowExecutionRequest {
-	now := time.Now()
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:  namespaceID,
-		StartRequest: startRequest,
+		NamespaceId:            namespaceID,
+		StartRequest:           startRequest,
+		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
+		Attempt:                1,
+		ParentExecutionInfo:    parentExecutionInfo,
 	}
-	if startRequest.GetWorkflowExecutionTimeoutSeconds() > 0 {
-		expirationInSeconds := startRequest.GetWorkflowExecutionTimeoutSeconds()
-		deadline := now.Add(time.Second * time.Duration(expirationInSeconds))
-		histRequest.WorkflowExecutionExpirationTimestamp = deadline.Round(time.Millisecond).UnixNano()
+
+	if timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()) > 0 {
+		deadline := now.Add(timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()))
+		histRequest.WorkflowExecutionExpirationTime = timestamp.TimePtr(deadline.Round(time.Millisecond))
 	}
-	histRequest.FirstDecisionTaskBackoffSeconds = backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now)
+
+	histRequest.FirstWorkflowTaskBackoff = backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now)
 	return histRequest
 }
 
@@ -496,26 +578,30 @@ func IsJustOrderByClause(clause string) bool {
 
 // ConvertIndexedValueTypeToProtoType takes fieldType as interface{} and convert to IndexedValueType.
 // Because different implementation of dynamic config client may lead to different types
-func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger) commonpb.IndexedValueType {
+func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger) enumspb.IndexedValueType {
 	switch t := fieldType.(type) {
 	case float64:
-		return commonpb.IndexedValueType(fieldType.(float64))
+		return enumspb.IndexedValueType(t)
 	case int:
-		return commonpb.IndexedValueType(fieldType.(int))
-	case commonpb.IndexedValueType:
-		return fieldType.(commonpb.IndexedValueType)
-	default:
-		// Unknown fieldType, please make sure dynamic config return correct value type
-		logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(t))
-		return fieldType.(commonpb.IndexedValueType) // it will panic and been captured by logger
+		return enumspb.IndexedValueType(t)
+	case string:
+		if ivt, ok := enumspb.IndexedValueType_value[t]; ok {
+			return enumspb.IndexedValueType(ivt)
+		}
+	case enumspb.IndexedValueType:
+		return t
 	}
+
+	// Unknown fieldType, please make sure dynamic config return correct value type
+	logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(fieldType))
+	return fieldType.(enumspb.IndexedValueType) // it will panic and been captured by logger
 }
 
 // DeserializeSearchAttributeValue takes json encoded search attribute value and it's type as input, then
 // unmarshal the value into a concrete type and return the value
-func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb.IndexedValueType) (interface{}, error) {
+func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType enumspb.IndexedValueType) (interface{}, error) {
 	switch valueType {
-	case commonpb.IndexedValueType_String, commonpb.IndexedValueType_Keyword:
+	case enumspb.INDEXED_VALUE_TYPE_STRING, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
 		var val string
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []string
@@ -523,7 +609,7 @@ func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb
 			return listVal, err
 		}
 		return val, nil
-	case commonpb.IndexedValueType_Int:
+	case enumspb.INDEXED_VALUE_TYPE_INT:
 		var val int64
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []int64
@@ -531,7 +617,7 @@ func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb
 			return listVal, err
 		}
 		return val, nil
-	case commonpb.IndexedValueType_Double:
+	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
 		var val float64
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []float64
@@ -539,7 +625,7 @@ func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb
 			return listVal, err
 		}
 		return val, nil
-	case commonpb.IndexedValueType_Bool:
+	case enumspb.INDEXED_VALUE_TYPE_BOOL:
 		var val bool
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []bool
@@ -547,7 +633,7 @@ func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb
 			return listVal, err
 		}
 		return val, nil
-	case commonpb.IndexedValueType_Datetime:
+	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
 		var val time.Time
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []time.Time
@@ -567,4 +653,14 @@ func GetDefaultAdvancedVisibilityWritingMode(isAdvancedVisConfigExist bool) stri
 		return AdvancedVisibilityWritingModeOn
 	}
 	return AdvancedVisibilityWritingModeOff
+}
+
+func GetPayloadsMapSize(data map[string]*commonpb.Payloads) int {
+	size := 0
+	for key, payloads := range data {
+		size += len(key)
+		size += payloads.Size()
+	}
+
+	return size
 }

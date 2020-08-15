@@ -26,13 +26,15 @@ package namespace
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/mocks"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -67,25 +69,25 @@ func (s *attrValidatorSuite) TearDownTest() {
 
 func (s *attrValidatorSuite) TestValidateConfigRetentionPeriod() {
 	testCases := []struct {
-		retentionPeriod int32
+		retentionPeriod *time.Duration
 		expectedErr     error
 	}{
 		{
-			retentionPeriod: 10,
+			retentionPeriod: timestamp.DurationFromDays(10),
 			expectedErr:     nil,
 		},
 		{
-			retentionPeriod: 0,
+			retentionPeriod: timestamp.DurationFromDays(0),
 			expectedErr:     errInvalidRetentionPeriod,
 		},
 		{
-			retentionPeriod: -3,
+			retentionPeriod: timestamp.DurationFromDays(-3),
 			expectedErr:     errInvalidRetentionPeriod,
 		},
 	}
 	for _, tc := range testCases {
 		actualErr := s.validator.validateNamespaceConfig(
-			&persistenceblobs.NamespaceConfig{RetentionDays: tc.retentionPeriod},
+			&persistenceblobs.NamespaceConfig{Retention: tc.retentionPeriod},
 		)
 		s.Equal(tc.expectedErr, actualErr)
 	}

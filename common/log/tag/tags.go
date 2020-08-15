@@ -29,14 +29,17 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	enumspb "go.temporal.io/api/enums/v1"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // All logging tags are defined in this file.
 // To help finding available tags, we recommend that all tags to be categorized and placed in the corresponding section.
 // We currently have those categories:
 //   0. Common tags that can't be categorized(or belong to more than one)
-//   1. Workflow: these tags are information that are useful to our customer, like workflow-id/run-id/task-list/...
+//   1. Workflow: these tags are information that are useful to our customer, like workflow-id/run-id/task-queue/...
 //   2. System : these tags are internal information which usually cannot be understood by our customers,
 
 ///////////////////  Common tags defined here ///////////////////
@@ -54,6 +57,11 @@ func ClusterName(clusterName string) Tag {
 // Timestamp returns tag for Timestamp
 func Timestamp(timestamp time.Time) Tag {
 	return newTimeTag("timestamp", timestamp)
+}
+
+// Timestamp returns tag for Timestamp
+func TimestampPtr(t *time.Time) Tag {
+	return newTimeTag("timestamp", timestamp.TimeValue(t))
 }
 
 // Timestamp returns tag for Timestamp
@@ -85,8 +93,8 @@ func workflowListFilterType(listFilterType string) Tag {
 func WorkflowError(error error) Tag { return newErrorTag("wf-error", error) }
 
 // WorkflowTimeoutType returns tag for WorkflowTimeoutType
-func WorkflowTimeoutType(timeoutType int64) Tag {
-	return newInt64("wf-timeout-type", timeoutType)
+func WorkflowTimeoutType(timeoutType enumspb.TimeoutType) Tag {
+	return newStringTag("wf-timeout-type", timeoutType.String())
 }
 
 // WorkflowPollContextTimeout returns tag for WorkflowPollContextTimeout
@@ -110,19 +118,13 @@ func WorkflowType(wfType string) Tag {
 }
 
 // WorkflowState returns tag for WorkflowState
-func WorkflowState(s int) Tag {
-	return newInt("wf-state", s)
+func WorkflowState(s enumsspb.WorkflowExecutionState) Tag {
+	return newStringTag("wf-state", s.String())
 }
 
 // WorkflowRunID returns tag for WorkflowRunID
 func WorkflowRunID(runID string) Tag {
 	return newStringTag("wf-run-id", runID)
-}
-
-// WorkflowRunID returns tag for WorkflowRunID
-func WorkflowRunIDBytes(runID []byte) Tag {
-	// Todo, we want these to print as hex-encoded (uuid format), binary tag gives us b64
-	return newBinaryTag("wf-run-id", runID)
 }
 
 // WorkflowResetBaseRunID returns tag for WorkflowResetBaseRunID
@@ -160,9 +162,9 @@ func WorkflowEndingRunID(endingRunID string) Tag {
 	return newStringTag("wf-ending-run-id", endingRunID)
 }
 
-// WorkflowDecisionTimeoutSeconds returns tag for WorkflowDecisionTimeoutSeconds
-func WorkflowDecisionTimeoutSeconds(s int32) Tag {
-	return newInt32("wf-decision-timeout", s)
+// WorkflowTaskTimeoutSeconds returns tag for WorkflowTaskTimeoutSeconds
+func WorkflowTaskTimeoutSeconds(s int64) Tag {
+	return newInt64("workflow-task-timeout", s)
 }
 
 // QueryID returns tag for QueryID
@@ -180,12 +182,6 @@ func BlobSizeViolationOperation(operation string) Tag {
 // WorkflowNamespaceID returns tag for WorkflowNamespaceID
 func WorkflowNamespaceID(namespaceID string) Tag {
 	return newStringTag("wf-namespace-id", namespaceID)
-}
-
-// WorkflowRunID returns tag for WorkflowRunID
-func WorkflowNamespaceIDBytes(namespaceID []byte) Tag {
-	// Todo, we want these to print as hex-encoded (uuid format), binary tag gives us b64
-	return newBinaryTag("wf-namespace-id", namespaceID)
 }
 
 // WorkflowNamespace returns tag for WorkflowNamespace
@@ -257,21 +253,11 @@ func WorkflowBranchID(branchID string) Tag {
 	return newStringTag("wf-branch-id", branchID)
 }
 
-// WorkflowTreeIDBytes returns tag for WorkflowTreeIDBytes
-func WorkflowTreeIDBytes(treeIDBytes []byte) Tag {
-	return newBinaryTag("wf-tree-id", treeIDBytes)
-}
-
-// WorkflowBranchIDBytes returns tag for WorkflowBranchIDBytes
-func WorkflowBranchIDBytes(branchIDBytes []byte) Tag {
-	return newBinaryTag("wf-branch-id", branchIDBytes)
-}
-
 // workflow task
 
-// WorkflowDecisionType returns tag for WorkflowDecisionType
-func WorkflowDecisionType(decisionType int64) Tag {
-	return newInt64("wf-decision-type", decisionType)
+// WorkflowCommandType returns tag for WorkflowCommandType
+func WorkflowCommandType(commandType enumspb.CommandType) Tag {
+	return newStringTag("command-type", commandType.String())
 }
 
 // WorkflowQueryType returns tag for WorkflowQueryType
@@ -279,19 +265,19 @@ func WorkflowQueryType(qt string) Tag {
 	return newStringTag("wf-query-type", qt)
 }
 
-// WorkflowDecisionFailCause returns tag for WorkflowDecisionFailCause
-func WorkflowDecisionFailCause(decisionFailCause int64) Tag {
-	return newInt64("wf-decision-fail-cause", decisionFailCause)
+// WorkflowTaskFailedCause returns tag for WorkflowTaskFailedCause
+func WorkflowTaskFailedCause(workflowTaskFailCause enumspb.WorkflowTaskFailedCause) Tag {
+	return newStringTag("workflow-task-fail-cause", workflowTaskFailCause.String())
 }
 
-// WorkflowTaskListType returns tag for WorkflowTaskListType
-func WorkflowTaskListType(taskListType tasklistpb.TaskListType) Tag {
-	return newInt32("wf-task-list-type", int32(taskListType))
+// WorkflowTaskQueueType returns tag for WorkflowTaskQueueType
+func WorkflowTaskQueueType(taskQueueType enumspb.TaskQueueType) Tag {
+	return newStringTag("wf-task-queue-type", taskQueueType.String())
 }
 
-// WorkflowTaskListName returns tag for WorkflowTaskListName
-func WorkflowTaskListName(taskListName string) Tag {
-	return newStringTag("wf-task-list-name", taskListName)
+// WorkflowTaskQueueName returns tag for WorkflowTaskQueueName
+func WorkflowTaskQueueName(taskQueueName string) Tag {
+	return newStringTag("wf-task-queue-name", taskQueueName)
 }
 
 // size limit
@@ -302,8 +288,8 @@ func WorkflowSize(workflowSize int64) Tag {
 }
 
 // WorkflowSignalCount returns tag for SignalCount
-func WorkflowSignalCount(signalCount int32) Tag {
-	return newInt32("wf-signal-count", signalCount)
+func WorkflowSignalCount(signalCount int64) Tag {
+	return newInt64("wf-signal-count", signalCount)
 }
 
 // WorkflowHistorySize returns tag for HistorySize
@@ -379,6 +365,11 @@ func Address(ad string) Tag {
 // HostID return tag for HostID
 func HostID(hid string) Tag {
 	return newStringTag("hostId", hid)
+}
+
+// Env return tag for runtime environment
+func Env(env string) Tag {
+	return newStringTag("env", env)
 }
 
 // Key returns tag for Key
@@ -463,6 +454,11 @@ func ShardID(shardID int) Tag {
 	return newInt("shard-id", shardID)
 }
 
+// ShardItem returns tag for ShardItem
+func ShardItem(shardItem interface{}) Tag {
+	return newObjectTag("shard-item", shardItem)
+}
+
 // ShardTime returns tag for ShardTime
 func ShardTime(shardTime interface{}) Tag {
 	return newObjectTag("shard-time", shardTime)
@@ -526,8 +522,8 @@ func TaskID(taskID int64) Tag {
 }
 
 // TaskType returns tag for TaskType for queue processor
-func TaskType(taskType int32) Tag {
-	return newInt32("queue-task-type", taskType)
+func TaskType(taskType enumsspb.TaskType) Tag {
+	return newStringTag("queue-task-type", taskType.String())
 }
 
 // TaskVersion returns tag for TaskVersion
@@ -578,8 +574,8 @@ func AttemptEnd(attemptEnd time.Time) Tag {
 }
 
 // ScheduleAttempt returns tag for ScheduleAttempt
-func ScheduleAttempt(scheduleAttempt int64) Tag {
-	return newInt64("schedule-attempt", scheduleAttempt)
+func ScheduleAttempt(scheduleAttempt int32) Tag {
+	return newInt32("schedule-attempt", scheduleAttempt)
 }
 
 // ElasticSearch
@@ -776,8 +772,8 @@ func ArchivalRequestCloseFailoverVersion(requestCloseFailoverVersion int64) Tag 
 }
 
 // ArchivalRequestCloseTimestamp returns tag for RequestCloseTimestamp
-func ArchivalRequestCloseTimestamp(requestCloseTimeStamp int64) Tag {
-	return newInt64("archival-request-close-timestamp", requestCloseTimeStamp)
+func ArchivalRequestCloseTimestamp(requestCloseTimeStamp *time.Time) Tag {
+	return newTimeTag("archival-request-close-timestamp", timestamp.TimeValue(requestCloseTimeStamp))
 }
 
 // ArchivalRequestStatus returns tag for RequestStatus
@@ -843,9 +839,9 @@ func ActivityInfo(activityInfo interface{}) Tag {
 	return newObjectTag("activity-info", activityInfo)
 }
 
-// DecisionRequestId returns tag for decision RequestId
-func DecisionRequestId(s string) Tag {
-	return newStringTag("decision-request-id", s)
+// WorkflowTaskRequestId returns tag for workflow task RequestId
+func WorkflowTaskRequestId(s string) Tag {
+	return newStringTag("workflow-task-request-id", s)
 }
 
 // AckLevel returns tag for ack level
@@ -858,7 +854,17 @@ func QueryLevel(s time.Time) Tag {
 	return newTimeTag("query-level", s)
 }
 
-// TaskListInfo returns tag for task list info
-func TaskListInfo(s interface{}) Tag {
-	return newObjectTag("task-list-info", s)
+// QueryLevel returns tag for query level
+func MinQueryLevel(s time.Time) Tag {
+	return newTimeTag("min-query-level", s)
+}
+
+// QueryLevel returns tag for query level
+func MaxQueryLevel(s time.Time) Tag {
+	return newTimeTag("max-query-level", s)
+}
+
+// TaskQueueInfo returns tag for task queue info
+func TaskQueueInfo(s interface{}) Tag {
+	return newObjectTag("task-queue-info", s)
 }

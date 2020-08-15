@@ -25,10 +25,10 @@
 package sql
 
 import (
-	"github.com/temporalio/temporal/common/persistence/sql"
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/tools/common/schema"
+	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/tools/common/schema"
 )
 
 type (

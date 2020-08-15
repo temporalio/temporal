@@ -29,20 +29,20 @@ import (
 	"runtime"
 	"time"
 
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/service/worker/scanner/tasklist"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/worker/scanner/taskqueue"
 )
 
 type (
 	taskReader struct {
 		taskBuffer chan *persistenceblobs.AllocatedTaskInfo // tasks loaded from persistence
 		notifyC    chan struct{}                            // Used as signal to notify pump of new tasks
-		tlMgr      *taskListManagerImpl
+		tlMgr      *taskQueueManagerImpl
 		// The cancel objects are to cancel the ratelimiter Wait in dispatchBufferedTasks. The ideal
 		// approach is to use request-scoped contexts and use a unique one for each call to Wait. However
 		// in order to cancel it on shutdown, we need a new goroutine for each call that would wait on
@@ -56,7 +56,7 @@ type (
 	}
 )
 
-func newTaskReader(tlMgr *taskListManagerImpl) *taskReader {
+func newTaskReader(tlMgr *taskQueueManagerImpl) *taskReader {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &taskReader{
 		tlMgr:               tlMgr,
@@ -94,21 +94,21 @@ dispatchLoop:
 	for {
 		select {
 		case taskInfo, ok := <-tr.taskBuffer:
-			if !ok { // Task list getTasks pump is shutdown
+			if !ok { // Task queue getTasks pump is shutdown
 				break dispatchLoop
 			}
-			task := newInternalTask(taskInfo, tr.tlMgr.completeTask, commongenpb.TaskSource_DbBacklog, "", false)
+			task := newInternalTask(taskInfo, tr.tlMgr.completeTask, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
 			for {
 				err := tr.tlMgr.DispatchTask(tr.cancelCtx, task)
 				if err == nil {
 					break
 				}
 				if err == context.Canceled {
-					tr.tlMgr.logger.Info("Tasklist manager context is cancelled, shutting down")
+					tr.tlMgr.logger.Info("Taskqueue manager context is cancelled, shutting down")
 					break dispatchLoop
 				}
 				// this should never happen unless there is a bug - don't drop the task
-				tr.scope().IncCounter(metrics.BufferThrottlePerTaskListCounter)
+				tr.scope().IncCounter(metrics.BufferThrottlePerTaskQueueCounter)
 				tr.logger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
 				runtime.Gosched()
 			}
@@ -123,7 +123,7 @@ func (tr *taskReader) getTasksPump() {
 	defer close(tr.taskBuffer)
 
 	updateAckTimer := time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
-	checkIdleTaskListTimer := time.NewTimer(tr.tlMgr.config.IdleTasklistCheckInterval())
+	checkIdleTaskQueueTimer := time.NewTimer(tr.tlMgr.config.IdleTaskqueueCheckInterval())
 	lastTimeWriteTask := time.Time{}
 getTasksPumpLoop:
 	for {
@@ -132,7 +132,7 @@ getTasksPumpLoop:
 			break getTasksPumpLoop
 		case <-tr.notifyC:
 			{
-				lastTimeWriteTask = time.Now()
+				lastTimeWriteTask = time.Now().UTC()
 
 				tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch()
 				if err != nil {
@@ -149,7 +149,7 @@ getTasksPumpLoop:
 					continue getTasksPumpLoop
 				}
 
-				if !tr.addTasksToBuffer(tasks, lastTimeWriteTask, checkIdleTaskListTimer) {
+				if !tr.addTasksToBuffer(tasks, lastTimeWriteTask, checkIdleTaskQueueTimer) {
 					break getTasksPumpLoop
 				}
 				// There maybe more tasks. We yield now, but signal pump to check again later.
@@ -160,11 +160,11 @@ getTasksPumpLoop:
 				err := tr.persistAckLevel()
 				if err != nil {
 					if _, ok := err.(*persistence.ConditionFailedError); ok {
-						// This indicates the task list may have moved to another host.
+						// This indicates the task queue may have moved to another host.
 						tr.tlMgr.Stop()
 					} else {
 						tr.logger().Error("Persistent store operation failure",
-							tag.StoreOperationUpdateTaskList,
+							tag.StoreOperationUpdateTaskQueue,
 							tag.Error(err))
 					}
 					// keep going as saving ack is not critical
@@ -172,19 +172,19 @@ getTasksPumpLoop:
 				tr.Signal() // periodically signal pump to check persistence for tasks
 				updateAckTimer = time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
 			}
-		case <-checkIdleTaskListTimer.C:
+		case <-checkIdleTaskQueueTimer.C:
 			{
 				if tr.isIdle(lastTimeWriteTask) {
 					tr.handleIdleTimeout()
 					break getTasksPumpLoop
 				}
-				checkIdleTaskListTimer = time.NewTimer(tr.tlMgr.config.IdleTasklistCheckInterval())
+				checkIdleTaskQueueTimer = time.NewTimer(tr.tlMgr.config.IdleTaskqueueCheckInterval())
 			}
 		}
 	}
 
 	updateAckTimer.Stop()
-	checkIdleTaskListTimer.Stop()
+	checkIdleTaskQueueTimer.Stop()
 }
 
 func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistenceblobs.AllocatedTaskInfo, error) {
@@ -205,7 +205,7 @@ func (tr *taskReader) getTaskBatch() ([]*persistenceblobs.AllocatedTaskInfo, int
 	readLevel := tr.tlMgr.taskAckManager.getReadLevel()
 	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
 
-	// counter i is used to break and let caller check whether tasklist is still alive and need resume read.
+	// counter i is used to break and let caller check whether taskqueue is still alive and need resume read.
 	for i := 0; i < 10 && readLevel < maxReadLevel; i++ {
 		upper := readLevel + tr.tlMgr.config.RangeSize
 		if upper > maxReadLevel {
@@ -236,15 +236,15 @@ func (tr *taskReader) handleIdleTimeout() {
 
 func (tr *taskReader) addTasksToBuffer(tasks []*persistenceblobs.AllocatedTaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
 	for _, t := range tasks {
-		if tasklist.IsTaskExpired(t) {
-			tr.scope().IncCounter(metrics.ExpiredTasksPerTaskListCounter)
+		if taskqueue.IsTaskExpired(t) {
+			tr.scope().IncCounter(metrics.ExpiredTasksPerTaskQueueCounter)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
 			tr.tlMgr.taskAckManager.setReadLevel(t.GetTaskId())
 			continue
 		}
 		if !tr.addSingleTaskToBuffer(t, lastWriteTime, idleTimer) {
-			return false // we are shutting down the task list
+			return false // we are shutting down the task queue
 		}
 	}
 	return true
@@ -273,7 +273,7 @@ func (tr *taskReader) persistAckLevel() error {
 }
 
 func (tr *taskReader) isTaskAddedRecently(lastAddTime time.Time) bool {
-	return time.Now().Sub(lastAddTime) <= tr.tlMgr.config.MaxTasklistIdleTime()
+	return time.Now().UTC().Sub(lastAddTime) <= tr.tlMgr.config.MaxTaskqueueIdleTime()
 }
 
 func (tr *taskReader) logger() log.Logger {

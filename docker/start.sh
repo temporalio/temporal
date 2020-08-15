@@ -5,6 +5,7 @@ set -x
 DB="${DB:-cassandra}"
 ENABLE_ES="${ENABLE_ES:-false}"
 ES_PORT="${ES_PORT:-9200}"
+ES_SCHEME="${ES_SCHEME:-http}"
 RF=${RF:-1}
 DEFAULT_NAMESPACE="${DEFAULT_NAMESPACE:-default}"
 DEFAULT_NAMESPACE_RETENTION=${DEFAULT_NAMESPACE_RETENTION:-1}
@@ -33,39 +34,43 @@ setup_cassandra_schema() {
 }
 
 setup_mysql_schema() {
+    { export SQL_PASSWORD=$MYSQL_PWD; } 2> /dev/null
+
     SCHEMA_DIR=$TEMPORAL_HOME/schema/mysql/v57/temporal/versioned
 
     if [ "$MYSQL_TX_ISOLATION_COMPAT" == "true" ]; then
         MYSQL_CONNECT_ATTR='--connect-attributes tx_isolation=READ-COMMITTED'
     fi
 
-    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $MYSQL_CONNECT_ATTR create --db $DBNAME
-    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $MYSQL_CONNECT_ATTR --db $DBNAME setup-schema -v 0.0
-    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $MYSQL_CONNECT_ATTR --db $DBNAME update-schema -d $SCHEMA_DIR
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER $MYSQL_CONNECT_ATTR create --db $DBNAME
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER $MYSQL_CONNECT_ATTR --db $DBNAME setup-schema -v 0.0
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER $MYSQL_CONNECT_ATTR --db $DBNAME update-schema -d $SCHEMA_DIR
     VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/mysql/v57/visibility/versioned
-    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $MYSQL_CONNECT_ATTR create --db $VISIBILITY_DBNAME
-    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $MYSQL_CONNECT_ATTR --db $VISIBILITY_DBNAME setup-schema -v 0.0
-    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $MYSQL_CONNECT_ATTR --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER $MYSQL_CONNECT_ATTR create --db $VISIBILITY_DBNAME
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER $MYSQL_CONNECT_ATTR --db $VISIBILITY_DBNAME setup-schema -v 0.0
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER $MYSQL_CONNECT_ATTR --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
 setup_postgres_schema() {
+    { export SQL_PASSWORD=$POSTGRES_PWD; } 2> /dev/null
+
     SCHEMA_DIR=$TEMPORAL_HOME/schema/postgres/temporal/versioned
-    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT create --db $DBNAME
-    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $DBNAME setup-schema -v 0.0
-    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $DBNAME update-schema -d $SCHEMA_DIR
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT create --db $DBNAME
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $DBNAME setup-schema -v 0.0
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $DBNAME update-schema -d $SCHEMA_DIR
     VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/postgres/visibility/versioned
-    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT create --db $VISIBILITY_DBNAME
-    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $VISIBILITY_DBNAME setup-schema -v 0.0
-    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT create --db $VISIBILITY_DBNAME
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $VISIBILITY_DBNAME setup-schema -v 0.0
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
 
 setup_es_template() {
     SCHEMA_FILE=$TEMPORAL_HOME/schema/elasticsearch/visibility/index_template.json
     server=`echo $ES_SEEDS | awk -F ',' '{print $1}'`
-    URL="http://$server:$ES_PORT/_template/temporal-visibility-template"
+    URL="${ES_SCHEME}://$server:$ES_PORT/_template/temporal-visibility-template"
     curl -X PUT $URL -H 'Content-Type: application/json' --data-binary "@$SCHEMA_FILE"
-    URL="http://$server:$ES_PORT/temporal-visibility-dev"
+    URL="${ES_SCHEME}://$server:$ES_PORT/temporal-visibility-dev"
     curl -X PUT $URL
 }
 
@@ -116,7 +121,7 @@ wait_for_postgres() {
 
 wait_for_es() {
     server=`echo $ES_SEEDS | awk -F ',' '{print $1}'`
-    URL="http://$server:$ES_PORT"
+    URL="${ES_SCHEME}://$server:$ES_PORT"
     curl -s $URL 2>&1 > /dev/null
     until [ $? -eq 0 ]; do
         echo 'waiting for elasticsearch to start up'
@@ -168,4 +173,4 @@ if [ "$ENABLE_ES" == "true" ]; then
     setup_es_template
 fi
 
-bash /start-temporal.sh
+exec bash /start-temporal.sh

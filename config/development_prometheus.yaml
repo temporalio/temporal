@@ -68,9 +68,9 @@ clusterMetadata:
   clusterInformation:
     active:
       enabled: true
-      initialFailoverVersion: 0
+      initialFailoverVersion: 1
       rpcName: "frontend"
-      rpcAddress: "localhost:7933"
+      rpcAddress: "localhost:7233"
 
 dcRedirectionPolicy:
   policy: "noop"
@@ -78,14 +78,14 @@ dcRedirectionPolicy:
 
 archival:
   history:
-    status: "enabled"
+    state: "enabled"
     enableRead: true
     provider:
       filestore:
         fileMode: "0666"
         dirMode: "0766"
   visibility:
-    status: "enabled"
+    state: "enabled"
     enableRead: true
     provider:
       filestore:
@@ -95,10 +95,10 @@ archival:
 namespaceDefaults:
   archival:
     history:
-      status: "enabled"
+      state: "disabled"
       URI: "file:///tmp/temporal_archival/development"
     visibility:
-      status: "enabled"
+      state: "disabled"
       URI: "file:///tmp/temporal_vis_archival/development"
 
 kafka:
@@ -113,5 +113,5 @@ kafka:
       cluster: test
 
 publicClient:
-  hostPort: "localhost:7933"
+  hostPort: "localhost:7233"
 

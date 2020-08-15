@@ -28,19 +28,19 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/temporal/activity"
-	sdkclient "go.temporal.io/temporal/client"
-	"go.temporal.io/temporal/worker"
-	"go.temporal.io/temporal/workflow"
+	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver/provider"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -78,7 +78,7 @@ type (
 
 const (
 	workflowIDPrefix       = "temporal-archival"
-	decisionTaskList       = "temporal-archival-tl"
+	workflowTaskQueue      = "temporal-archival-tq"
 	signalName             = "temporal-archival-signal"
 	archivalWorkflowFnName = "archivalWorkflow"
 	workflowRunTimeout     = time.Hour * 24 * 30
@@ -104,7 +104,7 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 		BackgroundActivityContext: actCtx,
 	}
 	clientWorker := &clientWorker{
-		worker:         worker.New(container.PublicClient, decisionTaskList, wo),
+		worker:         worker.New(container.PublicClient, workflowTaskQueue, wo),
 		namespaceCache: container.NamespaceCache,
 	}
 

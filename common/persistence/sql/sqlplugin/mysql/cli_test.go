@@ -29,7 +29,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/tools/sql/clitest"
+	"go.temporal.io/server/tools/sql/clitest"
 )
 
 func TestSQLConnTestSuite(t *testing.T) {

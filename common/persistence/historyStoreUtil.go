@@ -27,16 +27,16 @@ package persistence
 import (
 	"fmt"
 
-	eventpb "go.temporal.io/temporal-proto/event"
+	historypb "go.temporal.io/api/history/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 )
 
 // ReadFullPageV2Events reads a full page of history events from HistoryManager. Due to storage format of V2 History
 // it is not guaranteed that pageSize amount of data is returned. Function returns the list of history events, the size
 // of data read, the next page token, and an error if present.
-func ReadFullPageV2Events(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*eventpb.HistoryEvent, int, []byte, error) {
-	var historyEvents []*eventpb.HistoryEvent
+func ReadFullPageV2Events(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*historypb.HistoryEvent, int, []byte, error) {
+	var historyEvents []*historypb.HistoryEvent
 	size := int(0)
 	for {
 		response, err := historyV2Mgr.ReadHistoryBranch(req)
@@ -55,8 +55,8 @@ func ReadFullPageV2Events(historyV2Mgr HistoryManager, req *ReadHistoryBranchReq
 // ReadFullPageV2EventsByBatch reads a full page of history events by batch from HistoryManager. Due to storage format of V2 History
 // it is not guaranteed that pageSize amount of data is returned. Function returns the list of history batches, the size
 // of data read, the next page token, and an error if present.
-func ReadFullPageV2EventsByBatch(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*eventpb.History, int, []byte, error) {
-	historyBatches := []*eventpb.History{}
+func ReadFullPageV2EventsByBatch(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*historypb.History, int, []byte, error) {
+	historyBatches := []*historypb.History{}
 	eventsRead := 0
 	size := 0
 	for {

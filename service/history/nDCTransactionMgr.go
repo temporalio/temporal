@@ -31,16 +31,16 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 )
 
 // NOTE: terminology
@@ -318,7 +318,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 		baseRebuildLastEventID := baseMutableState.GetPreviousStartedEventID()
 
 		// TODO when https://github.com/uber/cadence/issues/2420 is finished, remove this block,
-		//  since cannot reapply event to a finished workflow which had no decisions started
+		//  since cannot reapply event to a finished workflow which had no workflow task started
 		if baseRebuildLastEventID == common.EmptyEventID {
 			r.logger.Warn("cannot reapply event to a finished workflow",
 				tag.WorkflowNamespaceID(namespaceID),
@@ -386,7 +386,7 @@ func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 	_, err := r.shard.GetExecutionManager().GetWorkflowExecution(
 		&persistence.GetWorkflowExecutionRequest{
 			NamespaceID: namespaceID,
-			Execution: executionpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
@@ -437,7 +437,7 @@ func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 	weContext, release, err := r.historyCache.getOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

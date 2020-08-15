@@ -29,8 +29,8 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/metrics"
 )
 
 var _ Client = (*metricClient)(nil)
@@ -135,18 +135,18 @@ func (c *metricClient) PollMutableState(
 	return resp, err
 }
 
-func (c *metricClient) ResetStickyTaskList(
+func (c *metricClient) ResetStickyTaskQueue(
 	context context.Context,
-	request *historyservice.ResetStickyTaskListRequest,
-	opts ...grpc.CallOption) (*historyservice.ResetStickyTaskListResponse, error) {
-	c.metricsClient.IncCounter(metrics.HistoryClientResetStickyTaskListScope, metrics.ClientRequests)
+	request *historyservice.ResetStickyTaskQueueRequest,
+	opts ...grpc.CallOption) (*historyservice.ResetStickyTaskQueueResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientResetStickyTaskQueueScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.HistoryClientResetStickyTaskListScope, metrics.ClientLatency)
-	resp, err := c.client.ResetStickyTaskList(context, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientResetStickyTaskQueueScope, metrics.ClientLatency)
+	resp, err := c.client.ResetStickyTaskQueue(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientResetStickyTaskListScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientResetStickyTaskQueueScope, metrics.ClientFailures)
 	}
 
 	return resp, err
@@ -169,18 +169,18 @@ func (c *metricClient) DescribeWorkflowExecution(
 	return resp, err
 }
 
-func (c *metricClient) RecordDecisionTaskStarted(
+func (c *metricClient) RecordWorkflowTaskStarted(
 	context context.Context,
-	request *historyservice.RecordDecisionTaskStartedRequest,
-	opts ...grpc.CallOption) (*historyservice.RecordDecisionTaskStartedResponse, error) {
-	c.metricsClient.IncCounter(metrics.HistoryClientRecordDecisionTaskStartedScope, metrics.ClientRequests)
+	request *historyservice.RecordWorkflowTaskStartedRequest,
+	opts ...grpc.CallOption) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientRecordWorkflowTaskStartedScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.HistoryClientRecordDecisionTaskStartedScope, metrics.ClientLatency)
-	resp, err := c.client.RecordDecisionTaskStarted(context, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientRecordWorkflowTaskStartedScope, metrics.ClientLatency)
+	resp, err := c.client.RecordWorkflowTaskStarted(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientRecordDecisionTaskStartedScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientRecordWorkflowTaskStartedScope, metrics.ClientFailures)
 	}
 
 	return resp, err
@@ -203,35 +203,35 @@ func (c *metricClient) RecordActivityTaskStarted(
 	return resp, err
 }
 
-func (c *metricClient) RespondDecisionTaskCompleted(
+func (c *metricClient) RespondWorkflowTaskCompleted(
 	context context.Context,
-	request *historyservice.RespondDecisionTaskCompletedRequest,
-	opts ...grpc.CallOption) (*historyservice.RespondDecisionTaskCompletedResponse, error) {
-	c.metricsClient.IncCounter(metrics.HistoryClientRespondDecisionTaskCompletedScope, metrics.ClientRequests)
+	request *historyservice.RespondWorkflowTaskCompletedRequest,
+	opts ...grpc.CallOption) (*historyservice.RespondWorkflowTaskCompletedResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientRespondWorkflowTaskCompletedScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.HistoryClientRespondDecisionTaskCompletedScope, metrics.ClientLatency)
-	response, err := c.client.RespondDecisionTaskCompleted(context, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientRespondWorkflowTaskCompletedScope, metrics.ClientLatency)
+	response, err := c.client.RespondWorkflowTaskCompleted(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientRespondDecisionTaskCompletedScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientRespondWorkflowTaskCompletedScope, metrics.ClientFailures)
 	}
 
 	return response, err
 }
 
-func (c *metricClient) RespondDecisionTaskFailed(
+func (c *metricClient) RespondWorkflowTaskFailed(
 	context context.Context,
-	request *historyservice.RespondDecisionTaskFailedRequest,
-	opts ...grpc.CallOption) (*historyservice.RespondDecisionTaskFailedResponse, error) {
-	c.metricsClient.IncCounter(metrics.HistoryClientRespondDecisionTaskFailedScope, metrics.ClientRequests)
+	request *historyservice.RespondWorkflowTaskFailedRequest,
+	opts ...grpc.CallOption) (*historyservice.RespondWorkflowTaskFailedResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientRespondWorkflowTaskFailedScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.HistoryClientRespondDecisionTaskFailedScope, metrics.ClientLatency)
-	resp, err := c.client.RespondDecisionTaskFailed(context, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientRespondWorkflowTaskFailedScope, metrics.ClientLatency)
+	resp, err := c.client.RespondWorkflowTaskFailed(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientRespondDecisionTaskFailedScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientRespondWorkflowTaskFailedScope, metrics.ClientFailures)
 	}
 
 	return resp, err
@@ -407,18 +407,18 @@ func (c *metricClient) ResetWorkflowExecution(
 	return resp, err
 }
 
-func (c *metricClient) ScheduleDecisionTask(
+func (c *metricClient) ScheduleWorkflowTask(
 	context context.Context,
-	request *historyservice.ScheduleDecisionTaskRequest,
-	opts ...grpc.CallOption) (*historyservice.ScheduleDecisionTaskResponse, error) {
-	c.metricsClient.IncCounter(metrics.HistoryClientScheduleDecisionTaskScope, metrics.ClientRequests)
+	request *historyservice.ScheduleWorkflowTaskRequest,
+	opts ...grpc.CallOption) (*historyservice.ScheduleWorkflowTaskResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientScheduleWorkflowTaskScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.HistoryClientScheduleDecisionTaskScope, metrics.ClientLatency)
-	resp, err := c.client.ScheduleDecisionTask(context, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientScheduleWorkflowTaskScope, metrics.ClientLatency)
+	resp, err := c.client.ScheduleWorkflowTask(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientScheduleDecisionTaskScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientScheduleWorkflowTaskScope, metrics.ClientFailures)
 	}
 
 	return resp, err
@@ -593,19 +593,19 @@ func (c *metricClient) ReapplyEvents(
 	return resp, err
 }
 
-func (c *metricClient) ReadDLQMessages(
+func (c *metricClient) GetDLQMessages(
 	ctx context.Context,
-	request *historyservice.ReadDLQMessagesRequest,
+	request *historyservice.GetDLQMessagesRequest,
 	opts ...grpc.CallOption,
-) (*historyservice.ReadDLQMessagesResponse, error) {
+) (*historyservice.GetDLQMessagesResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.HistoryClientReadDLQMessagesScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.HistoryClientReadDLQMessagesScope, metrics.ClientLatency)
-	resp, err := c.client.ReadDLQMessages(ctx, request, opts...)
+	c.metricsClient.IncCounter(metrics.HistoryClientGetDLQMessagesScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientGetDLQMessagesScope, metrics.ClientLatency)
+	resp, err := c.client.GetDLQMessages(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientReadDLQMessagesScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientGetDLQMessagesScope, metrics.ClientFailures)
 	}
 	return resp, err
 }

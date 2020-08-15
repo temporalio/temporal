@@ -1,5 +1,5 @@
 CREATE TABLE namespaces(
-  shard_id INTEGER NOT NULL DEFAULT 54321,
+  partition_id INTEGER NOT NULL,
   id BYTEA NOT NULL,
   name VARCHAR(255) UNIQUE NOT NULL,
   notification_version BIGINT NOT NULL,
@@ -7,14 +7,16 @@ CREATE TABLE namespaces(
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
   is_global BOOLEAN NOT NULL,
-  PRIMARY KEY(shard_id, id)
+  PRIMARY KEY(partition_id, id)
 );
 
 CREATE TABLE namespace_metadata (
-  notification_version BIGINT NOT NULL
+  partition_id INTEGER NOT NULL,
+  notification_version BIGINT NOT NULL,
+  PRIMARY KEY(partition_id)
 );
 
-INSERT INTO namespace_metadata (notification_version) VALUES (1);
+INSERT INTO namespace_metadata (partition_id, notification_version) VALUES (54321, 1);
 
 CREATE TABLE shards (
   shard_id INTEGER NOT NULL,
@@ -64,40 +66,35 @@ CREATE TABLE current_executions(
 );
 
 CREATE TABLE buffered_events (
-  id BIGSERIAL NOT NULL,
   shard_id INTEGER NOT NULL,
   namespace_id BYTEA NOT NULL,
   workflow_id VARCHAR(255) NOT NULL,
   run_id BYTEA NOT NULL,
+  id BIGSERIAL NOT NULL UNIQUE,
   --
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
-  PRIMARY KEY (id)
+  PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, id)
 );
 
-CREATE INDEX buffered_events_by_events_ids ON buffered_events(shard_id, namespace_id, workflow_id, run_id);
-
 CREATE TABLE tasks (
-  namespace_id BYTEA NOT NULL,
-  task_list_name VARCHAR(255) NOT NULL,
-  task_type SMALLINT NOT NULL, -- {Activity, Decision}
+  range_hash BIGINT NOT NULL,
+  task_queue_id BYTEA NOT NULL,
   task_id BIGINT NOT NULL,
   --
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
-  PRIMARY KEY (namespace_id, task_list_name, task_type, task_id)
+  PRIMARY KEY (range_hash, task_queue_id, task_id)
 );
 
-CREATE TABLE task_lists (
-  shard_id INTEGER NOT NULL,
-  namespace_id BYTEA NOT NULL,
-  name VARCHAR(255) NOT NULL,
-  task_type SMALLINT NOT NULL, -- {Activity, Decision}
+CREATE TABLE task_queues (
+  range_hash BIGINT NOT NULL,
+  task_queue_id BYTEA NOT NULL,
   --
   range_id BIGINT NOT NULL,
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
-  PRIMARY KEY (shard_id, namespace_id, name, task_type)
+  PRIMARY KEY (range_hash, task_queue_id)
 );
 
 CREATE TABLE replication_tasks (
@@ -246,6 +243,7 @@ CREATE TABLE cluster_metadata (
 
 CREATE TABLE cluster_membership
 (
+    membership_partition INTEGER NOT NULL,
     host_id              BYTEA NOT NULL,
     rpc_address          VARCHAR(15) NOT NULL,
     rpc_port             SMALLINT NOT NULL,
@@ -253,8 +251,7 @@ CREATE TABLE cluster_membership
     session_start        TIMESTAMP DEFAULT '1970-01-01 00:00:01',
     last_heartbeat       TIMESTAMP DEFAULT '1970-01-01 00:00:01',
     record_expiry        TIMESTAMP DEFAULT '1970-01-01 00:00:01',
-    insertion_order      BIGSERIAL NOT NULL UNIQUE,
-    PRIMARY KEY (host_id)
+    PRIMARY KEY (membership_partition, host_id)
 );
 
 CREATE UNIQUE INDEX cm_idx_rolehost ON cluster_membership (role, host_id);

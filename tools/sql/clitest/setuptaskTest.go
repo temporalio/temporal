@@ -29,9 +29,9 @@ import (
 
 	"os"
 
-	"github.com/temporalio/temporal/environment"
-	"github.com/temporalio/temporal/tools/common/schema/test"
-	"github.com/temporalio/temporal/tools/sql"
+	"go.temporal.io/server/environment"
+	"go.temporal.io/server/tools/common/schema/test"
+	"go.temporal.io/server/tools/sql"
 )
 
 type (

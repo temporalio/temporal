@@ -28,91 +28,91 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	enumspb "go.temporal.io/api/enums/v1"
+
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
-	taskListDB struct {
+	taskQueueDB struct {
 		sync.Mutex
-		namespaceID  primitives.UUID
-		taskListName string
-		taskListKind tasklistpb.TaskListKind
-		taskType     tasklistpb.TaskListType
-		rangeID      int64
-		ackLevel     int64
-		store        persistence.TaskManager
-		logger       log.Logger
+		namespaceID   string
+		taskQueueName string
+		taskQueueKind enumspb.TaskQueueKind
+		taskType      enumspb.TaskQueueType
+		rangeID       int64
+		ackLevel      int64
+		store         persistence.TaskManager
+		logger        log.Logger
 	}
-	taskListState struct {
+	taskQueueState struct {
 		rangeID  int64
 		ackLevel int64
 	}
 )
 
-// newTaskListDB returns an instance of an object that represents
-// persistence view of a taskList. All mutations / reads to taskLists
+// newTaskQueueDB returns an instance of an object that represents
+// persistence view of a taskQueue. All mutations / reads to taskQueues
 // wrt persistence go through this object.
 //
 // This class will serialize writes to persistence that do condition updates. There are
 // two reasons for doing this:
 // - To work around known Cassandra issue where concurrent LWT to the same partition cause timeout errors
-// - To provide the guarantee that there is only writer who updates taskList in persistence at any given point in time
-//   This guarantee makes some of the other code simpler and there is no impact to perf because updates to tasklist are
+// - To provide the guarantee that there is only writer who updates taskQueue in persistence at any given point in time
+//   This guarantee makes some of the other code simpler and there is no impact to perf because updates to taskqueue are
 //   spread out and happen in background routines
-func newTaskListDB(store persistence.TaskManager, namespaceID primitives.UUID, name string, taskType tasklistpb.TaskListType, kind tasklistpb.TaskListKind, logger log.Logger) *taskListDB {
-	return &taskListDB{
-		namespaceID:  namespaceID,
-		taskListName: name,
-		taskListKind: kind,
-		taskType:     taskType,
-		store:        store,
-		logger:       logger,
+func newTaskQueueDB(store persistence.TaskManager, namespaceID string, name string, taskType enumspb.TaskQueueType, kind enumspb.TaskQueueKind, logger log.Logger) *taskQueueDB {
+	return &taskQueueDB{
+		namespaceID:   namespaceID,
+		taskQueueName: name,
+		taskQueueKind: kind,
+		taskType:      taskType,
+		store:         store,
+		logger:        logger,
 	}
 }
 
 // RangeID returns the current persistence view of rangeID
-func (db *taskListDB) RangeID() int64 {
+func (db *taskQueueDB) RangeID() int64 {
 	db.Lock()
 	defer db.Unlock()
 	return db.rangeID
 }
 
-// RenewLease renews the lease on a tasklist. If there is no previous lease,
-// this method will attempt to steal tasklist from current owner
-func (db *taskListDB) RenewLease() (taskListState, error) {
+// RenewLease renews the lease on a taskqueue. If there is no previous lease,
+// this method will attempt to steal taskqueue from current owner
+func (db *taskQueueDB) RenewLease() (taskQueueState, error) {
 	db.Lock()
 	defer db.Unlock()
-	resp, err := db.store.LeaseTaskList(&persistence.LeaseTaskListRequest{
-		NamespaceID:  db.namespaceID,
-		TaskList:     db.taskListName,
-		TaskType:     db.taskType,
-		TaskListKind: db.taskListKind,
-		RangeID:      atomic.LoadInt64(&db.rangeID),
+	resp, err := db.store.LeaseTaskQueue(&persistence.LeaseTaskQueueRequest{
+		NamespaceID:   db.namespaceID,
+		TaskQueue:     db.taskQueueName,
+		TaskType:      db.taskType,
+		TaskQueueKind: db.taskQueueKind,
+		RangeID:       atomic.LoadInt64(&db.rangeID),
 	})
 	if err != nil {
-		return taskListState{}, err
+		return taskQueueState{}, err
 	}
-	db.ackLevel = resp.TaskListInfo.Data.AckLevel
-	db.rangeID = resp.TaskListInfo.RangeID
-	return taskListState{rangeID: db.rangeID, ackLevel: db.ackLevel}, nil
+	db.ackLevel = resp.TaskQueueInfo.Data.AckLevel
+	db.rangeID = resp.TaskQueueInfo.RangeID
+	return taskQueueState{rangeID: db.rangeID, ackLevel: db.ackLevel}, nil
 }
 
-// UpdateState updates the taskList state with the given value
-func (db *taskListDB) UpdateState(ackLevel int64) error {
+// UpdateState updates the taskQueue state with the given value
+func (db *taskQueueDB) UpdateState(ackLevel int64) error {
 	db.Lock()
 	defer db.Unlock()
-	_, err := db.store.UpdateTaskList(&persistence.UpdateTaskListRequest{
-		TaskListInfo: &persistenceblobs.TaskListInfo{
+	_, err := db.store.UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
+		TaskQueueInfo: &persistenceblobs.TaskQueueInfo{
 			NamespaceId: db.namespaceID,
-			Name:        db.taskListName,
+			Name:        db.taskQueueName,
 			TaskType:    db.taskType,
 			AckLevel:    ackLevel,
-			Kind:        db.taskListKind,
+			Kind:        db.taskQueueKind,
 		},
 		RangeID: db.rangeID,
 	})
@@ -122,19 +122,19 @@ func (db *taskListDB) UpdateState(ackLevel int64) error {
 	return err
 }
 
-// CreateTasks creates a batch of given tasks for this task list
-func (db *taskListDB) CreateTasks(tasks []*persistenceblobs.AllocatedTaskInfo) (*persistence.CreateTasksResponse, error) {
+// CreateTasks creates a batch of given tasks for this task queue
+func (db *taskQueueDB) CreateTasks(tasks []*persistenceblobs.AllocatedTaskInfo) (*persistence.CreateTasksResponse, error) {
 	db.Lock()
 	defer db.Unlock()
 	return db.store.CreateTasks(
 		&persistence.CreateTasksRequest{
-			TaskListInfo: &persistence.PersistedTaskListInfo{
-				Data: &persistenceblobs.TaskListInfo{
+			TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
+				Data: &persistenceblobs.TaskQueueInfo{
 					NamespaceId: db.namespaceID,
-					Name:        db.taskListName,
+					Name:        db.taskQueueName,
 					TaskType:    db.taskType,
 					AckLevel:    db.ackLevel,
-					Kind:        db.taskListKind,
+					Kind:        db.taskQueueKind,
 				},
 				RangeID: db.rangeID,
 			},
@@ -143,10 +143,10 @@ func (db *taskListDB) CreateTasks(tasks []*persistenceblobs.AllocatedTaskInfo) (
 }
 
 // GetTasks returns a batch of tasks between the given range
-func (db *taskListDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int) (*persistence.GetTasksResponse, error) {
+func (db *taskQueueDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int) (*persistence.GetTasksResponse, error) {
 	return db.store.GetTasks(&persistence.GetTasksRequest{
 		NamespaceID:  db.namespaceID,
-		TaskList:     db.taskListName,
+		TaskQueue:    db.taskQueueName,
 		TaskType:     db.taskType,
 		BatchSize:    batchSize,
 		ReadLevel:    minTaskID,  // exclusive
@@ -154,12 +154,12 @@ func (db *taskListDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int) 
 	})
 }
 
-// CompleteTask deletes a single task from this task list
-func (db *taskListDB) CompleteTask(taskID int64) error {
+// CompleteTask deletes a single task from this task queue
+func (db *taskQueueDB) CompleteTask(taskID int64) error {
 	err := db.store.CompleteTask(&persistence.CompleteTaskRequest{
-		TaskList: &persistence.TaskListKey{
+		TaskQueue: &persistence.TaskQueueKey{
 			NamespaceID: db.namespaceID,
-			Name:        db.taskListName,
+			Name:        db.taskQueueName,
 			TaskType:    db.taskType,
 		},
 		TaskID: taskID,
@@ -169,8 +169,8 @@ func (db *taskListDB) CompleteTask(taskID int64) error {
 			tag.StoreOperationCompleteTask,
 			tag.Error(err),
 			tag.TaskID(taskID),
-			tag.WorkflowTaskListType(db.taskType),
-			tag.WorkflowTaskListName(db.taskListName))
+			tag.WorkflowTaskQueueType(db.taskType),
+			tag.WorkflowTaskQueueName(db.taskQueueName))
 	}
 	return err
 }
@@ -178,21 +178,21 @@ func (db *taskListDB) CompleteTask(taskID int64) error {
 // CompleteTasksLessThan deletes of tasks less than the given taskID. Limit is
 // the upper bound of number of tasks that can be deleted by this method. It may
 // or may not be honored
-func (db *taskListDB) CompleteTasksLessThan(taskID int64, limit int) (int, error) {
+func (db *taskQueueDB) CompleteTasksLessThan(taskID int64, limit int) (int, error) {
 	n, err := db.store.CompleteTasksLessThan(&persistence.CompleteTasksLessThanRequest{
-		NamespaceID:  db.namespaceID,
-		TaskListName: db.taskListName,
-		TaskType:     db.taskType,
-		TaskID:       taskID,
-		Limit:        limit,
+		NamespaceID:   db.namespaceID,
+		TaskQueueName: db.taskQueueName,
+		TaskType:      db.taskType,
+		TaskID:        taskID,
+		Limit:         limit,
 	})
 	if err != nil {
 		db.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
 			tag.TaskID(taskID),
-			tag.WorkflowTaskListType(db.taskType),
-			tag.WorkflowTaskListName(db.taskListName))
+			tag.WorkflowTaskQueueType(db.taskType),
+			tag.WorkflowTaskQueueName(db.taskQueueName))
 	}
 	return n, err
 }

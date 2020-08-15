@@ -33,7 +33,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 
-	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 )
 
 // MockHistoryIterator is a mock of HistoryIterator interface
@@ -60,10 +60,10 @@ func (m *MockHistoryIterator) EXPECT() *MockHistoryIteratorMockRecorder {
 }
 
 // Next mocks base method
-func (m *MockHistoryIterator) Next() (*archivergenpb.HistoryBlob, error) {
+func (m *MockHistoryIterator) Next() (*archiverspb.HistoryBlob, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Next")
-	ret0, _ := ret[0].(*archivergenpb.HistoryBlob)
+	ret0, _ := ret[0].(*archiverspb.HistoryBlob)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -25,7 +25,7 @@
 package messaging
 
 import (
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (

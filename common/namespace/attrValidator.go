@@ -26,12 +26,13 @@ package namespace
 
 import (
 	"fmt"
+	"time"
 
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	"go.temporal.io/temporal-proto/serviceerror"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/cluster"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/cluster"
 )
 
 type (
@@ -55,13 +56,13 @@ func newAttrValidator(
 }
 
 func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistenceblobs.NamespaceConfig) error {
-	if config.RetentionDays < int32(d.minRetentionDays) {
+	if config.Retention != nil && *config.Retention < time.Hour*24*time.Duration(d.minRetentionDays) {
 		return errInvalidRetentionPeriod
 	}
-	if config.HistoryArchivalStatus == namespacepb.ArchivalStatus_Enabled && len(config.HistoryArchivalURI) == 0 {
+	if config.HistoryArchivalState == enumspb.ARCHIVAL_STATE_ENABLED && len(config.HistoryArchivalUri) == 0 {
 		return errInvalidArchivalConfig
 	}
-	if config.VisibilityArchivalStatus == namespacepb.ArchivalStatus_Enabled && len(config.VisibilityArchivalURI) == 0 {
+	if config.VisibilityArchivalState == enumspb.ARCHIVAL_STATE_ENABLED && len(config.VisibilityArchivalUri) == 0 {
 		return errInvalidArchivalConfig
 	}
 	return nil

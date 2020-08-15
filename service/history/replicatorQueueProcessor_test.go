@@ -32,20 +32,22 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -129,24 +131,24 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
+		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
-		NamespaceId: primitives.MustParseUUID(namespaceID),
+		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
-		RunId:       primitives.MustParseUUID(runID),
+		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: namespace},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -172,18 +174,18 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
+		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
-		NamespaceId: primitives.MustParseUUID(namespaceID),
+		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
-		RunId:       primitives.MustParseUUID(runID),
+		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		namespaceID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -193,8 +195,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: namespace},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -220,18 +222,18 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
+		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
-		NamespaceId: primitives.MustParseUUID(namespaceID),
+		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
-		RunId:       primitives.MustParseUUID(runID),
+		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		namespaceID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -243,8 +245,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: namespace},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -270,18 +272,18 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
+		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
-		NamespaceId: primitives.MustParseUUID(namespaceID),
+		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
-		RunId:       primitives.MustParseUUID(runID),
+		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		namespaceID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -292,29 +294,25 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 
 	activityVersion := int64(333)
 	activityScheduleID := scheduleID
-	activityScheduledTime := time.Now()
+	activityScheduledTime := time.Now().UTC()
 	activityStartedID := common.EmptyEventID
-	activityStartedTime := time.Time{}
-	activityHeartbeatTime := time.Time{}
 	activityAttempt := int32(16384)
 	activityDetails := payloads.EncodeString("some random activity progress")
-	activityLastFailureReason := "some random reason"
+	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
-	activityLastFailureDetails := payloads.EncodeString("some random failure details")
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistence.ActivityInfo{
-		Version:                  activityVersion,
-		ScheduleID:               activityScheduleID,
-		ScheduledTime:            activityScheduledTime,
-		StartedID:                activityStartedID,
-		StartedTime:              activityStartedTime,
-		LastHeartBeatUpdatedTime: activityHeartbeatTime,
-		Details:                  activityDetails,
-		Attempt:                  activityAttempt,
-		LastFailureReason:        activityLastFailureReason,
-		LastWorkerIdentity:       activityLastWorkerIdentity,
-		LastFailureDetails:       activityLastFailureDetails,
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistenceblobs.ActivityInfo{
+		Version:                 activityVersion,
+		ScheduleId:              activityScheduleID,
+		ScheduledTime:           &activityScheduledTime,
+		StartedId:               activityStartedID,
+		StartedTime:             nil,
+		LastHeartbeatUpdateTime: nil,
+		LastHeartbeatDetails:    activityDetails,
+		Attempt:                 activityAttempt,
+		RetryLastFailure:        activityLastFailure,
+		RetryLastWorkerIdentity: activityLastWorkerIdentity,
 	}, true).AnyTimes()
 	versionHistory := &persistence.VersionHistory{
 		BranchToken: []byte{},
@@ -333,8 +331,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: namespace},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -346,24 +344,23 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		nil,
 	), nil).AnyTimes()
 
-	s.mockProducer.On("Publish", &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskType_SyncActivityTask,
-		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
+	s.mockProducer.On("Publish", &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
 				NamespaceId:        namespaceID,
 				WorkflowId:         workflowID,
 				RunId:              runID,
 				Version:            activityVersion,
 				ScheduledId:        activityScheduleID,
-				ScheduledTime:      activityScheduledTime.UnixNano(),
+				ScheduledTime:      &activityScheduledTime,
 				StartedId:          activityStartedID,
-				StartedTime:        0,
-				LastHeartbeatTime:  activityHeartbeatTime.UnixNano(),
+				StartedTime:        nil,
+				LastHeartbeatTime:  nil,
 				Details:            activityDetails,
 				Attempt:            activityAttempt,
-				LastFailureReason:  activityLastFailureReason,
+				LastFailure:        activityLastFailure,
 				LastWorkerIdentity: activityLastWorkerIdentity,
-				LastFailureDetails: activityLastFailureDetails,
 				VersionHistory:     versionHistory.ToProto(),
 			},
 		},
@@ -383,18 +380,18 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
+		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
-		NamespaceId: primitives.MustParseUUID(namespaceID),
+		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
-		RunId:       primitives.MustParseUUID(runID),
+		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		namespaceID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -405,29 +402,27 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 
 	activityVersion := int64(333)
 	activityScheduleID := scheduleID
-	activityScheduledTime := time.Now()
+	activityScheduledTime := timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC))
 	activityStartedID := activityScheduleID + 1
 	activityStartedTime := activityScheduledTime.Add(time.Minute)
 	activityHeartbeatTime := activityStartedTime.Add(time.Minute)
 	activityAttempt := int32(16384)
 	activityDetails := payloads.EncodeString("some random activity progress")
-	activityLastFailureReason := "some random reason"
+	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
-	activityLastFailureDetails := payloads.EncodeString("some random failure details")
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistence.ActivityInfo{
-		Version:                  activityVersion,
-		ScheduleID:               activityScheduleID,
-		ScheduledTime:            activityScheduledTime,
-		StartedID:                activityStartedID,
-		StartedTime:              activityStartedTime,
-		LastHeartBeatUpdatedTime: activityHeartbeatTime,
-		Details:                  activityDetails,
-		Attempt:                  activityAttempt,
-		LastFailureReason:        activityLastFailureReason,
-		LastWorkerIdentity:       activityLastWorkerIdentity,
-		LastFailureDetails:       activityLastFailureDetails,
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistenceblobs.ActivityInfo{
+		Version:                 activityVersion,
+		ScheduleId:              activityScheduleID,
+		ScheduledTime:           activityScheduledTime,
+		StartedId:               activityStartedID,
+		StartedTime:             &activityStartedTime,
+		LastHeartbeatUpdateTime: &activityHeartbeatTime,
+		LastHeartbeatDetails:    activityDetails,
+		Attempt:                 activityAttempt,
+		RetryLastFailure:        activityLastFailure,
+		RetryLastWorkerIdentity: activityLastWorkerIdentity,
 	}, true).AnyTimes()
 	versionHistory := &persistence.VersionHistory{
 		BranchToken: []byte{},
@@ -446,8 +441,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: namespace},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -458,24 +453,23 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		version,
 		nil,
 	), nil).AnyTimes()
-	s.mockProducer.On("Publish", &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskType_SyncActivityTask,
-		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
+	s.mockProducer.On("Publish", &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
 				NamespaceId:        namespaceID,
 				WorkflowId:         workflowID,
 				RunId:              runID,
 				Version:            activityVersion,
 				ScheduledId:        activityScheduleID,
-				ScheduledTime:      activityScheduledTime.UnixNano(),
+				ScheduledTime:      activityScheduledTime,
 				StartedId:          activityStartedID,
-				StartedTime:        activityStartedTime.UnixNano(),
-				LastHeartbeatTime:  activityHeartbeatTime.UnixNano(),
+				StartedTime:        &activityStartedTime,
+				LastHeartbeatTime:  &activityHeartbeatTime,
 				Details:            activityDetails,
 				Attempt:            activityAttempt,
-				LastFailureReason:  activityLastFailureReason,
+				LastFailure:        activityLastFailure,
 				LastWorkerIdentity: activityLastWorkerIdentity,
-				LastFailureDetails: activityLastFailureDetails,
 				VersionHistory:     versionHistory.ToProto(),
 			},
 		},
@@ -501,11 +495,11 @@ func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
 		ShardID:       &shardID,
 	}
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: []*eventpb.HistoryEvent{
+		HistoryEvents: []*historypb.HistoryEvent{
 			{
 				EventId: int64(1),
-				// EventType:  eventpb.EventType_WorkflowExecutionStarted,
-				// Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
+				// EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				// Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
 			},
 		},
 		NextPageToken:    []byte{},

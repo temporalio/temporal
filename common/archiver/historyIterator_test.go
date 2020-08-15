@@ -27,17 +27,21 @@ package archiver
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/serviceerror"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -74,7 +78,7 @@ type (
 )
 
 func (e *testSizeEstimator) EstimateSize(v interface{}) (int, error) {
-	historyBatch, ok := v.(*eventpb.History)
+	historyBatch, ok := v.(*historypb.History)
 	if !ok {
 		return -1, errors.New("test size estimator only estimate the size of history batches")
 	}
@@ -106,7 +110,7 @@ func (s *HistoryIteratorSuite) TestReadHistory_Failed_EventsV2() {
 func (s *HistoryIteratorSuite) TestReadHistory_Success_EventsV2() {
 	mockHistoryV2Manager := &mocks.HistoryV2Manager{}
 	resp := persistence.ReadHistoryBranchByBatchResponse{
-		History:       []*eventpb.History{},
+		History:       []*historypb.History{},
 		NextPageToken: []byte{},
 	}
 	mockHistoryV2Manager.On("ReadHistoryBranchByBatch", mock.Anything).Return(&resp, nil)
@@ -355,7 +359,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
-	expectedHeader := &archivergenpb.HistoryBlobHeader{
+	expectedHeader := &archiverspb.HistoryBlobHeader{
 		Namespace:            testNamespace,
 		NamespaceId:          testNamespaceID,
 		WorkflowId:           testWorkflowID,
@@ -417,7 +421,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
-	expectedHeader := &archivergenpb.HistoryBlobHeader{
+	expectedHeader := &archiverspb.HistoryBlobHeader{
 		Namespace:            testNamespace,
 		NamespaceId:          testNamespaceID,
 		WorkflowId:           testWorkflowID,
@@ -468,7 +472,7 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 		blob, err := itr.Next()
 		s.NoError(err)
 		s.NotNil(blob)
-		expectedHeader := &archivergenpb.HistoryBlobHeader{
+		expectedHeader := &archiverspb.HistoryBlobHeader{
 			Namespace:            testNamespace,
 			NamespaceId:          testNamespaceID,
 			WorkflowId:           testWorkflowID,
@@ -664,13 +668,13 @@ func (s *HistoryIteratorSuite) assertStateMatches(expected historyIteratorState,
 	s.Equal(expected.FinishedIteration, itr.FinishedIteration)
 }
 
-func (s *HistoryIteratorSuite) constructHistoryBatches(batchInfo []int, page page, firstEventID int64) []*eventpb.History {
-	var batches []*eventpb.History
+func (s *HistoryIteratorSuite) constructHistoryBatches(batchInfo []int, page page, firstEventID int64) []*historypb.History {
+	var batches []*historypb.History
 	eventsID := firstEventID
 	for batchIdx, numEvents := range batchInfo[page.firstbatchIdx : page.firstbatchIdx+page.numBatches] {
-		var events []*eventpb.HistoryEvent
+		var events []*historypb.HistoryEvent
 		for i := 0; i < numEvents; i++ {
-			event := &eventpb.HistoryEvent{
+			event := &historypb.HistoryEvent{
 				EventId: eventsID,
 				Version: page.firstEventFailoverVersion,
 			}
@@ -680,7 +684,7 @@ func (s *HistoryIteratorSuite) constructHistoryBatches(batchInfo []int, page pag
 			}
 			events = append(events, event)
 		}
-		batches = append(batches, &eventpb.History{
+		batches = append(batches, &historypb.History{
 			Events: events,
 		})
 	}
@@ -709,4 +713,33 @@ func (s *HistoryIteratorSuite) constructTestHistoryIterator(
 	}
 	itr.sizeEstimator = newTestSizeEstimator()
 	return itr
+}
+func (s *HistoryIteratorSuite) TestJSONSizeEstimator() {
+	e := NewJSONSizeEstimator()
+
+	historyEvent := &historypb.HistoryEvent{
+		EventId:   1,
+		EventTime: timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC)),
+		TaskId:    1,
+		Version:   1,
+	}
+	historyEvent.EventType = enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED
+	historyEvent.Attributes = &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "taskQueue",
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		StartToCloseTimeout: timestamp.DurationPtr(10 * time.Second),
+		Attempt:             1,
+	}}
+
+	h := &historypb.History{
+		Events: []*historypb.HistoryEvent{
+			historyEvent,
+		},
+	}
+
+	size, err := e.EstimateSize(h)
+	s.NoError(err)
+	s.Equal(266, size)
 }

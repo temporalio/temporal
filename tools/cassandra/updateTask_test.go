@@ -30,8 +30,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/schema/cassandra"
-	"github.com/temporalio/temporal/tools/common/schema/test"
+	"go.temporal.io/server/schema/cassandra"
+	"go.temporal.io/server/tools/common/schema/test"
 )
 
 type UpdateSchemaTestSuite struct {

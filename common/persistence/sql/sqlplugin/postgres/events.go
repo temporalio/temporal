@@ -27,7 +27,7 @@ package postgres
 import (
 	"database/sql"
 
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 const (
@@ -93,5 +93,5 @@ func (pdb *db) SelectFromHistoryTree(filter *sqlplugin.HistoryTreeFilter) ([]sql
 
 // DeleteFromHistoryTree deletes one or more rows from history_tree table
 func (pdb *db) DeleteFromHistoryTree(filter *sqlplugin.HistoryTreeFilter) (sql.Result, error) {
-	return pdb.conn.Exec(deleteHistoryTreeQuery, filter.ShardID, filter.TreeID, *filter.BranchID)
+	return pdb.conn.Exec(deleteHistoryTreeQuery, filter.ShardID, filter.TreeID, filter.BranchID)
 }

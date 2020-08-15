@@ -29,7 +29,7 @@ import (
 
 	"github.com/urfave/cli"
 
-	"github.com/temporalio/temporal/tools/common/schema"
+	"go.temporal.io/server/tools/common/schema"
 )
 
 const defaultSQLPort = 3306

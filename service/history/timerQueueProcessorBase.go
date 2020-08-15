@@ -30,20 +30,20 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gogo/protobuf/types"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/collection"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/quotas"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 var (
@@ -221,7 +221,7 @@ func (t *timerQueueProcessorBase) notifyNewTimers(
 			newTime = ts
 		}
 
-		scopeIdx := getTimerTaskMetricScope(int32(task.GetType()), isActive)
+		scopeIdx := getTimerTaskMetricScope(task.GetType(), isActive)
 		t.metricsClient.IncCounter(scopeIdx, metrics.NewTimerCounter)
 	}
 
@@ -288,11 +288,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 					return err
 				}
 				if lookAheadTimer != nil {
-					visTs, err := types.TimestampFromProto(lookAheadTimer.VisibilityTimestamp)
-					if err != nil {
-						return err
-					}
-					t.timerGate.Update(visTs)
+					t.timerGate.Update(timestamp.TimeValue(lookAheadTimer.VisibilityTime))
 				}
 				continue
 			}
@@ -312,11 +308,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 					return err
 				}
 				if lookAheadTimer != nil {
-					visTs, err := types.TimestampFromProto(lookAheadTimer.VisibilityTimestamp)
-					if err != nil {
-						return err
-					}
-					t.timerGate.Update(visTs)
+					t.timerGate.Update(timestamp.TimeValue(lookAheadTimer.VisibilityTime))
 				}
 			}
 		case <-updateAckTimer.C:
@@ -444,64 +436,64 @@ func (t *timerQueueProcessorBase) getTimerFiredCount() uint64 {
 
 //nolint:unused
 func (t *timerQueueProcessorBase) getTimerTaskType(
-	taskType int,
+	taskType enumsspb.TaskType,
 ) string {
 
 	switch taskType {
-	case persistence.TaskTypeUserTimer:
+	case enumsspb.TASK_TYPE_USER_TIMER:
 		return "UserTimer"
-	case persistence.TaskTypeActivityTimeout:
+	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
 		return "ActivityTimeout"
-	case persistence.TaskTypeDecisionTimeout:
-		return "DecisionTimeout"
-	case persistence.TaskTypeWorkflowRunTimeout:
+	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
+		return "WorkflowTaskTimeout"
+	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return "WorkflowRunTimeout"
-	case persistence.TaskTypeDeleteHistoryEvent:
+	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
 		return "DeleteHistoryEvent"
-	case persistence.TaskTypeActivityRetryTimer:
+	case enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		return "ActivityRetryTimerTask"
-	case persistence.TaskTypeWorkflowBackoffTimer:
+	case enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
 		return "WorkflowBackoffTimerTask"
 	}
 	return "UnKnown"
 }
 
 func getTimerTaskMetricScope(
-	taskType int32,
+	taskType enumsspb.TaskType,
 	isActive bool,
 ) int {
 	switch taskType {
-	case persistence.TaskTypeDecisionTimeout:
+	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
 		if isActive {
-			return metrics.TimerActiveTaskDecisionTimeoutScope
+			return metrics.TimerActiveTaskWorkflowTaskTimeoutScope
 		}
-		return metrics.TimerStandbyTaskDecisionTimeoutScope
-	case persistence.TaskTypeActivityTimeout:
+		return metrics.TimerStandbyTaskWorkflowTaskTimeoutScope
+	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
 		if isActive {
 			return metrics.TimerActiveTaskActivityTimeoutScope
 		}
 		return metrics.TimerStandbyTaskActivityTimeoutScope
-	case persistence.TaskTypeUserTimer:
+	case enumsspb.TASK_TYPE_USER_TIMER:
 		if isActive {
 			return metrics.TimerActiveTaskUserTimerScope
 		}
 		return metrics.TimerStandbyTaskUserTimerScope
-	case persistence.TaskTypeWorkflowRunTimeout:
+	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		if isActive {
 			return metrics.TimerActiveTaskWorkflowTimeoutScope
 		}
 		return metrics.TimerStandbyTaskWorkflowTimeoutScope
-	case persistence.TaskTypeDeleteHistoryEvent:
+	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
 		if isActive {
 			return metrics.TimerActiveTaskDeleteHistoryEventScope
 		}
 		return metrics.TimerStandbyTaskDeleteHistoryEventScope
-	case persistence.TaskTypeActivityRetryTimer:
+	case enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		if isActive {
 			return metrics.TimerActiveTaskActivityRetryTimerScope
 		}
 		return metrics.TimerStandbyTaskActivityRetryTimerScope
-	case persistence.TaskTypeWorkflowBackoffTimer:
+	case enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
 		if isActive {
 			return metrics.TimerActiveTaskWorkflowBackoffTimerScope
 		}

@@ -27,13 +27,14 @@ package history
 import (
 	"time"
 
-	"github.com/gogo/protobuf/types"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -70,12 +71,12 @@ func standbyTransferTaskPostActionTaskDiscarded(
 	transferTask := taskInfo.(*persistenceblobs.TransferTaskInfo)
 	logger.Error("Discarding standby transfer task due to task being pending for too long.",
 		tag.WorkflowID(transferTask.GetWorkflowId()),
-		tag.WorkflowRunIDBytes(transferTask.GetRunId()),
-		tag.WorkflowNamespaceIDBytes(transferTask.GetNamespaceId()),
+		tag.WorkflowRunID(transferTask.GetRunId()),
+		tag.WorkflowNamespaceID(transferTask.GetNamespaceId()),
 		tag.TaskID(transferTask.GetTaskId()),
 		tag.TaskType(transferTask.TaskType),
 		tag.FailoverVersion(transferTask.GetVersion()),
-		tag.TimestampProto(transferTask.VisibilityTimestamp),
+		tag.TimestampPtr(transferTask.VisibilityTime),
 		tag.WorkflowEventID(transferTask.GetScheduleId()))
 	return ErrTaskDiscarded
 }
@@ -93,13 +94,13 @@ func standbyTimerTaskPostActionTaskDiscarded(
 	timerTask := taskInfo.(*persistenceblobs.TimerTaskInfo)
 	logger.Error("Discarding standby timer task due to task being pending for too long.",
 		tag.WorkflowID(timerTask.GetWorkflowId()),
-		tag.WorkflowRunIDBytes(timerTask.GetRunId()),
-		tag.WorkflowNamespaceIDBytes(timerTask.GetNamespaceId()),
+		tag.WorkflowRunID(timerTask.GetRunId()),
+		tag.WorkflowNamespaceID(timerTask.GetNamespaceId()),
 		tag.TaskID(timerTask.GetTaskId()),
 		tag.TaskType(timerTask.TaskType),
-		tag.WorkflowTimeoutType(int64(timerTask.TimeoutType)),
+		tag.WorkflowTimeoutType(timerTask.TimeoutType),
 		tag.FailoverVersion(timerTask.GetVersion()),
-		tag.TimestampProto(timerTask.VisibilityTimestamp),
+		tag.TimestampPtr(timerTask.VisibilityTime),
 		tag.WorkflowEventID(timerTask.GetEventId()))
 	return ErrTaskDiscarded
 }
@@ -115,13 +116,13 @@ type (
 		lastEventVersion int64
 	}
 
-	pushActivityToMatchingInfo struct {
-		activityScheduleToStartTimeout int32
+	pushActivityTaskToMatchingInfo struct {
+		activityTaskScheduleToStartTimeout time.Duration
 	}
 
-	pushDecisionToMatchingInfo struct {
-		decisionScheduleToStartTimeout int32
-		tasklist                       tasklistpb.TaskList
+	pushWorkflowTaskToMatchingInfo struct {
+		workflowTaskScheduleToStartTimeout int64
+		taskqueue                          taskqueuepb.TaskQueue
 	}
 )
 
@@ -147,22 +148,22 @@ func newHistoryResendInfoFor2DC(
 }
 
 func newPushActivityToMatchingInfo(
-	activityScheduleToStartTimeout int32,
-) *pushActivityToMatchingInfo {
+	activityScheduleToStartTimeout time.Duration,
+) *pushActivityTaskToMatchingInfo {
 
-	return &pushActivityToMatchingInfo{
-		activityScheduleToStartTimeout: activityScheduleToStartTimeout,
+	return &pushActivityTaskToMatchingInfo{
+		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
 	}
 }
 
-func newPushDecisionToMatchingInfo(
-	decisionScheduleToStartTimeout int32,
-	tasklist tasklistpb.TaskList,
-) *pushDecisionToMatchingInfo {
+func newPushWorkflowTaskToMatchingInfo(
+	workflowTaskScheduleToStartTimeout int64,
+	taskqueue taskqueuepb.TaskQueue,
+) *pushWorkflowTaskToMatchingInfo {
 
-	return &pushDecisionToMatchingInfo{
-		decisionScheduleToStartTimeout: decisionScheduleToStartTimeout,
-		tasklist:                       tasklist,
+	return &pushWorkflowTaskToMatchingInfo{
+		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
+		taskqueue:                          taskqueue,
 	}
 }
 
@@ -197,7 +198,7 @@ func getStandbyPostActionFn(
 
 	// this is for task retry, use machine time
 	now := standbyNow()
-	taskTime, _ := types.TimestampFromProto(taskInfo.GetVisibilityTimestamp())
+	taskTime := timestamp.TimeValue(taskInfo.GetVisibilityTime())
 	resendTime := taskTime.Add(standbyTaskMissingEventsResendDelay)
 	discardTime := taskTime.Add(standbyTaskMissingEventsDiscardDelay)
 

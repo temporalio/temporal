@@ -33,28 +33,28 @@ import (
 
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
-	sdkclient "go.temporal.io/temporal/client"
+	sdkclient "go.temporal.io/sdk/client"
 
-	"github.com/temporalio/temporal/client"
-	"github.com/temporalio/temporal/client/admin"
-	"github.com/temporalio/temporal/client/frontend"
-	"github.com/temporalio/temporal/client/history"
-	"github.com/temporalio/temporal/client/matching"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/provider"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/membership"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/client/admin"
+	"go.temporal.io/server/client/frontend"
+	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -379,7 +379,7 @@ func (h *Impl) Start() {
 	// The service is now started up
 	h.logger.Info("Service resources started", tag.Address(hostInfo.GetAddress()))
 	// seed the random generator once for this service
-	rand.Seed(time.Now().UTC().UnixNano())
+	rand.Seed(time.Now().UnixNano())
 }
 
 // Stop stops all resources
@@ -396,9 +396,6 @@ func (h *Impl) Stop() {
 	h.namespaceCache.Stop()
 	h.membershipMonitor.Stop()
 	h.ringpopChannel.Close()
-	if err := h.grpcListener.Close(); err != nil {
-		h.logger.WithTags(tag.Error(err)).Error("failed to close gRPC listener")
-	}
 	h.runtimeMetricsReporter.Stop()
 	h.persistenceBean.Close()
 	h.visibilityMgr.Close()

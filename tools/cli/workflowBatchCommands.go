@@ -31,14 +31,15 @@ import (
 	"strings"
 
 	"github.com/urfave/cli"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/workflowservice"
-	sdkclient "go.temporal.io/temporal/client"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/service/worker/batcher"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/worker/batcher"
 )
 
 // TerminateBatchJob stops abatch job
@@ -71,8 +72,8 @@ func DescribeBatchJob(c *cli.Context) {
 	}
 
 	output := map[string]interface{}{}
-	if wf.WorkflowExecutionInfo.GetStatus() != executionpb.WorkflowExecutionStatus_Running {
-		if wf.WorkflowExecutionInfo.GetStatus() != executionpb.WorkflowExecutionStatus_Completed {
+	if wf.WorkflowExecutionInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		if wf.WorkflowExecutionInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
 			output["msg"] = "batch job stopped status: " + wf.WorkflowExecutionInfo.GetStatus().String()
 		} else {
 			output["msg"] = "batch job is finished successfully"
@@ -123,14 +124,14 @@ func ListBatchJobs(c *cli.Context) {
 
 		job := map[string]string{
 			"jobId":     wf.Execution.GetWorkflowId(),
-			"startTime": convertTime(wf.GetStartTime().GetValue(), false),
+			"startTime": formatTime(timestamp.TimeValue(wf.GetStartTime()), false),
 			"reason":    reason,
 			"operator":  operator,
 		}
 
-		if wf.GetStatus() != executionpb.WorkflowExecutionStatus_Running {
+		if wf.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			job["status"] = wf.GetStatus().String()
-			job["closeTime"] = convertTime(wf.GetCloseTime().GetValue(), false)
+			job["closeTime"] = formatTime(timestamp.TimeValue(wf.GetCloseTime()), false)
 		} else {
 			job["status"] = "RUNNING"
 		}
@@ -188,7 +189,7 @@ func StartBatchJob(c *cli.Context) {
 	tcCtx, cancel = newContext(c)
 	defer cancel()
 	options := sdkclient.StartWorkflowOptions{
-		TaskList: batcher.BatcherTaskListName,
+		TaskQueue: batcher.BatcherTaskQueueName,
 		Memo: map[string]interface{}{
 			"Reason": reason,
 		},

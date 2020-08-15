@@ -27,7 +27,7 @@ package mocks
 import (
 	"github.com/stretchr/testify/mock"
 
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/persistence"
 )
 
 // HistoryManager mock implementation

@@ -25,7 +25,7 @@
 package namespace
 
 import (
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 )
 
 var (

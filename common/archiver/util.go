@@ -27,12 +27,12 @@ package archiver
 import (
 	"errors"
 
-	commonpb "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/api/common/v1"
 
-	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payload"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
 )
 
 var (
@@ -63,14 +63,14 @@ func TagLoggerWithArchiveHistoryRequestAndURI(logger log.Logger, request *Archiv
 }
 
 // TagLoggerWithArchiveVisibilityRequestAndURI tags logger with fields in the archive visibility request and the URI
-func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *archivergenpb.ArchiveVisibilityRequest, URI string) log.Logger {
+func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *archiverspb.ArchiveVisibilityRequest, URI string) log.Logger {
 	return logger.WithTags(
 		tag.ArchivalRequestNamespaceID(request.GetNamespaceId()),
 		tag.ArchivalRequestNamespace(request.GetNamespace()),
 		tag.ArchivalRequestWorkflowID(request.GetWorkflowId()),
 		tag.ArchivalRequestRunID(request.GetRunId()),
 		tag.ArchvialRequestWorkflowType(request.GetWorkflowTypeName()),
-		tag.ArchivalRequestCloseTimestamp(request.GetCloseTimestamp()),
+		tag.ArchivalRequestCloseTimestamp(request.GetCloseTime()),
 		tag.ArchivalRequestStatus(request.GetStatus().String()),
 		tag.ArchivalURI(URI),
 	)
@@ -111,7 +111,7 @@ func ValidateGetRequest(request *GetHistoryRequest) error {
 }
 
 // ValidateVisibilityArchivalRequest validates the archive visibility request
-func ValidateVisibilityArchivalRequest(request *archivergenpb.ArchiveVisibilityRequest) error {
+func ValidateVisibilityArchivalRequest(request *archiverspb.ArchiveVisibilityRequest) error {
 	if request.GetNamespaceId() == "" {
 		return errEmptyNamespaceID
 	}
@@ -127,10 +127,10 @@ func ValidateVisibilityArchivalRequest(request *archivergenpb.ArchiveVisibilityR
 	if request.GetWorkflowTypeName() == "" {
 		return errEmptyWorkflowTypeName
 	}
-	if request.GetStartTimestamp() == 0 {
+	if request.GetStartTime() == nil || request.GetStartTime().IsZero() {
 		return errEmptyStartTime
 	}
-	if request.GetCloseTimestamp() == 0 {
+	if request.GetCloseTime() == nil || request.GetCloseTime().IsZero() {
 		return errEmptyCloseTime
 	}
 	return nil

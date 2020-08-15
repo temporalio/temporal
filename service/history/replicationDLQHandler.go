@@ -22,31 +22,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationDLQHandler_mock.go -self_package github.com/temporalio/temporal/service/history
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationDLQHandler_mock.go -self_package go.temporal.io/server/service/history
 
 package history
 
 import (
 	"context"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/server/api/adminservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
 	// replicationDLQHandler is the interface handles replication DLQ messages
 	replicationDLQHandler interface {
-		readMessages(
+		getMessages(
 			ctx context.Context,
 			sourceCluster string,
 			lastMessageID int64,
 			pageSize int,
 			pageToken []byte,
-		) ([]*replicationgenpb.ReplicationTask, []byte, error)
+		) ([]*replicationspb.ReplicationTask, []byte, error)
 		purgeMessages(
 			sourceCluster string,
 			lastMessageID int64,
@@ -79,13 +78,13 @@ func newReplicationDLQHandler(
 	}
 }
 
-func (r *replicationDLQHandlerImpl) readMessages(
+func (r *replicationDLQHandlerImpl) getMessages(
 	ctx context.Context,
 	sourceCluster string,
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
-) ([]*replicationgenpb.ReplicationTask, []byte, error) {
+) ([]*replicationspb.ReplicationTask, []byte, error) {
 
 	tasks, _, token, err := r.readMessagesWithAckLevel(
 		ctx,
@@ -103,7 +102,7 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
-) ([]*replicationgenpb.ReplicationTask, int64, []byte, error) {
+) ([]*replicationspb.ReplicationTask, int64, []byte, error) {
 
 	ackLevel := r.shard.GetReplicatorDLQAckLevel(sourceCluster)
 	resp, err := r.shard.GetExecutionManager().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
@@ -120,12 +119,12 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	}
 
 	remoteAdminClient := r.shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster)
-	taskInfo := make([]*replicationgenpb.ReplicationTaskInfo, len(resp.Tasks))
+	taskInfo := make([]*replicationspb.ReplicationTaskInfo, len(resp.Tasks))
 	for _, task := range resp.Tasks {
-		taskInfo = append(taskInfo, &replicationgenpb.ReplicationTaskInfo{
-			NamespaceId:  primitives.UUIDString(task.GetNamespaceId()),
+		taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
+			NamespaceId:  task.GetNamespaceId(),
 			WorkflowId:   task.GetWorkflowId(),
-			RunId:        primitives.UUIDString(task.GetRunId()),
+			RunId:        task.GetRunId(),
 			TaskType:     task.GetTaskType(),
 			TaskId:       task.GetTaskId(),
 			Version:      task.GetVersion(),

@@ -27,9 +27,10 @@ package history
 import (
 	"time"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -109,51 +110,51 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 }
 
 func getTransferTaskMetricsScope(
-	taskType int32,
+	taskType enumsspb.TaskType,
 	isActive bool,
 ) int {
 	switch taskType {
-	case persistence.TransferTaskTypeActivityTask:
+	case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 		if isActive {
 			return metrics.TransferActiveTaskActivityScope
 		}
 		return metrics.TransferStandbyTaskActivityScope
-	case persistence.TransferTaskTypeDecisionTask:
+	case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
 		if isActive {
-			return metrics.TransferActiveTaskDecisionScope
+			return metrics.TransferActiveTaskWorkflowTaskScope
 		}
-		return metrics.TransferStandbyTaskDecisionScope
-	case persistence.TransferTaskTypeCloseExecution:
+		return metrics.TransferStandbyTaskWorkflowTaskScope
+	case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
 		if isActive {
 			return metrics.TransferActiveTaskCloseExecutionScope
 		}
 		return metrics.TransferStandbyTaskCloseExecutionScope
-	case persistence.TransferTaskTypeCancelExecution:
+	case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 		if isActive {
 			return metrics.TransferActiveTaskCancelExecutionScope
 		}
 		return metrics.TransferStandbyTaskCancelExecutionScope
-	case persistence.TransferTaskTypeSignalExecution:
+	case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
 		if isActive {
 			return metrics.TransferActiveTaskSignalExecutionScope
 		}
 		return metrics.TransferStandbyTaskSignalExecutionScope
-	case persistence.TransferTaskTypeStartChildExecution:
+	case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
 		if isActive {
 			return metrics.TransferActiveTaskStartChildExecutionScope
 		}
 		return metrics.TransferStandbyTaskStartChildExecutionScope
-	case persistence.TransferTaskTypeRecordWorkflowStarted:
+	case enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED:
 		if isActive {
 			return metrics.TransferActiveTaskRecordWorkflowStartedScope
 		}
 		return metrics.TransferStandbyTaskRecordWorkflowStartedScope
-	case persistence.TransferTaskTypeResetWorkflow:
+	case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 		if isActive {
 			return metrics.TransferActiveTaskResetWorkflowScope
 		}
 		return metrics.TransferStandbyTaskResetWorkflowScope
-	case persistence.TransferTaskTypeUpsertWorkflowSearchAttributes:
+	case enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 		if isActive {
 			return metrics.TransferActiveTaskUpsertWorkflowSearchAttributesScope
 		}

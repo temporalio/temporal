@@ -25,17 +25,15 @@
 package namespace
 
 import (
-	"github.com/gogo/protobuf/types"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	replicationpb "go.temporal.io/temporal-proto/replication"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/messaging"
 )
 
 // NOTE: the counterpart of namespace replication receiving logic is in service/worker package
@@ -43,7 +41,7 @@ import (
 type (
 	// Replicator is the interface which can replicate the namespace
 	Replicator interface {
-		HandleTransmissionTask(namespaceOperation replicationgenpb.NamespaceOperation, info *persistenceblobs.NamespaceInfo,
+		HandleTransmissionTask(namespaceOperation enumsspb.NamespaceOperation, info *persistenceblobs.NamespaceInfo,
 			config *persistenceblobs.NamespaceConfig, replicationConfig *persistenceblobs.NamespaceReplicationConfig,
 			configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error
 	}
@@ -63,37 +61,36 @@ func NewNamespaceReplicator(replicationMessageSink messaging.Producer, logger lo
 }
 
 // HandleTransmissionTask handle transmission of the namespace replication task
-func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(namespaceOperation replicationgenpb.NamespaceOperation,
+func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(namespaceOperation enumsspb.NamespaceOperation,
 	info *persistenceblobs.NamespaceInfo, config *persistenceblobs.NamespaceConfig, replicationConfig *persistenceblobs.NamespaceReplicationConfig,
 	configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error {
 
 	if !isGlobalNamespaceEnabled {
-		namespaceReplicator.logger.Warn("Should not replicate non global namespace", tag.WorkflowNamespaceIDBytes(info.Id))
+		namespaceReplicator.logger.Warn("Should not replicate non global namespace", tag.WorkflowNamespaceID(info.Id))
 		return nil
 	}
 
-	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
-	task := &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
-		NamespaceTaskAttributes: &replicationgenpb.NamespaceTaskAttributes{
+	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
+	task := &replicationspb.ReplicationTask_NamespaceTaskAttributes{
+		NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
 			NamespaceOperation: namespaceOperation,
-			Id:                 primitives.UUIDString(info.Id),
+			Id:                 info.Id,
 			Info: &namespacepb.NamespaceInfo{
 				Name:        info.Name,
-				Status:      info.Status,
+				State:       info.State,
 				Description: info.Description,
 				OwnerEmail:  info.Owner,
 				Data:        info.Data,
 			},
-			Config: &namespacepb.NamespaceConfiguration{
-				WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
-				EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
-				HistoryArchivalStatus:                  config.HistoryArchivalStatus,
-				HistoryArchivalURI:                     config.HistoryArchivalURI,
-				VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
-				VisibilityArchivalURI:                  config.VisibilityArchivalURI,
-				BadBinaries:                            config.BadBinaries,
+			Config: &namespacepb.NamespaceConfig{
+				WorkflowExecutionRetentionTtl: config.Retention,
+				HistoryArchivalState:          config.HistoryArchivalState,
+				HistoryArchivalUri:            config.HistoryArchivalUri,
+				VisibilityArchivalState:       config.VisibilityArchivalState,
+				VisibilityArchivalUri:         config.VisibilityArchivalUri,
+				BadBinaries:                   config.BadBinaries,
 			},
-			ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 				ActiveClusterName: replicationConfig.ActiveClusterName,
 				Clusters:          namespaceReplicator.convertClusterReplicationConfigToProto(replicationConfig.Clusters),
 			},
@@ -103,7 +100,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 	}
 
 	return namespaceReplicator.replicationMessageSink.Publish(
-		&replicationgenpb.ReplicationTask{
+		&replicationspb.ReplicationTask{
 			TaskType:   taskType,
 			Attributes: task,
 		})
@@ -111,23 +108,10 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 
 func (namespaceReplicator *namespaceReplicatorImpl) convertClusterReplicationConfigToProto(
 	input []string,
-) []*replicationpb.ClusterReplicationConfiguration {
-	output := []*replicationpb.ClusterReplicationConfiguration{}
+) []*replicationpb.ClusterReplicationConfig {
+	output := []*replicationpb.ClusterReplicationConfig{}
 	for _, clusterName := range input {
-		output = append(output, &replicationpb.ClusterReplicationConfiguration{ClusterName: clusterName})
+		output = append(output, &replicationpb.ClusterReplicationConfig{ClusterName: clusterName})
 	}
 	return output
-}
-
-func (namespaceReplicator *namespaceReplicatorImpl) convertNamespaceStatusToProto(input int) (namespacepb.NamespaceStatus, error) {
-	switch input {
-	case persistence.NamespaceStatusRegistered:
-		output := namespacepb.NamespaceStatus_Registered
-		return output, nil
-	case persistence.NamespaceStatusDeprecated:
-		output := namespacepb.NamespaceStatus_Deprecated
-		return output, nil
-	default:
-		return namespacepb.NamespaceStatus_Registered, ErrInvalidNamespaceStatus
-	}
 }

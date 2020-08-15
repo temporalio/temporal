@@ -28,7 +28,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/temporalio/temporal/common/rpc"
+	"go.temporal.io/server/common/rpc"
 )
 
 // NewContext create new context with default timeout 90 seconds.

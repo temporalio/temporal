@@ -27,7 +27,7 @@ package host
 import (
 	"fmt"
 
-	"github.com/temporalio/temporal/common/membership"
+	"go.temporal.io/server/common/membership"
 )
 
 type simpleMonitor struct {

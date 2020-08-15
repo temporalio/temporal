@@ -30,22 +30,26 @@ import (
 )
 
 const (
-	readSchemaVersionQuery = `SELECT curr_version from schema_version where db_name=$1`
+	readSchemaVersionQuery = `SELECT curr_version from schema_version where version_partition=0 and db_name=$1`
 
-	writeSchemaVersionQuery = `INSERT into schema_version(db_name, creation_time, curr_version, min_compatible_version) VALUES ($1,$2,$3,$4)
-										ON CONFLICT (db_name) DO UPDATE 
+	writeSchemaVersionQuery = `INSERT into schema_version(version_partition, db_name, creation_time, curr_version, min_compatible_version) VALUES (0,$1,$2,$3,$4)
+										ON CONFLICT (version_partition, db_name) DO UPDATE 
 										  SET creation_time = excluded.creation_time,
 										   	  curr_version = excluded.curr_version,
 										      min_compatible_version = excluded.min_compatible_version;`
 
-	writeSchemaUpdateHistoryQuery = `INSERT into schema_update_history(year, month, update_time, old_version, new_version, manifest_md5, description) VALUES($1,$2,$3,$4,$5,$6,$7)`
+	writeSchemaUpdateHistoryQuery = `INSERT into schema_update_history(version_partition, year, month, update_time, old_version, new_version, manifest_md5, description) VALUES(0,$1,$2,$3,$4,$5,$6,$7)`
 
-	createSchemaVersionTableQuery = `CREATE TABLE schema_version(db_name VARCHAR(255) not null PRIMARY KEY, ` +
+	createSchemaVersionTableQuery = `CREATE TABLE schema_version(` +
+		`version_partition INT not null, ` +
+		`db_name VARCHAR(255) not null, ` +
 		`creation_time TIMESTAMP, ` +
 		`curr_version VARCHAR(64), ` +
-		`min_compatible_version VARCHAR(64));`
+		`min_compatible_version VARCHAR(64), ` +
+		`PRIMARY KEY (version_partition, db_name));`
 
 	createSchemaUpdateHistoryTableQuery = `CREATE TABLE schema_update_history(` +
+		`version_partition INT not null, ` +
 		`year int not null, ` +
 		`month int not null, ` +
 		`update_time TIMESTAMP not null, ` +
@@ -53,7 +57,7 @@ const (
 		`manifest_md5 VARCHAR(64), ` +
 		`new_version VARCHAR(64), ` +
 		`old_version VARCHAR(64), ` +
-		`PRIMARY KEY (year, month, update_time));`
+		`PRIMARY KEY (version_partition, year, month, update_time));`
 
 	// NOTE we have to use %v because somehow postgres doesn't work with ? here
 	// It's a small bug in sqlx library
@@ -84,7 +88,7 @@ func (pdb *db) ReadSchemaVersion(database string) (string, error) {
 
 // UpdateSchemaVersion updates the schema version for the keyspace
 func (pdb *db) UpdateSchemaVersion(database string, newVersion string, minCompatibleVersion string) error {
-	return pdb.Exec(writeSchemaVersionQuery, database, time.Now(), newVersion, minCompatibleVersion)
+	return pdb.Exec(writeSchemaVersionQuery, database, time.Now().UTC(), newVersion, minCompatibleVersion)
 }
 
 // WriteSchemaUpdateLog adds an entry to the schema update history table

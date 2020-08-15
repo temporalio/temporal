@@ -30,12 +30,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/environment"
-	"github.com/temporalio/temporal/tools/common/schema/test"
-	"github.com/temporalio/temporal/tools/sql"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/environment"
+	"go.temporal.io/server/tools/common/schema/test"
+	"go.temporal.io/server/tools/sql"
 )
 
 type (
@@ -144,13 +144,13 @@ CREATE TABLE task_maps (
 
 CREATE TABLE tasks (
   namespace_id BINARY(16) NOT NULL,
-  task_list_name VARCHAR(255) NOT NULL,
-  task_type TINYINT NOT NULL, -- {Activity, Decision}
+  task_queue_name VARCHAR(255) NOT NULL,
+  task_type TINYINT NOT NULL, -- {Activity, Workflow}
   task_id BIGINT NOT NULL,
   --
   data BLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
-  PRIMARY KEY (namespace_id, task_list_name, task_type, task_id)
+  PRIMARY KEY (namespace_id, task_queue_name, task_type, task_id)
 );
 `
 }

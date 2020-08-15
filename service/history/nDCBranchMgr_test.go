@@ -33,14 +33,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/serviceerror"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 type (
@@ -187,25 +188,24 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastWriteVersion, true).Return(nil).Times(1)
-	decisionInfo := &decisionInfo{
+	workflowTask := &workflowTaskInfo{
 		ScheduleID: 1234,
 		StartedID:  2345,
 	}
-	s.mockMutableState.EXPECT().GetInFlightDecision().Return(decisionInfo, true).Times(1)
+	s.mockMutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true).Times(1)
 	// GetExecutionInfo's return value is not used by this test
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).Times(1)
-	s.mockMutableState.EXPECT().AddDecisionTaskFailedEvent(
-		decisionInfo.ScheduleID,
-		decisionInfo.StartedID,
-		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
+	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
+		workflowTask.ScheduleID,
+		workflowTask.StartedID,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		identityHistoryService,
 		"",
 		"",
 		"",
-		"",
 		int64(0),
-	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
+	).Return(&historypb.HistoryEvent{}, nil).Times(1)
 	s.mockMutableState.EXPECT().FlushBufferedEvents().Return(nil).Times(1)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(lastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -278,7 +278,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEv
 		incomingVersionHistory,
 		150+2,
 		300)
-	s.IsType(&serviceerror.RetryTaskV2{}, err)
+	s.IsType(&serviceerrors.RetryTaskV2{}, err)
 }
 
 func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMissingEventInBetween() {
@@ -373,5 +373,5 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_Missin
 		baseBranchLCAEventID+2,
 		baseBranchLCAEventVersion,
 	)
-	s.IsType(&serviceerror.RetryTaskV2{}, err)
+	s.IsType(&serviceerrors.RetryTaskV2{}, err)
 }

@@ -31,8 +31,8 @@ import (
 	"github.com/pborman/uuid"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/common"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common"
 )
 
 var _ Client = (*clientImpl)(nil)
@@ -226,18 +226,18 @@ func (c *clientImpl) ReapplyEvents(
 	return client.ReapplyEvents(ctx, request, opts...)
 }
 
-func (c *clientImpl) ReadDLQMessages(
+func (c *clientImpl) GetDLQMessages(
 	ctx context.Context,
-	request *adminservice.ReadDLQMessagesRequest,
+	request *adminservice.GetDLQMessagesRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.ReadDLQMessagesResponse, error) {
+) (*adminservice.GetDLQMessagesResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.ReadDLQMessages(ctx, request, opts...)
+	return client.GetDLQMessages(ctx, request, opts...)
 }
 
 func (c *clientImpl) PurgeDLQMessages(
@@ -281,6 +281,20 @@ func (c *clientImpl) RefreshWorkflowTasks(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.RefreshWorkflowTasks(ctx, request, opts...)
+}
+
+func (c *clientImpl) ResendReplicationTasks(
+	ctx context.Context,
+	request *adminservice.ResendReplicationTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ResendReplicationTasksResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ResendReplicationTasks(ctx, request, opts...)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

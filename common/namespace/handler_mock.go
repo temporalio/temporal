@@ -33,7 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	workflowservice "go.temporal.io/temporal-proto/workflowservice"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 )
 
 // MockHandler is a mock of Handler interface.

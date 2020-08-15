@@ -36,8 +36,8 @@ import (
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
 
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/service/config"
 )
 
 const (
@@ -45,7 +45,7 @@ const (
 )
 
 var (
-	// ErrBucketNotFound is non retriable error that is thrown when the bucket doesn't exist
+	// ErrBucketNotFound is non retryable error that is thrown when the bucket doesn't exist
 	ErrBucketNotFound = errors.New("bucket not found")
 	errObjectNotFound = errors.New("object not found")
 	bucketNameRegExp  = regexp.MustCompile(bucketNameRegExpRaw)

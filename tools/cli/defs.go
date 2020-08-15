@@ -30,8 +30,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 const (
@@ -61,15 +60,18 @@ const (
 	defaultContextTimeoutForLongPoll             = 2 * time.Minute
 	defaultContextTimeoutForListArchivedWorkflow = 3 * time.Minute
 
-	defaultDecisionTimeoutInSeconds = 10
-	defaultPageSizeForList          = 500
-	defaultPageSizeForScan          = 2000
-	defaultWorkflowIDReusePolicy    = commonpb.WorkflowIdReusePolicy_AllowDuplicate
+	defaultWorkflowTaskTimeoutInSeconds = 10
+	defaultPageSizeForList              = 500
+	defaultPageSizeForScan              = 2000
+	defaultWorkflowIDReusePolicy        = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 
 	workflowStatusNotSet = -1
 	showErrorStackEnv    = `TEMPORAL_CLI_SHOW_STACKS`
 
 	searchAttrInputSeparator = "|"
+
+	cassandraDBType = "cassandra"
+	mySQLDBType     = "mysql"
 )
 
 var envKeysForUserName = []string{
@@ -79,10 +81,10 @@ var envKeysForUserName = []string{
 }
 
 var resetTypesMap = map[string]string{
-	"FirstDecisionCompleted": "",
-	"LastDecisionCompleted":  "",
-	"LastContinuedAsNew":     "",
-	"BadBinary":              FlagResetBadBinaryChecksum,
+	"FirstWorkflowTask": "",
+	"LastWorkflowTask":  "",
+	"LastContinuedAsNew":         "",
+	"BadBinary":                  FlagResetBadBinaryChecksum,
 }
 
 type jsonType int
@@ -102,26 +104,26 @@ var (
 	tableHeaderBlue         = tablewriter.Colors{tablewriter.FgHiBlueColor}
 	optionErr               = "there is something wrong with your command options"
 	osExit                  = os.Exit
-	workflowClosedStatusMap = map[string]executionpb.WorkflowExecutionStatus{
-		"running":        executionpb.WorkflowExecutionStatus_Running,
-		"completed":      executionpb.WorkflowExecutionStatus_Completed,
-		"failed":         executionpb.WorkflowExecutionStatus_Failed,
-		"canceled":       executionpb.WorkflowExecutionStatus_Canceled,
-		"terminated":     executionpb.WorkflowExecutionStatus_Terminated,
-		"continuedasnew": executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		"continueasnew":  executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		"timedout":       executionpb.WorkflowExecutionStatus_TimedOut,
+	workflowClosedStatusMap = map[string]enumspb.WorkflowExecutionStatus{
+		"running":        enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		"completed":      enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		"failed":         enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		"canceled":       enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		"terminated":     enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		"continuedasnew": enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		"continueasnew":  enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		"timedout":       enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 		// below are some alias
-		"r":         executionpb.WorkflowExecutionStatus_Running,
-		"c":         executionpb.WorkflowExecutionStatus_Completed,
-		"complete":  executionpb.WorkflowExecutionStatus_Completed,
-		"f":         executionpb.WorkflowExecutionStatus_Failed,
-		"fail":      executionpb.WorkflowExecutionStatus_Failed,
-		"cancel":    executionpb.WorkflowExecutionStatus_Canceled,
-		"terminate": executionpb.WorkflowExecutionStatus_Terminated,
-		"term":      executionpb.WorkflowExecutionStatus_Terminated,
-		"continue":  executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		"cont":      executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		"timeout":   executionpb.WorkflowExecutionStatus_TimedOut,
+		"r":         enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		"c":         enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		"complete":  enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		"f":         enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		"fail":      enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		"cancel":    enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		"terminate": enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		"term":      enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		"continue":  enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		"cont":      enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		"timeout":   enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 )

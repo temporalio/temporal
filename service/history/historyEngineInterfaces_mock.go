@@ -30,11 +30,13 @@ package history
 
 import (
 	reflect "reflect"
+	"time"
 
-	"github.com/gogo/protobuf/types"
 	gomock "github.com/golang/mock/gomock"
 
-	task "github.com/temporalio/temporal/common/task"
+	task "go.temporal.io/server/common/task"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 // MockqueueTaskInfo is a mock of queueTaskInfo interface
@@ -89,10 +91,10 @@ func (mr *MockqueueTaskInfoMockRecorder) GetTaskID() *gomock.Call {
 }
 
 // GetTaskType mocks base method
-func (m *MockqueueTaskInfo) GetTaskType() int32 {
+func (m *MockqueueTaskInfo) GetTaskType() enumsspb.TaskType {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTaskType")
-	ret0, _ := ret[0].(int32)
+	ret0, _ := ret[0].(enumsspb.TaskType)
 	return ret0
 }
 
@@ -102,18 +104,18 @@ func (mr *MockqueueTaskInfoMockRecorder) GetTaskType() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskType", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetTaskType))
 }
 
-// GetVisibilityTimestamp mocks base method
-func (m *MockqueueTaskInfo) GetVisibilityTimestamp() *types.Timestamp {
+// GetVisibilityTime mocks base method
+func (m *MockqueueTaskInfo) GetVisibilityTime() *time.Time {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVisibilityTimestamp")
-	ret0, _ := ret[0].(*types.Timestamp)
+	ret := m.ctrl.Call(m, "GetVisibilityTime")
+	ret0, _ := ret[0].(*time.Time)
 	return ret0
 }
 
-// GetVisibilityTimestamp indicates an expected call of GetVisibilityTimestamp
+// GetVisibilityTime indicates an expected call of GetVisibilityTime
 func (mr *MockqueueTaskInfoMockRecorder) GetVisibilityTimestamp() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTimestamp", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetVisibilityTimestamp))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTime", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetVisibilityTime))
 }
 
 // GetWorkflowId mocks base method
@@ -131,10 +133,10 @@ func (mr *MockqueueTaskInfoMockRecorder) GetWorkflowID() *gomock.Call {
 }
 
 // GetRunId mocks base method
-func (m *MockqueueTaskInfo) GetRunId() []byte {
+func (m *MockqueueTaskInfo) GetRunId() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRunId")
-	ret0, _ := ret[0].([]byte)
+	ret0, _ := ret[0].(string)
 	return ret0
 }
 
@@ -145,10 +147,10 @@ func (mr *MockqueueTaskInfoMockRecorder) GetRunID() *gomock.Call {
 }
 
 // GetNamespaceId mocks base method
-func (m *MockqueueTaskInfo) GetNamespaceId() []byte {
+func (m *MockqueueTaskInfo) GetNamespaceId() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespaceId")
-	ret0, _ := ret[0].([]byte)
+	ret0, _ := ret[0].(string)
 	return ret0
 }
 
@@ -316,10 +318,10 @@ func (mr *MockqueueTaskMockRecorder) GetTaskID() *gomock.Call {
 }
 
 // GetTaskType mocks base method
-func (m *MockqueueTask) GetTaskType() int32 {
+func (m *MockqueueTask) GetTaskType() enumsspb.TaskType {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTaskType")
-	ret0, _ := ret[0].(int32)
+	ret0, _ := ret[0].(enumsspb.TaskType)
 	return ret0
 }
 
@@ -329,18 +331,18 @@ func (mr *MockqueueTaskMockRecorder) GetTaskType() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskType", reflect.TypeOf((*MockqueueTask)(nil).GetTaskType))
 }
 
-// GetVisibilityTimestamp mocks base method
-func (m *MockqueueTask) GetVisibilityTimestamp() *types.Timestamp {
+// GetVisibilityTime mocks base method
+func (m *MockqueueTask) GetVisibilityTime() *time.Time {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVisibilityTimestamp")
-	ret0, _ := ret[0].(*types.Timestamp)
+	ret := m.ctrl.Call(m, "GetVisibilityTime")
+	ret0, _ := ret[0].(*time.Time)
 	return ret0
 }
 
-// GetVisibilityTimestamp indicates an expected call of GetVisibilityTimestamp
+// GetVisibilityTime indicates an expected call of GetVisibilityTime
 func (mr *MockqueueTaskMockRecorder) GetVisibilityTimestamp() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTimestamp", reflect.TypeOf((*MockqueueTask)(nil).GetVisibilityTimestamp))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTime", reflect.TypeOf((*MockqueueTask)(nil).GetVisibilityTime))
 }
 
 // GetWorkflowId mocks base method
@@ -358,10 +360,10 @@ func (mr *MockqueueTaskMockRecorder) GetWorkflowID() *gomock.Call {
 }
 
 // GetRunId mocks base method
-func (m *MockqueueTask) GetRunId() []byte {
+func (m *MockqueueTask) GetRunId() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRunId")
-	ret0, _ := ret[0].([]byte)
+	ret0, _ := ret[0].(string)
 	return ret0
 }
 
@@ -372,10 +374,10 @@ func (mr *MockqueueTaskMockRecorder) GetRunID() *gomock.Call {
 }
 
 // GetNamespaceId mocks base method
-func (m *MockqueueTask) GetNamespaceId() []byte {
+func (m *MockqueueTask) GetNamespaceId() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespaceId")
-	ret0, _ := ret[0].([]byte)
+	ret0, _ := ret[0].(string)
 	return ret0
 }
 

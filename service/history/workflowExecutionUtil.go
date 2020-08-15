@@ -25,12 +25,15 @@
 package history
 
 import (
-	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
-	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"time"
 
-	"github.com/temporalio/temporal/common"
+	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type workflowContext interface {
@@ -49,16 +52,16 @@ type workflowContextImpl struct {
 }
 
 type updateWorkflowAction struct {
-	noop           bool
-	createDecision bool
+	noop               bool
+	createWorkflowTask bool
 }
 
 var (
-	updateWorkflowWithNewDecision = &updateWorkflowAction{
-		createDecision: true,
+	updateWorkflowWithNewWorkflowTask = &updateWorkflowAction{
+		createWorkflowTask: true,
 	}
-	updateWorkflowWithoutDecision = &updateWorkflowAction{
-		createDecision: false,
+	updateWorkflowWithoutWorkflowTask = &updateWorkflowAction{
+		createWorkflowTask: false,
 	}
 )
 
@@ -106,19 +109,18 @@ func newWorkflowContext(
 	}
 }
 
-func failDecision(
+func failWorkflowTask(
 	mutableState mutableState,
-	decision *decisionInfo,
-	decisionFailureCause eventpb.DecisionTaskFailedCause,
+	workflowTask *workflowTaskInfo,
+	workflowTaskFailureCause enumspb.WorkflowTaskFailedCause,
 ) error {
 
-	if _, err := mutableState.AddDecisionTaskFailedEvent(
-		decision.ScheduleID,
-		decision.StartedID,
-		decisionFailureCause,
+	if _, err := mutableState.AddWorkflowTaskFailedEvent(
+		workflowTask.ScheduleID,
+		workflowTask.StartedID,
+		workflowTaskFailureCause,
 		nil,
 		identityHistoryService,
-		"",
 		"",
 		"",
 		"",
@@ -130,17 +132,17 @@ func failDecision(
 	return mutableState.FlushBufferedEvents()
 }
 
-func scheduleDecision(
+func scheduleWorkflowTask(
 	mutableState mutableState,
 ) error {
 
-	if mutableState.HasPendingDecision() {
+	if mutableState.HasPendingWorkflowTask() {
 		return nil
 	}
 
-	_, err := mutableState.AddDecisionTaskScheduledEvent(false)
+	_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
 	if err != nil {
-		return serviceerror.NewInternal("Failed to add decision scheduled event.")
+		return serviceerror.NewInternal("Failed to add workflow task scheduled event.")
 	}
 	return nil
 }
@@ -149,14 +151,14 @@ func retryWorkflow(
 	mutableState mutableState,
 	eventBatchFirstEventID int64,
 	parentNamespace string,
-	continueAsNewAttributes *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes,
+	continueAsNewAttributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) (mutableState, error) {
 
-	if decision, ok := mutableState.GetInFlightDecision(); ok {
-		if err := failDecision(
+	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
+		if err := failWorkflowTask(
 			mutableState,
-			decision,
-			eventpb.DecisionTaskFailedCause_ForceCloseDecision,
+			workflowTask,
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		); err != nil {
 			return nil, err
 		}
@@ -177,13 +179,14 @@ func retryWorkflow(
 func timeoutWorkflow(
 	mutableState mutableState,
 	eventBatchFirstEventID int64,
+	retryState enumspb.RetryState,
 ) error {
 
-	if decision, ok := mutableState.GetInFlightDecision(); ok {
-		if err := failDecision(
+	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
+		if err := failWorkflowTask(
 			mutableState,
-			decision,
-			eventpb.DecisionTaskFailedCause_ForceCloseDecision,
+			workflowTask,
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		); err != nil {
 			return err
 		}
@@ -191,6 +194,7 @@ func timeoutWorkflow(
 
 	_, err := mutableState.AddTimeoutWorkflowEvent(
 		eventBatchFirstEventID,
+		retryState,
 	)
 	return err
 }
@@ -203,11 +207,11 @@ func terminateWorkflow(
 	terminateIdentity string,
 ) error {
 
-	if decision, ok := mutableState.GetInFlightDecision(); ok {
-		if err := failDecision(
+	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
+		if err := failWorkflowTask(
 			mutableState,
-			decision,
-			eventpb.DecisionTaskFailedCause_ForceCloseDecision,
+			workflowTask,
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		); err != nil {
 			return err
 		}
@@ -220,4 +224,27 @@ func terminateWorkflow(
 		terminateIdentity,
 	)
 	return err
+}
+
+func getWorkflowExecutionTimeout(namespace string, requestedTimeout time.Duration, serviceConfig *Config) time.Duration {
+	executionTimeoutSeconds := requestedTimeout
+	if executionTimeoutSeconds == 0 {
+		executionTimeoutSeconds = timestamp.RoundUp(serviceConfig.DefaultWorkflowExecutionTimeout(namespace))
+	}
+	maxWorkflowExecutionTimeout := timestamp.RoundUp(serviceConfig.MaxWorkflowExecutionTimeout(namespace))
+	executionTimeoutSeconds = timestamp.MinDuration(executionTimeoutSeconds, maxWorkflowExecutionTimeout)
+
+	return executionTimeoutSeconds
+}
+
+func getWorkflowRunTimeout(namespace string, requestedTimeout, executionTimeout time.Duration, serviceConfig *Config) time.Duration {
+	runTimeoutSeconds := requestedTimeout
+	if runTimeoutSeconds == 0 {
+		runTimeoutSeconds = timestamp.RoundUp(serviceConfig.DefaultWorkflowRunTimeout(namespace))
+	}
+	maxWorkflowRunTimeout := timestamp.RoundUp(serviceConfig.MaxWorkflowRunTimeout(namespace))
+	runTimeoutSeconds = timestamp.MinDuration(runTimeoutSeconds, maxWorkflowRunTimeout)
+	runTimeoutSeconds = timestamp.MinDuration(runTimeoutSeconds, executionTimeout)
+
+	return runTimeoutSeconds
 }

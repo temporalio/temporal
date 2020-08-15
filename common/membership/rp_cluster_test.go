@@ -25,23 +25,20 @@
 package membership
 
 import (
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
 
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
 
 	"github.com/pborman/uuid"
-	"github.com/uber/ringpop-go"
-	"github.com/uber/ringpop-go/discovery/statichosts"
-	"github.com/uber/ringpop-go/swim"
+	"github.com/temporalio/ringpop-go"
 	"github.com/uber/tchannel-go"
 
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/log/tag"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log/tag"
 )
 
 // TestRingpopCluster is a type that represents a test ringpop cluster
@@ -114,10 +111,6 @@ func NewTestRingpopCluster(
 		cluster.seedNode = cluster.hostAddrs[0]
 	}
 	logger.Info("seedNode", tag.Name(cluster.seedNode))
-	bOptions := new(swim.BootstrapOptions)
-	bOptions.DiscoverProvider = statichosts.New(cluster.seedNode) // just use the first addr as the seed
-	bOptions.MaxJoinDuration = time.Duration(time.Second * 2)
-	bOptions.JoinSize = 1
 
 	seedAddress, seedPort, err := SplitHostPortTyped(cluster.seedNode)
 	seedMember := &persistence.ClusterMember{
@@ -128,8 +121,28 @@ func NewTestRingpopCluster(
 		LastHeartbeat: time.Now().UTC(),
 	}
 
-	mockMgr.EXPECT().GetClusterMembers(gomock.Any()).
-		Return(&persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember}}, nil).AnyTimes()
+	firstGetClusterMemberCall := true
+	mockMgr.EXPECT().GetClusterMembers(gomock.Any()).DoAndReturn(
+		func(_ *persistence.GetClusterMembersRequest) (*persistence.GetClusterMembersResponse, error) {
+			res := &persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember}}
+
+			if firstGetClusterMemberCall {
+				// The first time GetClusterMembers is invoked, we simulate returning a stale/bad heartbeat.
+				// All subsequent calls only return the single "good" seed member
+				// This ensures that we exercise the retry path in bootstrap properly.
+				badSeedMember := &persistence.ClusterMember{
+					HostID:        uuid.NewUUID(),
+					RPCAddress:    seedAddress,
+					RPCPort:       seedPort + 1,
+					SessionStart:  time.Now().UTC(),
+					LastHeartbeat: time.Now().UTC(),
+				}
+				res = &persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember, badSeedMember}}
+			}
+
+			firstGetClusterMemberCall = false
+			return res, nil
+		}).AnyTimes()
 
 	for i := 0; i < size; i++ {
 		resolver := func() (string, error) {
@@ -163,7 +176,7 @@ func (c *TestRingpopCluster) GetSeedNode() string {
 // KillHost kills the given host within the cluster
 func (c *TestRingpopCluster) KillHost(uuid string) {
 	for i := 0; i < len(c.hostUUIDs); i++ {
-		if 0 == strings.Compare(c.hostUUIDs[i], uuid) {
+		if c.hostUUIDs[i] == uuid {
 			c.rings[i].Stop()
 			c.channels[i].Close()
 			c.rings[i] = nil
@@ -196,7 +209,7 @@ func (c *TestRingpopCluster) GetHostAddrs() []string {
 // the given addr, if it exists
 func (c *TestRingpopCluster) FindHostByAddr(addr string) (HostInfo, bool) {
 	for _, hi := range c.hostInfoList {
-		if strings.Compare(hi.addr, addr) == 0 {
+		if hi.addr == addr {
 			return hi, true
 		}
 	}

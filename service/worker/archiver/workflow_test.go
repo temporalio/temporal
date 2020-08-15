@@ -25,22 +25,22 @@
 package archiver
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal/activity"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.uber.org/zap"
 
-	"go.temporal.io/temporal/testsuite"
-	"go.temporal.io/temporal/worker"
-	"go.temporal.io/temporal/workflow"
-
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/metrics"
-	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/metrics"
+	mmocks "go.temporal.io/server/common/metrics/mocks"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 var (
@@ -99,8 +99,9 @@ func (s *workflowSuite) TestArchivalWorkflow_Fail_HashesDoNotEqual() {
 	env.ExecuteWorkflow(archivalWorkflowTest)
 
 	s.True(env.IsWorkflowCompleted())
-	_, ok := env.GetWorkflowError().(*workflow.ContinueAsNewError)
-	s.True(ok, "Called ContinueAsNew")
+	err := env.GetWorkflowError()
+	var continueAsNewErr *workflow.ContinueAsNewError
+	s.True(errors.As(err, &continueAsNewErr), "Called ContinueAsNew")
 	env.AssertExpectations(s.T())
 }
 
@@ -144,8 +145,9 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 	env.ExecuteWorkflow(archivalWorkflowTest)
 
 	s.True(env.IsWorkflowCompleted())
-	_, ok := env.GetWorkflowError().(*workflow.ContinueAsNewError)
-	s.True(ok, "Called ContinueAsNew")
+	err := env.GetWorkflowError()
+	var continueAsNew *workflow.ContinueAsNewError
+	s.True(errors.As(err, &continueAsNew), "Called ContinueAsNew")
 	env.AssertExpectations(s.T())
 }
 
@@ -161,7 +163,7 @@ func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
 
 	replayer := worker.NewWorkflowReplayer()
 	s.registerWorkflowsForReplayer(replayer)
-	err := replayer.ReplayWorkflowHistoryFromJSONFile(logger, "testdata/archival_workflow_history_v1.json")
+	err := replayer.ReplayWorkflowHistoryFromJSONFile(log.NewZapAdapter(logger), "testdata/archival_workflow_history_v1.json")
 	s.NoError(err)
 }
 
@@ -170,6 +172,5 @@ func archivalWorkflowTest(ctx workflow.Context) error {
 }
 
 func (s *workflowSuite) registerWorkflowsForReplayer(env worker.WorkflowReplayer) {
-	env.RegisterWorkflow(archivalWorkflowTest)
 	env.RegisterWorkflowWithOptions(archivalWorkflow, workflow.RegisterOptions{Name: archivalWorkflowFnName})
 }

@@ -35,15 +35,15 @@
           "type": "long"
         },
         "ExecutionStatus": {
-          "type": "integer"
+          "type": "long"
         },
         "HistoryLength": {
-          "type": "integer"
+          "type": "long"
         },
         "KafkaKey": {
           "type": "keyword"
         },
-        "TaskList": {
+        "TaskQueue": {
           "type": "keyword"
         },
         "Attr": {
@@ -52,8 +52,8 @@
             "CustomStringField":  { "type": "text" },
             "CustomKeywordField": { "type": "keyword"},
             "CustomIntField": { "type": "long"},
-            "CustomBoolField": { "type": "boolean"},
             "CustomDoubleField": { "type": "double"},
+            "CustomBoolField": { "type": "boolean"},
             "CustomDatetimeField": { "type": "date"},
             "project": { "type": "keyword"},
             "service": { "type": "keyword"},

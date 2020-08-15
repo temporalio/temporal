@@ -30,7 +30,7 @@ import (
 
 	"github.com/gocql/gocql"
 
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/service/config"
 )
 
 // NewCassandraCluster creates a cassandra cluster from a given configuration

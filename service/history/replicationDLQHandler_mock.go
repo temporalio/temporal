@@ -33,7 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	replication "github.com/temporalio/temporal/.gen/proto/replication"
+	repication "go.temporal.io/server/api/replication/v1"
 )
 
 // MockreplicationDLQHandler is a mock of replicationDLQHandler interface.
@@ -59,20 +59,20 @@ func (m *MockreplicationDLQHandler) EXPECT() *MockreplicationDLQHandlerMockRecor
 	return m.recorder
 }
 
-// readMessages mocks base method.
-func (m *MockreplicationDLQHandler) readMessages(ctx context.Context, sourceCluster string, lastMessageID int64, pageSize int, pageToken []byte) ([]*replication.ReplicationTask, []byte, error) {
+// getMessages mocks base method.
+func (m *MockreplicationDLQHandler) getMessages(ctx context.Context, sourceCluster string, lastMessageID int64, pageSize int, pageToken []byte) ([]*repication.ReplicationTask, []byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "readMessages", ctx, sourceCluster, lastMessageID, pageSize, pageToken)
-	ret0, _ := ret[0].([]*replication.ReplicationTask)
+	ret := m.ctrl.Call(m, "getMessages", ctx, sourceCluster, lastMessageID, pageSize, pageToken)
+	ret0, _ := ret[0].([]*repication.ReplicationTask)
 	ret1, _ := ret[1].([]byte)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
 
-// readMessages indicates an expected call of readMessages.
-func (mr *MockreplicationDLQHandlerMockRecorder) readMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken interface{}) *gomock.Call {
+// getMessages indicates an expected call of getMessages.
+func (mr *MockreplicationDLQHandlerMockRecorder) getMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "readMessages", reflect.TypeOf((*MockreplicationDLQHandler)(nil).readMessages), ctx, sourceCluster, lastMessageID, pageSize, pageToken)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getMessages", reflect.TypeOf((*MockreplicationDLQHandler)(nil).getMessages), ctx, sourceCluster, lastMessageID, pageSize, pageToken)
 }
 
 // purgeMessages mocks base method.

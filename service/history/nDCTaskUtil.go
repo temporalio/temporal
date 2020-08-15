@@ -27,23 +27,21 @@ package history
 import (
 	"fmt"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/gogo/protobuf/types"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 )
 
 // verifyTaskVersion, will return true if failover version check is successful
 func verifyTaskVersion(
 	shard ShardContext,
 	logger log.Logger,
-	namespaceID []byte,
+	namespaceID string,
 	version int64,
 	taskVersion int64,
 	task interface{},
@@ -54,19 +52,19 @@ func verifyTaskVersion(
 	}
 
 	// the first return value is whether this task is valid for further processing
-	namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(primitives.UUIDString(namespaceID))
+	namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
-		logger.Debug("Cannot find namespaceID", tag.WorkflowNamespaceIDBytes(namespaceID), tag.Error(err))
+		logger.Debug("Cannot find namespaceID", tag.WorkflowNamespaceID(namespaceID), tag.Error(err))
 		return false, err
 	}
 	if !namespaceEntry.IsGlobalNamespace() {
-		logger.Debug("NamespaceID is not active, task version check pass", tag.WorkflowNamespaceIDBytes(namespaceID), tag.Task(task))
+		logger.Debug("NamespaceID is not active, task version check pass", tag.WorkflowNamespaceID(namespaceID), tag.Task(task))
 		return true, nil
 	} else if version != taskVersion {
-		logger.Debug("NamespaceID is active, task version != target version", tag.WorkflowNamespaceIDBytes(namespaceID), tag.Task(task), tag.TaskVersion(version))
+		logger.Debug("NamespaceID is active, task version != target version", tag.WorkflowNamespaceID(namespaceID), tag.Task(task), tag.TaskVersion(version))
 		return false, nil
 	}
-	logger.Debug("NamespaceID is active, task version == target version", tag.WorkflowNamespaceIDBytes(namespaceID), tag.Task(task), tag.TaskVersion(version))
+	logger.Debug("NamespaceID is active, task version == target version", tag.WorkflowNamespaceID(namespaceID), tag.Task(task), tag.TaskVersion(version))
 	return true, nil
 }
 
@@ -90,13 +88,13 @@ func loadMutableStateForTransferTask(
 	executionInfo := msBuilder.GetExecutionInfo()
 
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
-	// the exception is decision consistently fail
-	// there will be no event generated, thus making the decision schedule ID == next event ID
-	isDecisionRetry := transferTask.TaskType == persistence.TransferTaskTypeDecisionTask &&
-		executionInfo.DecisionScheduleID == transferTask.GetScheduleId() &&
-		executionInfo.DecisionAttempt > 0
+	// the exception is workflow task consistently fail
+	// there will be no event generated, thus making the workflow task schedule ID == next event ID
+	isWorkflowTaskRetry := transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK &&
+		executionInfo.WorkflowTaskScheduleID == transferTask.GetScheduleId() &&
+		executionInfo.WorkflowTaskAttempt > 1
 
-	if transferTask.GetScheduleId() >= msBuilder.GetNextEventID() && !isDecisionRetry {
+	if transferTask.GetScheduleId() >= msBuilder.GetNextEventID() && !isWorkflowTaskRetry {
 		metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.StaleMutableStateCounter)
 		context.clear()
 
@@ -135,13 +133,13 @@ func loadMutableStateForTimerTask(
 	executionInfo := msBuilder.GetExecutionInfo()
 
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
-	// the exception is decision consistently fail
-	// there will be no event generated, thus making the decision schedule ID == next event ID
-	isDecisionRetry := timerTask.TaskType == persistence.TaskTypeDecisionTimeout &&
-		executionInfo.DecisionScheduleID == timerTask.GetEventId() &&
-		executionInfo.DecisionAttempt > 0
+	// the exception is workflow task consistently fail
+	// there will be no event generated, thus making the workflow task schedule ID == next event ID
+	isWorkflowTaskRetry := timerTask.TaskType == enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT &&
+		executionInfo.WorkflowTaskScheduleID == timerTask.GetEventId() &&
+		executionInfo.WorkflowTaskAttempt > 1
 
-	if timerTask.GetEventId() >= msBuilder.GetNextEventID() && !isDecisionRetry {
+	if timerTask.GetEventId() >= msBuilder.GetNextEventID() && !isWorkflowTaskRetry {
 		metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
 		context.clear()
 
@@ -165,23 +163,21 @@ func initializeLoggerForTask(
 	task queueTaskInfo,
 	logger log.Logger,
 ) log.Logger {
-
-	t, _ := types.TimestampFromProto(task.GetVisibilityTimestamp())
 	taskLogger := logger.WithTags(
 		tag.ShardID(shardID),
 		tag.TaskID(task.GetTaskId()),
-		tag.TaskVisibilityTimestamp(t.UnixNano()),
+		tag.TaskVisibilityTimestamp(task.GetVisibilityTime().UnixNano()),
 		tag.FailoverVersion(task.GetVersion()),
 		tag.TaskType(task.GetTaskType()),
-		tag.WorkflowNamespaceIDBytes(task.GetNamespaceId()),
+		tag.WorkflowNamespaceID(task.GetNamespaceId()),
 		tag.WorkflowID(task.GetWorkflowId()),
-		tag.WorkflowRunIDBytes(task.GetRunId()),
+		tag.WorkflowRunID(task.GetRunId()),
 	)
 
 	switch task := task.(type) {
 	case *persistenceblobs.TimerTaskInfo:
 		taskLogger = taskLogger.WithTags(
-			tag.WorkflowTimeoutType(int64(task.TimeoutType)),
+			tag.WorkflowTimeoutType(task.TimeoutType),
 		)
 	case *persistenceblobs.TransferTaskInfo:
 		// noop

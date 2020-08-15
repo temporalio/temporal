@@ -32,12 +32,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (
@@ -68,8 +69,9 @@ func (s *historyEventNotifierSuite) SetupTest() {
 	s.historyEventNotifier = newHistoryEventNotifier(
 		clock.NewRealTimeSource(),
 		metrics.NewClient(tally.NoopScope, metrics.History),
-		func(workflowID string) int {
-			return len(workflowID)
+		func(namespaceID, workflowID string) int {
+			key := namespaceID + "_" + workflowID
+			return len(key)
 		},
 	)
 	s.historyEventNotifier.Start()
@@ -81,15 +83,15 @@ func (s *historyEventNotifierSuite) TearDownTest() {
 
 func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	namespaceID := "namespace ID"
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "workflow ID",
 		RunId:      "run ID",
 	}
 	lastFirstEventID := int64(3)
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
-	workflowState := persistence.WorkflowStateCreated
-	workflowStatus := executionpb.WorkflowExecutionStatus_Running
+	workflowState := enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
+	workflowStatus := enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	branchToken := make([]byte, 0)
 	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
 	timerChan := time.NewTimer(time.Second * 2).C
@@ -113,7 +115,7 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 
 func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	namespaceID := "namespace ID"
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "workflow ID",
 		RunId:      "run ID",
 	}
@@ -121,8 +123,8 @@ func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	lastFirstEventID := int64(3)
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
-	workflowState := persistence.WorkflowStateCreated
-	workflowStatus := executionpb.WorkflowExecutionStatus_Running
+	workflowState := enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
+	workflowStatus := enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	branchToken := make([]byte, 0)
 	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
 	timerChan := time.NewTimer(time.Second * 5).C

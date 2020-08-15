@@ -1,0 +1,81 @@
+// Copyright (c) 2019 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.matchingservice.v1;
+option go_package = "go.temporal.io/server/api/matchingservice/v1;matchingservice";
+
+import "temporal/server/api/matchingservice/v1/request_response.proto";
+
+// MatchingService API is exposed to provide support for polling from long running applications.
+// Such applications are expected to have a worker which regularly polls for WorkflowTask and ActivityTask.  For each
+// WorkflowTask, application is expected to process the history of events for that session and respond back with next
+// commands.  For each ActivityTask, application is expected to execute the actual logic for that task and respond back
+// with completion or failure.
+service MatchingService {
+
+    // PollWorkflowTaskQueue is called by frontend to process WorkflowTask from a specific task queue.  A
+    // WorkflowTask is dispatched to callers for active workflow executions, with pending workflow tasks.
+    rpc PollWorkflowTaskQueue (PollWorkflowTaskQueueRequest) returns (PollWorkflowTaskQueueResponse) {
+    }
+
+    // PollActivityTaskQueue is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
+    // is dispatched to callers whenever a ScheduleTask command is made for a workflow execution.
+    rpc PollActivityTaskQueue (PollActivityTaskQueueRequest) returns (PollActivityTaskQueueResponse) {
+    }
+
+    // AddWorkflowTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
+    // by the MatchingEngine.
+    rpc AddWorkflowTask (AddWorkflowTaskRequest) returns (AddWorkflowTaskResponse) {
+    }
+
+    // AddActivityTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
+    // by the MatchingEngine.
+    rpc AddActivityTask (AddActivityTaskRequest) returns (AddActivityTaskResponse) {
+    }
+
+    // QueryWorkflow is called by frontend to query a workflow.
+    rpc QueryWorkflow (QueryWorkflowRequest) returns (QueryWorkflowResponse) {
+    }
+
+    // RespondQueryTaskCompleted is called by frontend to respond query completed.
+    rpc RespondQueryTaskCompleted (RespondQueryTaskCompletedRequest) returns (RespondQueryTaskCompletedResponse) {
+    }
+
+    // CancelOutstandingPoll is called by frontend to unblock long polls on matching for zombie pollers.
+    // Our rpc stack does not support context propagation, so when a client connection goes away frontend sees
+    // cancellation of context for that handler, but any corresponding calls (long-poll) to matching service does not
+    // see the cancellation propagated so it can unblock corresponding long-polls on its end.  This results is tasks
+    // being dispatched to zombie pollers in this situation.  This API is added so every time frontend makes a long-poll
+    // api call to matching it passes in a pollerId and then calls this API when it detects client connection is closed
+    // to unblock long polls for this poller and prevent tasks being sent to these zombie pollers.
+    rpc CancelOutstandingPoll (CancelOutstandingPollRequest) returns (CancelOutstandingPollResponse) {
+    }
+
+    // DescribeTaskQueue returns information about the target task queue, right now this API returns the
+    // pollers which polled this task queue in last few minutes.
+    rpc DescribeTaskQueue (DescribeTaskQueueRequest) returns (DescribeTaskQueueResponse) {
+    }
+
+    // ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
+    rpc  ListTaskQueuePartitions(ListTaskQueuePartitionsRequest) returns (ListTaskQueuePartitionsResponse){
+    }
+}

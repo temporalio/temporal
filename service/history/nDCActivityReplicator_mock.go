@@ -33,7 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
+	historyservice "go.temporal.io/server/api/historyservice/v1"
 )
 
 // MocknDCActivityReplicator is a mock of nDCActivityReplicator interface.

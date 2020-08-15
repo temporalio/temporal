@@ -28,7 +28,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/temporalio/temporal/common/log"
+	"go.temporal.io/server/common/log"
 )
 
 // nopClient is a dummy implements of dynamicconfig Client interface, all operations will always return default values.

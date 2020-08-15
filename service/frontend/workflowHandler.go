@@ -31,38 +31,39 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/elasticsearch/validator"
-	"github.com/temporalio/temporal/common/headers"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/namespace"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/quotas"
-	"github.com/temporalio/temporal/common/resource"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	filterpb "go.temporal.io/temporal-proto/filter"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	querypb "go.temporal.io/temporal-proto/query"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	versionpb "go.temporal.io/temporal-proto/version"
-	"go.temporal.io/temporal-proto/workflowservice"
-
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	filterpb "go.temporal.io/api/filter/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	versionpb "go.temporal.io/api/version/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/elasticsearch/validator"
+	"go.temporal.io/server/common/enums"
+	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const (
@@ -72,22 +73,31 @@ const (
 	HealthStatusShuttingDown
 )
 
+const (
+	serviceName = "temporal.api.workflowservice.v1.WorkflowService"
+)
+
 var _ Handler = (*WorkflowHandler)(nil)
+
+var (
+	maxTime = time.Date(2100, 1, 1, 1, 0, 0, 0, time.UTC)
+)
 
 type (
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
 		resource.Resource
 
-		shuttingDown              int32
-		healthStatus              int32
-		tokenSerializer           common.TaskTokenSerializer
-		rateLimiter               quotas.Policy
-		config                    *Config
-		versionChecker            headers.VersionChecker
-		namespaceHandler          namespace.Handler
-		visibilityQueryValidator  *validator.VisibilityQueryValidator
-		searchAttributesValidator *validator.SearchAttributesValidator
+		shuttingDown                    int32
+		healthStatus                    int32
+		tokenSerializer                 common.TaskTokenSerializer
+		rateLimiter                     quotas.Policy
+		config                          *Config
+		versionChecker                  headers.VersionChecker
+		namespaceHandler                namespace.Handler
+		visibilityQueryValidator        *validator.VisibilityQueryValidator
+		searchAttributesValidator       *validator.SearchAttributesValidator
+		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
 	}
 
 	// HealthStatus is an enum that refers to the rpc handler health status
@@ -143,6 +153,7 @@ func NewWorkflowHandler(
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 		),
+		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 	}
 
 	return handler
@@ -178,8 +189,15 @@ func (wh *WorkflowHandler) GetConfig() *Config {
 }
 
 // https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-func (wh *WorkflowHandler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
+func (wh *WorkflowHandler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
 	wh.GetLogger().Debug("Frontend service health check endpoint (gRPC) reached.")
+
+	if request.Service != serviceName {
+		return &healthpb.HealthCheckResponse{
+			Status: healthpb.HealthCheckResponse_SERVICE_UNKNOWN,
+		}, nil
+	}
+
 	status := HealthStatus(atomic.LoadInt32(&wh.healthStatus))
 	if status == HealthStatusOK {
 		return &healthpb.HealthCheckResponse{
@@ -197,7 +215,7 @@ func (wh *WorkflowHandler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_W
 }
 
 // RegisterNamespace creates a new namespace which can be used as a container for all resources.  Namespace is a top level
-// entity within Temporal, used as a container for all resources like workflow executions, tasklists, etc.  Namespace
+// entity within Temporal, used as a container for all resources like workflow executions, taskqueues, etc.  Namespace
 // acts as a sandbox and provides isolation for all resources within the namespace.  All resources belongs to exactly one
 // namespace.
 func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workflowservice.RegisterNamespaceRequest) (_ *workflowservice.RegisterNamespaceResponse, retError error) {
@@ -218,7 +236,7 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
-	if request.GetWorkflowExecutionRetentionPeriodInDays() > common.MaxWorkflowRetentionPeriodInDays {
+	if timestamp.DurationValue(request.GetWorkflowExecutionRetentionPeriod()) > common.MaxWorkflowRetentionPeriod {
 		return nil, errInvalidRetention
 	}
 
@@ -368,8 +386,8 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 }
 
 // StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
-// 'WorkflowExecutionStarted' event in history and also schedule the first DecisionTask for the worker to make the
-// first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
+// 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
+// first workflow task for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 // exists with same workflowId.
 func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *workflowservice.StartWorkflowExecutionRequest) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
@@ -410,7 +428,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, wh.error(errWorkflowIDTooLong, scope)
 	}
 
-	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
+	if err := wh.validateRetryPolicy(request.GetNamespace(), request.RetryPolicy); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -430,19 +448,19 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, wh.error(errWorkflowTypeTooLong, scope)
 	}
 
-	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, scope); err != nil {
 		return nil, err
 	}
 
-	if request.GetWorkflowExecutionTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowExecutionTimeoutSeconds, scope)
 	}
 
-	if request.GetWorkflowRunTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowRunTimeoutSeconds, scope)
 	}
 
-	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
@@ -457,6 +475,8 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	if err := wh.searchAttributesValidator.ValidateSearchAttributes(request.SearchAttributes, namespace); err != nil {
 		return nil, wh.error(err, scope)
 	}
+
+	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
 
 	wh.GetLogger().Debug("Start workflow execution request namespace", tag.WorkflowNamespace(namespace))
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(namespace)
@@ -488,7 +508,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	}
 
 	wh.GetLogger().Debug("Start workflow execution request namespaceID", tag.WorkflowNamespaceID(namespaceID))
-	resp, err := wh.GetHistoryClient().StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID, request))
+	resp, err := wh.GetHistoryClient().StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID, request, nil, time.Now().UTC()))
 
 	if err != nil {
 		return nil, wh.error(err, scope)
@@ -524,13 +544,15 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
+	if err := wh.validateExecution(request.Execution, scope); err != nil {
 		return nil, err
 	}
 
 	if request.GetMaximumPageSize() <= 0 {
 		request.MaximumPageSize = int32(wh.config.HistoryMaxPageSize(request.GetNamespace()))
 	}
+
+	enums.SetDefaultHistoryEventFilterType(&request.HistoryEventFilterType)
 
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 	if err != nil {
@@ -562,7 +584,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	// 5. error if any
 	queryHistory := func(
 		namespaceUUID string,
-		execution *executionpb.WorkflowExecution,
+		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
 	) ([]byte, string, int64, int64, bool, error) {
@@ -576,7 +598,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		if err != nil {
 			return nil, "", 0, 0, false, err
 		}
-		isWorkflowRunning := response.GetWorkflowStatus() == executionpb.WorkflowExecutionStatus_Running
+		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
@@ -586,10 +608,10 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			nil
 	}
 
-	isLongPoll := request.GetWaitForNewEvent()
-	isCloseEventOnly := request.GetHistoryEventFilterType() == filterpb.HistoryEventFilterType_CloseEvent
+	isLongPoll := request.GetWaitNewEvent()
+	isCloseEventOnly := request.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 	execution := request.Execution
-	var continuationToken *tokengenpb.HistoryContinuation
+	var continuationToken *tokenspb.HistoryContinuation
 
 	var runID string
 	lastFirstEventID := common.FirstEventID
@@ -624,7 +646,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			continuationToken.IsWorkflowRunning = isWorkflowRunning
 		}
 	} else {
-		continuationToken = &tokengenpb.HistoryContinuation{}
+		continuationToken = &tokenspb.HistoryContinuation{}
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
@@ -644,8 +666,8 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	}
 	rawHistoryQueryEnabled := wh.config.SendRawWorkflowHistory(request.GetNamespace())
 
-	history := &eventpb.History{}
-	history.Events = []*eventpb.HistoryEvent{}
+	history := &historypb.History{}
+	history.Events = []*historypb.HistoryEvent{}
 	var historyBlob []*commonpb.DataBlob
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
@@ -658,7 +680,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 					nextEventID,
 					request.GetMaximumPageSize(),
 					nil,
-					continuationToken.TransientDecision,
+					continuationToken.TransientWorkflowTask,
 					continuationToken.BranchToken,
 				)
 				if err != nil {
@@ -676,7 +698,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 					nextEventID,
 					request.GetMaximumPageSize(),
 					nil,
-					continuationToken.TransientDecision,
+					continuationToken.TransientWorkflowTask,
 					continuationToken.BranchToken,
 				)
 				if err != nil {
@@ -696,7 +718,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		// return all events
 		if continuationToken.FirstEventId >= continuationToken.NextEventId {
 			// currently there is no new event
-			history.Events = []*eventpb.HistoryEvent{}
+			history.Events = []*historypb.HistoryEvent{}
 			if !isWorkflowRunning {
 				continuationToken = nil
 			}
@@ -710,7 +732,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 					continuationToken.NextEventId,
 					request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					continuationToken.TransientDecision,
+					continuationToken.TransientWorkflowTask,
 					continuationToken.BranchToken,
 				)
 			} else {
@@ -722,7 +744,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 					continuationToken.NextEventId,
 					request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					continuationToken.TransientDecision,
+					continuationToken.TransientWorkflowTask,
 					continuationToken.BranchToken,
 				)
 			}
@@ -752,18 +774,18 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	}, nil
 }
 
-// PollForDecisionTask is called by application worker to process DecisionTask from a specific taskList.  A
-// DecisionTask is dispatched to callers for active workflow executions, with pending decisions.
-// Application is then expected to call 'RespondDecisionTaskCompleted' API when it is done processing the DecisionTask.
-// It will also create a 'DecisionTaskStarted' event in the history for that session before handing off DecisionTask to
+// PollWorkflowTaskQueue is called by application worker to process WorkflowTask from a specific task queue.  A
+// WorkflowTask is dispatched to callers for active workflow executions, with pending workflow tasks.
+// Application is then expected to call 'RespondWorkflowTaskCompleted' API when it is done processing the WorkflowTask.
+// It will also create a 'WorkflowTaskStarted' event in the history for that session before handing off WorkflowTask to
 // application worker.
-func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *workflowservice.PollForDecisionTaskRequest) (_ *workflowservice.PollForDecisionTaskResponse, retError error) {
+func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *workflowservice.PollWorkflowTaskQueueRequest) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	tagsForErrorLog := []tag.Tag{tag.WorkflowNamespace(request.GetNamespace())}
-	callTime := time.Now()
+	callTime := time.Now().UTC()
 
-	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendPollForDecisionTaskScope, request.GetNamespace())
+	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendPollWorkflowTaskQueueScope, request.GetNamespace())
 	defer sw.Stop()
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
@@ -774,10 +796,10 @@ func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *wor
 		return nil, wh.error(errRequestNotSet, scope, tagsForErrorLog...)
 	}
 
-	wh.GetLogger().Debug("Received PollForDecisionTask")
+	wh.GetLogger().Debug("Received PollWorkflowTaskQueue")
 	if err := common.ValidateLongPollContextTimeout(
 		ctx,
-		"PollForDecisionTask",
+		"PollWorkflowTaskQueue",
 		wh.GetThrottledLogger(),
 	); err != nil {
 		return nil, wh.error(err, scope, tagsForErrorLog...)
@@ -794,7 +816,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *wor
 		return nil, wh.error(errIdentityTooLong, scope, tagsForErrorLog...)
 	}
 
-	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, scope); err != nil {
 		return nil, err
 	}
 
@@ -803,18 +825,18 @@ func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *wor
 	if err != nil {
 		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
-	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
+	namespaceID := namespaceEntry.GetInfo().Id
 
-	wh.GetLogger().Debug("Poll for decision.", tag.WorkflowNamespace(namespace), tag.WorkflowNamespaceID(namespaceID))
+	wh.GetLogger().Debug("Poll workflow task queue.", tag.WorkflowNamespace(namespace), tag.WorkflowNamespaceID(namespaceID))
 	if err := wh.checkBadBinary(namespaceEntry, request.GetBinaryChecksum()); err != nil {
 		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
 
 	pollerID := uuid.New()
-	var matchingResp *matchingservice.PollForDecisionTaskResponse
+	var matchingResp *matchingservice.PollWorkflowTaskQueueResponse
 	op := func() error {
 		var err error
-		matchingResp, err = wh.GetMatchingClient().PollForDecisionTask(ctx, &matchingservice.PollForDecisionTaskRequest{
+		matchingResp, err = wh.GetMatchingClient().PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
 			NamespaceId: namespaceID,
 			PollerId:    pollerID,
 			PollRequest: request,
@@ -824,7 +846,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *wor
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, tasklistpb.TaskListType_Decision, request.TaskList, pollerID)
+		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
 		if err != nil {
 			// For all other errors log an error and return it back to client.
 			ctxTimeout := "not-set"
@@ -832,8 +854,8 @@ func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *wor
 			if ok {
 				ctxTimeout = ctxDeadline.Sub(callTime).String()
 			}
-			wh.GetLogger().Error("PollForDecisionTask failed.",
-				tag.WorkflowTaskListName(request.GetTaskList().GetName()),
+			wh.GetLogger().Error("PollWorkflowTaskQueue failed.",
+				tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
 				tag.Value(ctxTimeout),
 				tag.Error(err))
 			return nil, wh.error(err, scope)
@@ -846,23 +868,23 @@ func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *wor
 	tagsForErrorLog = append(tagsForErrorLog, []tag.Tag{tag.WorkflowID(
 		matchingResp.GetWorkflowExecution().GetWorkflowId()),
 		tag.WorkflowRunID(matchingResp.GetWorkflowExecution().GetRunId())}...)
-	resp, err := wh.createPollForDecisionTaskResponse(ctx, scope, namespaceID, matchingResp, matchingResp.GetBranchToken())
+	resp, err := wh.createPollWorkflowTaskQueueResponse(ctx, scope, namespaceID, matchingResp, matchingResp.GetBranchToken())
 	if err != nil {
 		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
 	return resp, nil
 }
 
-// RespondDecisionTaskCompleted is called by application worker to complete a DecisionTask handed as a result of
-// 'PollForDecisionTask' API call.  Completing a DecisionTask will result in new events for the workflow execution and
-// potentially new ActivityTask being created for corresponding decisions.  It will also create a DecisionTaskCompleted
-// event in the history for that session.  Use the 'taskToken' provided as response of PollForDecisionTask API call
-// for completing the DecisionTask.
-// The response could contain a new decision task if there is one or if the request asking for one.
-func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, request *workflowservice.RespondDecisionTaskCompletedRequest) (_ *workflowservice.RespondDecisionTaskCompletedResponse, retError error) {
+// RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of
+// 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new events for the workflow execution and
+// potentially new ActivityTask being created for corresponding commands.  It will also create a WorkflowTaskCompleted
+// event in the history for that session.  Use the 'taskToken' provided as response of PollWorkflowTaskQueue API call
+// for completing the WorkflowTask.
+// The response could contain a new workflow task if there is one or if the request asking for one.
+func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(ctx context.Context, request *workflowservice.RespondWorkflowTaskCompletedRequest) (_ *workflowservice.RespondWorkflowTaskCompletedResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.getDefaultScope(metrics.FrontendRespondDecisionTaskCompletedScope)
+	scope := wh.getDefaultScope(metrics.FrontendRespondWorkflowTaskCompletedScope)
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -882,7 +904,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 		return nil, wh.error(err, scope)
 	}
 
-	namespaceId := primitives.UUIDString(taskToken.GetNamespaceId())
+	namespaceId := taskToken.GetNamespaceId()
 	if namespaceId == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
@@ -893,7 +915,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 	}
 
 	scope, sw := wh.startRequestProfileWithNamespace(
-		metrics.FrontendRespondDecisionTaskCompletedScope, namespaceEntry.GetInfo().Name,
+		metrics.FrontendRespondWorkflowTaskCompletedScope, namespaceEntry.GetInfo().Name,
 	)
 	defer sw.Stop()
 
@@ -901,7 +923,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 		return nil, errShuttingDown
 	}
 
-	histResp, err := wh.GetHistoryClient().RespondDecisionTaskCompleted(ctx, &historyservice.RespondDecisionTaskCompletedRequest{
+	histResp, err := wh.GetHistoryClient().RespondWorkflowTaskCompleted(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId:     namespaceId,
 		CompleteRequest: request},
 	)
@@ -913,9 +935,9 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	completedResp := &workflowservice.RespondDecisionTaskCompletedResponse{}
-	if request.GetReturnNewDecisionTask() && histResp != nil && histResp.StartedResponse != nil {
-		taskToken := &tokengenpb.Task{
+	completedResp := &workflowservice.RespondWorkflowTaskCompletedResponse{}
+	if request.GetReturnNewWorkflowTask() && histResp != nil && histResp.StartedResponse != nil {
+		taskToken := &tokenspb.Task{
 			NamespaceId:     taskToken.GetNamespaceId(),
 			WorkflowId:      taskToken.GetWorkflowId(),
 			RunId:           taskToken.GetRunId(),
@@ -923,30 +945,30 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 			ScheduleAttempt: histResp.StartedResponse.GetAttempt(),
 		}
 		token, _ := wh.tokenSerializer.Serialize(taskToken)
-		workflowExecution := &executionpb.WorkflowExecution{
+		workflowExecution := &commonpb.WorkflowExecution{
 			WorkflowId: taskToken.GetWorkflowId(),
-			RunId:      primitives.UUIDString(taskToken.GetRunId()),
+			RunId:      taskToken.GetRunId(),
 		}
-		matchingResp := common.CreateMatchingPollForDecisionTaskResponse(histResp.StartedResponse, workflowExecution, token)
+		matchingResp := common.CreateMatchingPollWorkflowTaskQueueResponse(histResp.StartedResponse, workflowExecution, token)
 
-		newDecisionTask, err := wh.createPollForDecisionTaskResponse(ctx, scope, namespaceId, matchingResp, matchingResp.GetBranchToken())
+		newWorkflowTask, err := wh.createPollWorkflowTaskQueueResponse(ctx, scope, namespaceId, matchingResp, matchingResp.GetBranchToken())
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
-		completedResp.DecisionTask = newDecisionTask
+		completedResp.WorkflowTask = newWorkflowTask
 	}
 
 	return completedResp, nil
 }
 
-// RespondDecisionTaskFailed is called by application worker to indicate failure.  This results in
-// DecisionTaskFailedEvent written to the history and a new DecisionTask created.  This API can be used by client to
-// either clear sticky tasklist or report any panics during DecisionTask processing.  Temporal will only append first
-// DecisionTaskFailed event to the history of workflow execution for consecutive failures.
-func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, request *workflowservice.RespondDecisionTaskFailedRequest) (_ *workflowservice.RespondDecisionTaskFailedResponse, retError error) {
+// RespondWorkflowTaskFailed is called by application worker to indicate failure.  This results in
+// WorkflowTaskFailedEvent written to the history and a new WorkflowTask created.  This API can be used by client to
+// either clear sticky taskqueue or report any panics during WorkflowTask processing.  Temporal will only append first
+// WorkflowTaskFailed event to the history of workflow execution for consecutive failures.
+func (wh *WorkflowHandler) RespondWorkflowTaskFailed(ctx context.Context, request *workflowservice.RespondWorkflowTaskFailedRequest) (_ *workflowservice.RespondWorkflowTaskFailedResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.getDefaultScope(metrics.FrontendRespondDecisionTaskFailedScope)
+	scope := wh.getDefaultScope(metrics.FrontendRespondWorkflowTaskFailedScope)
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -965,7 +987,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	namespaceId := primitives.UUIDString(taskToken.GetNamespaceId())
+	namespaceId := taskToken.GetNamespaceId()
 	if namespaceId == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
@@ -976,7 +998,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 	}
 
 	scope, sw := wh.startRequestProfileWithNamespace(
-		metrics.FrontendRespondDecisionTaskFailedScope, namespaceEntry.GetInfo().Name,
+		metrics.FrontendRespondWorkflowTaskFailedScope, namespaceEntry.GetInfo().Name,
 	)
 	defer sw.Stop()
 
@@ -992,21 +1014,22 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
 	if err := common.CheckEventBlobSizeLimit(
-		request.GetDetails().Size(),
+		request.GetFailure().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceId,
 		taskToken.GetWorkflowId(),
-		primitives.UUIDString(taskToken.GetRunId()),
+		taskToken.GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
-		tag.BlobSizeViolationOperation("RespondDecisionTaskFailed"),
+		tag.BlobSizeViolationOperation("RespondWorkflowTaskFailed"),
 	); err != nil {
-		// details exceed, we would just truncate the size for decision task failed as the details is not used anywhere by client code
-		request.Details = nil
+		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
+		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
+		request.Failure = serverFailure
 	}
 
-	_, err = wh.GetHistoryClient().RespondDecisionTaskFailed(ctx, &historyservice.RespondDecisionTaskFailedRequest{
+	_, err = wh.GetHistoryClient().RespondWorkflowTaskFailed(ctx, &historyservice.RespondWorkflowTaskFailedRequest{
 		NamespaceId:   namespaceId,
 		FailedRequest: request,
 	})
@@ -1014,22 +1037,22 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 		return nil, wh.error(err, scope)
 	}
 
-	return &workflowservice.RespondDecisionTaskFailedResponse{}, nil
+	return &workflowservice.RespondWorkflowTaskFailedResponse{}, nil
 }
 
-// PollForActivityTask is called by application worker to process ActivityTask from a specific taskList.  ActivityTask
-// is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
+// PollActivityTaskQueue is called by application worker to process ActivityTask from a specific task queue.  ActivityTask
+// is dispatched to callers whenever a ScheduleTask command is made for a workflow execution.
 // Application is expected to call 'RespondActivityTaskCompleted' or 'RespondActivityTaskFailed' once it is done
 // processing the task.
 // Application also needs to call 'RecordActivityTaskHeartbeat' API within 'heartbeatTimeoutSeconds' interval to
 // prevent the task from getting timed out.  An event 'ActivityTaskStarted' event is also written to workflow execution
 // history before the ActivityTask is dispatched to application worker.
-func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *workflowservice.PollForActivityTaskRequest) (_ *workflowservice.PollForActivityTaskResponse, retError error) {
+func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *workflowservice.PollActivityTaskQueueRequest) (_ *workflowservice.PollActivityTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	callTime := time.Now()
+	callTime := time.Now().UTC()
 
-	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendPollForActivityTaskScope, request.GetNamespace())
+	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendPollActivityTaskQueueScope, request.GetNamespace())
 	defer sw.Stop()
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
@@ -1040,10 +1063,10 @@ func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *wor
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	wh.GetLogger().Debug("Received PollForActivityTask")
+	wh.GetLogger().Debug("Received PollActivityTaskQueue")
 	if err := common.ValidateLongPollContextTimeout(
 		ctx,
-		"PollForActivityTask",
+		"PollActivityTaskQueue",
 		wh.GetThrottledLogger(),
 	); err != nil {
 		return nil, wh.error(err, scope)
@@ -1057,7 +1080,7 @@ func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *wor
 		return nil, wh.error(errNamespaceTooLong, scope)
 	}
 
-	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, scope); err != nil {
 		return nil, err
 	}
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
@@ -1070,10 +1093,10 @@ func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *wor
 	}
 
 	pollerID := uuid.New()
-	var matchingResponse *matchingservice.PollForActivityTaskResponse
+	var matchingResponse *matchingservice.PollActivityTaskQueueResponse
 	op := func() error {
 		var err error
-		matchingResponse, err = wh.GetMatchingClient().PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
+		matchingResponse, err = wh.GetMatchingClient().PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: namespaceID,
 			PollerId:    pollerID,
 			PollRequest: request,
@@ -1083,7 +1106,7 @@ func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *wor
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, tasklistpb.TaskListType_Activity, request.TaskList, pollerID)
+		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
 		if err != nil {
 			// For all other errors log an error and return it back to client.
 			ctxTimeout := "not-set"
@@ -1091,8 +1114,8 @@ func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *wor
 			if ok {
 				ctxTimeout = ctxDeadline.Sub(callTime).String()
 			}
-			wh.GetLogger().Error("PollForActivityTask failed.",
-				tag.WorkflowTaskListName(request.GetTaskList().GetName()),
+			wh.GetLogger().Error("PollActivityTaskQueue failed.",
+				tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
 				tag.Value(ctxTimeout),
 				tag.Error(err))
 			return nil, wh.error(err, scope)
@@ -1103,23 +1126,23 @@ func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *wor
 		return nil, nil
 	}
 
-	return &workflowservice.PollForActivityTaskResponse{
-		TaskToken:                       matchingResponse.TaskToken,
-		WorkflowExecution:               matchingResponse.WorkflowExecution,
-		ActivityId:                      matchingResponse.ActivityId,
-		ActivityType:                    matchingResponse.ActivityType,
-		Input:                           matchingResponse.Input,
-		ScheduledTimestamp:              matchingResponse.ScheduledTimestamp,
-		ScheduleToCloseTimeoutSeconds:   matchingResponse.ScheduleToCloseTimeoutSeconds,
-		StartedTimestamp:                matchingResponse.StartedTimestamp,
-		StartToCloseTimeoutSeconds:      matchingResponse.StartToCloseTimeoutSeconds,
-		HeartbeatTimeoutSeconds:         matchingResponse.HeartbeatTimeoutSeconds,
-		Attempt:                         matchingResponse.Attempt,
-		ScheduledTimestampOfThisAttempt: matchingResponse.ScheduledTimestampOfThisAttempt,
-		HeartbeatDetails:                matchingResponse.HeartbeatDetails,
-		WorkflowType:                    matchingResponse.WorkflowType,
-		WorkflowNamespace:               matchingResponse.WorkflowNamespace,
-		Header:                          matchingResponse.Header,
+	return &workflowservice.PollActivityTaskQueueResponse{
+		TaskToken:                   matchingResponse.TaskToken,
+		WorkflowExecution:           matchingResponse.WorkflowExecution,
+		ActivityId:                  matchingResponse.ActivityId,
+		ActivityType:                matchingResponse.ActivityType,
+		Input:                       matchingResponse.Input,
+		ScheduledTime:               matchingResponse.ScheduledTime,
+		ScheduleToCloseTimeout:      matchingResponse.ScheduleToCloseTimeout,
+		StartedTime:                 matchingResponse.StartedTime,
+		StartToCloseTimeout:         matchingResponse.StartToCloseTimeout,
+		HeartbeatTimeout:            matchingResponse.HeartbeatTimeout,
+		Attempt:                     matchingResponse.Attempt,
+		CurrentAttemptScheduledTime: matchingResponse.CurrentAttemptScheduledTime,
+		HeartbeatDetails:            matchingResponse.HeartbeatDetails,
+		WorkflowType:                matchingResponse.WorkflowType,
+		WorkflowNamespace:           matchingResponse.WorkflowNamespace,
+		Header:                      matchingResponse.Header,
 	}, nil
 }
 
@@ -1127,7 +1150,7 @@ func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *wor
 // to heartbeat within 'heartbeatTimeoutSeconds' interval for the ActivityTask, then it will be marked as timedout and
 // 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeat' will
 // fail with 'EntityNotExistsError' in such situations.  Use the 'taskToken' provided as response of
-// PollForActivityTask API call for heartbeating.
+// PollActivityTaskQueue API call for heartbeating.
 func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatRequest) (_ *workflowservice.RecordActivityTaskHeartbeatResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
@@ -1152,7 +1175,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	namespaceId := primitives.UUIDString(taskToken.GetNamespaceId())
+	namespaceId := taskToken.GetNamespaceId()
 	if namespaceId == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
@@ -1180,7 +1203,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		sizeLimitError,
 		namespaceId,
 		taskToken.GetWorkflowId(),
-		primitives.UUIDString(taskToken.GetRunId()),
+		taskToken.GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeat"),
@@ -1188,8 +1211,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: request.TaskToken,
-			Reason:    common.FailureReasonHeartbeatExceedsLimit,
-			Details:   nil,
+			Failure:   failure.NewServerFailure(common.FailureReasonHeartbeatExceedsLimit, true),
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1258,12 +1280,13 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		return nil, wh.error(errActivityIDNotSet, scope)
 	}
 
-	taskToken := &tokengenpb.Task{
-		NamespaceId: primitives.MustParseUUID(namespaceID),
-		RunId:       primitives.MustParseUUID(runID),
-		WorkflowId:  workflowID,
-		ScheduleId:  common.EmptyEventID,
-		ActivityId:  activityID,
+	taskToken := &tokenspb.Task{
+		NamespaceId:     namespaceID,
+		RunId:           runID,
+		WorkflowId:      workflowID,
+		ScheduleId:      common.EmptyEventID,
+		ActivityId:      activityID,
+		ScheduleAttempt: 1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1287,7 +1310,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		sizeLimitError,
 		namespaceID,
 		taskToken.GetWorkflowId(),
-		primitives.UUIDString(taskToken.GetRunId()),
+		taskToken.GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeatById"),
@@ -1295,8 +1318,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: token,
-			Reason:    common.FailureReasonHeartbeatExceedsLimit,
-			Details:   nil,
+			Failure:   failure.NewServerFailure(common.FailureReasonHeartbeatExceedsLimit, true),
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1326,9 +1348,9 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 }
 
 // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
-// result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask
-// created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of
-// PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+// result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new WorkflowTask
+// created for the workflow so new commands could be made.  Use the 'taskToken' provided as response of
+// PollActivityTaskQueue API call for completion. It fails with 'NotFoundFailure' if the taskToken is not valid
 // anymore due to activity timeout.
 func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedRequest) (_ *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
@@ -1352,7 +1374,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	namespaceId := primitives.UUIDString(taskToken.GetNamespaceId())
+	namespaceId := taskToken.GetNamespaceId()
 	if namespaceId == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
@@ -1384,7 +1406,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 		sizeLimitError,
 		namespaceId,
 		taskToken.GetWorkflowId(),
-		primitives.UUIDString(taskToken.GetRunId()),
+		taskToken.GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskCompleted"),
@@ -1392,8 +1414,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 		// result exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: request.TaskToken,
-			Reason:    common.FailureReasonCompleteResultExceedsLimit,
-			Details:   nil,
+			Failure:   failure.NewServerFailure(common.FailureReasonCompleteResultExceedsLimit, true),
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1417,10 +1438,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 }
 
 // RespondActivityTaskCompletedById is called by application worker when it is done processing an ActivityTask.
-// It will result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask
-// created for the workflow so new decisions could be made.  Similar to RespondActivityTaskCompleted but use Namespace,
-// WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
-// if the these IDs are not valid anymore due to activity timeout.
+// It will result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new WorkflowTask
+// created for the workflow so new commands could be made.  Similar to RespondActivityTaskCompleted but use Namespace,
+// WorkflowId and ActivityId instead of 'taskToken' for completion. It fails with 'NotFoundFailure'
+// if the these Ids are not valid anymore due to activity timeout.
 func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedByIdRequest) (_ *workflowservice.RespondActivityTaskCompletedByIdResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
@@ -1464,12 +1485,13 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &tokengenpb.Task{
-		NamespaceId: primitives.MustParseUUID(namespaceID),
-		RunId:       primitives.MustParseUUID(runID),
-		WorkflowId:  workflowID,
-		ScheduleId:  common.EmptyEventID,
-		ActivityId:  activityID,
+	taskToken := &tokenspb.Task{
+		NamespaceId:     namespaceID,
+		RunId:           runID,
+		WorkflowId:      workflowID,
+		ScheduleId:      common.EmptyEventID,
+		ActivityId:      activityID,
+		ScheduleAttempt: 1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1501,8 +1523,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		// result exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: token,
-			Reason:    common.FailureReasonCompleteResultExceedsLimit,
-			Details:   nil,
+			Failure:   failure.NewServerFailure(common.FailureReasonCompleteResultExceedsLimit, true),
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1532,9 +1553,9 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 }
 
 // RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will
-// result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask
-// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
-// PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+// result in a new 'ActivityTaskFailed' event being written to the workflow history and a new WorkflowTask
+// created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
+// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 // anymore due to activity timeout.
 func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, request *workflowservice.RespondActivityTaskFailedRequest) (_ *workflowservice.RespondActivityTaskFailedResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
@@ -1558,7 +1579,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	namespaceID := primitives.UUIDString(taskToken.GetNamespaceId())
+	namespaceID := taskToken.GetNamespaceId()
 	if namespaceID == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
@@ -1566,6 +1587,10 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 	namespaceEntry, err := wh.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, wh.error(err, scope)
+	}
+
+	if request.GetFailure() != nil && request.GetFailure().GetApplicationFailureInfo() == nil {
+		return nil, wh.error(errFailureMustHaveApplicationFailureInfo, scope)
 	}
 
 	scope, sw := wh.startRequestProfileWithNamespace(
@@ -1586,19 +1611,19 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
 	if err := common.CheckEventBlobSizeLimit(
-		request.GetDetails().Size(),
+		request.GetFailure().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID,
 		taskToken.GetWorkflowId(),
-		primitives.UUIDString(taskToken.GetRunId()),
+		taskToken.GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
 	); err != nil {
-		// details exceeds blob size limit, we would truncate the details and put a specific error reason
-		request.Reason = common.FailureReasonFailureDetailsExceedsLimit
-		request.Details = nil
+		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
+		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
+		request.Failure = serverFailure
 	}
 
 	_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1612,8 +1637,8 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 }
 
 // RespondActivityTaskFailedById is called by application worker when it is done processing an ActivityTask.
-// It will result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask
-// created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskFailed but use
+// It will result in a new 'ActivityTaskFailed' event being written to the workflow history and a new WorkflowTask
+// created for the workflow instance so new commands could be made.  Similar to RespondActivityTaskFailed but use
 // Namespace, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
 func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, request *workflowservice.RespondActivityTaskFailedByIdRequest) (_ *workflowservice.RespondActivityTaskFailedByIdResponse, retError error) {
@@ -1658,12 +1683,13 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &tokengenpb.Task{
-		NamespaceId: primitives.MustParseUUID(namespaceID),
-		RunId:       primitives.MustParseUUID(runID),
-		WorkflowId:  workflowID,
-		ScheduleId:  common.EmptyEventID,
-		ActivityId:  activityID,
+	taskToken := &tokenspb.Task{
+		NamespaceId:     namespaceID,
+		RunId:           runID,
+		WorkflowId:      workflowID,
+		ScheduleId:      common.EmptyEventID,
+		ActivityId:      activityID,
+		ScheduleAttempt: 1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1682,7 +1708,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
 	if err := common.CheckEventBlobSizeLimit(
-		request.GetDetails().Size(),
+		request.GetFailure().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID,
@@ -1692,15 +1718,14 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
 	); err != nil {
-		// details exceeds blob size limit, we would truncate the details and put a specific error reason
-		request.Reason = common.FailureReasonFailureDetailsExceedsLimit
-		request.Details = nil
+		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
+		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
+		request.Failure = serverFailure
 	}
 
 	req := &workflowservice.RespondActivityTaskFailedRequest{
 		TaskToken: token,
-		Reason:    request.Reason,
-		Details:   request.Details,
+		Failure:   request.GetFailure(),
 		Identity:  request.Identity,
 	}
 
@@ -1715,9 +1740,9 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 }
 
 // RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
-// result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
-// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
-// PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+// result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new WorkflowTask
+// created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
+// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 // anymore due to activity timeout.
 func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledRequest) (_ *workflowservice.RespondActivityTaskCanceledResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
@@ -1742,7 +1767,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		return nil, wh.error(err, scope)
 	}
 
-	namespaceID := primitives.UUIDString(taskToken.GetNamespaceId())
+	namespaceID := taskToken.GetNamespaceId()
 
 	if namespaceID == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
@@ -1776,7 +1801,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		sizeLimitError,
 		namespaceID,
 		taskToken.GetWorkflowId(),
-		primitives.UUIDString(taskToken.GetRunId()),
+		taskToken.GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskCanceled"),
@@ -1784,12 +1809,11 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		// details exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: request.TaskToken,
-			Reason:    common.FailureReasonCancelDetailsExceedsLimit,
-			Details:   nil,
+			Failure:   failure.NewServerFailure(common.FailureReasonCancelDetailsExceedsLimit, true),
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
-			NamespaceId:   primitives.UUIDString(taskToken.GetNamespaceId()),
+			NamespaceId:   taskToken.GetNamespaceId(),
 			FailedRequest: failRequest,
 		})
 		if err != nil {
@@ -1797,7 +1821,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		}
 	} else {
 		_, err = wh.GetHistoryClient().RespondActivityTaskCanceled(ctx, &historyservice.RespondActivityTaskCanceledRequest{
-			NamespaceId:   primitives.UUIDString(taskToken.GetNamespaceId()),
+			NamespaceId:   taskToken.GetNamespaceId(),
 			CancelRequest: request,
 		})
 		if err != nil {
@@ -1809,8 +1833,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 }
 
 // RespondActivityTaskCanceledById is called by application worker when it is successfully canceled an ActivityTask.
-// It will result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
-// created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskCanceled but use
+// It will result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new WorkflowTask
+// created for the workflow instance so new commands could be made.  Similar to RespondActivityTaskCanceled but use
 // Namespace, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
 func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledByIdRequest) (_ *workflowservice.RespondActivityTaskCanceledByIdResponse, retError error) {
@@ -1855,12 +1879,13 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &tokengenpb.Task{
-		NamespaceId: primitives.MustParseUUID(namespaceID),
-		RunId:       primitives.MustParseUUID(runID),
-		WorkflowId:  workflowID,
-		ScheduleId:  common.EmptyEventID,
-		ActivityId:  activityID,
+	taskToken := &tokenspb.Task{
+		NamespaceId:     namespaceID,
+		RunId:           runID,
+		WorkflowId:      workflowID,
+		ScheduleId:      common.EmptyEventID,
+		ActivityId:      activityID,
+		ScheduleAttempt: 1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1892,8 +1917,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		// details exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: token,
-			Reason:    common.FailureReasonCancelDetailsExceedsLimit,
-			Details:   nil,
+			Failure:   failure.NewServerFailure(common.FailureReasonCancelDetailsExceedsLimit, true),
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1923,8 +1947,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 }
 
 // RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
-// It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new DecisionTask
-// created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
+// It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
+// created for the workflow instance so new commands could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
 // anymore due to completion or doesn't exist.
 func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, request *workflowservice.RequestCancelWorkflowExecutionRequest) (_ *workflowservice.RequestCancelWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
@@ -1952,7 +1976,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecution(request.WorkflowExecution, scope); err != nil {
 		return nil, err
 	}
 
@@ -1973,7 +1997,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 }
 
 // SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
-// WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
+// WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
 func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request *workflowservice.SignalWorkflowExecutionRequest) (_ *workflowservice.SignalWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
@@ -2004,7 +2028,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, wh.error(errNamespaceTooLong, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecution(request.WorkflowExecution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2054,9 +2078,9 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 
 // SignalWithStartWorkflowExecution is used to ensure sending signal to a workflow.
 // If the workflow is running, this results in WorkflowExecutionSignaled event being recorded in the history
-// and a decision task being created for the execution.
+// and a workflow task being created for the execution.
 // If the workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
-// events being recorded in history, and a decision task being created for the execution
+// events being recorded in history, and a workflow task being created for the execution
 func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context, request *workflowservice.SignalWithStartWorkflowExecutionRequest) (_ *workflowservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
@@ -2112,7 +2136,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errWorkflowTypeTooLong, scope)
 	}
 
-	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, scope); err != nil {
 		return nil, err
 	}
 
@@ -2120,19 +2144,19 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errRequestIDTooLong, scope)
 	}
 
-	if request.GetWorkflowExecutionTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowExecutionTimeoutSeconds, scope)
 	}
 
-	if request.GetWorkflowRunTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowRunTimeoutSeconds, scope)
 	}
 
-	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
-	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
+	if err := wh.validateRetryPolicy(request.GetNamespace(), request.RetryPolicy); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2143,6 +2167,8 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	if err := wh.searchAttributesValidator.ValidateSearchAttributes(request.SearchAttributes, namespace); err != nil {
 		return nil, wh.error(err, scope)
 	}
+
+	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
 
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(namespace)
 	if err != nil {
@@ -2198,7 +2224,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	return &workflowservice.SignalWithStartWorkflowExecutionResponse{RunId: runId}, nil
 }
 
-// ResetWorkflowExecution reset an existing workflow execution to DecisionTaskCompleted event(exclusive).
+// ResetWorkflowExecution reset an existing workflow execution to WorkflowTaskCompleted event(exclusive).
 // And it will immediately terminating the current execution instance.
 func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *workflowservice.ResetWorkflowExecutionRequest) (_ *workflowservice.ResetWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
@@ -2226,7 +2252,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecution(request.WorkflowExecution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2274,7 +2300,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecution(request.WorkflowExecution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2322,10 +2348,14 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 	}
 
 	if request.StartTimeFilter == nil {
-		return nil, wh.error(errStartTimeFilterNotSet, scope)
+		request.StartTimeFilter = &filterpb.StartTimeFilter{}
 	}
 
-	if request.StartTimeFilter.GetEarliestTime() > request.StartTimeFilter.GetLatestTime() {
+	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
+		request.GetStartTimeFilter().LatestTime = &maxTime
+	}
+
+	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
 		return nil, wh.error(errEarliestTimeIsGreaterThanLatestTime, scope)
 	}
 
@@ -2348,8 +2378,8 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
 		NextPageToken:     request.NextPageToken,
-		EarliestStartTime: request.StartTimeFilter.GetEarliestTime(),
-		LatestStartTime:   request.StartTimeFilter.GetLatestTime(),
+		EarliestStartTime: timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).UnixNano(),
+		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()).UnixNano(),
 	}
 
 	var persistenceResp *persistence.ListWorkflowExecutionsResponse
@@ -2418,10 +2448,14 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 	}
 
 	if request.StartTimeFilter == nil {
-		return nil, wh.error(errStartTimeFilterNotSet, scope)
+		request.StartTimeFilter = &filterpb.StartTimeFilter{}
 	}
 
-	if request.StartTimeFilter.GetEarliestTime() > request.StartTimeFilter.GetLatestTime() {
+	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
+		request.GetStartTimeFilter().LatestTime = &maxTime
+	}
+
+	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
 		return nil, wh.error(errEarliestTimeIsGreaterThanLatestTime, scope)
 	}
 
@@ -2444,8 +2478,8 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
 		NextPageToken:     request.NextPageToken,
-		EarliestStartTime: request.StartTimeFilter.GetEarliestTime(),
-		LatestStartTime:   request.StartTimeFilter.GetLatestTime(),
+		EarliestStartTime: timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).UnixNano(),
+		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()).UnixNano(),
 	}
 
 	var persistenceResp *persistence.ListWorkflowExecutionsResponse
@@ -2476,10 +2510,14 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByStatus(&persistence.ListClosedWorkflowExecutionsByStatusRequest{
-				ListWorkflowExecutionsRequest: baseReq,
-				Status:                        request.GetStatusFilter().GetStatus(),
-			})
+			if request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED || request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+				err = errStatusFilterMustBeNotRunning
+			} else {
+				persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByStatus(&persistence.ListClosedWorkflowExecutionsByStatusRequest{
+					ListWorkflowExecutionsRequest: baseReq,
+					Status:                        request.GetStatusFilter().GetStatus(),
+				})
+			}
 		}
 		wh.GetLogger().Info("List closed workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByStatus)
@@ -2609,11 +2647,11 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, wh.error(err, scope)
 	}
 
-	if entry.GetConfig().VisibilityArchivalStatus != namespacepb.ArchivalStatus_Enabled {
+	if entry.GetConfig().VisibilityArchivalState != enumspb.ARCHIVAL_STATE_ENABLED {
 		return nil, wh.error(errNamespaceIsNotConfiguredForVisibilityArchival, scope)
 	}
 
-	URI, err := archiver.NewURI(entry.GetConfig().VisibilityArchivalURI)
+	URI, err := archiver.NewURI(entry.GetConfig().VisibilityArchivalUri)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2624,7 +2662,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 	}
 
 	archiverRequest := &archiver.QueryVisibilityRequest{
-		NamespaceID:   primitives.UUIDString(entry.GetInfo().Id),
+		NamespaceID:   entry.GetInfo().Id,
 		PageSize:      int(request.GetPageSize()),
 		NextPageToken: request.NextPageToken,
 		Query:         request.GetQuery(),
@@ -2637,8 +2675,8 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	// special handling of ExecutionTime for cron or retry
 	for _, execution := range archiverResponse.Executions {
-		if execution.GetExecutionTime() == 0 {
-			execution.ExecutionTime = execution.GetStartTime().GetValue()
+		if timestamp.TimeValue(execution.GetExecutionTime()).IsZero() {
+			execution.ExecutionTime = execution.GetStartTime()
 		}
 	}
 
@@ -2787,8 +2825,8 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 	return resp, nil
 }
 
-// RespondQueryTaskCompleted is called by application worker to complete a QueryTask (which is a DecisionTask for query)
-// as a result of 'PollForDecisionTask' API call. Completing a QueryTask will unblock the client call to 'QueryWorkflow'
+// RespondQueryTaskCompleted is called by application worker to complete a QueryTask (which is a WorkflowTask for query)
+// as a result of 'PollWorkflowTaskQueue' API call. Completing a QueryTask will unblock the client call to 'QueryWorkflow'
 // API and return the query result to client as a response to 'QueryWorkflow' API call.
 func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, request *workflowservice.RespondQueryTaskCompletedRequest) (_ *workflowservice.RespondQueryTaskCompletedResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
@@ -2812,7 +2850,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	if queryTaskToken.GetNamespaceId() == "" || queryTaskToken.GetTaskList() == "" || queryTaskToken.GetTaskId() == "" {
+	if queryTaskToken.GetNamespaceId() == "" || queryTaskToken.GetTaskQueue() == "" || queryTaskToken.GetTaskId() == "" {
 		return nil, wh.error(errInvalidTaskToken, scope)
 	}
 
@@ -2847,7 +2885,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 	); err != nil {
 		request = &workflowservice.RespondQueryTaskCompletedRequest{
 			TaskToken:     request.TaskToken,
-			CompletedType: querypb.QueryResultType_Failed,
+			CompletedType: enumspb.QUERY_RESULT_TYPE_FAILED,
 			QueryResult:   nil,
 			ErrorMessage:  err.Error(),
 		}
@@ -2855,12 +2893,15 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 
 	headers := headers.GetValues(ctx, headers.ClientImplHeaderName, headers.ClientFeatureVersionHeaderName)
 	request.WorkerVersionInfo = &versionpb.WorkerVersionInfo{
-		Impl:           headers[0],
+		Implementation: headers[0],
 		FeatureVersion: headers[1],
 	}
 	matchingRequest := &matchingservice.RespondQueryTaskCompletedRequest{
-		NamespaceId:      queryTaskToken.GetNamespaceId(),
-		TaskList:         &tasklistpb.TaskList{Name: queryTaskToken.GetTaskList()},
+		NamespaceId: queryTaskToken.GetNamespaceId(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: queryTaskToken.GetTaskQueue(),
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
 		TaskId:           queryTaskToken.GetTaskId(),
 		CompletedRequest: request,
 	}
@@ -2872,17 +2913,17 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 	return &workflowservice.RespondQueryTaskCompletedResponse{}, nil
 }
 
-// ResetStickyTaskList resets the sticky tasklist related information in mutable state of a given workflow.
+// ResetStickyTaskQueue resets the sticky taskqueue related information in mutable state of a given workflow.
 // Things cleared are:
-// 1. StickyTaskList
+// 1. StickyTaskQueue
 // 2. StickyScheduleToStartTimeout
 // 3. ClientLibraryVersion
 // 4. ClientFeatureVersion
 // 5. ClientImpl
-func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, request *workflowservice.ResetStickyTaskListRequest) (_ *workflowservice.ResetStickyTaskListResponse, retError error) {
+func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *workflowservice.ResetStickyTaskQueueRequest) (_ *workflowservice.ResetStickyTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendResetStickyTaskListScope, request.GetNamespace())
+	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendResetStickyTaskQueueScope, request.GetNamespace())
 	defer sw.Stop()
 
 	if wh.isShuttingDown() {
@@ -2901,7 +2942,7 @@ func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, request *wor
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
+	if err := wh.validateExecution(request.Execution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2910,14 +2951,14 @@ func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, request *wor
 		return nil, wh.error(err, scope)
 	}
 
-	_, err = wh.GetHistoryClient().ResetStickyTaskList(ctx, &historyservice.ResetStickyTaskListRequest{
+	_, err = wh.GetHistoryClient().ResetStickyTaskQueue(ctx, &historyservice.ResetStickyTaskQueueRequest{
 		NamespaceId: namespaceID,
 		Execution:   request.Execution,
 	})
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	return &workflowservice.ResetStickyTaskListResponse{}, nil
+	return &workflowservice.ResetStickyTaskQueueResponse{}, nil
 }
 
 // QueryWorkflow returns query result for a specified workflow execution
@@ -2946,7 +2987,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 	if request.GetNamespace() == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
-	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
+	if err := wh.validateExecution(request.Execution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2957,6 +2998,8 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 	if request.Query.GetQueryType() == "" {
 		return nil, wh.error(errQueryTypeNotSet, scope)
 	}
+
+	enums.SetDefaultQueryRejectCondition(&request.QueryRejectCondition)
 
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 	if err != nil {
@@ -3021,7 +3064,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, wh.error(err, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
+	if err := wh.validateExecution(request.Execution, scope); err != nil {
 		return nil, err
 	}
 
@@ -3035,19 +3078,19 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	}
 
 	return &workflowservice.DescribeWorkflowExecutionResponse{
-		ExecutionConfiguration: response.GetExecutionConfiguration(),
-		WorkflowExecutionInfo:  response.GetWorkflowExecutionInfo(),
-		PendingActivities:      response.GetPendingActivities(),
-		PendingChildren:        response.GetPendingChildren(),
+		ExecutionConfig:       response.GetExecutionConfig(),
+		WorkflowExecutionInfo: response.GetWorkflowExecutionInfo(),
+		PendingActivities:     response.GetPendingActivities(),
+		PendingChildren:       response.GetPendingChildren(),
 	}, nil
 }
 
-// DescribeTaskList returns information about the target tasklist, right now this API returns the
-// pollers which polled this tasklist in last few minutes.
-func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *workflowservice.DescribeTaskListRequest) (_ *workflowservice.DescribeTaskListResponse, retError error) {
+// DescribeTaskQueue returns information about the target taskqueue, right now this API returns the
+// pollers which polled this taskqueue in last few minutes.
+func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workflowservice.DescribeTaskQueueRequest) (_ *workflowservice.DescribeTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendDescribeTaskListScope, request.GetNamespace())
+	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendDescribeTaskQueueScope, request.GetNamespace())
 	defer sw.Stop()
 
 	if wh.isShuttingDown() {
@@ -3074,14 +3117,14 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *workfl
 		return nil, wh.error(err, scope)
 	}
 
-	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, scope); err != nil {
 		return nil, err
 	}
 
-	var matchingResponse *matchingservice.DescribeTaskListResponse
+	var matchingResponse *matchingservice.DescribeTaskQueueResponse
 	op := func() error {
 		var err error
-		matchingResponse, err = wh.GetMatchingClient().DescribeTaskList(ctx, &matchingservice.DescribeTaskListRequest{
+		matchingResponse, err = wh.GetMatchingClient().DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
 			NamespaceId: namespaceID,
 			DescRequest: request,
 		})
@@ -3093,9 +3136,9 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *workfl
 		return nil, wh.error(err, scope)
 	}
 
-	return &workflowservice.DescribeTaskListResponse{
-		Pollers:        matchingResponse.Pollers,
-		TaskListStatus: matchingResponse.TaskListStatus,
+	return &workflowservice.DescribeTaskQueueResponse{
+		Pollers:         matchingResponse.Pollers,
+		TaskQueueStatus: matchingResponse.TaskQueueStatus,
 	}, nil
 }
 
@@ -3109,18 +3152,18 @@ func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservic
 	}
 
 	return &workflowservice.GetClusterInfoResponse{
-		SupportedClientVersions: &versionpb.SupportedClientVersions{
+		SupportedSdkVersions: &versionpb.SupportedSDKVersions{
 			GoSdk:   headers.SupportedGoSDKVersion,
 			JavaSdk: headers.SupportedJavaSDKVersion,
 		},
 	}, nil
 }
 
-// ListTaskListPartitions returns all the partition and host for a task list.
-func (wh *WorkflowHandler) ListTaskListPartitions(ctx context.Context, request *workflowservice.ListTaskListPartitionsRequest) (_ *workflowservice.ListTaskListPartitionsResponse, retError error) {
+// ListTaskQueuePartitions returns all the partition and host for a task queue.
+func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request *workflowservice.ListTaskQueuePartitionsRequest) (_ *workflowservice.ListTaskQueuePartitionsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendListTaskListPartitionsScope, request.GetNamespace())
+	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendListTaskQueuePartitionsScope, request.GetNamespace())
 	defer sw.Stop()
 
 	if wh.isShuttingDown() {
@@ -3139,38 +3182,38 @@ func (wh *WorkflowHandler) ListTaskListPartitions(ctx context.Context, request *
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, scope); err != nil {
 		return nil, err
 	}
 
-	matchingResponse, err := wh.GetMatchingClient().ListTaskListPartitions(ctx, &matchingservice.ListTaskListPartitionsRequest{
+	matchingResponse, err := wh.GetMatchingClient().ListTaskQueuePartitions(ctx, &matchingservice.ListTaskQueuePartitionsRequest{
 		Namespace: request.GetNamespace(),
-		TaskList:  request.TaskList,
+		TaskQueue: request.TaskQueue,
 	})
 
 	if matchingResponse == nil {
 		return nil, err
 	}
 
-	return &workflowservice.ListTaskListPartitionsResponse{
-		ActivityTaskListPartitions: matchingResponse.ActivityTaskListPartitions,
-		DecisionTaskListPartitions: matchingResponse.DecisionTaskListPartitions,
+	return &workflowservice.ListTaskQueuePartitionsResponse{
+		ActivityTaskQueuePartitions: matchingResponse.ActivityTaskQueuePartitions,
+		WorkflowTaskQueuePartitions: matchingResponse.WorkflowTaskQueuePartitions,
 	}, err
 }
 
 func (wh *WorkflowHandler) getRawHistory(
 	scope metrics.Scope,
 	namespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	firstEventID int64,
 	nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
-	transientDecision *eventgenpb.TransientDecisionInfo,
+	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 ) ([]*commonpb.DataBlob, []byte, error) {
 	var rawHistory []*commonpb.DataBlob
-	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), wh.config.NumHistoryShards)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(), wh.config.NumHistoryShards)
 
 	resp, err := wh.GetHistoryManager().ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
@@ -3184,24 +3227,15 @@ func (wh *WorkflowHandler) getRawHistory(
 		return nil, nil, err
 	}
 
-	var encoding commonpb.EncodingType
 	for _, data := range resp.HistoryEventBlobs {
-		switch data.Encoding {
-		case common.EncodingTypeJSON:
-			encoding = commonpb.EncodingType_JSON
-		case common.EncodingTypeProto3:
-			encoding = commonpb.EncodingType_Proto3
-		default:
-			panic(fmt.Sprintf("Invalid encoding type for raw history, encoding type: %s", data.Encoding))
-		}
 		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: encoding,
+			EncodingType: data.Encoding,
 			Data:         data.Data,
 		})
 	}
 
-	if len(nextPageToken) == 0 && transientDecision != nil {
-		if err := wh.validateTransientDecisionEvents(nextEventID, transientDecision); err != nil {
+	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
+		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 			scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
 			wh.GetLogger().Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID),
@@ -3210,21 +3244,21 @@ func (wh *WorkflowHandler) getRawHistory(
 				tag.Error(err))
 		}
 
-		blob, err := wh.GetPayloadSerializer().SerializeEvent(transientDecision.ScheduledEvent, common.EncodingTypeProto3)
+		blob, err := wh.GetPayloadSerializer().SerializeEvent(transientWorkflowTaskInfo.ScheduledEvent, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return nil, nil, err
 		}
 		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob.Data,
 		})
 
-		blob, err = wh.GetPayloadSerializer().SerializeEvent(transientDecision.StartedEvent, common.EncodingTypeProto3)
+		blob, err = wh.GetPayloadSerializer().SerializeEvent(transientWorkflowTaskInfo.StartedEvent, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return nil, nil, err
 		}
 		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob.Data,
 		})
 	}
@@ -3235,20 +3269,20 @@ func (wh *WorkflowHandler) getRawHistory(
 func (wh *WorkflowHandler) getHistory(
 	scope metrics.Scope,
 	namespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	firstEventID, nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
-	transientDecision *eventgenpb.TransientDecisionInfo,
+	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
-) (*eventpb.History, []byte, error) {
+) (*historypb.History, []byte, error) {
 
 	var size int
 
 	isFirstPage := len(nextPageToken) == 0
-	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), wh.config.NumHistoryShards)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
-	var historyEvents []*eventpb.HistoryEvent
+	var historyEvents []*historypb.HistoryEvent
 	historyEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.GetHistoryManager(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
@@ -3280,8 +3314,8 @@ func (wh *WorkflowHandler) getHistory(
 		return nil, nil, err
 	}
 
-	if len(nextPageToken) == 0 && transientDecision != nil {
-		if err := wh.validateTransientDecisionEvents(nextEventID, transientDecision); err != nil {
+	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
+		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 			scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
 			wh.GetLogger().Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID),
@@ -3289,30 +3323,30 @@ func (wh *WorkflowHandler) getHistory(
 				tag.WorkflowRunID(execution.GetRunId()),
 				tag.Error(err))
 		}
-		// Append the transient decision events once we are done enumerating everything from the events table
-		historyEvents = append(historyEvents, transientDecision.ScheduledEvent, transientDecision.StartedEvent)
+		// Append the transient workflow task events once we are done enumerating everything from the events table
+		historyEvents = append(historyEvents, transientWorkflowTaskInfo.ScheduledEvent, transientWorkflowTaskInfo.StartedEvent)
 	}
 
-	executionHistory := &eventpb.History{}
+	executionHistory := &historypb.History{}
 	executionHistory.Events = historyEvents
 	return executionHistory, nextPageToken, nil
 }
 
-func (wh *WorkflowHandler) validateTransientDecisionEvents(
+func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
 	expectedNextEventID int64,
-	decision *eventgenpb.TransientDecisionInfo,
+	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 ) error {
 
-	if decision.ScheduledEvent.GetEventId() == expectedNextEventID &&
-		decision.StartedEvent.GetEventId() == expectedNextEventID+1 {
+	if transientWorkflowTaskInfo.ScheduledEvent.GetEventId() == expectedNextEventID &&
+		transientWorkflowTaskInfo.StartedEvent.GetEventId() == expectedNextEventID+1 {
 		return nil
 	}
 
-	return fmt.Errorf("invalid transient decision: expectedScheduledEventID=%v expectedStartedEventID=%v but have scheduledEventID=%v startedEventID=%v",
+	return fmt.Errorf("invalid transient workflow task: expectedScheduledEventID=%v expectedStartedEventID=%v but have scheduledEventID=%v startedEventID=%v",
 		expectedNextEventID,
 		expectedNextEventID+1,
-		decision.ScheduledEvent.GetEventId(),
-		decision.StartedEvent.GetEventId())
+		transientWorkflowTaskInfo.ScheduledEvent.GetEventId(),
+		transientWorkflowTaskInfo.StartedEvent.GetEventId())
 }
 
 // startRequestProfile initiates recording of request metrics
@@ -3386,17 +3420,19 @@ func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog
 	return err
 }
 
-func (wh *WorkflowHandler) validateTaskList(t *tasklistpb.TaskList, scope metrics.Scope) error {
+func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue, scope metrics.Scope) error {
 	if t == nil || t.GetName() == "" {
-		return wh.error(errTaskListNotSet, scope)
+		return wh.error(errTaskQueueNotSet, scope)
 	}
 	if len(t.GetName()) > wh.config.MaxIDLengthLimit() {
-		return wh.error(errTaskListTooLong, scope)
+		return wh.error(errTaskQueueTooLong, scope)
 	}
+
+	enums.SetDefaultTaskQueueKind(&t.Kind)
 	return nil
 }
 
-func (wh *WorkflowHandler) validateExecutionAndEmitMetrics(w *executionpb.WorkflowExecution, scope metrics.Scope) error {
+func (wh *WorkflowHandler) validateExecution(w *commonpb.WorkflowExecution, scope metrics.Scope) error {
 	err := validateExecution(w)
 	if err != nil {
 		return wh.error(err, scope)
@@ -3404,28 +3440,28 @@ func (wh *WorkflowHandler) validateExecutionAndEmitMetrics(w *executionpb.Workfl
 	return nil
 }
 
-func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
+func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 	ctx context.Context,
 	scope metrics.Scope,
 	namespaceID string,
-	matchingResp *matchingservice.PollForDecisionTaskResponse,
+	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
 	branchToken []byte,
-) (*workflowservice.PollForDecisionTaskResponse, error) {
+) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
 
 	if matchingResp.WorkflowExecution == nil {
-		// this will happen if there is no decision task to be send to worker / caller
-		return &workflowservice.PollForDecisionTaskResponse{}, nil
+		// this will happen if there is no workflow task to be send to worker / caller
+		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 	}
 
-	var history *eventpb.History
+	var history *historypb.History
 	var continuation []byte
 	var err error
 
 	if matchingResp.GetStickyExecutionEnabled() && matchingResp.Query != nil {
 		// meaning sticky query, we should not return any events to worker
 		// since query task only check the current status
-		history = &eventpb.History{
-			Events: []*eventpb.HistoryEvent{},
+		history = &historypb.History{
+			Events: []*historypb.HistoryEvent{},
 		}
 	} else {
 		// here we have 3 cases:
@@ -3455,7 +3491,7 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 			nextEventID,
 			int32(wh.config.HistoryMaxPageSize(namespace.GetInfo().Name)),
 			nil,
-			matchingResp.GetDecisionInfo(),
+			matchingResp.GetWorkflowTaskInfo(),
 			branchToken,
 		)
 		if err != nil {
@@ -3463,13 +3499,13 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 		}
 
 		if len(persistenceToken) != 0 {
-			continuation, err = serializeHistoryToken(&tokengenpb.HistoryContinuation{
-				RunId:             matchingResp.WorkflowExecution.GetRunId(),
-				FirstEventId:      firstEventID,
-				NextEventId:       nextEventID,
-				PersistenceToken:  persistenceToken,
-				TransientDecision: matchingResp.GetDecisionInfo(),
-				BranchToken:       branchToken,
+			continuation, err = serializeHistoryToken(&tokenspb.HistoryContinuation{
+				RunId:                 matchingResp.WorkflowExecution.GetRunId(),
+				FirstEventId:          firstEventID,
+				NextEventId:           nextEventID,
+				PersistenceToken:      persistenceToken,
+				TransientWorkflowTask: matchingResp.GetWorkflowTaskInfo(),
+				BranchToken:           branchToken,
 			})
 			if err != nil {
 				return nil, err
@@ -3477,28 +3513,28 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 		}
 	}
 
-	resp := &workflowservice.PollForDecisionTaskResponse{
-		TaskToken:                 matchingResp.TaskToken,
-		WorkflowExecution:         matchingResp.WorkflowExecution,
-		WorkflowType:              matchingResp.WorkflowType,
-		PreviousStartedEventId:    matchingResp.PreviousStartedEventId,
-		StartedEventId:            matchingResp.StartedEventId,
-		Query:                     matchingResp.Query,
-		BacklogCountHint:          matchingResp.BacklogCountHint,
-		Attempt:                   matchingResp.Attempt,
-		History:                   history,
-		NextPageToken:             continuation,
-		WorkflowExecutionTaskList: matchingResp.WorkflowExecutionTaskList,
-		ScheduledTimestamp:        matchingResp.ScheduledTimestamp,
-		StartedTimestamp:          matchingResp.StartedTimestamp,
-		Queries:                   matchingResp.Queries,
+	resp := &workflowservice.PollWorkflowTaskQueueResponse{
+		TaskToken:                  matchingResp.TaskToken,
+		WorkflowExecution:          matchingResp.WorkflowExecution,
+		WorkflowType:               matchingResp.WorkflowType,
+		PreviousStartedEventId:     matchingResp.PreviousStartedEventId,
+		StartedEventId:             matchingResp.StartedEventId,
+		Query:                      matchingResp.Query,
+		BacklogCountHint:           matchingResp.BacklogCountHint,
+		Attempt:                    matchingResp.Attempt,
+		History:                    history,
+		NextPageToken:              continuation,
+		WorkflowExecutionTaskQueue: matchingResp.WorkflowExecutionTaskQueue,
+		ScheduledTime:              matchingResp.ScheduledTime,
+		StartedTime:                matchingResp.StartedTime,
+		Queries:                    matchingResp.Queries,
 	}
 
 	return resp, nil
 }
 
 func (wh *WorkflowHandler) verifyHistoryIsComplete(
-	events []*eventpb.HistoryEvent,
+	events []*historypb.HistoryEvent,
 	expectedFirstEventID int64,
 	expectedLastEventID int64,
 	isFirstPage bool,
@@ -3554,7 +3590,7 @@ func (wh *WorkflowHandler) verifyHistoryIsComplete(
 }
 
 func (wh *WorkflowHandler) isFailoverRequest(updateRequest *workflowservice.UpdateNamespaceRequest) bool {
-	return updateRequest.ReplicationConfiguration != nil && updateRequest.ReplicationConfiguration.GetActiveClusterName() != ""
+	return updateRequest.ReplicationConfig != nil && updateRequest.ReplicationConfig.GetActiveClusterName() != ""
 }
 
 func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest, namespaceID string) bool {
@@ -3589,7 +3625,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		return nil, wh.error(err, scope)
 	}
 
-	URIString := entry.GetConfig().HistoryArchivalURI
+	URIString := entry.GetConfig().HistoryArchivalUri
 	if URIString == "" {
 		// if URI is empty, it means the namespace has never enabled for archival.
 		// the error is not "workflow has passed retention period", because
@@ -3618,7 +3654,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		return nil, wh.error(err, scope)
 	}
 
-	history := &eventpb.History{}
+	history := &historypb.History{}
 	for _, batch := range resp.HistoryBatches {
 		history.Events = append(history.Events, batch.Events...)
 	}
@@ -3629,8 +3665,8 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	}, nil
 }
 
-func (wh *WorkflowHandler) convertIndexedKeyToProto(keys map[string]interface{}) map[string]commonpb.IndexedValueType {
-	converted := make(map[string]commonpb.IndexedValueType)
+func (wh *WorkflowHandler) convertIndexedKeyToProto(keys map[string]interface{}) map[string]enumspb.IndexedValueType {
+	converted := make(map[string]enumspb.IndexedValueType)
 	for k, v := range keys {
 		converted[k] = common.ConvertIndexedValueTypeToProtoType(v, wh.GetLogger())
 	}
@@ -3661,22 +3697,22 @@ func (wh *WorkflowHandler) checkPermission(
 	return nil
 }
 
-func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error, namespaceID string, taskListType tasklistpb.TaskListType,
-	taskList *tasklistpb.TaskList, pollerID string) error {
+func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error, namespaceID string, taskQueueType enumspb.TaskQueueType,
+	taskQueue *taskqueuepb.TaskQueue, pollerID string) error {
 	// First check if this err is due to context cancellation.  This means client connection to frontend is closed.
 	if ctx.Err() == context.Canceled {
 		// Our rpc stack does not propagates context cancellation to the other service.  Lets make an explicit
 		// call to matching to notify this poller is gone to prevent any tasks being dispatched to zombie pollers.
 		_, err = wh.GetMatchingClient().CancelOutstandingPoll(context.Background(), &matchingservice.CancelOutstandingPollRequest{
-			NamespaceId:  namespaceID,
-			TaskListType: taskListType,
-			TaskList:     taskList,
-			PollerId:     pollerID,
+			NamespaceId:   namespaceID,
+			TaskQueueType: taskQueueType,
+			TaskQueue:     taskQueue,
+			PollerId:      pollerID,
 		})
 		// We can not do much if this call fails.  Just log the error and move on
 		if err != nil {
 			wh.GetLogger().Warn("Failed to cancel outstanding poller.",
-				tag.WorkflowTaskListName(taskList.GetName()), tag.Error(err))
+				tag.WorkflowTaskQueueName(taskQueue.GetName()), tag.Error(err))
 		}
 
 		// Clear error as we don't want to report context cancellation error to count against our SLA
@@ -3691,7 +3727,7 @@ func (wh *WorkflowHandler) checkBadBinary(namespaceEntry *cache.NamespaceCacheEn
 		badBinaries := namespaceEntry.GetConfig().BadBinaries.Binaries
 		_, ok := badBinaries[binaryChecksum]
 		if ok {
-			wh.GetMetricsClient().IncCounter(metrics.FrontendPollForDecisionTaskScope, metrics.ServiceErrBadBinaryCounter)
+			wh.GetMetricsClient().IncCounter(metrics.FrontendPollWorkflowTaskQueueScope, metrics.ServiceErrBadBinaryCounter)
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("Binary %v already marked as bad deployment.", binaryChecksum))
 		}
 	}
@@ -3707,4 +3743,15 @@ func (hs HealthStatus) String() string {
 	default:
 		return "unknown"
 	}
+}
+
+func (wh *WorkflowHandler) validateRetryPolicy(namespace string, retryPolicy *commonpb.RetryPolicy) error {
+	if retryPolicy == nil {
+		// By default, if the user does not explicitly set a retry policy for a Workflow, do not perform any retries.
+		return nil
+	}
+
+	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(wh.getDefaultWorkflowRetrySettings(namespace))
+	common.EnsureRetryPolicyDefaults(retryPolicy, defaultWorkflowRetrySettings)
+	return common.ValidateRetryPolicy(retryPolicy)
 }

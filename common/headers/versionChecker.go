@@ -29,7 +29,7 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-version"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 )
 
 const (
@@ -41,12 +41,12 @@ const (
 	CLI = "cli"
 
 	// SupportedGoSDKVersion indicates the highest Go SDK version server will accept requests from.
-	SupportedGoSDKVersion = "0.20.0"
+	SupportedGoSDKVersion = "0.99.0"
 	// SupportedJavaSDKVersion indicates the highest Java SDK version server will accept requests from.
 	// TODO(maxim): Fix before the first prod release
 	SupportedJavaSDKVersion = "0.99.0"
 	// SupportedCLIVersion indicates the highest CLI version server will accept requests from.
-	SupportedCLIVersion = "0.20.0"
+	SupportedCLIVersion = "0.99.0"
 
 	// BaseFeaturesFeatureVersion indicates the minimum client feature set version which supports all base features.
 	BaseFeaturesFeatureVersion = "1.0.0"

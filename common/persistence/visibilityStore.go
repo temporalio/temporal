@@ -25,15 +25,14 @@
 package persistence
 
 import (
-	"github.com/gogo/protobuf/types"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/persistence/serialization"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 type (
@@ -45,7 +44,7 @@ type (
 )
 
 // VisibilityEncoding is default encoding for visibility data
-const VisibilityEncoding = common.EncodingTypeProto3
+const VisibilityEncoding = enumspb.ENCODING_TYPE_PROTO3
 
 var _ VisibilityManager = (*visibilityManagerImpl)(nil)
 
@@ -76,7 +75,7 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWo
 		ExecutionTimestamp: request.ExecutionTimestamp,
 		RunTimeout:         request.RunTimeout,
 		TaskID:             request.TaskID,
-		TaskList:           request.TaskList,
+		TaskQueue:          request.TaskQueue,
 		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
 		SearchAttributes:   request.SearchAttributes,
 	}
@@ -93,7 +92,7 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWor
 		ExecutionTimestamp: request.ExecutionTimestamp,
 		TaskID:             request.TaskID,
 		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
-		TaskList:           request.TaskList,
+		TaskQueue:          request.TaskQueue,
 		SearchAttributes:   request.SearchAttributes,
 		CloseTimestamp:     request.CloseTimestamp,
 		Status:             request.Status,
@@ -113,7 +112,7 @@ func (v *visibilityManagerImpl) UpsertWorkflowExecution(request *UpsertWorkflowE
 		ExecutionTimestamp: request.ExecutionTimestamp,
 		TaskID:             request.TaskID,
 		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
-		TaskList:           request.TaskList,
+		TaskQueue:          request.TaskQueue,
 		SearchAttributes:   request.SearchAttributes,
 	}
 	return v.persistence.UpsertWorkflowExecution(req)
@@ -223,7 +222,7 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 	}
 
 	resp := &ListWorkflowExecutionsResponse{}
-	resp.Executions = make([]*executionpb.WorkflowExecutionInfo, len(internalResp.Executions))
+	resp.Executions = make([]*workflowpb.WorkflowExecutionInfo, len(internalResp.Executions))
 	for i, execution := range internalResp.Executions {
 		resp.Executions[i] = v.convertVisibilityWorkflowExecutionInfo(execution)
 	}
@@ -252,7 +251,7 @@ func (v *visibilityManagerImpl) getSearchAttributes(attr map[string]interface{})
 	}, nil
 }
 
-func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo) *executionpb.WorkflowExecutionInfo {
+func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo) *workflowpb.WorkflowExecutionInfo {
 	// special handling of ExecutionTime for cron or retry
 	if execution.ExecutionTime.UnixNano() == 0 {
 		execution.ExecutionTime = execution.StartTime
@@ -273,29 +272,25 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 			tag.Error(err))
 	}
 
-	convertedExecution := &executionpb.WorkflowExecutionInfo{
-		Execution: &executionpb.WorkflowExecution{
+	convertedExecution := &workflowpb.WorkflowExecutionInfo{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowID,
 			RunId:      execution.RunID,
 		},
 		Type: &commonpb.WorkflowType{
 			Name: execution.TypeName,
 		},
-		StartTime: &types.Int64Value{
-			Value: execution.StartTime.UnixNano(),
-		},
-		ExecutionTime:    execution.ExecutionTime.UnixNano(),
+		StartTime:        &execution.StartTime,
+		ExecutionTime:    &execution.ExecutionTime,
 		Memo:             memo,
 		SearchAttributes: searchAttributes,
-		TaskList:         execution.TaskList,
+		TaskQueue:        execution.TaskQueue,
+		Status:           execution.Status,
 	}
 
 	// for close records
-	if execution.Status != nil {
-		convertedExecution.CloseTime = &types.Int64Value{
-			Value: execution.CloseTime.UnixNano(),
-		}
-		convertedExecution.Status = *execution.Status
+	if execution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		convertedExecution.CloseTime = &execution.CloseTime
 		convertedExecution.HistoryLength = execution.HistoryLength
 	}
 

@@ -30,10 +30,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	eventpb "go.temporal.io/temporal-proto/event"
+	historypb "go.temporal.io/api/history/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
 )
 
 func (s *utilSuite) SetupTest() {
@@ -49,9 +49,10 @@ type utilSuite struct {
 }
 
 func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
-	historyBatches := []*eventpb.History{
+	now := time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)
+	historyBatches := []*historypb.History{
 		{
-			Events: []*eventpb.HistoryEvent{
+			Events: []*historypb.HistoryEvent{
 				{
 					EventId: common.FirstEventID,
 					Version: 1,
@@ -59,16 +60,16 @@ func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
 			},
 		},
 		{
-			Events: []*eventpb.HistoryEvent{
+			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: &now,
 					Version:   1,
 				},
 				{
 					EventId: common.FirstEventID + 2,
 					Version: 2,
-					Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
+					Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 						Identity: "some random identity",
 					}},
 				},

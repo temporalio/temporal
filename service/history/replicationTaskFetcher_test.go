@@ -31,12 +31,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/resource"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/resource"
 )
 
 type (
@@ -89,24 +89,24 @@ func (s *replicationTaskFetcherSuite) TearDownTest() {
 
 func (s *replicationTaskFetcherSuite) TestGetMessages() {
 	requestByShard := make(map[int32]*request)
-	token := &replicationgenpb.ReplicationToken{
-		ShardId:                0,
+	token := &replicationspb.ReplicationToken{
+		ShardId:                1,
 		LastProcessedMessageId: 1,
 		LastRetrievedMessageId: 2,
 	}
-	requestByShard[0] = &request{
+	requestByShard[1] = &request{
 		token: token,
 	}
 	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
-		Tokens: []*replicationgenpb.ReplicationToken{
+		Tokens: []*replicationspb.ReplicationToken{
 			token,
 		},
 		ClusterName: "active",
 	}
-	messageByShared := make(map[int32]*replicationgenpb.ReplicationMessages)
-	messageByShared[0] = &replicationgenpb.ReplicationMessages{}
+	messageByShared := make(map[int32]*replicationspb.ReplicationMessages)
+	messageByShared[1] = &replicationspb.ReplicationMessages{}
 	expectedResponse := &adminservice.GetReplicationMessagesResponse{
-		MessagesByShard: messageByShared,
+		ShardMessages: messageByShared,
 	}
 	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(expectedResponse, nil)
 	response, err := s.replicationTaskFetcher.getMessages(requestByShard)
@@ -116,30 +116,30 @@ func (s *replicationTaskFetcherSuite) TestGetMessages() {
 
 func (s *replicationTaskFetcherSuite) TestFetchAndDistributeTasks() {
 	requestByShard := make(map[int32]*request)
-	token := &replicationgenpb.ReplicationToken{
-		ShardId:                0,
+	token := &replicationspb.ReplicationToken{
+		ShardId:                1,
 		LastProcessedMessageId: 1,
 		LastRetrievedMessageId: 2,
 	}
-	respChan := make(chan *replicationgenpb.ReplicationMessages, 1)
-	requestByShard[0] = &request{
+	respChan := make(chan *replicationspb.ReplicationMessages, 1)
+	requestByShard[1] = &request{
 		token:    token,
 		respChan: respChan,
 	}
 	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
-		Tokens: []*replicationgenpb.ReplicationToken{
+		Tokens: []*replicationspb.ReplicationToken{
 			token,
 		},
 		ClusterName: "active",
 	}
-	messageByShared := make(map[int32]*replicationgenpb.ReplicationMessages)
-	messageByShared[0] = &replicationgenpb.ReplicationMessages{}
+	messageByShared := make(map[int32]*replicationspb.ReplicationMessages)
+	messageByShared[1] = &replicationspb.ReplicationMessages{}
 	expectedResponse := &adminservice.GetReplicationMessagesResponse{
-		MessagesByShard: messageByShared,
+		ShardMessages: messageByShared,
 	}
 	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(expectedResponse, nil)
 	err := s.replicationTaskFetcher.fetchAndDistributeTasks(requestByShard)
 	s.NoError(err)
 	respToken := <-respChan
-	s.Equal(messageByShared[0], respToken)
+	s.Equal(messageByShared[1], respToken)
 }

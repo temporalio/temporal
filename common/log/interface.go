@@ -25,12 +25,12 @@
 package log
 
 import (
-	"github.com/temporalio/temporal/common/log/tag"
+	"go.temporal.io/server/common/log/tag"
 )
 
 // Logger is our abstraction for logging
 // Usage examples:
-//  import "github.com/temporalio/temporal/common/log/tag"
+//  import "go.temporal.io/server/common/log/tag"
 //  1) logger = logger.WithTags(
 //          tag.WorkflowNextEventID( 123),
 //          tag.WorkflowActionWorkflowStarted,

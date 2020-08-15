@@ -31,7 +31,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -39,17 +38,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	sdkclient "go.temporal.io/temporal/client"
-	"go.temporal.io/temporal/encoded"
-	"go.temporal.io/temporal/worker"
-	"go.temporal.io/temporal/workflow"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/rpc"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/rpc"
 )
 
 type (
@@ -61,7 +59,7 @@ type (
 		hostPort  string
 		sdkClient sdkclient.Client
 		worker    worker.Worker
-		taskList  string
+		taskQueue string
 	}
 )
 
@@ -87,13 +85,16 @@ func (s *clientIntegrationSuite) SetupSuite() {
 	s.sdkClient, err = sdkclient.NewClient(sdkclient.Options{
 		HostPort:  s.hostPort,
 		Namespace: s.namespace,
+		ConnectionOptions: sdkclient.ConnectionOptions{
+			DisableHealthCheck: true,
+		},
 	})
 	if err != nil {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
 	}
 
-	s.taskList = "client-integration-test-tasklist"
-	s.worker = worker.New(s.sdkClient, s.taskList, worker.Options{})
+	s.taskQueue = "client-integration-test-taskqueue"
+	s.worker = worker.New(s.sdkClient, s.taskQueue, worker.Options{})
 
 	s.worker.RegisterWorkflow(testDataConverterWorkflow)
 	s.worker.RegisterWorkflow(testParentWorkflow)
@@ -106,7 +107,7 @@ func (s *clientIntegrationSuite) SetupSuite() {
 }
 
 func (s *clientIntegrationSuite) TearDownSuite() {
-	s.sdkClient.CloseConnection()
+	s.sdkClient.Close()
 	s.tearDownSuite()
 }
 
@@ -117,56 +118,99 @@ func (s *clientIntegrationSuite) SetupTest() {
 
 // testDataConverter implements encoded.DataConverter using gob
 type testDataConverter struct {
-	NumOfCallToData   int // for testing to know testDataConverter is called as expected
-	NumOfCallFromData int
+	NumOfCallToPayloads   int // for testing to know testDataConverter is called as expected
+	NumOfCallFromPayloads int
 }
 
-func (tdc *testDataConverter) ToData(value ...interface{}) (*commonpb.Payloads, error) {
+func (tdc *testDataConverter) ToPayloads(values ...interface{}) (*commonpb.Payloads, error) {
+	tdc.NumOfCallToPayloads++
 	result := &commonpb.Payloads{}
-
-	tdc.NumOfCallToData++
-	for i, obj := range value {
-		var buf bytes.Buffer
-		enc := gob.NewEncoder(&buf)
-		if err := enc.Encode(obj); err != nil {
+	for i, value := range values {
+		p, err := tdc.ToPayload(value)
+		if err != nil {
 			return nil, fmt.Errorf(
-				"unable to encode argument: %d, %v, with gob error: %v", i, reflect.TypeOf(obj), err)
+				"args[%d], %T: %w", i, value, err)
 		}
-		payloadItem := &commonpb.Payload{
-			Metadata: map[string][]byte{
-				"encoding": []byte("gob"),
-				"name":     []byte(fmt.Sprintf("args[%d]", i)),
-			},
-			Data: buf.Bytes(),
-		}
-		result.Payloads = append(result.Payloads, payloadItem)
+		result.Payloads = append(result.Payloads, p)
 	}
 	return result, nil
 }
 
-func (tdc *testDataConverter) FromData(payloads *commonpb.Payloads, valuePtr ...interface{}) error {
-	tdc.NumOfCallFromData++
-	for i, payload := range payloads.GetPayloads() {
-		encoding, ok := payload.GetMetadata()["encoding"]
-		if !ok {
-			return fmt.Errorf("args[%d]: %w", i, ErrEncodingIsNotSet)
-		}
-
-		e := string(encoding)
-		if e == "gob" {
-			dec := gob.NewDecoder(bytes.NewBuffer(payload.GetData()))
-			if err := dec.Decode(valuePtr[i]); err != nil {
-				return fmt.Errorf(
-					"unable to decode argument: %d, %v, with gob error: %v", i, reflect.TypeOf(valuePtr[i]), err)
-			}
-		} else {
-			return fmt.Errorf("args[%d], encoding %q: %w", i, e, ErrEncodingIsNotSupported)
+func (tdc *testDataConverter) FromPayloads(payloads *commonpb.Payloads, valuePtrs ...interface{}) error {
+	tdc.NumOfCallFromPayloads++
+	for i, p := range payloads.GetPayloads() {
+		err := tdc.FromPayload(p, valuePtrs[i])
+		if err != nil {
+			return fmt.Errorf("args[%d]: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func newTestDataConverter() encoded.DataConverter {
+func (tdc *testDataConverter) ToPayload(value interface{}) (*commonpb.Payload, error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	if err := enc.Encode(value); err != nil {
+		return nil, err
+	}
+	p := &commonpb.Payload{
+		Metadata: map[string][]byte{
+			"encoding": []byte("gob"),
+		},
+		Data: buf.Bytes(),
+	}
+	return p, nil
+}
+
+func (tdc *testDataConverter) FromPayload(payload *commonpb.Payload, valuePtr interface{}) error {
+	encoding, ok := payload.GetMetadata()["encoding"]
+	if !ok {
+		return ErrEncodingIsNotSet
+	}
+
+	e := string(encoding)
+	if e != "gob" {
+		return ErrEncodingIsNotSupported
+	}
+
+	return decodeGob(payload, valuePtr)
+}
+
+func (tdc *testDataConverter) ToStrings(payloads *commonpb.Payloads) []string {
+	var result []string
+	for _, p := range payloads.GetPayloads() {
+		result = append(result, tdc.ToString(p))
+	}
+
+	return result
+}
+
+func decodeGob(payload *commonpb.Payload, valuePtr interface{}) error {
+	dec := gob.NewDecoder(bytes.NewBuffer(payload.GetData()))
+	return dec.Decode(valuePtr)
+}
+
+func (tdc *testDataConverter) ToString(payload *commonpb.Payload) string {
+	encoding, ok := payload.GetMetadata()["encoding"]
+	if !ok {
+		return ErrEncodingIsNotSet.Error()
+	}
+
+	e := string(encoding)
+	if e != "gob" {
+		return ErrEncodingIsNotSupported.Error()
+	}
+
+	var value interface{}
+	err := decodeGob(payload, &value)
+	if err != nil {
+		return err.Error()
+	}
+
+	return fmt.Sprintf("%+v", value)
+}
+
+func newTestDataConverter() converter.DataConverter {
 	return &testDataConverter{}
 }
 
@@ -188,10 +232,10 @@ func testDataConverterWorkflow(ctx workflow.Context, tl string) (string, error) 
 	}
 
 	// use another converter to run activity,
-	// with new taskList so that worker with same data converter can properly process tasks.
+	// with new taskQueue so that worker with same data converter can properly process tasks.
 	var result1 string
 	ctx1 := workflow.WithDataConverter(ctx, newTestDataConverter())
-	ctx1 = workflow.WithTaskList(ctx1, tl)
+	ctx1 = workflow.WithTaskQueue(ctx1, tl)
 	err1 := workflow.ExecuteActivity(ctx1, testActivity, "world1").Get(ctx1, &result1)
 	if err1 != nil {
 		return "", err1
@@ -199,11 +243,14 @@ func testDataConverterWorkflow(ctx workflow.Context, tl string) (string, error) 
 	return result + "," + result1, nil
 }
 
-func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataConverter encoded.DataConverter) (sdkclient.Client, worker.Worker) {
+func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataConverter converter.DataConverter) (sdkclient.Client, worker.Worker) {
 	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
 		HostPort:      s.hostPort,
 		Namespace:     s.namespace,
 		DataConverter: dataConverter,
+		ConnectionOptions: sdkclient.ConnectionOptions{
+			DisableHealthCheck: true,
+		},
 	})
 	if err != nil {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
@@ -220,18 +267,18 @@ func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataCon
 }
 
 func (s *clientIntegrationSuite) TestClientDataConverter() {
-	tl := "client-integration-data-converter-activity-tasklist"
+	tl := "client-integration-data-converter-activity-taskqueue"
 	dc := newTestDataConverter()
 	sdkClient, worker := s.startWorkerWithDataConverter(tl, dc)
 	defer func() {
 		worker.Stop()
-		_ = sdkClient.CloseConnection()
+		sdkClient.Close()
 	}()
 
 	id := "client-integration-data-converter-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskList:           s.taskList,
+		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: time.Minute,
 	}
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
@@ -250,22 +297,22 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 
 	// to ensure custom data converter is used, this number might be different if client changed.
 	d := dc.(*testDataConverter)
-	s.Equal(1, d.NumOfCallToData)
-	s.Equal(1, d.NumOfCallFromData)
+	s.Equal(1, d.NumOfCallToPayloads)
+	s.Equal(1, d.NumOfCallFromPayloads)
 }
 
 func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
-	tl := "client-integration-data-converter-activity-failed-tasklist"
+	tl := "client-integration-data-converter-activity-failed-taskqueue"
 	sdkClient, worker := s.startWorkerWithDataConverter(tl, nil) // mismatch of data converter
 	defer func() {
 		worker.Stop()
-		_ = sdkClient.CloseConnection()
+		sdkClient.Close()
 	}()
 
 	id := "client-integration-data-converter-failed-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskList:           s.taskList,
+		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: time.Minute,
 	}
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
@@ -288,22 +335,20 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	for iter.HasNext() {
 		event, err := iter.Next()
 		s.NoError(err)
-		if event.GetEventType() == eventpb.EventType_ActivityTaskCompleted {
+		if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED {
 			completedAct++
 		}
-		if event.GetEventType() == eventpb.EventType_ActivityTaskFailed {
+		if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED {
 			failedAct++
-			var message string
-			err = payloads.Decode(event.GetActivityTaskFailedEventAttributes().GetDetails(), &message)
-			s.NoError(err)
-			s.True(strings.HasPrefix(message, "unable to decode the activity function input payload with error"))
+			s.NotNil(event.GetActivityTaskFailedEventAttributes().GetFailure().GetApplicationFailureInfo())
+			s.True(strings.HasPrefix(event.GetActivityTaskFailedEventAttributes().GetFailure().GetMessage(), "unable to decode the activity function input payload with error"))
 		}
 	}
 	s.Equal(1, completedAct)
 	s.Equal(1, failedAct)
 }
 
-var childTaskList = "client-integration-data-converter-child-tasklist"
+var childTaskQueue = "client-integration-data-converter-child-taskqueue"
 
 func testParentWorkflow(ctx workflow.Context) (string, error) {
 	logger := workflow.GetLogger(ctx)
@@ -325,7 +370,7 @@ func testParentWorkflow(ctx workflow.Context) (string, error) {
 	cwo1 := workflow.ChildWorkflowOptions{
 		WorkflowID:         childID1,
 		WorkflowRunTimeout: time.Minute,
-		TaskList:           childTaskList,
+		TaskQueue:          childTaskQueue,
 	}
 	ctx1 := workflow.WithChildOptions(ctx, cwo1)
 	ctx1 = workflow.WithDataConverter(ctx1, newTestDataConverter())
@@ -364,16 +409,16 @@ func testChildWorkflow(ctx workflow.Context, totalCount, runCount int) (string, 
 
 func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 	dc := newTestDataConverter()
-	sdkClient, worker := s.startWorkerWithDataConverter(childTaskList, dc)
+	sdkClient, worker := s.startWorkerWithDataConverter(childTaskQueue, dc)
 	defer func() {
 		worker.Stop()
-		_ = sdkClient.CloseConnection()
+		sdkClient.Close()
 	}()
 
 	id := "client-integration-data-converter-with-child-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskList:           s.taskList,
+		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: time.Minute,
 	}
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
@@ -392,6 +437,6 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 
 	// to ensure custom data converter is used, this number might be different if client changed.
 	d := dc.(*testDataConverter)
-	s.Equal(3, d.NumOfCallToData)
-	s.Equal(2, d.NumOfCallFromData)
+	s.Equal(3, d.NumOfCallToPayloads)
+	s.Equal(2, d.NumOfCallFromPayloads)
 }

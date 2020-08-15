@@ -1,0 +1,180 @@
+// Copyright (c) 2019 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.matchingservice.v1;
+option go_package = "go.temporal.io/server/api/matchingservice/v1;matchingservice";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+import "dependencies/gogoproto/gogo.proto";
+
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/api/taskqueue/v1/message.proto";
+import "temporal/api/query/v1/message.proto";
+
+import "temporal/server/api/enums/v1/task.proto";
+import "temporal/server/api/history/v1/message.proto";
+
+// TODO: remove this dependency
+import "temporal/api/workflowservice/v1/request_response.proto";
+
+message PollWorkflowTaskQueueRequest {
+    string namespace_id = 1;
+    string poller_id = 2;
+    temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest poll_request = 3;
+    string forwarded_source = 4;
+}
+
+message PollWorkflowTaskQueueResponse {
+    bytes task_token = 1;
+    temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
+    temporal.api.common.v1.WorkflowType workflow_type = 3;
+    int64 previous_started_event_id = 4;
+    int64 started_event_id = 5;
+    int32 attempt = 6;
+    int64 next_event_id = 7;
+    int64 backlog_count_hint = 8;
+    bool sticky_execution_enabled = 9;
+    temporal.api.query.v1.WorkflowQuery query = 10;
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo workflow_task_info = 11;
+    temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 12;
+    int32 event_store_version = 13;
+    bytes branch_token = 14;
+    google.protobuf.Timestamp scheduled_time = 15 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp started_time = 16 [(gogoproto.stdtime) = true];
+    map<string, temporal.api.query.v1.WorkflowQuery> queries = 17;
+}
+
+message PollActivityTaskQueueRequest {
+    string namespace_id = 1;
+    string poller_id = 2;
+    temporal.api.workflowservice.v1.PollActivityTaskQueueRequest poll_request = 3;
+    string forwarded_source = 4;
+}
+
+message PollActivityTaskQueueResponse {
+    bytes task_token = 1;
+    temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
+    string activity_id = 3;
+    temporal.api.common.v1.ActivityType activity_type = 4;
+    temporal.api.common.v1.Payloads input = 5;
+    google.protobuf.Timestamp scheduled_time = 6 [(gogoproto.stdtime) = true];
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration schedule_to_close_timeout = 7 [(gogoproto.stdduration) = true];
+    google.protobuf.Timestamp started_time = 8 [(gogoproto.stdtime) = true];
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration start_to_close_timeout = 9 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration heartbeat_timeout = 10 [(gogoproto.stdduration) = true];
+    int32 attempt = 11;
+    google.protobuf.Timestamp current_attempt_scheduled_time = 12 [(gogoproto.stdtime) = true];
+    temporal.api.common.v1.Payloads heartbeat_details = 13;
+    temporal.api.common.v1.WorkflowType workflow_type = 14;
+    string workflow_namespace = 15;
+    temporal.api.common.v1.Header header = 16;
+}
+
+message AddWorkflowTaskRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 3;
+    int64 schedule_id = 4;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration schedule_to_start_timeout = 5 [(gogoproto.stdduration) = true];
+    string forwarded_source = 6;
+    temporal.server.api.enums.v1.TaskSource source = 7;
+}
+
+message AddWorkflowTaskResponse {
+}
+
+message AddActivityTaskRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    string source_namespace_id = 3;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 4;
+    int64 schedule_id = 5;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration schedule_to_start_timeout = 6 [(gogoproto.stdduration) = true];
+    string forwarded_source = 7;
+    temporal.server.api.enums.v1.TaskSource source = 8;
+}
+
+message AddActivityTaskResponse {
+}
+
+message QueryWorkflowRequest {
+    string namespace_id = 1;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+    temporal.api.workflowservice.v1.QueryWorkflowRequest query_request = 3;
+    string forwarded_source = 4;
+}
+
+message QueryWorkflowResponse {
+    temporal.api.common.v1.Payloads query_result = 1;
+    temporal.api.query.v1.QueryRejected query_rejected = 2;
+}
+
+message RespondQueryTaskCompletedRequest {
+    string namespace_id = 1;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+    string task_id = 3;
+    temporal.api.workflowservice.v1.RespondQueryTaskCompletedRequest completed_request = 4;
+}
+
+message RespondQueryTaskCompletedResponse {
+}
+
+message CancelOutstandingPollRequest {
+    string namespace_id = 1;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 3;
+    string poller_id = 4;
+}
+
+message CancelOutstandingPollResponse {
+}
+
+message DescribeTaskQueueRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.DescribeTaskQueueRequest desc_request = 2;
+}
+
+message DescribeTaskQueueResponse {
+    repeated temporal.api.taskqueue.v1.PollerInfo pollers = 1;
+    temporal.api.taskqueue.v1.TaskQueueStatus task_queue_status = 2;
+}
+
+message ListTaskQueuePartitionsRequest {
+    string namespace = 1;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+}
+
+message ListTaskQueuePartitionsResponse {
+    repeated temporal.api.taskqueue.v1.TaskQueuePartitionMetadata activity_task_queue_partitions = 1;
+    repeated temporal.api.taskqueue.v1.TaskQueuePartitionMetadata workflow_task_queue_partitions = 2;
+}

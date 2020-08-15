@@ -31,10 +31,10 @@ import (
 	"github.com/uber-go/tally/m3"
 	"github.com/uber-go/tally/prometheus"
 
-	"github.com/temporalio/temporal/common/auth"
-	"github.com/temporalio/temporal/common/elasticsearch"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/elasticsearch"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const (
@@ -98,10 +98,6 @@ type (
 		// check net.ParseIP for supported syntax, only IPv4 is supported,
 		// mutually exclusive with `BindOnLocalHost` option
 		BindOnIP string `yaml:"bindOnIP"`
-		// DisableLogging disables all logging for rpc
-		DisableLogging bool `yaml:"disableLogging"`
-		// LogLevel is the desired log level
-		LogLevel string `yaml:"logLevel"`
 	}
 
 	// Global contains config items that apply process-wide to all services
@@ -110,6 +106,48 @@ type (
 		Membership Membership `yaml:"membership"`
 		// PProf is the PProf configuration
 		PProf PProf `yaml:"pprof"`
+		// TLS controls the communication encryption configuration
+		TLS RootTLS `yaml:"tls"`
+	}
+
+	// RootTLS contains all TLS settings for the Temporal server
+	RootTLS struct {
+		// Internode controls backend service communication TLS settings.
+		Internode GroupTLS `yaml:"internode"`
+		// Frontend controls SDK Client to Frontend communication TLS settings.
+		Frontend GroupTLS `yaml:"frontend"`
+	}
+
+	// GroupTLS contains an instance client and server TLS settings
+	GroupTLS struct {
+		// Client handles client TLS settings
+		Client ClientTLS `yaml:"client"`
+		// Server handles the server (listener) TLS settings
+		Server ServerTLS `yaml:"server"`
+	}
+
+	// ServerTLS contains items to load server TLS configuration
+	ServerTLS struct {
+		// The path to the file containing the PEM-encoded public key of the certificate to use.
+		CertFile string `yaml:"certFile"`
+		// The path to the file containing the PEM-encoded private key of the certificate to use.
+		KeyFile string `yaml:"keyFile"`
+		// A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust for client authentication.
+		// This value is ignored if `requireClientAuth` is not enabled.
+		ClientCAFiles []string `yaml:"clientCaFiles"`
+		// Requires clients to authenticate with a certificate when connecting, otherwise known as mutual TLS.
+		RequireClientAuth bool `yaml:"requireClientAuth"`
+	}
+
+	// ClientTLS contains TLS configuration for clients.
+	ClientTLS struct {
+		// DNS name to validate against for server to server connections.
+		// Required when TLS is enabled in a multi-host cluster.
+		// This name should be referenced by the certificate specified in the ServerTLS section.
+		ServerName string `yaml:"serverName"`
+
+		// Optional - A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust.
+		RootCAFiles []string `yaml:"rootCaFiles"`
 	}
 
 	// Membership contains config items related to the membership layer of temporal
@@ -162,8 +200,6 @@ type (
 	VisibilityConfig struct {
 		// EnableSampling for visibility
 		EnableSampling dynamicconfig.BoolPropertyFn `yaml:"-" json:"-"`
-		// EnableReadFromClosedExecutionV2 read closed from v2 table
-		EnableReadFromClosedExecutionV2 dynamicconfig.BoolPropertyFn `yaml:"-" json:"-"`
 		// VisibilityOpenMaxQPS max QPS for record open workflows
 		VisibilityOpenMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter `yaml:"-" json:"-"`
 		// VisibilityClosedMaxQPS max QPS for record closed workflows
@@ -196,6 +232,23 @@ type (
 		MaxConns int `yaml:"maxConns"`
 		// TLS configuration
 		TLS *auth.TLS `yaml:"tls"`
+		// Consistency configuration (defaults to LOCAL_QUORUM / LOCAL_SERIAL for all stores if this field not set)
+		Consistency *CassandraStoreConsistency `yaml:"consistency"`
+	}
+
+	// CassandraStoreConsistency enables you to set the consistency settings for each Cassandra Persistence Store for Temporal
+	CassandraStoreConsistency struct {
+		// Default defines the consistency level for ALL stores.
+		// Defaults to LOCAL_QUORUM and LOCAL_SERIAL if not set
+		Default *CassandraConsistencySettings `yaml:"default"`
+	}
+
+	// CassandraConsistencySettings sets the default consistency level for regular & serial queries to Cassandra.
+	CassandraConsistencySettings struct {
+		// Consistency sets the default consistency level. Values identical to gocql Consistency values. (defaults to LOCAL_QUORUM if not set).
+		Consistency string `yaml:"consistency"`
+		// SerialConsistency sets the consistency for the serial prtion of queries. Values identical to gocql SerialConsistency values. (defaults to LOCAL_SERIAL if not set)
+		SerialConsistency string `yaml:"serialConsistency"`
 	}
 
 	// SQL is the configuration for connecting to a SQL backed datastore
@@ -220,9 +273,10 @@ type (
 		MaxIdleConns int `yaml:"maxIdleConns"`
 		// MaxConnLifetime is the maximum time a connection can be alive
 		MaxConnLifetime time.Duration `yaml:"maxConnLifetime"`
-		// NumShards is the number of storage shards to use for tables
-		// in a sharded sql database. The default value for this param is 1
-		NumShards int `yaml:"nShards"`
+		// EXPERIMENTAL - TaskScanPartitions is the number of partitions to sequentially scan during ListTaskQueue operations.
+		// This is used for in a sharded sql database such as Vitess for heavy task workloads to minimize scatter gather.
+		// The default value for this param is 1, and should not be configured without a thorough understanding of what this does.
+		TaskScanPartitions int `yaml:"taskScanPartitions"`
 		// TLS is the configuration for TLS connections
 		TLS *auth.TLS `yaml:"tls"`
 	}
@@ -334,8 +388,8 @@ type (
 
 	// HistoryArchival contains the config for history archival
 	HistoryArchival struct {
-		// Status is the status of history archival either: enabled, disabled, or paused
-		Status string `yaml:"status"`
+		// State is the state of history archival either: enabled, disabled, or paused
+		State string `yaml:"state"`
 		// EnableRead whether history can be read from archival
 		EnableRead bool `yaml:"enableRead"`
 		// Provider contains the config for all history archivers
@@ -351,8 +405,8 @@ type (
 
 	// VisibilityArchival contains the config for visibility archival
 	VisibilityArchival struct {
-		// Status is the status of visibility archival either: enabled, disabled, or paused
-		Status string `yaml:"status"`
+		// State is the state of visibility archival either: enabled, disabled, or paused
+		State string `yaml:"state"`
 		// EnableRead whether visibility can be read from archival
 		EnableRead bool `yaml:"enableRead"`
 		// Provider contains the config for all visibility archivers
@@ -408,16 +462,16 @@ type (
 
 	// HistoryArchivalNamespaceDefaults is the default history archival config for each namespace
 	HistoryArchivalNamespaceDefaults struct {
-		// Status is the namespace default status of history archival: enabled or disabled
-		Status string `yaml:"status"`
+		// State is the namespace default state of history archival: enabled or disabled
+		State string `yaml:"state"`
 		// URI is the namespace default URI for history archiver
 		URI string `yaml:"URI"`
 	}
 
 	// VisibilityArchivalNamespaceDefaults is the default visibility archival config for each namespace
 	VisibilityArchivalNamespaceDefaults struct {
-		// Status is the namespace default status of visibility archival: enabled or disabled
-		Status string `yaml:"status"`
+		// State is the namespace default state of visibility archival: enabled or disabled
+		State string `yaml:"state"`
 		// URI is the namespace default URI for visibility archiver
 		URI string `yaml:"URI"`
 	}
@@ -435,4 +489,8 @@ func (c *Config) Validate() error {
 func (c *Config) String() string {
 	out, _ := json.MarshalIndent(c, "", "    ")
 	return string(out)
+}
+
+func (r *GroupTLS) IsEnabled() bool {
+	return r.Server.KeyFile != ""
 }

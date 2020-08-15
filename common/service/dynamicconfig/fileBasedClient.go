@@ -34,8 +34,8 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 var _ Client = (*fileBasedClient)(nil)
@@ -218,7 +218,7 @@ func (fc *fileBasedClient) UpdateValue(name Key, value interface{}) error {
 
 func (fc *fileBasedClient) update() error {
 	defer func() {
-		fc.lastUpdatedTime = time.Now()
+		fc.lastUpdatedTime = time.Now().UTC()
 	}()
 
 	newValues := make(map[string][]*constrainedValue)

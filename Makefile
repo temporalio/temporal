@@ -1,18 +1,21 @@
 ############################# Main targets #############################
 # Install all tools and builds binaries.
-install: update-tools proto bins
-
-# Run all possible checks and tests.
-all: proto check bins test
+install: update-tools bins
 
 # Rebuild binaries.
-bins: clean-bins proto temporal-server tctl temporal-cassandra-tool temporal-sql-tool temporal-canary
+bins: clean-bins temporal-server tctl temporal-cassandra-tool temporal-sql-tool
+
+# Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
+all: update-tools clean proto bins check test
 
 # Delete all build artefacts.
-clean: clean-bins clean-proto clean-test-results
+clean: clean-bins clean-test-results
 
-# Update proto submodule from remote and rebuild proto files.
-update-proto: clean-proto update-proto-submodule protoc update-proto-go proto-mock gomodtidy
+# Recompile proto files.
+proto: clean-proto install-proto-submodule buf api-linter protoc fix-proto-path proto-mock goimports-proto
+
+# Update proto submodule from remote and recompile proto files.
+update-proto: clean-proto update-proto-submodule buf api-linter protoc fix-proto-path update-go-api proto-mock goimports-proto gomodtidy
 
 # Build all docker images.
 docker-images:
@@ -37,7 +40,10 @@ ifndef GOPATH
 GOPATH := $(shell go env GOPATH)
 endif
 
-MODULE_ROOT := github.com/temporalio/temporal
+GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)
+export PATH := $(GOBIN):$(PATH)
+
+MODULE_ROOT := go.temporal.io/server
 BUILD := ./build
 COLOR := "\e[1;36m%s\e[0m\n"
 
@@ -73,7 +79,13 @@ ifdef TEST_TAG
 override TEST_TAG := -tags $(TEST_TAG)
 endif
 
-ALL_SRC         := $(shell find . -name "*.go" | grep -v -e ".gen")
+PROTO_ROOT := proto
+PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
+PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
+PROTO_IMPORTS := -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
+PROTO_OUT := api
+
+ALL_SRC         := $(shell find . -name "*.go" | grep -v -e "^$(PROTO_OUT)")
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
@@ -98,13 +110,6 @@ INTEG_NDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_ndc_sql_cover.out
 #   Packages are specified as import paths.
 GOCOVERPKG_ARG := -coverpkg="$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/tools/..."
 
-PROTO_ROOT     := proto
-# Note: using "shell find" instead of "wildcard" because "wildcard" caches directory structure.
-PROTO_DIRS     = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto" | grep -v temporal-proto)))
-PROTO_SERVICES = $(shell find $(PROTO_ROOT) -name "*service.proto" | grep -v temporal-proto)
-PROTO_IMPORT   := $(PROTO_ROOT):$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/gogo/protobuf/protobuf
-PROTO_GEN      := .gen/proto
-
 ##### Tools #####
 update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
@@ -112,6 +117,8 @@ update-checkers:
 	GO111MODULE=off go get -u golang.org/x/lint/golint
 	GO111MODULE=off go get -u honnef.co/go/tools/cmd/staticcheck
 	GO111MODULE=off go get -u github.com/kisielk/errcheck
+	GO111MODULE=off go get -u github.com/googleapis/api-linter/cmd/api-linter
+	GO111MODULE=off go get -u github.com/bufbuild/buf/cmd/buf
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
@@ -119,45 +126,50 @@ update-mockgen:
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
-	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogofaster
+	GO111MODULE=off go get -u github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
 	GO111MODULE=off go get -u google.golang.org/grpc
 
 update-tools: update-checkers update-mockgen update-proto-plugins
 
 ##### Proto #####
-$(PROTO_GEN):
-	@mkdir -p $(PROTO_GEN)
+$(PROTO_OUT):
+	@mkdir -p $(PROTO_OUT)
 
 clean-proto:
-	@rm -rf $(PROTO_GEN)/*
+	@rm -rf $(PROTO_OUT)/*
 
 update-proto-submodule:
 	@printf $(COLOR) "Update proto submodule from remote..."
-	git submodule update --remote $(PROTO_ROOT)/temporal-proto
+	git submodule update --force --remote $(PROTO_ROOT)/api
 
 install-proto-submodule:
 	@printf $(COLOR) "Install proto submodule..."
-	git submodule update --init $(PROTO_ROOT)/temporal-proto
+	git submodule update --init $(PROTO_ROOT)/api
 
-protoc: $(PROTO_GEN)
+protoc: $(PROTO_OUT)
 	@printf $(COLOR) "Build proto files..."
 # Run protoc separately for each directory because of different package names.
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogofaster_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_GEN) $(PROTO_DIR)*.proto$(NEWLINE))
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc $(PROTO_IMPORTS) --gogoslick_out=Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)*.proto$(NEWLINE))
 
-# All gRPC generated service files pathes relative to PROTO_ROOT.
-PROTO_GRPC_SERVICES = $(patsubst $(PROTO_GEN)/%,%,$(shell find $(PROTO_GEN) -name "service.pb.go"))
-dir_no_slash = $(patsubst %/,%,$(dir $(1)))
-dirname = $(notdir $(call dir_no_slash,$(1)))
+fix-proto-path:
+	mv -f $(PROTO_OUT)/temporal/server/api/* $(PROTO_OUT) && rm -rf $(PROTO_OUT)/temporal
 
-proto-mock: $(PROTO_GEN)
+# All gRPC generated service files pathes relative to PROTO_OUT.
+PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go"))
+service_name = $(firstword $(subst /, ,$(1)))
+mock_file_name = $(call service_name,$(1))mock/$(subst $(call service_name,$(1))/,,$(1:go=mock.go))
+
+proto-mock: $(PROTO_OUT)
 	@printf $(COLOR) "Generate proto mocks..."
-	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),cd $(PROTO_GEN) && mockgen -package $(call dirname,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call dir_no_slash,$(PROTO_GRPC_SERVICE))mock/$(notdir $(PROTO_GRPC_SERVICE:go=mock.go))$(NEWLINE) )
+	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),cd $(PROTO_OUT) && mockgen -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE))$(NEWLINE) )
 
-update-proto-go:
-	@printf $(COLOR) "Update go.temporal.io/temporal-proto..."
-	@go get -u go.temporal.io/temporal-proto
+update-go-api:
+	@printf $(COLOR) "Update go.temporal.io/api..."
+	@go get -u go.temporal.io/api@master
 
-proto: clean-proto install-proto-submodule protoc proto-mock
+goimports-proto:
+	@printf $(COLOR) "Run goimports..."
+	@goimports -w $(PROTO_OUT)
 
 ##### Binaries #####
 clean-bins:
@@ -166,69 +178,78 @@ clean-bins:
 	@rm -f temporal-server
 	@rm -f temporal-cassandra-tool
 	@rm -f temporal-sql-tool
-	@rm -f temporal-canary
 
-temporal-server: proto
+temporal-server:
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
 	go build -ldflags '$(GO_BUILD_LDFLAGS)' -o temporal-server cmd/server/main.go
 
-tctl: proto
+tctl:
 	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
 	go build -o tctl cmd/tools/cli/main.go
 
-temporal-cassandra-tool: proto
+temporal-cassandra-tool:
 	@printf $(COLOR) "Build temporal-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
 	go build -o temporal-cassandra-tool cmd/tools/cassandra/main.go
 
-temporal-sql-tool: proto
+temporal-sql-tool:
 	@printf $(COLOR) "Build temporal-sql-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
 	go build -o temporal-sql-tool cmd/tools/sql/main.go
-
-temporal-canary: proto
-	@printf $(COLOR) "Build temporal-canary with OS: $(GOOS), ARCH: $(GOARCH)..."
-	go build -o temporal-canary cmd/canary/main.go
 
 ##### Checks #####
 copyright:
 	@printf $(COLOR) "Check license header..."
-	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
+	@GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
 
 lint:
 	@printf $(COLOR) "Run linter..."
-	golint ./...
+	@golint ./...
+
+vet:
+	@printf $(COLOR) "Run go vet..."
+	@go vet ./... || true
 
 goimports-check:
 	@printf $(COLOR) "Run goimports checks..."
 # Use $(ALL_SRC) here to avoid checking generated files.
-	@goimports -l $(ALL_SRC)
+	@goimports -l $(ALL_SRC) || true
 
 goimports:
 	@printf $(COLOR) "Run goimports..."
-	goimports -w $(ALL_SRC)
+	@goimports -w $(ALL_SRC)
 
 staticcheck:
 	@printf $(COLOR) "Run staticcheck..."
-	staticcheck -fail none ./...
+	@staticcheck -fail none ./...
 
 errcheck:
 	@printf $(COLOR) "Run errcheck..."
-	errcheck ./... || true
+	@errcheck ./... || true
 
-check: copyright goimports-check lint staticcheck errcheck
+api-linter:
+	@printf $(COLOR) "Running api-linter..."
+	@api-linter --set-exit-status --output-format=summary $(PROTO_IMPORTS) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES)
+
+buf:
+	@printf $(COLOR) "Running buf linter..."
+	@(cd $(PROTO_ROOT) && buf check lint)
+
+check: copyright goimports-check lint vet staticcheck errcheck
 
 ##### Tests #####
 clean-test-results:
 	@rm -f test.log
 
-unit-test: clean-test-results proto
+unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
 	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(UNIT_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
+	@grep -qzwv "^--- FAIL" test.log
 
-integration-test: clean-test-results proto
+integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
 	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(INTEG_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
 	@go test -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) | tee -a test.log
+	@grep -qzwv "^--- FAIL" test.log
 
 test: unit-test integration-test
 
@@ -238,7 +259,7 @@ clean-build-results:
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 
-cover_profile: clean-build-results update-proto-plugins update-mockgen proto
+cover_profile: clean-build-results
 	@echo "mode: atomic" > $(UNIT_COVER_FILE)
 
 	@echo Running package tests:
@@ -248,7 +269,7 @@ cover_profile: clean-build-results update-proto-plugins update-mockgen proto
 		cat $(BUILD)/"$$dir"/coverage.out | grep -v "^mode: \w\+" >> $(UNIT_COVER_FILE); \
 	done;
 
-cover_integration_profile: clean-build-results update-proto-plugins update-mockgen proto
+cover_integration_profile: clean-build-results
 	@echo "mode: atomic" > $(INTEG_COVER_FILE)
 
 	@echo Running integration test with $(PERSISTENCE_TYPE)
@@ -256,7 +277,7 @@ cover_integration_profile: clean-build-results update-proto-plugins update-mockg
 	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" >> $(INTEG_COVER_FILE)
 
-cover_xdc_profile: clean-build-results update-proto-plugins update-mockgen proto
+cover_xdc_profile: clean-build-results
 	@echo "mode: atomic" > $(INTEG_XDC_COVER_FILE)
 
 	@echo Running integration test for cross dc with $(PERSISTENCE_TYPE)
@@ -264,7 +285,7 @@ cover_xdc_profile: clean-build-results update-proto-plugins update-mockgen proto
 	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE)
 
-cover_ndc_profile: clean-build-results update-proto-plugins update-mockgen proto
+cover_ndc_profile: clean-build-results
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 	@echo "mode: atomic" > $(INTEG_NDC_COVER_FILE)
@@ -276,11 +297,11 @@ cover_ndc_profile: clean-build-results update-proto-plugins update-mockgen proto
 
 $(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_CASS_COVER_FILE) $(INTEG_XDC_CASS_COVER_FILE) $(INTEG_SQL_COVER_FILE) $(INTEG_XDC_SQL_COVER_FILE)
 	@echo "mode: atomic" > $(COVER_ROOT)/cover.out
-	cat $(UNIT_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP ".gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP ".gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_XDC_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP ".gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP ".gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_XDC_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP ".gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(UNIT_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_XDC_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_XDC_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
 
 cover: $(COVER_ROOT)/cover.out
 	go tool cover -html=$(COVER_ROOT)/cover.out;
@@ -309,21 +330,20 @@ install-schema-mysql-pre5720: temporal-sql-tool
 
 install-schema-mysql: temporal-sql-tool
 	@printf $(COLOR) "Install MySQL schema..."
-	./temporal-sql-tool --ep 127.0.0.1 create --db temporal
-	./temporal-sql-tool --ep 127.0.0.1 --db temporal setup-schema -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned
-	./temporal-sql-tool --ep 127.0.0.1 create --db temporal_visibility
-	./temporal-sql-tool --ep 127.0.0.1 --db temporal_visibility setup-schema -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
+	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root create --db temporal
+	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal setup-schema -v 0.0
+	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned
+	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root create --db temporal_visibility
+	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal_visibility setup-schema -v 0.0
+	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
 
 install-schema-postgres: temporal-sql-tool
 	@printf $(COLOR) "Install Postgres schema..."
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw temporal --pl postgres create --db temporal
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw temporal --pl postgres --db temporal setup -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw temporal --pl postgres --db temporal update-schema -d ./schema/postgres/temporal/versioned
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw temporal --pl postgres create --db temporal_visibility
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw temporal --pl postgres --db temporal_visibility setup-schema -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw temporal --pl postgres --db temporal_visibility update-schema -d ./schema/postgres/visibility/versioned
+	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal setup -v 0.0
+	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal update-schema -d ./schema/postgres/temporal/versioned
+	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres create --db temporal_visibility
+	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal_visibility setup-schema -v 0.0
+	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal_visibility update-schema -d ./schema/postgres/visibility/versioned
 
 install-schema-cdc: temporal-cassandra-tool
 	@printf $(COLOR)  "Set up temporal_active key space..."
@@ -363,13 +383,11 @@ start-cdc-standby: temporal-server
 start-cdc-other: temporal-server
 	./temporal-server --zone other start
 
-start-canary: temporal-canary
-	./temporal-canary start
-
 ##### Auxilary #####
 go-generate:
 	@printf $(COLOR) "Regenerate everything..."
 	@go generate ./...
+	@goimports -w $(ALL_SRC)
 
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."

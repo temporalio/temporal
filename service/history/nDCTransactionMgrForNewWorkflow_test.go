@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -68,7 +68,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TearDownTest() {
 
 func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Dup() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
@@ -92,7 +92,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Dup() 
 
 func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
@@ -143,7 +143,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 
 func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsCurrent() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
@@ -212,7 +212,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 
 func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZombie() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
@@ -278,7 +278,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 
 func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZombie_Dedup() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
@@ -344,7 +344,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 
 func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_SuppressCurrentAndCreateAsCurrent() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"

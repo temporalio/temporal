@@ -30,14 +30,13 @@ import (
 	"context"
 	"fmt"
 
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/persistence"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/payloads"
 )
 
 type (
@@ -130,21 +129,21 @@ func (r *nDCWorkflowImpl) happensAfter(
 func (r *nDCWorkflowImpl) revive() error {
 
 	state, _ := r.mutableState.GetWorkflowStateStatus()
-	if state != persistence.WorkflowStateZombie {
+	if state != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		return nil
-	} else if state == persistence.WorkflowStateCompleted {
+	} else if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// workflow already finished
 		return nil
 	}
 
 	// workflow is in zombie state, need to set the state correctly accordingly
-	state = persistence.WorkflowStateCreated
-	if r.mutableState.HasProcessedOrPendingDecision() {
-		state = persistence.WorkflowStateRunning
+	state = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
+	if r.mutableState.HasProcessedOrPendingWorkflowTask() {
+		state = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	}
 	return r.mutableState.UpdateWorkflowStateStatus(
 		state,
-		executionpb.WorkflowExecutionStatus_Running,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)
 }
 
@@ -212,10 +211,10 @@ func (r *nDCWorkflowImpl) flushBufferedEvents() error {
 		return serviceerror.NewInternal("nDCWorkflow encounter workflow with buffered events but last write not from current cluster")
 	}
 
-	return r.failDecision(lastWriteVersion)
+	return r.failWorkflowTask(lastWriteVersion)
 }
 
-func (r *nDCWorkflowImpl) failDecision(
+func (r *nDCWorkflowImpl) failWorkflowTask(
 	lastWriteVersion int64,
 ) error {
 
@@ -224,18 +223,17 @@ func (r *nDCWorkflowImpl) failDecision(
 		return err
 	}
 
-	decision, ok := r.mutableState.GetInFlightDecision()
+	workflowTask, ok := r.mutableState.GetInFlightWorkflowTask()
 	if !ok {
 		return nil
 	}
 
-	if _, err := r.mutableState.AddDecisionTaskFailedEvent(
-		decision.ScheduleID,
-		decision.StartedID,
-		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
+	if _, err := r.mutableState.AddWorkflowTaskFailedEvent(
+		workflowTask.ScheduleID,
+		workflowTask.StartedID,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		identityHistoryService,
-		"",
 		"",
 		"",
 		"",
@@ -253,7 +251,7 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 ) error {
 
 	eventBatchFirstEventID := r.getMutableState().GetNextEventID()
-	if err := r.failDecision(lastWriteVersion); err != nil {
+	if err := r.failWorkflowTask(lastWriteVersion); err != nil {
 		return err
 	}
 
@@ -275,8 +273,8 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 func (r *nDCWorkflowImpl) zombiefyWorkflow() error {
 
 	return r.mutableState.GetExecutionInfo().UpdateWorkflowStateStatus(
-		persistence.WorkflowStateZombie,
-		executionpb.WorkflowExecutionStatus_Running,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)
 }
 

@@ -6,18 +6,28 @@ services:
     ports:
       - "9042:9042"
   temporal:
-    image: temporalio/auto-setup:0.21.1
+    image: temporalio/server:${SERVER_TAG:-0.28.0}
     ports:
      - "7233:7233"
     environment:
+      - "AUTO_SETUP=true"
       - "CASSANDRA_SEEDS=cassandra"
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"
     depends_on:
       - cassandra
+  temporal-admin-tools:
+    image: temporalio/admin-tools:${SERVER_TAG:-0.28.0}
+    stdin_open: true
+    tty: true
+    environment:
+      - "TEMPORAL_CLI_ADDRESS=temporal:7233"
+    depends_on:
+      - temporal
   temporal-web:
-    image: temporalio/web:0.21.1
+    image: temporalio/web:${WEB_TAG:-0.28.1}
     environment:
       - "TEMPORAL_GRPC_ENDPOINT=temporal:7233"
+      - "TEMPORAL_PERMIT_WRITE_API=true"
     ports:
       - "8088:8088"
     depends_on:

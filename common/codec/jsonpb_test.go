@@ -29,10 +29,14 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -43,14 +47,14 @@ type (
 )
 
 var (
-	historyEvent = &eventpb.HistoryEvent{
+	historyEvent = &historypb.HistoryEvent{
 		Version:   1234,
 		EventId:   130,
-		Timestamp: 112345132134,
-		EventType: eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated,
-		Attributes: &eventpb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &eventpb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
+		EventTime: timestamp.TimePtr(time.Date(1978, 8, 22, 0, 0, 0, 0, time.UTC)),
+		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
+		Attributes: &historypb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 			Namespace: "some random target namespace",
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: "some random target workflow ID",
 				RunId:      "some random target run ID",
 			},
@@ -58,7 +62,7 @@ var (
 			Control:           "some random control",
 		}},
 	}
-	encodedHistoryEvent = `{"eventId":"130","timestamp":"112345132134","eventType":"RequestCancelExternalWorkflowExecutionInitiated","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"namespace":"some random target namespace","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"some random control","childWorkflowOnly":true}}`
+	encodedHistoryEvent = `{"eventId":"130","eventTime":"1978-08-22T00:00:00Z","eventType":"RequestCancelExternalWorkflowExecutionInitiated","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"namespace":"some random target namespace","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"some random control","childWorkflowOnly":true}}`
 )
 
 func TestJSONPBEncoderSuite(t *testing.T) {
@@ -80,14 +84,14 @@ func (s *jsonpbEncoderSuite) TestEncode() {
 }
 
 func (s *jsonpbEncoderSuite) TestDecode() {
-	var val eventpb.HistoryEvent
+	var val historypb.HistoryEvent
 	err := s.encoder.Decode([]byte(encodedHistoryEvent), &val)
 	s.Nil(err)
 	s.EqualValues(val, *historyEvent)
 }
 
 func (s *jsonpbEncoderSuite) TestEncodeSlice() {
-	var historyEvents []*eventpb.HistoryEvent
+	var historyEvents []*historypb.HistoryEvent
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)
@@ -100,7 +104,7 @@ func (s *jsonpbEncoderSuite) TestEncodeSlice() {
 func (s *jsonpbEncoderSuite) TestDecodeSlice() {
 	historyEventsJSON := fmt.Sprintf("[%[1]s,%[1]s,%[1]s]", encodedHistoryEvent)
 
-	var historyEvents []*eventpb.HistoryEvent
+	var historyEvents []*historypb.HistoryEvent
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)

@@ -19,6 +19,8 @@ services:
     container_name: temporal-cassandra
     ports:
       - "9042:9042"
+    environment:
+      CASSANDRA_LISTEN_ADDRESS: 127.0.0.1
     networks:
       - temporal-dependencies-network
   postgres:
@@ -34,8 +36,6 @@ services:
   zookeeper:
     image: wurstmeister/zookeeper:3.4.6
     container_name: temporal-zookeeper
-    ports:
-      - "2181:2181"
     networks:
       - temporal-dependencies-network
   kafka:
@@ -46,13 +46,19 @@ services:
     ports:
       - "9092:9092"
     environment:
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:9092
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
     networks:
       - temporal-dependencies-network
   elasticsearch:
     image: elasticsearch:6.8.8
+    # Make ES available both on _local_ and _site_,
+    # and use use _local_ for the publish_host.
+    #
+    # See here for details on network configuration:
+    # https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-network.html
+    command: elasticsearch -Enetwork.host=_local_,_site_ -Enetwork.publish_host=_local_
     container_name: temporal-elasticsearch
     ports:
       - "9200:9200"
