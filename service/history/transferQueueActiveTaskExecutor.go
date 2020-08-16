@@ -1420,7 +1420,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 			NamespaceId: namespaceID,
 			// Include parent execution info with Terminate request which allows child to be terminated with
 			// different RunID due to continue as new.
-			ParentExecution: &workflowExecution,
+			FirstExecutionRunId: childInfo.StartedRunId,
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 				Namespace: namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{

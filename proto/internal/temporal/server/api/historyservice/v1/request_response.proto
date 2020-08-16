@@ -259,7 +259,7 @@ message RemoveSignalMutableStateResponse {
 
 message TerminateWorkflowExecutionRequest {
     string namespace_id = 1;
-    temporal.api.common.v1.WorkflowExecution parent_execution = 2;
+    string first_execution_run_id = 2;
     temporal.api.workflowservice.v1.TerminateWorkflowExecutionRequest terminate_request = 3;
 }
 
