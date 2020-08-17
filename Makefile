@@ -172,7 +172,7 @@ goimports-proto:
 	@goimports -w $(PROTO_OUT)
 
 copyright-proto:
-	printf $(COLOR) "Update license headers..."
+	@printf $(COLOR) "Update license headers..."
 	@go run ./cmd/tools/copyright/licensegen.go --scanDir $(PROTO_OUT)
 
 ##### Binaries #####
