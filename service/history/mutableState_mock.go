@@ -914,19 +914,19 @@ func (mr *MockmutableStateMockRecorder) GetActivityInfo(arg0 interface{}) *gomoc
 }
 
 // GetActivityInfoWithTimerHeartbeat mocks base method.
-func (m *MockmutableState) GetActivityInfoWithTimerHeartbeat(arg0 int64) (*persistenceblobs.ActivityInfo, int64, bool) {
+func (m *MockmutableState) GetActivityInfoWithTimerHeartbeat(scheduleEventID int64) (*persistenceblobs.ActivityInfo, time.Time, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetActivityInfoWithTimerHeartbeat", arg0)
+	ret := m.ctrl.Call(m, "GetActivityInfoWithTimerHeartbeat", scheduleEventID)
 	ret0, _ := ret[0].(*persistenceblobs.ActivityInfo)
-	ret1, _ := ret[1].(int64)
+	ret1, _ := ret[1].(time.Time)
 	ret2, _ := ret[2].(bool)
 	return ret0, ret1, ret2
 }
 
 // GetActivityInfoWithTimerHeartbeat indicates an expected call of GetActivityInfoWithTimerHeartbeat.
-func (mr *MockmutableStateMockRecorder) GetActivityInfoWithTimerHeartbeat(arg0 interface{}) *gomock.Call {
+func (mr *MockmutableStateMockRecorder) GetActivityInfoWithTimerHeartbeat(scheduleEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityInfoWithTimerHeartbeat", reflect.TypeOf((*MockmutableState)(nil).GetActivityInfoWithTimerHeartbeat), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityInfoWithTimerHeartbeat", reflect.TypeOf((*MockmutableState)(nil).GetActivityInfoWithTimerHeartbeat), scheduleEventID)
 }
 
 // GetActivityScheduledEvent mocks base method.
@@ -2251,7 +2251,7 @@ func (mr *MockmutableStateMockRecorder) UpdateActivity(arg0 interface{}) *gomock
 }
 
 // UpdateActivityWithTimerHeartbeat mocks base method.
-func (m *MockmutableState) UpdateActivityWithTimerHeartbeat(arg0 *persistenceblobs.ActivityInfo, arg1 int64) error {
+func (m *MockmutableState) UpdateActivityWithTimerHeartbeat(arg0 *persistenceblobs.ActivityInfo, arg1 time.Time) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateActivityWithTimerHeartbeat", arg0, arg1)
 	ret0, _ := ret[0].(error)

@@ -187,7 +187,7 @@ func (w *workflowResetorImpl) validateResetWorkflowAfterReplay(newMutableState m
 	if retError := newMutableState.CheckResettable(); retError != nil {
 		return retError
 	}
-	if !newMutableState.HasInFlightWorkflowTask() {
+	if !newMutableState.HasPendingWorkflowTask() {
 		return serviceerror.NewInternal(fmt.Sprintf("can't find the last started workflow task"))
 	}
 	if newMutableState.HasBufferedEvents() {
@@ -290,8 +290,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 
 	// failed the in-flight workflow task(started).
 	// Note that we need to ensure WorkflowTaskFailed event is appended right after WorkflowTaskStarted event
-	workflowTask, _ := newMutableState.GetInFlightWorkflowTask()
-
+	workflowTask, _ := newMutableState.GetPendingWorkflowTask()
 	_, err := newMutableState.AddWorkflowTaskFailedEvent(workflowTask.ScheduleID, workflowTask.StartedID, enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW, nil,
 		identityHistoryService, resetReason, baseRunID, newRunID, forkEventVersion)
 	if err != nil {
@@ -751,8 +750,10 @@ func validateLastBatchOfReset(lastBatch []*historypb.HistoryEvent, workflowTaskF
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong WorkflowTaskFinishEventId, it must be WorkflowTaskStarted + 1: %v", lastEvent.GetEventId()))
 	}
 
-	if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong WorkflowTaskFinishEventId, previous batch doesn't include WorkflowTaskStarted, lastFirstEventId: %v", firstEvent.GetEventId()))
+	if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED &&
+		lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to use provided event id %v as a reset point as previous batch [%v-%v] should end with WorkflowTaskStarted or WorkflowTaskScheduled event",
+			workflowTaskFinishEventID, firstEvent.GetEventId(), lastEvent.GetEventId()))
 	}
 
 	return nil

@@ -186,8 +186,6 @@ var (
 	ErrWorkflowParent = serviceerror.NewNotFound("workflow parent does not match")
 	// ErrDeserializingToken is the error to indicate task token is invalid
 	ErrDeserializingToken = serviceerror.NewInvalidArgument("error deserializing task token")
-	// ErrSignalOverSize is the error to indicate signal input size is > 256K
-	ErrSignalOverSize = serviceerror.NewInvalidArgument("signal input size is over 256K")
 	// ErrCancellationAlreadyRequested is the error indicating cancellation for target workflow is already requested
 	ErrCancellationAlreadyRequested = serviceerror.NewCancellationAlreadyRequested("cancellation already requested for this workflow execution")
 	// ErrSignalsLimitExceeded is the error indicating limit reached for maximum number of signal events
@@ -196,8 +194,6 @@ var (
 	ErrEventsAterWorkflowFinish = serviceerror.NewInternal("error validating last event being workflow finish event")
 	// ErrQueryEnteredInvalidState is error indicating query entered invalid state
 	ErrQueryEnteredInvalidState = serviceerror.NewInvalidArgument("query entered invalid state, this should be impossible")
-	// ErrQueryWorkflowBeforeFirstWorkflowTask is error indicating that query was attempted before first workflow task completed
-	ErrQueryWorkflowBeforeFirstWorkflowTask = serviceerror.NewQueryFailed("workflow must handle at least one workflow task before it can be queried")
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
 	ErrConsistentQueryBufferExceeded = serviceerror.NewInternal("consistent query buffer is full, cannot accept new consistent queries")
 
@@ -2317,7 +2313,6 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		request.GetWorkflowTaskFinishEventId() >= baseMutableState.GetNextEventID() {
 		return nil, serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow next event ID.")
 	}
-
 	// also load the current run of the workflow, it can be different from the base runID
 	resp, err := e.executionManager.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
@@ -2328,6 +2323,9 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	}
 
 	currentRunID := resp.RunID
+	if baseRunID == "" {
+		baseRunID = currentRunID
+	}
 	var currentContext workflowExecutionContext
 	var currentMutableState mutableState
 	var currentReleaseFn releaseWorkflowExecutionFunc

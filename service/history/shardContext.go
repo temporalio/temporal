@@ -1208,8 +1208,6 @@ func acquireShard(
 		shardInfo = &persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
 				ShardId:          int32(shardItem.shardID),
-				RangeId:          0,
-				TransferAckLevel: 0,
 			},
 		}
 		return shardItem.GetShardManager().CreateShard(&persistence.CreateShardRequest{ShardInfo: shardInfo.ShardInfo})
