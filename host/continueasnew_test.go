@@ -657,10 +657,10 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 
 func (s *integrationSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	parentID := "integration-child-workflow-with-continue-as-new-parent-terminate-test-parent"
-	childID := "integration-child-workflow-with-continue-as-new-test-child"
-	wtParent := "integration-child-workflow-with-continue-as-new-test-parent-type"
-	wtChild := "integration-child-workflow-with-continue-as-new-test-child-type"
-	tl := "integration-child-workflow-with-continue-as-new-test-taskqueue"
+	childID := "integration-child-workflow-with-continue-as-new-parent-terminate-test-child"
+	wtParent := "integration-child-workflow-with-continue-as-new-parent-terminate-test-parent-type"
+	wtChild := "integration-child-workflow-with-continue-as-new-parent-terminate-test-child-type"
+	tl := "integration-child-workflow-with-continue-as-new-parent-terminate-test-taskqueue"
 	identity := "worker1"
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
