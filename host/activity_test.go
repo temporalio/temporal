@@ -1100,7 +1100,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	}
 }
 
-func (s *integrationSuite) TestActivityCancellation() {
+func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
 	id := "integration-activity-cancellation-test"
 	wt := "integration-activity-cancellation-test-type"
 	tl := "integration-activity-cancellation-test-taskqueue"
@@ -1175,7 +1175,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 		}}, nil
 	}
 
-	activityExecutedCount := 0
+	activityCanceled := false
 	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
@@ -1186,12 +1186,12 @@ func (s *integrationSuite) TestActivityCancellation() {
 				&workflowservice.RecordActivityTaskHeartbeatRequest{
 					TaskToken: taskToken, Details: payloads.EncodeString("details")})
 			if response != nil && response.CancelRequested {
+				activityCanceled = true
 				return payloads.EncodeString("Activity Cancelled"), true, nil
 			}
 			s.NoError(err)
 			time.Sleep(10 * time.Millisecond)
 		}
-		activityExecutedCount++
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
@@ -1210,21 +1210,36 @@ func (s *integrationSuite) TestActivityCancellation() {
 	s.True(err == nil || err == matching.ErrNoTasks, err)
 
 	cancelCh := make(chan struct{})
-
 	go func() {
 		s.Logger.Info("Trying to cancel the task in a different thread")
+		// Send signal so that worker can send an activity cancel
+		_, err1 := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+			Namespace: s.namespace,
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: id,
+				RunId:      we.RunId,
+			},
+			SignalName: "my signal",
+			Input:      nil,
+			Identity:   identity,
+		})
+		s.NoError(err1)
+
 		scheduleActivity = false
 		requestCancellation = true
-		_, err := poller.PollAndProcessWorkflowTask(false, false)
-		s.True(err == nil || err == matching.ErrNoTasks, err)
-		cancelCh <- struct{}{}
+		_, err2 := poller.PollAndProcessWorkflowTask(false, false)
+		s.NoError(err2)
+		close(cancelCh)
 	}()
 
+	s.Logger.Info("Start activity.")
 	err = poller.PollAndProcessActivityTask(false)
 	s.True(err == nil || err == matching.ErrNoTasks, err)
 
+	s.Logger.Info("Waiting for cancel to complete.", tag.WorkflowRunID(we.RunId))
 	<-cancelCh
-	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
+	s.True(activityCanceled, "Activity was not cancelled.")
+	s.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 }
 
 func (s *integrationSuite) TestActivityCancellationNotStarted() {

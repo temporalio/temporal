@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -1278,11 +1279,13 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 		}},
 	}}
 
-	for i := 0; i < 2; i++ {
-		ms := createMutableState(msBuilder)
-		gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
-		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	}
+	ms1 := createMutableState(msBuilder)
+	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
+
+	ms2 := createMutableState(msBuilder)
+	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
@@ -1295,16 +1298,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err, s.printHistory(msBuilder))
-	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(15), executionBuilder.GetExecutionInfo().NextEventID)
-	s.Equal(workflowTaskStartedEvent1.EventId, executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
-	s.True(executionBuilder.HasPendingWorkflowTask())
-	di3, ok := executionBuilder.GetWorkflowTaskInfo(executionBuilder.GetExecutionInfo().NextEventID - 1)
-	s.True(ok)
-	s.Equal(executionBuilder.GetExecutionInfo().NextEventID-1, di3.ScheduleID)
-	s.Equal(int32(1), di3.Attempt)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal("UnhandledCommand", err.Error())
+
+	s.Equal(int64(15), ms2.ExecutionInfo.NextEventID)
+	s.Equal(workflowTaskStartedEvent1.EventId, ms2.ExecutionInfo.LastProcessedEvent)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.State)
+	s.Equal(ms2.ExecutionInfo.NextEventID-1, ms2.ExecutionInfo.WorkflowTaskScheduleID)
+	s.Equal(int32(1), ms2.ExecutionInfo.Attempt)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
@@ -1357,11 +1359,13 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 		}},
 	}}
 
-	for i := 0; i < 2; i++ {
-		ms := createMutableState(msBuilder)
-		gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
-		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	}
+	ms1 := createMutableState(msBuilder)
+	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
+
+	ms2 := createMutableState(msBuilder)
+	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
@@ -1374,16 +1378,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err, s.printHistory(msBuilder))
-	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(15), executionBuilder.GetExecutionInfo().NextEventID)
-	s.Equal(workflowTaskStartedEvent1.EventId, executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
-	s.True(executionBuilder.HasPendingWorkflowTask())
-	di3, ok := executionBuilder.GetWorkflowTaskInfo(executionBuilder.GetExecutionInfo().NextEventID - 1)
-	s.True(ok)
-	s.Equal(executionBuilder.GetExecutionInfo().NextEventID-1, di3.ScheduleID)
-	s.Equal(int32(1), di3.Attempt)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal("UnhandledCommand", err.Error())
+
+	s.Equal(int64(15), ms2.ExecutionInfo.NextEventID)
+	s.Equal(workflowTaskStartedEvent1.EventId, ms2.ExecutionInfo.LastProcessedEvent)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.State)
+	s.Equal(ms2.ExecutionInfo.NextEventID-1, ms2.ExecutionInfo.WorkflowTaskScheduleID)
+	s.Equal(int32(1), ms2.ExecutionInfo.Attempt)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedBadCommandAttributes() {
@@ -1443,7 +1446,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadCommandAttributes() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal("BadCompleteWorkflowExecutionAttributes: CompleteWorkflowExecutionCommandAttributes is not set on command.", err.Error())
 }
 
 // This test unit tests the activity schedule timeout validation logic of HistoryEngine's RespondWorkflowTaskComplete function.
@@ -1543,8 +1548,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 
 		gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
 		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
+		ms2 := createMutableState(msBuilder)
 		if iVar.expectWorkflowTaskFail {
-			gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
+			gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
 			s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 		}
 
@@ -1560,9 +1566,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 			},
 		})
 
-		s.Nil(err, s.printHistory(msBuilder))
-		executionBuilder := s.getBuilder(testNamespaceID, we)
 		if !iVar.expectWorkflowTaskFail {
+			s.NoError(err, s.printHistory(msBuilder))
+			executionBuilder := s.getBuilder(testNamespaceID, we)
 			s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 			s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
@@ -1573,10 +1579,13 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 			s.Equal(time.Duration(iVar.expectedScheduleToStart)*time.Second, timestamp.DurationValue(activity1Attributes.GetScheduleToStartTimeout()), iVar)
 			s.Equal(time.Duration(iVar.expectedStartToClose)*time.Second, timestamp.DurationValue(activity1Attributes.GetStartToCloseTimeout()), iVar)
 		} else {
-			s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID, iVar)
-			s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent, iVar)
-			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State, iVar)
-			s.True(executionBuilder.HasPendingWorkflowTask(), iVar)
+			s.Error(err)
+			s.IsType(&serviceerror.InvalidArgument{}, err)
+			s.True(strings.HasPrefix(err.Error(), "BadScheduleActivityAttributes"), err.Error())
+			s.Equal(int64(5), ms2.ExecutionInfo.NextEventID, iVar)
+			s.Equal(common.EmptyEventID, ms2.ExecutionInfo.LastProcessedEvent, iVar)
+			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.State, iVar)
+			s.True(ms2.ExecutionInfo.WorkflowTaskScheduleID != common.EmptyEventID, iVar)
 		}
 		s.TearDownTest()
 		s.SetupTest()
@@ -1622,7 +1631,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	var commands []*commandpb.Command
 
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
-	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
+	ms2 := createMutableState(msBuilder)
+	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
@@ -1639,12 +1649,14 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 			BinaryChecksum: "test-bad-binary",
 		},
 	})
-	s.Nil(err, s.printHistory(msBuilder))
-	executionBuilder := s.getBuilder(namespaceID, we)
-	s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
-	s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
-	s.True(executionBuilder.HasPendingWorkflowTask())
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal("BadBinary: binary test-bad-binary is already marked as bad deployment", err.Error())
+
+	s.Equal(int64(5), ms2.ExecutionInfo.NextEventID)
+	s.Equal(common.EmptyEventID, ms2.ExecutionInfo.LastProcessedEvent)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.State)
+	s.True(ms2.ExecutionInfo.WorkflowTaskScheduleID != common.EmptyEventID)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWorkflowTask() {
@@ -3770,12 +3782,13 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NotSchedule
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
-	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
-	s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
-	s.True(executionBuilder.HasPendingWorkflowTask())
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal("BadRequestCancelActivityAttributes: invalid history builder state for action: add-activitytask-cancel-requested-event", err.Error())
+	s.Equal(int64(5), ms2.ExecutionInfo.NextEventID)
+	s.Equal(common.EmptyEventID, ms2.ExecutionInfo.LastProcessedEvent)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.State)
+	s.True(ms2.ExecutionInfo.WorkflowTaskScheduleID != common.EmptyEventID)
 }
 
 func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled() {
@@ -4412,17 +4425,16 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal("StartTimerDuplicateId: invalid history builder state for action: add-timer-started-event", err.Error())
 
 	s.True(workflowTaskFailedEvent)
-	executionBuilder = s.getBuilder(testNamespaceID, we)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
-	s.True(executionBuilder.HasPendingWorkflowTask())
-	di3, ok := executionBuilder.GetWorkflowTaskInfo(executionBuilder.GetExecutionInfo().NextEventID)
-	s.True(ok, "DI.ScheduleID: %v, ScheduleID: %v, StartedID: %v", di2.ScheduleID,
-		executionBuilder.GetExecutionInfo().WorkflowTaskScheduleID, executionBuilder.GetExecutionInfo().WorkflowTaskStartedID)
-	s.Equal(executionBuilder.GetExecutionInfo().NextEventID, di3.ScheduleID)
-	s.Equal(int32(2), di3.Attempt)
+
+	s.Equal(int64(9), ms2.ExecutionInfo.NextEventID)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.State)
+	s.Equal(ms2.ExecutionInfo.NextEventID, ms2.ExecutionInfo.WorkflowTaskScheduleID)
+	s.Equal(int32(2), ms2.ExecutionInfo.WorkflowTaskAttempt)
 }
 
 func (s *engineSuite) TestUserTimer_RespondWorkflowTaskCompleted() {
@@ -4534,13 +4546,14 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal("BadCancelTimerAttributes: invalid history builder state for action: add-timer-canceled-event", err.Error())
 
-	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
-	s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
-	s.True(executionBuilder.HasPendingWorkflowTask())
+	s.Equal(int64(5), ms2.ExecutionInfo.NextEventID)
+	s.Equal(common.EmptyEventID, ms2.ExecutionInfo.LastProcessedEvent)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.State)
+	s.True(ms2.ExecutionInfo.WorkflowTaskScheduleID != common.EmptyEventID)
 }
 
 func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() {

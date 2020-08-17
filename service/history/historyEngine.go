@@ -37,7 +37,6 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
@@ -58,6 +57,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -2575,8 +2575,7 @@ func (e *historyEngineImpl) failWorkflowTask(
 	context workflowExecutionContext,
 	scheduleID int64,
 	startedID int64,
-	cause enumspb.WorkflowTaskFailedCause,
-	failure *failurepb.Failure,
+	workflowTaskFailedErr *workflowTaskFailedError,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (mutableState, error) {
 
@@ -2590,8 +2589,15 @@ func (e *historyEngineImpl) failWorkflowTask(
 	}
 
 	if _, err = mutableState.AddWorkflowTaskFailedEvent(
-		scheduleID, startedID, cause, failure, request.GetIdentity(), request.GetBinaryChecksum(), "", "", 0,
-	); err != nil {
+		scheduleID,
+		startedID,
+		workflowTaskFailedErr.failedCause,
+		failure.NewServerFailure(workflowTaskFailedErr.Error(), true),
+		request.GetIdentity(),
+		request.GetBinaryChecksum(),
+		"",
+		"",
+		0); err != nil {
 		return nil, err
 	}
 

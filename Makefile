@@ -12,10 +12,10 @@ all: update-tools clean proto bins check test
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto install-proto-submodule buf api-linter protoc fix-proto-path proto-mock goimports-proto
+proto: clean-proto install-proto-submodule buf api-linter protoc fix-proto-path proto-mock goimports-proto copyright-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule buf api-linter protoc fix-proto-path update-go-api proto-mock goimports-proto gomodtidy
+update-proto: clean-proto update-proto-submodule buf api-linter protoc fix-proto-path update-go-api proto-mock goimports-proto copyright-proto gomodtidy
 
 # Build all docker images.
 docker-images:
@@ -171,6 +171,10 @@ goimports-proto:
 	@printf $(COLOR) "Run goimports..."
 	@goimports -w $(PROTO_OUT)
 
+copyright-proto:
+	@printf $(COLOR) "Update license headers..."
+	@go run ./cmd/tools/copyright/licensegen.go --scanDir $(PROTO_OUT)
+
 ##### Binaries #####
 clean-bins:
 	@printf $(COLOR) "Delete old binaries..."
@@ -198,7 +202,7 @@ temporal-sql-tool:
 ##### Checks #####
 copyright:
 	@printf $(COLOR) "Check license header..."
-	@GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
+	@go run ./cmd/tools/copyright/licensegen.go --verifyOnly
 
 lint:
 	@printf $(COLOR) "Run linter..."

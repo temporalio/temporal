@@ -600,8 +600,6 @@ func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 
 			// Schedule and cancel child workflow in the same decision
 			childCancelled = true
-			buf := new(bytes.Buffer)
-			binary.Write(buf, binary.LittleEndian, 1)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -609,7 +607,7 @@ func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 					WorkflowId:   childWorkflowID,
 					WorkflowType: &commonpb.WorkflowType{Name: "childTypeA"},
 					TaskQueue:    &taskqueuepb.TaskQueue{Name: childTaskQueue},
-					Input:        payloads.EncodeBytes(buf.Bytes()),
+					Input:        payloads.EncodeBytes([]byte{1}),
 				}},
 			}, {
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
@@ -649,9 +647,9 @@ func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 			return nil, errors.New("workflow task failed event not found due to previous bad commands")
 		}
 
-		taskFailure := workflowtaskFailedEvent.GetWorkflowTaskFailedEventAttributes().Failure
-		if taskFailure.GetMessage() != "Start and RequestCancel for child workflow is not allowed in same workflow task." {
-			return nil, errors.New("Unexpected workflow task failure")
+		taskFailure := workflowtaskFailedEvent.GetWorkflowTaskFailedEventAttributes().GetFailure()
+		if taskFailure.GetMessage() != "BadRequestCancelExternalWorkflowExecutionAttributes: Start and RequestCancel for child workflow is not allowed in same workflow task." {
+			return nil, errors.New("unexpected workflow task failure")
 		}
 
 		workflowComplete = true
@@ -675,7 +673,9 @@ func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 
 	s.Logger.Info("Process first workflow task which starts and request cancels child workflow")
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
-	s.NoError(err)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal("BadRequestCancelExternalWorkflowExecutionAttributes: Start and RequestCancel for child workflow is not allowed in same workflow task.", err.Error())
 
 	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,

@@ -1098,7 +1098,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 		executions = append(executions, execution)
 		return []*commandpb.Command{
 			{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 
 				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 					TimerId:            "timer-id",
@@ -2653,7 +2653,9 @@ func (s *integrationSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents()
 	// so it will fail and create a new workflow task
 	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	s.NoError(err)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal("UnhandledCommand", err.Error())
 
 	// second workflow task, which will complete the workflow
 	// this expect the workflow task to have attempt == 1
@@ -3692,6 +3694,73 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 			s.Fail("timer got fired")
 		}
 	}
+}
+
+func (s *integrationSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument() {
+	id := "integration-respond-workflow-task-completed-test"
+	wt := "integration-respond-workflow-task-completed-test-type"
+	tq := "integration-respond-workflow-task-completed-test-taskqueue"
+	identity := "worker1"
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          uuid.New(),
+		Namespace:          s.namespace,
+		WorkflowId:         id,
+		WorkflowType:       &commonpb.WorkflowType{Name: wt},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: tq},
+		Input:              nil,
+		WorkflowRunTimeout: timestamp.DurationPtr(100 * time.Second),
+		Identity:           identity,
+	}
+
+	we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+	s.NotNil(we0)
+
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+			Attributes: &commandpb.Command_RecordMarkerCommandAttributes{
+				RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
+					MarkerName: "", // Marker name is missing.
+					Details:    nil,
+					Header:     nil,
+					Failure:    nil,
+				}},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal("BadRecordMarkerAttributes: MarkerName is not set on command.", err.Error())
+
+	resp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we0.GetRunId(),
+		},
+	})
+
+	s.NoError(err)
+	s.NotNil(resp)
+
+	// Last event is WORKFLOW_TASK_FAILED.
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, resp.History.Events[len(resp.History.Events)-1].GetEventType())
 }
 
 // helper function for TestStartWithMemo and TestSignalWithStartWithMemo to reduce duplicate code
