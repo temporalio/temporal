@@ -1418,16 +1418,16 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
 		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 			NamespaceId: namespaceID,
-			// Include StartedRunID as FirstExecutionRunID on the request to allow child to be terminated across runs.
-			// If the child does continue as new it still propagates the RunID of first execution.
-			FirstExecutionRunId: childInfo.StartedRunId,
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 				Namespace: namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: childInfo.StartedWorkflowId,
 				},
-				Reason:   "by parent close policy",
-				Identity: identityHistoryService,
+				// Include StartedRunID as FirstExecutionRunID on the request to allow child to be terminated across runs.
+				// If the child does continue as new it still propagates the RunID of first execution.
+				FirstExecutionRunId: childInfo.StartedRunId,
+				Reason:              "by parent close policy",
+				Identity:            identityHistoryService,
 			},
 		})
 		return err
@@ -1435,15 +1435,15 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
 		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
 			NamespaceId: namespaceID,
-			// Include StartedRunID as FirstExecutionRunID on the request to allow child to be canceled across runs.
-			// If the child does continue as new it still propagates the RunID of first execution.
-			FirstExecutionRunId: childInfo.StartedRunId,
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 				Namespace: namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: childInfo.StartedWorkflowId,
 				},
-				Identity: identityHistoryService,
+				// Include StartedRunID as FirstExecutionRunID on the request to allow child to be canceled across runs.
+				// If the child does continue as new it still propagates the RunID of first execution.
+				FirstExecutionRunId: childInfo.StartedRunId,
+				Identity:            identityHistoryService,
 			},
 		})
 		return err

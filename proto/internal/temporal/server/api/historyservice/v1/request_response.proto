@@ -259,8 +259,7 @@ message RemoveSignalMutableStateResponse {
 
 message TerminateWorkflowExecutionRequest {
     string namespace_id = 1;
-    string first_execution_run_id = 2;
-    temporal.api.workflowservice.v1.TerminateWorkflowExecutionRequest terminate_request = 3;
+    temporal.api.workflowservice.v1.TerminateWorkflowExecutionRequest terminate_request = 2;
 }
 
 message TerminateWorkflowExecutionResponse {
@@ -277,11 +276,10 @@ message ResetWorkflowExecutionResponse {
 
 message RequestCancelWorkflowExecutionRequest {
     string namespace_id = 1;
-    string first_execution_run_id = 2;
-    temporal.api.workflowservice.v1.RequestCancelWorkflowExecutionRequest cancel_request = 3;
-    int64 external_initiated_event_id = 4;
-    temporal.api.common.v1.WorkflowExecution external_workflow_execution = 5;
-    bool child_workflow_only = 6;
+    temporal.api.workflowservice.v1.RequestCancelWorkflowExecutionRequest cancel_request = 2;
+    int64 external_initiated_event_id = 3;
+    temporal.api.common.v1.WorkflowExecution external_workflow_execution = 4;
+    bool child_workflow_only = 5;
 }
 
 message RequestCancelWorkflowExecutionResponse {

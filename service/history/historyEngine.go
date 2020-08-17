@@ -1790,7 +1790,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 		WorkflowId: request.WorkflowExecution.WorkflowId,
 	}
 
-	firstExecutionRunID := req.GetFirstExecutionRunId()
+	firstExecutionRunID := request.GetFirstExecutionRunId()
 	// If firstExecutionRunID is set on the request always try to cancel currently running execution
 	if len(firstExecutionRunID) == 0 {
 		execution.RunId = request.WorkflowExecution.RunId
@@ -2171,7 +2171,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 		WorkflowId: request.WorkflowExecution.WorkflowId,
 	}
 
-	firstExecutionRunID := terminateRequest.GetFirstExecutionRunId()
+	firstExecutionRunID := request.GetFirstExecutionRunId()
 	// If firstExecutionRunID is set on the request always try to terminate currently running execution
 	if len(firstExecutionRunID) == 0 {
 		execution.RunId = request.WorkflowExecution.RunId
