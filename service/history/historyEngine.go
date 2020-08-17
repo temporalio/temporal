@@ -2562,8 +2562,15 @@ func (e *historyEngineImpl) failWorkflowTask(
 	}
 
 	if _, err = mutableState.AddWorkflowTaskFailedEvent(
-		scheduleID, startedID, workflowTaskFailedErr.failedCause, failure.NewServerFailure(workflowTaskFailedErr.Error(), true), request.GetIdentity(), request.GetBinaryChecksum(), "", "", 0,
-	); err != nil {
+		scheduleID,
+		startedID,
+		workflowTaskFailedErr.failedCause,
+		failure.NewServerFailure(workflowTaskFailedErr.Error(), true),
+		request.GetIdentity(),
+		request.GetBinaryChecksum(),
+		"",
+		"",
+		0); err != nil {
 		return nil, err
 	}
 

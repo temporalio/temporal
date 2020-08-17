@@ -76,7 +76,9 @@ type (
 
 	workflowTaskFailedError struct {
 		failedCause enumspb.WorkflowTaskFailedCause
-		causeErr    *serviceerror.InvalidArgument
+		// Use concrete type (not `error` interface) here to indicate that cause error is always InvalidArgument error
+		// and it is ok to return InvalidArgument to the caller in case of workflowTaskFailedError.
+		causeErr *serviceerror.InvalidArgument
 	}
 )
 
