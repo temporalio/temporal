@@ -5242,6 +5242,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		NamespaceID:                            sourceInfo.NamespaceID,
 		WorkflowID:                             sourceInfo.WorkflowID,
 		RunID:                                  sourceInfo.RunID,
+		FirstExecutionRunID:                    sourceInfo.FirstExecutionRunID,
 		ParentNamespaceID:                      sourceInfo.ParentNamespaceID,
 		ParentWorkflowID:                       sourceInfo.ParentWorkflowID,
 		ParentRunID:                            sourceInfo.ParentRunID,
