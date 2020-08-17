@@ -76,6 +76,7 @@ func NewTestCluster(keyspace, username, password, host string, port int, schemaD
 		Hosts:    host,
 		Port:     port,
 		MaxConns: 2,
+		ConnectTimeout: 600,
 		Keyspace: keyspace,
 	}
 	return &result

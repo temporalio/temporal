@@ -230,6 +230,8 @@ type (
 		Datacenter string `yaml:"datacenter"`
 		// MaxConns is the max number of connections to this datastore for a single keyspace
 		MaxConns int `yaml:"maxConns"`
+		// ConnectTimeout initial connection timeout measured in milliseconds, used during initial dial to server (default: 600ms)
+		ConnectTimeout int `yaml:"connectTimeout"`
 		// TLS configuration
 		TLS *auth.TLS `yaml:"tls"`
 		// Consistency configuration (defaults to LOCAL_QUORUM / LOCAL_SERIAL for all stores if this field not set)
