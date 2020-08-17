@@ -294,10 +294,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 
 	activityVersion := int64(333)
 	activityScheduleID := scheduleID
-	activityScheduledTime := time.Now()
+	activityScheduledTime := time.Now().UTC()
 	activityStartedID := common.EmptyEventID
-	activityStartedTime := time.Time{}
-	activityHeartbeatTime := time.Time{}
 	activityAttempt := int32(16384)
 	activityDetails := payloads.EncodeString("some random activity progress")
 	activityLastFailure := failure.NewServerFailure("some random reason", false)
@@ -309,8 +307,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		ScheduleId:              activityScheduleID,
 		ScheduledTime:           &activityScheduledTime,
 		StartedId:               activityStartedID,
-		StartedTime:             &activityStartedTime,
-		LastHeartbeatUpdateTime: &activityHeartbeatTime,
+		StartedTime:             nil,
+		LastHeartbeatUpdateTime: nil,
 		LastHeartbeatDetails:    activityDetails,
 		Attempt:                 activityAttempt,
 		RetryLastFailure:        activityLastFailure,
@@ -355,10 +353,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 				RunId:              runID,
 				Version:            activityVersion,
 				ScheduledId:        activityScheduleID,
-				ScheduledTime:      activityScheduledTime.UnixNano(),
+				ScheduledTime:      &activityScheduledTime,
 				StartedId:          activityStartedID,
-				StartedTime:        0,
-				LastHeartbeatTime:  activityHeartbeatTime.UnixNano(),
+				StartedTime:        nil,
+				LastHeartbeatTime:  nil,
 				Details:            activityDetails,
 				Attempt:            activityAttempt,
 				LastFailure:        activityLastFailure,
@@ -404,7 +402,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 
 	activityVersion := int64(333)
 	activityScheduleID := scheduleID
-	activityScheduledTime := time.Now()
+	activityScheduledTime := timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC))
 	activityStartedID := activityScheduleID + 1
 	activityStartedTime := activityScheduledTime.Add(time.Minute)
 	activityHeartbeatTime := activityStartedTime.Add(time.Minute)
@@ -417,7 +415,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistenceblobs.ActivityInfo{
 		Version:                 activityVersion,
 		ScheduleId:              activityScheduleID,
-		ScheduledTime:           &activityScheduledTime,
+		ScheduledTime:           activityScheduledTime,
 		StartedId:               activityStartedID,
 		StartedTime:             &activityStartedTime,
 		LastHeartbeatUpdateTime: &activityHeartbeatTime,
@@ -464,10 +462,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 				RunId:              runID,
 				Version:            activityVersion,
 				ScheduledId:        activityScheduleID,
-				ScheduledTime:      activityScheduledTime.UnixNano(),
+				ScheduledTime:      activityScheduledTime,
 				StartedId:          activityStartedID,
-				StartedTime:        activityStartedTime.UnixNano(),
-				LastHeartbeatTime:  activityHeartbeatTime.UnixNano(),
+				StartedTime:        &activityStartedTime,
+				LastHeartbeatTime:  &activityHeartbeatTime,
 				Details:            activityDetails,
 				Attempt:            activityAttempt,
 				LastFailure:        activityLastFailure,

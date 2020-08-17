@@ -30,7 +30,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -38,7 +37,7 @@ import (
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client/matching"
-	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -136,12 +135,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	var err error
 
 	// todo: Vet recomputing ScheduleToStart and rechecking expiry here
-	expiryGo, err := types.TimestampFromProto(task.event.Data.ExpiryTime)
-	if err != nil {
-		return err
-	}
-
-	newScheduleToStartTimeout := convert.Int32Ceil(time.Until(expiryGo).Seconds())
+	newScheduleToStartTimeout := time.Until(timestamp.TimeValue(task.event.Data.ExpiryTime))
 
 	// Todo - should we noop expired tasks? This will be moot once history stamp absolute time
 	/*if newScheduleToStartTimeout <= 0 {
@@ -157,10 +151,10 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				Name: name,
 				Kind: fwdr.taskQueueKind,
 			},
-			ScheduleId:                    task.event.Data.GetScheduleId(),
-			Source:                        task.source,
-			ScheduleToStartTimeoutSeconds: newScheduleToStartTimeout,
-			ForwardedFrom:                 fwdr.taskQueueID.name,
+			ScheduleId:             task.event.Data.GetScheduleId(),
+			Source:                 task.source,
+			ScheduleToStartTimeout: &newScheduleToStartTimeout,
+			ForwardedSource:        fwdr.taskQueueID.name,
 		})
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
@@ -171,10 +165,10 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				Name: name,
 				Kind: fwdr.taskQueueKind,
 			},
-			ScheduleId:                    task.event.Data.GetScheduleId(),
-			Source:                        task.source,
-			ScheduleToStartTimeoutSeconds: newScheduleToStartTimeout,
-			ForwardedFrom:                 fwdr.taskQueueID.name,
+			ScheduleId:             task.event.Data.GetScheduleId(),
+			Source:                 task.source,
+			ScheduleToStartTimeout: &newScheduleToStartTimeout,
+			ForwardedSource:        fwdr.taskQueueID.name,
 		})
 	default:
 		return errInvalidTaskQueueType
@@ -204,8 +198,8 @@ func (fwdr *Forwarder) ForwardQueryTask(
 			Name: name,
 			Kind: fwdr.taskQueueKind,
 		},
-		QueryRequest:  task.query.request.QueryRequest,
-		ForwardedFrom: fwdr.taskQueueID.name,
+		QueryRequest:    task.query.request.QueryRequest,
+		ForwardedSource: fwdr.taskQueueID.name,
 	})
 
 	return resp, fwdr.handleErr(err)
@@ -237,7 +231,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 				},
 				Identity: identity,
 			},
-			ForwardedFrom: fwdr.taskQueueID.name,
+			ForwardedSource: fwdr.taskQueueID.name,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
@@ -254,7 +248,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 				},
 				Identity: identity,
 			},
-			ForwardedFrom: fwdr.taskQueueID.name,
+			ForwardedSource: fwdr.taskQueueID.name,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)

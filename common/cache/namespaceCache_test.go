@@ -27,6 +27,7 @@ package cache
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -213,9 +214,9 @@ func (s *namespaceCacheSuite) TestGetNamespace_NonLoaded_GetByName() {
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{
 						"abc": {
-							Reason:         "test reason",
-							Operator:       "test operator",
-							CreateTimeNano: 123,
+							Reason:     "test reason",
+							Operator:   "test operator",
+							CreateTime: timestamp.TimePtr(time.Unix(0, 123).UTC()),
 						},
 					},
 				}},

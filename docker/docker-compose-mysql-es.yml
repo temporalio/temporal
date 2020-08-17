@@ -1,9 +1,11 @@
 version: '3'
 services:
-  cassandra:
-    image: cassandra:3.11
+  mysql:
+    image: mysql:5.7
     ports:
-      - "9042:9042"
+      - "3306:3306"
+    environment:
+      - "MYSQL_ROOT_PASSWORD=root"
   zookeeper:
     image: wurstmeister/zookeeper:3.4.6
     ports:
@@ -18,6 +20,24 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+  temporal:
+    image: temporalio/server:${SERVER_TAG:-0.27.0}
+    ports:
+     - "7233:7233"
+    environment:
+      - "AUTO_SETUP=true"
+      - "DB=mysql"
+      - "MYSQL_USER=root"
+      - "MYSQL_PWD=root"
+      - "MYSQL_SEEDS=mysql"
+      - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development_es.yaml"
+      - "ENABLE_ES=true"
+      - "ES_SEEDS=elasticsearch"
+      - "KAFKA_SEEDS=kafka"
+    depends_on:
+      - mysql
+      - elasticsearch
+      - kafka
   elasticsearch:
     image: elasticsearch:6.8.8
     ports:
@@ -25,23 +45,8 @@ services:
     environment:
       - discovery.type=single-node
       - ES_JAVA_OPTS=-Xms100m -Xmx100m
-  temporal:
-    image: temporalio/server:${SERVER_TAG:-0.28.0}
-    ports:
-     - "7233:7233"
-    environment:
-      - "AUTO_SETUP=true"
-      - "CASSANDRA_SEEDS=cassandra"
-      - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development_es.yaml"
-      - "ENABLE_ES=true"
-      - "ES_SEEDS=elasticsearch"
-      - "KAFKA_SEEDS=kafka"
-    depends_on:
-      - cassandra
-      - kafka
-      - elasticsearch
   temporal-admin-tools:
-    image: temporalio/admin-tools:${SERVER_TAG:-0.28.0}
+    image: temporalio/admin-tools:${SERVER_TAG:-0.27.0}
     stdin_open: true
     tty: true
     environment:
@@ -49,10 +54,9 @@ services:
     depends_on:
       - temporal
   temporal-web:
-    image: temporalio/web:${WEB_TAG:-0.28.1}
+    image: temporalio/web:${WEB_TAG:-0.27.0}
     environment:
       - "TEMPORAL_GRPC_ENDPOINT=temporal:7233"
-      - "TEMPORAL_PERMIT_WRITE_API=true"
     ports:
       - "8088:8088"
     depends_on:

@@ -40,7 +40,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
@@ -223,13 +222,13 @@ type (
 		StartTimestamp                         time.Time
 		LastUpdatedTimestamp                   time.Time
 		CreateRequestID                        string
-		SignalCount                            int32
+		SignalCount                            int64
 		WorkflowTaskVersion                    int64
 		WorkflowTaskScheduleID                 int64
 		WorkflowTaskStartedID                  int64
 		WorkflowTaskRequestID                  string
 		WorkflowTaskTimeout                    int64
-		WorkflowTaskAttempt                    int64
+		WorkflowTaskAttempt                    int32
 		WorkflowTaskStartedTimestamp           int64
 		WorkflowTaskScheduledTimestamp         int64
 		WorkflowTaskOriginalScheduledTimestamp int64
@@ -255,21 +254,6 @@ type (
 		BranchToken            []byte
 		// Cron
 		CronSchedule string
-	}
-
-	// ExecutionStats is the statistics about workflow execution
-	ExecutionStats struct {
-		HistorySize int64
-	}
-
-	// ReplicationState represents mutable state information for global namespaces.
-	// This information is used by replication protocol when applying events from remote clusters
-	ReplicationState struct {
-		CurrentVersion      int64
-		StartVersion        int64
-		LastWriteVersion    int64
-		LastWriteEventID    int64
-		LastReplicationInfo map[string]*replicationspb.ReplicationInfo
 	}
 
 	// ReplicationTaskInfoWrapper describes a replication task.
@@ -349,7 +333,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
-		ScheduleAttempt     int64
+		ScheduleAttempt     int32
 		TimeoutType         enumspb.TimeoutType
 		Version             int64
 	}
@@ -410,7 +394,7 @@ type (
 		TaskID              int64
 		TimeoutType         enumspb.TimeoutType
 		EventID             int64
-		Attempt             int64
+		Attempt             int32
 		Version             int64
 	}
 
@@ -490,8 +474,8 @@ type (
 		SignalInfos         map[int64]*persistenceblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 		ExecutionInfo       *WorkflowExecutionInfo
-		ExecutionStats      *ExecutionStats
-		ReplicationState    *ReplicationState
+		ExecutionStats      *persistenceblobs.ExecutionStats
+		ReplicationState    *persistenceblobs.ReplicationState
 		BufferedEvents      []*historypb.HistoryEvent
 		VersionHistories    *VersionHistories
 		Checksum            checksum.Checksum
@@ -592,7 +576,7 @@ type (
 
 		NewWorkflowSnapshot *WorkflowSnapshot
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// ConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for a single run
@@ -614,7 +598,7 @@ type (
 		//  basically should use CurrentWorkflowMutation instead
 		CurrentWorkflowCAS *CurrentWorkflowCAS
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// CurrentWorkflowCAS represent a compare and swap on current record
@@ -643,7 +627,7 @@ type (
 		// For new mutable state
 		NewWorkflowSnapshot WorkflowSnapshot
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// WorkflowEvents is used as generic workflow history events transaction container
@@ -658,8 +642,8 @@ type (
 	// WorkflowMutation is used as generic workflow execution state mutation
 	WorkflowMutation struct {
 		ExecutionInfo    *WorkflowExecutionInfo
-		ExecutionStats   *ExecutionStats
-		ReplicationState *ReplicationState
+		ExecutionStats   *persistenceblobs.ExecutionStats
+		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *VersionHistories
 
 		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
@@ -688,8 +672,8 @@ type (
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
 	WorkflowSnapshot struct {
 		ExecutionInfo    *WorkflowExecutionInfo
-		ExecutionStats   *ExecutionStats
-		ReplicationState *ReplicationState
+		ExecutionStats   *persistenceblobs.ExecutionStats
+		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *VersionHistories
 
 		ActivityInfos       []*persistenceblobs.ActivityInfo
@@ -1070,7 +1054,7 @@ type (
 		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
 		TransactionID int64
 		// optional binary encoding type
-		Encoding common.EncodingType
+		Encoding enumspb.EncodingType
 		// The shard to get history node data
 		ShardID *int
 	}
@@ -1124,6 +1108,8 @@ type (
 		Size int
 		// the first_event_id of last loaded batch
 		LastFirstEventID int64
+		// event id of the last event in the last loaded batch
+		LastEventID int64
 	}
 
 	// ReadRawHistoryBranchResponse is the response to ReadHistoryBranchRequest
@@ -1190,7 +1176,7 @@ type (
 	HistoryBranchDetail struct {
 		TreeID   string
 		BranchID string
-		ForkTime time.Time
+		ForkTime *time.Time
 		Info     string
 	}
 
@@ -1515,8 +1501,8 @@ func (d *WorkflowTask) SetTaskID(id int64) {
 }
 
 // GetVisibilityTime get the visibility timestamp
-func (d *ReplicationTaskInfoWrapper) GetVisibilityTime() *types.Timestamp {
-	return &types.Timestamp{}
+func (d *ReplicationTaskInfoWrapper) GetVisibilityTime() *time.Time {
+	return &time.Time{}
 }
 
 // GetVisibilityTime get the visibility timestamp
@@ -2091,12 +2077,12 @@ func (a *SyncActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
 
 // DBTimestampToUnixNano converts CQL timestamp to UnixNano
 func DBTimestampToUnixNano(milliseconds int64) int64 {
-	return milliseconds * 1000 * 1000 // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-3) - (-9) = 6, so multiply by 10⁶
+	return (time.Duration(milliseconds) * time.Millisecond).Nanoseconds()
 }
 
 // UnixNanoToDBTimestamp converts UnixNano to CQL timestamp
 func UnixNanoToDBTimestamp(timestamp int64) int64 {
-	return timestamp / (1000 * 1000) // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-9) - (-3) = -6, so divide by 10⁶
+	return time.Duration(timestamp).Milliseconds()
 }
 
 // NewHistoryBranchToken return a new branch token
@@ -2168,7 +2154,7 @@ func NewGetReplicationTasksFromDLQRequest(
 	}
 }
 
-func (r *ReplicationState) GenerateVersionProto() *persistenceblobs.ReplicationVersions {
+func GenerateVersionProto(r *persistenceblobs.ReplicationState) *persistenceblobs.ReplicationVersions {
 	return &persistenceblobs.ReplicationVersions{
 		StartVersion:     &types.Int64Value{Value: r.StartVersion},
 		LastWriteVersion: &types.Int64Value{Value: r.LastWriteVersion},

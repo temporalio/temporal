@@ -34,7 +34,9 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -47,6 +49,7 @@ import (
 	cassp "go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/tools/cassandra"
 )
@@ -124,10 +127,10 @@ func AdminDescribeWorkflow(c *cli.Context) {
 	prettyPrintJSONObject(resp)
 
 	if resp != nil {
-		msStr := resp.GetMutableStateInDatabase()
+		msStr := resp.GetDatabaseMutableState()
 		ms := persistence.WorkflowMutableState{}
 		// TODO: this won't work for some cases because json.Unmarshal can't be used for proto object
-		// Proper refactoring is required here: resp.GetMutableStateInDatabase() should return proto object.
+		// Proper refactoring is required here: resp.GetDatabaseMutableState() should return proto object.
 		err := json.Unmarshal([]byte(msStr), &ms)
 		if err != nil {
 			ErrorAndExit("json.Unmarshal err", err)
@@ -151,8 +154,8 @@ func AdminDescribeWorkflow(c *cli.Context) {
 		if ms.ExecutionInfo.AutoResetPoints != nil {
 			fmt.Println("auto-reset-points:")
 			for _, p := range ms.ExecutionInfo.AutoResetPoints.Points {
-				createT := time.Unix(0, p.GetCreateTimeNano())
-				expireT := time.Unix(0, p.GetExpireTimeNano())
+				createT := timestamp.TimeValue(p.GetCreateTime())
+				expireT := timestamp.TimeValue(p.GetExpireTime())
 				fmt.Println(p.GetBinaryChecksum(), p.GetRunId(), p.GetFirstWorkflowTaskCompletedId(), p.GetResettable(), createT, expireT)
 			}
 		}
@@ -214,7 +217,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	rid := c.String(FlagRunID)
 
 	resp := describeMutableState(c)
-	msStr := resp.GetMutableStateInDatabase()
+	msStr := resp.GetDatabaseMutableState()
 	ms := persistence.WorkflowMutableState{}
 	err := json.Unmarshal([]byte(msStr), &ms)
 	if err != nil {
@@ -239,7 +242,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	}
 
 	for _, branchToken := range branchTokens {
-		branchInfo, err := serialization.HistoryBranchFromBlob(branchToken, common.EncodingTypeProto3.String())
+		branchInfo, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 		if err != nil {
 			ErrorAndExit("HistoryBranchFromBlob decoder err", err)
 		}
@@ -383,6 +386,7 @@ func AdminGetNamespaceIDOrName(c *cli.Context) {
 
 // AdminGetShardID get shardID
 func AdminGetShardID(c *cli.Context) {
+	namespaceID := getRequiredOption(c, FlagNamespaceID)
 	wid := getRequiredOption(c, FlagWorkflowID)
 	numberOfShards := c.Int(FlagNumberOfShards)
 
@@ -390,8 +394,8 @@ func AdminGetShardID(c *cli.Context) {
 		ErrorAndExit("numberOfShards is required", nil)
 		return
 	}
-	shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
-	fmt.Printf("ShardId for workflowId: %v is %v \n", wid, shardID)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, wid, numberOfShards)
+	fmt.Printf("ShardId for namespace, workflowId: %v, %v is %v \n", namespaceID, wid, shardID)
 }
 
 // AdminDescribeTask outputs the details of a task given Task Id, Task Type, Shard Id and Visibility Timestamp
@@ -415,7 +419,7 @@ func AdminDescribeTask(c *cli.Context) {
 
 	if category == enumsspb.TASK_CATEGORY_TIMER {
 		vis := getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
-		req := &persistence.GetTimerTaskRequest{ShardID: int32(sid), TaskID: int64(tid), VisibilityTimestamp: time.Unix(0, vis)}
+		req := &persistence.GetTimerTaskRequest{ShardID: int32(sid), TaskID: int64(tid), VisibilityTimestamp: time.Unix(0, vis).UTC()}
 		task, err := executionManager.GetTimerTask(req)
 		if err != nil {
 			ErrorAndExit("Failed to get Timer Task", err)
@@ -477,10 +481,8 @@ func AdminListTasks(c *cli.Context) {
 		}
 		paginate(c, paginationFunc)
 	} else if category == enumsspb.TASK_CATEGORY_TIMER {
-		minVisFlag := parseTime(c.String(FlagMinVisibilityTimestamp), 0, time.Now())
-		minVis := time.Unix(0, minVisFlag)
-		maxVisFlag := parseTime(c.String(FlagMaxVisibilityTimestamp), 0, time.Now())
-		maxVis := time.Unix(0, maxVisFlag)
+		minVis := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now().UTC())
+		maxVis := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now().UTC())
 
 		req := &persistence.GetTimerIndexTasksRequest{MinTimestamp: minVis, MaxTimestamp: maxVis}
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
@@ -542,10 +544,10 @@ func AdminRemoveTask(c *cli.Context) {
 	defer cancel()
 
 	req := &adminservice.RemoveTaskRequest{
-		ShardId:             int32(shardID),
-		Category:            category,
-		TaskId:              taskID,
-		VisibilityTimestamp: visibilityTimestamp,
+		ShardId:        int32(shardID),
+		Category:       category,
+		TaskId:         taskID,
+		VisibilityTime: timestamp.UnixOrZeroTimePtr(visibilityTimestamp),
 	}
 
 	_, err = adminClient.RemoveTask(ctx, req)
@@ -621,7 +623,8 @@ func AdminListClusterMembership(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Failed to map membership role", err)
 	}
-	heartbeatFlag := parseTime(c.String(FlagEarliestTime), 0, time.Now())
+	// TODO: refactor this: parseTime shouldn't be used for duration.
+	heartbeatFlag := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now().UTC()).UnixNano()
 	heartbeat := time.Duration(heartbeatFlag)
 
 	pFactory := CreatePersistenceFactory(c)
@@ -661,10 +664,10 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 
 	req := &adminservice.DescribeHistoryHostRequest{}
 	if len(wid) > 0 {
-		req.ExecutionForHost = &commonpb.WorkflowExecution{WorkflowId: wid}
+		req.WorkflowExecution = &commonpb.WorkflowExecution{WorkflowId: wid}
 	}
 	if c.IsSet(FlagShardID) {
-		req.ShardIdForHost = int32(sid)
+		req.ShardId = int32(sid)
 	}
 	if len(addr) > 0 {
 		req.HostAddress = addr

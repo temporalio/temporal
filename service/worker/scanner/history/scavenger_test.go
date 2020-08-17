@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
@@ -46,6 +45,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -103,13 +103,13 @@ func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 			{
 				TreeID:   "treeID1",
 				BranchID: "branchID1",
-				ForkTime: time.Now(),
+				ForkTime: timestamp.TimeNowPtrUtc(),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
 				TreeID:   "treeID2",
 				BranchID: "branchID2",
-				ForkTime: time.Now(),
+				ForkTime: timestamp.TimeNowPtrUtc(),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
@@ -123,13 +123,13 @@ func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 			{
 				TreeID:   "treeID3",
 				BranchID: "branchID3",
-				ForkTime: time.Now(),
+				ForkTime: timestamp.TimeNowPtrUtc(),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
 				TreeID:   "treeID4",
 				BranchID: "branchID4",
-				ForkTime: time.Now(),
+				ForkTime: timestamp.TimeNowPtrUtc(),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
@@ -155,13 +155,13 @@ func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 			{
 				TreeID:   "treeID1",
 				BranchID: "branchID1",
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     "error-info",
 			},
 			{
 				TreeID:   "treeID2",
 				BranchID: "branchID2",
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     "error-info",
 			},
 		},
@@ -175,13 +175,13 @@ func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 			{
 				TreeID:   "treeID3",
 				BranchID: "branchID3",
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     "error-info",
 			},
 			{
 				TreeID:   "treeID4",
 				BranchID: "branchID4",
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     "error-info",
 			},
 		},
@@ -207,13 +207,13 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 			{
 				TreeID:   "treeID1",
 				BranchID: "branchID1",
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
 				TreeID:   "treeID2",
 				BranchID: "branchID2",
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
@@ -227,13 +227,13 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 			{
 				TreeID:   "treeID3",
 				BranchID: "branchID3",
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
 				TreeID:   "treeID4",
 				BranchID: "branchID4",
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
@@ -288,13 +288,13 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 			{
 				TreeID:   treeID1,
 				BranchID: branchID1,
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
 				TreeID:   treeID2,
 				BranchID: branchID2,
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
@@ -307,13 +307,13 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 			{
 				TreeID:   treeID3,
 				BranchID: branchID3,
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
 				TreeID:   treeID4,
 				BranchID: branchID4,
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
@@ -394,14 +394,14 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 				// skip
 				TreeID:   treeID1,
 				BranchID: branchID1,
-				ForkTime: time.Now(),
+				ForkTime: timestamp.TimeNowPtrUtc(),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
 				// split error
 				TreeID:   treeID2,
 				BranchID: branchID2,
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     "error-info",
 			},
 		},
@@ -415,21 +415,21 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 				// delete succ
 				TreeID:   treeID3,
 				BranchID: branchID3,
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
 				// delete fail
 				TreeID:   treeID4,
 				BranchID: branchID4,
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 			{
 				// not delete
 				TreeID:   treeID5,
 				BranchID: branchID5,
-				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID5", "workflowID5", "runID5"),
 			},
 		},

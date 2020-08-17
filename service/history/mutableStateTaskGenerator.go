@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -133,7 +134,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
 ) error {
 
 	attr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	firstWorkflowTaskDelayDuration := time.Duration(attr.GetFirstWorkflowTaskBackoffSeconds()) * time.Second
+	firstWorkflowTaskDelayDuration := timestamp.DurationValue(attr.GetFirstWorkflowTaskBackoff())
 
 	executionInfo := r.mutableState.GetExecutionInfo()
 	startVersion := startEvent.GetVersion()
@@ -195,7 +196,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedWorkflowTasks(
 	startVersion := startEvent.GetVersion()
 
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	workflowTaskBackoffDuration := time.Duration(startAttr.GetFirstWorkflowTaskBackoffSeconds()) * time.Second
+	workflowTaskBackoffDuration := timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff())
 	executionTimestamp := now.Add(workflowTaskBackoffDuration)
 
 	var workflowBackoffType enumsspb.WorkflowBackoffType
@@ -259,7 +260,7 @@ func (r *mutableStateTaskGeneratorImpl) generateScheduleWorkflowTaskTasks(
 	})
 
 	if r.mutableState.IsStickyTaskQueueEnabled() {
-		scheduledTime := time.Unix(0, workflowTask.ScheduledTimestamp)
+		scheduledTime := time.Unix(0, workflowTask.ScheduledTimestamp).UTC()
 		scheduleToStartTimeout := time.Duration(
 			r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout,
 		) * time.Second
@@ -289,7 +290,7 @@ func (r *mutableStateTaskGeneratorImpl) generateStartWorkflowTaskTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflowTaskInfo: %v", workflowTaskScheduleID))
 	}
 
-	startedTime := time.Unix(0, workflowTask.StartedTimestamp)
+	startedTime := time.Unix(0, workflowTask.StartedTimestamp).UTC()
 	workflowTaskTimeout := time.Duration(
 		workflowTask.WorkflowTaskTimeout,
 	) * time.Second

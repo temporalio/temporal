@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -214,7 +215,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: timestamp.TimePtr(time.Now().UTC()),
 					Version:   testCloseFailoverVersion + 1,
 				},
 			},
@@ -278,12 +279,12 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: timestamp.TimePtr(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 				{
 					EventId:   common.FirstEventID + 2,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: timestamp.TimePtr(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -292,7 +293,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: timestamp.TimePtr(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -541,12 +542,13 @@ func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.H
 }
 
 func (s *historyArchiverSuite) setupHistoryDirectory() {
+	now := time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)
 	s.historyBatchesV1 = []*historypb.History{
 		{
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: &now,
 					Version:   1,
 				},
 			},
@@ -558,12 +560,12 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: &now,
 					Version:   testCloseFailoverVersion,
 				},
 				{
 					EventId:   common.FirstEventID + 1,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: &now,
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -572,7 +574,7 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: &now,
 					Version:   testCloseFailoverVersion,
 				},
 			},

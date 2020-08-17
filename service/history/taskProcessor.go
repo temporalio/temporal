@@ -28,7 +28,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -41,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -91,7 +91,7 @@ func newTaskInfo(
 		processor:         processor,
 		task:              task,
 		attempt:           1,
-		startTime:         time.Now(), // used for metrics
+		startTime:         time.Now().UTC(), // used for metrics
 		logger:            logger,
 		shouldProcessTask: true,
 	}
@@ -329,7 +329,7 @@ func (t *taskProcessor) ackTaskOnce(
 
 	task.processor.complete(task)
 	if task.shouldProcessTask {
-		goVisibilityTime, _ := types.TimestampFromProto(task.task.GetVisibilityTime())
+		goVisibilityTime := timestamp.TimeValue(task.task.GetVisibilityTime())
 		scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(task.attempt))
 		scope.RecordTimer(metrics.TaskLatency, time.Since(task.startTime))
 		scope.RecordTimer(metrics.TaskQueueLatency, time.Since(goVisibilityTime))

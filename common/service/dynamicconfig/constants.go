@@ -61,7 +61,6 @@ var keys = map[Key]string{
 	// system settings
 	EnableGlobalNamespace:                  "system.enableGlobalNamespace",
 	EnableNDC:                              "system.enableNDC",
-	EnableNewKafkaClient:                   "system.enableNewKafkaClient",
 	EnableVisibilitySampling:               "system.enableVisibilitySampling",
 	AdvancedVisibilityWritingMode:          "system.advancedVisibilityWritingMode",
 	EnableReadVisibilityFromES:             "system.enableReadVisibilityFromES",
@@ -259,6 +258,7 @@ var keys = map[Key]string{
 	EnableDropStuckTaskByNamespaceID:                       "history.DropStuckTaskByNamespace",
 	SkipReapplicationByNamespaceId:                         "history.SkipReapplicationByNamespaceId",
 	DefaultActivityRetryPolicy:                             "history.defaultActivityRetryPolicy",
+	DefaultWorkflowRetryPolicy:                             "history.defaultWorkflowRetryPolicy",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -314,8 +314,6 @@ const (
 	EnableGlobalNamespace
 	// EnableNDC is key for enable N data center events replication
 	EnableNDC
-	// EnableNewKafkaClient is key for using New Kafka client
-	EnableNewKafkaClient
 	// EnableVisibilitySampling is key for enable visibility sampling
 	EnableVisibilitySampling
 	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
@@ -638,6 +636,9 @@ const (
 	// DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
 	// the user has not specified an explicit RetryPolicy
 	DefaultActivityRetryPolicy
+	// DefaultWorkflowRetryPolicy represents the out-of-box retry policy for unset fields
+	// where the user has set an explicit RetryPolicy, but not specified all the fields
+	DefaultWorkflowRetryPolicy
 
 	// EnableAdminProtection is whether to enable admin checking
 	EnableAdminProtection
@@ -820,6 +821,8 @@ const (
 	// lastFilterTypeForTest must be the last one in this const group for testing purpose
 	lastFilterTypeForTest
 )
+
+const DefaultNumTaskQueuePartitions = 4
 
 // FilterOption is used to provide filters for dynamic config keys
 type FilterOption func(filterMap map[Filter]interface{})

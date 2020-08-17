@@ -30,7 +30,6 @@ import (
 	"github.com/gocql/gocql"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -156,7 +155,7 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 		request.ID,
 		request.Name,
 		request.Namespace.Data,
-		request.Namespace.Encoding,
+		request.Namespace.Encoding.String(),
 		metadata.NotificationVersion,
 		request.IsGlobal,
 	)
@@ -270,7 +269,7 @@ func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceReq
 	}
 
 	return &p.InternalGetNamespaceResponse{
-		Namespace:           p.NewDataBlob(detail, common.EncodingType(detailEncoding)),
+		Namespace:           p.NewDataBlob(detail, detailEncoding),
 		IsGlobal:            isGlobalNamespace,
 		NotificationVersion: notificationVersion,
 	}, nil
@@ -307,7 +306,7 @@ func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespace
 		// do not include the metadata record
 		if name != namespaceMetadataRecordName {
 			response.Namespaces = append(response.Namespaces, &p.InternalGetNamespaceResponse{
-				Namespace:           p.NewDataBlob(detail, common.EncodingType(detailEncoding)),
+				Namespace:           p.NewDataBlob(detail, detailEncoding),
 				IsGlobal:            isGlobal,
 				NotificationVersion: notificationVersion,
 			})

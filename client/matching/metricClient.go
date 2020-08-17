@@ -58,9 +58,9 @@ func (c *metricClient) AddActivityTask(
 	c.metricsClient.IncCounter(metrics.MatchingClientAddActivityTaskScope, metrics.ClientRequests)
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddActivityTaskScope, metrics.ClientLatency)
 
-	c.emitForwardedFromStats(
+	c.emitForwardedSourceStats(
 		metrics.MatchingClientAddActivityTaskScope,
-		request.GetForwardedFrom(),
+		request.GetForwardedSource(),
 		request.TaskQueue,
 	)
 
@@ -82,9 +82,9 @@ func (c *metricClient) AddWorkflowTask(
 	c.metricsClient.IncCounter(metrics.MatchingClientAddWorkflowTaskScope, metrics.ClientRequests)
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddWorkflowTaskScope, metrics.ClientLatency)
 
-	c.emitForwardedFromStats(
+	c.emitForwardedSourceStats(
 		metrics.MatchingClientAddWorkflowTaskScope,
-		request.GetForwardedFrom(),
+		request.GetForwardedSource(),
 		request.TaskQueue,
 	)
 
@@ -107,9 +107,9 @@ func (c *metricClient) PollActivityTaskQueue(
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollActivityTaskQueueScope, metrics.ClientLatency)
 
 	if request.PollRequest != nil {
-		c.emitForwardedFromStats(
+		c.emitForwardedSourceStats(
 			metrics.MatchingClientPollActivityTaskQueueScope,
-			request.GetForwardedFrom(),
+			request.GetForwardedSource(),
 			request.PollRequest.TaskQueue,
 		)
 	}
@@ -133,9 +133,9 @@ func (c *metricClient) PollWorkflowTaskQueue(
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollWorkflowTaskQueueScope, metrics.ClientLatency)
 
 	if request.PollRequest != nil {
-		c.emitForwardedFromStats(
+		c.emitForwardedSourceStats(
 			metrics.MatchingClientPollWorkflowTaskQueueScope,
-			request.GetForwardedFrom(),
+			request.GetForwardedSource(),
 			request.PollRequest.TaskQueue,
 		)
 	}
@@ -158,9 +158,9 @@ func (c *metricClient) QueryWorkflow(
 	c.metricsClient.IncCounter(metrics.MatchingClientQueryWorkflowScope, metrics.ClientRequests)
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientQueryWorkflowScope, metrics.ClientLatency)
 
-	c.emitForwardedFromStats(
+	c.emitForwardedSourceStats(
 		metrics.MatchingClientQueryWorkflowScope,
-		request.GetForwardedFrom(),
+		request.GetForwardedSource(),
 		request.TaskQueue,
 	)
 
@@ -246,7 +246,7 @@ func (c *metricClient) ListTaskQueuePartitions(
 	return resp, err
 }
 
-func (c *metricClient) emitForwardedFromStats(scope int, forwardedFrom string, taskQueue *taskqueuepb.TaskQueue) {
+func (c *metricClient) emitForwardedSourceStats(scope int, forwardedFrom string, taskQueue *taskqueuepb.TaskQueue) {
 	if taskQueue == nil {
 		return
 	}

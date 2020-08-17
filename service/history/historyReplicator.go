@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -454,7 +455,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 	}
 
 	if rState.LastWriteVersion == incomingVersion {
-		// for ri.GetLastEventId() == rState.LastWriteEventID, ideally we should not do anything
+		// for ri.GetLastEventId() == rState.LastWriteEventId, ideally we should not do anything
 		return msBuilder, nil
 	}
 
@@ -505,7 +506,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 
 		// NOTE: this conflict resolution do not handle fast >= 2 failover
 		lastEvent := request.History.Events[len(request.History.Events)-1]
-		incomingTimestamp := lastEvent.GetTimestamp()
+		incomingTimestamp := timestamp.TimeValue(lastEvent.GetEventTime())
 		return r.resetMutableState(ctx, context, msBuilder, lastValidEventID, incomingVersion, incomingTimestamp, logger)
 	}
 	if rState.LastWriteVersion < ri.GetVersion() {
@@ -516,7 +517,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 
 	// remote replication info last write version is the same as local last write version, check reset
 	// Detect conflict
-	if ri.GetLastEventId() > rState.LastWriteEventID {
+	if ri.GetLastEventId() > rState.LastWriteEventId {
 		// if there is any bug in the replication protocol or implementation, this case can happen
 		logError(logger, "Conflict detected, but cannot resolve.", ErrCorruptedReplicationInfo)
 		// Returning InvalidArgument to force the message to land into DLQ
@@ -528,14 +529,14 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 		return nil, err
 	}
 
-	if ri.GetLastEventId() < msBuilder.GetReplicationState().LastWriteEventID {
+	if ri.GetLastEventId() < msBuilder.GetReplicationState().LastWriteEventId {
 		// the reason to reset mutable state if mutable state has buffered events
 		// is: what buffered event actually do is delay generation of event ID,
 		// the actual action of those buffered event are already applied to mutable state.
 
 		logger.Info("Conflict detected.")
 		lastEvent := request.History.Events[len(request.History.Events)-1]
-		incomingTimestamp := lastEvent.GetTimestamp()
+		incomingTimestamp := timestamp.TimeValue(lastEvent.GetEventTime())
 		return r.resetMutableState(ctx, context, msBuilder, ri.GetLastEventId(), incomingVersion, incomingTimestamp, logger)
 	}
 
@@ -627,7 +628,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 		err = r.replicateWorkflowStarted(ctx, context, msBuilder, request.History, sBuilder, logger)
 	default:
-		now := time.Unix(0, lastEvent.GetTimestamp())
+		now := timestamp.TimeValue(lastEvent.GetEventTime())
 		var newContext workflowExecutionContext
 		if newMutableState != nil {
 			newExecutionInfo := newMutableState.GetExecutionInfo()
@@ -646,7 +647,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 	}
 
 	if err == nil {
-		now := time.Unix(0, lastEvent.GetTimestamp())
+		now := timestamp.TimeValue(lastEvent.GetEventTime())
 		notify(r.shard, request.GetSourceCluster(), now)
 	}
 
@@ -672,7 +673,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	incomingVersion := firstEvent.GetVersion()
 	lastEvent := history.Events[len(history.Events)-1]
 
-	now := time.Unix(0, lastEvent.GetTimestamp())
+	now := timestamp.TimeValue(lastEvent.GetEventTime())
 	newWorkflow, workflowEventsSeq, err := msBuilder.CloseTransactionAsSnapshot(
 		now,
 		transactionPolicyPassive,
@@ -820,7 +821,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 	ctx context.Context,
 	msBuilder mutableState,
 	incomingVersion int64,
-	incomingTimestamp int64,
+	incomingTime time.Time,
 	logger log.Logger,
 ) (string, int64, enumsspb.WorkflowExecutionState, error) {
 
@@ -1041,7 +1042,7 @@ func (r *historyReplicator) resetMutableState(
 	msBuilder mutableState,
 	lastEventID int64,
 	incomingVersion int64,
-	incomingTimestamp int64,
+	incomingTime time.Time,
 	logger log.Logger,
 ) (mutableState, error) {
 
@@ -1053,7 +1054,7 @@ func (r *historyReplicator) resetMutableState(
 		ctx,
 		msBuilder,
 		incomingVersion,
-		incomingTimestamp,
+		incomingTime,
 		logger,
 	)
 	if err != nil {
@@ -1092,7 +1093,7 @@ func (r *historyReplicator) deserializeBlob(
 		return nil, ErrUnknownEncodingType
 	}
 	historyEvents, err := r.historySerializer.DeserializeBatchEvents(&serialization.DataBlob{
-		Encoding: common.EncodingTypeProto3,
+		Encoding: enumspb.ENCODING_TYPE_PROTO3,
 		Data:     blob.Data,
 	})
 	if err != nil {

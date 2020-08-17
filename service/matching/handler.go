@@ -146,7 +146,7 @@ func (h *Handler) AddActivityTask(
 	request *matchingservice.AddActivityTaskRequest,
 ) (_ *matchingservice.AddActivityTaskResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-	startT := time.Now()
+	startT := time.Now().UTC()
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
@@ -157,7 +157,7 @@ func (h *Handler) AddActivityTask(
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
+	if request.GetForwardedSource() != "" {
 		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 
@@ -179,7 +179,7 @@ func (h *Handler) AddWorkflowTask(
 	request *matchingservice.AddWorkflowTaskRequest,
 ) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-	startT := time.Now()
+	startT := time.Now().UTC()
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
@@ -190,7 +190,7 @@ func (h *Handler) AddWorkflowTask(
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
+	if request.GetForwardedSource() != "" {
 		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 
@@ -221,7 +221,7 @@ func (h *Handler) PollActivityTaskQueue(
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
+	if request.GetForwardedSource() != "" {
 		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 
@@ -257,7 +257,7 @@ func (h *Handler) PollWorkflowTaskQueue(
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
+	if request.GetForwardedSource() != "" {
 		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 
@@ -293,7 +293,7 @@ func (h *Handler) QueryWorkflow(
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
+	if request.GetForwardedSource() != "" {
 		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 

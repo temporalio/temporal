@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -252,9 +253,9 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		WorkflowId:         request.ArchiveRequest.WorkflowID,
 		RunId:              request.ArchiveRequest.RunID,
 		WorkflowTypeName:   request.ArchiveRequest.WorkflowTypeName,
-		StartTimestamp:     request.ArchiveRequest.StartTimestamp,
-		ExecutionTimestamp: request.ArchiveRequest.ExecutionTimestamp,
-		CloseTimestamp:     request.ArchiveRequest.CloseTimestamp,
+		StartTime:          timestamp.UnixOrZeroTimePtr(request.ArchiveRequest.StartTimestamp),
+		ExecutionTime:      timestamp.UnixOrZeroTimePtr(request.ArchiveRequest.ExecutionTimestamp),
+		CloseTime:          timestamp.UnixOrZeroTimePtr(request.ArchiveRequest.CloseTimestamp),
 		Status:             request.ArchiveRequest.Status,
 		HistoryLength:      request.ArchiveRequest.HistoryLength,
 		Memo:               request.ArchiveRequest.Memo,

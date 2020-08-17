@@ -108,21 +108,21 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	tasks := []*persistenceblobs.AllocatedTaskInfo{
 		{
 			Data: &persistenceblobs.TaskInfo{
-				ExpiryTime: timestamp.TimestampNowAddSeconds(-60).ToProto(),
-				CreateTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
+				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
+				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
 			},
 			TaskId: 11,
 		},
 		{
 			Data: &persistenceblobs.TaskInfo{
-				ExpiryTime: timestamp.TimestampNowAddSeconds(-60).ToProto(),
-				CreateTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
+				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
+				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
 			},
 			TaskId: 12,
 		},
 	}
 
-	require.True(t, tlm.taskReader.addTasksToBuffer(tasks, time.Now(), time.NewTimer(time.Minute)))
+	require.True(t, tlm.taskReader.addTasksToBuffer(tasks, time.Now().UTC(), time.NewTimer(time.Minute)))
 	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
 	require.Equal(t, int64(12), tlm.taskAckManager.getReadLevel())
 
@@ -130,19 +130,19 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	require.True(t, tlm.taskReader.addTasksToBuffer([]*persistenceblobs.AllocatedTaskInfo{
 		{
 			Data: &persistenceblobs.TaskInfo{
-				ExpiryTime: timestamp.TimestampNowAddSeconds(-60).ToProto(),
-				CreateTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
+				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
+				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
 			},
 			TaskId: 13,
 		},
 		{
 			Data: &persistenceblobs.TaskInfo{
-				ExpiryTime: timestamp.TimestampNowAddSeconds(-60).ToProto(),
-				CreateTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
+				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
+				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
 			},
 			TaskId: 14,
 		},
-	}, time.Now(), time.NewTimer(time.Minute)))
+	}, time.Now().UTC(), time.NewTimer(time.Minute)))
 	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
 	require.Equal(t, int64(14), tlm.taskAckManager.getReadLevel())
 }
@@ -178,9 +178,9 @@ func TestIsTaskAddedRecently(t *testing.T) {
 	defer controller.Finish()
 
 	tlm := createTestTaskQueueManager(controller)
-	require.True(t, tlm.taskReader.isTaskAddedRecently(time.Now()))
-	require.False(t, tlm.taskReader.isTaskAddedRecently(time.Now().Add(-tlm.config.MaxTaskqueueIdleTime())))
-	require.True(t, tlm.taskReader.isTaskAddedRecently(time.Now().Add(1*time.Second)))
+	require.True(t, tlm.taskReader.isTaskAddedRecently(time.Now().UTC()))
+	require.False(t, tlm.taskReader.isTaskAddedRecently(time.Now().UTC().Add(-tlm.config.MaxTaskqueueIdleTime())))
+	require.True(t, tlm.taskReader.isTaskAddedRecently(time.Now().UTC().Add(1*time.Second)))
 	require.False(t, tlm.taskReader.isTaskAddedRecently(time.Time{}))
 }
 

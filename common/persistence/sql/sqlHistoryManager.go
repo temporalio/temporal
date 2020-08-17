@@ -28,17 +28,16 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/gogo/protobuf/types"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type sqlHistoryV2Manager struct {
@@ -88,7 +87,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 		NodeID:       request.NodeID,
 		TxnID:        &request.TransactionID,
 		Data:         request.Events.Data,
-		DataEncoding: string(request.Events.Encoding),
+		DataEncoding: request.Events.Encoding.String(),
 		ShardID:      request.ShardID,
 	}
 
@@ -96,7 +95,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 		treeInfo := &persistenceblobs.HistoryTreeInfo{
 			BranchInfo: branchInfo,
 			Info:       request.Info,
-			ForkTime:   types.TimestampNow(),
+			ForkTime:   timestamp.TimeNowPtrUtc(),
 		}
 
 		blob, err := serialization.HistoryTreeInfoToBlob(treeInfo)
@@ -194,11 +193,9 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 	}
 
 	history := make([]*serialization.DataBlob, 0, int(request.PageSize))
-	eventBlob := &serialization.DataBlob{}
 
 	for _, row := range rows {
-		eventBlob.Data = row.Data
-		eventBlob.Encoding = common.EncodingType(row.DataEncoding)
+		eventBlob := p.NewDataBlob(row.Data, row.DataEncoding)
 
 		if *row.TxnID < lastTxnID {
 			// assuming that business logic layer is correct and transaction ID only increase
@@ -334,7 +331,7 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 			Ancestors: newAncestors,
 		},
 		Info:     request.Info,
-		ForkTime: types.TimestampNow(),
+		ForkTime: timestamp.TimeNowPtrUtc(),
 	}
 
 	blob, err := serialization.HistoryTreeInfoToBlob(treeInfo)
@@ -356,7 +353,7 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 		TreeID:       treeIDBytes,
 		BranchID:     newBranchIdBytes,
 		Data:         blob.Data,
-		DataEncoding: string(blob.Encoding),
+		DataEncoding: blob.Encoding.String(),
 	}
 	result, err := m.db.InsertIntoHistoryTree(row)
 	if err != nil {

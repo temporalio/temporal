@@ -147,13 +147,13 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		{
 			EventId:   2,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
@@ -372,7 +372,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 }
 
 func (s *nDCHistoryResenderSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
-	blob, err := s.serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
+	blob, err := s.serializer.SerializeBatchEvents(events, enumspb.ENCODING_TYPE_PROTO3)
 	s.Nil(err)
 	return &commonpb.DataBlob{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,

@@ -37,6 +37,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	m "go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/client/matching"
@@ -96,7 +97,7 @@ func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 
 func (t *transferQueueTaskExecutorBase) pushActivity(
 	task *persistenceblobs.TransferTaskInfo,
-	activityScheduleToStartTimeout int64,
+	activityScheduleToStartTimeout *time.Duration,
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
@@ -117,8 +118,8 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 			Name: task.TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: int32(activityScheduleToStartTimeout),
+		ScheduleId:             task.GetScheduleId(),
+		ScheduleToStartTimeout: activityScheduleToStartTimeout,
 	})
 
 	return err
@@ -127,7 +128,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	task *persistenceblobs.TransferTaskInfo,
 	taskqueue *taskqueuepb.TaskQueue,
-	workflowTaskScheduleToStartTimeout int64,
+	workflowTaskScheduleToStartTimeout *time.Duration,
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
@@ -143,9 +144,9 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
-		TaskQueue:                     taskqueue,
-		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: int32(workflowTaskScheduleToStartTimeout),
+		TaskQueue:              taskqueue,
+		ScheduleId:             task.GetScheduleId(),
+		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 	})
 	return err
 }
@@ -346,14 +347,14 @@ func getWorkflowExecutionTimestamp(
 	// Use value 0 to represent workflows that don't need backoff. Since ES doesn't support
 	// comparison between two field, we need a value to differentiate them from cron workflows
 	// or later runs of a workflow that needs retry.
-	executionTimestamp := time.Unix(0, 0)
+	executionTimestamp := time.Unix(0, 0).UTC()
 	if startEvent == nil {
 		return executionTimestamp
 	}
 
-	if backoffSeconds := startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoffSeconds(); backoffSeconds != 0 {
-		startTimestamp := time.Unix(0, startEvent.GetTimestamp())
-		executionTimestamp = startTimestamp.Add(time.Duration(backoffSeconds) * time.Second)
+	if backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff()); backoffDuration != 0 {
+		startTime := timestamp.TimeValue(startEvent.GetEventTime())
+		executionTimestamp = startTime.Add(backoffDuration)
 	}
 	return executionTimestamp
 }

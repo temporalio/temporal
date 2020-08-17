@@ -74,7 +74,7 @@ func (c *clientImpl) AddActivityTask(
 		request.GetNamespaceId(),
 		*request.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		request.GetForwardedFrom(),
+		request.GetForwardedSource(),
 	)
 	request.TaskQueue.Name = partition
 	client, err := c.getClientForTaskqueue(partition)
@@ -94,7 +94,7 @@ func (c *clientImpl) AddWorkflowTask(
 		request.GetNamespaceId(),
 		*request.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		request.GetForwardedFrom(),
+		request.GetForwardedSource(),
 	)
 	request.TaskQueue.Name = partition
 	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())
@@ -114,7 +114,7 @@ func (c *clientImpl) PollActivityTaskQueue(
 		request.GetNamespaceId(),
 		*request.PollRequest.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		request.GetForwardedFrom(),
+		request.GetForwardedSource(),
 	)
 	request.PollRequest.TaskQueue.Name = partition
 	client, err := c.getClientForTaskqueue(request.PollRequest.TaskQueue.GetName())
@@ -134,7 +134,7 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 		request.GetNamespaceId(),
 		*request.PollRequest.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		request.GetForwardedFrom(),
+		request.GetForwardedSource(),
 	)
 	request.PollRequest.TaskQueue.Name = partition
 	client, err := c.getClientForTaskqueue(request.PollRequest.TaskQueue.GetName())
@@ -151,7 +151,7 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice
 		request.GetNamespaceId(),
 		*request.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		request.GetForwardedFrom(),
+		request.GetForwardedSource(),
 	)
 	request.TaskQueue.Name = partition
 	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())

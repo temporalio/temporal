@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -41,6 +40,7 @@ import (
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -112,15 +112,13 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 		s.Equal(workflowExecution.WorkflowId, resp.Tasks[0].Data.GetWorkflowId())
 		s.EqualValues(workflowExecution.RunId, resp.Tasks[0].Data.GetRunId())
 		s.Equal(sid, resp.Tasks[0].Data.GetScheduleId())
-		cTime, err := types.TimestampFromProto(resp.Tasks[0].Data.CreateTime)
-		s.NoError(err)
-		eTime, err := types.TimestampFromProto(resp.Tasks[0].Data.ExpiryTime)
-		s.NoError(err)
+		cTime := timestamp.TimeValue(resp.Tasks[0].Data.CreateTime)
+		eTime := timestamp.TimeValue(resp.Tasks[0].Data.ExpiryTime)
 		s.True(cTime.UnixNano() > 0)
 		if s.TaskMgr.GetName() != "cassandra" {
 			// cassandra uses TTL and expiry isn't stored as part of task state
-			s.True(time.Now().Before(eTime))
-			s.True(eTime.Before(time.Now().Add((defaultScheduleToStartTimeout + 1) * time.Second)))
+			s.True(time.Now().UTC().Before(eTime))
+			s.True(eTime.Before(time.Now().UTC().Add((defaultScheduleToStartTimeout + 1) * time.Second)))
 		}
 	}
 }
@@ -303,7 +301,7 @@ func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
 func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueue() {
 	namespaceID := primitives.MustValidateUUID("00136543-72ad-4615-b7e9-44bca9775b45")
 	taskQueue := "aaaaaaa"
-	leaseTime := time.Now()
+	leaseTime := time.Now().UTC()
 	response, err := s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
 		NamespaceID: namespaceID,
 		TaskQueue:   taskQueue,
@@ -313,11 +311,11 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueue() {
 	tli := response.TaskQueueInfo
 	s.EqualValues(1, tli.RangeID)
 	s.EqualValues(0, tli.Data.AckLevel)
-	lu, err := types.TimestampFromProto(tli.Data.LastUpdateTime)
+	lu := tli.Data.LastUpdateTime
 	s.NoError(err)
 	s.True(lu.After(leaseTime) || lu.Equal(leaseTime))
 
-	leaseTime = time.Now()
+	leaseTime = time.Now().UTC()
 	response, err = s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
 		NamespaceID: namespaceID,
 		TaskQueue:   taskQueue,
@@ -328,7 +326,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueue() {
 	s.NotNil(tli)
 	s.EqualValues(2, tli.RangeID)
 	s.EqualValues(0, tli.Data.AckLevel)
-	lu2, err := types.TimestampFromProto(tli.Data.LastUpdateTime)
+	lu2 := tli.Data.LastUpdateTime
 	s.NoError(err)
 	s.True(lu2.After(leaseTime) || lu2.Equal(leaseTime))
 
@@ -452,14 +450,14 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskQueue() {
 		s.EqualValues(enumspb.TASK_QUEUE_KIND_STICKY, resp.Items[0].Data.Kind)
 		s.Equal(rangeID, resp.Items[0].RangeID)
 		s.Equal(ackLevel, resp.Items[0].Data.AckLevel)
-		lu0, err := types.TimestampFromProto(resp.Items[0].Data.LastUpdateTime)
+		lu0 := resp.Items[0].Data.LastUpdateTime
 		s.NoError(err)
 		s.True(lu0.After(updatedTime) || lu0.Equal(updatedTime))
 
 		ackLevel++
 		updateTL := resp.Items[0].Data
 		updateTL.AckLevel = ackLevel
-		updatedTime = time.Now()
+		updatedTime = time.Now().UTC()
 		_, err = s.TaskMgr.UpdateTaskQueue(&p.UpdateTaskQueueRequest{
 			TaskQueueInfo: updateTL,
 			RangeID:       rangeID,
@@ -469,7 +467,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskQueue() {
 		resp, err = s.TaskMgr.ListTaskQueue(&p.ListTaskQueueRequest{PageSize: 10})
 		s.NoError(err)
 		s.Equal(1, len(resp.Items))
-		lu0, err = types.TimestampFromProto(resp.Items[0].Data.LastUpdateTime)
+		lu0 = resp.Items[0].Data.LastUpdateTime
 		s.NoError(err)
 		s.True(lu0.After(updatedTime) || lu0.Equal(updatedTime))
 	}

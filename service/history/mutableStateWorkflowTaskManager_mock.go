@@ -63,7 +63,7 @@ func (m *MockmutableStateWorkflowTaskManager) EXPECT() *MockmutableStateWorkflow
 }
 
 // ReplicateWorkflowTaskScheduledEvent mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) ReplicateWorkflowTaskScheduledEvent(version, scheduleID int64, taskQueue *taskqueue.TaskQueue, startToCloseTimeoutSeconds int32, attempt, scheduleTimestamp, originalScheduledTimestamp int64) (*workflowTaskInfo, error) {
+func (m *MockmutableStateWorkflowTaskManager) ReplicateWorkflowTaskScheduledEvent(version, scheduleID int64, taskQueue *taskqueue.TaskQueue, startToCloseTimeoutSeconds, attempt int32, scheduleTimestamp, originalScheduledTimestamp int64) (*workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateWorkflowTaskScheduledEvent", version, scheduleID, taskQueue, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
 	ret0, _ := ret[0].(*workflowTaskInfo)

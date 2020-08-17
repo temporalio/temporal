@@ -27,7 +27,6 @@ package history
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -363,7 +362,7 @@ func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
 				SyncShardStatusTaskAttributes: &replicationspb.SyncShardStatusTaskAttributes{
 					SourceCluster: p.currentClusterName,
 					ShardId:       int64(p.shard.GetShardID()),
-					Timestamp:     now.UnixNano(),
+					StatusTime:    &now,
 				},
 			},
 		}
@@ -646,19 +645,17 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 				return nil, nil
 			}
 
-			var startedTime int64
-			var heartbeatTime int64
-			scheduledTime := activityInfo.ScheduledTime.UnixNano()
+			var startedTime *time.Time
+			var heartbeatTime *time.Time
+			scheduledTime := activityInfo.ScheduledTime
+
+			// Todo: Comment why this exists? Why not set?
 			if activityInfo.StartedId != common.EmptyEventID {
-				startedTime = activityInfo.StartedTime.UnixNano()
+				startedTime = activityInfo.StartedTime
 			}
 
 			// LastHeartbeatUpdateTime must be valid when getting the sync activity replication task
-			if activityInfo.LastHeartbeatUpdateTime != nil {
-				heartbeatTime = activityInfo.LastHeartbeatUpdateTime.UnixNano()
-			} else {
-				return nil, serviceerror.NewInternal(fmt.Sprintf("activityInfo with Id %v has no LastHeartbeatUpdateTime", activityInfo.ActivityId))
-			}
+			heartbeatTime = activityInfo.LastHeartbeatUpdateTime
 
 			// Version history uses when replicate the sync activity task
 			versionHistories := mutableState.GetVersionHistories()

@@ -26,6 +26,7 @@ package namespace
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -38,7 +39,6 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -81,7 +81,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
-	retention := int32(10)
+	retention := 10 * time.Hour * 24
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "some random history archival uri"
 	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
@@ -102,7 +102,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		Data:        data,
 	}
 	config := &persistenceblobs.NamespaceConfig{
-		Retention:               timestamp.DurationFromDays(retention),
+		Retention:               &retention,
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
@@ -129,12 +129,12 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 					Data:        data,
 				},
 				Config: &namespacepb.NamespaceConfig{
-					WorkflowExecutionRetentionPeriodInDays: retention,
-					HistoryArchivalState:                   historyArchivalState,
-					HistoryArchivalUri:                     historyArchivalURI,
-					VisibilityArchivalState:                visibilityArchivalState,
-					VisibilityArchivalUri:                  visibilityArchivalURI,
-					BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+					WorkflowExecutionRetentionTtl: &retention,
+					HistoryArchivalState:          historyArchivalState,
+					HistoryArchivalUri:            historyArchivalURI,
+					VisibilityArchivalState:       visibilityArchivalState,
+					VisibilityArchivalUri:         visibilityArchivalURI,
+					BadBinaries:                   &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 				},
 				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 					ActiveClusterName: clusterActive,
@@ -156,7 +156,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
-	retention := int32(10)
+	retention := 10 * time.Hour * 24
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "some random history archival uri"
 	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
@@ -177,7 +177,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		Data:        data,
 	}
 	config := &persistenceblobs.NamespaceConfig{
-		Retention:               timestamp.DurationFromDays(retention),
+		Retention:               &retention,
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
@@ -202,7 +202,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
-	retention := int32(10)
+	retention := 10 * time.Hour * 24
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "some random history archival uri"
 	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
@@ -223,7 +223,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		Data:        data,
 	}
 	config := &persistenceblobs.NamespaceConfig{
-		Retention:               timestamp.DurationFromDays(retention),
+		Retention:               &retention,
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
@@ -250,12 +250,12 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 					Data:        data,
 				},
 				Config: &namespacepb.NamespaceConfig{
-					WorkflowExecutionRetentionPeriodInDays: retention,
-					HistoryArchivalState:                   historyArchivalState,
-					HistoryArchivalUri:                     historyArchivalURI,
-					VisibilityArchivalState:                visibilityArchivalState,
-					VisibilityArchivalUri:                  visibilityArchivalURI,
-					BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+					WorkflowExecutionRetentionTtl: &retention,
+					HistoryArchivalState:          historyArchivalState,
+					HistoryArchivalUri:            historyArchivalURI,
+					VisibilityArchivalState:       visibilityArchivalState,
+					VisibilityArchivalUri:         visibilityArchivalURI,
+					BadBinaries:                   &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 				},
 				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 					ActiveClusterName: clusterActive,
@@ -276,7 +276,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
-	retention := int32(10)
+	retention := 10 * time.Hour * 24
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "some random history archival uri"
 	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
@@ -297,7 +297,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		Data:        data,
 	}
 	config := &persistenceblobs.NamespaceConfig{
-		Retention:               timestamp.DurationFromDays(retention),
+		Retention:               &retention,
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,

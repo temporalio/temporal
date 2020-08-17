@@ -29,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
@@ -53,6 +52,7 @@ import (
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type cliAppSuite struct {
@@ -165,7 +165,7 @@ var describeNamespaceResponseServer = &workflowservice.DescribeNamespaceResponse
 		OwnerEmail:  "test@uber.com",
 	},
 	Config: &namespacepb.NamespaceConfig{
-		WorkflowExecutionRetentionPeriodInDays: 3,
+		WorkflowExecutionRetentionTtl: timestamp.DurationPtr(3 * time.Hour * 24),
 	},
 	ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 		ActiveClusterName: "active",
@@ -242,11 +242,11 @@ var (
 				{
 					EventType: eventType,
 					Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-						WorkflowType:               &commonpb.WorkflowType{Name: "TestWorkflow"},
-						TaskQueue:                  &taskqueuepb.TaskQueue{Name: "taskQueue"},
-						WorkflowRunTimeoutSeconds:  60,
-						WorkflowTaskTimeoutSeconds: 10,
-						Identity:                   "tester",
+						WorkflowType:        &commonpb.WorkflowType{Name: "TestWorkflow"},
+						TaskQueue:           &taskqueuepb.TaskQueue{Name: "taskQueue"},
+						WorkflowRunTimeout:  timestamp.DurationPtr(60 * time.Second),
+						WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+						Identity:            "tester",
 					}},
 				},
 			},
@@ -411,8 +411,8 @@ var (
 				Type: &commonpb.WorkflowType{
 					Name: "test-list-workflow-type",
 				},
-				StartTime:     &types.Int64Value{Value: time.Now().UnixNano()},
-				CloseTime:     &types.Int64Value{Value: time.Now().Add(time.Hour).UnixNano()},
+				StartTime:     timestamp.TimePtr(time.Now().UTC()),
+				CloseTime:     timestamp.TimePtr(time.Now().UTC().Add(time.Hour)),
 				Status:        status,
 				HistoryLength: 12,
 			},
@@ -429,8 +429,8 @@ var (
 				Type: &commonpb.WorkflowType{
 					Name: "test-list-open-workflow-type",
 				},
-				StartTime:     &types.Int64Value{Value: time.Now().UnixNano()},
-				CloseTime:     &types.Int64Value{Value: time.Now().Add(time.Hour).UnixNano()},
+				StartTime:     timestamp.TimePtr(time.Now().UTC()),
+				CloseTime:     timestamp.TimePtr(time.Now().UTC().Add(time.Hour)),
 				HistoryLength: 12,
 			},
 		},
@@ -515,7 +515,7 @@ func (s *cliAppSuite) TestCountWorkflow() {
 var describeTaskQueueResponse = &workflowservice.DescribeTaskQueueResponse{
 	Pollers: []*taskqueuepb.PollerInfo{
 		{
-			LastAccessTime: time.Now().UnixNano(),
+			LastAccessTime: timestamp.TimePtr(time.Now().UTC()),
 			Identity:       "tester",
 		},
 	},
@@ -523,9 +523,9 @@ var describeTaskQueueResponse = &workflowservice.DescribeTaskQueueResponse{
 
 func (s *cliAppSuite) TestAdminDescribeWorkflow() {
 	resp := &adminservice.DescribeWorkflowExecutionResponse{
-		ShardId:                "test-shard-id",
-		HistoryAddr:            "ip:port",
-		MutableStateInDatabase: `{"ExecutionInfo":{"BranchToken":"ChBNWvyipehOuYvioA1u+suwEhDyawZ9XsdN6Liiof+Novu5"}}`,
+		ShardId:              "test-shard-id",
+		HistoryAddr:          "ip:port",
+		DatabaseMutableState: `{"ExecutionInfo":{"BranchToken":"ChBNWvyipehOuYvioA1u+suwEhDyawZ9XsdN6Liiof+Novu5"}}`,
 	}
 
 	s.serverAdminClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil)
@@ -591,101 +591,103 @@ func (s *cliAppSuite) TestObserveWorkflowWithID() {
 
 // TestParseTime tests the parsing of date argument in UTC and UnixNano formats
 func (s *cliAppSuite) TestParseTime() {
-	s.Equal(int64(100), parseTime("", 100, time.Now()))
-	s.Equal(int64(1528383845000000000), parseTime("2018-06-07T15:04:05+00:00", 0, time.Now()))
-	s.Equal(int64(1528383845000000000), parseTime("1528383845000000000", 0, time.Now()))
+	s.Equal("1978-08-22 00:00:00 +0000 UTC", parseTime("", time.Date(1978, 8, 22, 0, 0, 0, 0, time.UTC), time.Now().UTC()).String())
+	s.Equal("2018-06-07T15:04:05+07:00", parseTime("2018-06-07T15:04:05+07:00", time.Time{}, time.Now()).Format(time.RFC3339))
+	expected, err := time.Parse(defaultDateTimeFormat, "2018-06-07T15:04:05+07:00")
+	s.NoError(err)
+	s.Equal(expected.UTC(), parseTime("1528358645000000000", time.Time{}, time.Now().UTC()))
 }
 
 // TestParseTimeDateRange tests the parsing of date argument in time range format, N<duration>
 // where N is the integral multiplier, and duration can be second/minute/hour/day/week/month/year
 func (s *cliAppSuite) TestParseTimeDateRange() {
-	now := time.Now()
+	now := time.Now().UTC()
 	tests := []struct {
-		timeStr  string // input
-		defVal   int64  // input
-		expected int64  // expected unix nano (approx)
+		timeStr  string    // input
+		defVal   time.Time // input
+		expected time.Time // expected unix nano (approx)
 	}{
 		{
 			timeStr:  "1s",
-			defVal:   int64(0),
-			expected: now.Add(-time.Second).UnixNano(),
+			defVal:   time.Time{},
+			expected: now.Add(-time.Second),
 		},
 		{
 			timeStr:  "100second",
-			defVal:   int64(0),
-			expected: now.Add(-100 * time.Second).UnixNano(),
+			defVal:   time.Time{},
+			expected: now.Add(-100 * time.Second),
 		},
 		{
 			timeStr:  "2m",
-			defVal:   int64(0),
-			expected: now.Add(-2 * time.Minute).UnixNano(),
+			defVal:   time.Time{},
+			expected: now.Add(-2 * time.Minute),
 		},
 		{
 			timeStr:  "200minute",
-			defVal:   int64(0),
-			expected: now.Add(-200 * time.Minute).UnixNano(),
+			defVal:   time.Time{},
+			expected: now.Add(-200 * time.Minute),
 		},
 		{
 			timeStr:  "3h",
-			defVal:   int64(0),
-			expected: now.Add(-3 * time.Hour).UnixNano(),
+			defVal:   time.Time{},
+			expected: now.Add(-3 * time.Hour),
 		},
 		{
 			timeStr:  "1000hour",
-			defVal:   int64(0),
-			expected: now.Add(-1000 * time.Hour).UnixNano(),
+			defVal:   time.Time{},
+			expected: now.Add(-1000 * time.Hour),
 		},
 		{
 			timeStr:  "5d",
-			defVal:   int64(0),
-			expected: now.Add(-5 * day).UnixNano(),
+			defVal:   time.Time{},
+			expected: now.Add(-5 * day),
 		},
 		{
 			timeStr:  "25day",
-			defVal:   int64(0),
-			expected: now.Add(-25 * day).UnixNano(),
+			defVal:   time.Time{},
+			expected: now.Add(-25 * day),
 		},
 		{
 			timeStr:  "5w",
-			defVal:   int64(0),
-			expected: now.Add(-5 * week).UnixNano(),
+			defVal:   time.Time{},
+			expected: now.Add(-5 * week),
 		},
 		{
 			timeStr:  "52week",
-			defVal:   int64(0),
-			expected: now.Add(-52 * week).UnixNano(),
+			defVal:   time.Time{},
+			expected: now.Add(-52 * week),
 		},
 		{
 			timeStr:  "3M",
-			defVal:   int64(0),
-			expected: now.Add(-3 * month).UnixNano(),
+			defVal:   time.Time{},
+			expected: now.Add(-3 * month),
 		},
 		{
 			timeStr:  "6month",
-			defVal:   int64(0),
-			expected: now.Add(-6 * month).UnixNano(),
+			defVal:   time.Time{},
+			expected: now.Add(-6 * month),
 		},
 		{
 			timeStr:  "1y",
-			defVal:   int64(0),
-			expected: now.Add(-year).UnixNano(),
+			defVal:   time.Time{},
+			expected: now.Add(-year),
 		},
 		{
 			timeStr:  "7year",
-			defVal:   int64(0),
-			expected: now.Add(-7 * year).UnixNano(),
+			defVal:   time.Time{},
+			expected: now.Add(-7 * year),
 		},
 		{
 			timeStr:  "100y", // epoch time will be returned as that's the minimum unix timestamp possible
-			defVal:   int64(0),
-			expected: time.Unix(0, 0).UnixNano(),
+			defVal:   time.Time{},
+			expected: time.Unix(0, 0).UTC(),
 		},
 	}
-	const delta = int64(5 * time.Millisecond)
+	const delta = 5 * time.Millisecond
 	for _, te := range tests {
 		parsedTime := parseTime(te.timeStr, te.defVal, now)
-		s.True(te.expected <= parsedTime, "Case: %s. %d must be less or equal than parsed %d", te.timeStr, te.expected, parsedTime)
-		s.True(te.expected+delta >= parsedTime, "Case: %s. %d must be greater or equal than parsed %d", te.timeStr, te.expected, parsedTime)
+		s.True(te.expected.Before(parsedTime) || te.expected == parsedTime, "Case: %s. %d must be less or equal than parsed %d", te.timeStr, te.expected, parsedTime)
+		s.True(te.expected.Add(delta).After(parsedTime) || te.expected.Add(delta) == parsedTime, "Case: %s. %d must be greater or equal than parsed %d", te.timeStr, te.expected, parsedTime)
 	}
 }
 
@@ -704,12 +706,12 @@ func (s *cliAppSuite) TestAnyToString() {
 		EventId:   1,
 		EventType: eventType,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:               &commonpb.WorkflowType{Name: "helloworldWorkflow"},
-			TaskQueue:                  &taskqueuepb.TaskQueue{Name: "taskQueue"},
-			WorkflowRunTimeoutSeconds:  60,
-			WorkflowTaskTimeoutSeconds: 10,
-			Identity:                   "tester",
-			Input:                      payloads.EncodeString(arg),
+			WorkflowType:        &commonpb.WorkflowType{Name: "helloworldWorkflow"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: "taskQueue"},
+			WorkflowRunTimeout:  timestamp.DurationPtr(60 * time.Second),
+			WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+			Identity:            "tester",
+			Input:               payloads.EncodeString(arg),
 		}},
 	}
 	res := anyToString(event, false, defaultMaxFieldLength)
@@ -726,13 +728,13 @@ func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		Memo:   &commonpb.Memo{Fields: fields},
 	}
-	s.Equal("{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
+	s.Equal("{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
 
 	fields["TestKey2"] = payload.EncodeString(`anotherTestValue`)
 	execution.Memo = &commonpb.Memo{Fields: fields}
 	got := anyToString(execution, true, 0)
-	expected := got == "{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
-		got == "{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
+	expected := got == "{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
+		got == "{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
 	s.True(expected)
 }
 
@@ -881,11 +883,11 @@ func historyEventIterator() sdkclient.HistoryEventIterator {
 			event := &historypb.HistoryEvent{
 				EventType: eventType,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-					WorkflowType:               &commonpb.WorkflowType{Name: "TestWorkflow"},
-					TaskQueue:                  &taskqueuepb.TaskQueue{Name: "taskQueue"},
-					WorkflowRunTimeoutSeconds:  60,
-					WorkflowTaskTimeoutSeconds: 10,
-					Identity:                   "tester",
+					WorkflowType:        &commonpb.WorkflowType{Name: "TestWorkflow"},
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: "taskQueue"},
+					WorkflowRunTimeout:  timestamp.DurationPtr(60 * time.Second),
+					WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+					Identity:            "tester",
 				}},
 			}
 			counter++

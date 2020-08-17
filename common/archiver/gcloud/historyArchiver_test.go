@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -57,9 +58,8 @@ const (
 	testNextEventID               = 1800
 	testCloseFailoverVersion      = 100
 	testPageSize                  = 100
-	exampleHistoryRecord          = `[{"events":[{"eventId":1,"timestamp":1576800090315103000,"eventType":"WorkflowExecutionStarted","version":-24,"taskId":5242897,"workflowExecutionStartedEventAttributes":{"workflowType":{"name":"MobileOnlyWorkflow::processMobileOnly"},"taskQueue":{"name":"MobileOnly"},"input":null,"workflowExecutionTimeoutSeconds":300,"workflowTaskTimeoutSeconds":60,"originalExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","identity":"","firstExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","attempt":1,"firstWorkflowTaskBackoffSeconds":0}}]}]`
-	twoEventsExampleHistoryRecord = `[{"events":[{"eventId":1,"timestamp":1576800090315103000,"eventType":"WorkflowExecutionStarted","version":-24,"taskId":5242897,"workflowExecutionStartedEventAttributes":{"workflowType":{"name":"MobileOnlyWorkflow::processMobileOnly"},"taskQueue":{"name":"MobileOnly"},"input":null,"workflowExecutionTimeoutSeconds":300,"workflowTaskTimeoutSeconds":60,"originalExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","identity":"","firstExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","attempt":1,"firstWorkflowTaskBackoffSeconds":0}},
-	{"eventId":2,"timestamp":1576800090315103000,"eventType":"WorkflowExecutionStarted","version":-24,"taskId":5242897,"workflowExecutionStartedEventAttributes":{"workflowType":{"name":"MobileOnlyWorkflow::processMobileOnly"},"taskQueue":{"name":"MobileOnly"},"input":null,"workflowExecutionTimeoutSeconds":300,"workflowTaskTimeoutSeconds":60,"originalExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","identity":"","firstExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","attempt":1,"firstWorkflowTaskBackoffSeconds":0}}]}]`
+	exampleHistoryRecord          = `[{"events":[{"eventId":1,"eventTime": "2020-07-30T00:30:03.082421843Z","eventType":"WorkflowExecutionStarted","version":-24,"taskId":5242897,"workflowExecutionStartedEventAttributes":{"workflowType":{"name":"MobileOnlyWorkflow::processMobileOnly"},"taskQueue":{"name":"MobileOnly"},"input":null,"workflowExecutionTimeout":"300s","workflowTaskTimeout":"60s","originalExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","identity":"","firstExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","attempt":1,"firstWorkflowTaskBackoff":"0s"}}]}]`
+	twoEventsExampleHistoryRecord = `[{"events":[{"eventId":1,"eventTime": "2020-07-30T00:30:03.082421843Z","eventType":"WorkflowExecutionStarted","version":-24,"taskId":5242897,"workflowExecutionStartedEventAttributes":{"workflowType":{"name":"MobileOnlyWorkflow::processMobileOnly"},"taskQueue":{"name":"MobileOnly"},"input":null,"workflowExecutionTimeout":"300s","workflowTaskTimeout":"60s","originalExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","identity":"","firstExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","attempt":1,"firstWorkflowTaskBackoff":"0s"}},{"eventId":2,"eventTime": "2020-07-30T00:30:03.082421843Z","eventType":"WorkflowExecutionStarted","version":-24,"taskId":5242897,"workflowExecutionStartedEventAttributes":{"workflowType":{"name":"MobileOnlyWorkflow::processMobileOnly"},"taskQueue":{"name":"MobileOnly"},"input":null,"workflowExecutionTimeout":"300s","workflowTaskTimeout":"60s","originalExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","identity":"","firstExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","attempt":1,"firstWorkflowTaskBackoff":"0s"}}]}]`
 )
 
 var (
@@ -258,7 +258,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: timestamp.TimePtr(time.Now().UTC()),
 					Version:   testCloseFailoverVersion + 1,
 				},
 			},
@@ -335,12 +335,12 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: timestamp.TimePtr(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 				{
 					EventId:   common.FirstEventID + 2,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: timestamp.TimePtr(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -349,7 +349,7 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: timestamp.TimePtr(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},

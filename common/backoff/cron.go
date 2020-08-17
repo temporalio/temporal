@@ -59,8 +59,8 @@ func GetBackoffForNextSchedule(cronSchedule string, scheduledTime time.Time, now
 		return NoBackoff
 	}
 
-	scheduledUTCTime := scheduledTime.In(time.UTC)
-	nowUTC := now.In(time.UTC)
+	scheduledUTCTime := scheduledTime.UTC()
+	nowUTC := now.UTC()
 
 	var nextScheduleTime time.Time
 	if nowUTC.Before(scheduledUTCTime) {
@@ -78,12 +78,11 @@ func GetBackoffForNextSchedule(cronSchedule string, scheduledTime time.Time, now
 	return roundedInterval
 }
 
-// GetBackoffForNextScheduleInSeconds calculates the backoff time in seconds for the next run given
-// a cronSchedule, current scheduled time, and now.
-func GetBackoffForNextScheduleInSeconds(cronSchedule string, scheduledTime time.Time, now time.Time) int32 {
+// GetBackoffForNextScheduleNonNegative calculates the backoff time and ensures a non-negative duration.
+func GetBackoffForNextScheduleNonNegative(cronSchedule string, scheduledTime time.Time, now time.Time) *time.Duration {
 	backoffDuration := GetBackoffForNextSchedule(cronSchedule, scheduledTime, now)
-	if backoffDuration == NoBackoff {
-		return 0
+	if backoffDuration == NoBackoff || backoffDuration < 0 {
+		backoffDuration = 0
 	}
-	return convert.Int32Ceil(backoffDuration.Seconds())
+	return &backoffDuration
 }

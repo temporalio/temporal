@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -718,7 +719,7 @@ func (s *HistoryIteratorSuite) TestJSONSizeEstimator() {
 
 	historyEvent := &historypb.HistoryEvent{
 		EventId:   1,
-		Timestamp: time.Now().UnixNano(),
+		EventTime: timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC)),
 		TaskId:    1,
 		Version:   1,
 	}
@@ -728,8 +729,8 @@ func (s *HistoryIteratorSuite) TestJSONSizeEstimator() {
 			Name: "taskQueue",
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		StartToCloseTimeoutSeconds: 10,
-		Attempt:                    1,
+		StartToCloseTimeout: timestamp.DurationPtr(10 * time.Second),
+		Attempt:             1,
 	}}
 
 	h := &historypb.History{
@@ -740,5 +741,5 @@ func (s *HistoryIteratorSuite) TestJSONSizeEstimator() {
 
 	size, err := e.EstimateSize(h)
 	s.NoError(err)
-	s.Equal(261, size)
+	s.Equal(266, size)
 }

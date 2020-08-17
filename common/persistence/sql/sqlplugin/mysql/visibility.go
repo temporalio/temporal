@@ -33,9 +33,11 @@ import (
 )
 
 const (
-	templateCreateWorkflowExecutionStarted = `INSERT IGNORE INTO executions_visibility (` +
+	templateCreateWorkflowExecutionStarted = `INSERT INTO executions_visibility (` +
 		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
+		`ON DUPLICATE KEY UPDATE ` +
+		`run_id=VALUES(run_id)`
 
 	templateCreateWorkflowExecutionClosed = `INSERT INTO executions_visibility (` +
 		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding) ` +

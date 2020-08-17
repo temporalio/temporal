@@ -27,7 +27,6 @@ package history
 import (
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -35,6 +34,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -76,7 +76,7 @@ func standbyTransferTaskPostActionTaskDiscarded(
 		tag.TaskID(transferTask.GetTaskId()),
 		tag.TaskType(transferTask.TaskType),
 		tag.FailoverVersion(transferTask.GetVersion()),
-		tag.TimestampProto(transferTask.VisibilityTime),
+		tag.TimestampPtr(transferTask.VisibilityTime),
 		tag.WorkflowEventID(transferTask.GetScheduleId()))
 	return ErrTaskDiscarded
 }
@@ -100,7 +100,7 @@ func standbyTimerTaskPostActionTaskDiscarded(
 		tag.TaskType(timerTask.TaskType),
 		tag.WorkflowTimeoutType(timerTask.TimeoutType),
 		tag.FailoverVersion(timerTask.GetVersion()),
-		tag.TimestampProto(timerTask.VisibilityTime),
+		tag.TimestampPtr(timerTask.VisibilityTime),
 		tag.WorkflowEventID(timerTask.GetEventId()))
 	return ErrTaskDiscarded
 }
@@ -198,7 +198,7 @@ func getStandbyPostActionFn(
 
 	// this is for task retry, use machine time
 	now := standbyNow()
-	taskTime, _ := types.TimestampFromProto(taskInfo.GetVisibilityTime())
+	taskTime := timestamp.TimeValue(taskInfo.GetVisibilityTime())
 	resendTime := taskTime.Add(standbyTaskMissingEventsResendDelay)
 	discardTime := taskTime.Add(standbyTaskMissingEventsDiscardDelay)
 

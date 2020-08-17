@@ -29,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -41,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -130,7 +130,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoErr() {
 	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{
-		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: types.TimestampNow()}, s.logger)
+		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: timestamp.TimeNowPtrUtc()}, s.logger)
 	var taskFilterErr taskFilter = func(task queueTaskInfo) (bool, error) {
 		return false, errors.New("some random error")
 	}
@@ -150,7 +150,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoEr
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr() {
 	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{
-		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: types.TimestampNow()}, s.logger)
+		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: timestamp.TimeNowPtrUtc()}, s.logger)
 	task.shouldProcessTask = false
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return false, nil
@@ -167,7 +167,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr()
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() {
 	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{
-		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: types.TimestampNow()}, s.logger)
+		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: timestamp.TimeNowPtrUtc()}, s.logger)
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return true, nil
 	}
@@ -184,7 +184,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessErrNoErr() {
 	err := errors.New("some random err")
 	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{
-		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: types.TimestampNow()}, s.logger)
+		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: timestamp.TimeNowPtrUtc()}, s.logger)
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return true, nil
 	}
@@ -233,10 +233,10 @@ func (s *taskProcessorSuite) TestHandleTaskError_NamespaceNotActiveError() {
 	err := serviceerror.NewNamespaceNotActive("", "", "")
 
 	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
-	taskInfo.startTime = time.Now().Add(-cache.NamespaceCacheRefreshInterval * time.Duration(2))
+	taskInfo.startTime = time.Now().UTC().Add(-cache.NamespaceCacheRefreshInterval * time.Duration(2))
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 
-	taskInfo.startTime = time.Now()
+	taskInfo.startTime = time.Now().UTC()
 	s.Equal(err, s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 }
 

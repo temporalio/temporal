@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -240,7 +241,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	lastEventID := int64(2)
 	branchToken := []byte("other random branch token")
 	targetBranchToken := []byte("some other random branch token")
-	now := time.Now()
+	now := time.Now().UTC()
 
 	targetNamespaceID := uuid.New()
 	targetNamespace := "other random namespace name"
@@ -254,13 +255,13 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		Version:   version,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: "some random workflow type"},
-			Input:                           payloads.EncodeString("some random input"),
-			WorkflowExecutionTimeoutSeconds: 123,
-			WorkflowRunTimeoutSeconds:       233,
-			WorkflowTaskTimeoutSeconds:      45,
-			Identity:                        "some random identity",
+			WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: "some random workflow type"},
+			Input:                    payloads.EncodeString("some random input"),
+			WorkflowExecutionTimeout: timestamp.DurationPtr(123 * time.Second),
+			WorkflowRunTimeout:       timestamp.DurationPtr(233 * time.Second),
+			WorkflowTaskTimeout:      timestamp.DurationPtr(45 * time.Second),
+			Identity:                 "some random identity",
 		}},
 	}}
 	events2 := []*historypb.HistoryEvent{{

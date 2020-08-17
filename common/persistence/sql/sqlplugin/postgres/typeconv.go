@@ -26,7 +26,7 @@ package postgres
 
 import "time"
 
-var localZone, _ = time.Now().Zone()
+var localZone, _ = time.Now().UTC().Zone()
 var localOffset = getLocalOffset()
 
 type (
@@ -49,7 +49,7 @@ func (c *converter) ToPostgresDateTime(t time.Time) time.Time {
 	zn, _ := t.Zone()
 	if zn != localZone {
 		nano := t.UnixNano()
-		t := time.Unix(0, nano)
+		t := time.Unix(0, nano).UTC()
 		return t
 	}
 	return t
@@ -61,6 +61,6 @@ func (c *converter) FromPostgresDateTime(t time.Time) time.Time {
 }
 
 func getLocalOffset() time.Duration {
-	_, offsetSecs := time.Now().Zone()
+	_, offsetSecs := time.Now().UTC().Zone()
 	return time.Duration(offsetSecs) * time.Second
 }

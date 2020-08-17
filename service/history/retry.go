@@ -25,15 +25,12 @@
 package history
 
 import (
-	"fmt"
 	"math"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 )
 
@@ -49,7 +46,7 @@ func getBackoffInterval(
 	nonRetryableTypes []string,
 ) (time.Duration, enumspb.RetryState) {
 
-	// Sanitiy check to make sure currentAttemptCounterValue started with 1.
+	// Sanity check to make sure currentAttemptCounterValue started with 1.
 	if currentAttemptCounterValue < 1 {
 		currentAttemptCounterValue = 1
 	}
@@ -65,10 +62,10 @@ func getBackoffInterval(
 	// currentAttemptCounterValue starts from 1.
 	// maxAttempts is the total attempts, including initial (non-retry) attempt.
 	// At this point we are about to make next attempt and all calculations in this func are for this next attempt.
-	// For example, if maxAttepmtps is set to 2 and we are making 1st retry, currentAttemptCounterValue will be 1
+	// For example, if maxAttempts is set to 2 and we are making 1st retry, currentAttemptCounterValue will be 1
 	// (we made 1 non-retry attempt already) and condition (currentAttemptCounterValue+1 > maxAttempts) will be false.
 	// With 2nd retry, currentAttemptCounterValue will be 2 (1 non-retry + 1 retry attempt already made) and
-	// condition (currentAttemptCounterValue+1 > maxAttempts) will be true (means stop retrying, we tried 2 time already).
+	// condition (currentAttemptCounterValue+1 > maxAttempts) will be true (means stop retrying, we tried 2 times already).
 	if maxAttempts > 0 && currentAttemptCounterValue+1 > maxAttempts {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
 	}
@@ -129,47 +126,4 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 		}
 	}
 	return true
-}
-
-func getDefaultActivityRetryPolicyConfigOptions() map[string]interface{} {
-	return map[string]interface{}{
-		"InitialRetryIntervalInSeconds": 1,
-		"MaximumRetryIntervalInSeconds": 100,
-		"ExponentialBackoffCoefficient": 2.0,
-		"MaximumAttempts":               0,
-	}
-}
-
-func fromConfigToActivityRetryPolicy(options map[string]interface{}) *commonpb.RetryPolicy {
-	retryPolicy := &commonpb.RetryPolicy{}
-	initialRetryInterval, ok := options["InitialRetryIntervalInSeconds"]
-	if ok {
-		retryPolicy.InitialIntervalInSeconds = int32(initialRetryInterval.(int))
-	}
-
-	maxRetryInterval, ok := options["MaximumRetryIntervalInSeconds"]
-	if ok {
-		retryPolicy.MaximumIntervalInSeconds = int32(maxRetryInterval.(int))
-	}
-
-	exponentialBackoffCoefficient, ok := options["ExponentialBackoffCoefficient"]
-	if ok {
-		retryPolicy.BackoffCoefficient = exponentialBackoffCoefficient.(float64)
-	}
-
-	maximumAttempts, ok := options["MaximumAttempts"]
-	if ok {
-		retryPolicy.MaximumAttempts = int32(maximumAttempts.(int))
-	}
-
-	err := common.ValidateRetryPolicy(retryPolicy)
-	if err != nil {
-		panic(
-			fmt.Sprintf(
-				"Bad Default Activity Retry Policy defined: %+v failed validation %v",
-				retryPolicy,
-				err))
-	}
-
-	return retryPolicy
 }

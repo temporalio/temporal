@@ -25,9 +25,12 @@
 package persistence
 
 import (
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
+	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -86,6 +89,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 			ReplicationState:    response.State.ReplicationState,
 			Checksum:            response.State.Checksum,
 			ChildExecutionInfos: response.State.ChildExecutionInfos,
+			VersionHistories:    NewVersionHistoriesFromProto(response.State.VersionHistories),
 		},
 	}
 
@@ -97,11 +101,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	versionHistories, err := m.DeserializeVersionHistories(response.State.VersionHistories)
-	if err != nil {
-		return nil, err
-	}
-	newResponse.State.VersionHistories = versionHistories
+
 	newResponse.MutableStateStats = m.statsComputer.computeMutableStateStats(response)
 
 	return newResponse, nil
@@ -109,21 +109,9 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 
 func (m *executionManagerImpl) DeserializeExecutionInfo(
 	info *InternalWorkflowExecutionInfo,
-) (*WorkflowExecutionInfo, *ExecutionStats, error) {
-
-	completionEvent, err := m.serializer.DeserializeEvent(info.CompletionEvent)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	autoResetPoints, err := m.serializer.DeserializeResetPoints(info.AutoResetPoints)
-	if err != nil {
-		return nil, nil, err
-	}
-
+) (*WorkflowExecutionInfo, *persistenceblobs.ExecutionStats, error) {
 	newInfo := &WorkflowExecutionInfo{
-		CompletionEvent: completionEvent,
-
+		CompletionEvent:                        info.CompletionEvent,
 		NamespaceID:                            info.NamespaceID,
 		WorkflowID:                             info.WorkflowID,
 		RunID:                                  info.RunID,
@@ -173,11 +161,16 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		NonRetryableErrorTypes:                 info.NonRetryableErrorTypes,
 		BranchToken:                            info.BranchToken,
 		CronSchedule:                           info.CronSchedule,
-		AutoResetPoints:                        autoResetPoints,
+		AutoResetPoints:                        info.AutoResetPoints,
 		SearchAttributes:                       info.SearchAttributes,
 		Memo:                                   info.Memo,
 	}
-	newStats := &ExecutionStats{
+
+	if newInfo.AutoResetPoints == nil {
+		newInfo.AutoResetPoints = &workflowpb.ResetPoints{}
+	}
+
+	newStats := &persistenceblobs.ExecutionStats{
 		HistorySize: info.HistorySize,
 	}
 	return newInfo, newStats, nil
@@ -208,7 +201,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	}
 	var serializedNewWorkflowSnapshot *InternalWorkflowSnapshot
 	if request.NewWorkflowSnapshot != nil {
-		serializedNewWorkflowSnapshot, err = m.SerializeWorkflowSnapshot(request.NewWorkflowSnapshot, request.Encoding)
+		serializedNewWorkflowSnapshot, err = m.SerializeWorkflowSnapshot(request.NewWorkflowSnapshot)
 		if err != nil {
 			return nil, err
 		}
@@ -230,21 +223,11 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 
 func (m *executionManagerImpl) SerializeExecutionInfo(
 	info *WorkflowExecutionInfo,
-	stats *ExecutionStats,
-	encoding common.EncodingType,
+	stats *persistenceblobs.ExecutionStats,
 ) (*InternalWorkflowExecutionInfo, error) {
 
 	if info == nil {
 		return &InternalWorkflowExecutionInfo{}, nil
-	}
-	completionEvent, err := m.serializer.SerializeEvent(info.CompletionEvent, encoding)
-	if err != nil {
-		return nil, err
-	}
-
-	resetPoints, err := m.serializer.SerializeResetPoints(info.AutoResetPoints, encoding)
-	if err != nil {
-		return nil, err
 	}
 
 	return &InternalWorkflowExecutionInfo{
@@ -256,7 +239,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		ParentRunID:                            info.ParentRunID,
 		InitiatedID:                            info.InitiatedID,
 		CompletionEventBatchID:                 info.CompletionEventBatchID,
-		CompletionEvent:                        completionEvent,
+		CompletionEvent:                        info.CompletionEvent,
 		TaskQueue:                              info.TaskQueue,
 		WorkflowTypeName:                       info.WorkflowTypeName,
 		WorkflowRunTimeout:                     info.WorkflowRunTimeout,
@@ -288,7 +271,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		ClientLibraryVersion:                   info.ClientLibraryVersion,
 		ClientFeatureVersion:                   info.ClientFeatureVersion,
 		ClientImpl:                             info.ClientImpl,
-		AutoResetPoints:                        resetPoints,
+		AutoResetPoints:                        info.AutoResetPoints,
 		Attempt:                                info.Attempt,
 		HasRetryPolicy:                         info.HasRetryPolicy,
 		InitialInterval:                        info.InitialInterval,
@@ -311,7 +294,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	request *ConflictResolveWorkflowExecutionRequest,
 ) error {
 
-	serializedResetWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.ResetWorkflowSnapshot, request.Encoding)
+	serializedResetWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.ResetWorkflowSnapshot)
 	if err != nil {
 		return err
 	}
@@ -324,7 +307,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	}
 	var serializedNewWorkflowMutation *InternalWorkflowSnapshot
 	if request.NewWorkflowSnapshot != nil {
-		serializedNewWorkflowMutation, err = m.SerializeWorkflowSnapshot(request.NewWorkflowSnapshot, request.Encoding)
+		serializedNewWorkflowMutation, err = m.SerializeWorkflowSnapshot(request.NewWorkflowSnapshot)
 		if err != nil {
 			return err
 		}
@@ -356,7 +339,7 @@ func (m *executionManagerImpl) ResetWorkflowExecution(
 	request *ResetWorkflowExecutionRequest,
 ) error {
 
-	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.NewWorkflowSnapshot, request.Encoding)
+	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.NewWorkflowSnapshot)
 	if err != nil {
 		return err
 	}
@@ -388,9 +371,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	request *CreateWorkflowExecutionRequest,
 ) (*CreateWorkflowExecutionResponse, error) {
 
-	encoding := common.EncodingTypeProto3
-
-	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.NewWorkflowSnapshot, encoding)
+	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.NewWorkflowSnapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -411,21 +392,17 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 
 func (m *executionManagerImpl) SerializeWorkflowMutation(
 	input *WorkflowMutation,
-	encoding common.EncodingType,
+	encoding enumspb.EncodingType,
 ) (*InternalWorkflowMutation, error) {
 
 	serializedExecutionInfo, err := m.SerializeExecutionInfo(
 		input.ExecutionInfo,
 		input.ExecutionStats,
-		encoding,
 	)
 	if err != nil {
 		return nil, err
 	}
-	serializedVersionHistories, err := m.SerializeVersionHistories(input.VersionHistories, encoding)
-	if err != nil {
-		return nil, err
-	}
+
 	var serializedNewBufferedEvents *serialization.DataBlob
 	if input.NewBufferedEvents != nil {
 		serializedNewBufferedEvents, err = m.serializer.SerializeBatchEvents(input.NewBufferedEvents, encoding)
@@ -446,7 +423,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 	return &InternalWorkflowMutation{
 		ExecutionInfo:    serializedExecutionInfo,
 		ReplicationState: input.ReplicationState,
-		VersionHistories: serializedVersionHistories,
+		VersionHistories: input.VersionHistories.ToProto(),
 		StartVersion:     startVersion,
 		LastWriteVersion: lastWriteVersion,
 
@@ -476,18 +453,12 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 
 func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 	input *WorkflowSnapshot,
-	encoding common.EncodingType,
 ) (*InternalWorkflowSnapshot, error) {
 
 	serializedExecutionInfo, err := m.SerializeExecutionInfo(
 		input.ExecutionInfo,
 		input.ExecutionStats,
-		encoding,
 	)
-	if err != nil {
-		return nil, err
-	}
-	serializedVersionHistories, err := m.SerializeVersionHistories(input.VersionHistories, encoding)
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +475,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 	return &InternalWorkflowSnapshot{
 		ExecutionInfo:    serializedExecutionInfo,
 		ReplicationState: input.ReplicationState,
-		VersionHistories: serializedVersionHistories,
+		VersionHistories: input.VersionHistories.ToProto(),
 		StartVersion:     startVersion,
 		LastWriteVersion: lastWriteVersion,
 
@@ -526,7 +497,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 
 func (m *executionManagerImpl) SerializeVersionHistories(
 	versionHistories *VersionHistories,
-	encoding common.EncodingType,
+	encoding enumspb.EncodingType,
 ) (*serialization.DataBlob, error) {
 
 	if versionHistories == nil {
@@ -691,7 +662,7 @@ func (m *executionManagerImpl) Close() {
 
 func getStartVersion(
 	versionHistories *VersionHistories,
-	replicationState *ReplicationState,
+	replicationState *persistenceblobs.ReplicationState,
 ) (int64, error) {
 
 	if replicationState == nil && versionHistories == nil {
@@ -715,7 +686,7 @@ func getStartVersion(
 
 func getLastWriteVersion(
 	versionHistories *VersionHistories,
-	replicationState *ReplicationState,
+	replicationState *persistenceblobs.ReplicationState,
 ) (int64, error) {
 
 	if replicationState == nil && versionHistories == nil {

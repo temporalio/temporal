@@ -32,14 +32,11 @@ import (
 	"math"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
@@ -242,27 +239,20 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 	// Build partial from proto
 	executionInfo := p.ProtoWorkflowExecutionToPartialInternalExecution(info, executionState, executionsRow.NextEventID)
 
-	state := &p.InternalWorkflowMutableState{ExecutionInfo: executionInfo}
+	state := &p.InternalWorkflowMutableState{ExecutionInfo: executionInfo, VersionHistories: info.GetVersionHistories()}
 
 	if info.ReplicationData != nil {
-		state.ReplicationState = &p.ReplicationState{}
+		state.ReplicationState = &persistenceblobs.ReplicationState{}
 
 		state.ReplicationState.StartVersion = info.StartVersion
 		state.ReplicationState.CurrentVersion = info.CurrentVersion
 		state.ReplicationState.LastWriteVersion = executionsRow.LastWriteVersion
-		state.ReplicationState.LastWriteEventID = info.ReplicationData.LastWriteEventId
+		state.ReplicationState.LastWriteEventId = info.ReplicationData.LastWriteEventId
 		state.ReplicationState.LastReplicationInfo = info.ReplicationData.LastReplicationInfo
 
 		if state.ReplicationState.LastReplicationInfo == nil {
 			state.ReplicationState.LastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo, 0)
 		}
-	}
-
-	if info.GetVersionHistories() != nil {
-		state.VersionHistories = p.NewDataBlob(
-			info.GetVersionHistories(),
-			common.EncodingType(info.GetVersionHistoriesEncoding()),
-		)
 	}
 
 	// Populate Maps
@@ -1065,14 +1055,14 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 	}
 
 	if len(resp.Timers) > request.BatchSize {
-		goVisibilityTimestamp, err := types.TimestampFromProto(resp.Timers[request.BatchSize].VisibilityTime)
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: error converting time for page token: %v", err))
+		goVisibilityTimestamp := resp.Timers[request.BatchSize].VisibilityTime
+		if goVisibilityTimestamp == nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: time for page token is nil - TaskId '%v'", resp.Timers[request.BatchSize].TaskId))
 		}
 
 		pageToken = &timerTaskPageToken{
 			TaskID:    resp.Timers[request.BatchSize].GetTaskId(),
-			Timestamp: goVisibilityTimestamp,
+			Timestamp: *goVisibilityTimestamp,
 		}
 		resp.Timers = resp.Timers[:request.BatchSize]
 		nextToken, err := pageToken.serialize()
@@ -1128,7 +1118,7 @@ func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationT
 		ShardID:           m.shardID,
 		TaskID:            replicationTask.GetTaskId(),
 		Data:              blob.Data,
-		DataEncoding:      string(blob.Encoding),
+		DataEncoding:      blob.Encoding.String(),
 	}
 
 	_, err = m.db.InsertIntoReplicationTasksDLQ(row)

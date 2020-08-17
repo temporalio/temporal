@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // AdminDescribeTaskQueue displays poller and status information of task queue.
@@ -111,7 +112,7 @@ func printPollerInfo(pollers []*taskqueuepb.PollerInfo, taskQueueType enumspb.Ta
 	table.SetHeaderLine(false)
 	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
 	for _, poller := range pollers {
-		table.Append([]string{poller.GetIdentity(), convertTime(poller.GetLastAccessTime(), false)})
+		table.Append([]string{poller.GetIdentity(), formatTime(timestamp.TimeValue(poller.GetLastAccessTime()), false)})
 	}
 	table.Render()
 }

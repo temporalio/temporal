@@ -54,7 +54,7 @@ type (
 		RequestID           string
 		WorkflowTaskTimeout int64
 		TaskQueue           *taskqueuepb.TaskQueue // This is only needed to communicate task queue used after AddWorkflowTaskScheduledEvent
-		Attempt             int64
+		Attempt             int32
 		// Scheduled and Started timestamps are useful for transient workflow task: when transient workflow task finally completes,
 		// use these timestamp to create scheduled/started events.
 		// Also used for recording latency metrics
@@ -117,7 +117,7 @@ type (
 		CopyToPersistence() *persistence.WorkflowMutableState
 		RetryActivity(ai *persistenceblobs.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
 		CreateNewHistoryEvent(eventType enumspb.EventType) *historypb.HistoryEvent
-		CreateNewHistoryEventWithTimestamp(eventType enumspb.EventType, timestamp int64) *historypb.HistoryEvent
+		CreateNewHistoryEventWithTime(eventType enumspb.EventType, time time.Time) *historypb.HistoryEvent
 		CreateTransientWorkflowTaskEvents(di *workflowTaskInfo, identity string) (*historypb.HistoryEvent, *historypb.HistoryEvent)
 		DeleteWorkflowTask()
 		DeleteSignalRequested(requestID string)
@@ -125,7 +125,7 @@ type (
 		FlushBufferedEvents() error
 		GetActivityByActivityID(string) (*persistenceblobs.ActivityInfo, bool)
 		GetActivityInfo(int64) (*persistenceblobs.ActivityInfo, bool)
-		GetActivityInfoWithTimerHeartbeat(int64) (*persistenceblobs.ActivityInfo, int64, bool)
+		GetActivityInfoWithTimerHeartbeat(scheduleEventID int64) (*persistenceblobs.ActivityInfo, time.Time, bool)
 		GetActivityScheduledEvent(int64) (*historypb.HistoryEvent, error)
 		GetChildExecutionInfo(int64) (*persistenceblobs.ChildExecutionInfo, bool)
 		GetChildExecutionInitiatedEvent(int64) (*historypb.HistoryEvent, error)
@@ -149,7 +149,7 @@ type (
 		GetPendingChildExecutionInfos() map[int64]*persistenceblobs.ChildExecutionInfo
 		GetPendingRequestCancelExternalInfos() map[int64]*persistenceblobs.RequestCancelInfo
 		GetPendingSignalExternalInfos() map[int64]*persistenceblobs.SignalInfo
-		GetReplicationState() *persistence.ReplicationState
+		GetReplicationState() *persistenceblobs.ReplicationState
 		GetRequestCancelInfo(int64) (*persistenceblobs.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(failure *failurepb.Failure) (time.Duration, enumspb.RetryState)
 		GetCronBackoffDuration() (time.Duration, error)
@@ -189,7 +189,7 @@ type (
 		ReplicateChildWorkflowExecutionTimedOutEvent(*historypb.HistoryEvent) error
 		ReplicateWorkflowTaskCompletedEvent(*historypb.HistoryEvent) error
 		ReplicateWorkflowTaskFailedEvent() error
-		ReplicateWorkflowTaskScheduledEvent(int64, int64, *taskqueuepb.TaskQueue, int32, int64, int64, int64) (*workflowTaskInfo, error)
+		ReplicateWorkflowTaskScheduledEvent(int64, int64, *taskqueuepb.TaskQueue, int32, int32, int64, int64) (*workflowTaskInfo, error)
 		ReplicateWorkflowTaskStartedEvent(*workflowTaskInfo, int64, int64, int64, string, int64) (*workflowTaskInfo, error)
 		ReplicateWorkflowTaskTimedOutEvent(enumspb.TimeoutType) error
 		ReplicateExternalWorkflowExecutionCancelRequested(*historypb.HistoryEvent) error
@@ -219,7 +219,7 @@ type (
 		SetHistoryTree(treeID string) error
 		SetVersionHistories(*persistence.VersionHistories) error
 		UpdateActivity(*persistenceblobs.ActivityInfo) error
-		UpdateActivityWithTimerHeartbeat(*persistenceblobs.ActivityInfo, int64) error
+		UpdateActivityWithTimerHeartbeat(*persistenceblobs.ActivityInfo, time.Time) error
 		UpdateActivityProgress(ai *persistenceblobs.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
 		UpdateWorkflowTask(*workflowTaskInfo)
 		UpdateReplicationStateVersion(int64, bool)

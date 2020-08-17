@@ -29,7 +29,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -93,7 +92,7 @@ var (
 
 type (
 	mutableStateBuilder struct {
-		pendingActivityTimerHeartbeats map[int64]int64                             // Schedule Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
+		pendingActivityTimerHeartbeats map[int64]time.Time                         // Schedule Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
 		pendingActivityInfoIDs         map[int64]*persistenceblobs.ActivityInfo    // Schedule Event ID -> Activity Info.
 		pendingActivityIDToEventID     map[string]int64                            // Activity ID -> Schedule Event ID of the activity.
 		updateActivityInfos            map[*persistenceblobs.ActivityInfo]struct{} // Modified activities from last update.
@@ -107,7 +106,7 @@ type (
 
 		pendingChildExecutionInfoIDs map[int64]*persistenceblobs.ChildExecutionInfo    // Initiated Event ID -> Child Execution Info
 		updateChildExecutionInfos    map[*persistenceblobs.ChildExecutionInfo]struct{} // Modified ChildExecution Infos since last update
-		deleteChildExecutionInfo     *int64                                       // Deleted ChildExecution Info since last update
+		deleteChildExecutionInfo     *int64                                            // Deleted ChildExecution Info since last update
 
 		pendingRequestCancelInfoIDs map[int64]*persistenceblobs.RequestCancelInfo    // Initiated Event ID -> RequestCancelInfo
 		updateRequestCancelInfos    map[*persistenceblobs.RequestCancelInfo]struct{} // Modified RequestCancel Infos since last update, for persistence update
@@ -127,7 +126,7 @@ type (
 
 		executionInfo    *persistence.WorkflowExecutionInfo // Workflow mutable state info.
 		versionHistories *persistence.VersionHistories
-		replicationState *persistence.ReplicationState
+		replicationState *persistenceblobs.ReplicationState
 		hBuilder         *historyBuilder
 
 		// in memory only attributes
@@ -181,7 +180,7 @@ func newMutableStateBuilder(
 ) *mutableStateBuilder {
 	s := &mutableStateBuilder{
 		updateActivityInfos:            make(map[*persistenceblobs.ActivityInfo]struct{}),
-		pendingActivityTimerHeartbeats: make(map[int64]int64),
+		pendingActivityTimerHeartbeats: make(map[int64]time.Time),
 		pendingActivityInfoIDs:         make(map[int64]*persistenceblobs.ActivityInfo),
 		pendingActivityIDToEventID:     make(map[string]int64),
 		deleteActivityInfos:            make(map[int64]struct{}),
@@ -252,11 +251,11 @@ func newMutableStateBuilderWithReplicationState(
 	namespaceEntry *cache.NamespaceCacheEntry,
 ) *mutableStateBuilder {
 	s := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry)
-	s.replicationState = &persistence.ReplicationState{
+	s.replicationState = &persistenceblobs.ReplicationState{
 		StartVersion:        s.currentVersion,
 		CurrentVersion:      s.currentVersion,
 		LastWriteVersion:    common.EmptyVersion,
-		LastWriteEventID:    common.EmptyEventID,
+		LastWriteEventId:    common.EmptyEventID,
 		LastReplicationInfo: make(map[string]*replicationspb.ReplicationInfo),
 	}
 	return s
@@ -403,7 +402,7 @@ func (e *mutableStateBuilder) GetExecutionInfo() *persistence.WorkflowExecutionI
 	return e.executionInfo
 }
 
-func (e *mutableStateBuilder) GetReplicationState() *persistence.ReplicationState {
+func (e *mutableStateBuilder) GetReplicationState() *persistenceblobs.ReplicationState {
 	return e.replicationState
 }
 
@@ -611,7 +610,7 @@ func (e *mutableStateBuilder) UpdateReplicationStateLastEventID(
 	lastEventID int64,
 ) {
 	e.replicationState.LastWriteVersion = lastWriteVersion
-	e.replicationState.LastWriteEventID = lastEventID
+	e.replicationState.LastWriteEventId = lastEventID
 
 	lastEventSourceCluster := e.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
 	currentCluster := e.clusterMetadata.GetCurrentClusterName()
@@ -907,12 +906,12 @@ func (e *mutableStateBuilder) CreateNewHistoryEvent(
 	eventType enumspb.EventType,
 ) *historypb.HistoryEvent {
 
-	return e.CreateNewHistoryEventWithTimestamp(eventType, e.timeSource.Now().UnixNano())
+	return e.CreateNewHistoryEventWithTime(eventType, e.timeSource.Now())
 }
 
-func (e *mutableStateBuilder) CreateNewHistoryEventWithTimestamp(
+func (e *mutableStateBuilder) CreateNewHistoryEventWithTime(
 	eventType enumspb.EventType,
-	timestamp int64,
+	time time.Time,
 ) *historypb.HistoryEvent {
 	eventID := e.executionInfo.NextEventID
 	if e.shouldBufferEvent(eventType) {
@@ -922,10 +921,9 @@ func (e *mutableStateBuilder) CreateNewHistoryEventWithTimestamp(
 		e.executionInfo.IncreaseNextEventID()
 	}
 
-	ts := timestamp
 	historyEvent := &historypb.HistoryEvent{}
 	historyEvent.EventId = eventID
-	historyEvent.Timestamp = ts
+	historyEvent.EventTime = &time
 	historyEvent.EventType = eventType
 	historyEvent.Version = e.GetCurrentVersion()
 	historyEvent.TaskId = common.EmptyEventTaskID
@@ -1040,7 +1038,7 @@ func (e *mutableStateBuilder) GetActivityInfo(
 // GetActivityInfo gives details about an activity that is currently in progress.
 func (e *mutableStateBuilder) GetActivityInfoWithTimerHeartbeat(
 	scheduleEventID int64,
-) (*persistenceblobs.ActivityInfo, int64, bool) {
+) (*persistenceblobs.ActivityInfo, time.Time, bool) {
 	ai, ok := e.pendingActivityInfoIDs[scheduleEventID]
 	timerVis, ok := e.pendingActivityTimerHeartbeats[scheduleEventID]
 
@@ -1144,8 +1142,7 @@ func (e *mutableStateBuilder) GetCronBackoffDuration() (time.Duration, error) {
 		e.logError("unable to find workflow start event", tag.ErrorTypeInvalidHistoryAction)
 		return backoff.NoBackoff, err
 	}
-	firstWorkflowTaskBackoff :=
-		time.Duration(workflowStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoffSeconds()) * time.Second
+	firstWorkflowTaskBackoff := timestamp.DurationValue(workflowStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
 	executionTime = executionTime.Add(firstWorkflowTaskBackoff)
 	return backoff.GetBackoffForNextSchedule(info.CronSchedule, executionTime, e.timeSource.Now()), nil
 }
@@ -1324,13 +1321,13 @@ func (e *mutableStateBuilder) ReplicateActivityInfo(
 	}
 
 	ai.Version = request.GetVersion()
-	ai.ScheduledTime = timestamp.TimePtr(time.Unix(0, request.GetScheduledTime()))
+	ai.ScheduledTime = request.GetScheduledTime()
 	ai.StartedId = request.GetStartedId()
-	ai.LastHeartbeatUpdateTime = timestamp.TimePtr(time.Unix(0, request.GetLastHeartbeatTime()))
+	ai.LastHeartbeatUpdateTime = request.GetLastHeartbeatTime()
 	if ai.StartedId == common.EmptyEventID {
 		ai.StartedTime = timestamp.TimePtr(time.Time{})
 	} else {
-		ai.StartedTime = timestamp.TimePtr(time.Unix(0, request.GetStartedTime()))
+		ai.StartedTime = request.GetStartedTime()
 	}
 	ai.LastHeartbeatDetails = request.GetDetails()
 	ai.Attempt = request.GetAttempt()
@@ -1366,7 +1363,7 @@ func (e *mutableStateBuilder) UpdateActivity(
 // UpdateActivity updates an activity
 func (e *mutableStateBuilder) UpdateActivityWithTimerHeartbeat(
 	ai *persistenceblobs.ActivityInfo,
-	timerTimeoutVisiblityInSeconds int64,
+	timerTimeoutVisibility time.Time,
 ) error {
 
 	err := e.UpdateActivity(ai)
@@ -1374,7 +1371,7 @@ func (e *mutableStateBuilder) UpdateActivityWithTimerHeartbeat(
 		return err
 	}
 
-	e.pendingActivityTimerHeartbeats[ai.ScheduleId] = timerTimeoutVisiblityInSeconds
+	e.pendingActivityTimerHeartbeats[ai.ScheduleId] = timerTimeoutVisibility
 	return nil
 }
 
@@ -1700,42 +1697,42 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	wType := &commonpb.WorkflowType{}
 	wType.Name = workflowType
 
-	var taskTimeout int32
-	if attributes.GetWorkflowTaskTimeoutSeconds() == 0 {
-		taskTimeout = int32(previousExecutionInfo.DefaultWorkflowTaskTimeout)
+	var taskTimeout *time.Duration
+	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) == 0 {
+		taskTimeout = timestamp.DurationPtr(time.Duration(previousExecutionInfo.DefaultWorkflowTaskTimeout) * time.Second)
 	} else {
-		taskTimeout = attributes.GetWorkflowTaskTimeoutSeconds()
+		taskTimeout = attributes.GetWorkflowTaskTimeout()
 	}
 
 	// Workflow runTimeout is already set to the correct value in
 	// validateContinueAsNewWorkflowExecutionAttributes
-	runTimeout := attributes.GetWorkflowRunTimeoutSeconds()
+	runTimeout := attributes.GetWorkflowRunTimeout()
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                       uuid.New(),
-		Namespace:                       e.namespaceEntry.GetInfo().Name,
-		WorkflowId:                      execution.WorkflowId,
-		TaskQueue:                       tq,
-		WorkflowType:                    wType,
-		WorkflowExecutionTimeoutSeconds: int32(previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout),
-		WorkflowRunTimeoutSeconds:       runTimeout,
-		WorkflowTaskTimeoutSeconds:      taskTimeout,
-		Input:                           attributes.Input,
-		Header:                          attributes.Header,
-		RetryPolicy:                     attributes.RetryPolicy,
-		CronSchedule:                    attributes.CronSchedule,
-		Memo:                            attributes.Memo,
-		SearchAttributes:                attributes.SearchAttributes,
+		RequestId:                uuid.New(),
+		Namespace:                e.namespaceEntry.GetInfo().Name,
+		WorkflowId:               execution.WorkflowId,
+		TaskQueue:                tq,
+		WorkflowType:             wType,
+		WorkflowExecutionTimeout: timestamp.DurationPtr(time.Duration(previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout) * time.Second),
+		WorkflowRunTimeout:       runTimeout,
+		WorkflowTaskTimeout:      taskTimeout,
+		Input:                    attributes.Input,
+		Header:                   attributes.Header,
+		RetryPolicy:              attributes.RetryPolicy,
+		CronSchedule:             attributes.CronSchedule,
+		Memo:                     attributes.Memo,
+		SearchAttributes:         attributes.SearchAttributes,
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:                     e.namespaceEntry.GetInfo().Id,
-		StartRequest:                    createRequest,
-		ParentExecutionInfo:             parentExecutionInfo,
-		LastCompletionResult:            attributes.LastCompletionResult,
-		ContinuedFailure:                attributes.GetFailure(),
-		ContinueAsNewInitiator:          attributes.Initiator,
-		FirstWorkflowTaskBackoffSeconds: attributes.BackoffStartIntervalInSeconds,
+		NamespaceId:              e.namespaceEntry.GetInfo().Id,
+		StartRequest:             createRequest,
+		ParentExecutionInfo:      parentExecutionInfo,
+		LastCompletionResult:     attributes.LastCompletionResult,
+		ContinuedFailure:         attributes.GetFailure(),
+		ContinueAsNewInitiator:   attributes.Initiator,
+		FirstWorkflowTaskBackoff: attributes.BackoffStartInterval,
 	}
 	if attributes.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -1744,7 +1741,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 	workflowTimeoutTime := previousExecutionState.GetExecutionInfo().WorkflowExpirationTime
 	if !workflowTimeoutTime.IsZero() {
-		req.WorkflowExecutionExpirationTimestamp = workflowTimeoutTime.UnixNano()
+		req.WorkflowExecutionExpirationTime = &workflowTimeoutTime
 	}
 
 	// History event only has namespace so namespaceID has to be passed in explicitly to update the mutable state
@@ -1769,13 +1766,13 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateWorkflowStartTasks(
-		e.unixNanoToTime(event.GetTimestamp()),
+		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	); err != nil {
 		return nil, err
 	}
 	if err := e.taskGenerator.generateRecordWorkflowStartedTasks(
-		e.unixNanoToTime(event.GetTimestamp()),
+		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	); err != nil {
 		return nil, err
@@ -1824,13 +1821,13 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateWorkflowStartTasks(
-		e.unixNanoToTime(event.GetTimestamp()),
+		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	); err != nil {
 		return nil, err
 	}
 	if err := e.taskGenerator.generateRecordWorkflowStartedTasks(
-		e.unixNanoToTime(event.GetTimestamp()),
+		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	); err != nil {
 		return nil, err
@@ -1852,9 +1849,9 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.RunID = execution.GetRunId()
 	e.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	e.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
-	e.executionInfo.WorkflowRunTimeout = int64(event.GetWorkflowRunTimeoutSeconds())
-	e.executionInfo.WorkflowExecutionTimeout = int64(event.GetWorkflowExecutionTimeoutSeconds())
-	e.executionInfo.DefaultWorkflowTaskTimeout = int64(event.GetWorkflowTaskTimeoutSeconds())
+	e.executionInfo.WorkflowRunTimeout = int64(timestamp.DurationValue(event.GetWorkflowRunTimeout()).Seconds())
+	e.executionInfo.WorkflowExecutionTimeout = int64(timestamp.DurationValue(event.GetWorkflowExecutionTimeout()).Seconds())
+	e.executionInfo.DefaultWorkflowTaskTimeout = int64(timestamp.DurationValue(event.GetWorkflowTaskTimeout()).Seconds())
 
 	if err := e.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1886,22 +1883,22 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	}
 
 	e.executionInfo.Attempt = event.GetAttempt()
-	if event.GetWorkflowExecutionExpirationTimestamp() != 0 {
-		e.executionInfo.WorkflowExpirationTime = time.Unix(0, event.GetWorkflowExecutionExpirationTimestamp())
+	if !timestamp.TimeValue(event.GetWorkflowExecutionExpirationTime()).IsZero() {
+		e.executionInfo.WorkflowExpirationTime = timestamp.TimeValue(event.GetWorkflowExecutionExpirationTime())
 	}
 	if event.RetryPolicy != nil {
 		e.executionInfo.HasRetryPolicy = true
 		e.executionInfo.BackoffCoefficient = event.RetryPolicy.GetBackoffCoefficient()
-		e.executionInfo.InitialInterval = int64(event.RetryPolicy.GetInitialIntervalInSeconds())
+		e.executionInfo.InitialInterval = int64(timestamp.DurationValue(event.RetryPolicy.GetInitialInterval()).Seconds())
 		e.executionInfo.MaximumAttempts = event.RetryPolicy.GetMaximumAttempts()
-		e.executionInfo.MaximumInterval = int64(event.RetryPolicy.GetMaximumIntervalInSeconds())
+		e.executionInfo.MaximumInterval = int64(timestamp.DurationValue(event.RetryPolicy.GetMaximumInterval()).Seconds())
 		e.executionInfo.NonRetryableErrorTypes = event.RetryPolicy.GetNonRetryableErrorTypes()
 	}
 
 	e.executionInfo.AutoResetPoints = rolloverAutoResetPointsWithExpiringTime(
 		event.GetPrevAutoResetPoints(),
 		event.GetContinuedExecutionRunId(),
-		startEvent.GetTimestamp(),
+		timestamp.TimeValue(startEvent.GetEventTime()),
 		e.namespaceEntry.GetRetentionDays(e.executionInfo.WorkflowID),
 	)
 
@@ -1957,7 +1954,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowTaskScheduledEvent(
 	scheduleID int64,
 	taskQueue *taskqueuepb.TaskQueue,
 	startToCloseTimeoutSeconds int32,
-	attempt int64,
+	attempt int32,
 	scheduleTimestamp int64,
 	originalScheduledTimestamp int64,
 ) (*workflowTaskInfo, error) {
@@ -2040,7 +2037,7 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 		BinaryChecksum:               binChecksum,
 		RunId:                        exeInfo.RunID,
 		FirstWorkflowTaskCompletedId: event.GetEventId(),
-		CreateTimeNano:               e.timeSource.Now().UnixNano(),
+		CreateTime:                   timestamp.TimePtr(e.timeSource.Now()),
 		Resettable:                   resettable,
 	}
 	currResetPoints = append(currResetPoints, info)
@@ -2056,7 +2053,7 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 	}
 	exeInfo.SearchAttributes[definition.BinaryChecksums] = bytes
 	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
-		return e.taskGenerator.generateWorkflowSearchAttrTasks(e.unixNanoToTime(event.GetTimestamp()))
+		return e.taskGenerator.generateWorkflowSearchAttrTasks(timestamp.TimeValue(event.GetEventTime()))
 	}
 	return nil
 }
@@ -2185,7 +2182,7 @@ func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(
 	ai, err := e.ReplicateActivityTaskScheduledEvent(workflowTaskCompletedEventID, event)
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateActivityTransferTasks(
-		e.unixNanoToTime(event.GetTimestamp()),
+		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	); err != nil {
 		return nil, nil, err
@@ -2209,21 +2206,21 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 	}
 
 	scheduleEventID := event.GetEventId()
-	scheduleToCloseTimeout := attributes.GetScheduleToCloseTimeoutSeconds()
+	scheduleToCloseTimeout := attributes.GetScheduleToCloseTimeout()
 
 	ai := &persistenceblobs.ActivityInfo{
 		Version:                 event.GetVersion(),
 		ScheduleId:              scheduleEventID,
 		ScheduledEventBatchId:   firstEventID,
-		ScheduledTime:           timestamp.TimePtr(time.Unix(0, event.GetTimestamp())),
+		ScheduledTime:           event.GetEventTime(),
 		StartedId:               common.EmptyEventID,
 		StartedTime:             timestamp.TimePtr(time.Time{}),
 		ActivityId:              attributes.ActivityId,
 		NamespaceId:             targetNamespaceID,
-		ScheduleToStartTimeout:  timestamp.DurationFromSeconds(int64(attributes.GetScheduleToStartTimeoutSeconds())),
-		ScheduleToCloseTimeout:  timestamp.DurationFromSeconds(int64(scheduleToCloseTimeout)),
-		StartToCloseTimeout:     timestamp.DurationFromSeconds(int64(attributes.GetStartToCloseTimeoutSeconds())),
-		HeartbeatTimeout:        timestamp.DurationFromSeconds(int64(attributes.GetHeartbeatTimeoutSeconds())),
+		ScheduleToStartTimeout:  attributes.GetScheduleToStartTimeout(),
+		ScheduleToCloseTimeout:  scheduleToCloseTimeout,
+		StartToCloseTimeout:     attributes.GetStartToCloseTimeout(),
+		HeartbeatTimeout:        attributes.GetHeartbeatTimeout(),
 		CancelRequested:         false,
 		CancelRequestId:         common.EmptyEventID,
 		LastHeartbeatUpdateTime: timestamp.TimePtr(time.Time{}),
@@ -2232,12 +2229,12 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		HasRetryPolicy:          attributes.RetryPolicy != nil,
 		Attempt:                 1,
 	}
-	retryTime := (*ai.ScheduledTime).Add(time.Duration(scheduleToCloseTimeout) * time.Second)
+	retryTime := timestamp.TimeValue(ai.ScheduledTime).Add(timestamp.DurationValue(scheduleToCloseTimeout))
 	ai.RetryExpirationTime = &retryTime
 	if ai.HasRetryPolicy {
-		ai.RetryInitialInterval = timestamp.DurationFromSeconds(int64(attributes.RetryPolicy.GetInitialIntervalInSeconds()))
+		ai.RetryInitialInterval = attributes.RetryPolicy.GetInitialInterval()
 		ai.RetryBackoffCoefficient = attributes.RetryPolicy.GetBackoffCoefficient()
-		ai.RetryMaximumInterval = timestamp.DurationFromSeconds(int64(attributes.RetryPolicy.GetMaximumIntervalInSeconds()))
+		ai.RetryMaximumInterval = attributes.RetryPolicy.GetMaximumInterval()
 		ai.RetryMaximumAttempts = attributes.RetryPolicy.GetMaximumAttempts()
 		ai.RetryNonRetryableErrorTypes = attributes.RetryPolicy.NonRetryableErrorTypes
 	}
@@ -2259,11 +2256,11 @@ func (e *mutableStateBuilder) addTransientActivityStartedEvent(
 	}
 
 	// activity task was started (as transient event), we need to add it now.
-	event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, ai.RequestId, ai.StartedIdentity,
+	event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, int32(ai.Attempt), ai.RequestId, ai.StartedIdentity,
 		ai.RetryLastFailure)
 	if !ai.StartedTime.IsZero() {
 		// overwrite started event time to the one recorded in ActivityInfo
-		event.Timestamp = ai.StartedTime.UnixNano()
+		event.EventTime = ai.StartedTime
 	}
 	return e.ReplicateActivityTaskStartedEvent(event)
 }
@@ -2281,7 +2278,7 @@ func (e *mutableStateBuilder) AddActivityTaskStartedEvent(
 	}
 
 	if !ai.HasRetryPolicy {
-		event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, requestID, identity, ai.RetryLastFailure)
+		event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, int32(ai.Attempt), requestID, identity, ai.RetryLastFailure)
 		if err := e.ReplicateActivityTaskStartedEvent(event); err != nil {
 			return nil, err
 		}
@@ -2321,7 +2318,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskStartedEvent(
 	ai.Version = event.GetVersion()
 	ai.StartedId = event.GetEventId()
 	ai.RequestId = attributes.GetRequestId()
-	ai.StartedTime = timestamp.TimePtr(time.Unix(0, event.GetTimestamp()))
+	ai.StartedTime = event.GetEventTime()
 	ai.LastHeartbeatUpdateTime = ai.StartedTime
 	e.updateActivityInfos[ai] = struct{}{}
 	return nil
@@ -2607,7 +2604,7 @@ func (e *mutableStateBuilder) AddCompletedWorkflowEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateWorkflowCloseTasks(
-		e.unixNanoToTime(event.GetTimestamp()),
+		timestamp.TimeValue(event.GetEventTime()),
 	); err != nil {
 		return nil, err
 	}
@@ -2648,7 +2645,7 @@ func (e *mutableStateBuilder) AddFailWorkflowEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateWorkflowCloseTasks(
-		e.unixNanoToTime(event.GetTimestamp()),
+		timestamp.TimeValue(event.GetEventTime()),
 	); err != nil {
 		return nil, err
 	}
@@ -2688,7 +2685,7 @@ func (e *mutableStateBuilder) AddTimeoutWorkflowEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateWorkflowCloseTasks(
-		e.unixNanoToTime(event.GetTimestamp()),
+		timestamp.TimeValue(event.GetEventTime()),
 	); err != nil {
 		return nil, err
 	}
@@ -2767,7 +2764,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionCanceledEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateWorkflowCloseTasks(
-		e.unixNanoToTime(event.GetTimestamp()),
+		timestamp.TimeValue(event.GetEventTime()),
 	); err != nil {
 		return nil, err
 	}
@@ -2808,7 +2805,7 @@ func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionInitiated
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateRequestCancelExternalTasks(
-		e.unixNanoToTime(event.GetTimestamp()),
+		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	); err != nil {
 		return nil, nil, err
@@ -2932,7 +2929,7 @@ func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateSignalExternalTasks(
-		e.unixNanoToTime(event.GetTimestamp()),
+		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	); err != nil {
 		return nil, nil, err
@@ -2978,7 +2975,7 @@ func (e *mutableStateBuilder) AddUpsertWorkflowSearchAttributesEvent(
 	e.ReplicateUpsertWorkflowSearchAttributesEvent(event)
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateWorkflowSearchAttrTasks(
-		e.unixNanoToTime(event.GetTimestamp()),
+		timestamp.TimeValue(event.GetEventTime()),
 	); err != nil {
 		return nil, err
 	}
@@ -3123,19 +3120,14 @@ func (e *mutableStateBuilder) ReplicateTimerStartedEvent(
 	attributes := event.GetTimerStartedEventAttributes()
 	timerID := attributes.GetTimerId()
 
-	startToFireTimeout := attributes.GetStartToFireTimeoutSeconds()
-	fireTimeout := time.Duration(startToFireTimeout) * time.Second
+	startToFireTimeout := timestamp.DurationValue(attributes.GetStartToFireTimeout())
 	// TODO: Time skew need to be taken in to account.
-	expiryTime, err := types.TimestampProto(time.Unix(0, event.GetTimestamp()).Add(fireTimeout)) // should use the event time, not now
-
-	if err != nil {
-		return nil, err
-	}
+	expiryTime := timestamp.TimeValue(event.GetEventTime()).Add(startToFireTimeout) // should use the event time, not now
 
 	ti := &persistenceblobs.TimerInfo{
 		Version:    event.GetVersion(),
 		TimerId:    timerID,
-		ExpiryTime: expiryTime,
+		ExpiryTime: &expiryTime,
 		StartedId:  event.GetEventId(),
 		TaskStatus: timerTaskStatusNone,
 	}
@@ -3265,7 +3257,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionTerminatedEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateWorkflowCloseTasks(
-		e.unixNanoToTime(event.GetTimestamp()),
+		timestamp.TimeValue(event.GetEventTime()),
 	); err != nil {
 		return nil, err
 	}
@@ -3402,7 +3394,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateWorkflowCloseTasks(
-		e.unixNanoToTime(continueAsNewEvent.GetTimestamp()),
+		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
 	); err != nil {
 		return nil, nil, err
 	}
@@ -3413,7 +3405,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 func rolloverAutoResetPointsWithExpiringTime(
 	resetPoints *workflowpb.ResetPoints,
 	prevRunID string,
-	nowNano int64,
+	now time.Time,
 	namespaceRetentionDays int32,
 ) *workflowpb.ResetPoints {
 
@@ -3421,10 +3413,10 @@ func rolloverAutoResetPointsWithExpiringTime(
 		return resetPoints
 	}
 	newPoints := make([]*workflowpb.ResetPointInfo, 0, len(resetPoints.Points))
-	ExpireTimeNano := nowNano + int64(time.Duration(namespaceRetentionDays)*time.Hour*24)
+	expireTime := now.Add(time.Duration(namespaceRetentionDays) * time.Hour * 24)
 	for _, rp := range resetPoints.Points {
 		if rp.GetRunId() == prevRunID {
-			rp.ExpireTimeNano = ExpireTimeNano
+			rp.ExpireTime = &expireTime
 		}
 		newPoints = append(newPoints, rp)
 	}
@@ -3473,7 +3465,7 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateChildWorkflowTasks(
-		e.unixNanoToTime(event.GetTimestamp()),
+		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	); err != nil {
 		return nil, nil, err
@@ -3827,11 +3819,11 @@ func (e *mutableStateBuilder) RetryActivity(
 
 	backoffInterval, retryState := getBackoffInterval(
 		now,
-		*ai.RetryExpirationTime,
+		timestamp.TimeValue(ai.RetryExpirationTime),
 		ai.Attempt,
 		ai.RetryMaximumAttempts,
-		*ai.RetryInitialInterval,
-		*ai.RetryMaximumInterval,
+		timestamp.DurationValue(ai.RetryInitialInterval),
+		timestamp.DurationValue(ai.RetryMaximumInterval),
 		ai.RetryBackoffCoefficient,
 		failure,
 		ai.RetryNonRetryableErrorTypes,
@@ -4649,7 +4641,7 @@ func (e *mutableStateBuilder) shouldVerifyChecksum() bool {
 func (e *mutableStateBuilder) shouldInvalidateCheckum() bool {
 	invalidateBeforeEpochSecs := int64(e.config.MutableStateChecksumInvalidateBefore())
 	if invalidateBeforeEpochSecs > 0 {
-		invalidateBefore := time.Unix(invalidateBeforeEpochSecs, 0)
+		invalidateBefore := time.Unix(invalidateBeforeEpochSecs, 0).UTC()
 		return e.executionInfo.LastUpdatedTimestamp.Before(invalidateBefore)
 	}
 	return false
@@ -4669,11 +4661,11 @@ func (e *mutableStateBuilder) createCallerError(
 	return serviceerror.NewInvalidArgument(fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field().String))
 }
 
-func (e *mutableStateBuilder) unixNanoToTime(
+func (_ *mutableStateBuilder) unixNanoToTime(
 	timestampNanos int64,
 ) time.Time {
 
-	return time.Unix(0, timestampNanos)
+	return time.Unix(0, timestampNanos).UTC()
 }
 
 func (e *mutableStateBuilder) logInfo(msg string, tags ...tag.Tag) {

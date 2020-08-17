@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gogo/protobuf/types"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -44,6 +43,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -190,9 +190,9 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
 	isHeartBeatTask := task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
-	activityInfo, heartbeatTimeoutVisSeconds, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.GetEventId())
-	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTime)
-	if isHeartBeatTask && ok && heartbeatTimeoutVisSeconds <= goVisibilityTS.Unix() {
+	activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.GetEventId())
+	goVisibilityTS := timestamp.TimeValue(task.VisibilityTime)
+	if isHeartBeatTask && ok && (heartbeatTimeoutVis.Before(goVisibilityTS) || heartbeatTimeoutVis.Equal(goVisibilityTS)) {
 		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
 		if err := mutableState.UpdateActivity(activityInfo); err != nil {
 			return err
@@ -391,7 +391,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	// generate activity task
 	scheduledID := task.GetEventId()
 	activityInfo, ok := mutableState.GetActivityInfo(scheduledID)
-	if !ok || task.ScheduleAttempt < int64(activityInfo.Attempt) || activityInfo.StartedId != common.EmptyEventID {
+	if !ok || task.ScheduleAttempt < activityInfo.Attempt || activityInfo.StartedId != common.EmptyEventID {
 		if ok {
 			t.logger.Info("Duplicate activity retry timer task",
 				tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowID),
@@ -444,12 +444,12 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	release(nil) // release earlier as we don't need the lock anymore
 
 	_, retError = t.shard.GetService().GetMatchingClient().AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
-		NamespaceId:                   targetNamespaceID,
-		SourceNamespaceId:             namespaceID,
-		Execution:                     execution,
-		TaskQueue:                     taskQueue,
-		ScheduleId:                    scheduledID,
-		ScheduleToStartTimeoutSeconds: int32(scheduleToStartTimeout.Seconds()),
+		NamespaceId:            targetNamespaceID,
+		SourceNamespaceId:      namespaceID,
+		Execution:              execution,
+		TaskQueue:              taskQueue,
+		ScheduleId:             scheduledID,
+		ScheduleToStartTimeout: scheduleToStartTimeout,
 	})
 
 	return retError
@@ -524,19 +524,19 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 
 	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	continueAsNewAttributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-		WorkflowType:                  startAttributes.WorkflowType,
-		TaskQueue:                     startAttributes.TaskQueue,
-		Input:                         startAttributes.Input,
-		WorkflowRunTimeoutSeconds:     startAttributes.WorkflowRunTimeoutSeconds,
-		WorkflowTaskTimeoutSeconds:    startAttributes.WorkflowTaskTimeoutSeconds,
-		BackoffStartIntervalInSeconds: int32(backoffInterval.Seconds()),
-		RetryPolicy:                   startAttributes.RetryPolicy,
-		Initiator:                     continueAsNewInitiator,
-		Failure:                       timeoutFailure,
-		CronSchedule:                  mutableState.GetExecutionInfo().CronSchedule,
-		Header:                        startAttributes.Header,
-		Memo:                          startAttributes.Memo,
-		SearchAttributes:              startAttributes.SearchAttributes,
+		WorkflowType:         startAttributes.WorkflowType,
+		TaskQueue:            startAttributes.TaskQueue,
+		Input:                startAttributes.Input,
+		WorkflowRunTimeout:   startAttributes.WorkflowRunTimeout,
+		WorkflowTaskTimeout:  startAttributes.WorkflowTaskTimeout,
+		BackoffStartInterval: &backoffInterval,
+		RetryPolicy:          startAttributes.RetryPolicy,
+		Initiator:            continueAsNewInitiator,
+		Failure:              timeoutFailure,
+		CronSchedule:         mutableState.GetExecutionInfo().CronSchedule,
+		Header:               startAttributes.Header,
+		Memo:                 startAttributes.Memo,
+		SearchAttributes:     startAttributes.SearchAttributes,
 	}
 	newMutableState, err := retryWorkflow(
 		mutableState,

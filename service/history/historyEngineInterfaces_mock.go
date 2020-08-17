@@ -30,8 +30,8 @@ package history
 
 import (
 	reflect "reflect"
+	"time"
 
-	"github.com/gogo/protobuf/types"
 	gomock "github.com/golang/mock/gomock"
 
 	task "go.temporal.io/server/common/task"
@@ -105,10 +105,10 @@ func (mr *MockqueueTaskInfoMockRecorder) GetTaskType() *gomock.Call {
 }
 
 // GetVisibilityTime mocks base method
-func (m *MockqueueTaskInfo) GetVisibilityTime() *types.Timestamp {
+func (m *MockqueueTaskInfo) GetVisibilityTime() *time.Time {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetVisibilityTime")
-	ret0, _ := ret[0].(*types.Timestamp)
+	ret0, _ := ret[0].(*time.Time)
 	return ret0
 }
 
@@ -332,10 +332,10 @@ func (mr *MockqueueTaskMockRecorder) GetTaskType() *gomock.Call {
 }
 
 // GetVisibilityTime mocks base method
-func (m *MockqueueTask) GetVisibilityTime() *types.Timestamp {
+func (m *MockqueueTask) GetVisibilityTime() *time.Time {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetVisibilityTime")
-	ret0, _ := ret[0].(*types.Timestamp)
+	ret0, _ := ret[0].(*time.Time)
 	return ret0
 }
 

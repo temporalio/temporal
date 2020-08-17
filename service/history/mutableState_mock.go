@@ -804,18 +804,18 @@ func (mr *MockmutableStateMockRecorder) CreateNewHistoryEvent(eventType interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNewHistoryEvent", reflect.TypeOf((*MockmutableState)(nil).CreateNewHistoryEvent), eventType)
 }
 
-// CreateNewHistoryEventWithTimestamp mocks base method.
-func (m *MockmutableState) CreateNewHistoryEventWithTimestamp(eventType enums.EventType, timestamp int64) *history.HistoryEvent {
+// CreateNewHistoryEventWithTime mocks base method.
+func (m *MockmutableState) CreateNewHistoryEventWithTime(eventType enums.EventType, time time.Time) *history.HistoryEvent {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateNewHistoryEventWithTimestamp", eventType, timestamp)
+	ret := m.ctrl.Call(m, "CreateNewHistoryEventWithTime", eventType, time)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	return ret0
 }
 
-// CreateNewHistoryEventWithTimestamp indicates an expected call of CreateNewHistoryEventWithTimestamp.
-func (mr *MockmutableStateMockRecorder) CreateNewHistoryEventWithTimestamp(eventType, timestamp interface{}) *gomock.Call {
+// CreateNewHistoryEventWithTime indicates an expected call of CreateNewHistoryEventWithTime.
+func (mr *MockmutableStateMockRecorder) CreateNewHistoryEventWithTime(eventType, time interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNewHistoryEventWithTimestamp", reflect.TypeOf((*MockmutableState)(nil).CreateNewHistoryEventWithTimestamp), eventType, timestamp)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNewHistoryEventWithTime", reflect.TypeOf((*MockmutableState)(nil).CreateNewHistoryEventWithTime), eventType, time)
 }
 
 // CreateTransientWorkflowTaskEvents mocks base method.
@@ -914,19 +914,19 @@ func (mr *MockmutableStateMockRecorder) GetActivityInfo(arg0 interface{}) *gomoc
 }
 
 // GetActivityInfoWithTimerHeartbeat mocks base method.
-func (m *MockmutableState) GetActivityInfoWithTimerHeartbeat(arg0 int64) (*persistenceblobs.ActivityInfo, int64, bool) {
+func (m *MockmutableState) GetActivityInfoWithTimerHeartbeat(scheduleEventID int64) (*persistenceblobs.ActivityInfo, time.Time, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetActivityInfoWithTimerHeartbeat", arg0)
+	ret := m.ctrl.Call(m, "GetActivityInfoWithTimerHeartbeat", scheduleEventID)
 	ret0, _ := ret[0].(*persistenceblobs.ActivityInfo)
-	ret1, _ := ret[1].(int64)
+	ret1, _ := ret[1].(time.Time)
 	ret2, _ := ret[2].(bool)
 	return ret0, ret1, ret2
 }
 
 // GetActivityInfoWithTimerHeartbeat indicates an expected call of GetActivityInfoWithTimerHeartbeat.
-func (mr *MockmutableStateMockRecorder) GetActivityInfoWithTimerHeartbeat(arg0 interface{}) *gomock.Call {
+func (mr *MockmutableStateMockRecorder) GetActivityInfoWithTimerHeartbeat(scheduleEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityInfoWithTimerHeartbeat", reflect.TypeOf((*MockmutableState)(nil).GetActivityInfoWithTimerHeartbeat), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityInfoWithTimerHeartbeat", reflect.TypeOf((*MockmutableState)(nil).GetActivityInfoWithTimerHeartbeat), scheduleEventID)
 }
 
 // GetActivityScheduledEvent mocks base method.
@@ -1262,10 +1262,10 @@ func (mr *MockmutableStateMockRecorder) GetPendingSignalExternalInfos() *gomock.
 }
 
 // GetReplicationState mocks base method.
-func (m *MockmutableState) GetReplicationState() *persistence.ReplicationState {
+func (m *MockmutableState) GetReplicationState() *persistenceblobs.ReplicationState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationState")
-	ret0, _ := ret[0].(*persistence.ReplicationState)
+	ret0, _ := ret[0].(*persistenceblobs.ReplicationState)
 	return ret0
 }
 
@@ -1828,7 +1828,7 @@ func (mr *MockmutableStateMockRecorder) ReplicateWorkflowTaskFailedEvent() *gomo
 }
 
 // ReplicateWorkflowTaskScheduledEvent mocks base method.
-func (m *MockmutableState) ReplicateWorkflowTaskScheduledEvent(arg0, arg1 int64, arg2 *taskqueue.TaskQueue, arg3 int32, arg4, arg5, arg6 int64) (*workflowTaskInfo, error) {
+func (m *MockmutableState) ReplicateWorkflowTaskScheduledEvent(arg0, arg1 int64, arg2 *taskqueue.TaskQueue, arg3, arg4 int32, arg5, arg6 int64) (*workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateWorkflowTaskScheduledEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 	ret0, _ := ret[0].(*workflowTaskInfo)
@@ -2251,7 +2251,7 @@ func (mr *MockmutableStateMockRecorder) UpdateActivity(arg0 interface{}) *gomock
 }
 
 // UpdateActivityWithTimerHeartbeat mocks base method.
-func (m *MockmutableState) UpdateActivityWithTimerHeartbeat(arg0 *persistenceblobs.ActivityInfo, arg1 int64) error {
+func (m *MockmutableState) UpdateActivityWithTimerHeartbeat(arg0 *persistenceblobs.ActivityInfo, arg1 time.Time) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateActivityWithTimerHeartbeat", arg0, arg1)
 	ret0, _ := ret[0].(error)

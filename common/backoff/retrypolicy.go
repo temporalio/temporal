@@ -79,7 +79,7 @@ type (
 	}
 )
 
-// SystemClock implements Clock interface that uses time.Now().
+// SystemClock implements Clock interface that uses time.Now().UTC().
 var SystemClock = systemClock{}
 
 // NewExponentialRetryPolicy returns an instance of ExponentialRetryPolicy using the provided initialInterval
@@ -179,7 +179,7 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 
 // Now returns the current time using the system clock
 func (t systemClock) Now() time.Time {
-	return time.Now()
+	return time.Now().UTC()
 }
 
 // Reset will set the Retrier into initial state

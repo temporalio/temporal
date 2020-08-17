@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // All logging tags are defined in this file.
@@ -56,6 +57,11 @@ func ClusterName(clusterName string) Tag {
 // Timestamp returns tag for Timestamp
 func Timestamp(timestamp time.Time) Tag {
 	return newTimeTag("timestamp", timestamp)
+}
+
+// Timestamp returns tag for Timestamp
+func TimestampPtr(t *time.Time) Tag {
+	return newTimeTag("timestamp", timestamp.TimeValue(t))
 }
 
 // Timestamp returns tag for Timestamp
@@ -282,8 +288,8 @@ func WorkflowSize(workflowSize int64) Tag {
 }
 
 // WorkflowSignalCount returns tag for SignalCount
-func WorkflowSignalCount(signalCount int32) Tag {
-	return newInt32("wf-signal-count", signalCount)
+func WorkflowSignalCount(signalCount int64) Tag {
+	return newInt64("wf-signal-count", signalCount)
 }
 
 // WorkflowHistorySize returns tag for HistorySize
@@ -568,8 +574,8 @@ func AttemptEnd(attemptEnd time.Time) Tag {
 }
 
 // ScheduleAttempt returns tag for ScheduleAttempt
-func ScheduleAttempt(scheduleAttempt int64) Tag {
-	return newInt64("schedule-attempt", scheduleAttempt)
+func ScheduleAttempt(scheduleAttempt int32) Tag {
+	return newInt32("schedule-attempt", scheduleAttempt)
 }
 
 // ElasticSearch
@@ -766,8 +772,8 @@ func ArchivalRequestCloseFailoverVersion(requestCloseFailoverVersion int64) Tag 
 }
 
 // ArchivalRequestCloseTimestamp returns tag for RequestCloseTimestamp
-func ArchivalRequestCloseTimestamp(requestCloseTimeStamp int64) Tag {
-	return newInt64("archival-request-close-timestamp", requestCloseTimeStamp)
+func ArchivalRequestCloseTimestamp(requestCloseTimeStamp *time.Time) Tag {
+	return newTimeTag("archival-request-close-timestamp", timestamp.TimeValue(requestCloseTimeStamp))
 }
 
 // ArchivalRequestStatus returns tag for RequestStatus
@@ -846,6 +852,16 @@ func AckLevel(s interface{}) Tag {
 // QueryLevel returns tag for query level
 func QueryLevel(s time.Time) Tag {
 	return newTimeTag("query-level", s)
+}
+
+// QueryLevel returns tag for query level
+func MinQueryLevel(s time.Time) Tag {
+	return newTimeTag("min-query-level", s)
+}
+
+// QueryLevel returns tag for query level
+func MaxQueryLevel(s time.Time) Tag {
+	return newTimeTag("max-query-level", s)
 }
 
 // TaskQueueInfo returns tag for task queue info

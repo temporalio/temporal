@@ -23,9 +23,11 @@ syntax = "proto3";
 package temporal.server.api.persistenceblobs.v1;
 option go_package = "go.temporal.io/server/api/persistenceblobs/v1;persistenceblobs";
 
-import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
+
+import "dependencies/gogoproto/gogo.proto";
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/workflow.proto";
@@ -34,12 +36,29 @@ import "temporal/api/namespace/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
+import "temporal/api/workflow/v1/message.proto";
 
-import "dependencies/gogoproto/v1/gogo.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/enums/v1/task.proto";
+import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/replication/v1/message.proto";
+
+// ExecutionStats is not persisted and is used internally and as part of mutableState
+message ExecutionStats {
+    int64 history_size = 1;
+}
+
+// ReplicationState represents mutable state information for global namespaces.
+// This information is used by replication protocol when applying events from remote clusters
+// (not persisted)
+message ReplicationState {
+    int64 current_version = 1;
+    int64 start_version = 2;
+    int64 last_write_version = 3;
+    int64 last_write_event_id = 4;
+    map<string, temporal.server.api.replication.v1.ReplicationInfo> last_replication_info = 5;
+}
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster.
 message ImmutableClusterMetadata {
@@ -51,41 +70,41 @@ message ActivityInfo {
     int64 version = 1;
     int64 scheduled_event_batch_id = 2;
     temporal.api.history.v1.HistoryEvent scheduled_event = 3;
-    google.protobuf.Timestamp scheduled_time = 5 [(gogoproto.stdtime) = true];
-    int64 started_id = 6;
-    temporal.api.history.v1.HistoryEvent started_event = 7;
-    google.protobuf.Timestamp started_time = 9 [(gogoproto.stdtime) = true];
-    string activity_id = 10;
-    string request_id = 11;
+    google.protobuf.Timestamp scheduled_time = 4 [(gogoproto.stdtime) = true];
+    int64 started_id = 5;
+    temporal.api.history.v1.HistoryEvent started_event = 6;
+    google.protobuf.Timestamp started_time = 7 [(gogoproto.stdtime) = true];
+    string activity_id = 8;
+    string request_id = 9;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration schedule_to_start_timeout = 12 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration schedule_to_start_timeout = 10 [(gogoproto.stdduration) = true];
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration schedule_to_close_timeout = 13 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration schedule_to_close_timeout = 11 [(gogoproto.stdduration) = true];
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration start_to_close_timeout = 14 [(gogoproto.stdduration) = true];
-    google.protobuf.Duration heartbeat_timeout = 15 [(gogoproto.stdduration) = true];
-    bool cancel_requested = 16;
-    int64 cancel_request_id = 17;
-    int32 timer_task_status = 18;
-    int32 attempt = 19;
-    string task_queue = 20;
-    string started_identity = 21;
-    bool has_retry_policy = 22;
-    google.protobuf.Duration retry_initial_interval = 23 [(gogoproto.stdduration) = true];
-    google.protobuf.Duration retry_maximum_interval = 24 [(gogoproto.stdduration) = true];
-    int32 retry_maximum_attempts = 25;
-    google.protobuf.Timestamp retry_expiration_time = 26 [(gogoproto.stdtime) = true];
-    double retry_backoff_coefficient = 27;
-    repeated string retry_non_retryable_error_types = 28;
-    temporal.api.failure.v1.Failure retry_last_failure = 29;
-    string retry_last_worker_identity = 30;
-    string namespace_id = 31;
-    int64 schedule_id = 32;
-    temporal.api.common.v1.Payloads last_heartbeat_details = 33;
-    google.protobuf.Timestamp last_heartbeat_update_time = 34 [(gogoproto.stdtime) = true];
+    google.protobuf.Duration start_to_close_timeout = 12 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration heartbeat_timeout = 13 [(gogoproto.stdduration) = true];
+    bool cancel_requested = 14;
+    int64 cancel_request_id = 15;
+    int32 timer_task_status = 16;
+    int32 attempt = 17;
+    string task_queue = 18;
+    string started_identity = 19;
+    bool has_retry_policy = 20;
+    google.protobuf.Duration retry_initial_interval = 21 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration retry_maximum_interval = 22 [(gogoproto.stdduration) = true];
+    int32 retry_maximum_attempts = 23;
+    google.protobuf.Timestamp retry_expiration_time = 24 [(gogoproto.stdtime) = true];
+    double retry_backoff_coefficient = 25;
+    repeated string retry_non_retryable_error_types = 26;
+    temporal.api.failure.v1.Failure retry_last_failure = 27;
+    string retry_last_worker_identity = 28;
+    string namespace_id = 29;
+    int64 schedule_id = 30;
+    temporal.api.common.v1.Payloads last_heartbeat_details = 31;
+    google.protobuf.Timestamp last_heartbeat_update_time = 32 [(gogoproto.stdtime) = true];
 }
 
 message ShardInfo {
@@ -97,11 +116,11 @@ message ShardInfo {
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "since" is needed here. --)
     int32 stolen_since_renew = 6;
-    google.protobuf.Timestamp update_time = 7;
-    google.protobuf.Timestamp timer_ack_level_time = 8;
+    google.protobuf.Timestamp update_time = 7 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp timer_ack_level_time = 8 [(gogoproto.stdtime) = true];
     int64 namespace_notification_version = 9;
     map<string, int64> cluster_transfer_ack_level = 10;
-    map<string, google.protobuf.Timestamp> cluster_timer_ack_level = 11;
+    map<string, google.protobuf.Timestamp> cluster_timer_ack_level = 11 [(gogoproto.stdtime) = true];
     map<string, int64> cluster_replication_level = 12;
     map<string, int64> replication_dlq_ack_level = 13;
 }
@@ -133,10 +152,10 @@ message TimerTaskInfo {
     temporal.api.enums.v1.TimeoutType timeout_type = 5;
     temporal.server.api.enums.v1.WorkflowBackoffType workflow_backoff_type = 6;
     int64 version = 7;
-    int64 schedule_attempt = 8;
+    int32 schedule_attempt = 8;
     int64 event_id = 9;
     int64 task_id = 10;
-    google.protobuf.Timestamp visibility_time = 11;
+    google.protobuf.Timestamp visibility_time = 11 [(gogoproto.stdtime) = true];
 }
 
 message TransferTaskInfo {
@@ -152,7 +171,7 @@ message TransferTaskInfo {
     int64 schedule_id = 10;
     int64 version = 11;
     int64 task_id = 12;
-    google.protobuf.Timestamp visibility_time = 13;
+    google.protobuf.Timestamp visibility_time = 13 [(gogoproto.stdtime) = true];
     bool record_visibility = 14;
 }
 
@@ -176,7 +195,7 @@ message HistoryBranch {
 message HistoryTreeInfo {
     HistoryBranch branch_info = 1;
     // For fork operation to prevent race condition of leaking event data when forking branches fail. Also can be used for clean up leaked data.
-    google.protobuf.Timestamp fork_time = 2;
+    google.protobuf.Timestamp fork_time = 2 [(gogoproto.stdtime) = true];
     // For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
     string info = 3;
 }
@@ -184,7 +203,7 @@ message HistoryTreeInfo {
 message TimerInfo {
     int64 version = 1;
     int64 started_id = 2;
-    google.protobuf.Timestamp expiry_time = 3;
+    google.protobuf.Timestamp expiry_time = 3 [(gogoproto.stdtime) = true];
     int64 task_status = 4;
     // timerId serves the purpose of indicating whether a timer task is generated for this timer info.
     string timer_id = 5;
@@ -195,23 +214,23 @@ message TaskInfo {
     string workflow_id = 2;
     string run_id = 3;
     int64 schedule_id = 4;
-    google.protobuf.Timestamp create_time = 5;
-    google.protobuf.Timestamp expiry_time = 6;
+    google.protobuf.Timestamp create_time = 5 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
 }
 
 message AllocatedTaskInfo {
     TaskInfo data = 1;
-    int64 task_id = 8;
+    int64 task_id = 2;
 }
 
 message TaskQueueInfo {
     string namespace_id = 1;
     string name = 2;
     temporal.api.enums.v1.TaskQueueType task_type = 3;
-    temporal.api.enums.v1.TaskQueueKind kind = 5;
-    int64 ack_level = 6;
-    google.protobuf.Timestamp expiry_time = 7;
-    google.protobuf.Timestamp last_update_time = 8;
+    temporal.api.enums.v1.TaskQueueKind kind = 4;
+    int64 ack_level = 5;
+    google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_update_time = 7 [(gogoproto.stdtime) = true];
 }
 
 message SignalInfo {
@@ -239,65 +258,62 @@ message WorkflowExecutionState {
 }
 
 message WorkflowExecutionInfo {
-    string namespace_id = 61;
-    string workflow_id = 62;
-    string parent_namespace_id = 1;
-    string parent_workflow_id = 2;
-    string parent_run_id = 3;
-    int64 initiated_id = 4;
-    int64 completion_event_batch_id = 5;
-    bytes completion_event = 6;
-    string completion_event_encoding = 7;
-    string task_queue = 8;
-    string workflow_type_name = 9;
-    google.protobuf.Duration workflow_execution_timeout = 10 [(gogoproto.stdduration) = true];
-    google.protobuf.Duration workflow_run_timeout = 11 [(gogoproto.stdduration) = true];
-    google.protobuf.Duration default_workflow_task_timeout = 12 [(gogoproto.stdduration) = true];
-    int64 start_version = 15;
-    int64 current_version = 16;
-    ReplicationData replication_data = 17;
-    int64 last_event_task_id = 19;
-    int64 last_first_event_id = 20;
-    int64 last_processed_event = 21;
-    google.protobuf.Timestamp start_time = 22 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp last_update_time = 23 [(gogoproto.stdtime) = true];
-    int64 workflow_task_version = 24;
-    int64 workflow_task_schedule_id = 25;
-    int64 workflow_task_started_id = 26;
-    google.protobuf.Duration workflow_task_timeout = 27 [(gogoproto.stdduration) = true];
-    int64 workflow_task_attempt = 28;
-    google.protobuf.Timestamp workflow_task_started_time = 29 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp workflow_task_scheduled_time = 30 [(gogoproto.stdtime) = true];
-    bool cancel_requested = 31;
-    google.protobuf.Timestamp workflow_task_original_scheduled_time = 32 [(gogoproto.stdtime) = true];
-    string workflow_task_request_id = 34;
-    string cancel_request_id = 35;
-    string sticky_task_queue = 36;
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string parent_namespace_id = 3;
+    string parent_workflow_id = 4;
+    string parent_run_id = 5;
+    int64 initiated_id = 6;
+    int64 completion_event_batch_id = 7;
+    temporal.api.history.v1.HistoryEvent completion_event = 8;
+    string task_queue = 9;
+    string workflow_type_name = 10;
+    google.protobuf.Duration workflow_execution_timeout = 11 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration workflow_run_timeout = 12 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration default_workflow_task_timeout = 13 [(gogoproto.stdduration) = true];
+    int64 start_version = 14;
+    int64 current_version = 15;
+    ReplicationData replication_data = 16;
+    int64 last_event_task_id = 17;
+    int64 last_first_event_id = 18;
+    int64 last_processed_event = 19;
+    google.protobuf.Timestamp start_time = 20 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_update_time = 21 [(gogoproto.stdtime) = true];
+    int64 workflow_task_version = 22;
+    int64 workflow_task_schedule_id = 23;
+    int64 workflow_task_started_id = 24;
+    google.protobuf.Duration workflow_task_timeout = 25 [(gogoproto.stdduration) = true];
+    int32 workflow_task_attempt = 26;
+    google.protobuf.Timestamp workflow_task_started_time = 27 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp workflow_task_scheduled_time = 28 [(gogoproto.stdtime) = true];
+    bool cancel_requested = 29;
+    google.protobuf.Timestamp workflow_task_original_scheduled_time = 30 [(gogoproto.stdtime) = true];
+    string workflow_task_request_id = 31;
+    string cancel_request_id = 32;
+    string sticky_task_queue = 33;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration sticky_schedule_to_start_timeout = 37 [(gogoproto.stdduration) = true];
-    int64 retry_attempt = 38;
-    google.protobuf.Duration retry_initial_interval = 39 [(gogoproto.stdduration) = true];
-    google.protobuf.Duration retry_maximum_interval = 40 [(gogoproto.stdduration) = true];
-    int32 retry_maximum_attempts = 41;
-    double retry_backoff_coefficient = 42;
-    google.protobuf.Timestamp retry_expiration_time = 43 [(gogoproto.stdtime) = true];
-    repeated string retry_non_retryable_error_types = 44;
-    bool has_retry_policy = 45;
-    string cron_schedule = 46;
-    int32 event_store_version = 47;
-    bytes event_branch_token = 48;
-    int64 signal_count = 49;
-    int64 history_size = 50;
-    string client_library_version = 51;
-    string client_feature_version = 52;
-    string client_impl = 53;
-    bytes auto_reset_points = 54;
-    string auto_reset_points_encoding = 55;
-    map<string, temporal.api.common.v1.Payload> search_attributes = 56;
-    map<string, temporal.api.common.v1.Payload> memo = 57;
-    bytes version_histories = 58;
-    string version_histories_encoding = 59;
+    google.protobuf.Duration sticky_schedule_to_start_timeout = 34 [(gogoproto.stdduration) = true];
+    int32 retry_attempt = 35;
+    google.protobuf.Duration retry_initial_interval = 36 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration retry_maximum_interval = 37 [(gogoproto.stdduration) = true];
+    int32 retry_maximum_attempts = 38;
+    double retry_backoff_coefficient = 39;
+    google.protobuf.Timestamp retry_expiration_time = 40 [(gogoproto.stdtime) = true];
+    repeated string retry_non_retryable_error_types = 41;
+    bool has_retry_policy = 42;
+    string cron_schedule = 43;
+    int32 event_store_version = 44;
+    bytes event_branch_token = 45;
+    int64 signal_count = 46;
+    int64 history_size = 47;
+    string client_library_version = 48;
+    string client_feature_version = 49;
+    string client_impl = 50;
+    temporal.api.workflow.v1.ResetPoints auto_reset_points = 51;
+    map<string, temporal.api.common.v1.Payload> search_attributes = 52;
+    map<string, temporal.api.common.v1.Payload> memo = 53;
+    temporal.server.api.history.v1.VersionHistories version_histories = 54;
 }
 
 message Checksum {
@@ -325,11 +341,10 @@ message NamespaceDetail {
     NamespaceInfo info = 1;
     NamespaceConfig config = 2;
     NamespaceReplicationConfig replication_config = 3;
-
-    int64 config_version = 9;
-    int64 failover_notification_version = 11;
-    int64 failover_version = 12;
-    int64 failover_end_time = 13;
+    int64 config_version = 4;
+    int64 failover_notification_version = 5;
+    int64 failover_version = 6;
+    google.protobuf.Timestamp failover_end_time = 7 [(gogoproto.stdtime) = true];
 }
 
 message NamespaceInfo {
@@ -365,6 +380,6 @@ message ReplicationData {
 }
 
 message ReplicationVersions {
-    google.protobuf.Int64Value start_version = 15;
-    google.protobuf.Int64Value last_write_version = 16;
+    google.protobuf.Int64Value start_version = 1;
+    google.protobuf.Int64Value last_write_version = 2;
 }

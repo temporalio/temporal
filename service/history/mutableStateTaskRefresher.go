@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 var emptyTasks = []persistence.Task{}
@@ -184,7 +185,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowStart(
 	}
 
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	if !mutableState.HasProcessedOrPendingWorkflowTask() && startAttr.GetFirstWorkflowTaskBackoffSeconds() > 0 {
+	if !mutableState.HasProcessedOrPendingWorkflowTask() && timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff()) > 0 {
 		if err := taskGenerator.generateDelayedWorkflowTasks(
 			now,
 			startEvent,

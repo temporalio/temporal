@@ -165,8 +165,8 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	listRequest := &workflowservice.ListOpenWorkflowExecutionsRequest{
 		Namespace: testNamespace,
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: 0,
-			LatestTime:   time.Now().UnixNano(),
+			EarliestTime: timestamp.TimePtr(time.Time{}),
+			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: "wid",
@@ -188,8 +188,8 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	listRequest2 := &workflowservice.ListClosedWorkflowExecutionsRequest{
 		Namespace: testNamespace,
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: 0,
-			LatestTime:   time.Now().UnixNano(),
+			EarliestTime: timestamp.TimePtr(time.Time{}),
+			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: "wid",
@@ -254,12 +254,12 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowTaskTimeoutSeconds: 1,
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds: 1,
-			BackoffCoefficient:       2,
-			MaximumIntervalInSeconds: 2,
-			MaximumAttempts:          1,
+			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			BackoffCoefficient: 2,
+			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumAttempts:    1,
 		},
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
@@ -290,14 +290,14 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeoutSeconds: 1,
-		WorkflowRunTimeoutSeconds:       1,
-		WorkflowTaskTimeoutSeconds:      1,
+		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds: 1,
-			BackoffCoefficient:       2,
-			MaximumIntervalInSeconds: 2,
-			MaximumAttempts:          1,
+			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			BackoffCoefficient: 2,
+			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -319,14 +319,14 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSe
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeoutSeconds: 1,
-		WorkflowRunTimeoutSeconds:       1,
-		WorkflowTaskTimeoutSeconds:      1,
+		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds: 1,
-			BackoffCoefficient:       2,
-			MaximumIntervalInSeconds: 2,
-			MaximumAttempts:          1,
+			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			BackoffCoefficient: 2,
+			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -349,14 +349,14 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNot
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeoutSeconds: 1,
-		WorkflowRunTimeoutSeconds:       1,
-		WorkflowTaskTimeoutSeconds:      1,
+		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds: 1,
-			BackoffCoefficient:       2,
-			MaximumIntervalInSeconds: 2,
-			MaximumAttempts:          1,
+			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			BackoffCoefficient: 2,
+			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -380,10 +380,10 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskQueueNotSet
 			Name: "",
 		},
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds: 1,
-			BackoffCoefficient:       2,
-			MaximumIntervalInSeconds: 2,
-			MaximumAttempts:          1,
+			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			BackoffCoefficient: 2,
+			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -406,13 +406,13 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeoutSeconds: -1,
-		WorkflowRunTimeoutSeconds:       1,
+		WorkflowExecutionTimeout: timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds: 1,
-			BackoffCoefficient:       2,
-			MaximumIntervalInSeconds: 2,
-			MaximumAttempts:          1,
+			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			BackoffCoefficient: 2,
+			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -435,19 +435,68 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeo
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeoutSeconds: 1,
-		WorkflowRunTimeoutSeconds:       -1,
+		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds: 1,
-			BackoffCoefficient:       2,
-			MaximumIntervalInSeconds: 2,
-			MaximumAttempts:          1,
+			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			BackoffCoefficient: 2,
+			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
 	s.Equal(errInvalidWorkflowRunTimeoutSeconds, err)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNonNilRetryPolicyInitialized() {
+	config := s.newConfig()
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := s.getWorkflowHandler(config)
+
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  "test-namespace",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		RetryPolicy:              &commonpb.RetryPolicy{},
+		RequestId:                uuid.New(),
+	}
+	wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.Equal(&commonpb.RetryPolicy{
+		BackoffCoefficient: 2.0,
+		InitialInterval:    timestamp.DurationPtr(time.Second),
+		MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
+	}, startWorkflowExecutionRequest.RetryPolicy)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNilRetryPolicyNotInitialized() {
+	config := s.newConfig()
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := s.getWorkflowHandler(config)
+
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  "test-namespace",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		RequestId:                uuid.New(),
+	}
+	wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.Nil(startWorkflowExecutionRequest.RetryPolicy)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTimeout() {
@@ -464,14 +513,14 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTime
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeoutSeconds: 1,
-		WorkflowRunTimeoutSeconds:       1,
-		WorkflowTaskTimeoutSeconds:      -1,
+		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(-1) * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds: 1,
-			BackoffCoefficient:       2,
-			MaximumIntervalInSeconds: 2,
-			MaximumAttempts:          1,
+			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			BackoffCoefficient: 2,
+			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -1008,7 +1057,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		WorkflowId: "wid",
 		RunId:      "rid",
 	}
-	shardID := common.WorkflowIDToHistoryShard(we.WorkflowId, numHistoryShards)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, we.WorkflowId, numHistoryShards)
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
@@ -1394,10 +1443,10 @@ func registerNamespaceRequest(
 	visibilityArchivalURI string,
 ) *workflowservice.RegisterNamespaceRequest {
 	return &workflowservice.RegisterNamespaceRequest{
-		Name:                                 "test-namespace",
-		Description:                          "test-description",
-		OwnerEmail:                           "test-owner-email",
-		WorkflowExecutionRetentionPeriodDays: 10,
+		Name:                             "test-namespace",
+		Description:                      "test-description",
+		OwnerEmail:                       "test-owner-email",
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(10 * time.Hour * 24),
 		Clusters: []*replicationpb.ClusterReplicationConfig{
 			{
 				ClusterName: cluster.TestCurrentClusterName,

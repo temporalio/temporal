@@ -31,7 +31,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -162,7 +161,7 @@ func (t *timerSequenceImpl) createNextActivityTimer() (bool, error) {
 
 	var err error
 	if firstTimerTask.timerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-		err = t.mutableState.UpdateActivityWithTimerHeartbeat(activityInfo, firstTimerTask.timestamp.Unix())
+		err = t.mutableState.UpdateActivityWithTimerHeartbeat(activityInfo, firstTimerTask.timestamp)
 	} else {
 		err = t.mutableState.UpdateActivity(activityInfo)
 	}
@@ -175,7 +174,7 @@ func (t *timerSequenceImpl) createNextActivityTimer() (bool, error) {
 		VisibilityTimestamp: firstTimerTask.timestamp,
 		TimeoutType:         firstTimerTask.timerType,
 		EventID:             firstTimerTask.eventID,
-		Attempt:             int64(firstTimerTask.attempt),
+		Attempt:             firstTimerTask.attempt,
 		Version:             t.mutableState.GetCurrentVersion(),
 	})
 	return true, nil
@@ -240,11 +239,11 @@ func (t *timerSequenceImpl) getUserTimerTimeout(
 	timerInfo *persistenceblobs.TimerInfo,
 ) *timerSequenceID {
 
-	expiryTime, _ := types.TimestampFromProto(timerInfo.ExpiryTime)
+	expiryTime := timerInfo.ExpiryTime
 
 	return &timerSequenceID{
 		eventID:      timerInfo.GetStartedId(),
-		timestamp:    expiryTime,
+		timestamp:    timestamp.TimeValue(expiryTime),
 		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: timerInfo.TaskStatus == timerTaskStatusCreated,
 		attempt:      1,
@@ -265,7 +264,7 @@ func (t *timerSequenceImpl) getActivityScheduleToStartTimeout(
 		return nil
 	}
 
-	startTimeout := timestamp.AddDurationPtrToTimePtr(activityInfo.ScheduledTime, activityInfo.ScheduleToStartTimeout)
+	startTimeout := timestamp.TimeValue(activityInfo.ScheduledTime).Add(timestamp.DurationValue(activityInfo.ScheduleToStartTimeout))
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,
@@ -285,7 +284,7 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 		return nil
 	}
 
-	closeTimeout := timestamp.AddDurationPtrToTimePtr(activityInfo.ScheduledTime, activityInfo.ScheduleToCloseTimeout)
+	closeTimeout := timestamp.TimeValue(activityInfo.ScheduledTime).Add(timestamp.DurationValue(activityInfo.ScheduleToCloseTimeout))
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,
@@ -310,7 +309,7 @@ func (t *timerSequenceImpl) getActivityStartToCloseTimeout(
 		return nil
 	}
 
-	closeTimeout := timestamp.AddDurationPtrToTimePtr(activityInfo.StartedTime, activityInfo.StartToCloseTimeout)
+	closeTimeout := timestamp.TimeValue(activityInfo.StartedTime).Add(timestamp.DurationValue(activityInfo.StartToCloseTimeout))
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,
@@ -341,16 +340,16 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 	}
 
 	// use the latest time as last heartbeat time
-	lastHeartbeat := time.Time{}
+	var lastHeartbeat time.Time
 	if activityInfo.StartedTime != nil {
-		lastHeartbeat = *activityInfo.StartedTime
+		lastHeartbeat = timestamp.TimeValue(activityInfo.StartedTime)
 	}
 
 	if activityInfo.LastHeartbeatUpdateTime != nil && activityInfo.LastHeartbeatUpdateTime.After(lastHeartbeat) {
-		lastHeartbeat = *activityInfo.LastHeartbeatUpdateTime
+		lastHeartbeat = timestamp.TimeValue(activityInfo.LastHeartbeatUpdateTime)
 	}
 
-	heartbeatTimeout := timestamp.AddDurationPtrToTime(lastHeartbeat, activityInfo.HeartbeatTimeout)
+	heartbeatTimeout := lastHeartbeat.Add(timestamp.DurationValue(activityInfo.HeartbeatTimeout))
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,

@@ -30,9 +30,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-
 	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -41,7 +40,7 @@ import (
 )
 
 var (
-	maximumTime = time.Unix(0, math.MaxInt64)
+	maximumTime = time.Unix(0, math.MaxInt64).UTC()
 )
 
 type (
@@ -112,11 +111,10 @@ func (t timerKeys) Less(i, j int) bool {
 	return compareTimerIDLess(&t[i], &t[j])
 }
 
-func timerKeyFromGogoTime(protoTime *types.Timestamp, taskID int64) *timerKey {
+func timerKeyFromTimePtr(protoTime *time.Time, taskID int64) *timerKey {
 	// Its okay to ignore this since we do validation coming into a gogo/protoTime
-	t, _ := types.TimestampFromProto(protoTime)
 	return &timerKey{
-		VisibilityTimestamp: t,
+		VisibilityTimestamp: timestamp.TimeValue(protoTime),
 		TaskID:              taskID,
 	}
 }
@@ -227,7 +225,7 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistenceblobs.TimerTaskIn
 		}
 		morePage = len(pageToken) != 0
 		t.logger.Debug("readTimerTasks",
-			tag.QueryLevel(minQueryLevel), tag.QueryLevel(maxQueryLevel), tag.Counter(len(tasks)), tag.Bool(morePage))
+			tag.MinQueryLevel(minQueryLevel), tag.MaxQueryLevel(maxQueryLevel), tag.Counter(len(tasks)), tag.Bool(morePage))
 	}
 
 	t.Lock()
@@ -245,7 +243,7 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistenceblobs.TimerTaskIn
 
 TaskFilterLoop:
 	for _, task := range tasks {
-		timerKey := timerKeyFromGogoTime(task.GetVisibilityTime(), task.GetTaskId())
+		timerKey := &timerKey{VisibilityTimestamp: timestamp.TimeValue(task.GetVisibilityTime()), TaskID: task.GetTaskId()}
 		_, isLoaded := t.outstandingTasks[*timerKey]
 		if isLoaded {
 			// timer already loaded
@@ -273,7 +271,7 @@ TaskFilterLoop:
 		} else {
 			t.minQueryLevel = t.maxQueryLevel
 		}
-		t.logger.Debug("Moved timer minQueryLevel", tag.QueryLevel(t.minQueryLevel))
+		t.logger.Debug("Moved timer minQueryLevel", tag.MinQueryLevel(t.minQueryLevel))
 		t.pageToken = nil
 	}
 	t.Unlock()
@@ -313,8 +311,8 @@ func (t *timerQueueAckMgrImpl) readLookAheadTask() (*persistenceblobs.TimerTaskI
 	return nil, nil
 }
 
-func (t *timerQueueAckMgrImpl) completeTimerTask(timerTask *persistenceblobs.TimerTaskInfo) {
-	timerKey := timerKeyFromGogoTime(timerTask.GetVisibilityTime(), timerTask.GetTaskId())
+func (t *timerQueueAckMgrImpl) completeTimerTask(task *persistenceblobs.TimerTaskInfo) {
+	timerKey := &timerKey{VisibilityTimestamp: timestamp.TimeValue(task.GetVisibilityTime()), TaskID: task.GetTaskId()}
 	t.Lock()
 	defer t.Unlock()
 

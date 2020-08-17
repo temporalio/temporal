@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/worker/batcher"
 )
 
@@ -123,14 +124,14 @@ func ListBatchJobs(c *cli.Context) {
 
 		job := map[string]string{
 			"jobId":     wf.Execution.GetWorkflowId(),
-			"startTime": convertTime(wf.GetStartTime().GetValue(), false),
+			"startTime": formatTime(timestamp.TimeValue(wf.GetStartTime()), false),
 			"reason":    reason,
 			"operator":  operator,
 		}
 
 		if wf.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			job["status"] = wf.GetStatus().String()
-			job["closeTime"] = convertTime(wf.GetCloseTime().GetValue(), false)
+			job["closeTime"] = formatTime(timestamp.TimeValue(wf.GetCloseTime()), false)
 		} else {
 			job["status"] = "RUNNING"
 		}

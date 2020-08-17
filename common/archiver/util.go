@@ -70,7 +70,7 @@ func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *arc
 		tag.ArchivalRequestWorkflowID(request.GetWorkflowId()),
 		tag.ArchivalRequestRunID(request.GetRunId()),
 		tag.ArchvialRequestWorkflowType(request.GetWorkflowTypeName()),
-		tag.ArchivalRequestCloseTimestamp(request.GetCloseTimestamp()),
+		tag.ArchivalRequestCloseTimestamp(request.GetCloseTime()),
 		tag.ArchivalRequestStatus(request.GetStatus().String()),
 		tag.ArchivalURI(URI),
 	)
@@ -127,10 +127,10 @@ func ValidateVisibilityArchivalRequest(request *archiverspb.ArchiveVisibilityReq
 	if request.GetWorkflowTypeName() == "" {
 		return errEmptyWorkflowTypeName
 	}
-	if request.GetStartTimestamp() == 0 {
+	if request.GetStartTime() == nil || request.GetStartTime().IsZero() {
 		return errEmptyStartTime
 	}
-	if request.GetCloseTimestamp() == 0 {
+	if request.GetCloseTime() == nil || request.GetCloseTime().IsZero() {
 		return errEmptyCloseTime
 	}
 	return nil

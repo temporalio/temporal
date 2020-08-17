@@ -27,7 +27,7 @@ package log
 import (
 	"fmt"
 
-	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/log"
 	"go.uber.org/zap"
 )
 
@@ -74,6 +74,6 @@ func (log *ZapAdapter) Error(msg string, keyvals ...interface{}) {
 	log.zl.Error(msg, log.fields(keyvals)...)
 }
 
-func (log *ZapAdapter) With(keyvals ...interface{}) client.Logger {
+func (log *ZapAdapter) With(keyvals ...interface{}) log.Logger {
 	return NewZapAdapter(log.zl.With(log.fields(keyvals)...))
 }

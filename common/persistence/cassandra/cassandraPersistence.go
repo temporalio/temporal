@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -172,12 +173,6 @@ workflow_state = ? ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?` +
 		`, ?, ?, ?, ?, ?) IF NOT EXISTS `
 
-	templateCreateWorkflowExecutionWithVersionHistoriesQuery = `INSERT INTO executions (` +
-		`shard_id, namespace_id, workflow_id, run_id, type, ` +
-		`execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, ` +
-		`visibility_ts, task_id, version_histories, version_histories_encoding, checksum, checksum_encoding) ` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS `
-
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, namespace_id, workflow_id, run_id, transfer, transfer_encoding, visibility_ts, task_id) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -203,7 +198,7 @@ workflow_state = ? ` +
 
 	templateGetWorkflowExecutionQuery = `SELECT execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, replication_metadata, replication_metadata_encoding, activity_map, activity_map_encoding, timer_map, timer_map_encoding, ` +
 		`child_executions_map, child_executions_map_encoding, request_cancel_map, request_cancel_map_encoding, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
-		`version_histories, version_histories_encoding, checksum, checksum_encoding ` +
+		`checksum, checksum_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -264,25 +259,6 @@ workflow_state = ? ` +
 		`, replication_metadata = ? ` +
 		`, replication_metadata_encoding = ? ` +
 		`, next_event_id = ? ` +
-		`, checksum = ? ` +
-		`, checksum_encoding = ? ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and namespace_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ? `
-
-	templateUpdateWorkflowExecutionWithVersionHistoriesQuery = `UPDATE executions ` +
-		`SET execution = ?` +
-		`, execution_encoding = ?` +
-		`, execution_state = ? ` +
-		`, execution_state_encoding = ? ` +
-		`, next_event_id = ? ` +
-		`, version_histories = ? ` +
-		`, version_histories_encoding = ? ` +
 		`, checksum = ? ` +
 		`, checksum_encoding = ? ` +
 		`WHERE shard_id = ? ` +
@@ -782,7 +758,7 @@ func (d *cassandraPersistence) GetShardID() int {
 
 func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error {
 	shardInfo := request.ShardInfo
-	shardInfo.UpdateTime = types.TimestampNow()
+	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
 	data, err := serialization.ShardInfoToBlob(shardInfo)
 
 	if err != nil {
@@ -798,7 +774,7 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 		defaultVisibilityTimestamp,
 		rowTypeShardTaskID,
 		data.Data,
-		data.Encoding,
+		data.Encoding.String(),
 		shardInfo.GetRangeId())
 
 	previous := make(map[string]interface{})
@@ -849,7 +825,7 @@ func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShard
 
 func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error {
 	shardInfo := request.ShardInfo
-	shardInfo.UpdateTime = types.TimestampNow()
+	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
 	data, err := serialization.ShardInfoToBlob(shardInfo)
 
 	if err != nil {
@@ -858,7 +834,7 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 
 	query := d.session.Query(templateUpdateShardQuery,
 		data.Data,
-		data.Encoding,
+		data.Encoding.String(),
 		shardInfo.GetRangeId(),
 		shardInfo.GetShardId(), // Where
 		rowTypeShard,
@@ -1109,15 +1085,9 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 		return nil, convertCommonErrors("GetWorkflowExecution", err)
 	}
 
-	info, replicationState, err := workflowExecutionFromRow(result)
+	state, err := mutableStateFromRow(result)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
-	}
-
-	state := &p.InternalWorkflowMutableState{
-		ExecutionInfo:    info,
-		ReplicationState: replicationState,
-		VersionHistories: p.NewDataBlob(result["version_histories"].([]byte), common.EncodingType(result["version_histories_encoding"].(string))),
 	}
 
 	if state.VersionHistories != nil && state.ReplicationState != nil {
@@ -1428,7 +1398,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 	batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 		newRunID,
 		stateDatablob.Data,
-		stateDatablob.Encoding,
+		stateDatablob.Encoding.String(),
 		replicationVersions.Data,
 		replicationVersions.Encoding.String(),
 		lastWriteVersion,
@@ -1929,7 +1899,8 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 			continue
 		}
 		if _, ok := result["execution"]; ok {
-			wfInfo, _, _ := workflowExecutionFromRow(result)
+			state, _ := mutableStateFromRow(result)
+			wfInfo := state.ExecutionInfo
 			response.ExecutionInfos = append(response.ExecutionInfos, wfInfo)
 		}
 		result = make(map[string]interface{})
@@ -2228,7 +2199,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 	if len(request.TaskQueue) == 0 {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue requires non empty task queue"))
 	}
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	query := d.session.Query(templateGetTaskQueue,
 		request.NamespaceID,
 		request.TaskQueue,
@@ -2269,7 +2240,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 				taskQueueTaskID,
 				initialRangeID,
 				datablob.Data,
-				datablob.Encoding,
+				datablob.Encoding.String(),
 			)
 		} else if isThrottlingError(err) {
 			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("LeaseTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
@@ -2306,7 +2277,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 		query = d.session.Query(templateUpdateTaskQueueQuery,
 			rangeID+1,
 			datablob.Data,
-			datablob.Encoding,
+			datablob.Encoding.String(),
 			request.NamespaceID,
 			&request.TaskQueue,
 			request.TaskType,
@@ -2337,7 +2308,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 // From TaskManager interface
 func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest) (*p.UpdateTaskQueueResponse, error) {
 	tli := *request.TaskQueueInfo
-	tli.LastUpdateTime = types.TimestampNow()
+	tli.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	if tli.Kind == enumspb.TASK_QUEUE_KIND_STICKY { // if task_queue is sticky, then update with TTL
 		expiry := types.TimestampNow()
 		expiry.Seconds += int64(stickyTaskQueueTTL)
@@ -2355,7 +2326,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 			taskQueueTaskID,
 			request.RangeID,
 			datablob.Data,
-			datablob.Encoding,
+			datablob.Encoding.String(),
 			stickyTaskQueueTTL,
 		)
 		err = query.Exec()
@@ -2366,7 +2337,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 		return &p.UpdateTaskQueueResponse{}, nil
 	}
 
-	tli.LastUpdateTime = types.TimestampNow()
+	tli.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	datablob, err := serialization.TaskQueueInfoToBlob(&tli)
 	if err != nil {
 		return nil, convertCommonErrors("UpdateTaskQueue", err)
@@ -2375,7 +2346,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 	query := d.session.Query(templateUpdateTaskQueueQuery,
 		request.RangeID,
 		datablob.Data,
-		datablob.Encoding,
+		datablob.Encoding.String(),
 		tli.GetNamespaceId(),
 		&tli.Name,
 		tli.TaskType,
@@ -2460,7 +2431,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				rowTypeTask,
 				task.GetTaskId(),
 				datablob.Data,
-				datablob.Encoding)
+				datablob.Encoding.String())
 		} else {
 			if ttl > maxCassandraTTL {
 				ttl = maxCassandraTTL
@@ -2473,13 +2444,13 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				rowTypeTask,
 				task.GetTaskId(),
 				datablob.Data,
-				datablob.Encoding,
+				datablob.Encoding.String(),
 				ttl)
 		}
 	}
 
 	tl := *request.TaskQueueInfo.Data
-	tl.LastUpdateTime = types.TimestampNow()
+	tl.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	datablob, err := serialization.TaskQueueInfoToBlob(&tl)
 
 	if err != nil {
@@ -2490,7 +2461,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 	batch.Query(templateUpdateTaskQueueQuery,
 		request.TaskQueueInfo.RangeID,
 		datablob.Data,
-		datablob.Encoding,
+		datablob.Encoding.String(),
 		namespaceID,
 		taskQueue,
 		taskQueueType,
@@ -2521,10 +2492,14 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 func GetTaskTTL(task *persistenceblobs.TaskInfo) int64 {
 	var ttl int64 = 0
 	if task.ExpiryTime != nil {
-		// Ignoring error since err is just validating 0 < yyyy < 1000 and nanos < 1e9
-		// and we'd have checked this upstream
-		expiryGo, _ := types.TimestampFromProto(task.ExpiryTime)
-		expiryTtl := convert.Int64Ceil(expiryGo.Sub(time.Now()).Seconds())
+		expiryTtl := convert.Int64Ceil(time.Until(timestamp.TimeValue(task.ExpiryTime)).Seconds())
+
+		// 0 means no ttl, we dont want that.
+		// Todo: Come back and correctly ignore expired in-memory tasks before persisting
+		if expiryTtl < 1 {
+			expiryTtl = 1
+		}
+
 		ttl = expiryTtl
 	}
 	return ttl
@@ -2727,7 +2702,7 @@ func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplication
 		request.SourceClusterName,
 		rowTypeDLQRunID,
 		datablob.Data,
-		datablob.Encoding,
+		datablob.Encoding.String(),
 		defaultVisibilityTimestamp,
 		task.GetTaskId())
 
@@ -2806,45 +2781,50 @@ func (d *cassandraPersistence) RangeDeleteReplicationTaskFromDLQ(
 	return nil
 }
 
-func workflowExecutionFromRow(result map[string]interface{}) (*p.InternalWorkflowExecutionInfo, *p.ReplicationState, error) {
+func mutableStateFromRow(result map[string]interface{}) (*p.InternalWorkflowMutableState, error) {
 	eiBytes, ok := result["execution"].([]byte)
 	if !ok {
-		return nil, nil, newPersistedTypeMismatchError("execution", "", eiBytes, result)
+		return nil, newPersistedTypeMismatchError("execution", "", eiBytes, result)
 	}
 
 	eiEncoding, ok := result["execution_encoding"].(string)
 	if !ok {
-		return nil, nil, newPersistedTypeMismatchError("execution_encoding", "", eiEncoding, result)
+		return nil, newPersistedTypeMismatchError("execution_encoding", "", eiEncoding, result)
 	}
 
 	protoInfo, err := serialization.WorkflowExecutionInfoFromBlob(eiBytes, eiEncoding)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	nextEventID, ok := result["next_event_id"].(int64)
 	if !ok {
-		return nil, nil, newPersistedTypeMismatchError("next_event_id", "", nextEventID, result)
+		return nil, newPersistedTypeMismatchError("next_event_id", "", nextEventID, result)
 	}
 
 	protoState, err := protoExecutionStateFromRow(result)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	info := p.ProtoWorkflowExecutionToPartialInternalExecution(protoInfo, protoState, nextEventID)
 
-	var state *p.ReplicationState
+	var state *persistenceblobs.ReplicationState
 	if protoInfo.ReplicationData != nil {
 		protoReplVersions, err := ProtoReplicationVersionsFromResultMap(result)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		state = ReplicationStateFromProtos(protoInfo, protoReplVersions)
 	}
 
-	return info, state, nil
+	mutableState := &p.InternalWorkflowMutableState{
+		ExecutionInfo:    info,
+		ReplicationState: state,
+		VersionHistories: protoInfo.VersionHistories,
+	}
+	return mutableState, nil
 }
 
 func ProtoReplicationVersionsFromResultMap(result map[string]interface{}) (*persistenceblobs.ReplicationVersions, error) {

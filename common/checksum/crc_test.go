@@ -30,16 +30,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func TestCRC32OverThrift(t *testing.T) {
+func TestCRC32OverProto(t *testing.T) {
 	// note: do not use a struct with map since
 	// iteration order is not guaranteed in Go and
 	// so, each call to thrift encode will result in
@@ -49,9 +49,7 @@ func TestCRC32OverThrift(t *testing.T) {
 			WorkflowId: uuid.New(),
 			RunId:      uuid.New(),
 		},
-		StartTime: &types.Int64Value{
-			Value: time.Now().UnixNano(),
-		},
+		StartTime:     timestamp.TimePtr(time.Now().UTC()),
 		HistoryLength: 550,
 	}
 

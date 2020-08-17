@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // NOTE: the counterpart of namespace replication receiving logic is in service/worker package
@@ -84,12 +83,12 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 				Data:        info.Data,
 			},
 			Config: &namespacepb.NamespaceConfig{
-				WorkflowExecutionRetentionPeriodInDays: timestamp.DaysInt32FromDuration(config.Retention),
-				HistoryArchivalState:                   config.HistoryArchivalState,
-				HistoryArchivalUri:                     config.HistoryArchivalUri,
-				VisibilityArchivalState:                config.VisibilityArchivalState,
-				VisibilityArchivalUri:                  config.VisibilityArchivalUri,
-				BadBinaries:                            config.BadBinaries,
+				WorkflowExecutionRetentionTtl: config.Retention,
+				HistoryArchivalState:          config.HistoryArchivalState,
+				HistoryArchivalUri:            config.HistoryArchivalUri,
+				VisibilityArchivalState:       config.VisibilityArchivalState,
+				VisibilityArchivalUri:         config.VisibilityArchivalUri,
+				BadBinaries:                   config.BadBinaries,
 			},
 			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 				ActiveClusterName: replicationConfig.ActiveClusterName,

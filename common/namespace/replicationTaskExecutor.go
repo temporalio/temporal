@@ -36,7 +36,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 var (
@@ -123,7 +122,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 				Data:        task.Info.Data,
 			},
 			Config: &persistenceblobs.NamespaceConfig{
-				Retention:               timestamp.DurationFromDays(task.Config.GetWorkflowExecutionRetentionPeriodInDays()),
+				Retention:               task.Config.GetWorkflowExecutionRetentionTtl(),
 				HistoryArchivalState:    task.Config.GetHistoryArchivalState(),
 				HistoryArchivalUri:      task.Config.GetHistoryArchivalUri(),
 				VisibilityArchivalState: task.Config.GetVisibilityArchivalState(),
@@ -234,7 +233,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 			Data:        task.Info.Data,
 		}
 		request.Namespace.Config = &persistenceblobs.NamespaceConfig{
-			Retention:               timestamp.DurationFromDays(task.Config.GetWorkflowExecutionRetentionPeriodInDays()),
+			Retention:               task.Config.GetWorkflowExecutionRetentionTtl(),
 			HistoryArchivalState:    task.Config.GetHistoryArchivalState(),
 			HistoryArchivalUri:      task.Config.GetHistoryArchivalUri(),
 			VisibilityArchivalState: task.Config.GetVisibilityArchivalState(),

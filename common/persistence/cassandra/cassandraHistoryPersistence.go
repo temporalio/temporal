@@ -29,7 +29,6 @@ import (
 	"sort"
 
 	"github.com/gocql/gocql"
-	"github.com/gogo/protobuf/types"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -38,6 +37,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -118,7 +118,7 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 		h.sortAncestors(&branchInfo.Ancestors)
 		treeInfoDataBlob, err := serialization.HistoryTreeInfoToBlob(&persistenceblobs.HistoryTreeInfo{
 			BranchInfo: branchInfo,
-			ForkTime:   types.TimestampNow(),
+			ForkTime:   timestamp.TimeNowPtrUtc(),
 			Info:       request.Info,
 		})
 
@@ -128,13 +128,13 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 
 		batch := h.session.NewBatch(gocql.LoggedBatch)
 		batch.Query(v2templateInsertTree,
-			branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.Encoding)
+			branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.Encoding.String())
 		batch.Query(v2templateUpsertData,
-			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding)
+			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding.String())
 		err = h.session.ExecuteBatch(batch)
 	} else {
 		query := h.session.Query(v2templateUpsertData,
-			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding)
+			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding.String())
 		err = query.Exec()
 	}
 
@@ -173,11 +173,14 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 
 	history := make([]*serialization.DataBlob, 0, int(request.PageSize))
 
-	eventBlob := &serialization.DataBlob{}
-	nodeID := int64(0)
-	txnID := int64(0)
-
-	for iter.Scan(&nodeID, &txnID, &eventBlob.Data, &eventBlob.Encoding) {
+	for {
+		var data []byte
+		var encoding string
+		nodeID := int64(0)
+		txnID := int64(0)
+		if !iter.Scan(&nodeID, &txnID, &data, &encoding) {
+			break
+		}
 		if txnID < lastTxnID {
 			// assuming that business logic layer is correct and transaction ID only increase
 			// thus, valid event batch will come with increasing transaction ID
@@ -201,8 +204,8 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
 			lastTxnID = txnID
 			lastNodeID = nodeID
+			eventBlob := p.NewDataBlob(data, encoding)
 			history = append(history, eventBlob)
-			eventBlob = &serialization.DataBlob{}
 		}
 	}
 
@@ -239,7 +242,7 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 //           \
 //            8[8]
 //
-//Now we want to fork a new branch B3 from B2.
+// Now we want to fork a new branch B3 from B2.
 // The only valid forking nodeIDs are 3,6 or 8.
 // 1 is not valid because we can't fork from first node.
 // 2/4/5 is NOT valid either because they are inside a batch.
@@ -300,7 +303,7 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 			BranchId:  request.NewBranchID,
 			Ancestors: newAncestors,
 		},
-		ForkTime: types.TimestampNow(),
+		ForkTime: timestamp.TimeNowPtrUtc(),
 		Info:     request.Info,
 	}
 
@@ -318,7 +321,7 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err))
 	}
-	query := h.session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.Encoding)
+	query := h.session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.Encoding.String())
 	err = query.Exec()
 	if err != nil {
 		return nil, convertCommonErrors("ForkHistoryBranch", err)
@@ -424,15 +427,10 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 			return nil, convertCommonErrors("GetAllHistoryTreeBranches", err)
 		}
 
-		goForkTime, err := types.TimestampFromProto(hti.ForkTime)
-		if err != nil {
-			return nil, convertCommonErrors("GetAllHistoryTreeBranches", err)
-		}
-
 		branchDetail := p.HistoryBranchDetail{
 			TreeID:   treeUUID.String(),
 			BranchID: branchUUID.String(),
-			ForkTime: goForkTime,
+			ForkTime: hti.ForkTime,
 			Info:     hti.Info,
 		}
 		branches = append(branches, branchDetail)

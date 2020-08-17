@@ -44,7 +44,7 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 	taskqueue := "event-generator-taskQueue"
 
 	var historyBatch []*historypb.History
-	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 2)
 
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
@@ -111,7 +111,7 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 	)
 
 	execMgrFactory := s.active.GetExecutionManagerFactory()
-	executionManager, err := execMgrFactory.NewExecutionManager(0)
+	executionManager, err := execMgrFactory.NewExecutionManager(1)
 	s.NoError(err)
 
 	expectedDLQMsgs := map[int64]bool{}

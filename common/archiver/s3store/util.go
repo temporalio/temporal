@@ -38,7 +38,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -151,7 +150,7 @@ func constructHistoryKeyPrefix(path, namespaceID, workflowID, runID string) stri
 }
 
 func constructTimeBasedSearchKey(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, timestamp int64, precision string) string {
-	t := time.Unix(0, timestamp).In(time.UTC)
+	t := time.Unix(0, timestamp).UTC()
 	var timeFormat = ""
 	switch precision {
 	case PrecisionSecond:
@@ -171,7 +170,7 @@ func constructTimeBasedSearchKey(path, namespaceID, primaryIndexKey, primaryInde
 }
 
 func constructTimestampIndex(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, timestamp int64, runID string) string {
-	t := time.Unix(0, timestamp).In(time.UTC)
+	t := time.Unix(0, timestamp).UTC()
 	return fmt.Sprintf("%s/%s/%s", constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), t.Format(time.RFC3339), runID)
 }
 
@@ -272,11 +271,9 @@ func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *wor
 		Type: &commonpb.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
-		StartTime: &types.Int64Value{
-			Value: record.StartTimestamp},
-		ExecutionTime: record.ExecutionTimestamp,
-		CloseTime: &types.Int64Value{
-			Value: record.CloseTimestamp},
+		StartTime:     record.StartTime,
+		ExecutionTime: record.ExecutionTime,
+		CloseTime:     record.CloseTime,
 		Status:        record.Status,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,

@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type ForwarderTestSuite struct {
@@ -105,10 +104,10 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduleId(), request.GetScheduleId())
 
-	schedToStart := request.GetScheduleToStartTimeoutSeconds()
-	rewritten := convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.ExpiryTime).ToTime()).Seconds())
-	t.Equal(schedToStart, rewritten)
-	t.Equal(t.taskQueue.name, request.GetForwardedFrom())
+	schedToStart := int32(request.GetScheduleToStartTimeout().Seconds())
+	rewritten := convert.Int32Ceil(time.Until(*taskInfo.Data.ExpiryTime).Seconds())
+	t.EqualValues(schedToStart, rewritten)
+	t.Equal(t.taskQueue.name, request.GetForwardedSource())
 }
 
 func (t *ForwarderTestSuite) TestForwardActivityTask() {
@@ -126,15 +125,15 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(t.taskQueue.Parent(20), request.TaskQueue.GetName())
-	t.Equal(enumspb.TaskQueueKind(t.fwdr.taskQueueKind), request.TaskQueue.GetKind())
+	t.Equal(t.fwdr.taskQueueKind, request.TaskQueue.GetKind())
 	t.Equal(t.taskQueue.namespaceID, request.GetNamespaceId())
 	t.Equal(taskInfo.Data.GetNamespaceId(), request.GetSourceNamespaceId())
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduleId(), request.GetScheduleId())
-	t.EqualValues(convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.ExpiryTime).ToTime()).Seconds()),
-		request.GetScheduleToStartTimeoutSeconds())
-	t.Equal(t.taskQueue.name, request.GetForwardedFrom())
+	t.EqualValues(convert.Int32Ceil(time.Until(*taskInfo.Data.ExpiryTime).Seconds()),
+		int32(request.GetScheduleToStartTimeout().Seconds()))
+	t.Equal(t.taskQueue.name, request.GetForwardedSource())
 }
 
 func (t *ForwarderTestSuite) TestForwardTaskRateExceeded() {

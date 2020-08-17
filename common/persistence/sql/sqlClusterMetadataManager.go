@@ -30,8 +30,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -70,7 +68,7 @@ func (s *sqlClusterMetadataManager) InsertImmutableDataIfNotExists(request *p.In
 	// or even move to a lock mechanism, but that doesn't appear worth the extra lines of code.
 	_, err := s.db.InsertIfNotExistsIntoClusterMetadata(&sqlplugin.ClusterMetadataRow{
 		ImmutableData:         request.ImmutableClusterMetadata.Data,
-		ImmutableDataEncoding: *convert.StringPtr(string(request.ImmutableClusterMetadata.Encoding)),
+		ImmutableDataEncoding: request.ImmutableClusterMetadata.Encoding.String(),
 	})
 
 	if err != nil {
@@ -91,7 +89,7 @@ func (s *sqlClusterMetadataManager) GetImmutableClusterMetadata() (*p.InternalGe
 	}
 
 	return &p.InternalGetImmutableClusterMetadataResponse{
-		ImmutableClusterMetadata: p.NewDataBlob(row.ImmutableData, common.EncodingType(row.ImmutableDataEncoding)),
+		ImmutableClusterMetadata: p.NewDataBlob(row.ImmutableData, row.ImmutableDataEncoding),
 	}, nil
 }
 

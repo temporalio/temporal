@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
 )
@@ -68,18 +69,18 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		Header:                     header,
-		Memo:                       memo,
-		SearchAttributes:           searchAttr,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 10,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		Header:              header,
+		Memo:                memo,
+		SearchAttributes:    searchAttr,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -103,14 +104,14 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-					WorkflowType:               workflowType,
-					TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
-					Input:                      payloads.EncodeBytes(buf.Bytes()),
-					Header:                     header,
-					Memo:                       memo,
-					SearchAttributes:           searchAttr,
-					WorkflowRunTimeoutSeconds:  100,
-					WorkflowTaskTimeoutSeconds: 10,
+					WorkflowType:        workflowType,
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+					Input:               payloads.EncodeBytes(buf.Bytes()),
+					Header:              header,
+					Memo:                memo,
+					SearchAttributes:    searchAttr,
+					WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+					WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 				}},
 			}}, nil
 		}
@@ -162,15 +163,15 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 10,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -191,11 +192,11 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-					WorkflowType:               workflowType,
-					TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
-					Input:                      payloads.EncodeBytes(buf.Bytes()),
-					WorkflowRunTimeoutSeconds:  1, // set timeout to 1
-					WorkflowTaskTimeoutSeconds: 1,
+					WorkflowType:        workflowType,
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+					Input:               payloads.EncodeBytes(buf.Bytes()),
+					WorkflowRunTimeout:  timestamp.DurationPtr(1 * time.Second), // set timeout to 1
+					WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
 				}},
 			}}, nil
 		}
@@ -263,14 +264,14 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                       uuid.New(),
-		Namespace:                       s.namespace,
-		WorkflowId:                      id,
-		WorkflowType:                    workflowType,
-		TaskQueue:                       taskQueue,
-		Input:                           nil,
-		WorkflowExecutionTimeoutSeconds: 5,
-		Identity:                        identity,
+		RequestId:                uuid.New(),
+		Namespace:                s.namespace,
+		WorkflowId:               id,
+		WorkflowType:             workflowType,
+		TaskQueue:                taskQueue,
+		Input:                    nil,
+		WorkflowExecutionTimeout: timestamp.DurationPtr(5 * time.Second),
+		Identity:                 identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -288,11 +289,11 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-				WorkflowType:               workflowType,
-				TaskQueue:                  taskQueue,
-				Input:                      nil,
-				WorkflowRunTimeoutSeconds:  100,
-				WorkflowTaskTimeoutSeconds: 1,
+				WorkflowType:        workflowType,
+				TaskQueue:           taskQueue,
+				Input:               nil,
+				WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
 			}},
 		}}, nil
 	}
@@ -331,7 +332,7 @@ GetHistoryLoop:
 		if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
 			if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
 				// Ensure that timeout is not caused by runTimeout
-				s.True(time.Duration(lastEvent.Timestamp-firstEvent.Timestamp) < 5*time.Second)
+				s.True(timestamp.TimeValue(lastEvent.EventTime).Sub(timestamp.TimeValue(firstEvent.EventTime)) < 5*time.Second)
 			}
 
 			// Only PollForWorkflowTask if the last event is WorkflowTaskScheduled
@@ -352,7 +353,7 @@ GetHistoryLoop:
 		s.Logger.Info("Workflow execution timedout.  Printing history for last run:")
 		common.PrettyPrintHistory(h, s.Logger)
 
-		s.True(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeoutSeconds() < 5)
+		s.True(timestamp.DurationValue(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout()) < 5*time.Second)
 		workflowComplete = true
 		break GetHistoryLoop
 	}
@@ -371,15 +372,15 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -400,11 +401,11 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-					WorkflowType:               workflowType,
-					TaskQueue:                  taskQueue,
-					Input:                      nil,
-					WorkflowRunTimeoutSeconds:  100,
-					WorkflowTaskTimeoutSeconds: 1,
+					WorkflowType:        workflowType,
+					TaskQueue:           taskQueue,
+					Input:               nil,
+					WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+					WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
 				}},
 			}}, nil
 		}
@@ -465,15 +466,15 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 parentID,
-		WorkflowType:               parentWorkflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          parentID,
+		WorkflowType:        parentWorkflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
