@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
 	serviceConfig "go.temporal.io/server/common/service/config"
 )
@@ -59,6 +60,7 @@ type (
 		config         *Config
 		logger         log.Logger
 		remotePeer     admin.Client
+		rateLimiter    *quotas.DynamicRateLimiter
 		requestChan    chan *request
 		done           chan struct{}
 	}
@@ -68,6 +70,7 @@ type (
 
 		GetSourceCluster() string
 		GetRequestChan() chan<- *request
+		GetRateLimiter() *quotas.DynamicRateLimiter
 	}
 
 	// ReplicationTaskFetchers is a group of fetchers, one per source DC.
@@ -168,8 +171,11 @@ func newReplicationTaskFetcher(
 		remotePeer:     sourceFrontend,
 		currentCluster: currentCluster,
 		sourceCluster:  sourceCluster,
-		requestChan:    make(chan *request, requestChanBufferSize),
-		done:           make(chan struct{}),
+		rateLimiter: quotas.NewDynamicRateLimiter(func() float64 {
+			return config.ReplicationTaskProcessorHostQPS()
+		}),
+		requestChan: make(chan *request, requestChanBufferSize),
+		done:        make(chan struct{}),
 	}
 }
 
@@ -309,4 +315,9 @@ func (f *ReplicationTaskFetcherImpl) GetSourceCluster() string {
 // GetRequestChan returns the request chan for the fetcher
 func (f *ReplicationTaskFetcherImpl) GetRequestChan() chan<- *request {
 	return f.requestChan
+}
+
+// GetRateLimiter returns the host level rate limiter for the fetcher
+func (f *ReplicationTaskFetcherImpl) GetRateLimiter() *quotas.DynamicRateLimiter {
+	return f.rateLimiter
 }
