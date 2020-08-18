@@ -43,13 +43,16 @@ run_id = ?`
 	// %[2]v is the columns of the value struct (i.e. no primary key columns), comma separated
 	// %[3]v should be %[2]v with colons prepended.
 	// i.e. %[3]v = ",".join(":" + s for s in %[2]v)
+	// %[4]v should be %[2]v in the format of n=VALUES(n).
+	// i.e. %[4]v = ",".join(s + "=VALUES(" + s + ")" for s in %[2]v)
 	// So that this query can be used with BindNamed
-	// %[4]v should be the name of the key associated with the map
+	// %[5]v should be the name of the key associated with the map
 	// e.g. for ActivityInfo it is "schedule_id"
-	setKeyInMapQryTemplate = `REPLACE INTO %[1]v
-(shard_id, namespace_id, workflow_id, run_id, %[4]v, %[2]v)
+	setKeyInMapQryTemplate = `INSERT INTO %[1]v
+(shard_id, namespace_id, workflow_id, run_id, %[5]v, %[2]v)
 VALUES
-(:shard_id, :namespace_id, :workflow_id, :run_id, :%[4]v, %[3]v)`
+(:shard_id, :namespace_id, :workflow_id, :run_id, :%[5]v, %[3]v) 
+ON DUPLICATE KEY UPDATE %[5]v=VALUES(%[5]v), %[4]v;`
 
 	// %[2]v is the name of the key
 	deleteKeyInMapQryTemplate = `DELETE FROM %[1]v
@@ -90,6 +93,9 @@ func makeSetKeyInMapQry(tableName string, nonPrimaryKeyColumns []string, mapKeyN
 		strings.Join(stringMap(nonPrimaryKeyColumns, func(x string) string {
 			return ":" + x
 		}), ","),
+		strings.Join(stringMap(nonPrimaryKeyColumns, func(x string) string {
+			return x + "=VALUES(" + x + ")"
+		}), ","),
 		mapKeyName)
 }
 
@@ -123,7 +129,44 @@ var (
 
 // ReplaceIntoActivityInfoMaps replaces one or more rows in activity_info_maps table
 func (mdb *db) ReplaceIntoActivityInfoMaps(rows []sqlplugin.ActivityInfoMapsRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(setKeyInActivityInfoMapQry, rows)
+	q, args, err := mdb.db.BindNamed(setKeyInActivityInfoMapQry, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	q = expandBatchInsertQuery(q, len(rows))
+
+	return mdb.conn.Exec(q, args...)
+}
+
+func expandBatchInsertQuery(q string, rowCount int) string {
+	b := strings.Builder{}
+	// Inclusive start index
+	valStartIdx := strings.Index(q, "(?,")
+
+	// Add 2 to get exclusive end index
+	valEndIdx := strings.Index(q, "?)") + 2
+
+	// Write initial half of query
+	b.WriteString(q[0:valEndIdx])
+
+	// Create rowCount-1 more (?, ?, ?) placeholders
+	for i := 0; i < rowCount-1; i++ {
+		b.WriteString(",")
+		b.WriteString(q[valStartIdx:valEndIdx])
+	}
+
+	// sqlx does not like VALUES() and is generating an artifact
+	// into the sql query when we don't use a semicolon when we don't terminate with a `;`.
+	// Removing that while writing the second half of the query if it exists.
+	lastIdx := strings.LastIndex(q, ",")
+	if lastIdx == -1 || lastIdx <= valEndIdx {
+		b.WriteString(q[valEndIdx:])
+	} else {
+		b.WriteString(q[valEndIdx:lastIdx])
+	}
+
+	return b.String()
 }
 
 // SelectFromActivityInfoMaps reads one or more rows from activity_info_maps table
@@ -131,7 +174,7 @@ func (mdb *db) SelectFromActivityInfoMaps(filter *sqlplugin.ActivityInfoMapsFilt
 	var rows []sqlplugin.ActivityInfoMapsRow
 	err := mdb.conn.Select(&rows, getActivityInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
-		rows[i].ShardID = int64(filter.ShardID)
+		rows[i].ShardID = filter.ShardID
 		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
@@ -163,7 +206,15 @@ var (
 
 // ReplaceIntoTimerInfoMaps replaces one or more rows in timer_info_maps table
 func (mdb *db) ReplaceIntoTimerInfoMaps(rows []sqlplugin.TimerInfoMapsRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(setKeyInTimerInfoMapSQLQuery, rows)
+	q, args, err := mdb.db.BindNamed(setKeyInTimerInfoMapSQLQuery, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	q = expandBatchInsertQuery(q, len(rows))
+
+	return mdb.conn.Exec(q, args...)
+
 }
 
 // SelectFromTimerInfoMaps reads one or more rows from timer_info_maps table
@@ -203,7 +254,15 @@ var (
 
 // ReplaceIntoChildExecutionInfoMaps replaces one or more rows in child_execution_info_maps table
 func (mdb *db) ReplaceIntoChildExecutionInfoMaps(rows []sqlplugin.ChildExecutionInfoMapsRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(setKeyInChildExecutionInfoMapQry, rows)
+	q, args, err := mdb.db.BindNamed(setKeyInChildExecutionInfoMapQry, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	q = expandBatchInsertQuery(q, len(rows))
+
+	return mdb.conn.Exec(q, args...)
+
 }
 
 // SelectFromChildExecutionInfoMaps reads one or more rows from child_execution_info_maps table
@@ -243,7 +302,15 @@ var (
 
 // ReplaceIntoRequestCancelInfoMaps replaces one or more rows in request_cancel_info_maps table
 func (mdb *db) ReplaceIntoRequestCancelInfoMaps(rows []sqlplugin.RequestCancelInfoMapsRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(setKeyInRequestCancelInfoMapQry, rows)
+	q, args, err := mdb.db.BindNamed(setKeyInRequestCancelInfoMapQry, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	q = expandBatchInsertQuery(q, len(rows))
+
+	return mdb.conn.Exec(q, args...)
+
 }
 
 // SelectFromRequestCancelInfoMaps reads one or more rows from request_cancel_info_maps table
@@ -283,7 +350,14 @@ var (
 
 // ReplaceIntoSignalInfoMaps replaces one or more rows in signal_info_maps table
 func (mdb *db) ReplaceIntoSignalInfoMaps(rows []sqlplugin.SignalInfoMapsRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(setKeyInSignalInfoMapQry, rows)
+	q, args, err := mdb.db.BindNamed(setKeyInSignalInfoMapQry, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	q = expandBatchInsertQuery(q, len(rows))
+
+	return mdb.conn.Exec(q, args...)
 }
 
 // SelectFromSignalInfoMaps reads one or more rows from signal_info_maps table
@@ -316,9 +390,10 @@ workflow_id = ? AND
 run_id = ?
 `
 
-	createSignalsRequestedSetQry = `INSERT IGNORE INTO signals_requested_sets
+	createSignalsRequestedSetQry = `INSERT INTO signals_requested_sets
 (shard_id, namespace_id, workflow_id, run_id, signal_id) VALUES
-(:shard_id, :namespace_id, :workflow_id, :run_id, :signal_id)`
+(:shard_id, :namespace_id, :workflow_id, :run_id, :signal_id)
+ON DUPLICATE KEY UPDATE signal_id=VALUES(signal_id);`
 
 	deleteSignalsRequestedSetQry = `DELETE FROM signals_requested_sets
 WHERE 
@@ -337,7 +412,14 @@ run_id = ?`
 
 // InsertIntoSignalsRequestedSets inserts one or more rows into signals_requested_sets table
 func (mdb *db) InsertIntoSignalsRequestedSets(rows []sqlplugin.SignalsRequestedSetsRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(createSignalsRequestedSetQry, rows)
+	q, args, err := mdb.db.BindNamed(createSignalsRequestedSetQry, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	q = expandBatchInsertQuery(q, len(rows))
+
+	return mdb.conn.Exec(q, args...)
 }
 
 // SelectFromSignalsRequestedSets reads one or more rows from signals_requested_sets table

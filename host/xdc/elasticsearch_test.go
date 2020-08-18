@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/host"
 )
@@ -156,11 +157,11 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	namespace := "test-xdc-search-attr-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                 namespace,
-		Clusters:                             clusterReplicationConfigES,
-		ActiveClusterName:                    clusterNameES[0],
-		IsGlobalNamespace:                    true,
-		WorkflowExecutionRetentionPeriodDays: 1,
+		Name:                             namespace,
+		Clusters:                         clusterReplicationConfigES,
+		ActiveClusterName:                clusterNameES[0],
+		IsGlobalNamespace:                true,
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
@@ -194,18 +195,18 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		},
 	}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
-		SearchAttributes:           searchAttr,
+		RequestId:           uuid.New(),
+		Namespace:           namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
+		SearchAttributes:    searchAttr,
 	}
-	startTime := time.Now().UnixNano()
+	startTime := time.Now().UTC()
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -213,7 +214,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	s.logger.Info("StartWorkflowExecution \n", tag.WorkflowRunID(we.GetRunId()))
 
 	startFilter := &filterpb.StartTimeFilter{}
-	startFilter.EarliestTime = startTime
+	startFilter.EarliestTime = &startTime
 	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: namespace,
@@ -224,7 +225,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	testListResult := func(client host.FrontendClient) {
 		var openExecution *workflowpb.WorkflowExecutionInfo
 		for i := 0; i < numOfRetry; i++ {
-			startFilter.LatestTime = time.Now().UnixNano()
+			startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
 
 			resp, err := client.ListWorkflowExecutions(host.NewContext(), listRequest)
 			s.NoError(err)

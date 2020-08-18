@@ -163,7 +163,7 @@ clusterMetadata:
     clusterInformation:
         active:
             enabled: true
-            initialFailoverVersion: 0
+            initialFailoverVersion: 1
             rpcName: "frontend"
             rpcAddress: "127.0.0.1:7233"
 
@@ -190,11 +190,11 @@ archival:
 namespaceDefaults:
   archival:
     history:
-      state: "enabled"
+      state: "disabled"
       URI: "file:///tmp/temporal_archival/development"
     visibility:
-      state: "enabled"
-      URI: "file:///tmp/cadence_vis_archival/development"
+      state: "disabled"
+      URI: "file:///tmp/temporal_vis_archival/development"
 
 kafka:
     tls:
@@ -213,8 +213,10 @@ kafka:
             topic: temporal-visibility-dev
             dlq-topic: temporal-visibility-dev-dlq
 
+{{ $publicIp := default .Env.BIND_ON_IP "127.0.0.1" -}}
+{{- $defaultPublicHostPost := (print $publicIp ":7233") -}}
 publicClient:
-    hostPort: {{ default .Env.BIND_ON_IP "127.0.0.1" }}:7233
+    hostPort: {{ default .Env.PUBLIC_FRONTEND_ADDRESS $defaultPublicHostPost }}
 
 dynamicConfigClient:
     filepath: {{ default .Env.DYNAMIC_CONFIG_FILE_PATH "/etc/temporal/config/dynamicconfig" }}

@@ -27,17 +27,21 @@ package archiver
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -709,4 +713,33 @@ func (s *HistoryIteratorSuite) constructTestHistoryIterator(
 	}
 	itr.sizeEstimator = newTestSizeEstimator()
 	return itr
+}
+func (s *HistoryIteratorSuite) TestJSONSizeEstimator() {
+	e := NewJSONSizeEstimator()
+
+	historyEvent := &historypb.HistoryEvent{
+		EventId:   1,
+		EventTime: timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC)),
+		TaskId:    1,
+		Version:   1,
+	}
+	historyEvent.EventType = enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED
+	historyEvent.Attributes = &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "taskQueue",
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		StartToCloseTimeout: timestamp.DurationPtr(10 * time.Second),
+		Attempt:             1,
+	}}
+
+	h := &historypb.History{
+		Events: []*historypb.HistoryEvent{
+			historyEvent,
+		},
+	}
+
+	size, err := e.EstimateSize(h)
+	s.NoError(err)
+	s.Equal(266, size)
 }

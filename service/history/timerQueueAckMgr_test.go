@@ -31,6 +31,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	"github.com/gogo/protobuf/types"
 
@@ -118,11 +119,11 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardId: 0,
+				ShardId: 1,
 				RangeId: 1,
-				ClusterTimerAckLevel: map[string]*types.Timestamp{
-					cluster.TestCurrentClusterName:     gogoProtoTimestampNowAddDuration(-8),
-					cluster.TestAlternativeClusterName: gogoProtoTimestampNowAddDuration(-10),
+				ClusterTimerAckLevel: map[string]*time.Time{
+					cluster.TestCurrentClusterName:     timestamp.TimeNowPtrUtcAddSeconds(-8),
+					cluster.TestAlternativeClusterName: timestamp.TimeNowPtrUtcAddSeconds(-10),
 				}},
 		},
 		config,
@@ -174,8 +175,8 @@ func (s *timerQueueAckMgrSuite) TestIsProcessNow() {
 }
 
 func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
-	minTimestamp := time.Now().Add(-10 * time.Second)
-	maxTimestamp := time.Now().Add(10 * time.Second)
+	minTimestamp := time.Now().UTC().Add(-10 * time.Second)
+	maxTimestamp := time.Now().UTC().Add(10 * time.Second)
 	batchSize := 10
 
 	request := &persistence.GetTimerIndexTasksRequest{
@@ -191,7 +192,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 				NamespaceId:     TestNamespaceId,
 				WorkflowId:      "some random workflow ID",
 				RunId:           uuid.New(),
-				VisibilityTime:  gogoProtoTimestampNowAddDuration(-5),
+				VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
 				TaskId:          int64(59),
 				TaskType:        1,
 				TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -211,8 +212,8 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 }
 
 func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
-	minTimestamp := time.Now().Add(-10 * time.Second)
-	maxTimestamp := time.Now().Add(10 * time.Second)
+	minTimestamp := time.Now().UTC().Add(-10 * time.Second)
+	maxTimestamp := time.Now().UTC().Add(10 * time.Second)
 	batchSize := 10
 
 	request := &persistence.GetTimerIndexTasksRequest{
@@ -228,7 +229,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 				NamespaceId:     TestNamespaceId,
 				WorkflowId:      "some random workflow ID",
 				RunId:           uuid.New(),
-				VisibilityTime:  gogoProtoTimestampNowAddDuration(-5),
+				VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
 				TaskId:          int64(59),
 				TaskType:        1,
 				TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -264,7 +265,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
 		RunId:           uuid.New(),
-		VisibilityTime:  gogoProtoTimestampNowAddDuration(-5),
+		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
 		TaskId:          int64(59),
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -283,7 +284,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	s.Nil(lookAheadTask)
 	s.False(moreTasks)
 
-	timerSequenceID := timerKeyFromGogoTime(timer.VisibilityTime, timer.GetTaskId())
+	timerSequenceID := timerKeyFromTimePtr(timer.VisibilityTime, timer.GetTaskId())
 	s.Equal(map[timerKey]bool{*timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
@@ -307,7 +308,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
 		RunId:           uuid.New(),
-		VisibilityTime:  gogoProtoTimestampNowAddDuration(-5),
+		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
 		TaskId:          int64(59),
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -321,13 +322,13 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(response, nil).Once()
-	readTimestamp := time.Now() // the approximate time of calling readTimerTasks
+	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
 	s.Equal([]*persistenceblobs.TimerTaskInfo{timer}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.True(moreTasks)
-	timerSequenceID := timerKeyFromGogoTime(timer.VisibilityTime, timer.GetTaskId())
+	timerSequenceID := timerKeyFromTimePtr(timer.VisibilityTime, timer.GetTaskId())
 	s.Equal(map[timerKey]bool{*timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(minQueryLevel, s.timerQueueAckMgr.minQueryLevel)
@@ -353,7 +354,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
 		RunId:           uuid.New(),
-		VisibilityTime:  gogoProtoTimestampNowAddDuration(int(s.mockShard.GetConfig().TimerProcessorMaxTimeShift().Seconds())),
+		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(int(s.mockShard.GetConfig().TimerProcessorMaxTimeShift().Seconds())),
 		TaskId:          int64(59),
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -376,7 +377,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(s.timerQueueAckMgr.maxQueryLevel, s.timerQueueAckMgr.minQueryLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
-	s.Equal(protoToNanos(timer.VisibilityTime), s.timerQueueAckMgr.maxQueryLevel.UnixNano())
+	s.Equal(timer.VisibilityTime.UnixNano(), s.timerQueueAckMgr.maxQueryLevel.UnixNano())
 }
 
 func protoToNanos(timestamp *types.Timestamp) int64 {
@@ -400,7 +401,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
 		RunId:           uuid.New(),
-		VisibilityTime:  gogoProtoTimestampNowAddDuration(int(s.mockShard.GetConfig().TimerProcessorMaxTimeShift().Seconds())),
+		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(int(s.mockShard.GetConfig().TimerProcessorMaxTimeShift().Seconds())),
 		TaskId:          int64(59),
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -424,7 +425,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(s.timerQueueAckMgr.maxQueryLevel, s.timerQueueAckMgr.minQueryLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
-	s.Equal(protoToNanos(timer.VisibilityTime), s.timerQueueAckMgr.maxQueryLevel.UnixNano())
+	s.Equal(timer.VisibilityTime.UnixNano(), s.timerQueueAckMgr.maxQueryLevel.UnixNano())
 }
 
 func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
@@ -434,7 +435,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
 		RunId:           uuid.New(),
-		VisibilityTime:  gogoProtoTimestampNowAddDuration(-5),
+		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
 		TaskId:          int64(59),
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -456,7 +457,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
 		RunId:           uuid.New(),
-		VisibilityTime:  &types.Timestamp{Seconds: timer1.VisibilityTime.Seconds + 1, Nanos: timer1.VisibilityTime.Nanos},
+		VisibilityTime:  timestamp.TimePtr(timer1.VisibilityTime.Add(time.Second)),
 		TaskId:          timer2.GetTaskId() + 1,
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -477,34 +478,33 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 
 	// we are not testing shard context
 	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
-	timerSequenceID1 := timerKeyFromGogoTime(timer1.VisibilityTime, timer1.GetTaskId())
+	timerSequenceID1 := timerKeyFromTimePtr(timer1.VisibilityTime, timer1.GetTaskId())
 	s.timerQueueAckMgr.completeTimerTask(timer1)
 	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID1])
 	s.timerQueueAckMgr.updateAckLevel()
-	s.Equal(protoToNanos(timer1.VisibilityTime), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
+	s.Equal(timer1.VisibilityTime.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
 
 	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
-	timerSequenceID3 := timerKeyFromGogoTime(timer3.VisibilityTime, timer3.GetTaskId())
+	timerSequenceID3 := timerKeyFromTimePtr(timer3.VisibilityTime, timer3.GetTaskId())
 	s.timerQueueAckMgr.completeTimerTask(timer3)
 	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID3])
 	s.timerQueueAckMgr.updateAckLevel()
 	// ack level remains unchanged
-	s.Equal(protoToNanos(timer1.VisibilityTime), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
+	s.Equal(timer1.VisibilityTime.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
 
 	// we are not testing shard context
 	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
-	timerSequenceID2 := timerKeyFromGogoTime(timer2.VisibilityTime, timer2.GetTaskId())
+	timerSequenceID2 := timerKeyFromTimePtr(timer2.VisibilityTime, timer2.GetTaskId())
 	s.timerQueueAckMgr.completeTimerTask(timer2)
 	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID2])
 	s.timerQueueAckMgr.updateAckLevel()
-	s.Equal(protoToNanos(timer3.VisibilityTime), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
+	s.Equal(timer3.VisibilityTime.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
 }
 
 func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(s.clusterName).AnyTimes()
 	level := s.mockShard.UpdateTimerMaxReadLevel(s.clusterName)
-	protoLevel, err := types.TimestampProto(level)
-	s.NoError(err)
+
 	s.timerQueueAckMgr.minQueryLevel = level
 	s.timerQueueAckMgr.maxQueryLevel = s.timerQueueAckMgr.minQueryLevel
 
@@ -513,7 +513,7 @@ func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
 		RunId:           uuid.New(),
-		VisibilityTime:  protoLevel,
+		VisibilityTime:  &level,
 		TaskId:          int64(59),
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -540,12 +540,6 @@ func (s *timerQueueFailoverAckMgrSuite) TearDownSuite() {
 
 }
 
-func gogoProtoTimestampNowAddDuration(seconds int) *types.Timestamp {
-	t := types.TimestampNow()
-	t.Seconds += int64(seconds)
-	return t
-}
-
 func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
@@ -557,11 +551,11 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardId: 0,
+				ShardId: 1,
 				RangeId: 1,
-				ClusterTimerAckLevel: map[string]*types.Timestamp{
-					cluster.TestCurrentClusterName:     types.TimestampNow(),
-					cluster.TestAlternativeClusterName: gogoProtoTimestampNowAddDuration(-10),
+				ClusterTimerAckLevel: map[string]*time.Time{
+					cluster.TestCurrentClusterName:     timestamp.TimeNowPtrUtc(),
+					cluster.TestAlternativeClusterName: timestamp.TimeNowPtrUtcAddSeconds(-10),
 				}},
 			TimerFailoverLevels: make(map[string]persistence.TimerFailoverLevel),
 		},
@@ -576,8 +570,8 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 
 	s.namespaceID = "deadd0d0-c001-face-d00d-020000000000"
-	s.minLevel = time.Now().Add(-10 * time.Minute)
-	s.maxLevel = time.Now().Add(10 * time.Minute)
+	s.minLevel = time.Now().UTC().Add(-10 * time.Minute)
+	s.maxLevel = time.Now().UTC().Add(10 * time.Minute)
 	s.timerQueueFailoverAckMgr = newTimerQueueFailoverAckMgr(
 		s.mockShard,
 		s.mockShard.GetMetricsClient(),
@@ -638,7 +632,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
 		RunId:           uuid.New(),
-		VisibilityTime:  gogoProtoTimestampNowAddDuration(-5),
+		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
 		TaskId:          int64(59),
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -650,7 +644,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
 		RunId:           uuid.New(),
-		VisibilityTime:  gogoProtoTimestampNowAddDuration(-5),
+		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
 		TaskId:          int64(60),
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -663,7 +657,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	}
 
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(response, nil).Once()
-	readTimestamp := time.Now() // the approximate time of calling readTimerTasks
+	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
 	timers, lookAheadTimer, more, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
 	s.Equal([]*persistenceblobs.TimerTaskInfo{timer1, timer2}, timers)
@@ -695,7 +689,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_NoNextPage() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(response, nil).Once()
 
-	readTimestamp := time.Now() // the approximate time of calling readTimerTasks
+	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
 	timers, lookAheadTimer, more, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
 	s.Equal([]*persistenceblobs.TimerTaskInfo{}, timers)
@@ -714,7 +708,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_InTheFuture() {
 
 	// when namespace failover happen, it is possible that remote cluster's time is after
 	// current cluster's time
-	maxQueryLevel := time.Now()
+	maxQueryLevel := time.Now().UTC()
 	s.timerQueueFailoverAckMgr.minQueryLevel = maxQueryLevel.Add(1 * time.Second)
 	s.timerQueueFailoverAckMgr.maxQueryLevel = maxQueryLevel
 
@@ -731,7 +725,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_InTheFuture() {
 }
 
 func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
-	from := time.Now().Add(-10 * time.Second)
+	from := time.Now().UTC().Add(-10 * time.Second)
 	s.timerQueueFailoverAckMgr.minQueryLevel = from
 	s.timerQueueFailoverAckMgr.maxQueryLevel = from
 	s.timerQueueFailoverAckMgr.ackLevel = timerKey{VisibilityTimestamp: from}
@@ -742,7 +736,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
 		RunId:           uuid.New(),
-		VisibilityTime:  gogoProtoTimestampNowAddDuration(-5),
+		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
 		TaskId:          int64(59),
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -764,7 +758,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
 		RunId:           uuid.New(),
-		VisibilityTime:  &types.Timestamp{Seconds: timer1.VisibilityTime.Seconds + 1, Nanos: timer1.VisibilityTime.Nanos},
+		VisibilityTime:  timestamp.TimePtr(timer1.VisibilityTime.Add(time.Second)),
 		TaskId:          timer2.GetTaskId() + 1,
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -782,7 +776,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.Nil(lookAheadTask)
 	s.False(moreTasks)
 
-	timerSequenceID2 := timerKeyFromGogoTime(timer2.VisibilityTime, timer2.GetTaskId())
+	timerSequenceID2 := timerKeyFromTimePtr(timer2.VisibilityTime, timer2.GetTaskId())
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer2)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID2])
 	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
@@ -793,7 +787,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	default:
 	}
 
-	timerSequenceID3 := timerKeyFromGogoTime(timer3.VisibilityTime, timer3.GetTaskId())
+	timerSequenceID3 := timerKeyFromTimePtr(timer3.VisibilityTime, timer3.GetTaskId())
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer3)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID3])
 	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
@@ -804,7 +798,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	default:
 	}
 
-	timerSequenceID1 := timerKeyFromGogoTime(timer1.VisibilityTime, timer1.GetTaskId())
+	timerSequenceID1 := timerKeyFromTimePtr(timer1.VisibilityTime, timer1.GetTaskId())
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer1)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID1])
 	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()

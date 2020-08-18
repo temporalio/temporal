@@ -32,15 +32,15 @@ const (
 	// FirstEventID is the id of the first event in the history
 	FirstEventID int64 = 1
 	// EmptyEventID is the id of the empty event
-	EmptyEventID int64 = -23
+	EmptyEventID int64 = 0
 	// EmptyVersion is used as the default value for failover version when no value is provided
-	EmptyVersion int64 = -24
+	EmptyVersion int64 = 0
 	// EndEventID is the id of the end event, here we use the int64 max
 	EndEventID int64 = 1<<63 - 1
 	// BufferedEventID is the id of the buffered event
 	BufferedEventID int64 = -123
 	// EmptyEventTaskID is uninitialized id of the task id within event
-	EmptyEventTaskID int64 = -1234
+	EmptyEventTaskID int64 = 0
 	// TransientEventID is the id of the transient event
 	TransientEventID int64 = -124
 	// FirstBlobPageToken is the page token identifying the first blob for each history archival
@@ -62,27 +62,9 @@ const (
 	WorkerServiceName = "worker"
 )
 
-// Data encoding types
-const (
-	// todo: Deprecate and use protoEncodingEnum.ToString()
-	EncodingTypeJSON    EncodingType = "json"
-	EncodingTypeGob     EncodingType = "gob"
-	EncodingTypeUnknown EncodingType = "unknow"
-	EncodingTypeEmpty   EncodingType = ""
-	EncodingTypeProto3  EncodingType = "proto3"
-)
-
-func (e EncodingType) String() string {
-	return string(e)
-}
-
-type (
-	// EncodingType is an enum that represents various data encoding types
-	EncodingType string
-)
-
 // MaxTaskTimeout is maximum task timeout allowed. 366 days in seconds
-const MaxTaskTimeout = 31622400
+const MaxTaskTimeout = MaxTaskTimeoutSeconds * time.Second
+const MaxTaskTimeoutSeconds = 31622400
 
 const (
 	// GetHistoryMaxPageSize is the max page size for get history
@@ -107,7 +89,7 @@ const (
 	// SystemNamespaceID is namespace id for all temporal system workflows
 	SystemNamespaceID = "32049b68-7872-4094-8e63-d0dd59896a83"
 	// SystemNamespaceRetentionDays is retention config for all temporal system workflows
-	SystemNamespaceRetentionDays = 7
+	SystemNamespaceRetentionDays = time.Hour * 24 * 7
 	// DefaultAdminOperationToken is the default dynamic config value for AdminOperationToken
 	DefaultAdminOperationToken = "TemporalTeamONLY"
 )
@@ -119,10 +101,10 @@ const (
 	// CriticalLongPollTimeout is a threshold for the context timeout passed into long poll API,
 	// below which a warning will be logged
 	CriticalLongPollTimeout = time.Second * 20
-	// MaxWorkflowRetentionPeriodInDays is the maximum of workflow retention when registering namespace
+	// MaxWorkflowRetentionPeriod is the maximum of workflow retention when registering namespace
 	// !!! Do NOT simply decrease this number, because it is being used by history scavenger to avoid race condition against history archival.
 	// Check more details in history scanner(scavenger)
-	MaxWorkflowRetentionPeriodInDays = 30
+	MaxWorkflowRetentionPeriod = 30 * time.Hour * 24
 )
 
 const (

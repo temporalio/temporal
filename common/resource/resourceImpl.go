@@ -379,7 +379,7 @@ func (h *Impl) Start() {
 	// The service is now started up
 	h.logger.Info("Service resources started", tag.Address(hostInfo.GetAddress()))
 	// seed the random generator once for this service
-	rand.Seed(time.Now().UTC().UnixNano())
+	rand.Seed(time.Now().UnixNano())
 }
 
 // Stop stops all resources
@@ -396,9 +396,6 @@ func (h *Impl) Stop() {
 	h.namespaceCache.Stop()
 	h.membershipMonitor.Stop()
 	h.ringpopChannel.Close()
-	if err := h.grpcListener.Close(); err != nil {
-		h.logger.WithTags(tag.Error(err)).Error("failed to close gRPC listener")
-	}
 	h.runtimeMetricsReporter.Stop()
 	h.persistenceBean.Close()
 	h.visibilityMgr.Close()

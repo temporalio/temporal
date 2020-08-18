@@ -46,6 +46,7 @@ import (
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type sizeLimitIntegrationSuite struct {
@@ -86,15 +87,15 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -114,14 +115,14 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tq},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -188,8 +189,8 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: &filterpb.StartTimeFilter{
-				EarliestTime: 0,
-				LatestTime:   time.Now().UnixNano(),
+				EarliestTime: timestamp.TimePtr(time.Time{}),
+				LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 			},
 			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,

@@ -47,6 +47,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -114,7 +115,7 @@ func (s *engine2Suite) SetupTest() {
 		s.controller,
 		&p.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardId:          0,
+				ShardId:          1,
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
@@ -151,7 +152,7 @@ func (s *engine2Suite) SetupTest() {
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		config:               s.config,
 		timeSource:           s.mockShard.GetTimeSource(),
-		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
+		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int { return 1 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
@@ -182,7 +183,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyExpired() {
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.StickyTaskQueue = stickyTl
 
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
@@ -229,8 +230,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyExpired() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
 	s.Nil(err)
 	s.NotNil(response)
-	expectedResponse.StartedTimestamp = response.StartedTimestamp
-	expectedResponse.ScheduledTimestamp = 0
+	expectedResponse.StartedTime = response.StartedTime
+	expectedResponse.ScheduledTime = &time.Time{}
 	expectedResponse.Queries = make(map[string]*querypb.WorkflowQuery)
 	s.Equal(&expectedResponse, response)
 }
@@ -248,10 +249,10 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
 	executionInfo := msBuilder.GetExecutionInfo()
-	executionInfo.LastUpdatedTimestamp = time.Now()
+	executionInfo.LastUpdatedTimestamp = time.Now().UTC()
 	executionInfo.StickyTaskQueue = stickyTl
 
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
@@ -300,8 +301,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
 	s.Nil(err)
 	s.NotNil(response)
-	expectedResponse.StartedTimestamp = response.StartedTimestamp
-	expectedResponse.ScheduledTimestamp = 0
+	expectedResponse.StartedTime = response.StartedTime
+	expectedResponse.ScheduledTime = &time.Time{}
 	expectedResponse.Queries = make(map[string]*querypb.WorkflowQuery)
 	s.Equal(&expectedResponse, response)
 }
@@ -724,8 +725,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, true)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, int64(2), int64(3), identity)
-	scheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, workflowTaskCompletedEvent.EventId, activityID,
-		activityType, tl, activityInput, 100, 10, 1, 5)
+	scheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, workflowTaskCompletedEvent.EventId, activityID, activityType, tl, activityInput, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
 
 	ms1 := createMutableState(msBuilder)
 	gwmsResponse1 := &p.GetWorkflowExecutionResponse{State: ms1}
@@ -829,7 +829,7 @@ func (s *engine2Suite) createExecutionStartedState(we commonpb.WorkflowExecution
 	startWorkflowTask bool) mutableState {
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		s.logger, we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	if startWorkflowTask {
 		addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -863,7 +863,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -917,15 +917,15 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 		Attempt:     1,
 		NamespaceId: namespaceID,
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                       namespaceID,
-			WorkflowId:                      workflowID,
-			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
-			WorkflowExecutionTimeoutSeconds: 20,
-			WorkflowRunTimeoutSeconds:       1,
-			WorkflowTaskTimeoutSeconds:      2,
-			Identity:                        identity,
-			RequestId:                       requestID,
+			Namespace:                namespaceID,
+			WorkflowId:               workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+			WorkflowExecutionTimeout: timestamp.DurationPtr(20 * time.Second),
+			WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
+			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			Identity:                 identity,
+			RequestId:                requestID,
 		},
 	})
 	s.Nil(err)
@@ -956,14 +956,14 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 		Attempt:     1,
 		NamespaceId: namespaceID,
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                       namespaceID,
-			WorkflowId:                      workflowID,
-			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
-			WorkflowExecutionTimeoutSeconds: 1,
-			WorkflowTaskTimeoutSeconds:      2,
-			Identity:                        identity,
-			RequestId:                       requestID,
+			Namespace:                namespaceID,
+			WorkflowId:               workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			Identity:                 identity,
+			RequestId:                requestID,
 		},
 	})
 	s.Nil(err)
@@ -993,14 +993,14 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 		Attempt:     1,
 		NamespaceId: namespaceID,
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                       namespaceID,
-			WorkflowId:                      workflowID,
-			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
-			WorkflowExecutionTimeoutSeconds: 1,
-			WorkflowTaskTimeoutSeconds:      2,
-			Identity:                        identity,
-			RequestId:                       "newRequestID",
+			Namespace:                namespaceID,
+			WorkflowId:               workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			Identity:                 identity,
+			RequestId:                "newRequestID",
 		},
 	})
 	if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); !ok {
@@ -1057,15 +1057,15 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 			Attempt:     1,
 			NamespaceId: namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				Namespace:                       namespaceID,
-				WorkflowId:                      workflowID,
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
-				WorkflowExecutionTimeoutSeconds: 1,
-				WorkflowTaskTimeoutSeconds:      2,
-				Identity:                        identity,
-				RequestId:                       "newRequestID",
-				WorkflowIdReusePolicy:           option,
+				Namespace:                namespaceID,
+				WorkflowId:               workflowID,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+				Identity:                 identity,
+				RequestId:                "newRequestID",
+				WorkflowIdReusePolicy:    option,
 			},
 		})
 
@@ -1139,15 +1139,15 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 				Attempt:     1,
 				NamespaceId: namespaceID,
 				StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-					Namespace:                       namespaceID,
-					WorkflowId:                      workflowID,
-					WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-					TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
-					WorkflowExecutionTimeoutSeconds: 1,
-					WorkflowTaskTimeoutSeconds:      2,
-					Identity:                        identity,
-					RequestId:                       "newRequestID",
-					WorkflowIdReusePolicy:           option,
+					Namespace:                namespaceID,
+					WorkflowId:               workflowID,
+					WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+					TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+					WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+					WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+					Identity:                 identity,
+					RequestId:                "newRequestID",
+					WorkflowIdReusePolicy:    option,
 				},
 			})
 
@@ -1221,16 +1221,16 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:                       namespaceID,
-			WorkflowId:                      workflowID,
-			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
-			WorkflowExecutionTimeoutSeconds: 1,
-			WorkflowTaskTimeoutSeconds:      2,
-			Identity:                        identity,
-			SignalName:                      signalName,
-			Input:                           input,
-			RequestId:                       requestID,
+			Namespace:                namespaceID,
+			WorkflowId:               workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			Identity:                 identity,
+			SignalName:               signalName,
+			Input:                    input,
+			RequestId:                requestID,
 		},
 	}
 
@@ -1262,16 +1262,16 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:                       namespaceID,
-			WorkflowId:                      workflowID,
-			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
-			WorkflowExecutionTimeoutSeconds: 1,
-			WorkflowTaskTimeoutSeconds:      2,
-			Identity:                        identity,
-			SignalName:                      signalName,
-			Input:                           input,
-			RequestId:                       requestID,
+			Namespace:                namespaceID,
+			WorkflowId:               workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			Identity:                 identity,
+			SignalName:               signalName,
+			Input:                    input,
+			RequestId:                requestID,
 		},
 	}
 
@@ -1303,24 +1303,24 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:                       namespaceID,
-			WorkflowId:                      workflowID,
-			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
-			Input:                           input,
-			WorkflowExecutionTimeoutSeconds: 1,
-			WorkflowTaskTimeoutSeconds:      2,
-			Identity:                        identity,
-			RequestId:                       requestID,
-			WorkflowIdReusePolicy:           enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-			SignalName:                      signalName,
-			SignalInput:                     nil,
-			Control:                         "",
-			RetryPolicy:                     nil,
-			CronSchedule:                    "",
-			Memo:                            nil,
-			SearchAttributes:                nil,
-			Header:                          nil,
+			Namespace:                namespaceID,
+			WorkflowId:               workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+			Input:                    input,
+			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			Identity:                 identity,
+			RequestId:                requestID,
+			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			SignalName:               signalName,
+			SignalInput:              nil,
+			Control:                  "",
+			RetryPolicy:              nil,
+			CronSchedule:             "",
+			Memo:                     nil,
+			SearchAttributes:         nil,
+			Header:                   nil,
 		},
 	}
 
@@ -1355,24 +1355,24 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:                       namespaceID,
-			WorkflowId:                      workflowID,
-			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
-			Input:                           input,
-			WorkflowExecutionTimeoutSeconds: 1,
-			WorkflowTaskTimeoutSeconds:      2,
-			Identity:                        identity,
-			RequestId:                       requestID,
-			WorkflowIdReusePolicy:           enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-			SignalName:                      signalName,
-			SignalInput:                     nil,
-			Control:                         "",
-			RetryPolicy:                     nil,
-			CronSchedule:                    "",
-			Memo:                            nil,
-			SearchAttributes:                nil,
-			Header:                          nil,
+			Namespace:                namespaceID,
+			WorkflowId:               workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+			Input:                    input,
+			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			Identity:                 identity,
+			RequestId:                requestID,
+			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			SignalName:               signalName,
+			SignalInput:              nil,
+			Control:                  "",
+			RetryPolicy:              nil,
+			CronSchedule:             "",
+			Memo:                     nil,
+			SearchAttributes:         nil,
+			Header:                   nil,
 		},
 	}
 
@@ -1415,24 +1415,24 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:                       namespaceID,
-			WorkflowId:                      workflowID,
-			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
-			Input:                           input,
-			WorkflowExecutionTimeoutSeconds: 1,
-			WorkflowTaskTimeoutSeconds:      2,
-			Identity:                        identity,
-			RequestId:                       requestID,
-			WorkflowIdReusePolicy:           enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-			SignalName:                      signalName,
-			SignalInput:                     nil,
-			Control:                         "",
-			RetryPolicy:                     nil,
-			CronSchedule:                    "",
-			Memo:                            nil,
-			SearchAttributes:                nil,
-			Header:                          nil,
+			Namespace:                namespaceID,
+			WorkflowId:               workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+			Input:                    input,
+			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			Identity:                 identity,
+			RequestId:                requestID,
+			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			SignalName:               signalName,
+			SignalInput:              nil,
+			Control:                  "",
+			RetryPolicy:              nil,
+			CronSchedule:             "",
+			Memo:                     nil,
+			SearchAttributes:         nil,
+			Header:                   nil,
 		},
 	}
 

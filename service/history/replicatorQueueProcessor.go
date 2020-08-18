@@ -362,7 +362,7 @@ func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
 				SyncShardStatusTaskAttributes: &replicationspb.SyncShardStatusTaskAttributes{
 					SourceCluster: p.currentClusterName,
 					ShardId:       int64(p.shard.GetShardID()),
-					Timestamp:     now.UnixNano(),
+					StatusTime:    &now,
 				},
 			},
 		}
@@ -645,14 +645,17 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 				return nil, nil
 			}
 
-			var startedTime int64
-			var heartbeatTime int64
-			scheduledTime := activityInfo.ScheduledTime.UnixNano()
-			if activityInfo.StartedID != common.EmptyEventID {
-				startedTime = activityInfo.StartedTime.UnixNano()
+			var startedTime *time.Time
+			var heartbeatTime *time.Time
+			scheduledTime := activityInfo.ScheduledTime
+
+			// Todo: Comment why this exists? Why not set?
+			if activityInfo.StartedId != common.EmptyEventID {
+				startedTime = activityInfo.StartedTime
 			}
+
 			// LastHeartbeatUpdateTime must be valid when getting the sync activity replication task
-			heartbeatTime = activityInfo.LastHeartBeatUpdatedTime.UnixNano()
+			heartbeatTime = activityInfo.LastHeartbeatUpdateTime
 
 			// Version history uses when replicate the sync activity task
 			versionHistories := mutableState.GetVersionHistories()
@@ -673,15 +676,15 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 						WorkflowId:         taskInfo.GetWorkflowId(),
 						RunId:              runID,
 						Version:            activityInfo.Version,
-						ScheduledId:        activityInfo.ScheduleID,
+						ScheduledId:        activityInfo.ScheduleId,
 						ScheduledTime:      scheduledTime,
-						StartedId:          activityInfo.StartedID,
+						StartedId:          activityInfo.StartedId,
 						StartedTime:        startedTime,
 						LastHeartbeatTime:  heartbeatTime,
-						Details:            activityInfo.Details,
+						Details:            activityInfo.LastHeartbeatDetails,
 						Attempt:            activityInfo.Attempt,
-						LastFailure:        activityInfo.LastFailure,
-						LastWorkerIdentity: activityInfo.LastWorkerIdentity,
+						LastFailure:        activityInfo.RetryLastFailure,
+						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
 						VersionHistory:     versionHistory,
 					},
 				},

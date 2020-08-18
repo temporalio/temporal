@@ -27,12 +27,13 @@ package persistence
 import (
 	"errors"
 
-	"go.temporal.io/server/common"
+	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/log"
 )
 
 const (
-	clusterMetadataEncoding = common.EncodingTypeProto3
+	clusterMetadataEncoding = enumspb.ENCODING_TYPE_PROTO3
 )
 
 var (

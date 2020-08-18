@@ -39,13 +39,13 @@ import (
 
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -152,15 +152,15 @@ func (s *replicationTaskProcessorSuite) TestSendFetchMessageRequest() {
 }
 
 func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
-	now := time.Now()
+	now := timestamp.TimeNowPtrUtc()
 	s.mockEngine.EXPECT().SyncShardStatus(gomock.Any(), &historyservice.SyncShardStatusRequest{
 		SourceCluster: "standby",
 		ShardId:       0,
-		Timestamp:     now.UnixNano(),
+		StatusTime:    now,
 	}).Return(nil).Times(1)
 
 	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationspb.SyncShardStatus{
-		Timestamp: now.UnixNano(),
+		StatusTime: now,
 	})
 	s.NoError(err)
 }
@@ -229,7 +229,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 		},
 	}
 	serializer := s.mockResource.GetPayloadSerializer()
-	data, err := serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
+	data, err := serializer.SerializeBatchEvents(events, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,

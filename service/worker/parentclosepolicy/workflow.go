@@ -110,7 +110,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 			//no-op
 			continue
 		case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
-			_, err = client.TerminateWorkflowExecution(nil, &historyservice.TerminateWorkflowExecutionRequest{
+			_, err = client.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 				NamespaceId: request.NamespaceID,
 				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 					Namespace: request.Namespace,
@@ -123,7 +123,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 				},
 			})
 		case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
-			_, err = client.RequestCancelWorkflowExecution(nil, &historyservice.RequestCancelWorkflowExecutionRequest{
+			_, err = client.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
 				NamespaceId: request.NamespaceID,
 				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 					Namespace: request.Namespace,

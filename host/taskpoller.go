@@ -28,6 +28,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
@@ -58,33 +59,33 @@ type (
 
 	// TaskPoller is used in integration tests to poll workflow or activity task queues.
 	TaskPoller struct {
-		Engine                              FrontendClient
-		Namespace                           string
-		TaskQueue                           *taskqueuepb.TaskQueue
-		StickyTaskQueue                     *taskqueuepb.TaskQueue
-		StickyScheduleToStartTimeoutSeconds int32
-		Identity                            string
-		WorkflowTaskHandler                 workflowTaskHandler
-		ActivityTaskHandler                 activityTaskHandler
-		QueryHandler                        queryHandler
-		Logger                              log.Logger
-		T                                   *testing.T
+		Engine                       FrontendClient
+		Namespace                    string
+		TaskQueue                    *taskqueuepb.TaskQueue
+		StickyTaskQueue              *taskqueuepb.TaskQueue
+		StickyScheduleToStartTimeout time.Duration
+		Identity                     string
+		WorkflowTaskHandler          workflowTaskHandler
+		ActivityTaskHandler          activityTaskHandler
+		QueryHandler                 queryHandler
+		Logger                       log.Logger
+		T                            *testing.T
 	}
 )
 
 // PollAndProcessWorkflowTask for workflow tasks
 func (p *TaskPoller) PollAndProcessWorkflowTask(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, false, false, int64(1))
+	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, false, false, 1)
 }
 
 // PollAndProcessWorkflowTaskWithSticky for workflow tasks
 func (p *TaskPoller) PollAndProcessWorkflowTaskWithSticky(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, true, true, int64(1))
+	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, true, true, 1)
 }
 
 // PollAndProcessWorkflowTaskWithoutRetry for workflow tasks
 func (p *TaskPoller) PollAndProcessWorkflowTaskWithoutRetry(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttemptAndRetry(dumpHistory, dropTask, false, false, int64(1), 1)
+	return p.PollAndProcessWorkflowTaskWithAttemptAndRetry(dumpHistory, dropTask, false, false, 1, 1)
 }
 
 // PollAndProcessWorkflowTaskWithAttempt for workflow tasks
@@ -93,7 +94,7 @@ func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttempt(
 	dropTask bool,
 	pollStickyTaskQueue bool,
 	respondStickyTaskQueue bool,
-	workflowTaskAttempt int64,
+	workflowTaskAttempt int32,
 ) (isQueryTask bool, err error) {
 
 	return p.PollAndProcessWorkflowTaskWithAttemptAndRetry(
@@ -111,7 +112,7 @@ func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttemptAndRetry(
 	dropTask bool,
 	pollStickyTaskQueue bool,
 	respondStickyTaskQueue bool,
-	workflowTaskAttempt int64,
+	workflowTaskAttempt int32,
 	retryCount int,
 ) (isQueryTask bool, err error) {
 
@@ -133,7 +134,7 @@ func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWor
 	dropTask bool,
 	pollStickyTaskQueue bool,
 	respondStickyTaskQueue bool,
-	workflowTaskAttempt int64,
+	workflowTaskAttempt int32,
 	retryCount int,
 	forceCreateNewWorkflowTask bool,
 	queryResult *querypb.WorkflowQueryResult,
@@ -277,8 +278,8 @@ Loop:
 				Identity:  p.Identity,
 				Commands:  commands,
 				StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-					WorkerTaskQueue:               p.StickyTaskQueue,
-					ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
+					WorkerTaskQueue:        p.StickyTaskQueue,
+					ScheduleToStartTimeout: &p.StickyScheduleToStartTimeout,
 				},
 				ReturnNewWorkflowTask:      forceCreateNewWorkflowTask,
 				ForceCreateNewWorkflowTask: forceCreateNewWorkflowTask,
@@ -334,8 +335,8 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 			Identity:  p.Identity,
 			Commands:  commands,
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-				WorkerTaskQueue:               p.StickyTaskQueue,
-				ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
+				WorkerTaskQueue:        p.StickyTaskQueue,
+				ScheduleToStartTimeout: &p.StickyScheduleToStartTimeout,
 			},
 			ReturnNewWorkflowTask:      true,
 			ForceCreateNewWorkflowTask: true,

@@ -30,10 +30,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -289,11 +288,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 					return err
 				}
 				if lookAheadTimer != nil {
-					visTs, err := types.TimestampFromProto(lookAheadTimer.VisibilityTime)
-					if err != nil {
-						return err
-					}
-					t.timerGate.Update(visTs)
+					t.timerGate.Update(timestamp.TimeValue(lookAheadTimer.VisibilityTime))
 				}
 				continue
 			}
@@ -313,11 +308,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 					return err
 				}
 				if lookAheadTimer != nil {
-					visTs, err := types.TimestampFromProto(lookAheadTimer.VisibilityTime)
-					if err != nil {
-						return err
-					}
-					t.timerGate.Update(visTs)
+					t.timerGate.Update(timestamp.TimeValue(lookAheadTimer.VisibilityTime))
 				}
 			}
 		case <-updateAckTimer.C:

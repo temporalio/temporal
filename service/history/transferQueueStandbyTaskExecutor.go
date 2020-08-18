@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 )
 
@@ -132,10 +133,8 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			return nil, err
 		}
 
-		if activityInfo.StartedID == common.EmptyEventID {
-			return newPushActivityToMatchingInfo(
-				activityInfo.ScheduleToStartTimeout,
-			), nil
+		if activityInfo.StartedId == common.EmptyEventID {
+			return newPushActivityToMatchingInfo(*activityInfo.ScheduleToStartTimeout), nil
 		}
 
 		return nil, nil
@@ -170,7 +169,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 
 		executionInfo := mutableState.GetExecutionInfo()
 		workflowTimeout := executionInfo.WorkflowRunTimeout
-		wtTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
+		wtTimeout := common.MinInt64(workflowTimeout, common.MaxTaskTimeoutSeconds)
 
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), wtInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
@@ -218,18 +217,18 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		if err != nil {
 			return nil, err
 		}
-		wfCloseTime := completionEvent.GetTimestamp()
+		wfCloseTime := timestamp.TimeValue(completionEvent.GetEventTime())
 
 		executionInfo := mutableState.GetExecutionInfo()
 		workflowTypeName := executionInfo.WorkflowTypeName
-		workflowCloseTimestamp := wfCloseTime
+		workflowCloseTime := wfCloseTime
 		workflowStatus := executionInfo.Status
 		workflowHistoryLength := mutableState.GetNextEventID() - 1
 		startEvent, err := mutableState.GetStartEvent()
 		if err != nil {
 			return nil, err
 		}
-		workflowStartTimestamp := startEvent.GetTimestamp()
+		workflowStartTime := timestamp.TimeValue(startEvent.GetEventTime())
 		workflowExecutionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
 		visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 		searchAttr := executionInfo.SearchAttributes
@@ -250,9 +249,9 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			transferTask.GetWorkflowId(),
 			transferTask.GetRunId(),
 			workflowTypeName,
-			workflowStartTimestamp,
+			workflowStartTime.UnixNano(),
 			workflowExecutionTimestamp.UnixNano(),
-			workflowCloseTimestamp,
+			workflowCloseTime.UnixNano(),
 			workflowStatus,
 			workflowHistoryLength,
 			transferTask.GetTaskId(),
@@ -357,7 +356,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return nil, err
 		}
 
-		if childWorkflowInfo.StartedID != common.EmptyEventID {
+		if childWorkflowInfo.StartedId != common.EmptyEventID {
 			return nil, nil
 		}
 
@@ -429,13 +428,13 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	workflowTimeout := executionInfo.WorkflowRunTimeout
+	workflowTimeout := int32(executionInfo.WorkflowRunTimeout)
 	wfTypeName := executionInfo.WorkflowTypeName
 	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {
 		return err
 	}
-	startTimestamp := startEvent.GetTimestamp()
+	startTime := timestamp.TimeValue(startEvent.GetEventTime())
 	executionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
@@ -446,7 +445,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 			transferTask.GetWorkflowId(),
 			transferTask.GetRunId(),
 			wfTypeName,
-			startTimestamp,
+			startTime.UnixNano(),
 			executionTimestamp.UnixNano(),
 			workflowTimeout,
 			transferTask.GetTaskId(),
@@ -460,7 +459,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 		transferTask.GetWorkflowId(),
 		transferTask.GetRunId(),
 		wfTypeName,
-		startTimestamp,
+		startTime.UnixNano(),
 		executionTimestamp.UnixNano(),
 		workflowTimeout,
 		transferTask.GetTaskId(),
@@ -523,10 +522,10 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 	}
 
 	pushActivityInfo := postActionInfo.(*pushActivityTaskToMatchingInfo)
-	timeout := common.MinInt32(pushActivityInfo.activityTaskScheduleToStartTimeout, common.MaxTaskTimeout)
+	timeout := common.MinInt64(int64(pushActivityInfo.activityTaskScheduleToStartTimeout), common.MaxTaskTimeoutSeconds)
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		task.(*persistenceblobs.TransferTaskInfo),
-		timeout,
+		timestamp.DurationFromSeconds(timeout),
 	)
 }
 
@@ -541,11 +540,11 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 	}
 
 	pushwtInfo := postActionInfo.(*pushWorkflowTaskToMatchingInfo)
-	timeout := common.MinInt32(pushwtInfo.workflowTaskScheduleToStartTimeout, common.MaxTaskTimeout)
+	timeout := common.MinInt64(pushwtInfo.workflowTaskScheduleToStartTimeout, common.MaxTaskTimeoutSeconds)
 	return t.transferQueueTaskExecutorBase.pushWorkflowTask(
 		task.(*persistenceblobs.TransferTaskInfo),
 		&pushwtInfo.taskqueue,
-		timeout,
+		timestamp.DurationFromSeconds(timeout),
 	)
 }
 

@@ -43,6 +43,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -57,6 +58,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -117,15 +119,15 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 	}
 	request.SearchAttributes = searchAttr
 
-	startTime := time.Now().UnixNano()
+	startTime := time.Now().UTC()
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
 	startFilter := &filterpb.StartTimeFilter{}
-	startFilter.EarliestTime = startTime
+	startFilter.EarliestTime = &startTime
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	for i := 0; i < numOfRetry; i++ {
-		startFilter.LatestTime = time.Now().UnixNano()
+		startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
 		resp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 			Namespace:       s.namespace,
 			MaximumPageSize: defaultTestValueOfESIndexMaxResultWindow,
@@ -175,7 +177,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_ExecutionTime() {
 	weCron, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
-	query := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") and ExecutionTime < %v`, id, cronID, time.Now().UnixNano()+int64(time.Minute))
+	query := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") and ExecutionTime < %v`, id, cronID, time.Now().UTC().UnixNano()+int64(time.Minute))
 	s.testHelperForReadOnce(weCron.GetRunId(), query, false)
 
 	query = fmt.Sprintf(`WorkflowId = "%s"`, id)
@@ -229,7 +231,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 		false,
 		true,
 		true,
-		int64(0),
+		0,
 		1,
 		true,
 		nil)
@@ -337,7 +339,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(openExecution.GetExecutionTime() >= openExecution.GetStartTime().GetValue())
+	s.GreaterOrEqual(openExecution.GetExecutionTime().UnixNano(), openExecution.GetStartTime().UnixNano())
 	searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[key]
 	var searchVal int
 	payload.Decode(searchValBytes, &searchVal)
@@ -451,7 +453,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 			intVal, _ := payload.Encode(i)
 			doubleVal, _ := payload.Encode(float64(i))
 			strVal, _ := payload.Encode(strconv.Itoa(i))
-			timeVal, _ := payload.Encode(time.Now())
+			timeVal, _ := payload.Encode(time.Now().UTC())
 			searchAttr := &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
 					definition.CustomIntField:      intVal,
@@ -498,8 +500,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 		e1 := openExecutions[i-1]
 		e2 := openExecutions[i]
 		if e2.GetCloseTime() != nil {
-			s.NotEqual(0, e1.GetCloseTime().GetValue())
-			s.GreaterOrEqual(e2.GetCloseTime().GetValue(), e1.GetCloseTime().GetValue())
+			s.NotEqual(0, e1.GetCloseTime().UnixNano())
+			s.GreaterOrEqual(e2.GetCloseTime().UnixNano(), e1.GetCloseTime().UnixNano())
 		}
 	}
 
@@ -694,7 +696,7 @@ func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(runID, query strin
 	}
 	s.NotNil(openExecution)
 	s.Equal(runID, openExecution.GetExecution().GetRunId())
-	s.True(openExecution.GetExecutionTime() >= openExecution.GetStartTime().GetValue())
+	s.GreaterOrEqual(openExecution.GetExecutionTime().UnixNano(), openExecution.GetStartTime().UnixNano())
 	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
 		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
 		var searchVal string
@@ -714,15 +716,15 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -762,13 +764,13 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow_PageToken() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                  s.namespace,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		Namespace:           s.namespace,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	numOfWorkflows := 4
@@ -822,15 +824,15 @@ func (s *elasticsearchIntegrationSuite) createStartWorkflowExecutionRequest(id, 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 	return request
 }
@@ -846,15 +848,15 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -915,7 +917,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		false,
 		true,
 		true,
-		int64(0),
+		0,
 		1,
 		true,
 		nil)
@@ -965,7 +967,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		false,
 		true,
 		true,
-		int64(0),
+		0,
 		1,
 		true,
 		nil)
@@ -1046,15 +1048,15 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1089,7 +1091,9 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
-	s.NoError(err)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal("BadSearchAttributes: INVALIDKEY is not valid search attribute key", err.Error())
 
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,

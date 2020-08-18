@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
@@ -53,6 +52,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 )
 
@@ -104,7 +104,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.namespaceID = testNamespaceID
 	s.namespaceEntry = testGlobalNamespaceEntry
 	s.version = s.namespaceEntry.GetFailoverVersion()
-	s.now = time.Now()
+	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 	s.fetchHistoryDuration = config.StandbyTaskMissingEventsResendDelay() +
 		(config.StandbyTaskMissingEventsDiscardDelay()-config.StandbyTaskMissingEventsResendDelay())/2
@@ -195,10 +195,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -212,9 +212,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	taskID := int64(59)
 	activityID := "activity-1"
 	activityType := "some random activity type"
-	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1, 1, 1, 1)
+	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
 
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
@@ -230,7 +230,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 }
@@ -251,10 +251,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -268,10 +268,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_
 	taskID := int64(59)
 	activityID := "activity-1"
 	activityType := "some random activity type"
-	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1, 1, 1, 1)
+	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
 
-	now := types.TimestampNow()
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.fetchHistoryDuration))
+	now := timestamp.TimeNowPtrUtc()
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
@@ -288,7 +288,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(1)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
@@ -314,8 +314,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 					Name: taskQueueName,
 					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 				},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -329,9 +329,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 	taskID := int64(59)
 	activityID := "activity-1"
 	activityType := "some random activity type"
-	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1, 1, 1, 1)
+	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
 
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
@@ -349,7 +349,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
@@ -370,10 +370,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -382,7 +382,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 	taskID := int64(59)
 	di := addWorkflowTaskScheduledEvent(mutableState)
 
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
@@ -398,7 +398,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 }
@@ -419,10 +419,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending_
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -431,8 +431,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending_
 	taskID := int64(59)
 	di := addWorkflowTaskScheduledEvent(mutableState)
 
-	now := types.TimestampNow()
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.fetchHistoryDuration))
+	now := timestamp.TimeNowPtrUtc()
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
@@ -449,7 +449,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending_
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockMatchingClient.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, nil).Times(1)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
@@ -470,10 +470,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -482,7 +482,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	taskID := int64(59)
 	di := addWorkflowTaskScheduledEvent(mutableState)
 
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
@@ -501,7 +501,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
@@ -522,10 +522,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -539,7 +539,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	taskID := int64(59)
 	di = addWorkflowTaskScheduledEvent(mutableState)
 
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
@@ -558,7 +558,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
@@ -579,10 +579,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -596,7 +596,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
 
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
@@ -614,7 +614,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Return(nil).Once()
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewDisabledArchvialConfig())
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
@@ -640,10 +640,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -658,7 +658,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
 	nextEventID := event.GetEventId() + 1
 
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
@@ -677,11 +677,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.fetchHistoryDuration))
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
 		transferTask.GetNamespaceId(), transferTask.GetWorkflowId(),
 		transferTask.GetRunId(), nextEventID,
@@ -690,7 +690,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.discardDuration))
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskDiscarded, err)
 }
@@ -716,10 +716,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -733,7 +733,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 	taskID := int64(59)
 	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
 
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
@@ -754,7 +754,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
@@ -781,10 +781,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -800,7 +800,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 		testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, nil, "")
 	nextEventID := event.GetEventId() + 1
 
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
@@ -819,11 +819,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.fetchHistoryDuration))
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
 		transferTask.GetNamespaceId(), transferTask.GetWorkflowId(),
 		transferTask.GetRunId(), nextEventID,
@@ -832,7 +832,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.discardDuration))
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskDiscarded, err)
 }
@@ -859,10 +859,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -877,7 +877,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 	event, _ = addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
 		testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, nil, "")
 
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
@@ -898,7 +898,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
@@ -923,10 +923,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -939,10 +939,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 
 	taskID := int64(59)
 	event, _ = addStartChildWorkflowExecutionInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
-		testChildNamespace, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1, 1, 1)
+		testChildNamespace, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second)
 	nextEventID := event.GetEventId() + 1
 
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
@@ -961,11 +961,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.fetchHistoryDuration))
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
 		transferTask.GetNamespaceId(), transferTask.GetWorkflowId(),
 		transferTask.GetRunId(), nextEventID,
@@ -974,7 +974,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.discardDuration))
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskDiscarded, err)
 }
@@ -999,10 +999,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 			ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 		},
@@ -1016,9 +1016,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 
 	taskID := int64(59)
 	event, childInfo := addStartChildWorkflowExecutionInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
-		testChildNamespace, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1, 1, 1)
+		testChildNamespace, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second)
 
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
@@ -1035,12 +1035,12 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 	}
 
 	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), testChildNamespace, childWorkflowID, uuid.New(), childWorkflowType)
-	childInfo.StartedID = event.GetEventId()
+	childInfo.StartedId = event.GetEventId()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
@@ -1061,10 +1061,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -1074,7 +1074,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
 
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
@@ -1098,13 +1098,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 			RunId:      executionInfo.RunID,
 		},
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
-		StartTimestamp:   event.GetTimestamp(),
-		RunTimeout:       int64(executionInfo.WorkflowRunTimeout),
+		StartTimestamp:   timestamp.TimeValue(event.GetEventTime()).UnixNano(),
+		RunTimeout:       executionInfo.WorkflowRunTimeout,
 		TaskID:           taskID,
 		TaskQueue:        taskQueueName,
 	}).Return(nil).Once()
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
@@ -1125,10 +1125,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 		},
 	)
@@ -1138,7 +1138,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
 
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
@@ -1162,13 +1162,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 			RunId:      executionInfo.RunID,
 		},
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
-		StartTimestamp:   event.GetTimestamp(),
-		WorkflowTimeout:  int64(executionInfo.WorkflowRunTimeout),
+		StartTimestamp:   timestamp.TimeValue(event.GetEventTime()).UnixNano(),
+		WorkflowTimeout:  executionInfo.WorkflowRunTimeout,
 		TaskID:           taskID,
 		TaskQueue:        taskQueueName,
 	}).Return(nil).Once()
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
+	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }

@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/environment"
 )
@@ -165,13 +166,13 @@ func (s *IntegrationBase) registerNamespace(
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(10000 * time.Second)
 	defer cancel()
 	_, err := s.engine.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
-		Name:                                 namespace,
-		Description:                          namespace,
-		WorkflowExecutionRetentionPeriodDays: int32(retentionDays),
-		HistoryArchivalState:                 historyArchivalState,
-		HistoryArchivalUri:                   historyArchivalURI,
-		VisibilityArchivalState:              visibilityArchivalState,
-		VisibilityArchivalUri:                visibilityArchivalURI,
+		Name:                             namespace,
+		Description:                      namespace,
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(time.Duration(retentionDays) * time.Hour * 24),
+		HistoryArchivalState:             historyArchivalState,
+		HistoryArchivalUri:               historyArchivalURI,
+		VisibilityArchivalState:          visibilityArchivalState,
+		VisibilityArchivalUri:            visibilityArchivalURI,
 	})
 
 	return err
@@ -225,7 +226,7 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
 			},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays:           0,
+				Retention:               timestamp.DurationFromDays(0),
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_ENABLED,
 				HistoryArchivalUri:      s.testCluster.archiverBase.historyURI,
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,

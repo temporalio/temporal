@@ -75,7 +75,7 @@ func newMutableStateChecksumPayload(ms mutableState) *checksumproto.MutableState
 
 	if replicationState != nil {
 		payload.LastWriteVersion = replicationState.LastWriteVersion
-		payload.LastWriteEventId = replicationState.LastWriteEventID
+		payload.LastWriteEventId = replicationState.LastWriteEventId
 	}
 
 	versionHistories := ms.GetVersionHistories()

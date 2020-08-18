@@ -51,6 +51,7 @@ import (
 	messageMocks "go.temporal.io/server/common/messaging/mocks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/task"
@@ -796,10 +797,10 @@ func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replication
 		RunId:              "some random run ID",
 		Version:            1394,
 		ScheduledId:        728,
-		ScheduledTime:      time.Now().UnixNano(),
+		ScheduledTime:      timestamp.TimeNowPtrUtc(),
 		StartedId:          1015,
-		StartedTime:        time.Now().UnixNano(),
-		LastHeartbeatTime:  time.Now().UnixNano(),
+		StartedTime:        timestamp.TimeNowPtrUtc(),
+		LastHeartbeatTime:  timestamp.TimeNowPtrUtc(),
 		Details:            payloads.EncodeString("some random detail"),
 		Attempt:            59,
 		LastFailure:        failure.NewServerFailure("some random failure reason", false),

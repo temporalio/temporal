@@ -385,9 +385,8 @@ func NewVersionHistories(
 func NewVersionHistoriesFromProto(
 	input *historyspb.VersionHistories,
 ) *VersionHistories {
-
 	if input == nil {
-		panic("version histories is null")
+		return nil
 	}
 	if len(input.Histories) == 0 {
 		panic("version histories cannot have empty")
@@ -427,6 +426,9 @@ func (h *VersionHistories) Duplicate() *VersionHistories {
 
 // ToProto return thrift format of version histories
 func (h *VersionHistories) ToProto() *historyspb.VersionHistories {
+	if h == nil {
+		return nil
+	}
 
 	currentVersionHistoryIndex := h.CurrentVersionHistoryIndex
 	var histories []*historyspb.VersionHistory

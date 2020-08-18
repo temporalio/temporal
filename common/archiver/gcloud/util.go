@@ -35,7 +35,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
@@ -69,7 +68,7 @@ func constructVisibilityFilenamePrefix(namespaceID, tag string) string {
 }
 
 func constructTimeBasedSearchKey(namespaceID, tag string, timestamp int64, precision string) string {
-	t := time.Unix(0, timestamp).In(time.UTC)
+	t := time.Unix(0, timestamp).UTC()
 	var timeFormat = ""
 	switch precision {
 	case PrecisionSecond:
@@ -145,7 +144,7 @@ func decodeVisibilityRecord(data []byte) (*archiverproto.ArchiveVisibilityReques
 }
 
 func constructVisibilityFilename(namespace, workflowTypeName, workflowID, runID, tag string, timestamp int64) string {
-	t := time.Unix(0, timestamp).In(time.UTC)
+	t := time.Unix(0, timestamp).UTC()
 	prefix := constructVisibilityFilenamePrefix(namespace, tag)
 	return fmt.Sprintf("%s_%s_%s_%s_%s.visibility", prefix, t.Format(time.RFC3339), hash(workflowTypeName), hash(workflowID), hash(runID))
 }
@@ -165,9 +164,9 @@ func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *wor
 		Type: &commonpb.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
-		StartTime:     &types.Int64Value{Value: record.StartTimestamp},
-		ExecutionTime: record.ExecutionTimestamp,
-		CloseTime:     &types.Int64Value{Value: record.CloseTimestamp},
+		StartTime:     record.StartTime,
+		ExecutionTime: record.ExecutionTime,
+		CloseTime:     record.CloseTime,
 		Status:        record.Status,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,

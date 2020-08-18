@@ -73,7 +73,7 @@ WORKDIR /etc/temporal
 
 ENV SERVICES="history,matching,frontend,worker"
 
-EXPOSE 7933 7934 7935 7939 6933 6934 6935 6939 7233 7234 7235 7239
+EXPOSE 6933 6934 6935 6939 7233 7234 7235 7239
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD /start.sh
 

@@ -23,6 +23,11 @@ syntax = "proto3";
 package temporal.server.api.matchingservice.v1;
 option go_package = "go.temporal.io/server/api/matchingservice/v1;matchingservice";
 
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+import "dependencies/gogoproto/gogo.proto";
+
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/taskqueue/v1/message.proto";
@@ -38,7 +43,7 @@ message PollWorkflowTaskQueueRequest {
     string namespace_id = 1;
     string poller_id = 2;
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest poll_request = 3;
-    string forwarded_from = 4;
+    string forwarded_source = 4;
 }
 
 message PollWorkflowTaskQueueResponse {
@@ -47,7 +52,7 @@ message PollWorkflowTaskQueueResponse {
     temporal.api.common.v1.WorkflowType workflow_type = 3;
     int64 previous_started_event_id = 4;
     int64 started_event_id = 5;
-    int64 attempt = 6;
+    int32 attempt = 6;
     int64 next_event_id = 7;
     int64 backlog_count_hint = 8;
     bool sticky_execution_enabled = 9;
@@ -56,8 +61,8 @@ message PollWorkflowTaskQueueResponse {
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 12;
     int32 event_store_version = 13;
     bytes branch_token = 14;
-    int64 scheduled_timestamp = 15;
-    int64 started_timestamp = 16;
+    google.protobuf.Timestamp scheduled_time = 15 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp started_time = 16 [(gogoproto.stdtime) = true];
     map<string, temporal.api.query.v1.WorkflowQuery> queries = 17;
 }
 
@@ -65,7 +70,7 @@ message PollActivityTaskQueueRequest {
     string namespace_id = 1;
     string poller_id = 2;
     temporal.api.workflowservice.v1.PollActivityTaskQueueRequest poll_request = 3;
-    string forwarded_from = 4;
+    string forwarded_source = 4;
 }
 
 message PollActivityTaskQueueResponse {
@@ -74,13 +79,17 @@ message PollActivityTaskQueueResponse {
     string activity_id = 3;
     temporal.api.common.v1.ActivityType activity_type = 4;
     temporal.api.common.v1.Payloads input = 5;
-    int64 scheduled_timestamp = 6;
-    int32 schedule_to_close_timeout_seconds = 7;
-    int64 started_timestamp = 8;
-    int32 start_to_close_timeout_seconds = 9;
-    int32 heartbeat_timeout_seconds = 10;
+    google.protobuf.Timestamp scheduled_time = 6 [(gogoproto.stdtime) = true];
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration schedule_to_close_timeout = 7 [(gogoproto.stdduration) = true];
+    google.protobuf.Timestamp started_time = 8 [(gogoproto.stdtime) = true];
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration start_to_close_timeout = 9 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration heartbeat_timeout = 10 [(gogoproto.stdduration) = true];
     int32 attempt = 11;
-    int64 scheduled_timestamp_of_this_attempt = 12;
+    google.protobuf.Timestamp current_attempt_scheduled_time = 12 [(gogoproto.stdtime) = true];
     temporal.api.common.v1.Payloads heartbeat_details = 13;
     temporal.api.common.v1.WorkflowType workflow_type = 14;
     string workflow_namespace = 15;
@@ -92,8 +101,10 @@ message AddWorkflowTaskRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 3;
     int64 schedule_id = 4;
-    int32 schedule_to_start_timeout_seconds = 5;
-    string forwarded_from = 6;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration schedule_to_start_timeout = 5 [(gogoproto.stdduration) = true];
+    string forwarded_source = 6;
     temporal.server.api.enums.v1.TaskSource source = 7;
 }
 
@@ -106,8 +117,10 @@ message AddActivityTaskRequest {
     string source_namespace_id = 3;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 4;
     int64 schedule_id = 5;
-    int32 schedule_to_start_timeout_seconds = 6;
-    string forwarded_from = 7;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration schedule_to_start_timeout = 6 [(gogoproto.stdduration) = true];
+    string forwarded_source = 7;
     temporal.server.api.enums.v1.TaskSource source = 8;
 }
 
@@ -118,7 +131,7 @@ message QueryWorkflowRequest {
     string namespace_id = 1;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
     temporal.api.workflowservice.v1.QueryWorkflowRequest query_request = 3;
-    string forwarded_from = 4;
+    string forwarded_source = 4;
 }
 
 message QueryWorkflowResponse {

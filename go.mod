@@ -22,7 +22,7 @@ require (
 	github.com/gocql/gocql v0.0.0-20200624222514-34081eda590e
 	github.com/gogo/protobuf v1.3.1
 	github.com/gogo/status v1.1.0
-	github.com/golang/mock v1.4.3
+	github.com/golang/mock v1.4.4
 	github.com/golang/protobuf v1.4.2
 	github.com/google/uuid v1.1.1
 	github.com/hashicorp/go-version v1.2.0
@@ -59,8 +59,8 @@ require (
 	github.com/urfave/cli v1.22.4
 	github.com/valyala/fastjson v1.5.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/api v0.27.1-0.20200721162149-2817a2b06f1c
-	go.temporal.io/sdk v0.27.1-0.20200721191416-05a45557fecc
+	go.temporal.io/api v0.28.1-0.20200817234501-1906e4d1fd45
+	go.temporal.io/sdk v0.28.0
 	go.uber.org/atomic v1.6.0
 	go.uber.org/multierr v1.5.0
 	go.uber.org/zap v1.15.0
@@ -68,7 +68,7 @@ require (
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e
 	golang.org/x/tools v0.0.0-20200609164405-eb789aa7ce50 // indirect
 	google.golang.org/api v0.26.0
-	google.golang.org/grpc v1.30.0
+	google.golang.org/grpc v1.31.0
 	google.golang.org/grpc/examples v0.0.0-20200625174016-7a808837ae92
 	gopkg.in/validator.v2 v2.0.0-20200605151824-2b28d334fa05
 	gopkg.in/yaml.v2 v2.3.0

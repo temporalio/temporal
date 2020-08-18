@@ -30,11 +30,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func applyWorkflowMutationTx(
@@ -750,19 +751,14 @@ func createTransferTasks(
 		info.TaskType = task.GetType()
 		info.Version = task.GetVersion()
 
-		t, err := types.TimestampProto(task.GetVisibilityTimestamp().UTC())
-		if err != nil {
-			return err
-		}
-
-		info.VisibilityTime = t
+		info.VisibilityTime = timestamp.TimePtr(task.GetVisibilityTimestamp().UTC())
 
 		blob, err := serialization.TransferTaskInfoToBlob(info)
 		if err != nil {
 			return err
 		}
 		transferTasksRows[i].Data = blob.Data
-		transferTasksRows[i].DataEncoding = string(blob.Encoding)
+		transferTasksRows[i].DataEncoding = blob.Encoding.String()
 	}
 
 	result, err := tx.InsertIntoTransferTasks(transferTasksRows)
@@ -856,7 +852,7 @@ func createReplicationTasks(
 		replicationTasksRows[i].ShardID = shardID
 		replicationTasksRows[i].TaskID = task.GetTaskID()
 		replicationTasksRows[i].Data = blob.Data
-		replicationTasksRows[i].DataEncoding = string(blob.Encoding)
+		replicationTasksRows[i].DataEncoding = blob.Encoding.String()
 	}
 
 	result, err := tx.InsertIntoReplicationTasks(replicationTasksRows)
@@ -906,7 +902,7 @@ func createTimerTasks(
 
 			case *p.ActivityRetryTimerTask:
 				info.EventId = t.EventID
-				info.ScheduleAttempt = int64(t.Attempt)
+				info.ScheduleAttempt = t.Attempt
 
 			case *p.WorkflowBackoffTimerTask:
 				info.EventId = t.EventID
@@ -929,23 +925,19 @@ func createTimerTasks(
 			info.TaskType = task.GetType()
 			info.TaskId = task.GetTaskID()
 
-			goVisTs := task.GetVisibilityTimestamp()
-			protoVisTs, err := types.TimestampProto(goVisTs)
-			if err != nil {
-				return err
-			}
+			goVisTs := timestamp.TimePtr(task.GetVisibilityTimestamp().UTC())
 
-			info.VisibilityTime = protoVisTs
+			info.VisibilityTime = goVisTs
 			blob, err := serialization.TimerTaskInfoToBlob(info)
 			if err != nil {
 				return err
 			}
 
 			timerTasksRows[i].ShardID = shardID
-			timerTasksRows[i].VisibilityTimestamp = goVisTs
+			timerTasksRows[i].VisibilityTimestamp = *goVisTs
 			timerTasksRows[i].TaskID = task.GetTaskID()
 			timerTasksRows[i].Data = blob.Data
-			timerTasksRows[i].DataEncoding = string(blob.Encoding)
+			timerTasksRows[i].DataEncoding = blob.Encoding.String()
 		}
 
 		result, err := tx.InsertIntoTimerTasks(timerTasksRows)
@@ -1135,8 +1127,8 @@ func updateCurrentExecution(
 
 func buildExecutionRow(
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *p.ReplicationState,
-	versionHistories *serialization.DataBlob,
+	replicationState *persistenceblobs.ReplicationState,
+	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
 	currentVersion int64,
@@ -1185,8 +1177,8 @@ func buildExecutionRow(
 func (m *sqlExecutionManager) createExecution(
 	tx sqlplugin.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *p.ReplicationState,
-	versionHistories *serialization.DataBlob,
+	replicationState *persistenceblobs.ReplicationState,
+	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
 	currentVersion int64,
@@ -1201,7 +1193,7 @@ func (m *sqlExecutionManager) createExecution(
 	}
 
 	// TODO we should set the start time and last update time on business logic layer
-	executionInfo.StartTimestamp = time.Now()
+	executionInfo.StartTimestamp = time.Now().UTC()
 	executionInfo.LastUpdateTimestamp = executionInfo.StartTimestamp
 
 	row, err := buildExecutionRow(
@@ -1244,8 +1236,8 @@ func (m *sqlExecutionManager) createExecution(
 func updateExecution(
 	tx sqlplugin.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *p.ReplicationState,
-	versionHistories *serialization.DataBlob,
+	replicationState *persistenceblobs.ReplicationState,
+	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
 	currentVersion int64,
@@ -1260,7 +1252,7 @@ func updateExecution(
 	}
 
 	// TODO we should set the last update time on business logic layer
-	executionInfo.LastUpdateTimestamp = time.Now()
+	executionInfo.LastUpdateTimestamp = time.Now().UTC()
 
 	row, err := buildExecutionRow(
 		executionInfo,

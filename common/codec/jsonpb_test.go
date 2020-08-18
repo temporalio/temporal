@@ -29,11 +29,14 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -47,7 +50,7 @@ var (
 	historyEvent = &historypb.HistoryEvent{
 		Version:   1234,
 		EventId:   130,
-		Timestamp: 112345132134,
+		EventTime: timestamp.TimePtr(time.Date(1978, 8, 22, 0, 0, 0, 0, time.UTC)),
 		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		Attributes: &historypb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 			Namespace: "some random target namespace",
@@ -59,7 +62,7 @@ var (
 			Control:           "some random control",
 		}},
 	}
-	encodedHistoryEvent = `{"eventId":"130","timestamp":"112345132134","eventType":"RequestCancelExternalWorkflowExecutionInitiated","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"namespace":"some random target namespace","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"some random control","childWorkflowOnly":true}}`
+	encodedHistoryEvent = `{"eventId":"130","eventTime":"1978-08-22T00:00:00Z","eventType":"RequestCancelExternalWorkflowExecutionInitiated","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"namespace":"some random target namespace","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"some random control","childWorkflowOnly":true}}`
 )
 
 func TestJSONPBEncoderSuite(t *testing.T) {

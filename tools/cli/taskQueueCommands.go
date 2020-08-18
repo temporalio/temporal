@@ -33,6 +33,8 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
+
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // DescribeTaskQueue show pollers info of a given taskqueue
@@ -64,7 +66,7 @@ func DescribeTaskQueue(c *cli.Context) {
 	table.SetHeaderLine(false)
 	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
 	for _, poller := range pollers {
-		table.Append([]string{poller.GetIdentity(), convertTime(poller.GetLastAccessTime(), false)})
+		table.Append([]string{poller.GetIdentity(), formatTime(timestamp.TimeValue(poller.GetLastAccessTime()), false)})
 	}
 	table.Render()
 }

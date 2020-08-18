@@ -122,7 +122,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 				Data:        task.Info.Data,
 			},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays:           task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
+				Retention:               task.Config.GetWorkflowExecutionRetentionTtl(),
 				HistoryArchivalState:    task.Config.GetHistoryArchivalState(),
 				HistoryArchivalUri:      task.Config.GetHistoryArchivalUri(),
 				VisibilityArchivalState: task.Config.GetVisibilityArchivalState(),
@@ -233,7 +233,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 			Data:        task.Info.Data,
 		}
 		request.Namespace.Config = &persistenceblobs.NamespaceConfig{
-			RetentionDays:           task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
+			Retention:               task.Config.GetWorkflowExecutionRetentionTtl(),
 			HistoryArchivalState:    task.Config.GetHistoryArchivalState(),
 			HistoryArchivalUri:      task.Config.GetHistoryArchivalUri(),
 			VisibilityArchivalState: task.Config.GetVisibilityArchivalState(),

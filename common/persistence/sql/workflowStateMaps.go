@@ -31,8 +31,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
@@ -40,7 +38,7 @@ import (
 
 func updateActivityInfos(
 	tx sqlplugin.Tx,
-	activityInfos []*persistence.InternalActivityInfo,
+	activityInfos []*persistenceblobs.ActivityInfo,
 	deleteInfos []int64,
 	shardID int,
 	namespaceID primitives.UUID,
@@ -51,7 +49,7 @@ func updateActivityInfos(
 	if len(activityInfos) > 0 {
 		rows := make([]sqlplugin.ActivityInfoMapsRow, len(activityInfos))
 		for i, v := range activityInfos {
-			blob, err := serialization.ActivityInfoToBlob(v.ToProto())
+			blob, err := serialization.ActivityInfoToBlob(v)
 			if err != nil {
 				return err
 			}
@@ -61,9 +59,9 @@ func updateActivityInfos(
 				NamespaceID:  namespaceID,
 				WorkflowID:   workflowID,
 				RunID:        runID,
-				ScheduleID:   v.ScheduleID,
+				ScheduleID:   v.ScheduleId,
 				Data:         blob.Data,
-				DataEncoding: string(blob.Encoding),
+				DataEncoding: blob.Encoding.String(),
 			}
 		}
 
@@ -103,7 +101,7 @@ func getActivityInfoMap(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (map[int64]*persistence.InternalActivityInfo, error) {
+) (map[int64]*persistenceblobs.ActivityInfo, error) {
 
 	rows, err := db.SelectFromActivityInfoMaps(&sqlplugin.ActivityInfoMapsFilter{
 		ShardID:     int64(shardID),
@@ -115,14 +113,13 @@ func getActivityInfoMap(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get activity info. Error: %v", err))
 	}
 
-	ret := make(map[int64]*persistence.InternalActivityInfo)
+	ret := make(map[int64]*persistenceblobs.ActivityInfo)
 	for _, v := range rows {
 		decoded, err := serialization.ActivityInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
-		info := persistence.ProtoActivityInfoToInternalActivityInfo(decoded)
-		ret[v.ScheduleID] = info
+		ret[v.ScheduleID] = decoded
 	}
 
 	return ret, nil
@@ -171,7 +168,7 @@ func updateTimerInfos(
 				RunID:        runID,
 				TimerID:      v.GetTimerId(),
 				Data:         blob.Data,
-				DataEncoding: string(blob.Encoding),
+				DataEncoding: blob.Encoding.String(),
 			}
 		}
 		if _, err := tx.ReplaceIntoTimerInfoMaps(rows); err != nil {
@@ -252,7 +249,7 @@ func deleteTimerInfoMap(
 
 func updateChildExecutionInfos(
 	tx sqlplugin.Tx,
-	childExecutionInfos []*persistence.InternalChildExecutionInfo,
+	childExecutionInfos []*persistenceblobs.ChildExecutionInfo,
 	deleteInfos *int64,
 	shardID int,
 	namespaceID primitives.UUID,
@@ -263,7 +260,7 @@ func updateChildExecutionInfos(
 	if len(childExecutionInfos) > 0 {
 		rows := make([]sqlplugin.ChildExecutionInfoMapsRow, len(childExecutionInfos))
 		for i, v := range childExecutionInfos {
-			blob, err := serialization.ChildExecutionInfoToBlob(v.ToProto())
+			blob, err := serialization.ChildExecutionInfoToBlob(v)
 			if err != nil {
 				return err
 			}
@@ -272,9 +269,9 @@ func updateChildExecutionInfos(
 				NamespaceID:  namespaceID,
 				WorkflowID:   workflowID,
 				RunID:        runID,
-				InitiatedID:  v.InitiatedID,
+				InitiatedID:  v.InitiatedId,
 				Data:         blob.Data,
-				DataEncoding: string(blob.Encoding),
+				DataEncoding: blob.Encoding.String(),
 			}
 		}
 		if _, err := tx.ReplaceIntoChildExecutionInfoMaps(rows); err != nil {
@@ -302,7 +299,7 @@ func getChildExecutionInfoMap(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (map[int64]*persistence.InternalChildExecutionInfo, error) {
+) (map[int64]*persistenceblobs.ChildExecutionInfo, error) {
 
 	rows, err := db.SelectFromChildExecutionInfoMaps(&sqlplugin.ChildExecutionInfoMapsFilter{
 		ShardID:     int64(shardID),
@@ -314,20 +311,13 @@ func getChildExecutionInfoMap(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get timer info. Error: %v", err))
 	}
 
-	ret := make(map[int64]*persistence.InternalChildExecutionInfo)
+	ret := make(map[int64]*persistenceblobs.ChildExecutionInfo)
 	for _, v := range rows {
 		rowInfo, err := serialization.ChildExecutionInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
-		info := persistence.ProtoChildExecutionInfoToInternal(rowInfo)
-		if rowInfo.InitiatedEvent != nil {
-			info.InitiatedEvent = persistence.NewDataBlob(rowInfo.InitiatedEvent, common.EncodingType(rowInfo.GetInitiatedEventEncoding()))
-		}
-		if rowInfo.StartedEvent != nil {
-			info.StartedEvent = persistence.NewDataBlob(rowInfo.StartedEvent, common.EncodingType(rowInfo.GetStartedEventEncoding()))
-		}
-		ret[v.InitiatedID] = info
+		ret[v.InitiatedID] = rowInfo
 	}
 
 	return ret, nil
@@ -376,7 +366,7 @@ func updateRequestCancelInfos(
 				RunID:        runID,
 				InitiatedID:  v.GetInitiatedId(),
 				Data:         blob.Data,
-				DataEncoding: string(blob.Encoding),
+				DataEncoding: blob.Encoding.String(),
 			}
 		}
 
@@ -485,7 +475,7 @@ func updateSignalInfos(
 				RunID:        runID,
 				InitiatedID:  v.GetInitiatedId(),
 				Data:         blob.Data,
-				DataEncoding: string(blob.Encoding),
+				DataEncoding: blob.Encoding.String(),
 			}
 		}
 

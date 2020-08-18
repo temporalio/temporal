@@ -26,8 +26,7 @@ package history
 
 import (
 	"context"
-
-	"github.com/gogo/protobuf/types"
+	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -76,7 +75,7 @@ type (
 		GetVersion() int64
 		GetTaskId() int64
 		GetTaskType() enumsspb.TaskType
-		GetVisibilityTime() *types.Timestamp
+		GetVisibilityTime() *time.Time
 		GetWorkflowId() string
 		GetRunId() string
 		GetNamespaceId() string

@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -128,16 +129,16 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 	URI, err := archiver.NewURI("wrongscheme://")
 	s.NoError(err)
 	request := &archiverproto.ArchiveVisibilityRequest{
-		Namespace:          testNamespace,
-		NamespaceId:        testNamespaceID,
-		WorkflowId:         testWorkflowID,
-		RunId:              testRunID,
-		WorkflowTypeName:   testWorkflowTypeName,
-		StartTimestamp:     time.Now().UnixNano(),
-		ExecutionTimestamp: 0, // workflow without backoff
-		CloseTimestamp:     time.Now().UnixNano(),
-		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		HistoryLength:      int64(101),
+		Namespace:        testNamespace,
+		NamespaceId:      testNamespaceID,
+		WorkflowId:       testWorkflowID,
+		RunId:            testRunID,
+		WorkflowTypeName: testWorkflowTypeName,
+		StartTime:        timestamp.TimeNowPtrUtc(),
+		ExecutionTime:    nil, // workflow without backoff
+		CloseTime:        timestamp.TimeNowPtrUtc(),
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		HistoryLength:    int64(101),
 	}
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
 	s.Error(err)
@@ -167,18 +168,18 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	defer os.RemoveAll(dir)
 
 	visibilityArchiver := s.newTestVisibilityArchiver()
-	closeTimestamp := time.Now()
+	closeTimestamp := timestamp.TimeNowPtrUtc()
 	request := &archiverproto.ArchiveVisibilityRequest{
-		NamespaceId:        testNamespaceID,
-		Namespace:          testNamespace,
-		WorkflowId:         testWorkflowID,
-		RunId:              testRunID,
-		WorkflowTypeName:   testWorkflowTypeName,
-		StartTimestamp:     closeTimestamp.Add(-time.Hour).UnixNano(),
-		ExecutionTimestamp: 0, // workflow without backoff
-		CloseTimestamp:     closeTimestamp.UnixNano(),
-		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		HistoryLength:      int64(101),
+		NamespaceId:      testNamespaceID,
+		Namespace:        testNamespace,
+		WorkflowId:       testWorkflowID,
+		RunId:            testRunID,
+		WorkflowTypeName: testWorkflowTypeName,
+		StartTime:        timestamp.TimePtr(closeTimestamp.Add(-time.Hour)),
+		ExecutionTime:    nil, // workflow without backoff
+		CloseTime:        closeTimestamp,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		HistoryLength:    int64(101),
 		Memo: &commonpb.Memo{
 			Fields: map[string]*commonpb.Payload{
 				"testFields": payload.EncodeBytes([]byte{1, 2, 3}),
@@ -193,7 +194,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
 	s.NoError(err)
 
-	expectedFilename := constructVisibilityFilename(closeTimestamp.UnixNano(), testRunID)
+	expectedFilename := constructVisibilityFilename(closeTimestamp, testRunID)
 	filepath := path.Join(dir, testNamespaceID, expectedFilename)
 	s.assertFileExists(filepath)
 
@@ -219,7 +220,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				latestCloseTime:   int64(12345),
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
-				CloseTimestamp: int64(1999),
+				CloseTime: timestamp.UnixOrZeroTimePtr(1999),
 			},
 			shouldMatch: true,
 		},
@@ -229,7 +230,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				latestCloseTime:   int64(12345),
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
-				CloseTimestamp: int64(999),
+				CloseTime: timestamp.UnixOrZeroTimePtr(999),
 			},
 			shouldMatch: false,
 		},
@@ -240,7 +241,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				workflowID:        convert.StringPtr("random workflowID"),
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
-				CloseTimestamp: int64(2000),
+				CloseTime: timestamp.UnixOrZeroTimePtr(2000),
 			},
 			shouldMatch: false,
 		},
@@ -252,7 +253,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				runID:             convert.StringPtr("random runID"),
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
-				CloseTimestamp:   int64(12345),
+				CloseTime:        timestamp.UnixOrZeroTimePtr(12345),
 				WorkflowId:       "random workflowID",
 				RunId:            "random runID",
 				WorkflowTypeName: "random type name",
@@ -266,7 +267,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				workflowTypeName:  convert.StringPtr("some random type name"),
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
-				CloseTimestamp: int64(12345),
+				CloseTime: timestamp.UnixOrZeroTimePtr(12345),
 			},
 			shouldMatch: false,
 		},
@@ -278,7 +279,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
-				CloseTimestamp:   int64(12345),
+				CloseTime:        timestamp.UnixOrZeroTimePtr(12345),
 				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 				WorkflowTypeName: "some random type name",
 			},
@@ -517,58 +518,58 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowId:       testWorkflowID,
 			RunId:            testRunID,
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTimestamp:   1,
-			CloseTimestamp:   10000,
+			StartTime:        timestamp.UnixOrZeroTimePtr(1),
+			CloseTime:        timestamp.UnixOrZeroTimePtr(10000),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		},
 		{
-			NamespaceId:        testNamespaceID,
-			Namespace:          testNamespace,
-			WorkflowId:         "some random workflow ID",
-			RunId:              "some random run ID",
-			WorkflowTypeName:   testWorkflowTypeName,
-			StartTimestamp:     2,
-			ExecutionTimestamp: 0,
-			CloseTimestamp:     1000,
-			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-			HistoryLength:      123,
+			NamespaceId:      testNamespaceID,
+			Namespace:        testNamespace,
+			WorkflowId:       "some random workflow ID",
+			RunId:            "some random run ID",
+			WorkflowTypeName: testWorkflowTypeName,
+			StartTime:        timestamp.UnixOrZeroTimePtr(2),
+			ExecutionTime:    nil,
+			CloseTime:        timestamp.UnixOrZeroTimePtr(1000),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			HistoryLength:    123,
 		},
 		{
-			NamespaceId:        testNamespaceID,
-			Namespace:          testNamespace,
-			WorkflowId:         "another workflow ID",
-			RunId:              "another run ID",
-			WorkflowTypeName:   testWorkflowTypeName,
-			StartTimestamp:     3,
-			ExecutionTimestamp: 0,
-			CloseTimestamp:     10,
-			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-			HistoryLength:      456,
+			NamespaceId:      testNamespaceID,
+			Namespace:        testNamespace,
+			WorkflowId:       "another workflow ID",
+			RunId:            "another run ID",
+			WorkflowTypeName: testWorkflowTypeName,
+			StartTime:        timestamp.UnixOrZeroTimePtr(3),
+			ExecutionTime:    nil,
+			CloseTime:        timestamp.UnixOrZeroTimePtr(10),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+			HistoryLength:    456,
 		},
 		{
-			NamespaceId:        testNamespaceID,
-			Namespace:          testNamespace,
-			WorkflowId:         "and another workflow ID",
-			RunId:              "and another run ID",
-			WorkflowTypeName:   testWorkflowTypeName,
-			StartTimestamp:     3,
-			ExecutionTimestamp: 0,
-			CloseTimestamp:     5,
-			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-			HistoryLength:      456,
+			NamespaceId:      testNamespaceID,
+			Namespace:        testNamespace,
+			WorkflowId:       "and another workflow ID",
+			RunId:            "and another run ID",
+			WorkflowTypeName: testWorkflowTypeName,
+			StartTime:        timestamp.UnixOrZeroTimePtr(3),
+			ExecutionTime:    nil,
+			CloseTime:        timestamp.UnixOrZeroTimePtr(5),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			HistoryLength:    456,
 		},
 		{
-			NamespaceId:        "some random namespace ID",
-			Namespace:          "some random namespace name",
-			WorkflowId:         "another workflow ID",
-			RunId:              "another run ID",
-			WorkflowTypeName:   testWorkflowTypeName,
-			StartTimestamp:     3,
-			ExecutionTimestamp: 0,
-			CloseTimestamp:     10000,
-			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-			HistoryLength:      456,
+			NamespaceId:      "some random namespace ID",
+			Namespace:        "some random namespace name",
+			WorkflowId:       "another workflow ID",
+			RunId:            "another run ID",
+			WorkflowTypeName: testWorkflowTypeName,
+			StartTime:        timestamp.UnixOrZeroTimePtr(3),
+			ExecutionTime:    nil,
+			CloseTime:        timestamp.UnixOrZeroTimePtr(10000),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+			HistoryLength:    456,
 		},
 	}
 
@@ -580,7 +581,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(record *archiverproto.ArchiveVisibilityRequest) {
 	data, err := encode(record)
 	s.Require().NoError(err)
-	filename := constructVisibilityFilename(record.CloseTimestamp, record.GetRunId())
+	filename := constructVisibilityFilename(record.CloseTime, record.GetRunId())
 	s.Require().NoError(os.MkdirAll(path.Join(s.testQueryDirectory, record.GetNamespaceId()), testDirMode))
 	err = writeFile(path.Join(s.testQueryDirectory, record.GetNamespaceId(), filename), data, testFileMode)
 	s.Require().NoError(err)

@@ -257,7 +257,7 @@ func AdminDBScan(c *cli.Context) {
 		}(i)
 	}
 
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 	progressReport := &ProgressReport{}
 	for i := 0; i < numShards; i++ {
 		report := <-reports
@@ -747,7 +747,7 @@ func constructFileNameFromShard(shardID int) string {
 }
 
 func createScanOutputDirectories() *ScanOutputDirectories {
-	now := time.Now().Unix()
+	now := time.Now().UTC().Unix()
 	sod := &ScanOutputDirectories{
 		ShardScanReportDirectoryPath:       fmt.Sprintf("./scan_%v/shard_scan_report", now),
 		ExecutionCheckFailureDirectoryPath: fmt.Sprintf("./scan_%v/execution_check_failure", now),
@@ -783,7 +783,7 @@ func writeToFile(file *os.File, message string) {
 func includeShardInProgressReport(report *ShardScanReport, progressReport *ProgressReport, startTime time.Time) {
 	progressReport.NumberOfShardsFinished++
 	progressReport.Rates.TotalDBRequests += report.TotalDBRequests
-	progressReport.Rates.TimeRunning = time.Now().Sub(startTime).String()
+	progressReport.Rates.TimeRunning = time.Now().UTC().Sub(startTime).String()
 	if report.Failure != nil {
 		progressReport.NumberOfShardScanFailures++
 	}
@@ -813,7 +813,7 @@ func includeShardInProgressReport(report *ShardScanReport, progressReport *Progr
 		progressReport.CorruptionTypeBreakdown.PercentageOpenExecutionInvalidCurrentExecution = math.Round((float64(progressReport.CorruptionTypeBreakdown.TotalOpenExecutionInvalidCurrentExecution) * 100.0) / float64(progressReport.TotalExecutionsCount))
 	}
 
-	pastTime := time.Now().Sub(startTime)
+	pastTime := time.Now().UTC().Sub(startTime)
 	hoursPast := float64(pastTime) / float64(time.Hour)
 	progressReport.Rates.ShardsPerHour = math.Round(float64(progressReport.NumberOfShardsFinished) / hoursPast)
 	progressReport.Rates.ExecutionsPerHour = math.Round(float64(progressReport.TotalExecutionsCount) / hoursPast)
@@ -830,9 +830,9 @@ func getRateLimiter(startRPS int, targetRPS int, scaleUpSeconds int) *quotas.Dyn
 		return quotas.NewDynamicRateLimiter(func() float64 { return float64(targetRPS) })
 	}
 	rpsIncreasePerSecond := (targetRPS - startRPS) / scaleUpSeconds
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 	rpsFn := func() float64 {
-		secondsPast := int(time.Now().Sub(startTime).Seconds())
+		secondsPast := int(time.Now().UTC().Sub(startTime).Seconds())
 		if secondsPast >= scaleUpSeconds {
 			return float64(targetRPS)
 		}

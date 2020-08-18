@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -49,6 +50,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
 
@@ -154,11 +156,11 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 		return err
 	}
 
-	timeout := common.MinInt32(ai.ScheduleToStartTimeout, common.MaxTaskTimeout)
+	timeout := timestamp.MinDuration(timestamp.DurationValue(ai.ScheduleToStartTimeout), common.MaxTaskTimeout)
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushActivity(task, timeout)
+	return t.pushActivity(task, &timeout)
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
@@ -193,7 +195,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 
 	executionInfo := mutableState.GetExecutionInfo()
 	runTimeout := executionInfo.WorkflowRunTimeout
-	taskTimeout := common.MinInt32(runTimeout, common.MaxTaskTimeout)
+	taskTimeout := common.MinInt64(runTimeout, int64(common.MaxTaskTimeout.Seconds()))
 
 	// NOTE: previously this section check whether mutable state has enabled
 	// sticky workflowTask, if so convert the workflowTask to a sticky workflowTask.
@@ -214,7 +216,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushWorkflowTask(task, taskQueue, taskTimeout)
+	return t.pushWorkflowTask(task, taskQueue, timestamp.DurationPtr(time.Second*time.Duration(taskTimeout)))
 }
 
 func (t *transferQueueActiveTaskExecutor) processCloseExecution(
@@ -252,7 +254,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	wfCloseTime := completionEvent.GetTimestamp()
+	wfCloseTime := timestamp.TimeValue(completionEvent.GetEventTime())
 
 	parentNamespaceID := executionInfo.ParentNamespaceID
 	parentWorkflowID := executionInfo.ParentWorkflowID
@@ -268,7 +270,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	workflowStartTimestamp := startEvent.GetTimestamp()
+	workflowStartTimestamp := timestamp.TimeValue(startEvent.GetEventTime())
 	workflowExecutionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := executionInfo.SearchAttributes
@@ -283,9 +285,9 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		task.GetWorkflowId(),
 		task.GetRunId(),
 		workflowTypeName,
-		workflowStartTimestamp,
+		workflowStartTimestamp.UnixNano(),
 		workflowExecutionTimestamp.UnixNano(),
-		workflowCloseTimestamp,
+		workflowCloseTimestamp.UnixNano(),
 		workflowStatus,
 		workflowHistoryLength,
 		task.GetTaskId(),
@@ -581,10 +583,10 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 
 	// ChildExecution already started, just create WorkflowTask and complete transfer task
-	if childInfo.StartedID != common.EmptyEventID {
+	if childInfo.StartedId != common.EmptyEventID {
 		childExecution := &commonpb.WorkflowExecution{
-			WorkflowId: childInfo.StartedWorkflowID,
-			RunId:      childInfo.StartedRunID,
+			WorkflowId: childInfo.StartedWorkflowId,
+			RunId:      childInfo.StartedRunId,
 		}
 		return t.createFirstWorkflowTask(task.GetTargetNamespaceId(), childExecution)
 	}
@@ -674,13 +676,13 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	runTimeout := executionInfo.WorkflowRunTimeout
+	runTimeout := int32(executionInfo.WorkflowRunTimeout)
 	wfTypeName := executionInfo.WorkflowTypeName
 	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {
 		return err
 	}
-	startTimestamp := startEvent.GetTimestamp()
+	startTimestamp := timestamp.TimeValue(startEvent.GetEventTime())
 	executionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
@@ -695,7 +697,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 			task.GetWorkflowId(),
 			task.GetRunId(),
 			wfTypeName,
-			startTimestamp,
+			startTimestamp.UnixNano(),
 			executionTimestamp.UnixNano(),
 			runTimeout,
 			task.GetTaskId(),
@@ -709,7 +711,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 		task.GetWorkflowId(),
 		task.GetRunId(),
 		wfTypeName,
-		startTimestamp,
+		startTimestamp.UnixNano(),
 		executionTimestamp.UnixNano(),
 		runTimeout,
 		task.GetTaskId(),
@@ -851,7 +853,7 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 			namespace := initiatedAttributes.Namespace
 			initiatedEventID := task.GetScheduleId()
 			ci, ok := mutableState.GetChildExecutionInfo(initiatedEventID)
-			if !ok || ci.StartedID != common.EmptyEventID {
+			if !ok || ci.StartedId != common.EmptyEventID {
 				return serviceerror.NewNotFound("Pending child execution not found.")
 			}
 
@@ -884,7 +886,7 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 
 			initiatedEventID := task.GetScheduleId()
 			ci, ok := mutableState.GetChildExecutionInfo(initiatedEventID)
-			if !ok || ci.StartedID != common.EmptyEventID {
+			if !ok || ci.StartedId != common.EmptyEventID {
 				return serviceerror.NewNotFound("Pending child execution not found.")
 			}
 
@@ -1189,32 +1191,31 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 	task *persistenceblobs.TransferTaskInfo,
 	namespace string,
 	targetNamespace string,
-	childInfo *persistence.ChildExecutionInfo,
+	childInfo *persistenceblobs.ChildExecutionInfo,
 	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 ) (string, error) {
+	request := common.CreateHistoryStartWorkflowRequest(
+		task.GetTargetNamespaceId(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			Namespace:                targetNamespace,
+			WorkflowId:               attributes.WorkflowId,
+			WorkflowType:             attributes.WorkflowType,
+			TaskQueue:                attributes.TaskQueue,
+			Input:                    attributes.Input,
+			Header:                   attributes.Header,
+			WorkflowExecutionTimeout: attributes.WorkflowExecutionTimeout,
+			WorkflowRunTimeout:       attributes.WorkflowRunTimeout,
+			WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
 
-	now := t.shard.GetTimeSource().Now()
-	request := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId: task.GetTargetNamespaceId(),
-		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                       targetNamespace,
-			WorkflowId:                      attributes.WorkflowId,
-			WorkflowType:                    attributes.WorkflowType,
-			TaskQueue:                       attributes.TaskQueue,
-			Input:                           attributes.Input,
-			Header:                          attributes.Header,
-			WorkflowExecutionTimeoutSeconds: attributes.WorkflowExecutionTimeoutSeconds,
-			WorkflowRunTimeoutSeconds:       attributes.WorkflowRunTimeoutSeconds,
-			WorkflowTaskTimeoutSeconds:      attributes.WorkflowTaskTimeoutSeconds,
 			// Use the same request ID to dedupe StartWorkflowExecution calls
-			RequestId:             childInfo.CreateRequestID,
+			RequestId:             childInfo.CreateRequestId,
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
 			RetryPolicy:           attributes.RetryPolicy,
 			CronSchedule:          attributes.CronSchedule,
 			Memo:                  attributes.Memo,
 			SearchAttributes:      attributes.SearchAttributes,
 		},
-		ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
+		&workflowspb.ParentExecutionInfo{
 			NamespaceId: task.GetNamespaceId(),
 			Namespace:   namespace,
 			Execution: &commonpb.WorkflowExecution{
@@ -1223,14 +1224,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 			},
 			InitiatedId: task.GetScheduleId(),
 		},
-		FirstWorkflowTaskBackoffSeconds: backoff.GetBackoffForNextScheduleInSeconds(
-			attributes.GetCronSchedule(),
-			now,
-			now,
-		),
-		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
-		Attempt:                1,
-	}
+		t.shard.GetTimeSource().Now(),
+	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
@@ -1348,7 +1343,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	namespaceID string,
 	namespace string,
-	childInfos map[int64]*persistence.ChildExecutionInfo,
+	childInfos map[int64]*persistenceblobs.ChildExecutionInfo,
 ) error {
 
 	if len(childInfos) == 0 {
@@ -1367,8 +1362,8 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 			}
 
 			executions = append(executions, parentclosepolicy.RequestDetail{
-				WorkflowID: childInfo.StartedWorkflowID,
-				RunID:      childInfo.StartedRunID,
+				WorkflowID: childInfo.StartedWorkflowId,
+				RunID:      childInfo.StartedRunId,
 				Policy:     childInfo.ParentClosePolicy,
 			})
 		}
@@ -1404,7 +1399,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	namespaceID string,
 	namespace string,
-	childInfo *persistence.ChildExecutionInfo,
+	childInfo *persistenceblobs.ChildExecutionInfo,
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
@@ -1421,11 +1416,13 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 				Namespace: namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: childInfo.StartedWorkflowID,
-					RunId:      childInfo.StartedRunID,
+					WorkflowId: childInfo.StartedWorkflowId,
 				},
-				Reason:   "by parent close policy",
-				Identity: identityHistoryService,
+				// Include StartedRunID as FirstExecutionRunID on the request to allow child to be terminated across runs.
+				// If the child does continue as new it still propagates the RunID of first execution.
+				FirstExecutionRunId: childInfo.StartedRunId,
+				Reason:              "by parent close policy",
+				Identity:            identityHistoryService,
 			},
 		})
 		return err
@@ -1436,10 +1433,12 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 				Namespace: namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: childInfo.StartedWorkflowID,
-					RunId:      childInfo.StartedRunID,
+					WorkflowId: childInfo.StartedWorkflowId,
 				},
-				Identity: identityHistoryService,
+				// Include StartedRunID as FirstExecutionRunID on the request to allow child to be canceled across runs.
+				// If the child does continue as new it still propagates the RunID of first execution.
+				FirstExecutionRunId: childInfo.StartedRunId,
+				Identity:            identityHistoryService,
 			},
 		})
 		return err

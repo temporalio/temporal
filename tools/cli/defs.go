@@ -81,8 +81,8 @@ var envKeysForUserName = []string{
 }
 
 var resetTypesMap = map[string]string{
-	"FirstWorkflowTaskCompleted": "",
-	"LastWorkflowTaskCompleted":  "",
+	"FirstWorkflowTask": "",
+	"LastWorkflowTask":  "",
 	"LastContinuedAsNew":         "",
 	"BadBinary":                  FlagResetBadBinaryChecksum,
 }

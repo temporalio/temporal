@@ -130,7 +130,7 @@ func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRe
 		request.ExecutionTimestamp,
 		request.TaskID,
 		request.Memo.Data,
-		request.Memo.GetEncoding(),
+		request.Memo.Encoding,
 		request.SearchAttributes,
 	)
 	return v.producer.Publish(msg)
@@ -151,7 +151,7 @@ func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRec
 		request.TaskID,
 		request.Memo.Data,
 		request.TaskQueue,
-		request.Memo.GetEncoding(),
+		request.Memo.Encoding,
 		request.SearchAttributes,
 	)
 	return v.producer.Publish(msg)
@@ -169,7 +169,7 @@ func (v *esVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWor
 		request.ExecutionTimestamp,
 		request.TaskID,
 		request.Memo.Data,
-		request.Memo.GetEncoding(),
+		request.Memo.Encoding,
 		request.SearchAttributes,
 	)
 	return v.producer.Publish(msg)
@@ -879,15 +879,15 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 		WorkflowID:       source.WorkflowID,
 		RunID:            source.RunID,
 		TypeName:         source.WorkflowType,
-		StartTime:        time.Unix(0, source.StartTime),
-		ExecutionTime:    time.Unix(0, source.ExecutionTime),
-		Memo:             p.NewDataBlob(source.Memo, common.EncodingType(source.Encoding)),
+		StartTime:        time.Unix(0, source.StartTime).UTC(),
+		ExecutionTime:    time.Unix(0, source.ExecutionTime).UTC(),
+		Memo:             p.NewDataBlob(source.Memo, source.Encoding),
 		TaskQueue:        source.TaskQueue,
 		SearchAttributes: source.Attr,
 		Status:           source.ExecutionStatus,
 	}
 	if source.CloseTime != 0 {
-		record.CloseTime = time.Unix(0, source.CloseTime)
+		record.CloseTime = time.Unix(0, source.CloseTime).UTC()
 		record.HistoryLength = source.HistoryLength
 	}
 
@@ -895,7 +895,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 }
 
 func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string, taskQueue string,
-	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding common.EncodingType,
+	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding enumspb.EncodingType,
 	searchAttributes map[string]*commonpb.Payload) *indexerspb.Message {
 
 	msgType := enumsspb.MESSAGE_TYPE_INDEX
@@ -907,7 +907,7 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 	}
 	if len(memo) != 0 {
 		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
-		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: string(encoding)}}
+		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: encoding.String()}}
 	}
 	for k, v := range searchAttributes {
 		// TODO: current implementation assumes that payload is JSON.
@@ -929,7 +929,7 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 
 func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, workflowTypeName string,
 	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, status enumspb.WorkflowExecutionStatus,
-	historyLength int64, taskID int64, memo []byte, taskQueue string, encoding common.EncodingType,
+	historyLength int64, taskID int64, memo []byte, taskQueue string, encoding enumspb.EncodingType,
 	searchAttributes map[string]*commonpb.Payload) *indexerspb.Message {
 
 	msgType := enumsspb.MESSAGE_TYPE_INDEX
@@ -944,7 +944,7 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 	}
 	if len(memo) != 0 {
 		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
-		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: string(encoding)}}
+		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: encoding.String()}}
 	}
 	for k, v := range searchAttributes {
 		// TODO: current implementation assumes that payload is JSON.

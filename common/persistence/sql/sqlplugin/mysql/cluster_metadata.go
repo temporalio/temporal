@@ -46,9 +46,11 @@ VALUES(?, ?, ?)`
 cluster_metadata WHERE metadata_partition = ?`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
-	templateUpsertActiveClusterMembership = `REPLACE INTO
+	templateUpsertActiveClusterMembership = `INSERT INTO
 cluster_membership (membership_partition, host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?)`
+VALUES(?, ?, ?, ?, ?, ?, ?, ?) 
+ON DUPLICATE KEY UPDATE 
+session_start=VALUES(session_start), last_heartbeat=VALUES(last_heartbeat), record_expiry=VALUES(record_expiry)`
 
 	templatePruneStaleClusterMembership = `DELETE FROM
 cluster_membership 

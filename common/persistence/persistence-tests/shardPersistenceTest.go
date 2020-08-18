@@ -27,15 +27,14 @@ package persistencetests
 import (
 	"os"
 	"testing"
-	"time"
 
-	"github.com/gogo/protobuf/types"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -126,8 +125,8 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	updatedInfo.TransferAckLevel = updatedTransferAckLevel
 	updatedInfo.ReplicationAckLevel = updatedReplicationAckLevel
 	updatedInfo.StolenSinceRenew = updatedStolenSinceRenew
-	updatedTimerAckLevel := time.Now()
-	updatedInfo.TimerAckLevelTime, _ = types.TimestampProto(updatedTimerAckLevel)
+	updatedTimerAckLevel := timestamp.TimeNowPtrUtc()
+	updatedInfo.TimerAckLevelTime = updatedTimerAckLevel
 	err2 := s.UpdateShard(updatedInfo, shardInfo.GetRangeId())
 	s.Nil(err2)
 
@@ -139,8 +138,8 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	s.Equal(updatedTransferAckLevel, info1.TransferAckLevel)
 	s.Equal(updatedReplicationAckLevel, info1.ReplicationAckLevel)
 	s.Equal(updatedStolenSinceRenew, info1.StolenSinceRenew)
-	info1timerAckLevelTime, _ := types.TimestampFromProto(info1.TimerAckLevelTime)
-	s.EqualTimes(updatedTimerAckLevel, info1timerAckLevelTime)
+	info1timerAckLevelTime := info1.TimerAckLevelTime
+	s.EqualTimes(*updatedTimerAckLevel, *info1timerAckLevelTime)
 
 	failedUpdateInfo := copyShardInfo(shardInfo)
 	failedUpdateInfo.Owner = "failed_owner"
@@ -160,8 +159,8 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	s.Equal(updatedReplicationAckLevel, info2.ReplicationAckLevel)
 	s.Equal(updatedStolenSinceRenew, info2.StolenSinceRenew)
 
-	info1timerAckLevelTime, _ = types.TimestampFromProto(info1.TimerAckLevelTime)
-	s.EqualTimes(updatedTimerAckLevel, info1timerAckLevelTime)
+	info1timerAckLevelTime = info1.TimerAckLevelTime
+	s.EqualTimes(*updatedTimerAckLevel, *info1timerAckLevelTime)
 }
 
 func copyShardInfo(sourceInfo *persistenceblobs.ShardInfo) *persistenceblobs.ShardInfo {

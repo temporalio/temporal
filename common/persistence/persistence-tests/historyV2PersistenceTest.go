@@ -37,11 +37,11 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/convert"
 	p "go.temporal.io/server/common/persistence"
@@ -694,9 +694,9 @@ func (s *HistoryV2PersistenceSuite) getIDByKey(m sync.Map, k int) int64 {
 func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version int64) []*historypb.HistoryEvent {
 	var events []*historypb.HistoryEvent
 
-	timestamp := time.Now().UnixNano()
+	now := time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)
 	for _, eid := range eventIDs {
-		e := &historypb.HistoryEvent{EventId: eid, Version: version, Timestamp: timestamp}
+		e := &historypb.HistoryEvent{EventId: eid, Version: version, EventTime: &now}
 		events = append(events, e)
 	}
 
@@ -811,7 +811,7 @@ func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*historypb.Hi
 			BranchToken:   branch,
 			Events:        events,
 			TransactionID: txnID,
-			Encoding:      common.EncodingTypeProto3,
+			Encoding:      enumspb.ENCODING_TYPE_PROTO3,
 			ShardID:       convert.IntPtr(int(s.ShardInfo.GetShardId())),
 		})
 		return err

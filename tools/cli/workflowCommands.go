@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history"
 )
 
@@ -143,9 +144,9 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 			columns = append(columns, strconv.FormatInt(e.GetEventId(), 10))
 
 			if printRawTime {
-				columns = append(columns, strconv.FormatInt(e.GetTimestamp(), 10))
+				columns = append(columns, strconv.FormatInt(timestamp.TimeValue(e.GetEventTime()).UnixNano(), 10))
 			} else if printDateTime {
-				columns = append(columns, convertTime(e.GetTimestamp(), false))
+				columns = append(columns, formatTime(timestamp.TimeValue(e.GetEventTime()), false))
 			}
 			if printVersion {
 				columns = append(columns, fmt.Sprintf("(Version: %v)", e.Version))
@@ -215,11 +216,11 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		Input:                           input,
-		WorkflowExecutionTimeoutSeconds: int32(et),
-		WorkflowTaskTimeoutSeconds:      int32(dt),
-		Identity:                        getCliIdentity(),
-		WorkflowIdReusePolicy:           reusePolicy,
+		Input:                    input,
+		WorkflowExecutionTimeout: timestamp.DurationPtr(time.Duration(et) * time.Second),
+		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(dt) * time.Second),
+		Identity:                 getCliIdentity(),
+		WorkflowIdReusePolicy:    reusePolicy,
 	}
 	if c.IsSet(FlagCronSchedule) {
 		startRequest.CronSchedule = c.String(FlagCronSchedule)
@@ -322,10 +323,11 @@ func processMemo(c *cli.Context) map[string]*commonpb.Payload {
 		memoKeys = strings.Split(rawMemoKey, " ")
 	}
 
-	rawMemoValue := string(processJSONInputHelper(c, jsonTypeMemo))
-	if rawMemoValue == "" {
+	jsonsRaw := readJSONInputs(c, jsonTypeMemo)
+	if len(jsonsRaw) == 0 {
 		return nil
 	}
+	rawMemoValue := string(jsonsRaw[0]) // StringFlag may contain up to one json
 
 	if err := validateJSONs(rawMemoValue); err != nil {
 		ErrorAndExit("Input is not valid JSON, or JSONs concatenated with spaces/newlines.", err)
@@ -408,9 +410,9 @@ func printWorkflowProgress(c *cli.Context, wid, rid string) {
 				isTimeElapseExist = false
 			}
 			if showDetails {
-				fmt.Printf("  %d, %s, %s, %s\n", event.GetEventId(), convertTime(event.GetTimestamp(), false), ColorEvent(event), HistoryEventToString(event, true, maxFieldLength))
+				fmt.Printf("  %d, %s, %s, %s\n", event.GetEventId(), formatTime(timestamp.TimeValue(event.GetEventTime()), false), ColorEvent(event), HistoryEventToString(event, true, maxFieldLength))
 			} else {
-				fmt.Printf("  %d, %s, %s\n", event.GetEventId(), convertTime(event.GetTimestamp(), false), ColorEvent(event))
+				fmt.Printf("  %d, %s, %s\n", event.GetEventId(), formatTime(timestamp.TimeValue(event.GetEventTime()), false), ColorEvent(event))
 			}
 			lastEvent = event
 		}
@@ -874,7 +876,7 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 		for _, pt := range resp.WorkflowExecutionInfo.AutoResetPoints.Points {
 			var row []string
 			row = append(row, pt.GetBinaryChecksum())
-			row = append(row, time.Unix(0, pt.GetCreateTimeNano()).String())
+			row = append(row, timestamp.TimeValue(pt.GetCreateTime()).String())
 			row = append(row, pt.GetRunId())
 			row = append(row, strconv.FormatInt(pt.GetFirstWorkflowTaskCompletedId(), 10))
 			table.Append(row)
@@ -890,8 +892,8 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 	executionInfo := &clispb.WorkflowExecutionInfo{
 		Execution:         info.GetExecution(),
 		Type:              info.GetType(),
-		CloseTime:         convertTime(info.GetCloseTime().GetValue(), false),
-		StartTime:         convertTime(info.GetStartTime().GetValue(), false),
+		CloseTime:         info.GetCloseTime(),
+		StartTime:         info.GetStartTime(),
 		Status:            info.GetStatus(),
 		HistoryLength:     info.GetHistoryLength(),
 		ParentNamespaceId: info.GetParentNamespaceId(),
@@ -905,17 +907,17 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 	var tmpAct *clispb.PendingActivityInfo
 	for _, pa := range resp.PendingActivities {
 		tmpAct = &clispb.PendingActivityInfo{
-			ActivityId:             pa.GetActivityId(),
-			ActivityType:           pa.GetActivityType(),
-			State:                  pa.GetState(),
-			ScheduledTimestamp:     convertTime(pa.GetScheduledTimestamp(), false),
-			LastStartedTimestamp:   convertTime(pa.GetLastStartedTimestamp(), false),
-			LastHeartbeatTimestamp: convertTime(pa.GetLastHeartbeatTimestamp(), false),
-			Attempt:                pa.GetAttempt(),
-			MaximumAttempts:        pa.GetMaximumAttempts(),
-			ExpirationTimestamp:    convertTime(pa.GetExpirationTimestamp(), false),
-			LastFailure:            convertFailure(pa.GetLastFailure()),
-			LastWorkerIdentity:     pa.GetLastWorkerIdentity(),
+			ActivityId:         pa.GetActivityId(),
+			ActivityType:       pa.GetActivityType(),
+			State:              pa.GetState(),
+			ScheduledTime:      pa.GetScheduledTime(),
+			LastStartedTime:    pa.GetLastStartedTime(),
+			LastHeartbeatTime:  pa.GetLastHeartbeatTime(),
+			Attempt:            pa.GetAttempt(),
+			MaximumAttempts:    pa.GetMaximumAttempts(),
+			ExpirationTime:     pa.GetExpirationTime(),
+			LastFailure:        convertFailure(pa.GetLastFailure()),
+			LastWorkerIdentity: pa.GetLastWorkerIdentity(),
 		}
 
 		if pa.HeartbeatDetails != nil {
@@ -1006,8 +1008,8 @@ func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *t
 func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func([]byte) ([]byte, int) {
 	wfClient := getWorkflowClient(c)
 
-	earliestTime := parseTime(c.String(FlagEarliestTime), 0, time.Now())
-	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UnixNano(), time.Now())
+	earliestTime := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now().UTC())
+	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UTC(), time.Now().UTC())
 	workflowID := c.String(FlagWorkflowID)
 	workflowType := c.String(FlagWorkflowType)
 	printRawTime := c.Bool(FlagPrintRawTime)
@@ -1072,13 +1074,13 @@ func appendWorkflowExecutionsToTable(
 	for _, e := range executions {
 		var startTime, executionTime, closeTime string
 		if printRawTime {
-			startTime = fmt.Sprintf("%d", e.GetStartTime().GetValue())
-			executionTime = fmt.Sprintf("%d", e.GetExecutionTime())
-			closeTime = fmt.Sprintf("%d", e.GetCloseTime().GetValue())
+			startTime = fmt.Sprintf("%v", timestamp.TimeValue(e.GetStartTime()))
+			executionTime = fmt.Sprintf("%v", e.GetExecutionTime())
+			closeTime = fmt.Sprintf("%v", timestamp.TimeValue(e.GetCloseTime()))
 		} else {
-			startTime = convertTime(e.GetStartTime().GetValue(), !printDateTime)
-			executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
-			closeTime = convertTime(e.GetCloseTime().GetValue(), !printDateTime)
+			startTime = formatTime(timestamp.TimeValue(e.GetStartTime()), !printDateTime)
+			executionTime = formatTime(timestamp.TimeValue(e.GetExecutionTime()), !printDateTime)
+			closeTime = formatTime(timestamp.TimeValue(e.GetCloseTime()), !printDateTime)
 		}
 		row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), e.GetTaskQueue(), startTime, executionTime}
 		if !queryOpen {
@@ -1146,15 +1148,15 @@ func listWorkflowExecutions(client client.Client, pageSize int, nextPageToken []
 	return response.Executions, response.NextPageToken
 }
 
-func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string,
+func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTime time.Time, workflowID, workflowType string,
 	nextPageToken []byte, c *cli.Context) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
 
 	request := &workflowservice.ListOpenWorkflowExecutionsRequest{
 		MaximumPageSize: int32(pageSize),
 		NextPageToken:   nextPageToken,
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: earliestTime,
-			LatestTime:   latestTime,
+			EarliestTime: &earliestTime,
+			LatestTime:   &latestTime,
 		},
 	}
 	if len(workflowID) > 0 {
@@ -1174,15 +1176,15 @@ func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTi
 	return response.Executions, response.NextPageToken
 }
 
-func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string,
+func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latestTime time.Time, workflowID, workflowType string,
 	workflowStatus enumspb.WorkflowExecutionStatus, nextPageToken []byte, c *cli.Context) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
 
 	request := &workflowservice.ListClosedWorkflowExecutionsRequest{
 		MaximumPageSize: int32(pageSize),
 		NextPageToken:   nextPageToken,
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: earliestTime,
-			LatestTime:   latestTime,
+			EarliestTime: &earliestTime,
+			LatestTime:   &latestTime,
 		},
 	}
 	if len(workflowID) > 0 {
@@ -1207,8 +1209,8 @@ func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latest
 func getListResultInRaw(c *cli.Context, queryOpen bool, nextPageToken []byte) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
 	wfClient := getWorkflowClient(c)
 
-	earliestTime := parseTime(c.String(FlagEarliestTime), 0, time.Now())
-	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UnixNano(), time.Now())
+	earliestTime := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now().UTC())
+	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UTC(), time.Now().UTC())
 	workflowID := c.String(FlagWorkflowID)
 	workflowType := c.String(FlagWorkflowType)
 	pageSize := c.Int(FlagPageSize)
@@ -1292,13 +1294,13 @@ func scanWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 		for _, e := range result {
 			var startTime, executionTime, closeTime string
 			if printRawTime {
-				startTime = fmt.Sprintf("%d", e.GetStartTime().GetValue())
-				executionTime = fmt.Sprintf("%d", e.GetExecutionTime())
-				closeTime = fmt.Sprintf("%d", e.GetCloseTime().GetValue())
+				startTime = fmt.Sprintf("%v", timestamp.TimeValue(e.GetStartTime()))
+				executionTime = fmt.Sprintf("%v", e.GetExecutionTime())
+				closeTime = fmt.Sprintf("%v", timestamp.TimeValue(e.GetCloseTime()))
 			} else {
-				startTime = convertTime(e.GetStartTime().GetValue(), !printDateTime)
-				executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
-				closeTime = convertTime(e.GetCloseTime().GetValue(), !printDateTime)
+				startTime = formatTime(timestamp.TimeValue(e.GetStartTime()), !printDateTime)
+				executionTime = formatTime(timestamp.TimeValue(e.GetExecutionTime()), !printDateTime)
+				closeTime = formatTime(timestamp.TimeValue(e.GetCloseTime()), !printDateTime)
 			}
 			row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), startTime, executionTime}
 			if !queryOpen {
@@ -1359,16 +1361,16 @@ func ObserveHistory(c *cli.Context) {
 func ResetWorkflow(c *cli.Context) {
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	wid := getRequiredOption(c, FlagWorkflowID)
-	rid := getRequiredOption(c, FlagRunID)
 	reason := getRequiredOption(c, FlagReason)
 	if len(reason) == 0 {
 		ErrorAndExit("wrong reason", fmt.Errorf("reason cannot be empty"))
 	}
+	rid := c.String(FlagRunID)
 	eventID := c.Int64(FlagEventID)
 	resetType := c.String(FlagResetType)
 	extraForResetType, ok := resetTypesMap[resetType]
 	if !ok && eventID <= 0 {
-		ErrorAndExit("Must specify valid eventId or valid resetType", nil)
+		ErrorAndExit(fmt.Sprintf("must specify either valid event_id or reset_type (one of %s)", strings.Join(mapKeysToArray(resetTypesMap), ", ")), nil)
 	}
 	if ok && len(extraForResetType) > 0 {
 		getRequiredOption(c, extraForResetType)
@@ -1712,7 +1714,7 @@ func isLastEventWorkflowTaskFailedWithNonDeterminism(ctx context.Context, namesp
 
 		if attr.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE ||
 			strings.Contains(attr.GetFailure().GetMessage(), "nondeterministic") {
-			fmt.Printf("found non determnistic workflow wid:%v, rid:%v, orignalStartTime:%v \n", wid, rid, time.Unix(0, firstEvent.GetTimestamp()))
+			fmt.Printf("found non determnistic workflow wid:%v, rid:%v, orignalStartTime:%v \n", wid, rid, timestamp.TimeValue(firstEvent.GetEventTime()))
 			return true, nil
 		}
 	}
@@ -1723,8 +1725,8 @@ func isLastEventWorkflowTaskFailedWithNonDeterminism(ctx context.Context, namesp
 func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskFinishID int64, err error) {
 	fmt.Println("resetType:", resetType)
 	switch resetType {
-	case "LastWorkflowTaskCompleted":
-		resetBaseRunID, workflowTaskFinishID, err = getLastWorkflowTaskCompletedID(ctx, namespace, wid, rid, frontendClient)
+	case "LastWorkflowTask":
+		resetBaseRunID, workflowTaskFinishID, err = getLastWorkflowTaskEventID(ctx, namespace, wid, rid, frontendClient)
 		if err != nil {
 			return
 		}
@@ -1733,8 +1735,8 @@ func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, names
 		if err != nil {
 			return
 		}
-	case "FirstWorkflowTaskCompleted":
-		resetBaseRunID, workflowTaskFinishID, err = getFirstWorkflowTaskCompletedID(ctx, namespace, wid, rid, frontendClient)
+	case "FirstWorkflowTask":
+		resetBaseRunID, workflowTaskFinishID, err = getFirstWorkflowTaskEventID(ctx, namespace, wid, rid, frontendClient)
 		if err != nil {
 			return
 		}
@@ -1750,7 +1752,8 @@ func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, names
 	return
 }
 
-func getLastWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskCompletedID int64, err error) {
+// Returns event id of the last completed task or id of the next event after scheduled task.
+func getLastWorkflowTaskEventID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskEventID int64, err error) {
 	resetBaseRunID = rid
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
@@ -1769,7 +1772,9 @@ func getLastWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid str
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
 			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-				workflowTaskCompletedID = e.GetEventId()
+				workflowTaskEventID = e.GetEventId()
+			} else if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+				workflowTaskEventID = e.GetEventId() + 1
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
@@ -1778,8 +1783,8 @@ func getLastWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid str
 			break
 		}
 	}
-	if workflowTaskCompletedID == 0 {
-		return "", 0, printErrorAndReturn("Get LastWorkflowTaskCompletedID failed", fmt.Errorf("no WorkflowTaskCompletedID"))
+	if workflowTaskEventID == 0 {
+		return "", 0, printErrorAndReturn("Get LastWorkflowTaskID failed", fmt.Errorf("unable to find any scheduled or completed task"))
 	}
 	return
 }
@@ -1812,7 +1817,8 @@ func getBadWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid, bin
 	return
 }
 
-func getFirstWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskCompletedID int64, err error) {
+// Returns id of the first workflow task completed event or if it doesn't exist then id of the event after task scheduled event.
+func getFirstWorkflowTaskEventID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskEventID int64, err error) {
 	resetBaseRunID = rid
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
@@ -1823,7 +1829,6 @@ func getFirstWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid st
 		MaximumPageSize: 1000,
 		NextPageToken:   nil,
 	}
-
 	for {
 		resp, err := frontendClient.GetWorkflowExecutionHistory(ctx, req)
 		if err != nil {
@@ -1831,8 +1836,13 @@ func getFirstWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid st
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
 			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-				workflowTaskCompletedID = e.GetEventId()
-				return resetBaseRunID, workflowTaskCompletedID, nil
+				workflowTaskEventID = e.GetEventId()
+				return resetBaseRunID, workflowTaskEventID, nil
+			}
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+				if workflowTaskEventID == 0 {
+					workflowTaskEventID = e.GetEventId() + 1
+				}
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
@@ -1841,8 +1851,8 @@ func getFirstWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid st
 			break
 		}
 	}
-	if workflowTaskCompletedID == 0 {
-		return "", 0, printErrorAndReturn("Get FirstWorkflowTaskCompletedID failed", fmt.Errorf("no WorkflowTaskCompletedID"))
+	if workflowTaskEventID == 0 {
+		return "", 0, printErrorAndReturn("Get FirstWorkflowTaskID failed", fmt.Errorf("unable to find any scheduled or completed task"))
 	}
 	return
 }

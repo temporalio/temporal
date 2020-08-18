@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -147,7 +148,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -195,7 +196,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -245,7 +246,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -293,27 +294,25 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 
 	activityVersion := int64(333)
 	activityScheduleID := scheduleID
-	activityScheduledTime := time.Now()
+	activityScheduledTime := time.Now().UTC()
 	activityStartedID := common.EmptyEventID
-	activityStartedTime := time.Time{}
-	activityHeartbeatTime := time.Time{}
 	activityAttempt := int32(16384)
 	activityDetails := payloads.EncodeString("some random activity progress")
 	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistence.ActivityInfo{
-		Version:                  activityVersion,
-		ScheduleID:               activityScheduleID,
-		ScheduledTime:            activityScheduledTime,
-		StartedID:                activityStartedID,
-		StartedTime:              activityStartedTime,
-		LastHeartBeatUpdatedTime: activityHeartbeatTime,
-		Details:                  activityDetails,
-		Attempt:                  activityAttempt,
-		LastFailure:              activityLastFailure,
-		LastWorkerIdentity:       activityLastWorkerIdentity,
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistenceblobs.ActivityInfo{
+		Version:                 activityVersion,
+		ScheduleId:              activityScheduleID,
+		ScheduledTime:           &activityScheduledTime,
+		StartedId:               activityStartedID,
+		StartedTime:             nil,
+		LastHeartbeatUpdateTime: nil,
+		LastHeartbeatDetails:    activityDetails,
+		Attempt:                 activityAttempt,
+		RetryLastFailure:        activityLastFailure,
+		RetryLastWorkerIdentity: activityLastWorkerIdentity,
 	}, true).AnyTimes()
 	versionHistory := &persistence.VersionHistory{
 		BranchToken: []byte{},
@@ -333,7 +332,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -354,10 +353,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 				RunId:              runID,
 				Version:            activityVersion,
 				ScheduledId:        activityScheduleID,
-				ScheduledTime:      activityScheduledTime.UnixNano(),
+				ScheduledTime:      &activityScheduledTime,
 				StartedId:          activityStartedID,
-				StartedTime:        0,
-				LastHeartbeatTime:  activityHeartbeatTime.UnixNano(),
+				StartedTime:        nil,
+				LastHeartbeatTime:  nil,
 				Details:            activityDetails,
 				Attempt:            activityAttempt,
 				LastFailure:        activityLastFailure,
@@ -403,7 +402,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 
 	activityVersion := int64(333)
 	activityScheduleID := scheduleID
-	activityScheduledTime := time.Now()
+	activityScheduledTime := timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC))
 	activityStartedID := activityScheduleID + 1
 	activityStartedTime := activityScheduledTime.Add(time.Minute)
 	activityHeartbeatTime := activityStartedTime.Add(time.Minute)
@@ -413,17 +412,17 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	activityLastWorkerIdentity := "some random worker identity"
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistence.ActivityInfo{
-		Version:                  activityVersion,
-		ScheduleID:               activityScheduleID,
-		ScheduledTime:            activityScheduledTime,
-		StartedID:                activityStartedID,
-		StartedTime:              activityStartedTime,
-		LastHeartBeatUpdatedTime: activityHeartbeatTime,
-		Details:                  activityDetails,
-		Attempt:                  activityAttempt,
-		LastFailure:              activityLastFailure,
-		LastWorkerIdentity:       activityLastWorkerIdentity,
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistenceblobs.ActivityInfo{
+		Version:                 activityVersion,
+		ScheduleId:              activityScheduleID,
+		ScheduledTime:           activityScheduledTime,
+		StartedId:               activityStartedID,
+		StartedTime:             &activityStartedTime,
+		LastHeartbeatUpdateTime: &activityHeartbeatTime,
+		LastHeartbeatDetails:    activityDetails,
+		Attempt:                 activityAttempt,
+		RetryLastFailure:        activityLastFailure,
+		RetryLastWorkerIdentity: activityLastWorkerIdentity,
 	}, true).AnyTimes()
 	versionHistory := &persistence.VersionHistory{
 		BranchToken: []byte{},
@@ -443,7 +442,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -463,10 +462,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 				RunId:              runID,
 				Version:            activityVersion,
 				ScheduledId:        activityScheduleID,
-				ScheduledTime:      activityScheduledTime.UnixNano(),
+				ScheduledTime:      activityScheduledTime,
 				StartedId:          activityStartedID,
-				StartedTime:        activityStartedTime.UnixNano(),
-				LastHeartbeatTime:  activityHeartbeatTime.UnixNano(),
+				StartedTime:        &activityStartedTime,
+				LastHeartbeatTime:  &activityHeartbeatTime,
 				Details:            activityDetails,
 				Attempt:            activityAttempt,
 				LastFailure:        activityLastFailure,

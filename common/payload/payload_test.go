@@ -42,7 +42,7 @@ func TestToString(t *testing.T) {
 
 	p := EncodeString("str")
 	result = ToString(p)
-	assert.Equal("\"str\"", result)
+	assert.Equal("str", result)
 
 	p, err := Encode(10)
 	assert.NoError(err)
@@ -52,7 +52,7 @@ func TestToString(t *testing.T) {
 	p, err = Encode([]byte{41, 42, 43})
 	assert.NoError(err)
 	result = ToString(p)
-	assert.Equal(")*+", result)
+	assert.Equal("KSor", result)
 
 	p, err = Encode(&testStruct{
 		Int:    10,
@@ -61,12 +61,12 @@ func TestToString(t *testing.T) {
 	})
 	assert.NoError(err)
 	result = ToString(p)
-	assert.Equal(`{"Int":10,"String":"str","Bytes":"MzQ1"}`, result)
+	assert.Equal(`{Bytes:MzQ1 Int:10 String:str}`, result)
 
 	p, err = Encode(nil)
 	assert.NoError(err)
 	result = ToString(p)
-	assert.Equal("null", result)
+	assert.Equal("nil", result)
 
 	result = ToString(nil)
 	assert.Equal("", result)

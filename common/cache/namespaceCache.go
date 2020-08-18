@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // ReplicationPolicy is the namespace's replication policy,
@@ -265,6 +266,7 @@ func (c *namespaceCache) Start() {
 
 // Start start the background refresh of namespace
 func (c *namespaceCache) Stop() {
+
 	if !atomic.CompareAndSwapInt32(&c.status, namespaceCacheStarted, namespaceCacheStopped) {
 		return
 	}
@@ -398,12 +400,11 @@ func (c *namespaceCache) refreshLoop() {
 			return
 		case <-timer.C:
 			for err := c.refreshNamespaces(); err != nil; err = c.refreshNamespaces() {
-				select {
-				case <-c.shutdownChan:
+				c.logger.Error("Error refreshing namespace cache", tag.Error(err))
+				time.Sleep(NamespaceCacheRefreshFailureRetryInterval)
+
+				if _, opened := <-c.shutdownChan; !opened {
 					return
-				default:
-					c.logger.Error("Error refreshing namespace cache", tag.Error(err))
-					time.Sleep(NamespaceCacheRefreshFailureRetryInterval)
 				}
 			}
 		}
@@ -808,13 +809,18 @@ func (entry *NamespaceCacheEntry) GetRetentionDays(
 	if entry.IsSampledForLongerRetention(workflowID) {
 		if sampledRetentionValue, ok := entry.info.Data[SampleRetentionKey]; ok {
 			sampledRetentionDays, err := strconv.Atoi(sampledRetentionValue)
-			if err != nil || sampledRetentionDays < int(entry.config.RetentionDays) {
-				return entry.config.RetentionDays
+			if err != nil || sampledRetentionDays < timestamp.DaysFromDuration(entry.config.Retention) {
+				return timestamp.DaysInt32FromDuration(entry.config.Retention)
 			}
 			return int32(sampledRetentionDays)
 		}
 	}
-	return entry.config.RetentionDays
+
+	if entry.config.Retention == nil {
+		return 0
+	}
+
+	return timestamp.DaysInt32FromDuration(entry.config.Retention)
 }
 
 // IsSampledForLongerRetentionEnabled return whether sample for longer retention is enabled or not

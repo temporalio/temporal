@@ -31,7 +31,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -158,10 +158,15 @@ func (t *timerSequenceImpl) createNextActivityTimer() (bool, error) {
 	}
 	// mark timer task mask as indication that timer task is generated
 	activityInfo.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.timerType)
+
+	var err error
 	if firstTimerTask.timerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-		activityInfo.LastHeartbeatTimeoutVisibilityInSeconds = firstTimerTask.timestamp.Unix()
+		err = t.mutableState.UpdateActivityWithTimerHeartbeat(activityInfo, firstTimerTask.timestamp)
+	} else {
+		err = t.mutableState.UpdateActivity(activityInfo)
 	}
-	if err := t.mutableState.UpdateActivity(activityInfo); err != nil {
+
+	if err != nil {
 		return false, err
 	}
 	t.mutableState.AddTimerTasks(&persistence.ActivityTimeoutTask{
@@ -169,7 +174,7 @@ func (t *timerSequenceImpl) createNextActivityTimer() (bool, error) {
 		VisibilityTimestamp: firstTimerTask.timestamp,
 		TimeoutType:         firstTimerTask.timerType,
 		EventID:             firstTimerTask.eventID,
-		Attempt:             int64(firstTimerTask.attempt),
+		Attempt:             firstTimerTask.attempt,
 		Version:             t.mutableState.GetCurrentVersion(),
 	})
 	return true, nil
@@ -234,11 +239,11 @@ func (t *timerSequenceImpl) getUserTimerTimeout(
 	timerInfo *persistenceblobs.TimerInfo,
 ) *timerSequenceID {
 
-	expiryTime, _ := types.TimestampFromProto(timerInfo.ExpiryTime)
+	expiryTime := timerInfo.ExpiryTime
 
 	return &timerSequenceID{
 		eventID:      timerInfo.GetStartedId(),
-		timestamp:    expiryTime,
+		timestamp:    timestamp.TimeValue(expiryTime),
 		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: timerInfo.TaskStatus == timerTaskStatusCreated,
 		attempt:      1,
@@ -246,25 +251,23 @@ func (t *timerSequenceImpl) getUserTimerTimeout(
 }
 
 func (t *timerSequenceImpl) getActivityScheduleToStartTimeout(
-	activityInfo *persistence.ActivityInfo,
+	activityInfo *persistenceblobs.ActivityInfo,
 ) *timerSequenceID {
 
 	// activity is not scheduled yet, probably due to retry & backoff
-	if activityInfo.ScheduleID == common.EmptyEventID {
+	if activityInfo.ScheduleId == common.EmptyEventID {
 		return nil
 	}
 
 	// activity is already started
-	if activityInfo.StartedID != common.EmptyEventID {
+	if activityInfo.StartedId != common.EmptyEventID {
 		return nil
 	}
 
-	startTimeout := activityInfo.ScheduledTime.Add(
-		time.Duration(activityInfo.ScheduleToStartTimeout) * time.Second,
-	)
+	startTimeout := timestamp.TimeValue(activityInfo.ScheduledTime).Add(timestamp.DurationValue(activityInfo.ScheduleToStartTimeout))
 
 	return &timerSequenceID{
-		eventID:      activityInfo.ScheduleID,
+		eventID:      activityInfo.ScheduleId,
 		timestamp:    startTimeout,
 		timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		timerCreated: (activityInfo.TimerTaskStatus & timerTaskStatusCreatedScheduleToStart) > 0,
@@ -273,20 +276,18 @@ func (t *timerSequenceImpl) getActivityScheduleToStartTimeout(
 }
 
 func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
-	activityInfo *persistence.ActivityInfo,
+	activityInfo *persistenceblobs.ActivityInfo,
 ) *timerSequenceID {
 
 	// activity is not scheduled yet, probably due to retry & backoff
-	if activityInfo.ScheduleID == common.EmptyEventID {
+	if activityInfo.ScheduleId == common.EmptyEventID {
 		return nil
 	}
 
-	closeTimeout := activityInfo.ScheduledTime.Add(
-		time.Duration(activityInfo.ScheduleToCloseTimeout) * time.Second,
-	)
+	closeTimeout := timestamp.TimeValue(activityInfo.ScheduledTime).Add(timestamp.DurationValue(activityInfo.ScheduleToCloseTimeout))
 
 	return &timerSequenceID{
-		eventID:      activityInfo.ScheduleID,
+		eventID:      activityInfo.ScheduleId,
 		timestamp:    closeTimeout,
 		timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		timerCreated: (activityInfo.TimerTaskStatus & timerTaskStatusCreatedScheduleToClose) > 0,
@@ -295,25 +296,23 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 }
 
 func (t *timerSequenceImpl) getActivityStartToCloseTimeout(
-	activityInfo *persistence.ActivityInfo,
+	activityInfo *persistenceblobs.ActivityInfo,
 ) *timerSequenceID {
 
 	// activity is not scheduled yet, probably due to retry & backoff
-	if activityInfo.ScheduleID == common.EmptyEventID {
+	if activityInfo.ScheduleId == common.EmptyEventID {
 		return nil
 	}
 
 	// activity is not started yet
-	if activityInfo.StartedID == common.EmptyEventID {
+	if activityInfo.StartedId == common.EmptyEventID {
 		return nil
 	}
 
-	closeTimeout := activityInfo.StartedTime.Add(
-		time.Duration(activityInfo.StartToCloseTimeout) * time.Second,
-	)
+	closeTimeout := timestamp.TimeValue(activityInfo.StartedTime).Add(timestamp.DurationValue(activityInfo.StartToCloseTimeout))
 
 	return &timerSequenceID{
-		eventID:      activityInfo.ScheduleID,
+		eventID:      activityInfo.ScheduleId,
 		timestamp:    closeTimeout,
 		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: (activityInfo.TimerTaskStatus & timerTaskStatusCreatedStartToClose) > 0,
@@ -322,36 +321,38 @@ func (t *timerSequenceImpl) getActivityStartToCloseTimeout(
 }
 
 func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
-	activityInfo *persistence.ActivityInfo,
+	activityInfo *persistenceblobs.ActivityInfo,
 ) *timerSequenceID {
 
 	// activity is not scheduled yet, probably due to retry & backoff
-	if activityInfo.ScheduleID == common.EmptyEventID {
+	if activityInfo.ScheduleId == common.EmptyEventID {
 		return nil
 	}
 
 	// activity is not started yet
-	if activityInfo.StartedID == common.EmptyEventID {
+	if activityInfo.StartedId == common.EmptyEventID {
 		return nil
 	}
 
 	// not heartbeat timeout configured
-	if activityInfo.HeartbeatTimeout <= 0 {
+	if activityInfo.HeartbeatTimeout != nil && *activityInfo.HeartbeatTimeout <= 0 {
 		return nil
 	}
 
 	// use the latest time as last heartbeat time
-	lastHeartbeat := activityInfo.StartedTime
-	if activityInfo.LastHeartBeatUpdatedTime.After(lastHeartbeat) {
-		lastHeartbeat = activityInfo.LastHeartBeatUpdatedTime
+	var lastHeartbeat time.Time
+	if activityInfo.StartedTime != nil {
+		lastHeartbeat = timestamp.TimeValue(activityInfo.StartedTime)
 	}
 
-	heartbeatTimeout := lastHeartbeat.Add(
-		time.Duration(activityInfo.HeartbeatTimeout) * time.Second,
-	)
+	if activityInfo.LastHeartbeatUpdateTime != nil && activityInfo.LastHeartbeatUpdateTime.After(lastHeartbeat) {
+		lastHeartbeat = timestamp.TimeValue(activityInfo.LastHeartbeatUpdateTime)
+	}
+
+	heartbeatTimeout := lastHeartbeat.Add(timestamp.DurationValue(activityInfo.HeartbeatTimeout))
 
 	return &timerSequenceID{
-		eventID:      activityInfo.ScheduleID,
+		eventID:      activityInfo.ScheduleId,
 		timestamp:    heartbeatTimeout,
 		timerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		timerCreated: (activityInfo.TimerTaskStatus & timerTaskStatusCreatedHeartbeat) > 0,

@@ -35,10 +35,11 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
-	timeout              = int32(10000)
+	timeout              = 10000 * time.Second
 	signal               = "NDC signal"
 	checksum             = "NDC checksum"
 	childWorkflowPrefix  = "child-"
@@ -146,8 +147,8 @@ func InitializeHistoryEventGenerator(
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			StartToCloseTimeoutSeconds: timeout,
-			Attempt:                    workflowTaskAttempts,
+			StartToCloseTimeout: timestamp.DurationPtr(timeout),
+			Attempt:             workflowTaskAttempts,
 		}}
 		return historyEvent
 	})
@@ -243,12 +244,12 @@ func InitializeHistoryEventGenerator(
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			WorkflowExecutionTimeoutSeconds: timeout,
-			WorkflowRunTimeoutSeconds:       timeout,
-			WorkflowTaskTimeoutSeconds:      timeout,
-			Identity:                        identity,
-			FirstExecutionRunId:             uuid.New(),
-			Attempt:                         1,
+			WorkflowExecutionTimeout: timestamp.DurationPtr(timeout),
+			WorkflowRunTimeout:       timestamp.DurationPtr(timeout),
+			WorkflowTaskTimeout:      timestamp.DurationPtr(timeout),
+			Identity:                 identity,
+			FirstExecutionRunId:      uuid.New(),
+			Attempt:                  1,
 		}}
 		return historyEvent
 	})
@@ -293,8 +294,8 @@ func InitializeHistoryEventGenerator(
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			WorkflowRunTimeoutSeconds:    timeout,
-			WorkflowTaskTimeoutSeconds:   timeout,
+			WorkflowRunTimeout:           timestamp.DurationPtr(timeout),
+			WorkflowTaskTimeout:          timestamp.DurationPtr(timeout),
 			WorkflowTaskCompletedEventId: eventID - 1,
 			Initiator:                    enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 		}}
@@ -401,10 +402,10 @@ func InitializeHistoryEventGenerator(
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			ScheduleToCloseTimeoutSeconds: timeout,
-			ScheduleToStartTimeoutSeconds: timeout,
-			StartToCloseTimeoutSeconds:    timeout,
-			WorkflowTaskCompletedEventId:  lastEvent.EventId,
+			ScheduleToCloseTimeout:       timestamp.DurationPtr(timeout),
+			ScheduleToStartTimeout:       timestamp.DurationPtr(timeout),
+			StartToCloseTimeout:          timestamp.DurationPtr(timeout),
+			WorkflowTaskCompletedEventId: lastEvent.EventId,
 		}}
 		return historyEvent
 	})
@@ -550,7 +551,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.EventType = enumspb.EVENT_TYPE_TIMER_STARTED
 		historyEvent.Attributes = &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 			TimerId:                      uuid.New(),
-			StartToFireTimeoutSeconds:    10,
+			StartToFireTimeout:           timestamp.DurationPtr(10 * time.Second),
 			WorkflowTaskCompletedEventId: lastEvent.EventId,
 		}}
 		return historyEvent
@@ -613,11 +614,11 @@ func InitializeHistoryEventGenerator(
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			WorkflowExecutionTimeoutSeconds: timeout,
-			WorkflowRunTimeoutSeconds:       timeout,
-			WorkflowTaskTimeoutSeconds:      timeout,
-			WorkflowTaskCompletedEventId:    lastEvent.EventId,
-			WorkflowIdReusePolicy:           enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+			WorkflowExecutionTimeout:     timestamp.DurationPtr(timeout),
+			WorkflowRunTimeout:           timestamp.DurationPtr(timeout),
+			WorkflowTaskTimeout:          timestamp.DurationPtr(timeout),
+			WorkflowTaskCompletedEventId: lastEvent.EventId,
+			WorkflowIdReusePolicy:        enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		}}
 		return historyEvent
 	})
@@ -944,7 +945,7 @@ func getDefaultHistoryEvent(
 	globalTaskID++
 	return &historypb.HistoryEvent{
 		EventId:   eventID,
-		Timestamp: time.Now().UnixNano(),
+		EventTime: timestamp.TimePtr(time.Now().UTC()),
 		TaskId:    globalTaskID,
 		Version:   version,
 	}

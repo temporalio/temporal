@@ -4,7 +4,8 @@ build:
     - api
 lint:
   ignore:
-    - temporal/api # do not lint public api
+    - temporal/api # from `api` root: do not lint public api
+    - dependencies # from `api` root: do not lint external dependencies
   use:
     - DEFAULT
   except:

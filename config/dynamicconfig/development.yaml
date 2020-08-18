@@ -22,12 +22,15 @@ history.historyMgrNumConns:
 system.advancedVisibilityWritingMode:
 - value: "off"
   constraints: {}
-matching.numTaskqueueReadPartitions:
-- value: 1
-  constraints: {}
 history.defaultActivityRetryPolicy:
 - value:
-    InitialRetryIntervalInSeconds: 1
-    MaximumRetryIntervalInSeconds: 120
-    ExponentialBackoffCoefficient: 2.0
+    InitialIntervalInSeconds: 1
+    MaximumIntervalCoefficient: 100.0
+    BackoffCoefficient: 2.0
+    MaximumAttempts: 0
+history.defaultWorkflowRetryPolicy:
+- value:
+    InitialIntervalInSeconds: 1
+    MaximumIntervalCoefficient: 100.0
+    BackoffCoefficient: 2.0
     MaximumAttempts: 0

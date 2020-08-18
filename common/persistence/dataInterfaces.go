@@ -34,14 +34,12 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
@@ -204,6 +202,7 @@ type (
 		NamespaceID                            string
 		WorkflowID                             string
 		RunID                                  string
+		FirstExecutionRunID                    string
 		ParentNamespaceID                      string
 		ParentWorkflowID                       string
 		ParentRunID                            string
@@ -212,9 +211,9 @@ type (
 		CompletionEvent                        *historypb.HistoryEvent
 		TaskQueue                              string
 		WorkflowTypeName                       string
-		WorkflowRunTimeout                     int32
-		WorkflowExecutionTimeout               int32
-		DefaultWorkflowTaskTimeout             int32
+		WorkflowRunTimeout                     int64
+		WorkflowExecutionTimeout               int64
+		DefaultWorkflowTaskTimeout             int64
 		State                                  enumsspb.WorkflowExecutionState
 		Status                                 enumspb.WorkflowExecutionStatus
 		LastFirstEventID                       int64
@@ -224,20 +223,20 @@ type (
 		StartTimestamp                         time.Time
 		LastUpdatedTimestamp                   time.Time
 		CreateRequestID                        string
-		SignalCount                            int32
+		SignalCount                            int64
 		WorkflowTaskVersion                    int64
 		WorkflowTaskScheduleID                 int64
 		WorkflowTaskStartedID                  int64
 		WorkflowTaskRequestID                  string
-		WorkflowTaskTimeout                    int32
-		WorkflowTaskAttempt                    int64
+		WorkflowTaskTimeout                    int64
+		WorkflowTaskAttempt                    int32
 		WorkflowTaskStartedTimestamp           int64
 		WorkflowTaskScheduledTimestamp         int64
 		WorkflowTaskOriginalScheduledTimestamp int64
 		CancelRequested                        bool
 		CancelRequestID                        string
 		StickyTaskQueue                        string
-		StickyScheduleToStartTimeout           int32
+		StickyScheduleToStartTimeout           int64
 		ClientLibraryVersion                   string
 		ClientFeatureVersion                   string
 		ClientImpl                             string
@@ -247,30 +246,15 @@ type (
 		// for retry
 		Attempt                int32
 		HasRetryPolicy         bool
-		InitialInterval        int32
+		InitialInterval        int64
 		BackoffCoefficient     float64
-		MaximumInterval        int32
+		MaximumInterval        int64
 		WorkflowExpirationTime time.Time
 		MaximumAttempts        int32
 		NonRetryableErrorTypes []string
 		BranchToken            []byte
 		// Cron
 		CronSchedule string
-	}
-
-	// ExecutionStats is the statistics about workflow execution
-	ExecutionStats struct {
-		HistorySize int64
-	}
-
-	// ReplicationState represents mutable state information for global namespaces.
-	// This information is used by replication protocol when applying events from remote clusters
-	ReplicationState struct {
-		CurrentVersion      int64
-		StartVersion        int64
-		LastWriteVersion    int64
-		LastWriteEventID    int64
-		LastReplicationInfo map[string]*replicationspb.ReplicationInfo
 	}
 
 	// ReplicationTaskInfoWrapper describes a replication task.
@@ -350,7 +334,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
-		ScheduleAttempt     int64
+		ScheduleAttempt     int32
 		TimeoutType         enumspb.TimeoutType
 		Version             int64
 	}
@@ -411,7 +395,7 @@ type (
 		TaskID              int64
 		TimeoutType         enumspb.TimeoutType
 		EventID             int64
-		Attempt             int64
+		Attempt             int32
 		Version             int64
 	}
 
@@ -484,57 +468,18 @@ type (
 
 	// WorkflowMutableState indicates workflow related state
 	WorkflowMutableState struct {
-		ActivityInfos       map[int64]*ActivityInfo
+		ActivityInfos       map[int64]*persistenceblobs.ActivityInfo
 		TimerInfos          map[string]*persistenceblobs.TimerInfo
-		ChildExecutionInfos map[int64]*ChildExecutionInfo
+		ChildExecutionInfos map[int64]*persistenceblobs.ChildExecutionInfo
 		RequestCancelInfos  map[int64]*persistenceblobs.RequestCancelInfo
 		SignalInfos         map[int64]*persistenceblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 		ExecutionInfo       *WorkflowExecutionInfo
-		ExecutionStats      *ExecutionStats
-		ReplicationState    *ReplicationState
+		ExecutionStats      *persistenceblobs.ExecutionStats
+		ReplicationState    *persistenceblobs.ReplicationState
 		BufferedEvents      []*historypb.HistoryEvent
 		VersionHistories    *VersionHistories
 		Checksum            checksum.Checksum
-	}
-
-	// ActivityInfo details.
-	ActivityInfo struct {
-		Version                  int64
-		ScheduleID               int64
-		ScheduledEventBatchID    int64
-		ScheduledEvent           *historypb.HistoryEvent
-		ScheduledTime            time.Time
-		StartedID                int64
-		StartedEvent             *historypb.HistoryEvent
-		StartedTime              time.Time
-		NamespaceID              string
-		ActivityID               string
-		RequestID                string
-		Details                  *commonpb.Payloads
-		ScheduleToStartTimeout   int32
-		ScheduleToCloseTimeout   int32
-		StartToCloseTimeout      int32
-		HeartbeatTimeout         int32
-		CancelRequested          bool
-		CancelRequestID          int64
-		LastHeartBeatUpdatedTime time.Time
-		TimerTaskStatus          int32
-		// For retry
-		Attempt                int32
-		StartedIdentity        string
-		TaskQueue              string
-		HasRetryPolicy         bool
-		InitialInterval        int32
-		BackoffCoefficient     float64
-		MaximumInterval        int32
-		ExpirationTime         time.Time
-		MaximumAttempts        int32
-		NonRetryableErrorTypes []string
-		LastFailure            *failurepb.Failure
-		LastWorkerIdentity     string
-		// Not written to database - This is used only for deduping heartbeat timer creation
-		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}
 
 	// TimerInfo details - metadata about user timer info.
@@ -544,22 +489,6 @@ type (
 		StartedID  int64
 		ExpiryTime time.Time
 		TaskStatus int64
-	}
-
-	// ChildExecutionInfo has details for pending child executions.
-	ChildExecutionInfo struct {
-		Version               int64
-		InitiatedID           int64
-		InitiatedEventBatchID int64
-		InitiatedEvent        *historypb.HistoryEvent
-		StartedID             int64
-		StartedWorkflowID     string
-		StartedRunID          string
-		StartedEvent          *historypb.HistoryEvent
-		CreateRequestID       string
-		Namespace             string
-		WorkflowTypeName      string
-		ParentClosePolicy     enumspb.ParentClosePolicy
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
@@ -648,7 +577,7 @@ type (
 
 		NewWorkflowSnapshot *WorkflowSnapshot
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// ConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for a single run
@@ -670,7 +599,7 @@ type (
 		//  basically should use CurrentWorkflowMutation instead
 		CurrentWorkflowCAS *CurrentWorkflowCAS
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// CurrentWorkflowCAS represent a compare and swap on current record
@@ -699,7 +628,7 @@ type (
 		// For new mutable state
 		NewWorkflowSnapshot WorkflowSnapshot
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// WorkflowEvents is used as generic workflow history events transaction container
@@ -714,15 +643,15 @@ type (
 	// WorkflowMutation is used as generic workflow execution state mutation
 	WorkflowMutation struct {
 		ExecutionInfo    *WorkflowExecutionInfo
-		ExecutionStats   *ExecutionStats
-		ReplicationState *ReplicationState
+		ExecutionStats   *persistenceblobs.ExecutionStats
+		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *VersionHistories
 
-		UpsertActivityInfos       []*ActivityInfo
+		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
 		DeleteActivityInfos       []int64
 		UpsertTimerInfos          []*persistenceblobs.TimerInfo
 		DeleteTimerInfos          []string
-		UpsertChildExecutionInfos []*ChildExecutionInfo
+		UpsertChildExecutionInfos []*persistenceblobs.ChildExecutionInfo
 		DeleteChildExecutionInfo  *int64
 		UpsertRequestCancelInfos  []*persistenceblobs.RequestCancelInfo
 		DeleteRequestCancelInfo   *int64
@@ -744,13 +673,13 @@ type (
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
 	WorkflowSnapshot struct {
 		ExecutionInfo    *WorkflowExecutionInfo
-		ExecutionStats   *ExecutionStats
-		ReplicationState *ReplicationState
+		ExecutionStats   *persistenceblobs.ExecutionStats
+		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *VersionHistories
 
-		ActivityInfos       []*ActivityInfo
+		ActivityInfos       []*persistenceblobs.ActivityInfo
 		TimerInfos          []*persistenceblobs.TimerInfo
-		ChildExecutionInfos []*ChildExecutionInfo
+		ChildExecutionInfos []*persistenceblobs.ChildExecutionInfo
 		RequestCancelInfos  []*persistenceblobs.RequestCancelInfo
 		SignalInfos         []*persistenceblobs.SignalInfo
 		SignalRequestedIDs  []string
@@ -1126,7 +1055,7 @@ type (
 		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
 		TransactionID int64
 		// optional binary encoding type
-		Encoding common.EncodingType
+		Encoding enumspb.EncodingType
 		// The shard to get history node data
 		ShardID *int
 	}
@@ -1180,6 +1109,8 @@ type (
 		Size int
 		// the first_event_id of last loaded batch
 		LastFirstEventID int64
+		// event id of the last event in the last loaded batch
+		LastEventID int64
 	}
 
 	// ReadRawHistoryBranchResponse is the response to ReadHistoryBranchRequest
@@ -1246,7 +1177,7 @@ type (
 	HistoryBranchDetail struct {
 		TreeID   string
 		BranchID string
-		ForkTime time.Time
+		ForkTime *time.Time
 		Info     string
 	}
 
@@ -1571,8 +1502,8 @@ func (d *WorkflowTask) SetTaskID(id int64) {
 }
 
 // GetVisibilityTime get the visibility timestamp
-func (d *ReplicationTaskInfoWrapper) GetVisibilityTime() *types.Timestamp {
-	return &types.Timestamp{}
+func (d *ReplicationTaskInfoWrapper) GetVisibilityTime() *time.Time {
+	return &time.Time{}
 }
 
 // GetVisibilityTime get the visibility timestamp
@@ -2147,12 +2078,12 @@ func (a *SyncActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
 
 // DBTimestampToUnixNano converts CQL timestamp to UnixNano
 func DBTimestampToUnixNano(milliseconds int64) int64 {
-	return milliseconds * 1000 * 1000 // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-3) - (-9) = 6, so multiply by 10⁶
+	return (time.Duration(milliseconds) * time.Millisecond).Nanoseconds()
 }
 
 // UnixNanoToDBTimestamp converts UnixNano to CQL timestamp
 func UnixNanoToDBTimestamp(timestamp int64) int64 {
-	return timestamp / (1000 * 1000) // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-9) - (-3) = -6, so divide by 10⁶
+	return time.Duration(timestamp).Milliseconds()
 }
 
 // NewHistoryBranchToken return a new branch token
@@ -2224,7 +2155,7 @@ func NewGetReplicationTasksFromDLQRequest(
 	}
 }
 
-func (r *ReplicationState) GenerateVersionProto() *persistenceblobs.ReplicationVersions {
+func GenerateVersionProto(r *persistenceblobs.ReplicationState) *persistenceblobs.ReplicationVersions {
 	return &persistenceblobs.ReplicationVersions{
 		StartVersion:     &types.Int64Value{Value: r.StartVersion},
 		LastWriteVersion: &types.Int64Value{Value: r.LastWriteVersion},

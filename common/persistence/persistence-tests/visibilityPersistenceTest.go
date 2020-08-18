@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/payload"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -79,7 +80,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
 
-	startTime := time.Now().Add(time.Second * -5).UnixNano()
+	startTime := time.Now().UTC().Add(time.Second * -5).UnixNano()
 	startReq := &p.RecordWorkflowExecutionStartedRequest{
 		NamespaceID:      testNamespaceUUID,
 		Execution:        workflowExecution,
@@ -139,7 +140,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
 
-	startTime := time.Now().Add(time.Second * -5).UnixNano()
+	startTime := time.Now().UTC().Add(time.Second * -5).UnixNano()
 	err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&p.RecordWorkflowExecutionStartedRequest{
 		NamespaceID:      testNamespaceUUID,
 		Execution:        workflowExecution,
@@ -191,7 +192,7 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 	testNamespaceUUID := uuid.New()
 
 	// Create 2 executions
-	startTime1 := time.Now()
+	startTime1 := time.Now().UTC()
 	workflowExecution1 := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-pagination-test1",
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
@@ -497,7 +498,7 @@ func (s *VisibilityPersistenceSuite) TestGetClosedExecution() {
 		RunId:      "a3dbc7bf-deb1-4946-b57c-cf0615ea553f",
 	}
 
-	startTime := time.Now().Add(time.Second * -5).UnixNano()
+	startTime := time.Now().UTC().Add(time.Second * -5).UnixNano()
 	err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&p.RecordWorkflowExecutionStartedRequest{
 		NamespaceID:      testNamespaceUUID,
 		Execution:        workflowExecution,
@@ -556,7 +557,7 @@ func (s *VisibilityPersistenceSuite) TestClosedWithoutStarted() {
 		NamespaceID:      testNamespaceUUID,
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
-		StartTimestamp:   time.Now().Add(time.Second * -5).UnixNano(),
+		StartTimestamp:   time.Now().UTC().Add(time.Second * -5).UnixNano(),
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
@@ -581,7 +582,7 @@ func (s *VisibilityPersistenceSuite) TestMultipleUpserts() {
 		RunId:      "a3dbc7bf-deb1-4946-b57c-cf0615ea553f",
 	}
 
-	startTime := time.Now().Add(time.Second * -5).UnixNano()
+	startTime := time.Now().UTC().Add(time.Second * -5).UnixNano()
 	closeReq := &p.RecordWorkflowExecutionClosedRequest{
 		NamespaceID:      testNamespaceUUID,
 		Execution:        workflowExecution,
@@ -623,7 +624,7 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 	}
 	nRows := 5
 	testNamespaceUUID := uuid.New()
-	startTime := time.Now().Add(time.Second * -5).UnixNano()
+	startTime := time.Now().UTC().Add(time.Second * -5).UnixNano()
 	for i := 0; i < nRows; i++ {
 		workflowExecution := commonpb.WorkflowExecution{
 			WorkflowId: uuid.New(),
@@ -727,8 +728,8 @@ func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
 	s.Equal(req.Execution.RunId, resp.Execution.RunId)
 	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
-	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(resp.GetStartTime().GetValue()))
-	s.Equal(s.nanosToMillis(req.CloseTimestamp), s.nanosToMillis(resp.GetCloseTime().GetValue()))
+	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(timestamp.TimeValue(resp.GetStartTime()).UnixNano()))
+	s.Equal(s.nanosToMillis(req.CloseTimestamp), s.nanosToMillis(timestamp.TimeValue(resp.GetCloseTime()).UnixNano()))
 	s.Equal(req.Status, resp.GetStatus())
 	s.Equal(req.HistoryLength, resp.HistoryLength)
 }
@@ -738,7 +739,7 @@ func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
 	s.Equal(req.Execution.GetRunId(), resp.Execution.GetRunId())
 	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
-	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(resp.GetStartTime().GetValue()))
+	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(timestamp.TimeValue(resp.GetStartTime()).UnixNano()))
 	s.Nil(resp.CloseTime)
 	s.Equal(resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	s.Zero(resp.HistoryLength)

@@ -190,16 +190,16 @@ func computeExecutionInfoSize(executionInfo *InternalWorkflowExecutionInfo) int 
 	return size
 }
 
-func computeActivityInfoSize(ai *InternalActivityInfo) int {
-	size := len(ai.ActivityID)
+func computeActivityInfoSize(ai *persistenceblobs.ActivityInfo) int {
+	size := len(ai.ActivityId)
 	if ai.ScheduledEvent != nil {
-		size += len(ai.ScheduledEvent.Data)
+		size += ai.ScheduledEvent.Size()
 	}
 	if ai.StartedEvent != nil {
-		size += len(ai.StartedEvent.Data)
+		size += ai.StartedEvent.Size()
 	}
-	if ai.Details != nil {
-		size += ai.Details.Size()
+	if ai.LastHeartbeatDetails != nil {
+		size += ai.LastHeartbeatDetails.Size()
 	}
 
 	return size
@@ -211,13 +211,13 @@ func computeTimerInfoSize(ti *persistenceblobs.TimerInfo) int {
 	return size
 }
 
-func computeChildInfoSize(ci *InternalChildExecutionInfo) int {
+func computeChildInfoSize(ci *persistenceblobs.ChildExecutionInfo) int {
 	size := 0
 	if ci.InitiatedEvent != nil {
-		size += len(ci.InitiatedEvent.Data)
+		size += ci.InitiatedEvent.Size()
 	}
 	if ci.StartedEvent != nil {
-		size += len(ci.StartedEvent.Data)
+		size += ci.StartedEvent.Size()
 	}
 	return size
 }

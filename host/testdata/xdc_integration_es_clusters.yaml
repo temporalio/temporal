@@ -19,12 +19,12 @@
     clusterInformation:
       active-es:
         enabled: true
-        initialFailoverVersion: 0
+        initialFailoverVersion: 1
         rpcName: "frontend"
         rpcAddress: "127.0.0.1:9134"
       standby-es:
         enabled: true
-        initialFailoverVersion: 1
+        initialFailoverVersion: 2
         rpcName: "frontend"
         rpcAddress: "127.0.0.1:10134"
   enablearchival: false
@@ -56,7 +56,7 @@
           cluster: test
         test-visibility-topic-0-dlq:
           cluster: test
-      cadence-cluster-topics:
+      temporal-cluster-topics:
         active-es:
           topic: active-es
           dlq-topic: active-es-dlq
@@ -95,12 +95,12 @@
     clusterInformation:
       active-es:
         enabled: true
-        initialFailoverVersion: 0
+        initialFailoverVersion: 1
         rpcName: "frontend"
         rpcAddress: "127.0.0.1:9134"
       standby-es:
         enabled: true
-        initialFailoverVersion: 1
+        initialFailoverVersion: 2
         rpcName: "frontend"
         rpcAddress: "127.0.0.1:10134"
   enablearchival: false
@@ -132,7 +132,7 @@
           cluster: test
         test-visibility-topic-1-dlq:
           cluster: test
-      cadence-cluster-topics:
+      temporal-cluster-topics:
         active-es:
           topic: active-es
           dlq-topic: active-es-dlq

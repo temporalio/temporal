@@ -44,9 +44,9 @@ func TestValidTaskQueueNames(t *testing.T) {
 		{"__temporal_sys/list0", "__temporal_sys/list0", 0},
 		{"__temporal_sys/list0/", "__temporal_sys/list0/", 0},
 		{"/__temporal_sys_list0", "/__temporal_sys_list0", 0},
-		{"/__temporal_sys/list0/1", "list0", 1},
-		{"/__temporal_sys//list0//41", "/list0/", 41},
-		{"/__temporal_sys//__temporal_sys/sys/0/41", "/__temporal_sys/sys/0", 41},
+		{"/_sys/list0/1", "list0", 1},
+		{"/_sys//list0//41", "/list0/", 41},
+		{"/_sys//_sys/sys/0/41", "/_sys/sys/0", 41},
 	}
 
 	for _, tc := range testCases {
@@ -72,25 +72,25 @@ func TestTaskQueueParentName(t *testing.T) {
 		{"list0", 0, ""},
 		/* 1-ary tree */
 		{"list0", 1, ""},
-		{"/__temporal_sys/list0/1", 1, "list0"},
-		{"/__temporal_sys/list0/2", 1, "/__temporal_sys/list0/1"},
+		{"/_sys/list0/1", 1, "list0"},
+		{"/_sys/list0/2", 1, "/_sys/list0/1"},
 		/* 2-ary tree */
 		{"list0", 2, ""},
-		{"/__temporal_sys/list0/1", 2, "list0"},
-		{"/__temporal_sys/list0/2", 2, "list0"},
-		{"/__temporal_sys/list0/3", 2, "/__temporal_sys/list0/1"},
-		{"/__temporal_sys/list0/4", 2, "/__temporal_sys/list0/1"},
-		{"/__temporal_sys/list0/5", 2, "/__temporal_sys/list0/2"},
-		{"/__temporal_sys/list0/6", 2, "/__temporal_sys/list0/2"},
+		{"/_sys/list0/1", 2, "list0"},
+		{"/_sys/list0/2", 2, "list0"},
+		{"/_sys/list0/3", 2, "/_sys/list0/1"},
+		{"/_sys/list0/4", 2, "/_sys/list0/1"},
+		{"/_sys/list0/5", 2, "/_sys/list0/2"},
+		{"/_sys/list0/6", 2, "/_sys/list0/2"},
 		/* 3-ary tree */
-		{"/__temporal_sys/list0/1", 3, "list0"},
-		{"/__temporal_sys/list0/2", 3, "list0"},
-		{"/__temporal_sys/list0/3", 3, "list0"},
-		{"/__temporal_sys/list0/4", 3, "/__temporal_sys/list0/1"},
-		{"/__temporal_sys/list0/5", 3, "/__temporal_sys/list0/1"},
-		{"/__temporal_sys/list0/6", 3, "/__temporal_sys/list0/1"},
-		{"/__temporal_sys/list0/7", 3, "/__temporal_sys/list0/2"},
-		{"/__temporal_sys/list0/10", 3, "/__temporal_sys/list0/3"},
+		{"/_sys/list0/1", 3, "list0"},
+		{"/_sys/list0/2", 3, "list0"},
+		{"/_sys/list0/3", 3, "list0"},
+		{"/_sys/list0/4", 3, "/_sys/list0/1"},
+		{"/_sys/list0/5", 3, "/_sys/list0/1"},
+		{"/_sys/list0/6", 3, "/_sys/list0/1"},
+		{"/_sys/list0/7", 3, "/_sys/list0/2"},
+		{"/_sys/list0/10", 3, "/_sys/list0/3"},
 	}
 
 	for _, tc := range testCases {
@@ -104,13 +104,13 @@ func TestTaskQueueParentName(t *testing.T) {
 
 func TestInvalidTaskqueueNames(t *testing.T) {
 	inputs := []string{
-		"/__temporal_sys/",
-		"/__temporal_sys/0",
-		"/__temporal_sys//1",
-		"/__temporal_sys//0",
-		"/__temporal_sys/list0",
-		"/__temporal_sys/list0/0",
-		"/__temporal_sys/list0/-1",
+		"/_sys/",
+		"/_sys/0",
+		"/_sys//1",
+		"/_sys//0",
+		"/_sys/list0",
+		"/_sys/list0/0",
+		"/_sys/list0/-1",
 	}
 	for _, name := range inputs {
 		t.Run(name, func(t *testing.T) {

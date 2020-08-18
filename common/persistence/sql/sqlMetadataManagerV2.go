@@ -30,7 +30,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -159,7 +158,7 @@ func (m *sqlMetadataManagerV2) GetNamespace(request *persistence.GetNamespaceReq
 
 func (m *sqlMetadataManagerV2) namespaceRowToGetNamespaceResponse(row *sqlplugin.NamespaceRow) (*persistence.InternalGetNamespaceResponse, error) {
 	return &persistence.InternalGetNamespaceResponse{
-		Namespace:           persistence.NewDataBlob(row.Data, common.EncodingType(row.DataEncoding)),
+		Namespace:           persistence.NewDataBlob(row.Data, row.DataEncoding),
 		IsGlobal:            row.IsGlobal,
 		NotificationVersion: row.NotificationVersion,
 	}, nil

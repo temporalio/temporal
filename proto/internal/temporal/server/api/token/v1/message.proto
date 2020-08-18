@@ -55,7 +55,7 @@ message Task {
     string workflow_id  = 2;
     string run_id = 3;
     int64 schedule_id = 4;
-    int64 schedule_attempt = 5;
+    int32 schedule_attempt = 5;
     string activity_id = 6;
     string workflow_type = 7;
     string activity_type = 8;

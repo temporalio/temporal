@@ -112,7 +112,7 @@ func (s *nDCTransactionMgrSuite) TearDownTest() {
 
 func (s *nDCTransactionMgrSuite) TestCreateWorkflow() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 	targetWorkflow := NewMocknDCWorkflow(s.controller)
 
 	s.mockCreateMgr.EXPECT().dispatchForNewWorkflow(
@@ -125,7 +125,7 @@ func (s *nDCTransactionMgrSuite) TestCreateWorkflow() {
 
 func (s *nDCTransactionMgrSuite) TestUpdateWorkflow() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 	isWorkflowRebuilt := true
 	targetWorkflow := NewMocknDCWorkflow(s.controller)
 	newWorkflow := NewMocknDCWorkflow(s.controller)
@@ -140,7 +140,7 @@ func (s *nDCTransactionMgrSuite) TestUpdateWorkflow() {
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 	releaseCalled := false
 	runID := uuid.New()
 
@@ -177,7 +177,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
@@ -251,7 +251,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Open() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 	releaseCalled := false
 
 	workflow := NewMocknDCWorkflow(s.controller)
@@ -285,7 +285,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Op
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Closed() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
@@ -333,7 +333,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Cl
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
@@ -387,7 +387,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"

@@ -25,13 +25,15 @@
 package history
 
 import (
+	"time"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type workflowContext interface {
@@ -224,25 +226,25 @@ func terminateWorkflow(
 	return err
 }
 
-func getWorkflowExecutionTimeout(namespace string, requestedTimeout int32, serviceConfig *Config) int32 {
+func getWorkflowExecutionTimeout(namespace string, requestedTimeout time.Duration, serviceConfig *Config) time.Duration {
 	executionTimeoutSeconds := requestedTimeout
 	if executionTimeoutSeconds == 0 {
-		executionTimeoutSeconds = convert.Int32Ceil(serviceConfig.DefaultWorkflowExecutionTimeout(namespace).Seconds())
+		executionTimeoutSeconds = timestamp.RoundUp(serviceConfig.DefaultWorkflowExecutionTimeout(namespace))
 	}
-	maxWorkflowExecutionTimeout := convert.Int32Ceil(serviceConfig.MaxWorkflowExecutionTimeout(namespace).Seconds())
-	executionTimeoutSeconds = common.MinInt32(executionTimeoutSeconds, maxWorkflowExecutionTimeout)
+	maxWorkflowExecutionTimeout := timestamp.RoundUp(serviceConfig.MaxWorkflowExecutionTimeout(namespace))
+	executionTimeoutSeconds = timestamp.MinDuration(executionTimeoutSeconds, maxWorkflowExecutionTimeout)
 
 	return executionTimeoutSeconds
 }
 
-func getWorkflowRunTimeout(namespace string, requestedTimeout, executionTimeout int32, serviceConfig *Config) int32 {
+func getWorkflowRunTimeout(namespace string, requestedTimeout, executionTimeout time.Duration, serviceConfig *Config) time.Duration {
 	runTimeoutSeconds := requestedTimeout
 	if runTimeoutSeconds == 0 {
-		runTimeoutSeconds = convert.Int32Ceil(serviceConfig.DefaultWorkflowRunTimeout(namespace).Seconds())
+		runTimeoutSeconds = timestamp.RoundUp(serviceConfig.DefaultWorkflowRunTimeout(namespace))
 	}
-	maxWorkflowRunTimeout := convert.Int32Ceil(serviceConfig.MaxWorkflowRunTimeout(namespace).Seconds())
-	runTimeoutSeconds = common.MinInt32(runTimeoutSeconds, maxWorkflowRunTimeout)
-	runTimeoutSeconds = common.MinInt32(runTimeoutSeconds, executionTimeout)
+	maxWorkflowRunTimeout := timestamp.RoundUp(serviceConfig.MaxWorkflowRunTimeout(namespace))
+	runTimeoutSeconds = timestamp.MinDuration(runTimeoutSeconds, maxWorkflowRunTimeout)
+	runTimeoutSeconds = timestamp.MinDuration(runTimeoutSeconds, executionTimeout)
 
 	return runTimeoutSeconds
 }

@@ -35,6 +35,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/api/common/v1"
+	persistenceblobs "go.temporal.io/server/api/persistenceblobs/v1"
 	persistence "go.temporal.io/server/common/persistence"
 )
 
@@ -134,10 +135,10 @@ func (mr *MockworkflowExecutionContextMockRecorder) loadWorkflowExecutionForRepl
 }
 
 // loadExecutionStats mocks base method.
-func (m *MockworkflowExecutionContext) loadExecutionStats() (*persistence.ExecutionStats, error) {
+func (m *MockworkflowExecutionContext) loadExecutionStats() (*persistenceblobs.ExecutionStats, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "loadExecutionStats")
-	ret0, _ := ret[0].(*persistence.ExecutionStats)
+	ret0, _ := ret[0].(*persistenceblobs.ExecutionStats)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

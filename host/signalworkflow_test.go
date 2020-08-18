@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 )
 
@@ -74,15 +75,15 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -106,14 +107,14 @@ func (s *integrationSuite) TestSignalWorkflow() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(1),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 2,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(1),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
@@ -248,15 +249,15 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -280,14 +281,14 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(1),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 2,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(1),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
@@ -389,15 +390,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -405,15 +406,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	foreignRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.foreignNamespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.foreignNamespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(NewContext(), foreignRequest)
 	s.NoError(err0)
@@ -433,14 +434,14 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -489,14 +490,14 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(foreignActivityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(int(foreignActivityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
@@ -606,18 +607,18 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
-		CronSchedule:               cronSpec,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
+		CronSchedule:        cronSpec,
 	}
-	now := time.Now()
+	now := time.Now().UTC()
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
@@ -643,7 +644,7 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 	var workflowTaskDelay time.Duration
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		workflowTaskDelay = time.Now().Sub(now)
+		workflowTaskDelay = time.Now().UTC().Sub(now)
 
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -682,15 +683,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -698,15 +699,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	foreignRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.foreignNamespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.foreignNamespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(NewContext(), foreignRequest)
 	s.NoError(err0)
@@ -726,14 +727,14 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -782,14 +783,14 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(foreignActivityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(int(foreignActivityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
@@ -897,15 +898,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
@@ -925,14 +926,14 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -1022,15 +1023,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
@@ -1050,14 +1051,14 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -1153,15 +1154,15 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	// Start a workflow
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1186,14 +1187,14 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(1),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 2,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(1),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
@@ -1257,19 +1258,19 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	signalInput := payloads.EncodeString("my signal input")
 	wfIDReusePolicy := enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		Header:                     header,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		SignalName:                 signalName,
-		SignalInput:                signalInput,
-		Identity:                   identity,
-		WorkflowIdReusePolicy:      wfIDReusePolicy,
+		RequestId:             uuid.New(),
+		Namespace:             s.namespace,
+		WorkflowId:            id,
+		WorkflowType:          workflowType,
+		TaskQueue:             taskQueue,
+		Input:                 nil,
+		Header:                header,
+		WorkflowRunTimeout:    timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout:   timestamp.DurationPtr(1 * time.Second),
+		SignalName:            signalName,
+		SignalInput:           signalInput,
+		Identity:              identity,
+		WorkflowIdReusePolicy: wfIDReusePolicy,
 	}
 	resp, err := s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
 	s.NoError(err)
@@ -1352,8 +1353,8 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 		Namespace:       s.namespace,
 		MaximumPageSize: 100,
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: 0,
-			LatestTime:   time.Now().UnixNano(),
+			EarliestTime: timestamp.TimePtr(time.Time{}),
+			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: id,
@@ -1389,8 +1390,8 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 		Namespace:       s.namespace,
 		MaximumPageSize: 100,
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: 0,
-			LatestTime:   time.Now().UnixNano(),
+			EarliestTime: timestamp.TimePtr(time.Time{}),
+			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: id,
@@ -1414,15 +1415,15 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 
 	// Start a workflow
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1443,14 +1444,14 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -1493,18 +1494,18 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
 	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		SignalName:                 signalName,
-		SignalInput:                signalInput,
-		Identity:                   identity,
-		WorkflowIdReusePolicy:      enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		RequestId:             uuid.New(),
+		Namespace:             s.namespace,
+		WorkflowId:            id,
+		WorkflowType:          workflowType,
+		TaskQueue:             taskQueue,
+		Input:                 nil,
+		WorkflowRunTimeout:    timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout:   timestamp.DurationPtr(1 * time.Second),
+		SignalName:            signalName,
+		SignalInput:           signalInput,
+		Identity:              identity,
+		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 	}
 	ctx, _ := rpc.NewContextWithTimeoutAndHeaders(5 * time.Second)
 	resp, err := s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)

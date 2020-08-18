@@ -41,6 +41,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -125,7 +126,7 @@ func (s *conflictResolverSuite) SetupTest() {
 	h := &historyEngineImpl{
 		shard:                s.mockShard,
 		clusterMetadata:      s.mockClusterMetadata,
-		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
+		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int { return 1 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
@@ -153,7 +154,7 @@ func (s *conflictResolverSuite) TestReset() {
 	prevState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 
 	sourceCluster := cluster.TestAlternativeClusterName
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 	version := int64(12)
 
 	namespaceID := s.mockContext.namespaceID
@@ -166,13 +167,13 @@ func (s *conflictResolverSuite) TestReset() {
 		Version:   version,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: "some random workflow type"},
-			Input:                           payloads.EncodeString("some random input"),
-			WorkflowExecutionTimeoutSeconds: 123,
-			WorkflowRunTimeoutSeconds:       231,
-			WorkflowTaskTimeoutSeconds:      233,
-			Identity:                        "some random identity",
+			WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: "some random workflow type"},
+			Input:                    payloads.EncodeString("some random input"),
+			WorkflowExecutionTimeout: timestamp.DurationPtr(123 * time.Second),
+			WorkflowRunTimeout:       timestamp.DurationPtr(231 * time.Second),
+			WorkflowTaskTimeout:      timestamp.DurationPtr(233 * time.Second),
+			Identity:                 "some random identity",
 		}},
 	}
 	event2 := &historypb.HistoryEvent{
@@ -209,9 +210,9 @@ func (s *conflictResolverSuite) TestReset() {
 		InitiatedID:                  common.EmptyEventID,
 		TaskQueue:                    event1.GetWorkflowExecutionStartedEventAttributes().TaskQueue.GetName(),
 		WorkflowTypeName:             event1.GetWorkflowExecutionStartedEventAttributes().WorkflowType.GetName(),
-		WorkflowExecutionTimeout:     event1.GetWorkflowExecutionStartedEventAttributes().WorkflowExecutionTimeoutSeconds,
-		WorkflowRunTimeout:           event1.GetWorkflowExecutionStartedEventAttributes().WorkflowRunTimeoutSeconds,
-		DefaultWorkflowTaskTimeout:   event1.GetWorkflowExecutionStartedEventAttributes().WorkflowTaskTimeoutSeconds,
+		WorkflowExecutionTimeout:     int64(timestamp.DurationValue(event1.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionTimeout()).Seconds()),
+		WorkflowRunTimeout:           int64(timestamp.DurationValue(event1.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout()).Seconds()),
+		DefaultWorkflowTaskTimeout:   int64(timestamp.DurationValue(event1.GetWorkflowExecutionStartedEventAttributes().GetWorkflowTaskTimeout()).Seconds()),
 		State:                        enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status:                       enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastFirstEventID:             event1.GetEventId(),
@@ -240,6 +241,8 @@ func (s *conflictResolverSuite) TestReset() {
 		s.IsType(&persistence.UpsertWorkflowSearchAttributesTask{}, transferTasks[0])
 		input.ResetWorkflowSnapshot.TransferTasks = nil
 
+		s.Equal(executionInfo, input.ResetWorkflowSnapshot.ExecutionInfo)
+
 		s.Equal(&persistence.ConflictResolveWorkflowExecutionRequest{
 			RangeID: s.mockShard.shardInfo.GetRangeId(),
 			CurrentWorkflowCAS: &persistence.CurrentWorkflowCAS{
@@ -249,14 +252,14 @@ func (s *conflictResolverSuite) TestReset() {
 			},
 			ResetWorkflowSnapshot: persistence.WorkflowSnapshot{
 				ExecutionInfo: executionInfo,
-				ExecutionStats: &persistence.ExecutionStats{
+				ExecutionStats: &persistenceblobs.ExecutionStats{
 					HistorySize: historySize,
 				},
-				ReplicationState: &persistence.ReplicationState{
+				ReplicationState: &persistenceblobs.ReplicationState{
 					CurrentVersion:   event1.GetVersion(),
 					StartVersion:     event1.GetVersion(),
 					LastWriteVersion: event1.GetVersion(),
-					LastWriteEventID: event1.GetEventId(),
+					LastWriteEventId: event1.GetEventId(),
 					LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 						sourceCluster: {
 							Version:     event1.GetVersion(),
@@ -264,9 +267,9 @@ func (s *conflictResolverSuite) TestReset() {
 						},
 					},
 				},
-				ActivityInfos:       []*persistence.ActivityInfo{},
+				ActivityInfos:       []*persistenceblobs.ActivityInfo{},
 				TimerInfos:          []*persistenceblobs.TimerInfo{},
-				ChildExecutionInfos: []*persistence.ChildExecutionInfo{},
+				ChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 				RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 				SignalInfos:         []*persistenceblobs.SignalInfo{},
 				SignalRequestedIDs:  []string{},
@@ -275,7 +278,7 @@ func (s *conflictResolverSuite) TestReset() {
 				TimerTasks:          nil,
 				Condition:           s.mockContext.updateCondition,
 			},
-			Encoding: common.EncodingType(s.mockShard.GetConfig().EventEncodingType(namespaceID)),
+			Encoding: enumspb.EncodingType(enumspb.EncodingType_value[s.mockShard.GetConfig().EventEncodingType(namespaceID)]),
 		}, input)
 		return true
 	})).Return(nil).Once()
@@ -288,7 +291,7 @@ func (s *conflictResolverSuite) TestReset() {
 				State:  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
-			ExecutionStats: &persistence.ExecutionStats{},
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
 		},
 	}, nil).Once() // return empty resoonse since we are not testing the load
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()

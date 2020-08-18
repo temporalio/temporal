@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -147,7 +148,7 @@ func (s *resetorSuite) SetupTest() {
 		metricsClient:        s.mockShard.GetMetricsClient(),
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		config:               s.config,
-		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), s.mockShard.GetMetricsClient(), func(string) int { return 0 }),
+		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), s.mockShard.GetMetricsClient(), func(string, string) int { return shardID }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
@@ -165,7 +166,7 @@ func (s *resetorSuite) TearDownTest() {
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -228,7 +229,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
-		ExecutionStats: &persistence.ExecutionStats{},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
 	}}
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -253,7 +254,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  currExeInfo,
-		ExecutionStats: &persistence.ExecutionStats{},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
 	}}
 
 	gcurResponse := &persistence.GetCurrentExecutionResponse{
@@ -287,11 +288,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskQueue:                       taskQueue,
-							Input:                           payloads.EncodeString("testInput"),
-							WorkflowExecutionTimeoutSeconds: 100,
-							WorkflowRunTimeoutSeconds:       50,
-							WorkflowTaskTimeoutSeconds:      200,
+							TaskQueue:                taskQueue,
+							Input:                    payloads.EncodeString("testInput"),
+							WorkflowExecutionTimeout: timestamp.DurationPtr(100 * time.Second),
+							WorkflowRunTimeout:       timestamp.DurationPtr(50 * time.Second),
+							WorkflowTaskTimeout:      timestamp.DurationPtr(200 * time.Second),
 						}},
 					},
 					{
@@ -299,8 +300,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 						Version:   common.EmptyVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -350,12 +351,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType0",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  4,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 4,
 						}},
 					},
 					{
@@ -364,7 +365,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerFiredID,
-							StartToFireTimeoutSeconds:    2,
+							StartToFireTimeout:           timestamp.DurationPtr(2 * time.Second),
 							WorkflowTaskCompletedEventId: 4,
 						}},
 					},
@@ -398,8 +399,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 						Version:   common.EmptyVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -444,8 +445,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 						Version:   common.EmptyVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -482,17 +483,17 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType1",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 							RetryPolicy: &commonpb.RetryPolicy{
-								InitialIntervalInSeconds: 1,
-								BackoffCoefficient:       0.2,
-								MaximumAttempts:          10,
-								MaximumIntervalInSeconds: 1000,
+								InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+								BackoffCoefficient: 0.2,
+								MaximumAttempts:    10,
+								MaximumInterval:    timestamp.DurationPtr(1000 * time.Second),
 							},
 						}},
 					},
@@ -505,12 +506,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -519,7 +520,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID1,
-							StartToFireTimeoutSeconds:    4,
+							StartToFireTimeout:           timestamp.DurationPtr(4 * time.Second),
 							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
@@ -529,7 +530,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID2,
-							StartToFireTimeoutSeconds:    8,
+							StartToFireTimeout:           timestamp.DurationPtr(8 * time.Second),
 							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
@@ -542,12 +543,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -559,12 +560,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 				},
@@ -621,8 +622,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 						Version:   common.EmptyVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -639,7 +640,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					},
 				},
 			},
-			/////////////// reset point/////////////
+			// ///////////// reset point/////////////
 			{
 				Events: []*historypb.HistoryEvent{
 					{
@@ -657,7 +658,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerAfterReset,
-							StartToFireTimeoutSeconds:    4,
+							StartToFireTimeout:           timestamp.DurationPtr(4 * time.Second),
 							WorkflowTaskCompletedEventId: 29,
 						}},
 					},
@@ -703,14 +704,14 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	}
 
 	eid := int64(0)
-	timestamp := int64(1000)
+	eventTime := time.Unix(0, 1000).UTC()
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = timestamp
+			e.EventTime = &eventTime
 		}
 	}
 
@@ -832,14 +833,14 @@ func (s *resetorSuite) assertTimerIDs(ids []string, timers []*persistenceblobs.T
 	s.Equal(0, len(m))
 }
 
-func (s *resetorSuite) assertActivityIDs(ids []string, timers []*persistence.ActivityInfo) {
+func (s *resetorSuite) assertActivityIDs(ids []string, timers []*persistenceblobs.ActivityInfo) {
 	m := map[string]bool{}
 	for _, s := range ids {
 		m[s] = true
 	}
 
 	for _, t := range timers {
-		delete(m, t.ActivityID)
+		delete(m, t.ActivityId)
 	}
 
 	s.Equal(0, len(m))
@@ -847,7 +848,7 @@ func (s *resetorSuite) assertActivityIDs(ids []string, timers []*persistence.Act
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCancel() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -913,7 +914,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
-		ExecutionStats: &persistence.ExecutionStats{},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
 	}}
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -937,7 +938,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	}
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  currExeInfo,
-		ExecutionStats: &persistence.ExecutionStats{},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
 	}}
 
 	gcurResponse := &persistence.GetCurrentExecutionResponse{
@@ -971,10 +972,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskQueue:                       taskQueue,
-							Input:                           payloads.EncodeString("testInput"),
-							WorkflowExecutionTimeoutSeconds: 100,
-							WorkflowTaskTimeoutSeconds:      200,
+							TaskQueue:                taskQueue,
+							Input:                    payloads.EncodeString("testInput"),
+							WorkflowExecutionTimeout: timestamp.DurationPtr(100 * time.Second),
+							WorkflowTaskTimeout:      timestamp.DurationPtr(200 * time.Second),
 						}},
 					},
 					{
@@ -982,8 +983,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						Version:   common.EmptyVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -1033,12 +1034,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType0",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  4,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 4,
 						}},
 					},
 					{
@@ -1047,7 +1048,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerFiredID,
-							StartToFireTimeoutSeconds:    2,
+							StartToFireTimeout:           timestamp.DurationPtr(2 * time.Second),
 							WorkflowTaskCompletedEventId: 4,
 						}},
 					},
@@ -1081,8 +1082,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						Version:   common.EmptyVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -1127,8 +1128,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						Version:   common.EmptyVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -1165,17 +1166,17 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType1",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 							RetryPolicy: &commonpb.RetryPolicy{
-								InitialIntervalInSeconds: 1,
-								BackoffCoefficient:       0.2,
-								MaximumAttempts:          10,
-								MaximumIntervalInSeconds: 1000,
+								InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+								BackoffCoefficient: 0.2,
+								MaximumAttempts:    10,
+								MaximumInterval:    timestamp.DurationPtr(1000 * time.Second),
 							},
 						}},
 					},
@@ -1188,12 +1189,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -1202,7 +1203,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID1,
-							StartToFireTimeoutSeconds:    4,
+							StartToFireTimeout:           timestamp.DurationPtr(4 * time.Second),
 							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
@@ -1212,7 +1213,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID2,
-							StartToFireTimeoutSeconds:    8,
+							StartToFireTimeout:           timestamp.DurationPtr(8 * time.Second),
 							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
@@ -1225,12 +1226,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -1242,12 +1243,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -1315,8 +1316,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						Version:   common.EmptyVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -1333,7 +1334,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					},
 				},
 			},
-			/////////////// reset point/////////////
+			// ///////////// reset point/////////////
 			{
 				Events: []*historypb.HistoryEvent{
 					{
@@ -1351,7 +1352,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerAfterReset,
-							StartToFireTimeoutSeconds:    4,
+							StartToFireTimeout:           timestamp.DurationPtr(4 * time.Second),
 							WorkflowTaskCompletedEventId: 30,
 						}},
 					},
@@ -1397,14 +1398,14 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	}
 
 	eid := int64(0)
-	timestamp := int64(1000)
+	eventTime := time.Unix(0, 1000).UTC()
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = timestamp
+			e.EventTime = &eventTime
 		}
 	}
 
@@ -1426,7 +1427,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 
 	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Id: testNamespaceID},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
 			Clusters: []string{
@@ -1499,16 +1500,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
-	forkRepState := &persistence.ReplicationState{
+	forkRepState := &persistenceblobs.ReplicationState{
 		CurrentVersion:      beforeResetVersion,
 		StartVersion:        beforeResetVersion,
-		LastWriteEventID:    common.EmptyEventID,
+		LastWriteEventId:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
 		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -1534,7 +1535,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -1569,10 +1570,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskQueue:                       taskQueue,
-							Input:                           payloads.EncodeString("testInput"),
-							WorkflowExecutionTimeoutSeconds: 100,
-							WorkflowTaskTimeoutSeconds:      200,
+							TaskQueue:                taskQueue,
+							Input:                    payloads.EncodeString("testInput"),
+							WorkflowExecutionTimeout: timestamp.DurationPtr(100 * time.Second),
+							WorkflowTaskTimeout:      timestamp.DurationPtr(200 * time.Second),
 						}},
 					},
 					{
@@ -1580,8 +1581,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -1631,12 +1632,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType0",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  4,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 4,
 						}},
 					},
 					{
@@ -1645,7 +1646,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerFiredID,
-							StartToFireTimeoutSeconds:    2,
+							StartToFireTimeout:           timestamp.DurationPtr(2 * time.Second),
 							WorkflowTaskCompletedEventId: 4,
 						}},
 					},
@@ -1679,8 +1680,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -1725,8 +1726,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -1763,17 +1764,17 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType1",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 							RetryPolicy: &commonpb.RetryPolicy{
-								InitialIntervalInSeconds: 1,
-								BackoffCoefficient:       0.2,
-								MaximumAttempts:          10,
-								MaximumIntervalInSeconds: 1000,
+								InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+								BackoffCoefficient: 0.2,
+								MaximumAttempts:    10,
+								MaximumInterval:    timestamp.DurationPtr(1000 * time.Second),
 							},
 						}},
 					},
@@ -1786,12 +1787,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -1800,7 +1801,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID1,
-							StartToFireTimeoutSeconds:    4,
+							StartToFireTimeout:           timestamp.DurationPtr(4 * time.Second),
 							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
@@ -1810,7 +1811,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID2,
-							StartToFireTimeoutSeconds:    8,
+							StartToFireTimeout:           timestamp.DurationPtr(8 * time.Second),
 							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
@@ -1823,12 +1824,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -1840,12 +1841,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -1910,8 +1911,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -1928,7 +1929,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					},
 				},
 			},
-			/////////////// reset point/////////////
+			// ///////////// reset point/////////////
 			{
 				Events: []*historypb.HistoryEvent{
 					{
@@ -1946,7 +1947,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerAfterReset,
-							StartToFireTimeoutSeconds:    4,
+							StartToFireTimeout:           timestamp.DurationPtr(4 * time.Second),
 							WorkflowTaskCompletedEventId: 30,
 						}},
 					},
@@ -1992,14 +1993,14 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	}
 
 	eid := int64(0)
-	timestamp := int64(1000)
+	eventTime := time.Unix(0, 1000).UTC()
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = timestamp
+			e.EventTime = &eventTime
 		}
 	}
 
@@ -2106,7 +2107,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
 	compareRepState.CurrentVersion = afterResetVersion
-	compareRepState.LastWriteEventID = 34
+	compareRepState.LastWriteEventId = 34
 	compareRepState.LastWriteVersion = afterResetVersion
 	compareRepState.LastReplicationInfo = map[string]*replicationspb.ReplicationInfo{
 		"standby": {
@@ -2132,7 +2133,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 
 	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Id: testNamespaceID},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
 			Clusters: []string{
@@ -2205,16 +2206,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
-	forkRepState := &persistence.ReplicationState{
+	forkRepState := &persistenceblobs.ReplicationState{
 		CurrentVersion:      beforeResetVersion,
 		StartVersion:        beforeResetVersion,
-		LastWriteEventID:    common.EmptyEventID,
+		LastWriteEventId:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
 		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -2239,7 +2240,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	}
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -2274,10 +2275,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskQueue:                  taskQueue,
-							Input:                      payloads.EncodeString("testInput"),
-							WorkflowRunTimeoutSeconds:  100,
-							WorkflowTaskTimeoutSeconds: 200,
+							TaskQueue:           taskQueue,
+							Input:               payloads.EncodeString("testInput"),
+							WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+							WorkflowTaskTimeout: timestamp.DurationPtr(200 * time.Second),
 						}},
 					},
 					{
@@ -2285,8 +2286,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -2336,12 +2337,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType0",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  4,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 4,
 						}},
 					},
 					{
@@ -2350,7 +2351,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerFiredID,
-							StartToFireTimeoutSeconds:    2,
+							StartToFireTimeout:           timestamp.DurationPtr(2 * time.Second),
 							WorkflowTaskCompletedEventId: 4,
 						}},
 					},
@@ -2384,8 +2385,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -2430,8 +2431,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -2468,17 +2469,17 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType1",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 							RetryPolicy: &commonpb.RetryPolicy{
-								InitialIntervalInSeconds: 1,
-								BackoffCoefficient:       0.2,
-								MaximumAttempts:          10,
-								MaximumIntervalInSeconds: 1000,
+								InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+								BackoffCoefficient: 0.2,
+								MaximumAttempts:    10,
+								MaximumInterval:    timestamp.DurationPtr(1000 * time.Second),
 							},
 						}},
 					},
@@ -2491,12 +2492,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -2505,7 +2506,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID1,
-							StartToFireTimeoutSeconds:    4,
+							StartToFireTimeout:           timestamp.DurationPtr(4 * time.Second),
 							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
@@ -2515,7 +2516,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID2,
-							StartToFireTimeoutSeconds:    8,
+							StartToFireTimeout:           timestamp.DurationPtr(8 * time.Second),
 							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
@@ -2528,12 +2529,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -2545,12 +2546,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -2615,8 +2616,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -2633,7 +2634,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					},
 				},
 			},
-			/////////////// reset point/////////////
+			// ///////////// reset point/////////////
 			{
 				Events: []*historypb.HistoryEvent{
 					{
@@ -2651,7 +2652,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerAfterReset,
-							StartToFireTimeoutSeconds:    4,
+							StartToFireTimeout:           timestamp.DurationPtr(4 * time.Second),
 							WorkflowTaskCompletedEventId: 30,
 						}},
 					},
@@ -2697,14 +2698,14 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	}
 
 	eid := int64(0)
-	timestamp := int64(1000)
+	eventTime := time.Unix(0, 1000).UTC()
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = timestamp
+			e.EventTime = &eventTime
 		}
 	}
 
@@ -2732,7 +2733,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 
 	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Id: testNamespaceID},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
 			Clusters: []string{
@@ -2805,16 +2806,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
-	forkRepState := &persistence.ReplicationState{
+	forkRepState := &persistenceblobs.ReplicationState{
 		CurrentVersion:      beforeResetVersion,
 		StartVersion:        beforeResetVersion,
-		LastWriteEventID:    common.EmptyEventID,
+		LastWriteEventId:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
 		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -2840,7 +2841,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -2875,10 +2876,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskQueue:                  taskQueue,
-							Input:                      payloads.EncodeString("testInput"),
-							WorkflowRunTimeoutSeconds:  100,
-							WorkflowTaskTimeoutSeconds: 200,
+							TaskQueue:           taskQueue,
+							Input:               payloads.EncodeString("testInput"),
+							WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+							WorkflowTaskTimeout: timestamp.DurationPtr(200 * time.Second),
 						}},
 					},
 					{
@@ -2886,8 +2887,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -2937,12 +2938,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType0",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  4,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 4,
 						}},
 					},
 					{
@@ -2951,7 +2952,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerFiredID,
-							StartToFireTimeoutSeconds:    2,
+							StartToFireTimeout:           timestamp.DurationPtr(2 * time.Second),
 							WorkflowTaskCompletedEventId: 4,
 						}},
 					},
@@ -2985,8 +2986,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -3031,8 +3032,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -3069,17 +3070,17 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType1",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 							RetryPolicy: &commonpb.RetryPolicy{
-								InitialIntervalInSeconds: 1,
-								BackoffCoefficient:       0.2,
-								MaximumAttempts:          10,
-								MaximumIntervalInSeconds: 1000,
+								InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+								BackoffCoefficient: 0.2,
+								MaximumAttempts:    10,
+								MaximumInterval:    timestamp.DurationPtr(1000 * time.Second),
 							},
 						}},
 					},
@@ -3092,12 +3093,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -3106,7 +3107,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID1,
-							StartToFireTimeoutSeconds:    4,
+							StartToFireTimeout:           timestamp.DurationPtr(4 * time.Second),
 							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
@@ -3116,7 +3117,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID2,
-							StartToFireTimeoutSeconds:    8,
+							StartToFireTimeout:           timestamp.DurationPtr(8 * time.Second),
 							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
@@ -3129,12 +3130,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -3146,12 +3147,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -3216,8 +3217,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -3234,7 +3235,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					},
 				},
 			},
-			/////////////// reset point/////////////
+			// ///////////// reset point/////////////
 			{
 				Events: []*historypb.HistoryEvent{
 					{
@@ -3252,7 +3253,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerAfterReset,
-							StartToFireTimeoutSeconds:    4,
+							StartToFireTimeout:           timestamp.DurationPtr(4 * time.Second),
 							WorkflowTaskCompletedEventId: 30,
 						}},
 					},
@@ -3298,14 +3299,14 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	}
 
 	eid := int64(0)
-	timestamp := int64(1000)
+	eventTime := time.Unix(0, 1000).UTC()
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = timestamp
+			e.EventTime = &eventTime
 		}
 	}
 
@@ -3398,7 +3399,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
 	compareRepState.CurrentVersion = afterResetVersion
-	compareRepState.LastWriteEventID = 34
+	compareRepState.LastWriteEventId = 34
 	compareRepState.LastWriteVersion = afterResetVersion
 	compareRepState.LastReplicationInfo = map[string]*replicationspb.ReplicationInfo{
 		"standby": {
@@ -3424,7 +3425,7 @@ func (s *resetorSuite) TestApplyReset() {
 
 	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Id: testNamespaceID},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
@@ -3486,16 +3487,16 @@ func (s *resetorSuite) TestApplyReset() {
 		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
-	forkRepState := &persistence.ReplicationState{
+	forkRepState := &persistenceblobs.ReplicationState{
 		CurrentVersion:      beforeResetVersion,
 		StartVersion:        beforeResetVersion,
-		LastWriteEventID:    common.EmptyEventID,
+		LastWriteEventId:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
 		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -3521,7 +3522,7 @@ func (s *resetorSuite) TestApplyReset() {
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -3553,10 +3554,10 @@ func (s *resetorSuite) TestApplyReset() {
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskQueue:                  taskQueue,
-							Input:                      payloads.EncodeString("testInput"),
-							WorkflowRunTimeoutSeconds:  100,
-							WorkflowTaskTimeoutSeconds: 200,
+							TaskQueue:           taskQueue,
+							Input:               payloads.EncodeString("testInput"),
+							WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+							WorkflowTaskTimeout: timestamp.DurationPtr(200 * time.Second),
 						}},
 					},
 					{
@@ -3564,8 +3565,8 @@ func (s *resetorSuite) TestApplyReset() {
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -3615,12 +3616,12 @@ func (s *resetorSuite) TestApplyReset() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType0",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  4,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 4,
 						}},
 					},
 					{
@@ -3629,7 +3630,7 @@ func (s *resetorSuite) TestApplyReset() {
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerFiredID,
-							StartToFireTimeoutSeconds:    2,
+							StartToFireTimeout:           timestamp.DurationPtr(2 * time.Second),
 							WorkflowTaskCompletedEventId: 4,
 						}},
 					},
@@ -3663,8 +3664,8 @@ func (s *resetorSuite) TestApplyReset() {
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -3709,8 +3710,8 @@ func (s *resetorSuite) TestApplyReset() {
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -3747,17 +3748,17 @@ func (s *resetorSuite) TestApplyReset() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType1",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 							RetryPolicy: &commonpb.RetryPolicy{
-								InitialIntervalInSeconds: 1,
-								BackoffCoefficient:       0.2,
-								MaximumAttempts:          10,
-								MaximumIntervalInSeconds: 1000,
+								InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+								BackoffCoefficient: 0.2,
+								MaximumAttempts:    10,
+								MaximumInterval:    timestamp.DurationPtr(1000 * time.Second),
 							},
 						}},
 					},
@@ -3770,12 +3771,12 @@ func (s *resetorSuite) TestApplyReset() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -3784,7 +3785,7 @@ func (s *resetorSuite) TestApplyReset() {
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID1,
-							StartToFireTimeoutSeconds:    4,
+							StartToFireTimeout:           timestamp.DurationPtr(4 * time.Second),
 							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
@@ -3794,7 +3795,7 @@ func (s *resetorSuite) TestApplyReset() {
 						EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 						Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID2,
-							StartToFireTimeoutSeconds:    8,
+							StartToFireTimeout:           timestamp.DurationPtr(8 * time.Second),
 							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
@@ -3807,12 +3808,12 @@ func (s *resetorSuite) TestApplyReset() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -3824,12 +3825,12 @@ func (s *resetorSuite) TestApplyReset() {
 							ActivityType: &commonpb.ActivityType{
 								Name: "actType2",
 							},
-							TaskQueue:                     taskQueue,
-							ScheduleToCloseTimeoutSeconds: 1000,
-							ScheduleToStartTimeoutSeconds: 2000,
-							StartToCloseTimeoutSeconds:    3000,
-							HeartbeatTimeoutSeconds:       4000,
-							WorkflowTaskCompletedEventId:  16,
+							TaskQueue:                    taskQueue,
+							ScheduleToCloseTimeout:       timestamp.DurationPtr(1000 * time.Second),
+							ScheduleToStartTimeout:       timestamp.DurationPtr(2000 * time.Second),
+							StartToCloseTimeout:          timestamp.DurationPtr(3000 * time.Second),
+							HeartbeatTimeout:             timestamp.DurationPtr(4000 * time.Second),
+							WorkflowTaskCompletedEventId: 16,
 						}},
 					},
 					{
@@ -3894,8 +3895,8 @@ func (s *resetorSuite) TestApplyReset() {
 						Version:   beforeResetVersion,
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-							TaskQueue:                  taskQueue,
-							StartToCloseTimeoutSeconds: 100,
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						}},
 					},
 				},
@@ -3912,19 +3913,19 @@ func (s *resetorSuite) TestApplyReset() {
 					},
 				},
 			},
-			/////////////// reset point/////////////
+			// ///////////// reset point/////////////
 		},
 	}
 
 	eid := int64(0)
-	timestamp := int64(1000)
+	eventTime := time.Unix(0, 1000).UTC()
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = timestamp
+			e.EventTime = &eventTime
 		}
 	}
 
@@ -3988,8 +3989,8 @@ func (s *resetorSuite) TestApplyReset() {
 				Version:   afterResetVersion,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-					TaskQueue:                  taskQueue,
-					StartToCloseTimeoutSeconds: 100,
+					TaskQueue:           taskQueue,
+					StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 				}},
 			},
 		},
@@ -4044,7 +4045,7 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Equal(int64(33), appendReq.Events[3].GetEventId())
 	s.Equal(int64(34), appendReq.Events[4].GetEventId())
 
-	s.Equal(common.EncodingType(s.config.EventEncodingType(namespaceID)), appendReq.Encoding)
+	s.Equal(enumspb.EncodingType(enumspb.EncodingType_value[s.config.EventEncodingType(namespaceID)]), appendReq.Encoding)
 
 	// verify executionManager request
 	calls = s.mockExecutionMgr.Calls
@@ -4084,7 +4085,7 @@ func (s *resetorSuite) TestApplyReset() {
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
 	compareRepState.CurrentVersion = afterResetVersion
-	compareRepState.LastWriteEventID = 34
+	compareRepState.LastWriteEventId = 34
 	compareRepState.LastWriteVersion = afterResetVersion
 	compareRepState.LastReplicationInfo = map[string]*replicationspb.ReplicationInfo{
 		"standby": {
@@ -4126,18 +4127,18 @@ func TestFindAutoResetPoint(t *testing.T) {
 		Resettable:     false,
 	}
 
-	expiredNowNano := time.Now().UnixNano() - int64(time.Hour)
-	notExpiredNowNano := time.Now().UnixNano() + int64(time.Hour)
+	expiredNow := time.Now().UTC().Add(-1 * time.Hour)
+	notExpiredNow := time.Now().UTC().Add(time.Hour)
 	pt4 := &workflowpb.ResetPointInfo{
 		BinaryChecksum: "expired",
 		Resettable:     true,
-		ExpireTimeNano: expiredNowNano,
+		ExpireTime:     &expiredNow,
 	}
 
 	pt5 := &workflowpb.ResetPointInfo{
 		BinaryChecksum: "notExpired",
 		Resettable:     true,
-		ExpireTimeNano: notExpiredNowNano,
+		ExpireTime:     &notExpiredNow,
 	}
 
 	// case 3: two intersection
@@ -4218,4 +4219,317 @@ func TestFindAutoResetPoint(t *testing.T) {
 		},
 	})
 	assert.Equal(t, pt.String(), pt5.String())
+}
+
+func (s *resetorSuite) TestResetWorkflowExecution_WithoutRunID() {
+	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "", nil,
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+
+	namespaceID := testNamespaceID
+
+	wid := "wId"
+	wfType := "wfType"
+	taskQueueName := "taskQueue"
+	preResetRunID := uuid.New().String()
+
+	request := &historyservice.ResetWorkflowExecutionRequest{NamespaceId: namespaceID, ResetRequest: &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: "testNamespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      "",
+		},
+		Reason:                    "test reset",
+		WorkflowTaskFinishEventId: 4,
+		RequestId:                 uuid.New().String(),
+	},
+	}
+
+	preResetBranchToken := []byte("preResetBranchToken")
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: taskQueueName,
+	}
+	// Prepare history event sequence.
+	readHistoryResponse := &persistence.ReadHistoryBranchByBatchResponse{
+		NextPageToken:    nil,
+		Size:             1000,
+		LastFirstEventID: int64(4),
+		History: []*historypb.History{
+			{
+				Events: []*historypb.HistoryEvent{
+					{
+						EventId:   1,
+						Version:   common.EmptyVersion,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+						Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+							WorkflowType: &commonpb.WorkflowType{
+								Name: wfType,
+							},
+							TaskQueue:                taskQueue,
+							Input:                    payloads.EncodeString("testInput"),
+							WorkflowExecutionTimeout: timestamp.DurationPtr(100 * time.Second),
+							WorkflowRunTimeout:       timestamp.DurationPtr(50 * time.Second),
+							WorkflowTaskTimeout:      timestamp.DurationPtr(200 * time.Second),
+						}},
+					},
+					{
+						EventId:   2,
+						Version:   common.EmptyVersion,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+						}},
+					},
+				},
+			},
+			{
+				Events: []*historypb.HistoryEvent{
+					{
+						EventId:   3,
+						Version:   common.EmptyVersion,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+						Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
+							ScheduledEventId: 2,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*historypb.HistoryEvent{
+					{
+						EventId:   4,
+						Version:   common.EmptyVersion,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+						Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
+							ScheduledEventId: 2,
+							StartedEventId:   3,
+						}},
+					},
+				},
+			},
+		},
+	}
+
+	eid := int64(0)
+	eventTime := time.Unix(0, 1000).UTC()
+	for _, be := range readHistoryResponse.History {
+		for _, e := range be.Events {
+			eid++
+			if e.GetEventId() != eid {
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
+			}
+			e.EventTime = &eventTime
+		}
+	}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
+		NamespaceID: namespaceID,
+		Execution: commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      preResetRunID,
+		},
+	}).Return(&persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{
+			NamespaceID:            namespaceID,
+			WorkflowID:             wid,
+			WorkflowTypeName:       wfType,
+			TaskQueue:              taskQueueName,
+			RunID:                  preResetRunID,
+			BranchToken:            preResetBranchToken,
+			NextEventID:            5,
+			WorkflowTaskVersion:    common.EmptyVersion,
+			WorkflowTaskScheduleID: common.EmptyEventID,
+			WorkflowTaskStartedID:  common.EmptyEventID,
+			State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
+	}}, nil).Once()
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(&persistence.GetCurrentExecutionResponse{
+		RunID: preResetRunID,
+	}, nil).Twice()
+	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
+		BranchToken:   preResetBranchToken,
+		MinEventID:    common.FirstEventID,
+		MaxEventID:    int64(6),
+		PageSize:      defaultHistoryPageSize,
+		NextPageToken: nil,
+		ShardID:       &s.shardID,
+	}).Return(readHistoryResponse, nil).Once()
+	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.Anything).Return(&persistence.ForkHistoryBranchResponse{
+		NewBranchToken: []byte("newBranch"),
+	}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{
+		Size: 200,
+	}, nil).Times(2)
+	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	// Perform a reset and make sure there is no error.
+	response, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
+	s.Nil(err)
+	s.NotNil(response.RunId)
+}
+
+func (s *resetorSuite) TestResetWorkflowExecution_NoCompletedTasks() {
+	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "", nil,
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+
+	namespaceID := testNamespaceID
+
+	request := &historyservice.ResetWorkflowExecutionRequest{NamespaceId: namespaceID, ResetRequest: &workflowservice.ResetWorkflowExecutionRequest{}}
+
+	wid := "wId"
+	wfType := "wfType"
+	taskQueueName := "taskQueue"
+	forkRunID := uuid.New().String()
+	currRunID := uuid.New().String()
+
+	we := commonpb.WorkflowExecution{
+		WorkflowId: wid,
+		RunId:      forkRunID,
+	}
+
+	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 "testNamespace",
+		WorkflowExecution:         &we,
+		Reason:                    "test reset",
+		WorkflowTaskFinishEventId: 3,
+		RequestId:                 uuid.New().String(),
+	}
+
+	forkBranchToken := []byte("forkBranchToken")
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: taskQueueName,
+	}
+	// Prepare history event sequence.
+	readHistoryResponse := &persistence.ReadHistoryBranchByBatchResponse{
+		NextPageToken:    nil,
+		Size:             1000,
+		LastFirstEventID: int64(3),
+		History: []*historypb.History{
+			{
+				Events: []*historypb.HistoryEvent{
+					{
+						EventId:   1,
+						Version:   common.EmptyVersion,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+						Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+							WorkflowType: &commonpb.WorkflowType{
+								Name: wfType,
+							},
+							TaskQueue:                taskQueue,
+							Input:                    payloads.EncodeString("testInput"),
+							WorkflowExecutionTimeout: timestamp.DurationPtr(100 * time.Second),
+							WorkflowRunTimeout:       timestamp.DurationPtr(50 * time.Second),
+							WorkflowTaskTimeout:      timestamp.DurationPtr(200 * time.Second),
+						}},
+					},
+					{
+						EventId:   2,
+						Version:   common.EmptyVersion,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+						}},
+					},
+				},
+			},
+			{
+				Events: []*historypb.HistoryEvent{
+					{
+						EventId:    3,
+						Version:    common.EmptyVersion,
+						EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
+						Attributes: &historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes{WorkflowTaskTimedOutEventAttributes: &historypb.WorkflowTaskTimedOutEventAttributes{}},
+					},
+				},
+			},
+		},
+	}
+
+	eid := int64(0)
+	eventTime := time.Unix(0, 1000).UTC()
+	for _, be := range readHistoryResponse.History {
+		for _, e := range be.Events {
+			eid++
+			if e.GetEventId() != eid {
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
+			}
+			e.EventTime = &eventTime
+		}
+	}
+
+	// Mock calls.
+	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
+		NamespaceID: namespaceID,
+		Execution: commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      forkRunID,
+		},
+	}).Return(&persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{
+			NamespaceID:            namespaceID,
+			WorkflowID:             wid,
+			WorkflowTypeName:       wfType,
+			TaskQueue:              taskQueueName,
+			RunID:                  forkRunID,
+			BranchToken:            forkBranchToken,
+			NextEventID:            4,
+			WorkflowTaskVersion:    common.EmptyVersion,
+			WorkflowTaskScheduleID: common.EmptyEventID,
+			WorkflowTaskStartedID:  common.EmptyEventID,
+			State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
+	}}, nil).Once()
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(&persistence.GetCurrentExecutionResponse{
+		RunID: currRunID,
+	}, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
+		NamespaceID: namespaceID,
+		Execution: commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      currRunID,
+		},
+	}).Return(&persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{
+			NamespaceID:            namespaceID,
+			WorkflowID:             wid,
+			WorkflowTypeName:       wfType,
+			TaskQueue:              taskQueueName,
+			RunID:                  currRunID,
+			NextEventID:            common.FirstEventID,
+			WorkflowTaskVersion:    common.EmptyVersion,
+			WorkflowTaskScheduleID: common.EmptyEventID,
+			WorkflowTaskStartedID:  common.EmptyEventID,
+			State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
+	}}, nil).Once()
+	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
+		BranchToken:   forkBranchToken,
+		MinEventID:    common.FirstEventID,
+		MaxEventID:    int64(4),
+		PageSize:      defaultHistoryPageSize,
+		NextPageToken: nil,
+		ShardID:       &s.shardID,
+	}).Return(readHistoryResponse, nil).Once()
+	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.Anything).Return(&persistence.ForkHistoryBranchResponse{
+		NewBranchToken: []byte("newBranch"),
+	}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{
+		Size: 200,
+	}, nil).Times(2)
+	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	// Perform a reset and make sure there is no error.
+	response, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
+	s.Nil(err)
+	s.NotNil(response.RunId)
 }

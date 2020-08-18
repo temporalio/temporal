@@ -71,15 +71,15 @@ clusterMetadata:
       enabled: true
       initialFailoverVersion: 1
       rpcName: "frontend"
-      rpcAddress: "localhost:7933"
+      rpcAddress: "localhost:7233"
     standby:
       enabled: true
-      initialFailoverVersion: 0
+      initialFailoverVersion: 2
       rpcName: "frontend"
       rpcAddress: "localhost:8933"
     other:
       enabled: true
-      initialFailoverVersion: 2
+      initialFailoverVersion: 3
       rpcName: "frontend"
       rpcAddress: "localhost:9933"
 
@@ -110,7 +110,7 @@ kafka:
       cluster: test
     other-dlq:
       cluster: test
-  cadence-cluster-topics:
+  temporal-cluster-topics:
     active:
       topic: active
       dlq-topic: active-dlq
@@ -140,11 +140,11 @@ archival:
 namespaceDefaults:
   archival:
     history:
-      state: "enabled"
+      state: "disabled"
       URI: "file:///tmp/temporal_archival/development"
     visibility:
-      state: "enabled"
+      state: "disabled"
       URI: "file:///tmp/temporal_vis_archival/development"
 
 publicClient:
-  hostPort: "localhost:7933"
+  hostPort: "localhost:7233"

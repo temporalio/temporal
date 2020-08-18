@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -160,22 +161,22 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.generateRecordWorkflowStartedTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 				event,
 			); err != nil {
 				return nil, err
 			}
 
 			if err := taskGenerator.generateWorkflowStartTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-			if attributes.GetFirstWorkflowTaskBackoffSeconds() > 0 {
+			if timestamp.DurationValue(attributes.GetFirstWorkflowTaskBackoff()) > 0 {
 				if err := taskGenerator.generateDelayedWorkflowTasks(
-					b.unixNanoToTime(event.GetTimestamp()),
+					timestamp.TimeValue(event.GetEventTime()),
 					event,
 				); err != nil {
 					return nil, err
@@ -195,15 +196,15 @@ func (b *stateBuilderImpl) applyEvents(
 
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
 			attributes := event.GetWorkflowTaskScheduledEventAttributes()
-			// use event.GetTimestamp() as WorkflowTaskOriginalScheduledTimestamp, because the heartbeat is not happening here.
+			// use timestamp.TimeValue(event.GetEventTime()) as WorkflowTaskOriginalScheduledTimestamp, because the heartbeat is not happening here.
 			workflowTask, err := b.mutableState.ReplicateWorkflowTaskScheduledEvent(
 				event.GetVersion(),
 				event.GetEventId(),
 				attributes.TaskQueue,
-				attributes.GetStartToCloseTimeoutSeconds(),
+				int32(timestamp.DurationValue(attributes.GetStartToCloseTimeout()).Seconds()),
 				attributes.GetAttempt(),
-				event.GetTimestamp(),
-				event.GetTimestamp(),
+				timestamp.TimeValue(event.GetEventTime()).UnixNano(),
+				timestamp.TimeValue(event.GetEventTime()).UnixNano(),
 			)
 			if err != nil {
 				return nil, err
@@ -213,7 +214,7 @@ func (b *stateBuilderImpl) applyEvents(
 			// there shall be no workflowTask schedule to start timeout
 			// NOTE: at the beginning of the loop, stickyness is cleared
 			if err := taskGenerator.generateScheduleWorkflowTaskTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 				workflowTask.ScheduleID,
 			); err != nil {
 				return nil, err
@@ -227,14 +228,14 @@ func (b *stateBuilderImpl) applyEvents(
 				attributes.GetScheduledEventId(),
 				event.GetEventId(),
 				attributes.GetRequestId(),
-				event.GetTimestamp(),
+				timestamp.TimeValue(event.GetEventTime()).UnixNano(),
 			)
 			if err != nil {
 				return nil, err
 			}
 
 			if err := taskGenerator.generateStartWorkflowTaskTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 				workflowTask.ScheduleID,
 			); err != nil {
 				return nil, err
@@ -265,7 +266,7 @@ func (b *stateBuilderImpl) applyEvents(
 				// there shall be no workflowTask schedule to start timeout
 				// NOTE: at the beginning of the loop, stickyness is cleared
 				if err := taskGenerator.generateScheduleWorkflowTaskTasks(
-					b.unixNanoToTime(event.GetTimestamp()),
+					timestamp.TimeValue(event.GetEventTime()),
 					workflowTask.ScheduleID,
 				); err != nil {
 					return nil, err
@@ -288,7 +289,7 @@ func (b *stateBuilderImpl) applyEvents(
 				// there shall be no workflowTask schedule to start timeout
 				// NOTE: at the beginning of the loop, stickyness is cleared
 				if err := taskGenerator.generateScheduleWorkflowTaskTasks(
-					b.unixNanoToTime(event.GetTimestamp()),
+					timestamp.TimeValue(event.GetEventTime()),
 					workflowTask.ScheduleID,
 				); err != nil {
 					return nil, err
@@ -304,7 +305,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.generateActivityTransferTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 				event,
 			); err != nil {
 				return nil, err
@@ -385,7 +386,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.generateChildWorkflowTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 				event,
 			); err != nil {
 				return nil, err
@@ -452,7 +453,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.generateRequestCancelExternalTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 				event,
 			); err != nil {
 				return nil, err
@@ -484,7 +485,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.generateSignalExternalTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 				event,
 			); err != nil {
 				return nil, err
@@ -524,7 +525,7 @@ func (b *stateBuilderImpl) applyEvents(
 		case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 			b.mutableState.ReplicateUpsertWorkflowSearchAttributesEvent(event)
 			if err := taskGenerator.generateWorkflowSearchAttrTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 			); err != nil {
 				return nil, err
 			}
@@ -538,7 +539,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.generateWorkflowCloseTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 			); err != nil {
 				return nil, err
 			}
@@ -552,7 +553,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.generateWorkflowCloseTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 			); err != nil {
 				return nil, err
 			}
@@ -566,7 +567,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.generateWorkflowCloseTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 			); err != nil {
 				return nil, err
 			}
@@ -580,7 +581,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.generateWorkflowCloseTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 			); err != nil {
 				return nil, err
 			}
@@ -594,7 +595,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.generateWorkflowCloseTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 			); err != nil {
 				return nil, err
 			}
@@ -648,7 +649,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.generateWorkflowCloseTasks(
-				b.unixNanoToTime(event.GetTimestamp()),
+				timestamp.TimeValue(event.GetEventTime()),
 			); err != nil {
 				return nil, err
 			}
@@ -660,12 +661,12 @@ func (b *stateBuilderImpl) applyEvents(
 
 	// must generate the activity timer / user timer at the very end
 	if err := taskGenerator.generateActivityTimerTasks(
-		b.unixNanoToTime(lastEvent.GetTimestamp()),
+		timestamp.TimeValue(lastEvent.GetEventTime()),
 	); err != nil {
 		return nil, err
 	}
 	if err := taskGenerator.generateUserTimerTasks(
-		b.unixNanoToTime(lastEvent.GetTimestamp()),
+		timestamp.TimeValue(lastEvent.GetEventTime()),
 	); err != nil {
 		return nil, err
 	}
@@ -682,5 +683,5 @@ func (b *stateBuilderImpl) unixNanoToTime(
 	unixNano int64,
 ) time.Time {
 
-	return time.Unix(0, unixNano)
+	return time.Unix(0, unixNano).UTC()
 }

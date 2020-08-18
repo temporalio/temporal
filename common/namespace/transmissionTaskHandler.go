@@ -83,12 +83,12 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 				Data:        info.Data,
 			},
 			Config: &namespacepb.NamespaceConfig{
-				WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
-				HistoryArchivalState:                   config.HistoryArchivalState,
-				HistoryArchivalUri:                     config.HistoryArchivalUri,
-				VisibilityArchivalState:                config.VisibilityArchivalState,
-				VisibilityArchivalUri:                  config.VisibilityArchivalUri,
-				BadBinaries:                            config.BadBinaries,
+				WorkflowExecutionRetentionTtl: config.Retention,
+				HistoryArchivalState:          config.HistoryArchivalState,
+				HistoryArchivalUri:            config.HistoryArchivalUri,
+				VisibilityArchivalState:       config.VisibilityArchivalState,
+				VisibilityArchivalUri:         config.VisibilityArchivalUri,
+				BadBinaries:                   config.BadBinaries,
 			},
 			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 				ActiveClusterName: replicationConfig.ActiveClusterName,

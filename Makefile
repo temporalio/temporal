@@ -12,10 +12,10 @@ all: update-tools clean proto bins check test
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto install-proto-submodule buf api-linter protoc fix-proto-path proto-mock goimports-proto
+proto: clean-proto install-proto-submodule buf api-linter protoc fix-proto-path proto-mock goimports-proto copyright-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule buf api-linter protoc fix-proto-path update-go-api proto-mock goimports-proto gomodtidy
+update-proto: clean-proto update-proto-submodule buf api-linter protoc fix-proto-path update-go-api proto-mock goimports-proto copyright-proto gomodtidy
 
 # Build all docker images.
 docker-images:
@@ -148,7 +148,7 @@ install-proto-submodule:
 protoc: $(PROTO_OUT)
 	@printf $(COLOR) "Build proto files..."
 # Run protoc separately for each directory because of different package names.
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc $(PROTO_IMPORTS) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)*.proto$(NEWLINE))
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc $(PROTO_IMPORTS) --gogoslick_out=Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)*.proto$(NEWLINE))
 
 fix-proto-path:
 	mv -f $(PROTO_OUT)/temporal/server/api/* $(PROTO_OUT) && rm -rf $(PROTO_OUT)/temporal
@@ -169,6 +169,10 @@ update-go-api:
 goimports-proto:
 	@printf $(COLOR) "Run goimports..."
 	@goimports -w $(PROTO_OUT)
+
+copyright-proto:
+	@printf $(COLOR) "Update license headers..."
+	@go run ./cmd/tools/copyright/licensegen.go --scanDir $(PROTO_OUT)
 
 ##### Binaries #####
 clean-bins:
@@ -197,7 +201,7 @@ temporal-sql-tool:
 ##### Checks #####
 copyright:
 	@printf $(COLOR) "Check license header..."
-	@GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
+	@go run ./cmd/tools/copyright/licensegen.go --verifyOnly
 
 lint:
 	@printf $(COLOR) "Run linter..."
@@ -241,12 +245,14 @@ clean-test-results:
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
 	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(UNIT_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
+	@grep -qzwv "^--- FAIL" test.log
 
 integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
 	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(INTEG_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
 	@go test -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) | tee -a test.log
+	@grep -qzwv "^--- FAIL" test.log
 
 test: unit-test integration-test
 

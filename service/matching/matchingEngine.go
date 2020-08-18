@@ -33,7 +33,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -55,6 +54,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -234,7 +234,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 			addRequest.TaskQueue.GetName(),
 			addRequest.Execution.GetWorkflowId(),
 			addRequest.Execution.GetRunId(),
-			addRequest.GetScheduleToStartTimeoutSeconds()))
+			timestamp.DurationValue(addRequest.GetScheduleToStartTimeout())))
 
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
@@ -247,15 +247,14 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
-	now := types.TimestampNow()
-	expiry := types.TimestampNow()
-	expiry.Seconds += int64(addRequest.ScheduleToStartTimeoutSeconds)
+	now := timestamp.TimePtr(time.Now().UTC())
+	expiry := now.Add(timestamp.DurationValue(addRequest.GetScheduleToStartTimeout()))
 	taskInfo := &persistenceblobs.TaskInfo{
 		NamespaceId: namespaceID,
 		RunId:       addRequest.Execution.GetRunId(),
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),
-		ExpiryTime:  expiry,
+		ExpiryTime:  &expiry,
 		CreateTime:  now,
 	}
 
@@ -263,7 +262,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
-		forwardedFrom: addRequest.GetForwardedFrom(),
+		forwardedFrom: addRequest.GetForwardedSource(),
 	})
 }
 
@@ -294,23 +293,22 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
-	now := types.TimestampNow()
-	expiry := types.TimestampNow()
-	expiry.Seconds += int64(addRequest.GetScheduleToStartTimeoutSeconds())
+	now := timestamp.TimePtr(time.Now().UTC())
+	expiry := now.Add(timestamp.DurationValue(addRequest.GetScheduleToStartTimeout()))
 	taskInfo := &persistenceblobs.TaskInfo{
 		NamespaceId: sourceNamespaceID,
 		RunId:       runID,
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),
 		CreateTime:  now,
-		ExpiryTime:  expiry,
+		ExpiryTime:  &expiry,
 	}
 
 	return tlMgr.AddTask(hCtx.Context, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
-		forwardedFrom: addRequest.GetForwardedFrom(),
+		forwardedFrom: addRequest.GetForwardedSource(),
 	})
 }
 
@@ -348,7 +346,7 @@ pollLoop:
 			return nil, err
 		}
 
-		e.emitForwardedFromStats(hCtx.scope, task.isForwarded(), req.GetForwardedFrom())
+		e.emitForwardedSourceStats(hCtx.scope, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -447,7 +445,7 @@ pollLoop:
 			return nil, err
 		}
 
-		e.emitForwardedFromStats(hCtx.scope, task.isForwarded(), req.GetForwardedFrom())
+		e.emitForwardedSourceStats(hCtx.scope, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -661,7 +659,7 @@ func (e *matchingEngineImpl) getAllPartitions(
 
 	partitionKeys = append(partitionKeys, rootPartition)
 
-	nWritePartitions := e.config.GetTasksBatchSize
+	nWritePartitions := e.config.NumTaskqueueWritePartitions
 	n := nWritePartitions(namespace, rootPartition, taskQueueType)
 	if n <= 0 {
 		return partitionKeys, nil
@@ -724,7 +722,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 		}
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
-			ct, _ := types.TimestampFromProto(task.event.Data.CreateTime)
+			ct := timestamp.TimeValue(task.event.Data.CreateTime)
 			scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
 		}
 	}
@@ -756,7 +754,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		panic("ActivityTaskScheduledEventAttributes.ActivityID is not set")
 	}
 	if task.responseC == nil {
-		ct, _ := types.TimestampFromProto(task.event.Data.CreateTime)
+		ct := timestamp.TimeValue(task.event.Data.CreateTime)
 		scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
 	}
 
@@ -773,22 +771,22 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 
 	return &matchingservice.PollActivityTaskQueueResponse{
-		ActivityId:                      attributes.ActivityId,
-		ActivityType:                    attributes.ActivityType,
-		Header:                          attributes.Header,
-		Input:                           attributes.Input,
-		WorkflowExecution:               task.workflowExecution(),
-		ScheduledTimestampOfThisAttempt: historyResponse.ScheduledTimestampOfThisAttempt,
-		ScheduledTimestamp:              scheduledEvent.Timestamp,
-		ScheduleToCloseTimeoutSeconds:   attributes.ScheduleToCloseTimeoutSeconds,
-		StartedTimestamp:                historyResponse.StartedTimestamp,
-		StartToCloseTimeoutSeconds:      attributes.StartToCloseTimeoutSeconds,
-		HeartbeatTimeoutSeconds:         attributes.HeartbeatTimeoutSeconds,
-		TaskToken:                       serializedToken,
-		Attempt:                         int32(taskToken.ScheduleAttempt),
-		HeartbeatDetails:                historyResponse.HeartbeatDetails,
-		WorkflowType:                    historyResponse.WorkflowType,
-		WorkflowNamespace:               historyResponse.WorkflowNamespace,
+		ActivityId:                  attributes.ActivityId,
+		ActivityType:                attributes.ActivityType,
+		Header:                      attributes.Header,
+		Input:                       attributes.Input,
+		WorkflowExecution:           task.workflowExecution(),
+		CurrentAttemptScheduledTime: historyResponse.CurrentAttemptScheduledTime,
+		ScheduledTime:               scheduledEvent.EventTime,
+		ScheduleToCloseTimeout:      attributes.ScheduleToCloseTimeout,
+		StartedTime:                 historyResponse.StartedTime,
+		StartToCloseTimeout:         attributes.StartToCloseTimeout,
+		HeartbeatTimeout:            attributes.HeartbeatTimeout,
+		TaskToken:                   serializedToken,
+		Attempt:                     int32(taskToken.ScheduleAttempt),
+		HeartbeatDetails:            historyResponse.HeartbeatDetails,
+		WorkflowType:                historyResponse.WorkflowType,
+		WorkflowNamespace:           historyResponse.WorkflowNamespace,
 	}
 }
 
@@ -850,12 +848,12 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	return resp, err
 }
 
-func (e *matchingEngineImpl) emitForwardedFromStats(
+func (e *matchingEngineImpl) emitForwardedSourceStats(
 	scope metrics.Scope,
 	isTaskForwarded bool,
-	pollForwardedFrom string,
+	pollForwardedSource string,
 ) {
-	isPollForwarded := len(pollForwardedFrom) > 0
+	isPollForwarded := len(pollForwardedSource) > 0
 	switch {
 	case isTaskForwarded && isPollForwarded:
 		scope.IncCounter(metrics.RemoteToRemoteMatchPerTaskQueueCounter)

@@ -33,7 +33,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -129,7 +128,7 @@ func (v *visibilityArchiver) Archive(
 
 	// The filename has the format: closeTimestamp_hash(runID).visibility
 	// This format allows the archiver to sort all records without reading the file contents
-	filename := constructVisibilityFilename(request.CloseTimestamp, request.GetRunId())
+	filename := constructVisibilityFilename(request.CloseTime, request.GetRunId())
 	if err := writeFile(path.Join(dirPath, filename), encodedVisibilityRecord, v.fileMode); err != nil {
 		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return err
@@ -216,7 +215,7 @@ func (v *visibilityArchiver) query(
 			return nil, serviceerror.NewInternal(err.Error())
 		}
 
-		if record.CloseTimestamp < request.parsedQuery.earliestCloseTime {
+		if record.CloseTime.UnixNano() < request.parsedQuery.earliestCloseTime {
 			break
 		}
 
@@ -225,7 +224,7 @@ func (v *visibilityArchiver) query(
 			if len(response.Executions) == request.pageSize {
 				if idx != len(files) {
 					newToken := &queryVisibilityToken{
-						LastCloseTime: record.CloseTimestamp,
+						LastCloseTime: record.CloseTime.UnixNano(),
 						LastRunID:     record.GetRunId(),
 					}
 					encodedToken, err := serializeToken(newToken)
@@ -309,7 +308,7 @@ func sortAndFilterFiles(filenames []string, token *queryVisibilityToken) ([]stri
 }
 
 func matchQuery(record *archiverproto.ArchiveVisibilityRequest, query *parsedQuery) bool {
-	if record.CloseTimestamp < query.earliestCloseTime || record.CloseTimestamp > query.latestCloseTime {
+	if record.CloseTime.UnixNano() < query.earliestCloseTime || record.CloseTime.UnixNano() > query.latestCloseTime {
 		return false
 	}
 	if query.workflowID != nil && record.GetWorkflowId() != *query.workflowID {
@@ -336,11 +335,9 @@ func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *wor
 		Type: &commonpb.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
-		StartTime: &types.Int64Value{
-			Value: record.StartTimestamp},
-		ExecutionTime: record.ExecutionTimestamp,
-		CloseTime: &types.Int64Value{
-			Value: record.CloseTimestamp},
+		StartTime:     record.StartTime,
+		ExecutionTime: record.ExecutionTime,
+		CloseTime:     record.CloseTime,
 		Status:        record.Status,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,

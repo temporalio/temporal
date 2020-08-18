@@ -33,9 +33,9 @@ import (
 
 const (
 	// TestCurrentClusterInitialFailoverVersion is initial failover version for current cluster
-	TestCurrentClusterInitialFailoverVersion = int64(0)
+	TestCurrentClusterInitialFailoverVersion = int64(1)
 	// TestAlternativeClusterInitialFailoverVersion is initial failover version for alternative cluster
-	TestAlternativeClusterInitialFailoverVersion = int64(1)
+	TestAlternativeClusterInitialFailoverVersion = int64(2)
 	// TestFailoverVersionIncrement is failover version increment used for test
 	TestFailoverVersionIncrement = int64(10)
 	// TestCurrentClusterName is current cluster used for test

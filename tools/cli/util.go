@@ -84,6 +84,13 @@ func HistoryEventToString(e *historypb.HistoryEvent, printFully bool, maxFieldLe
 
 func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 	v := reflect.ValueOf(d)
+	// Time is handled separetely because we don't want to go through it fields.
+	if t, isTime := d.(time.Time); isTime {
+		if t.IsZero() {
+			return "<zero>"
+		}
+		return t.String()
+	}
 	switch v.Kind() {
 	case reflect.Ptr:
 		return anyToString(v.Elem().Interface(), printFully, maxFieldLength)
@@ -97,6 +104,12 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 				continue
 			}
 			fieldName := t.Field(i).Name
+
+			// Filter out private fields.
+			if !f.CanInterface() {
+				continue
+			}
+
 			fieldValue := valueToString(f, printFully, maxFieldLength)
 			if fieldValue == "" {
 				continue
@@ -571,8 +584,7 @@ func getRequiredGlobalOption(c *cli.Context, optionName string) string {
 	return value
 }
 
-func convertTime(unixNano int64, onlyTime bool) string {
-	t := time.Unix(0, unixNano)
+func formatTime(t time.Time, onlyTime bool) string {
 	var result string
 	if onlyTime {
 		result = t.Format(defaultTimeFormat)
@@ -582,7 +594,7 @@ func convertTime(unixNano int64, onlyTime bool) string {
 	return result
 }
 
-func parseTime(timeStr string, defaultValue int64, now time.Time) int64 {
+func parseTime(timeStr string, defaultValue time.Time, now time.Time) time.Time {
 	if len(timeStr) == 0 {
 		return defaultValue
 	}
@@ -590,22 +602,22 @@ func parseTime(timeStr string, defaultValue int64, now time.Time) int64 {
 	// try to parse
 	parsedTime, err := time.Parse(defaultDateTimeFormat, timeStr)
 	if err == nil {
-		return parsedTime.UnixNano()
+		return parsedTime
 	}
 
-	// treat as raw time
+	// treat as raw unix time
 	resultValue, err := strconv.ParseInt(timeStr, 10, 64)
 	if err == nil {
-		return resultValue
+		return time.Unix(0, resultValue).UTC()
 	}
 
 	// treat as time range format
 	parsedTime, err = parseTimeRange(timeStr, now)
 	if err != nil {
-		ErrorAndExit(fmt.Sprintf("Cannot parse time '%s', use UTC format '2006-01-02T15:04:05Z', "+
+		ErrorAndExit(fmt.Sprintf("Cannot parse time '%s', use UTC format '2006-01-02T15:04:05', "+
 			"time range or raw UnixNano directly. See help for more details.", timeStr), err)
 	}
-	return parsedTime.UnixNano()
+	return parsedTime
 }
 
 // parseTimeRange parses a given time duration string (in format X<time-duration>) and
@@ -619,10 +631,10 @@ func parseTime(timeStr string, defaultValue int64, now time.Time) int64 {
 // - month/M
 // - year/y
 // For example, possible input values, and their result:
-// - "3d" or "3day" --> three days --> time.Now().Add(-3 * 24 * time.Hour)
-// - "2m" or "2minute" --> two minutes --> time.Now().Add(-2 * time.Minute)
-// - "1w" or "1week" --> one week --> time.Now().Add(-7 * 24 * time.Hour)
-// - "30s" or "30second" --> thirty seconds --> time.Now().Add(-30 * time.Second)
+// - "3d" or "3day" --> three days --> time.Now().UTC().Add(-3 * 24 * time.Hour)
+// - "2m" or "2minute" --> two minutes --> time.Now().UTC().Add(-2 * time.Minute)
+// - "1w" or "1week" --> one week --> time.Now().UTC().Add(-7 * 24 * time.Hour)
+// - "30s" or "30second" --> thirty seconds --> time.Now().UTC().Add(-30 * time.Second)
 // Note: Duration strings are case-sensitive, and should be used as mentioned above only.
 // Limitation: Value of numerical multiplier, X should be in b/w 0 - 1e6 (1 million), boundary values excluded i.e.
 // 0 < X < 1e6. Also, the maximum time in the past can be 1 January 1970 00:00:00 UTC (epoch time),
@@ -656,7 +668,7 @@ func parseTimeRange(timeRange string, now time.Time) (time.Time, error) {
 	}
 
 	res := now.Add(time.Duration(-num) * dur) // using server's local timezone
-	epochTime := time.Unix(0, 0)
+	epochTime := time.Unix(0, 0).UTC()
 	if res.Before(epochTime) {
 		res = epochTime
 	}
@@ -738,51 +750,76 @@ func newContextWithTimeout(c *cli.Context, timeout time.Duration) (context.Conte
 
 // process and validate input provided through cmd or file
 func processJSONInput(c *cli.Context) *commonpb.Payloads {
-	rawJson := processJSONInputHelper(c, jsonTypeInput)
-	if len(rawJson) == 0 {
-		return nil
-	}
+	jsonsRaw := readJSONInputs(c, jsonTypeInput)
 
-	var v interface{}
-	if err := json.Unmarshal(rawJson, &v); err != nil {
-		ErrorAndExit("Input is not a valid JSON.", err)
-	}
+	var jsons []interface{}
+	for _, jsonRaw := range jsonsRaw {
+		if jsonRaw == nil {
+			jsons = append(jsons, nil)
+		} else {
+			var j interface{}
+			if err := json.Unmarshal(jsonRaw, &j); err != nil {
+				ErrorAndExit("Input is not a valid JSON.", err)
+			}
+			jsons = append(jsons, j)
+		}
 
-	p, err := payloads.Encode(v)
+	}
+	p, err := payloads.Encode(jsons...)
 	if err != nil {
-		ErrorAndExit("Unable to encode Input.", err)
+		ErrorAndExit("Unable to encode input.", err)
 	}
 
 	return p
 }
 
-// process and validate json
-func processJSONInputHelper(c *cli.Context, jType jsonType) []byte {
-	var flagNameOfRawInput string
-	var flagNameOfInputFileName string
+// read multiple inputs presented in json format
+func readJSONInputs(c *cli.Context, jType jsonType) [][]byte {
+	var flagRawInput string
+	var flagInputFileName string
 
 	switch jType {
 	case jsonTypeInput:
-		flagNameOfRawInput = FlagInput
-		flagNameOfInputFileName = FlagInputFile
+		flagRawInput = FlagInput
+		flagInputFileName = FlagInputFile
 	case jsonTypeMemo:
-		flagNameOfRawInput = FlagMemo
-		flagNameOfInputFileName = FlagMemoFile
+		flagRawInput = FlagMemo
+		flagInputFileName = FlagMemoFile
 	default:
 		return nil
 	}
 
-	if c.IsSet(flagNameOfRawInput) {
-		return []byte(c.String(flagNameOfRawInput))
-	} else if c.IsSet(flagNameOfInputFileName) {
-		inputFile := c.String(flagNameOfInputFileName)
+	if c.IsSet(flagRawInput) {
+		inputsG := c.Generic(flagRawInput)
+
+		var inputs *cli.StringSlice
+		var ok bool
+		if inputs, ok = inputsG.(*cli.StringSlice); !ok {
+			// input could be provided as StringFlag instead of StringSliceFlag
+			ss := make(cli.StringSlice, 1)
+			ss[0] = fmt.Sprintf("%v", inputsG)
+			inputs = &ss
+		}
+
+		var inputsRaw [][]byte
+		for _, i := range *inputs {
+			if strings.EqualFold(i, "null") {
+				inputsRaw = append(inputsRaw, []byte(nil))
+			} else {
+				inputsRaw = append(inputsRaw, []byte(i))
+			}
+		}
+
+		return inputsRaw
+	} else if c.IsSet(flagInputFileName) {
+		inputFile := c.String(flagInputFileName)
 		// This method is purely used to parse input from the CLI. The input comes from a trusted user
 		// #nosec
 		data, err := ioutil.ReadFile(inputFile)
 		if err != nil {
 			ErrorAndExit("Error reading input file", err)
 		}
-		return data
+		return [][]byte{data}
 	}
 	return nil
 }

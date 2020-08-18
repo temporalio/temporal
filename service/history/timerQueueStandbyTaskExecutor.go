@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 )
 
@@ -132,9 +132,8 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 				return nil, serviceerror.NewInternal(errString)
 			}
 
-			t, _ := types.TimestampFromProto(timerTask.VisibilityTime)
 			if isExpired := timerSequence.isExpired(
-				t,
+				timestamp.TimeValue(timerTask.VisibilityTime),
 				timerSequenceID,
 			); isExpired {
 				return getHistoryResendInfo(mutableState)
@@ -191,9 +190,8 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 				return nil, serviceerror.NewInternal(errString)
 			}
 
-			t, _ := types.TimestampFromProto(timerTask.VisibilityTime)
 			if isExpired := timerSequence.isExpired(
-				t,
+				timestamp.TimeValue(timerTask.VisibilityTime),
 				timerSequenceID,
 			); isExpired {
 				return getHistoryResendInfo(mutableState)
@@ -218,9 +216,9 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 		// created.
 		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
-		activityInfo, ok := mutableState.GetActivityInfo(timerTask.GetEventId())
-		goTS, _ := types.TimestampFromProto(timerTask.VisibilityTime)
-		if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goTS.Unix() {
+		activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.GetEventId())
+		goTS := timestamp.TimeValue(timerTask.VisibilityTime)
+		if isHeartBeatTask && ok && (heartbeatTimeoutVis.Before(goTS) || heartbeatTimeoutVis.Equal(goTS)) {
 			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
 			if err := mutableState.UpdateActivity(activityInfo); err != nil {
 				return nil, err

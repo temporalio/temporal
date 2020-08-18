@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/task"
 	"go.temporal.io/server/common/xdc"
@@ -259,7 +260,7 @@ SubmitLoop:
 func (p *replicationTaskProcessor) initLogger(msg messaging.Message) log.Logger {
 	return p.logger.WithTags(tag.KafkaPartition(msg.Partition()),
 		tag.KafkaOffset(msg.Offset()),
-		tag.AttemptStart(time.Now()))
+		tag.AttemptStart(time.Now().UTC()))
 }
 
 func (p *replicationTaskProcessor) ackMsg(msg messaging.Message, logger log.Logger) {
@@ -272,7 +273,7 @@ func (p *replicationTaskProcessor) ackMsg(msg messaging.Message, logger log.Logg
 
 func (p *replicationTaskProcessor) nackMsg(msg messaging.Message, err error, logger log.Logger) {
 	p.updateFailureMetric(metrics.ReplicatorScope, err)
-	logger.Error(ErrDeserializeReplicationTask.Error(), tag.Error(err), tag.AttemptEnd(time.Now()))
+	logger.Error(ErrDeserializeReplicationTask.Error(), tag.Error(err), tag.AttemptEnd(time.Now().UTC()))
 	// the underlying implementation will not return anything other than nil
 	// do logging just in case
 	if err = msg.Nack(); err != nil {
@@ -321,14 +322,15 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicationspb.Repl
 	}()
 
 	attr := task.GetSyncShardStatusTaskAttributes()
-	if time.Now().Sub(time.Unix(0, attr.GetTimestamp())) > dropSyncShardTaskTimeThreshold {
+	st := timestamp.TimeValue(attr.GetStatusTime())
+	if timestamp.TimeNowPtrUtc().Sub(st) > dropSyncShardTaskTimeThreshold {
 		return nil
 	}
 
 	req := &historyservice.SyncShardStatusRequest{
 		SourceCluster: attr.SourceCluster,
 		ShardId:       attr.ShardId,
-		Timestamp:     attr.Timestamp,
+		StatusTime:    &st,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), p.config.ReplicationTaskContextTimeout())
 	defer cancel()

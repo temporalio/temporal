@@ -26,7 +26,7 @@ services:
       - discovery.type=single-node
       - ES_JAVA_OPTS=-Xms100m -Xmx100m
   temporal:
-    image: temporalio/server:${SERVER_TAG:-0.27.0}
+    image: temporalio/server:${SERVER_TAG:-0.28.0}
     ports:
      - "7233:7233"
     environment:
@@ -41,7 +41,7 @@ services:
       - kafka
       - elasticsearch
   temporal-admin-tools:
-    image: temporalio/admin-tools:${SERVER_TAG:-0.27.0}
+    image: temporalio/admin-tools:${SERVER_TAG:-0.28.0}
     stdin_open: true
     tty: true
     environment:
@@ -49,9 +49,10 @@ services:
     depends_on:
       - temporal
   temporal-web:
-    image: temporalio/web:${WEB_TAG:-0.27.0}
+    image: temporalio/web:${WEB_TAG:-0.28.1}
     environment:
       - "TEMPORAL_GRPC_ENDPOINT=temporal:7233"
+      - "TEMPORAL_PERMIT_WRITE_API=true"
     ports:
       - "8088:8088"
     depends_on:

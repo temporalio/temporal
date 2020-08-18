@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -208,7 +209,7 @@ func (d *HandlerImpl) RegisterNamespace(
 		Data:        registerRequest.Data,
 	}
 	config := &persistenceblobs.NamespaceConfig{
-		RetentionDays:           registerRequest.GetWorkflowExecutionRetentionPeriodDays(),
+		Retention:               registerRequest.GetWorkflowExecutionRetentionPeriod(),
 		HistoryArchivalState:    nextHistoryArchivalState.State,
 		HistoryArchivalUri:      nextHistoryArchivalState.URI,
 		VisibilityArchivalState: nextVisibilityArchivalState.State,
@@ -438,9 +439,9 @@ func (d *HandlerImpl) UpdateNamespace(
 	}
 	if updateRequest.Config != nil {
 		updatedConfig := updateRequest.Config
-		if updatedConfig.GetWorkflowExecutionRetentionPeriodInDays() != 0 {
+		if timestamp.DurationValue(updatedConfig.GetWorkflowExecutionRetentionTtl()) != 0 {
 			configurationChanged = true
-			config.RetentionDays = updatedConfig.GetWorkflowExecutionRetentionPeriodInDays()
+			config.Retention = updatedConfig.GetWorkflowExecutionRetentionTtl()
 		}
 		if historyArchivalConfigChanged {
 			configurationChanged = true
@@ -455,7 +456,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		if updatedConfig.BadBinaries != nil {
 			maxLength := d.maxBadBinaryCount(updateRequest.GetName())
 			// only do merging
-			bb := d.mergeBadBinaries(config.BadBinaries.Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UnixNano())
+			bb := d.mergeBadBinaries(config.BadBinaries.Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UTC())
 			config.BadBinaries = &bb
 			if len(config.BadBinaries.Binaries) > maxLength {
 				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Total resetBinaries cannot exceed the max limit: %v", maxLength))
@@ -638,12 +639,12 @@ func (d *HandlerImpl) createResponse(
 	}
 
 	configResult := &namespacepb.NamespaceConfig{
-		WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
-		HistoryArchivalState:                   config.HistoryArchivalState,
-		HistoryArchivalUri:                     config.HistoryArchivalUri,
-		VisibilityArchivalState:                config.VisibilityArchivalState,
-		VisibilityArchivalUri:                  config.VisibilityArchivalUri,
-		BadBinaries:                            config.BadBinaries,
+		WorkflowExecutionRetentionTtl: config.Retention,
+		HistoryArchivalState:          config.HistoryArchivalState,
+		HistoryArchivalUri:            config.HistoryArchivalUri,
+		VisibilityArchivalState:       config.VisibilityArchivalState,
+		VisibilityArchivalUri:         config.VisibilityArchivalUri,
+		BadBinaries:                   config.BadBinaries,
 	}
 
 	var clusters []*replicationpb.ClusterReplicationConfig
@@ -663,14 +664,14 @@ func (d *HandlerImpl) createResponse(
 func (d *HandlerImpl) mergeBadBinaries(
 	old map[string]*namespacepb.BadBinaryInfo,
 	new map[string]*namespacepb.BadBinaryInfo,
-	createTimeNano int64,
+	createTime time.Time,
 ) namespacepb.BadBinaries {
 
 	if old == nil {
 		old = map[string]*namespacepb.BadBinaryInfo{}
 	}
 	for k, v := range new {
-		v.CreateTimeNano = createTimeNano
+		v.CreateTime = &createTime
 		old[k] = v
 	}
 	return namespacepb.BadBinaries{

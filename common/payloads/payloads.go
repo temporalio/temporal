@@ -25,68 +25,43 @@
 package payloads
 
 import (
-	"bytes"
 	"fmt"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/sdk/encoded"
+	"go.temporal.io/sdk/converter"
 )
 
 var (
-	dataConverter = encoded.GetDefaultDataConverter()
+	defaultDataConverter = converter.GetDefaultDataConverter()
 )
 
 func EncodeString(str string) *commonpb.Payloads {
-	// Error can be safely ignored here becase string always can be converted to JSON.
-	ps, _ := dataConverter.ToPayloads(str)
+	// Error can be safely ignored here becase string always can be converted.
+	ps, _ := defaultDataConverter.ToPayloads(str)
 	return ps
 }
 
 func EncodeInt(i int) *commonpb.Payloads {
-	// Error can be safely ignored here becase int always can be converted to JSON.
-	ps, _ := dataConverter.ToPayloads(i)
+	// Error can be safely ignored here becase int always can be converted.
+	ps, _ := defaultDataConverter.ToPayloads(i)
 	return ps
 }
 
 func EncodeBytes(bytes []byte) *commonpb.Payloads {
 	// Error can be safely ignored here becase []byte always can be raw encoded.
-	ps, _ := dataConverter.ToPayloads(bytes)
+	ps, _ := defaultDataConverter.ToPayloads(bytes)
 	return ps
 }
 
 func Encode(value ...interface{}) (*commonpb.Payloads, error) {
-	return dataConverter.ToPayloads(value...)
+	return defaultDataConverter.ToPayloads(value...)
 }
 
 func Decode(ps *commonpb.Payloads, valuePtr ...interface{}) error {
-	return dataConverter.FromPayloads(ps, valuePtr...)
+	return defaultDataConverter.FromPayloads(ps, valuePtr...)
 }
 
 func ToString(ps *commonpb.Payloads) string {
-	str, err := toString(ps)
-	if err != nil {
-		return fmt.Sprintf("Unable to decode payloads. %+v", err)
-	}
-	return str
-}
-
-func toString(ps *commonpb.Payloads) (string, error) {
-	var buf bytes.Buffer
-	details, err := dataConverter.ToStrings(ps)
-	if err != nil {
-		return "", err
-	}
-
-	buf.WriteString("[")
-	for _, d := range details {
-		buf.WriteString(d)
-		buf.WriteString(", ")
-	}
-
-	if buf.Len() > 1 {
-		buf.Truncate(buf.Len() - 2) // cut the last comma and space
-	}
-
-	buf.WriteString("]")
-	return buf.String(), nil
+	return fmt.Sprintf("[%s]", strings.Join(defaultDataConverter.ToStrings(ps), ", "))
 }

@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -103,7 +104,7 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.namespace = "some random namespace name"
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
-		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -146,13 +147,13 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		{
 			EventId:   2,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
-			Timestamp: time.Now().UnixNano(),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
@@ -371,7 +372,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 }
 
 func (s *nDCHistoryResenderSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
-	blob, err := s.serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
+	blob, err := s.serializer.SerializeBatchEvents(events, enumspb.ENCODING_TYPE_PROTO3)
 	s.Nil(err)
 	return &commonpb.DataBlob{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
