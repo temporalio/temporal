@@ -230,7 +230,7 @@ type (
 		Datacenter string `yaml:"datacenter"`
 		// MaxConns is the max number of connections to this datastore for a single keyspace
 		MaxConns int `yaml:"maxConns"`
-		// ConnectTimeout initial connection timeout that is used during initial dial to server (default: 600ms)
+		// ConnectTimeout is a timeout for initial dial to cassandra server (default: 600ms)
 		ConnectTimeout time.Duration `yaml:"connectTimeout"`
 		// TLS configuration
 		TLS *auth.TLS `yaml:"tls"`
