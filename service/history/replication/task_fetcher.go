@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/quotas"
 	serviceConfig "github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/service/history/config"
 )
@@ -52,6 +53,7 @@ type (
 
 		GetSourceCluster() string
 		GetRequestChan() chan<- *request
+		GetRateLimiter() *quotas.DynamicRateLimiter
 	}
 
 	// TaskFetchers is a group of fetchers, one per source DC.
@@ -69,6 +71,7 @@ type (
 		config         *config.Config
 		logger         log.Logger
 		remotePeer     admin.Client
+		rateLimiter    *quotas.DynamicRateLimiter
 		requestChan    chan *request
 		done           chan struct{}
 	}
@@ -167,8 +170,11 @@ func newReplicationTaskFetcher(
 		remotePeer:     sourceFrontend,
 		currentCluster: currentCluster,
 		sourceCluster:  sourceCluster,
-		requestChan:    make(chan *request, requestChanBufferSize),
-		done:           make(chan struct{}),
+		rateLimiter: quotas.NewDynamicRateLimiter(func() float64 {
+			return config.ReplicationTaskProcessorHostQPS()
+		}),
+		requestChan: make(chan *request, requestChanBufferSize),
+		done:        make(chan struct{}),
 	}
 }
 
@@ -303,4 +309,9 @@ func (f *taskFetcherImpl) GetSourceCluster() string {
 // GetRequestChan returns the request chan for the fetcher
 func (f *taskFetcherImpl) GetRequestChan() chan<- *request {
 	return f.requestChan
+}
+
+// GetRateLimiter returns the host level rate limiter for the fetcher
+func (f *taskFetcherImpl) GetRateLimiter() *quotas.DynamicRateLimiter {
+	return f.rateLimiter
 }

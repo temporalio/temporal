@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	adminClient "github.com/uber/cadence/client/admin"
 	"github.com/uber/cadence/common/authorization"
@@ -741,6 +742,7 @@ func (c *cadenceImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	client.OverrideValue(dynamicconfig.HistoryMgrNumConns, c.historyConfig.NumHistoryShards)
 	client.OverrideValue(dynamicconfig.ExecutionMgrNumConns, c.historyConfig.NumHistoryShards)
 	client.OverrideValue(dynamicconfig.EnableNDC, c.enableNDC)
+	client.OverrideValue(dynamicconfig.ReplicationTaskProcessorStartWait, time.Nanosecond)
 
 	if c.workerConfig.EnableIndexer {
 		client.OverrideValue(dynamicconfig.AdvancedVisibilityWritingMode, common.AdvancedVisibilityWritingModeDual)

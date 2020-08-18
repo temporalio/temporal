@@ -41,6 +41,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/engine"
 	"github.com/uber/cadence/service/history/shard"
@@ -78,6 +79,8 @@ type (
 		metricsClient     metrics.Client
 		logger            log.Logger
 		taskExecutor      TaskExecutor
+		hostRateLimiter   *quotas.DynamicRateLimiter
+		shardRateLimiter  *quotas.DynamicRateLimiter
 
 		taskRetryPolicy backoff.RetryPolicy
 		dlqRetryPolicy  backoff.RetryPolicy
@@ -121,16 +124,20 @@ func NewTaskProcessor(
 	noTaskBackoffPolicy.SetExpirationInterval(backoff.NoInterval)
 	noTaskRetrier := backoff.NewRetrier(noTaskBackoffPolicy, backoff.SystemClock)
 	return &taskProcessorImpl{
-		currentCluster:         shard.GetClusterMetadata().GetCurrentClusterName(),
-		sourceCluster:          taskFetcher.GetSourceCluster(),
-		status:                 common.DaemonStatusInitialized,
-		shard:                  shard,
-		historyEngine:          historyEngine,
-		historySerializer:      persistence.NewPayloadSerializer(),
-		config:                 config,
-		metricsClient:          metricsClient,
-		logger:                 shard.GetLogger(),
-		taskExecutor:           taskExecutor,
+		currentCluster:    shard.GetClusterMetadata().GetCurrentClusterName(),
+		sourceCluster:     taskFetcher.GetSourceCluster(),
+		status:            common.DaemonStatusInitialized,
+		shard:             shard,
+		historyEngine:     historyEngine,
+		historySerializer: persistence.NewPayloadSerializer(),
+		config:            config,
+		metricsClient:     metricsClient,
+		logger:            shard.GetLogger(),
+		taskExecutor:      taskExecutor,
+		hostRateLimiter:   taskFetcher.GetRateLimiter(),
+		shardRateLimiter: quotas.NewDynamicRateLimiter(func() float64 {
+			return config.ReplicationTaskProcessorShardQPS()
+		}),
 		taskRetryPolicy:        taskRetryPolicy,
 		dlqRetryPolicy:         dlqRetryPolicy,
 		noTaskRetrier:          noTaskRetrier,
@@ -195,6 +202,7 @@ Loop:
 				tag.Counter(len(response.GetReplicationTasks())),
 			)
 
+			p.taskProcessingStartWait()
 			p.processResponse(response)
 		case <-p.done:
 			return
@@ -285,7 +293,11 @@ func (p *taskProcessorImpl) processResponse(response *r.ReplicationMessages) {
 
 	scope := p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope, metrics.TargetClusterTag(p.sourceCluster))
 	batchRequestStartTime := time.Now()
+	ctx := context.Background()
 	for _, replicationTask := range response.ReplicationTasks {
+		// TODO: move to MultiStageRateLimiter
+		_ = p.hostRateLimiter.Wait(ctx)
+		_ = p.shardRateLimiter.Wait(ctx)
 		err := p.processSingleTask(replicationTask)
 		if err != nil {
 			// Processor is shutdown. Exit without updating the checkpoint.
@@ -617,4 +629,12 @@ func (p *taskProcessorImpl) updateFailureMetric(scope int, err error) {
 			p.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
 		}
 	}
+}
+
+func (p *taskProcessorImpl) taskProcessingStartWait() {
+	shardID := p.shard.GetShardID()
+	time.Sleep(backoff.JitDuration(
+		p.config.ReplicationTaskProcessorStartWait(shardID),
+		p.config.ReplicationTaskProcessorStartWaitJitterCoefficient(shardID),
+	))
 }

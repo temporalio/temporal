@@ -42,6 +42,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/engine"
@@ -113,9 +114,12 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.requestChan = make(chan *request, 10)
 
 	s.taskFetcher = NewMockTaskFetcher(s.controller)
-
+	rateLimiter := quotas.NewDynamicRateLimiter(func() float64 {
+		return 100
+	})
 	s.taskFetcher.EXPECT().GetSourceCluster().Return("standby").AnyTimes()
 	s.taskFetcher.EXPECT().GetRequestChan().Return(s.requestChan).AnyTimes()
+	s.taskFetcher.EXPECT().GetRateLimiter().Return(rateLimiter).AnyTimes()
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return("active").AnyTimes()
 
 	s.taskProcessor = NewTaskProcessor(
