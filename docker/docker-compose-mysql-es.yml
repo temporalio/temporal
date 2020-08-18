@@ -23,14 +23,16 @@ services:
   temporal:
     image: temporalio/server:${SERVER_TAG:-0.27.0}
     ports:
-     - "7233:7233"
+      - "7233:7233"
+    volumes:
+      - ../config:/mnt/temporal/config
     environment:
       - "AUTO_SETUP=true"
       - "DB=mysql"
       - "MYSQL_USER=root"
       - "MYSQL_PWD=root"
       - "MYSQL_SEEDS=mysql"
-      - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development_es.yaml"
+      - "DYNAMIC_CONFIG_FILE_PATH=/mnt/temporal/config/dynamicconfig/development_es.yaml"
       - "ENABLE_ES=true"
       - "ES_SEEDS=elasticsearch"
       - "KAFKA_SEEDS=kafka"

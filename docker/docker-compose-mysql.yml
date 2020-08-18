@@ -9,14 +9,16 @@ services:
   temporal:
     image: temporalio/server:${SERVER_TAG:-0.28.0}
     ports:
-     - "7233:7233"
+      - "7233:7233"
+    volumes:
+      - ../config:/mnt/temporal/config
     environment:
       - "AUTO_SETUP=true"
       - "DB=mysql"
       - "MYSQL_USER=root"
       - "MYSQL_PWD=root"
       - "MYSQL_SEEDS=mysql"
-      - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"
+      - "DYNAMIC_CONFIG_FILE_PATH=/mnt/temporal/config/dynamicconfig/development.yaml"
     depends_on:
       - mysql
   temporal-admin-tools:
