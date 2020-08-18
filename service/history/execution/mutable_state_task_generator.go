@@ -24,6 +24,8 @@ package execution
 
 import (
 	"fmt"
+	"math"
+	"math/rand"
 	"time"
 
 	"github.com/uber/cadence/.gen/go/shared"
@@ -102,7 +104,12 @@ type (
 	}
 )
 
-const defaultWorkflowRetentionInDays int32 = 1
+const (
+	defaultWorkflowRetentionInDays      int32 = 1
+	defaultInitIntervalForDecisionRetry       = 1 * time.Minute
+	defaultMaxIntervalForDecisionRetry        = 5 * time.Minute
+	defaultJitterCoefficient                  = 0.2
+)
 
 var _ MutableStateTaskGenerator = (*mutableStateTaskGeneratorImpl)(nil)
 
@@ -300,6 +307,14 @@ func (r *mutableStateTaskGeneratorImpl) GenerateDecisionStartTasks(
 	startToCloseTimeout := time.Duration(
 		decision.DecisionTimeout,
 	) * time.Second
+
+	// schedule timer exponentially if decision keeps failing
+	if decision.Attempt > 1 {
+		defaultStartToCloseTimeout := r.mutableState.GetExecutionInfo().DecisionStartToCloseTimeout
+		startToCloseTimeout = getNextDecisionTimeout(decision.Attempt, time.Duration(defaultStartToCloseTimeout)*time.Second)
+		decision.DecisionTimeout = int32(startToCloseTimeout.Seconds()) // override decision timeout
+		r.mutableState.UpdateDecision(decision)
+	}
 
 	r.mutableState.AddTimerTasks(&persistence.DecisionTimeoutTask{
 		// TaskID is set by shard
@@ -553,4 +568,19 @@ func (r *mutableStateTaskGeneratorImpl) getTargetDomainID(
 	}
 
 	return targetDomainID, nil
+}
+
+func getNextDecisionTimeout(attempt int64, defaultStartToCloseTimeout time.Duration) time.Duration {
+	if attempt <= 1 {
+		return defaultStartToCloseTimeout
+	}
+
+	nextInterval := float64(defaultInitIntervalForDecisionRetry) * math.Pow(2, float64(attempt-2))
+	nextInterval = math.Min(nextInterval, float64(defaultMaxIntervalForDecisionRetry))
+	jitterPortion := int(defaultJitterCoefficient * nextInterval)
+	if jitterPortion < 1 {
+		jitterPortion = 1
+	}
+	nextInterval = nextInterval*(1-defaultJitterCoefficient) + float64(rand.Intn(jitterPortion))
+	return time.Duration(nextInterval)
 }
