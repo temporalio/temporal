@@ -223,10 +223,8 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	task *persistenceblobs.TransferTaskInfo,
 ) (retError error) {
 
-	namespaceID, workflowExecution := t.getNamespaceIDAndWorkflowExecution(task)
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		namespaceID,
-		workflowExecution,
+		t.getNamespaceIDAndWorkflowExecution(task),
 	)
 	if err != nil {
 		return err
@@ -329,7 +327,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		return err
 	}
 
-	return t.processParentClosePolicy(task.GetNamespaceId(), namespace, workflowExecution, children)
+	return t.processParentClosePolicy(task.GetNamespaceId(), namespace, children)
 }
 
 func (t *transferQueueActiveTaskExecutor) processCancelExecution(
@@ -1345,7 +1343,6 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	namespaceID string,
 	namespace string,
-	workflowExecution commonpb.WorkflowExecution,
 	childInfos map[int64]*persistenceblobs.ChildExecutionInfo,
 ) error {
 
@@ -1387,7 +1384,6 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		if err := t.applyParentClosePolicy(
 			namespaceID,
 			namespace,
-			workflowExecution,
 			childInfo,
 		); err != nil {
 			if _, ok := err.(*serviceerror.NotFound); !ok {
@@ -1403,7 +1399,6 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	namespaceID string,
 	namespace string,
-	workflowExecution commonpb.WorkflowExecution,
 	childInfo *persistenceblobs.ChildExecutionInfo,
 ) error {
 
