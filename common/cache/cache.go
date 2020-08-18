@@ -23,6 +23,8 @@ package cache
 import (
 	"time"
 
+	"github.com/uber/cadence/common"
+
 	"github.com/uber/cadence/common/metrics"
 )
 
@@ -130,4 +132,6 @@ type DomainMetricsScopeCache interface {
 	Get(domainID string, scopeIdx int) (metrics.Scope, bool)
 	// Put adds metrics scope for a domainID and scopeIdx
 	Put(domainID string, scopeIdx int, metricsScope metrics.Scope)
+
+	common.Daemon
 }

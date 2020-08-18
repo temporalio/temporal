@@ -367,6 +367,7 @@ func (h *Impl) Start() {
 	}
 	h.membershipMonitor.Start()
 	h.domainCache.Start()
+	h.domainMetricsScopeCache.Start()
 
 	hostInfo, err := h.membershipMonitor.WhoAmI()
 	if err != nil {
@@ -392,6 +393,7 @@ func (h *Impl) Stop() {
 	}
 
 	h.domainCache.Stop()
+	h.domainMetricsScopeCache.Stop()
 	h.membershipMonitor.Stop()
 	if err := h.dispatcher.Stop(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Error("failed to stop dispatcher")
