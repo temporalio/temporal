@@ -781,6 +781,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 				NamespaceID:                namespaceID,
 				WorkflowID:                 newExecution.GetWorkflowId(),
 				RunID:                      newExecution.GetRunId(),
+				FirstExecutionRunID:        newExecution.GetRunId(),
 				TaskQueue:                  taskqueue,
 				WorkflowTypeName:           workflowType,
 				WorkflowRunTimeout:         workflowTimeout,
@@ -1234,6 +1235,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				NamespaceID:                uuid.New(),
 				WorkflowID:                 "get-workflow-test",
 				RunID:                      uuid.New(),
+				FirstExecutionRunID:        uuid.New(),
 				ParentNamespaceID:          uuid.New(),
 				ParentWorkflowID:           "get-workflow-test-parent",
 				ParentRunID:                uuid.New(),
@@ -1298,6 +1300,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.NamespaceID, info.NamespaceID)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowID, info.WorkflowID)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.RunID, info.RunID)
+	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.FirstExecutionRunID, info.FirstExecutionRunID)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.ParentNamespaceID, info.ParentNamespaceID)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.ParentWorkflowID, info.ParentWorkflowID)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.ParentRunID, info.ParentRunID)

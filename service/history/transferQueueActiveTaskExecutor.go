@@ -1417,10 +1417,12 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 				Namespace: namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: childInfo.StartedWorkflowId,
-					RunId:      childInfo.StartedRunId,
 				},
-				Reason:   "by parent close policy",
-				Identity: identityHistoryService,
+				// Include StartedRunID as FirstExecutionRunID on the request to allow child to be terminated across runs.
+				// If the child does continue as new it still propagates the RunID of first execution.
+				FirstExecutionRunId: childInfo.StartedRunId,
+				Reason:              "by parent close policy",
+				Identity:            identityHistoryService,
 			},
 		})
 		return err
@@ -1432,9 +1434,11 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 				Namespace: namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: childInfo.StartedWorkflowId,
-					RunId:      childInfo.StartedRunId,
 				},
-				Identity: identityHistoryService,
+				// Include StartedRunID as FirstExecutionRunID on the request to allow child to be canceled across runs.
+				// If the child does continue as new it still propagates the RunID of first execution.
+				FirstExecutionRunId: childInfo.StartedRunId,
+				Identity:            identityHistoryService,
 			},
 		})
 		return err

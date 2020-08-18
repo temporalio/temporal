@@ -212,6 +212,7 @@ type (
 		NamespaceID                            string
 		WorkflowID                             string
 		RunID                                  string
+		FirstExecutionRunID                    string
 		ParentNamespaceID                      string
 		ParentWorkflowID                       string
 		ParentRunID                            string
@@ -685,6 +686,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 	info := &persistenceblobs.WorkflowExecutionInfo{
 		NamespaceId:                       executionInfo.NamespaceID,
 		WorkflowId:                        executionInfo.WorkflowID,
+		FirstExecutionRunId:               executionInfo.FirstExecutionRunID,
 		TaskQueue:                         executionInfo.TaskQueue,
 		WorkflowTypeName:                  executionInfo.WorkflowTypeName,
 		WorkflowRunTimeout:                timestamp.DurationFromSeconds(executionInfo.WorkflowRunTimeout),
@@ -765,6 +767,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		NamespaceID:                            info.NamespaceId,
 		WorkflowID:                             info.WorkflowId,
 		RunID:                                  state.RunId,
+		FirstExecutionRunID:                    info.FirstExecutionRunId,
 		NextEventID:                            nextEventID,
 		TaskQueue:                              info.GetTaskQueue(),
 		WorkflowTypeName:                       info.GetWorkflowTypeName(),

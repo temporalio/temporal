@@ -202,6 +202,7 @@ type (
 		NamespaceID                            string
 		WorkflowID                             string
 		RunID                                  string
+		FirstExecutionRunID                    string
 		ParentNamespaceID                      string
 		ParentWorkflowID                       string
 		ParentRunID                            string
