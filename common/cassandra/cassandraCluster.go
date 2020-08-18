@@ -26,9 +26,8 @@ package cassandra
 
 import (
 	"crypto/tls"
-	"strings"
-
 	"github.com/gocql/gocql"
+	"strings"
 
 	"go.temporal.io/server/common/service/config"
 )
@@ -67,6 +66,9 @@ func NewCassandraCluster(cfg config.Cassandra) *gocql.ClusterConfig {
 	}
 	if cfg.MaxConns > 0 {
 		cluster.NumConns = cfg.MaxConns
+	}
+	if cfg.ConnectTimeout > 0 {
+		cluster.ConnectTimeout = cfg.ConnectTimeout
 	}
 
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
