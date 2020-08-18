@@ -460,6 +460,7 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 				NamespaceID:                namespaceID,
 				WorkflowID:                 workflowExecution.GetWorkflowId(),
 				RunID:                      workflowExecution.GetRunId(),
+				FirstExecutionRunID:        workflowExecution.GetRunId(),
 				ParentNamespaceID:          parentNamespaceID,
 				ParentWorkflowID:           parentExecution.GetWorkflowId(),
 				ParentRunID:                parentExecution.GetRunId(),

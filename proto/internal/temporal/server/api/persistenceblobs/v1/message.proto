@@ -314,6 +314,7 @@ message WorkflowExecutionInfo {
     map<string, temporal.api.common.v1.Payload> search_attributes = 52;
     map<string, temporal.api.common.v1.Payload> memo = 53;
     temporal.server.api.history.v1.VersionHistories version_histories = 54;
+    string first_execution_run_id = 55;
 }
 
 message Checksum {

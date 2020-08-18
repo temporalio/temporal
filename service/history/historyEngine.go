@@ -182,6 +182,8 @@ var (
 	ErrActivityTaskNotFound = serviceerror.NewNotFound("invalid activityID or activity already timed out or invoking workflow is completed")
 	// ErrWorkflowCompleted is the error to indicate workflow execution already completed
 	ErrWorkflowCompleted = serviceerror.NewNotFound("workflow execution already completed")
+	// ErrWorkflowExecutionNotFound is the error to indicate workflow execution does not exist
+	ErrWorkflowExecutionNotFound = serviceerror.NewNotFound("workflow execution not found")
 	// ErrWorkflowParent is the error to parent execution is given and mismatch
 	ErrWorkflowParent = serviceerror.NewNotFound("workflow parent does not match")
 	// ErrDeserializingToken is the error to indicate task token is invalid
@@ -1786,7 +1788,12 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 	childWorkflowOnly := req.GetChildWorkflowOnly()
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
-		RunId:      request.WorkflowExecution.RunId,
+	}
+
+	firstExecutionRunID := request.GetFirstExecutionRunId()
+	// If firstExecutionRunID is set on the request always try to cancel currently running execution
+	if len(firstExecutionRunID) == 0 {
+		execution.RunId = request.WorkflowExecution.RunId
 	}
 
 	return e.updateWorkflow(ctx, namespaceID, execution,
@@ -1795,7 +1802,15 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 				return nil, ErrWorkflowCompleted
 			}
 
+			// There is a workflow execution currently running with the WorkflowID.
+			// If user passed in a FirstExecutionRunID with the request to allow cancel to work across runs then
+			// let's compare the FirstExecutionRunID on the request to make sure we cancel the correct workflow
+			// execution.
 			executionInfo := mutableState.GetExecutionInfo()
+			if len(firstExecutionRunID) > 0 && executionInfo.FirstExecutionRunID != firstExecutionRunID {
+				return nil, ErrWorkflowExecutionNotFound
+			}
+
 			if childWorkflowOnly {
 				parentWorkflowID := executionInfo.ParentWorkflowID
 				parentRunID := executionInfo.ParentRunID
@@ -2154,7 +2169,12 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 	request := terminateRequest.TerminateRequest
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
-		RunId:      request.WorkflowExecution.RunId,
+	}
+
+	firstExecutionRunID := request.GetFirstExecutionRunId()
+	// If firstExecutionRunID is set on the request always try to terminate currently running execution
+	if len(firstExecutionRunID) == 0 {
+		execution.RunId = request.WorkflowExecution.RunId
 	}
 
 	return e.updateWorkflow(
@@ -2164,6 +2184,15 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
+			}
+
+			// There is a workflow execution currently running with the WorkflowID.
+			// If user passed in a FirstExecutionRunID with the request to allow terminate to work across runs then
+			// let's compare the FirstExecutionRunID on the request to make sure we terminate the correct workflow
+			// execution.
+			executionInfo := mutableState.GetExecutionInfo()
+			if len(firstExecutionRunID) > 0 && executionInfo.FirstExecutionRunID != firstExecutionRunID {
+				return nil, ErrWorkflowExecutionNotFound
 			}
 
 			eventBatchFirstEventID := mutableState.GetNextEventID()

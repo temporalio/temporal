@@ -1847,6 +1847,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.NamespaceID = e.namespaceEntry.GetInfo().Id
 	e.executionInfo.WorkflowID = execution.GetWorkflowId()
 	e.executionInfo.RunID = execution.GetRunId()
+	e.executionInfo.FirstExecutionRunID = event.GetFirstExecutionRunId()
 	e.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	e.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
 	e.executionInfo.WorkflowRunTimeout = int64(timestamp.DurationValue(event.GetWorkflowRunTimeout()).Seconds())
@@ -3342,11 +3343,17 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	}
 
 	continueAsNewEvent := e.hBuilder.AddContinuedAsNewEvent(workflowTaskCompletedEventID, newRunID, attributes)
-	currentStartEvent, err := e.GetStartEvent()
-	if err != nil {
-		return nil, nil, err
+	firstRunID := e.executionInfo.FirstExecutionRunID
+	// This is needed for backwards compatibility.  Workflow execution create with Temporal release v0.28.0 or earlier
+	// does not have FirstExecutionRunID stored as part of mutable state.  If this is not set then load it from
+	// workflow execution started event.
+	if len(firstRunID) == 0 {
+		currentStartEvent, err := e.GetStartEvent()
+		if err != nil {
+			return nil, nil, err
+		}
+		firstRunID = currentStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstExecutionRunId()
 	}
-	firstRunID := currentStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstExecutionRunId()
 
 	namespace := e.namespaceEntry.GetInfo().Name
 	namespaceID := e.namespaceEntry.GetInfo().Id
