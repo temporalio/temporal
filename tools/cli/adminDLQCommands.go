@@ -144,10 +144,14 @@ func AdminMergeDLQMessages(c *cli.Context) {
 
 	var response *replicator.MergeDLQMessagesResponse
 	var err error
-	for response == nil || len(response.GetNextPageToken()) > 0 {
+	for {
 		response, err = adminClient.MergeDLQMessages(ctx, request)
 		if err != nil {
 			ErrorAndExit("Failed to merge DLQ message", err)
+		}
+
+		if len(response.NextPageToken) == 0 {
+			break
 		}
 
 		request.NextPageToken = response.NextPageToken
