@@ -17,7 +17,7 @@ services:
     ports:
       - "7233:7233"
     volumes:
-      - ../config:/mnt/temporal/config
+      - ../config/dynamicconfig:/etc/temporal/config/dynamicconfig
     environment:
       - "AUTO_SETUP=true"
       - "DB=postgres"
@@ -25,7 +25,7 @@ services:
       - "POSTGRES_USER=root"
       - "POSTGRES_PWD="
       - "POSTGRES_SEEDS=postgres"
-      - "DYNAMIC_CONFIG_FILE_PATH=/mnt/temporal/config/dynamicconfig/development.yaml"
+      - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"
     depends_on:
       - cockroach
     links:

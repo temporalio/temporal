@@ -30,11 +30,11 @@ services:
     ports:
       - "7233:7233"
     volumes:
-      - ../config:/mnt/temporal/config
+      - ../config/dynamicconfig:/etc/temporal/config/dynamicconfig
     environment:
       - "AUTO_SETUP=true"
       - "CASSANDRA_SEEDS=cassandra"
-      - "DYNAMIC_CONFIG_FILE_PATH=/mnt/temporal/config/dynamicconfig/development_es.yaml"
+      - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development_es.yaml"
       - "ENABLE_ES=true"
       - "ES_SEEDS=elasticsearch"
       - "KAFKA_SEEDS=kafka"

@@ -102,8 +102,7 @@ COPY --from=builder /temporal/temporal-server /usr/local/bin
 COPY --from=builder /temporal/schema /etc/temporal/schema
 
 COPY docker/entrypoint.sh /docker-entrypoint.sh
-COPY config/dynamicconfig /etc/temporal/config/dynamicconfig
-COPY docker/config_template.yaml /etc/temporal/config
+COPY docker/config_template.yaml /etc/temporal/config/config_template.yaml
 COPY docker/start-temporal.sh /start-temporal.sh
 
 WORKDIR /usr/local/bin
