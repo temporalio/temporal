@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -103,7 +102,6 @@ type (
 		shutdownCh     chan struct{}
 		actionNotifyCh chan actionNotification
 
-		queueCollectionsLock       sync.RWMutex
 		processingQueueCollections []ProcessingQueueCollection
 	}
 )
@@ -166,7 +164,6 @@ func (p *processorBase) updateAckLevel() (bool, error) {
 	// Once persistence layer is updated, we need to persist all queue states
 	// instead of only the min ack level
 	p.metricsScope.IncCounter(metrics.AckLevelUpdateCounter)
-	p.queueCollectionsLock.Lock()
 	var minAckLevel task.Key
 	totalPengingTasks := 0
 	for _, queueCollection := range p.processingQueueCollections {
@@ -184,7 +181,6 @@ func (p *processorBase) updateAckLevel() (bool, error) {
 			minAckLevel = minTaskKey(minAckLevel, ackLevel)
 		}
 	}
-	p.queueCollectionsLock.Unlock()
 
 	if minAckLevel == nil {
 		// note that only failover processor will meet this condition
@@ -268,9 +264,6 @@ func (p *processorBase) splitProcessingQueueCollection(
 		return
 	}
 
-	p.queueCollectionsLock.Lock()
-	defer p.queueCollectionsLock.Unlock()
-
 	newQueuesMap := make(map[int][]ProcessingQueue)
 	for _, queueCollection := range p.processingQueueCollections {
 		newQueues := queueCollection.Split(splitPolicy)
@@ -325,6 +318,8 @@ func (p *processorBase) handleActionNotification(
 	switch notification.action.ActionType {
 	case ActionTypeReset:
 		result, err = p.resetProcessingQueueStates()
+	case ActionTypeGetState:
+		result = p.getProcessingQueueStates()
 	default:
 		err = fmt.Errorf("unknown queue action type: %v", notification.action.ActionType)
 	}
@@ -343,9 +338,6 @@ func (p *processorBase) handleActionNotification(
 }
 
 func (p *processorBase) resetProcessingQueueStates() (*ActionResult, error) {
-	p.queueCollectionsLock.Lock()
-	defer p.queueCollectionsLock.Unlock()
-
 	var minAckLevel task.Key
 	for _, queueCollection := range p.processingQueueCollections {
 		ackLevel, _ := queueCollection.UpdateAckLevels()
@@ -371,7 +363,7 @@ func (p *processorBase) resetProcessingQueueStates() (*ActionResult, error) {
 	var maxReadLevel task.Key
 	switch p.options.MetricScope {
 	case metrics.TransferActiveQueueProcessorScope, metrics.TransferStandbyQueueProcessorScope:
-		maxReadLevel = maxTransferReadLevel
+		maxReadLevel = maximumTransferTaskKey
 	case metrics.TimerActiveQueueProcessorScope, metrics.TimerStandbyQueueProcessorScope:
 		maxReadLevel = maximumTimerTaskKey
 	}
@@ -395,10 +387,7 @@ func (p *processorBase) resetProcessingQueueStates() (*ActionResult, error) {
 	}, nil
 }
 
-func (p *processorBase) getProcessingQueueStates() []ProcessingQueueState {
-	p.queueCollectionsLock.RLock()
-	defer p.queueCollectionsLock.RUnlock()
-
+func (p *processorBase) getProcessingQueueStates() *ActionResult {
 	var queueStates []ProcessingQueueState
 	for _, queueCollection := range p.processingQueueCollections {
 		for _, queue := range queueCollection.Queues() {
@@ -406,7 +395,12 @@ func (p *processorBase) getProcessingQueueStates() []ProcessingQueueState {
 		}
 	}
 
-	return queueStates
+	return &ActionResult{
+		ActionType: ActionTypeGetState,
+		GetStateActionResult: &GetStateActionResult{
+			States: queueStates,
+		},
+	}
 }
 
 func (p *processorBase) submitTask(
@@ -457,44 +451,6 @@ func newProcessingQueueCollections(
 	})
 
 	return processingQueueCollections
-}
-
-// RedispatchTasks should be un-exported after the queue processing logic
-// in history package is deprecated.
-func RedispatchTasks(
-	redispatchQueue collection.Queue,
-	taskProcessor task.Processor,
-	logger log.Logger,
-	metricsScope metrics.Scope,
-	shutdownCh <-chan struct{},
-) {
-	queueLength := redispatchQueue.Len()
-	metricsScope.RecordTimer(metrics.TaskRedispatchQueuePendingTasksTimer, time.Duration(queueLength))
-	for i := 0; i != queueLength; i++ {
-		element := redispatchQueue.Remove()
-		if element == nil {
-			// queue is empty, may due to concurrent redispatch on the same queue
-			return
-		}
-		queueTask := element.(task.Task)
-		submitted, err := taskProcessor.TrySubmit(queueTask)
-		if err != nil {
-			select {
-			case <-shutdownCh:
-				// if error is due to shard shutdown
-				return
-			default:
-				// otherwise it might be error from domain cache etc, add
-				// the task to redispatch queue so that it can be retried
-				logger.Error("failed to redispatch task", tag.Error(err))
-			}
-		}
-
-		if err != nil || !submitted {
-			// failed to submit, enqueue again
-			redispatchQueue.Add(queueTask)
-		}
-	}
 }
 
 func getPendingTasksMetricIdx(

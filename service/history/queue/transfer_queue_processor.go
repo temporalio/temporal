@@ -58,7 +58,7 @@ var (
 	errUnexpectedQueueTask = errors.New("unexpected queue task")
 	errProcessorShutdown   = errors.New("queue processor has been shutdown")
 
-	maxTransferReadLevel = newTransferTaskKey(math.MaxInt64)
+	maximumTransferTaskKey = newTransferTaskKey(math.MaxInt64)
 )
 
 type (
@@ -264,7 +264,17 @@ func (t *transferQueueProcessor) FailoverDomain(
 	}
 
 	maxReadLevel := int64(0)
-	for _, queueState := range t.activeQueueProcessor.getProcessingQueueStates() {
+	actionResult, err := t.HandleAction(t.currentClusterName, NewGetStateAction())
+	if err != nil {
+		t.logger.Error("Transfer Failover Failed", tag.WorkflowDomainIDs(domainIDs), tag.Error(err))
+		if err == errProcessorShutdown {
+			// processor/shard already shutdown, we don't need to create failover queue processor
+			return
+		}
+		// other errors should never be returned for GetStateAction
+		panic(fmt.Sprintf("unknown error for GetStateAction: %v", err))
+	}
+	for _, queueState := range actionResult.GetStateActionResult.States {
 		queueReadLevel := queueState.ReadLevel().(transferTaskKey).taskID
 		if maxReadLevel < queueReadLevel {
 			maxReadLevel = queueReadLevel
@@ -293,7 +303,7 @@ func (t *transferQueueProcessor) FailoverDomain(
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerDomainFailoverCallback function
-	err := updateShardAckLevel(newTransferTaskKey(minLevel))
+	err = updateShardAckLevel(newTransferTaskKey(minLevel))
 	if err != nil {
 		t.logger.Error("Error update shard ack level", tag.Error(err))
 	}
@@ -384,23 +394,23 @@ func (t *transferQueueProcessor) completeTransferLoop() {
 }
 
 func (t *transferQueueProcessor) completeTransfer() error {
-	var newAckLevel task.Key
-	for _, queueState := range t.activeQueueProcessor.getProcessingQueueStates() {
-		if newAckLevel == nil {
-			newAckLevel = queueState.AckLevel()
-		} else {
-			newAckLevel = minTaskKey(newAckLevel, queueState.AckLevel())
-		}
+	newAckLevel := maximumTransferTaskKey
+	actionResult, err := t.HandleAction(t.currentClusterName, NewGetStateAction())
+	if err != nil {
+		return err
+	}
+	for _, queueState := range actionResult.GetStateActionResult.States {
+		newAckLevel = minTaskKey(newAckLevel, queueState.AckLevel())
 	}
 
 	if t.isGlobalDomainEnabled {
-		for _, standbyQueueProcessor := range t.standbyQueueProcessors {
-			for _, queueState := range standbyQueueProcessor.getProcessingQueueStates() {
-				if newAckLevel == nil {
-					newAckLevel = queueState.AckLevel()
-				} else {
-					newAckLevel = minTaskKey(newAckLevel, queueState.AckLevel())
-				}
+		for standbyClusterName := range t.standbyQueueProcessors {
+			actionResult, err := t.HandleAction(standbyClusterName, NewGetStateAction())
+			if err != nil {
+				return err
+			}
+			for _, queueState := range actionResult.GetStateActionResult.States {
+				newAckLevel = minTaskKey(newAckLevel, queueState.AckLevel())
 			}
 		}
 
@@ -480,7 +490,7 @@ func newTransferQueueActiveProcessor(
 		NewProcessingQueueState(
 			defaultProcessingQueueLevel,
 			ackLevel,
-			maxTransferReadLevel,
+			maximumTransferTaskKey,
 			NewDomainFilter(nil, true),
 		),
 	}
@@ -542,7 +552,7 @@ func newTransferQueueStandbyProcessor(
 		NewProcessingQueueState(
 			defaultProcessingQueueLevel,
 			ackLevel,
-			maxTransferReadLevel,
+			maximumTransferTaskKey,
 			NewDomainFilter(nil, true),
 		),
 	}

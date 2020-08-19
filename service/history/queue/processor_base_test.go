@@ -21,9 +21,6 @@
 package queue
 
 import (
-	"errors"
-	"math/rand"
-	"sync"
 	"testing"
 	"time"
 
@@ -87,107 +84,6 @@ func (s *processorBaseSuite) SetupTest() {
 func (s *processorBaseSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.Finish(s.T())
-}
-
-func (s *processorBaseSuite) TestRedispatchTask_ProcessorShutDown() {
-	redispatchQueue := collection.NewConcurrentQueue()
-
-	numTasks := 5
-	for i := 0; i != numTasks; i++ {
-		mockTask := task.NewMockTask(s.controller)
-		redispatchQueue.Add(mockTask)
-	}
-
-	shutDownCh := make(chan struct{})
-
-	successfullyRedispatched := 3
-	var calls []*gomock.Call
-	for i := 0; i != successfullyRedispatched-1; i++ {
-		calls = append(calls, s.mockTaskProcessor.EXPECT().TrySubmit(gomock.Any()).Return(true, nil))
-	}
-	calls = append(calls, s.mockTaskProcessor.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ interface{}) (bool, error) {
-		close(shutDownCh)
-		return true, nil
-	}))
-	calls = append(calls, s.mockTaskProcessor.EXPECT().TrySubmit(gomock.Any()).Return(false, errors.New("processor shutdown")))
-	gomock.InOrder(calls...)
-
-	RedispatchTasks(
-		redispatchQueue,
-		s.mockTaskProcessor,
-		s.logger,
-		s.metricsScope,
-		shutDownCh,
-	)
-
-	s.Equal(numTasks-successfullyRedispatched-1, redispatchQueue.Len())
-}
-
-func (s *processorBaseSuite) TestRedispatchTask_Random() {
-	redispatchQueue := collection.NewConcurrentQueue()
-
-	numTasks := 10
-	dispatched := 0
-
-	for i := 0; i != numTasks; i++ {
-		mockTask := task.NewMockTask(s.controller)
-		redispatchQueue.Add(mockTask)
-		submitted := false
-		if rand.Intn(2) == 0 {
-			submitted = true
-			dispatched++
-		}
-		s.mockTaskProcessor.EXPECT().TrySubmit(task.NewMockTaskMatcher(mockTask)).Return(submitted, nil)
-	}
-
-	shutDownCh := make(chan struct{})
-	RedispatchTasks(
-		redispatchQueue,
-		s.mockTaskProcessor,
-		s.logger,
-		s.metricsScope,
-		shutDownCh,
-	)
-
-	s.Equal(numTasks-dispatched, redispatchQueue.Len())
-}
-
-func (s *processorBaseSuite) TestRedispatchTask_Concurrent() {
-	redispatchQueue := collection.NewConcurrentQueue()
-
-	numTasks := 10
-	concurrency := 3
-	dispatched := 0
-
-	for i := 0; i != numTasks; i++ {
-		mockTask := task.NewMockTask(s.controller)
-		redispatchQueue.Add(mockTask)
-		submitted := false
-		if rand.Intn(2) == 0 {
-			submitted = true
-			dispatched++
-		}
-		s.mockTaskProcessor.EXPECT().TrySubmit(task.NewMockTaskMatcher(mockTask)).Return(submitted, nil).AnyTimes()
-	}
-
-	shutDownCh := make(chan struct{})
-	wg := sync.WaitGroup{}
-	wg.Add(concurrency)
-	for i := 0; i != concurrency; i++ {
-		go func() {
-			RedispatchTasks(
-				redispatchQueue,
-				s.mockTaskProcessor,
-				s.logger,
-				s.metricsScope,
-				shutDownCh,
-			)
-			wg.Done()
-		}()
-	}
-	wg.Wait()
-
-	s.Equal(numTasks-dispatched, redispatchQueue.Len())
 }
 
 func (s *processorBaseSuite) TestSplitQueue() {

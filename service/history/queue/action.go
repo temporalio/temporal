@@ -26,15 +26,17 @@ type (
 
 	// Action specifies the Action should be performed
 	Action struct {
-		ActionType            ActionType
-		ResetActionAttributes *ResetActionAttributes
+		ActionType               ActionType
+		ResetActionAttributes    *ResetActionAttributes
+		GetStateActionAttributes *GetStateActionAttributes
 		// add attributes for other action types here
 	}
 
 	// ActionResult is the result for performing an Action
 	ActionResult struct {
-		ActionType        ActionType
-		ResetActionResult *ResetActionResult
+		ActionType           ActionType
+		ResetActionResult    *ResetActionResult
+		GetStateActionResult *GetStateActionResult
 	}
 
 	// ResetActionAttributes contains the parameter for performing Reset Action
@@ -42,13 +44,19 @@ type (
 	// ResetActionResult is the result for performing Reset Action
 	ResetActionResult struct{}
 
-	// TODO: add another Action for reading processing queue state to make
-	// the implementation of processorBase lock free
+	// GetStateActionAttributes contains the parameter for performing GetState Action
+	GetStateActionAttributes struct{}
+	// GetStateActionResult is the result for performing GetState Action
+	GetStateActionResult struct {
+		States []ProcessingQueueState
+	}
 )
 
 const (
 	// ActionTypeReset is the ActionType for reseting processing queue states
 	ActionTypeReset ActionType = iota + 1
+	// ActionTypeGetState is the ActionType for reading processing queue states
+	ActionTypeGetState
 	// add more ActionType here
 )
 
@@ -57,5 +65,13 @@ func NewResetAction() *Action {
 	return &Action{
 		ActionType:            ActionTypeReset,
 		ResetActionAttributes: &ResetActionAttributes{},
+	}
+}
+
+// NewGetStateAction reads all processing queue states in the processor
+func NewGetStateAction() *Action {
+	return &Action{
+		ActionType:               ActionTypeGetState,
+		GetStateActionAttributes: &GetStateActionAttributes{},
 	}
 }

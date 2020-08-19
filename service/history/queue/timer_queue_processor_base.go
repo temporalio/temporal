@@ -259,14 +259,12 @@ processorPumpLoop:
 
 			// New Timer has arrived.
 			t.metricsScope.IncCounter(metrics.NewTimerNotifyCounter)
-			t.queueCollectionsLock.RLock()
 			// notify all queue collections as they are waiting for the notification when there's
 			// no more task to process. For non-default queue, we choose to do periodic polling
 			// in the future, then we don't need to notify them.
 			for _, queueCollection := range t.processingQueueCollections {
 				t.upsertPollTime(queueCollection.Level(), newTime)
 			}
-			t.queueCollectionsLock.RUnlock()
 		case <-splitQueueTimer.C:
 			t.splitQueue()
 			splitQueueTimer.Reset(backoff.JitDuration(
@@ -280,15 +278,9 @@ processorPumpLoop:
 }
 
 func (t *timerQueueProcessorBase) processQueueCollections(levels map[int]struct{}) {
-	t.queueCollectionsLock.RLock()
-	queueCollections := t.processingQueueCollections
-	t.queueCollectionsLock.RUnlock()
-
-	for _, queueCollection := range queueCollections {
-		t.queueCollectionsLock.RLock()
+	for _, queueCollection := range t.processingQueueCollections {
 		level := queueCollection.Level()
 		if _, ok := levels[level]; !ok {
-			t.queueCollectionsLock.RUnlock()
 			continue
 		}
 
@@ -297,7 +289,6 @@ func (t *timerQueueProcessorBase) processQueueCollections(levels map[int]struct{
 			// process for this queue collection has finished
 			// it's possible that new queue will be added to this collection later though,
 			// pollTime will be updated after split/merge
-			t.queueCollectionsLock.RUnlock()
 			continue
 		}
 
@@ -306,7 +297,6 @@ func (t *timerQueueProcessorBase) processQueueCollections(levels map[int]struct{
 		maxReadLevel := minTaskKey(activeQueue.State().MaxLevel(), t.updateMaxReadLevel())
 		lookAheadMaxLevel := activeQueue.State().MaxLevel()
 		domainFilter := activeQueue.State().DomainFilter()
-		t.queueCollectionsLock.RUnlock()
 
 		if progress, ok := t.processingQueueReadProgress[level]; ok {
 			if progress.currentQueue == activeQueue {
@@ -405,9 +395,7 @@ func (t *timerQueueProcessorBase) processQueueCollections(levels map[int]struct{
 			}
 			newReadLevel = newTimerTaskKey(timerTaskInfos[len(timerTaskInfos)-1].GetVisibilityTimestamp(), 0)
 		}
-		t.queueCollectionsLock.Lock()
 		queueCollection.AddTasks(tasks, newReadLevel)
-		t.queueCollectionsLock.Unlock()
 	}
 }
 
