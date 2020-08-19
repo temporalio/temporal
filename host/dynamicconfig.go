@@ -44,10 +44,6 @@ var (
 		dynamicconfig.ReplicationTaskFetcherErrorRetryWait:          50 * time.Millisecond,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryWait:        time.Millisecond,
 		dynamicconfig.EnableConsistentQueryByDomain:                 true,
-		dynamicconfig.FrontendEnableRPCReplication:                  true,
-		dynamicconfig.HistoryEnableRPCReplication:                   true,
-		dynamicconfig.HistoryEnableKafkaReplication:                 false,
-		dynamicconfig.WorkerEnableRPCReplication:                    true,
 	}
 )
 

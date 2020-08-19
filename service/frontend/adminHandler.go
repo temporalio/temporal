@@ -130,12 +130,8 @@ func (adh *AdminHandler) RegisterHandler() {
 
 // Start starts the handler
 func (adh *AdminHandler) Start() {
-	// Start domain replication queue cleanup
-	if adh.config.EnableCleanupReplicationTask() {
-		// If the queue does not start, we can still call stop()
-		adh.Resource.GetDomainReplicationQueue().Start()
-	}
 
+	adh.Resource.GetDomainReplicationQueue().Start()
 	if adh.config.EnableGracefulFailover() {
 		adh.domainFailoverWatcher.Start()
 	}

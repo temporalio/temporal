@@ -96,9 +96,6 @@ type Config struct {
 	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithDomainFilter
-
-	EnableRPCReplication         dynamicconfig.BoolPropertyFn
-	EnableCleanupReplicationTask dynamicconfig.BoolPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -141,8 +138,6 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		VisibilityArchivalQueryMaxPageSize:          dc.GetIntProperty(dynamicconfig.VisibilityArchivalQueryMaxPageSize, 10000),
 		DisallowQuery:                               dc.GetBoolPropertyFilteredByDomain(dynamicconfig.DisallowQuery, false),
 		SendRawWorkflowHistory:                      dc.GetBoolPropertyFilteredByDomain(dynamicconfig.SendRawWorkflowHistory, false),
-		EnableRPCReplication:                        dc.GetBoolProperty(dynamicconfig.FrontendEnableRPCReplication, false),
-		EnableCleanupReplicationTask:                dc.GetBoolProperty(dynamicconfig.FrontendEnableCleanupReplicationTask, true),
 	}
 }
 
@@ -234,8 +229,7 @@ func (s *Service) Start() {
 	if clusterMetadata.IsGlobalDomainEnabled() {
 		consumerConfig := clusterMetadata.GetReplicationConsumerConfig()
 		if consumerConfig != nil &&
-			consumerConfig.Type == config.ReplicationConsumerTypeRPC &&
-			s.config.EnableRPCReplication() {
+			consumerConfig.Type == config.ReplicationConsumerTypeRPC {
 			replicationMessageSink = s.GetDomainReplicationQueue()
 		} else {
 			var err error
