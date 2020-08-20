@@ -28,9 +28,11 @@
 package replication
 
 import (
-	gomock "github.com/golang/mock/gomock"
-	quotas "github.com/uber/cadence/common/quotas"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+
+	quotas "github.com/uber/cadence/common/quotas"
 )
 
 // MockTaskFetcher is a mock of TaskFetcher interface

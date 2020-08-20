@@ -38,6 +38,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
@@ -62,6 +63,7 @@ type (
 		queueAckMgr
 
 		lastShardSyncTimestamp time.Time
+		rateLimiter            *quotas.DynamicRateLimiter
 	}
 )
 
@@ -141,7 +143,9 @@ func newReplicatorQueueProcessor(
 	)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
-
+	processor.rateLimiter = quotas.NewDynamicRateLimiter(func() float64 {
+		return config.ReplicationTaskGenerationQPS()
+	})
 	return processor
 }
 
@@ -449,6 +453,7 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 	var replicationTasks []*replicator.ReplicationTask
 	readLevel := lastReadTaskID
 	for _, taskInfo := range taskInfoList {
+		_ = p.rateLimiter.Wait(ctx)
 		var replicationTask *replicator.ReplicationTask
 		op := func() error {
 			var err error

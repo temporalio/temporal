@@ -232,6 +232,8 @@ type Config struct {
 	ReplicationTaskProcessorStartWaitJitterCoefficient dynamicconfig.FloatPropertyFnWithShardIDFilter
 	ReplicationTaskProcessorHostQPS                    dynamicconfig.FloatPropertyFn
 	ReplicationTaskProcessorShardQPS                   dynamicconfig.FloatPropertyFn
+	ReplicationTaskGenerationQPS                       dynamicconfig.FloatPropertyFn
+
 	// TODO: those two flags are for migration. Consider remove them after the migration complete
 	EnableRPCReplication         dynamicconfig.BoolPropertyFn
 	EnableKafkaReplication       dynamicconfig.BoolPropertyFn
@@ -448,6 +450,7 @@ func New(dc *dynamicconfig.Collection, numberOfShards int, storeType string, isA
 		EnableRPCReplication:                               dc.GetBoolProperty(dynamicconfig.HistoryEnableRPCReplication, false),
 		EnableKafkaReplication:                             dc.GetBoolProperty(dynamicconfig.HistoryEnableKafkaReplication, true),
 		EnableCleanupReplicationTask:                       dc.GetBoolProperty(dynamicconfig.HistoryEnableCleanupReplicationTask, true),
+		ReplicationTaskGenerationQPS:                       dc.GetFloat64Property(dynamicconfig.ReplicationTaskGenerationQPS, 100),
 
 		EnableConsistentQuery:                 dc.GetBoolProperty(dynamicconfig.EnableConsistentQuery, true),
 		EnableConsistentQueryByDomain:         dc.GetBoolPropertyFilteredByDomain(dynamicconfig.EnableConsistentQueryByDomain, false),
