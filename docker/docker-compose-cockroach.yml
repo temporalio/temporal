@@ -17,7 +17,7 @@ services:
     ports:
       - "7233:7233"
     volumes:
-      - ../config/dynamicconfig:/etc/temporal/config/dynamicconfig
+      - ${DYNAMIC_CONFIG_DIR:-../config/dynamicconfig}:/etc/temporal/config/dynamicconfig
     environment:
       - "AUTO_SETUP=true"
       - "DB=postgres"
