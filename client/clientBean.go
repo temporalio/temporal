@@ -83,6 +83,7 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 		adminClient, err := factory.NewAdminClientWithTimeout(
 			info.RPCAddress,
 			admin.DefaultTimeout,
+			admin.DefaultLargeTimeout,
 		)
 		if err != nil {
 			return nil, err
