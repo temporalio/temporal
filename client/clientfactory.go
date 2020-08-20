@@ -62,7 +62,7 @@ type (
 		NewMatchingClientWithTimeout(domainIDToName DomainIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
 		NewFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
 
-		NewAdminClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, dispatcher *yarpc.Dispatcher) (admin.Client, error)
+		NewAdminClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, largeTimeout time.Duration, dispatcher *yarpc.Dispatcher) (admin.Client, error)
 		NewFrontendClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, longPollTimeout time.Duration, dispatcher *yarpc.Dispatcher) (frontend.Client, error)
 	}
 
@@ -206,6 +206,7 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 func (cf *rpcClientFactory) NewAdminClientWithTimeoutAndDispatcher(
 	rpcName string,
 	timeout time.Duration,
+	largeTimeout time.Duration,
 	dispatcher *yarpc.Dispatcher,
 ) (admin.Client, error) {
 	keyResolver := func(key string) (string, error) {
@@ -216,7 +217,7 @@ func (cf *rpcClientFactory) NewAdminClientWithTimeoutAndDispatcher(
 		return adminserviceclient.New(dispatcher.ClientConfig(rpcName)), nil
 	}
 
-	client := admin.NewClient(timeout, common.NewClientCache(keyResolver, clientProvider))
+	client := admin.NewClient(timeout, largeTimeout, common.NewClientCache(keyResolver, clientProvider))
 	if cf.metricsClient != nil {
 		client = admin.NewMetricClient(client, cf.metricsClient)
 	}
