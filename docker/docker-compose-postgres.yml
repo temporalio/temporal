@@ -10,7 +10,9 @@ services:
   temporal:
     image: temporalio/server:${SERVER_TAG:-0.28.0}
     ports:
-     - "7233:7233"
+      - "7233:7233"
+    volumes:
+      - ${DYNAMIC_CONFIG_DIR:-../config/dynamicconfig}:/etc/temporal/config/dynamicconfig
     environment:
       - "AUTO_SETUP=true"
       - "DB=postgres"
