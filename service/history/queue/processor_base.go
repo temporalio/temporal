@@ -374,7 +374,7 @@ func (p *processorBase) resetProcessingQueueStates() (*ActionResult, error) {
 				defaultProcessingQueueLevel,
 				minAckLevel,
 				maxReadLevel,
-				NewDomainFilter(nil, false),
+				NewDomainFilter(nil, true),
 			),
 		},
 		p.logger,

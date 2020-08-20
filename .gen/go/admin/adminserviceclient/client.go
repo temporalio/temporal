@@ -62,6 +62,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*shared.DescribeHistoryHostResponse, error)
 
+	DescribeQueue(
+		ctx context.Context,
+		Request *shared.DescribeQueueRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.DescribeQueueResponse, error)
+
 	DescribeWorkflowExecution(
 		ctx context.Context,
 		Request *admin.DescribeWorkflowExecutionRequest,
@@ -259,6 +265,29 @@ func (c client) DescribeHistoryHost(
 	}
 
 	success, err = admin.AdminService_DescribeHistoryHost_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) DescribeQueue(
+	ctx context.Context,
+	_Request *shared.DescribeQueueRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.DescribeQueueResponse, err error) {
+
+	args := admin.AdminService_DescribeQueue_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_DescribeQueue_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = admin.AdminService_DescribeQueue_Helper.UnwrapResponse(&result)
 	return
 }
 

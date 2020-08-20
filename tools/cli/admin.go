@@ -839,23 +839,19 @@ func newAdminQueueCommands() []cli.Command {
 	return []cli.Command{
 		{
 			Name:  "reset",
-			Usage: "reset processing queue states for transfer or timer task processor",
-			Flags: []cli.Flag{
-				cli.IntFlag{
-					Name:  FlagShardIDWithAlias,
-					Usage: "shardID",
-				},
-				cli.StringFlag{
-					Name:  FlagCluster,
-					Usage: "cluster the task processor is responsible for",
-				},
-				cli.IntFlag{
-					Name:  FlagQueueType,
-					Usage: "queue type: 2 (transfer queue) or 3 (timer queue)",
-				},
-			},
+			Usage: "reset processing queue states for transfer or timer queue processor",
+			Flags: getQueueCommandFlags(),
 			Action: func(c *cli.Context) {
 				AdminResetQueue(c)
+			},
+		},
+		{
+			Name:    "describe",
+			Aliases: []string{"desc"},
+			Usage:   "describe processing queue states for transfer or timer queue processor",
+			Flags:   getQueueCommandFlags(),
+			Action: func(c *cli.Context) {
+				AdminDescribeQueue(c)
 			},
 		},
 	}
@@ -1016,6 +1012,23 @@ func getDBFlags() []cli.Flag {
 		cli.BoolFlag{
 			Name:  FlagTLSEnableHostVerification,
 			Usage: "cassandra tls verify hostname and server cert (tls must be enabled)",
+		},
+	}
+}
+
+func getQueueCommandFlags() []cli.Flag {
+	return []cli.Flag{
+		cli.IntFlag{
+			Name:  FlagShardIDWithAlias,
+			Usage: "shardID",
+		},
+		cli.StringFlag{
+			Name:  FlagCluster,
+			Usage: "cluster the task processor is responsible for",
+		},
+		cli.IntFlag{
+			Name:  FlagQueueType,
+			Usage: "queue type: 2 (transfer queue) or 3 (timer queue)",
 		},
 	}
 }

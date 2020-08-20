@@ -109,6 +109,23 @@ func (c *retryableClient) ResetQueue(
 	return err
 }
 
+func (c *retryableClient) DescribeQueue(
+	ctx context.Context,
+	request *shared.DescribeQueueRequest,
+	opts ...yarpc.CallOption,
+) (*shared.DescribeQueueResponse, error) {
+
+	var resp *shared.DescribeQueueResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.DescribeQueue(ctx, request, opts...)
+		return err
+	}
+
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) RemoveTask(
 	ctx context.Context,
 	request *shared.RemoveTaskRequest,

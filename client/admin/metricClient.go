@@ -136,6 +136,24 @@ func (c *metricClient) ResetQueue(
 	return err
 }
 
+func (c *metricClient) DescribeQueue(
+	ctx context.Context,
+	request *shared.DescribeQueueRequest,
+	opts ...yarpc.CallOption,
+) (*shared.DescribeQueueResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientDescribeQueueScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientDescribeQueueScope, metrics.CadenceClientLatency)
+	resp, err := c.client.DescribeQueue(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientDescribeQueueScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *admin.DescribeWorkflowExecutionRequest,

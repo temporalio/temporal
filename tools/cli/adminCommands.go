@@ -507,4 +507,32 @@ func AdminResetQueue(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Failed to reset queue", err)
 	}
+	fmt.Println("Reset queue state succeeded")
+}
+
+// AdminDescribeQueue describes task processing queue states
+func AdminDescribeQueue(c *cli.Context) {
+	adminClient := cFactory.ServerAdminClient(c)
+
+	shardID := getRequiredIntOption(c, FlagShardID)
+	clusterName := getRequiredOption(c, FlagCluster)
+	typeID := getRequiredIntOption(c, FlagQueueType)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	req := &shared.DescribeQueueRequest{
+		ShardID:     common.Int32Ptr(int32(shardID)),
+		ClusterName: common.StringPtr(clusterName),
+		Type:        common.Int32Ptr(int32(typeID)),
+	}
+
+	resp, err := adminClient.DescribeQueue(ctx, req)
+	if err != nil {
+		ErrorAndExit("Failed to describe queue", err)
+	}
+
+	for _, state := range resp.ProcessingQueueStates {
+		fmt.Println(state)
+	}
 }

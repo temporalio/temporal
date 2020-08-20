@@ -377,11 +377,12 @@ func (t *transferQueueProcessorBase) splitQueue() {
 		return
 	}
 
-	lookAhead := (currentMaxReadLevel - t.lastMaxReadLevel) / int64(currentTime.Sub(t.lastSplitTime))
+	// TODO: need a better way to estimate the look ahead taskID
+	lookAhead := (currentMaxReadLevel - t.lastMaxReadLevel) / int64(currentTime.Sub(t.lastSplitTime).Seconds())
 
 	splitPolicy := t.initializeSplitPolicy(
 		func(key task.Key, domainID string) task.Key {
-			totalLookAhead := lookAhead * int64(t.options.SplitLookAheadDurationByDomainID(domainID))
+			totalLookAhead := lookAhead * int64(t.options.SplitLookAheadDurationByDomainID(domainID).Seconds())
 			return newTransferTaskKey(key.(transferTaskKey).taskID + totalLookAhead)
 		},
 	)

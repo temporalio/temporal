@@ -75,10 +75,12 @@ type (
 		RefreshWorkflowTasks(ctx context.Context, domainUUID string, execution workflow.WorkflowExecution) error
 		ResetTransferQueue(ctx context.Context, clusterName string) error
 		ResetTimerQueue(ctx context.Context, clusterName string) error
+		DescribeTransferQueue(ctx context.Context, clusterName string) (*workflow.DescribeQueueResponse, error)
+		DescribeTimerQueue(ctx context.Context, clusterName string) (*workflow.DescribeQueueResponse, error)
 
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTransferTasks(tasks []persistence.Task)
-		NotifyNewReplicationTasks(tasks []persistence.Task)
 		NotifyNewTimerTasks(tasks []persistence.Task)
+		NotifyNewReplicationTasks(tasks []persistence.Task)
 	}
 )

@@ -142,6 +142,22 @@ func (c *clientImpl) ResetQueue(
 	return client.ResetQueue(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeQueue(
+	ctx context.Context,
+	request *shared.DescribeQueueRequest,
+	opts ...yarpc.CallOption,
+) (*shared.DescribeQueueResponse, error) {
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.DescribeQueue(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *admin.DescribeWorkflowExecutionRequest,

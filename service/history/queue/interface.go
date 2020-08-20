@@ -84,7 +84,7 @@ type (
 		common.Daemon
 		FailoverDomain(domainIDs map[string]struct{})
 		NotifyNewTask(clusterName string, transferTasks []persistence.Task)
-		HandleAction(clusterName string, action *Action) (*ActionResult, error)
+		HandleAction(clusterName string, action *Action) (*ActionResult, error) // TODO: enforce context timeout for Actions
 		LockTaskProcessing()
 		UnlockTaskProcessing()
 	}

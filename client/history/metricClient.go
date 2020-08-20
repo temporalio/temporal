@@ -135,6 +135,24 @@ func (c *metricClient) ResetQueue(
 	return err
 }
 
+func (c *metricClient) DescribeQueue(
+	context context.Context,
+	request *shared.DescribeQueueRequest,
+	opts ...yarpc.CallOption,
+) (*shared.DescribeQueueResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientDescribeQueueScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientDescribeQueueScope, metrics.CadenceClientLatency)
+	resp, err := c.client.DescribeQueue(context, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientDescribeQueueScope, metrics.CadenceClientFailures)
+	}
+
+	return resp, err
+}
+
 func (c *metricClient) DescribeMutableState(
 	context context.Context,
 	request *h.DescribeMutableStateRequest,

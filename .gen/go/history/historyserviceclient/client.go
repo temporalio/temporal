@@ -57,6 +57,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*history.DescribeMutableStateResponse, error)
 
+	DescribeQueue(
+		ctx context.Context,
+		Request *shared.DescribeQueueRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.DescribeQueueResponse, error)
+
 	DescribeWorkflowExecution(
 		ctx context.Context,
 		DescribeRequest *history.DescribeWorkflowExecutionRequest,
@@ -370,6 +376,29 @@ func (c client) DescribeMutableState(
 	}
 
 	success, err = history.HistoryService_DescribeMutableState_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) DescribeQueue(
+	ctx context.Context,
+	_Request *shared.DescribeQueueRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.DescribeQueueResponse, err error) {
+
+	args := history.HistoryService_DescribeQueue_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_DescribeQueue_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = history.HistoryService_DescribeQueue_Helper.UnwrapResponse(&result)
 	return
 }
 

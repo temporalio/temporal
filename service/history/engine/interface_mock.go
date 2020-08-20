@@ -622,6 +622,36 @@ func (mr *MockEngineMockRecorder) ResetTimerQueue(ctx, clusterName interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetTimerQueue", reflect.TypeOf((*MockEngine)(nil).ResetTimerQueue), ctx, clusterName)
 }
 
+// DescribeTransferQueue mocks base method
+func (m *MockEngine) DescribeTransferQueue(ctx context.Context, clusterName string) (*shared.DescribeQueueResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeTransferQueue", ctx, clusterName)
+	ret0, _ := ret[0].(*shared.DescribeQueueResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeTransferQueue indicates an expected call of DescribeTransferQueue
+func (mr *MockEngineMockRecorder) DescribeTransferQueue(ctx, clusterName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTransferQueue", reflect.TypeOf((*MockEngine)(nil).DescribeTransferQueue), ctx, clusterName)
+}
+
+// DescribeTimerQueue mocks base method
+func (m *MockEngine) DescribeTimerQueue(ctx context.Context, clusterName string) (*shared.DescribeQueueResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeTimerQueue", ctx, clusterName)
+	ret0, _ := ret[0].(*shared.DescribeQueueResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeTimerQueue indicates an expected call of DescribeTimerQueue
+func (mr *MockEngineMockRecorder) DescribeTimerQueue(ctx, clusterName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTimerQueue", reflect.TypeOf((*MockEngine)(nil).DescribeTimerQueue), ctx, clusterName)
+}
+
 // NotifyNewHistoryEvent mocks base method
 func (m *MockEngine) NotifyNewHistoryEvent(event *events.Notification) {
 	m.ctrl.T.Helper()

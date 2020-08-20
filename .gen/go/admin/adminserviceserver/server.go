@@ -56,6 +56,11 @@ type Interface interface {
 		Request *shared.DescribeHistoryHostRequest,
 	) (*shared.DescribeHistoryHostResponse, error)
 
+	DescribeQueue(
+		ctx context.Context,
+		Request *shared.DescribeQueueRequest,
+	) (*shared.DescribeQueueResponse, error)
+
 	DescribeWorkflowExecution(
 		ctx context.Context,
 		Request *admin.DescribeWorkflowExecutionRequest,
@@ -179,6 +184,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.DescribeHistoryHost),
 				},
 				Signature:    "DescribeHistoryHost(Request *shared.DescribeHistoryHostRequest) (*shared.DescribeHistoryHostResponse)",
+				ThriftModule: admin.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "DescribeQueue",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.DescribeQueue),
+				},
+				Signature:    "DescribeQueue(Request *shared.DescribeQueueRequest) (*shared.DescribeQueueResponse)",
 				ThriftModule: admin.ThriftModule,
 			},
 
@@ -338,7 +354,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 18)
+	procedures := make([]transport.Procedure, 0, 19)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -412,6 +428,25 @@ func (h handler) DescribeHistoryHost(ctx context.Context, body wire.Value) (thri
 
 	hadError := err != nil
 	result, err := admin.AdminService_DescribeHistoryHost_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) DescribeQueue(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args admin.AdminService_DescribeQueue_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.DescribeQueue(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := admin.AdminService_DescribeQueue_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

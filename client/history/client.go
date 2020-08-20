@@ -196,6 +196,7 @@ func (c *clientImpl) RemoveTask(
 			return err
 		}
 	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
 	op := func(ctx context.Context, client historyserviceclient.Interface) error {
 		var err error
 		ctx, cancel := c.createContext(ctx)
@@ -222,6 +223,7 @@ func (c *clientImpl) CloseShard(
 			return err
 		}
 	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
 	op := func(ctx context.Context, client historyserviceclient.Interface) error {
 		var err error
 		ctx, cancel := c.createContext(ctx)
@@ -251,6 +253,7 @@ func (c *clientImpl) ResetQueue(
 			return err
 		}
 	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
 	op := func(ctx context.Context, client historyserviceclient.Interface) error {
 		var err error
 		ctx, cancel := c.createContext(ctx)
@@ -264,6 +267,37 @@ func (c *clientImpl) ResetQueue(
 		return err
 	}
 	return nil
+}
+
+func (c *clientImpl) DescribeQueue(
+	ctx context.Context,
+	request *workflow.DescribeQueueRequest,
+	opts ...yarpc.CallOption,
+) (*workflow.DescribeQueueResponse, error) {
+
+	var err error
+	var client historyserviceclient.Interface
+	if request.ShardID != nil {
+		client, err = c.getClientForShardID(int(request.GetShardID()))
+		if err != nil {
+			return nil, err
+		}
+	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	var response *workflow.DescribeQueueResponse
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.DescribeQueue(ctx, request, opts...)
+		return err
+	}
+
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func (c *clientImpl) DescribeMutableState(
