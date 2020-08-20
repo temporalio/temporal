@@ -57,7 +57,7 @@ type (
 		NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error)
 		NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
 		NewFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
-		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration) (admin.Client, error)
+		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) (admin.Client, error)
 	}
 
 	// NamespaceIDToNameFunc maps a namespaceID to namespace name. Returns error when mapping is not possible.
@@ -191,6 +191,7 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 func (cf *rpcClientFactory) NewAdminClientWithTimeout(
 	rpcAddress string,
 	timeout time.Duration,
+	largeTimeout time.Duration,
 ) (admin.Client, error) {
 	keyResolver := func(key string) (string, error) {
 		return clientKeyConnection, nil
@@ -201,7 +202,7 @@ func (cf *rpcClientFactory) NewAdminClientWithTimeout(
 		return adminservice.NewAdminServiceClient(connection), nil
 	}
 
-	client := admin.NewClient(timeout, common.NewClientCache(keyResolver, clientProvider))
+	client := admin.NewClient(timeout, largeTimeout, common.NewClientCache(keyResolver, clientProvider))
 	if cf.metricsClient != nil {
 		client = admin.NewMetricClient(client, cf.metricsClient)
 	}
