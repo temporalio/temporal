@@ -39,21 +39,26 @@ var _ Client = (*clientImpl)(nil)
 const (
 	// DefaultTimeout is the default timeout used to make calls
 	DefaultTimeout = 10 * time.Second
+	// DefaultLargeTimeout is the default timeout used to make calls
+	DefaultLargeTimeout = time.Minute
 )
 
 type clientImpl struct {
-	timeout time.Duration
-	clients common.ClientCache
+	timeout      time.Duration
+	largeTimeout time.Duration
+	clients      common.ClientCache
 }
 
 // NewClient creates a new admin service TChannel client
 func NewClient(
 	timeout time.Duration,
+	largeTimeout time.Duration,
 	clients common.ClientCache,
 ) Client {
 	return &clientImpl{
-		timeout: timeout,
-		clients: clients,
+		timeout:      timeout,
+		largeTimeout: largeTimeout,
+		clients:      clients,
 	}
 }
 
@@ -209,7 +214,7 @@ func (c *clientImpl) GetReplicationMessages(
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.createContextWithLargeTimeout(ctx)
 	defer cancel()
 	return client.GetReplicationMessages(ctx, request, opts...)
 }
@@ -346,6 +351,13 @@ func (c *clientImpl) createContext(parent context.Context) (context.Context, con
 		return context.WithTimeout(context.Background(), c.timeout)
 	}
 	return context.WithTimeout(parent, c.timeout)
+}
+
+func (c *clientImpl) createContextWithLargeTimeout(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		return context.WithTimeout(context.Background(), c.largeTimeout)
+	}
+	return context.WithTimeout(parent, c.largeTimeout)
 }
 
 func (c *clientImpl) getRandomClient() (adminserviceclient.Interface, error) {

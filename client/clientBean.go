@@ -125,6 +125,7 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 		adminClient, err := factory.NewAdminClientWithTimeoutAndDispatcher(
 			info.RPCName,
 			admin.DefaultTimeout,
+			admin.DefaultLargeTimeout,
 			dispatcher,
 		)
 		if err != nil {
