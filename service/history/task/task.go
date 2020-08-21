@@ -75,7 +75,6 @@ type (
 		submitTime    time.Time
 		logger        log.Logger
 		scopeIdx      int
-		emitDomainTag bool
 		scope         metrics.Scope // initialized when processing task to make the initialization parallel
 		taskExecutor  Executor
 		maxRetryCount dynamicconfig.IntPropertyFn
@@ -115,7 +114,6 @@ func NewTimerTask(
 	redispatchFn func(task Task),
 	timeSource clock.TimeSource,
 	maxRetryCount dynamicconfig.IntPropertyFn,
-	emitDomainTag bool,
 	ackMgr TimerQueueAckMgr,
 ) Task {
 	return &timerTask{
@@ -129,7 +127,6 @@ func NewTimerTask(
 			taskExecutor,
 			timeSource,
 			maxRetryCount,
-			emitDomainTag,
 		),
 		ackMgr:       ackMgr,
 		redispatchFn: redispatchFn,
@@ -147,7 +144,6 @@ func NewTransferTask(
 	redispatchFn func(task Task),
 	timeSource clock.TimeSource,
 	maxRetryCount dynamicconfig.IntPropertyFn,
-	emitDomainTag bool,
 	ackMgr QueueAckMgr,
 ) Task {
 	return &transferTask{
@@ -161,7 +157,6 @@ func NewTransferTask(
 			taskExecutor,
 			timeSource,
 			maxRetryCount,
-			emitDomainTag,
 		),
 		ackMgr:       ackMgr,
 		redispatchFn: redispatchFn,
@@ -178,7 +173,6 @@ func newQueueTaskBase(
 	taskExecutor Executor,
 	timeSource clock.TimeSource,
 	maxRetryCount dynamicconfig.IntPropertyFn,
-	emitDomainTag bool,
 ) *taskBase {
 	return &taskBase{
 		Info:          taskInfo,
@@ -187,7 +181,6 @@ func newQueueTaskBase(
 		priority:      ctask.NoPriority,
 		queueType:     queueType,
 		scopeIdx:      scopeIdx,
-		emitDomainTag: emitDomainTag,
 		scope:         nil,
 		logger:        logger,
 		attempt:       0,
@@ -242,11 +235,7 @@ func (t *taskBase) Execute() error {
 	// processed as active or standby and use the corresponding
 	// task executor.
 	if t.scope == nil {
-		if t.emitDomainTag {
-			t.scope = GetOrCreateDomainTaggedScope(t.shard, t.scopeIdx, t.GetDomainID(), t.logger)
-		} else {
-			t.scope = t.shard.GetMetricsClient().Scope(t.scopeIdx)
-		}
+		t.scope = GetOrCreateDomainTaggedScope(t.shard, t.scopeIdx, t.GetDomainID(), t.logger)
 	}
 
 	var err error
@@ -260,8 +249,8 @@ func (t *taskBase) Execute() error {
 
 	defer func() {
 		if t.shouldProcessTask {
-			t.scope.IncCounter(metrics.TaskRequests)
-			t.scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(executionStartTime))
+			t.scope.IncCounter(metrics.TaskRequestsPerDomain)
+			t.scope.RecordTimer(metrics.TaskProcessingLatencyPerDomain, time.Since(executionStartTime))
 		}
 	}()
 
@@ -278,7 +267,7 @@ func (t *taskBase) HandleErr(
 
 			t.attempt++
 			if t.attempt > t.maxRetryCount() {
-				t.scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(t.attempt))
+				t.scope.RecordTimer(metrics.TaskAttemptTimerPerDomain, time.Duration(t.attempt))
 				t.logger.Error("Critical error processing task, retrying.",
 					tag.Error(err), tag.OperationCritical, tag.TaskType(t.GetTaskType()))
 			}
@@ -297,19 +286,19 @@ func (t *taskBase) HandleErr(
 		transferTask.TaskType == persistence.TransferTaskTypeCloseExecution &&
 		err == execution.ErrMissingWorkflowStartEvent &&
 		t.shard.GetConfig().EnableDropStuckTaskByDomainID(t.Info.GetDomainID()) { // use domainID here to avoid accessing domainCache
-		t.scope.IncCounter(metrics.TransferTaskMissingEventCounter)
+		t.scope.IncCounter(metrics.TransferTaskMissingEventCounterPerDomain)
 		t.logger.Error("Drop close execution transfer task due to corrupted workflow history", tag.Error(err), tag.LifeCycleProcessingFailed)
 		return nil
 	}
 
 	// this is a transient error
 	if err == ErrTaskRedispatch {
-		t.scope.IncCounter(metrics.TaskStandbyRetryCounter)
+		t.scope.IncCounter(metrics.TaskStandbyRetryCounterPerDomain)
 		return err
 	}
 
 	if err == ErrTaskDiscarded {
-		t.scope.IncCounter(metrics.TaskDiscarded)
+		t.scope.IncCounter(metrics.TaskDiscardedPerDomain)
 		err = nil
 	}
 
@@ -318,14 +307,14 @@ func (t *taskBase) HandleErr(
 	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*workflow.DomainNotActiveError); ok {
 		if t.timeSource.Now().Sub(t.submitTime) > 2*cache.DomainCacheRefreshInterval {
-			t.scope.IncCounter(metrics.TaskNotActiveCounter)
+			t.scope.IncCounter(metrics.TaskNotActiveCounterPerDomain)
 			return nil
 		}
 
 		return err
 	}
 
-	t.scope.IncCounter(metrics.TaskFailures)
+	t.scope.IncCounter(metrics.TaskFailuresPerDomain)
 
 	if _, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
 		t.logger.Error("More than 2 workflow are running.", tag.Error(err), tag.LifeCycleProcessingFailed)
@@ -359,9 +348,9 @@ func (t *taskBase) Ack() {
 
 	t.state = ctask.TaskStateAcked
 	if t.shouldProcessTask {
-		t.scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(t.attempt))
-		t.scope.RecordTimer(metrics.TaskLatency, time.Since(t.submitTime))
-		t.scope.RecordTimer(metrics.TaskQueueLatency, time.Since(t.GetVisibilityTimestamp()))
+		t.scope.RecordTimer(metrics.TaskAttemptTimerPerDomain, time.Duration(t.attempt))
+		t.scope.RecordTimer(metrics.TaskLatencyPerDomain, time.Since(t.submitTime))
+		t.scope.RecordTimer(metrics.TaskQueueLatencyPerDomain, time.Since(t.GetVisibilityTimestamp()))
 	}
 }
 

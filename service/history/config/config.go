@@ -92,7 +92,6 @@ type Config struct {
 	EnableDropStuckTaskByDomainID           dynamicconfig.BoolPropertyFnWithDomainIDFilter
 
 	// QueueProcessor settings
-	QueueProcessorEnableDomainTaggedMetrics            dynamicconfig.BoolPropertyFn
 	QueueProcessorEnableSplit                          dynamicconfig.BoolPropertyFn
 	QueueProcessorSplitMaxLevel                        dynamicconfig.IntPropertyFn
 	QueueProcessorEnableRandomSplitByDomainID          dynamicconfig.BoolPropertyFnWithDomainIDFilter
@@ -330,7 +329,6 @@ func New(dc *dynamicconfig.Collection, numberOfShards int, storeType string, isA
 		TaskRedispatchIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.TimerProcessorSplitQueueIntervalJitterCoefficient, 0.15),
 		EnableDropStuckTaskByDomainID:           dc.GetBoolPropertyFilteredByDomainID(dynamicconfig.EnableDropStuckTaskByDomainID, false),
 
-		QueueProcessorEnableDomainTaggedMetrics:            dc.GetBoolProperty(dynamicconfig.QueueProcessorEnableDomainTaggedMetrics, false),
 		QueueProcessorEnableSplit:                          dc.GetBoolProperty(dynamicconfig.QueueProcessorEnableSplit, false),
 		QueueProcessorSplitMaxLevel:                        dc.GetIntProperty(dynamicconfig.QueueProcessorSplitMaxLevel, 2), // 3 levels, start from 0
 		QueueProcessorEnableRandomSplitByDomainID:          dc.GetBoolPropertyFilteredByDomainID(dynamicconfig.QueueProcessorEnableRandomSplitByDomainID, false),

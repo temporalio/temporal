@@ -208,7 +208,7 @@ FilterLoop:
 		if err != nil {
 			task.attempt++
 			if task.attempt >= t.config.TimerTaskMaxRetryCount() {
-				scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(task.attempt))
+				scope.RecordTimer(metrics.TaskAttemptTimerPerDomain, time.Duration(task.attempt))
 				task.logger.Error("Critical error processing task, retrying.",
 					tag.Error(err), tag.OperationCritical, tag.TaskType(task.task.GetTaskType()))
 			}
@@ -257,8 +257,8 @@ func (t *taskProcessor) processTaskOnce(
 
 	scope := task.GetOrCreateDomainTaggedScope(t.shard, scopeIdx, taskInfo.task.GetDomainID(), t.logger)
 	if taskInfo.shouldProcessTask {
-		scope.IncCounter(metrics.TaskRequests)
-		scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))
+		scope.IncCounter(metrics.TaskRequestsPerDomain)
+		scope.RecordTimer(metrics.TaskProcessingLatencyPerDomain, time.Since(startTime))
 	}
 
 	return scope, err
@@ -283,14 +283,14 @@ func (t *taskProcessor) handleTaskError(
 		transferTask.TaskType == persistence.TransferTaskTypeCloseExecution &&
 		err == execution.ErrMissingWorkflowStartEvent &&
 		t.config.EnableDropStuckTaskByDomainID(taskInfo.task.GetDomainID()) { // use domainID here to avoid accessing domainCache
-		scope.IncCounter(metrics.TransferTaskMissingEventCounter)
+		scope.IncCounter(metrics.TransferTaskMissingEventCounterPerDomain)
 		taskInfo.logger.Error("Drop close execution transfer task due to corrupted workflow history", tag.Error(err), tag.LifeCycleProcessingFailed)
 		return nil
 	}
 
 	// this is a transient error
 	if err == task.ErrTaskRedispatch {
-		scope.IncCounter(metrics.TaskStandbyRetryCounter)
+		scope.IncCounter(metrics.TaskStandbyRetryCounterPerDomain)
 		select {
 		case <-notificationChan:
 		case <-t.shutdownCh:
@@ -299,7 +299,7 @@ func (t *taskProcessor) handleTaskError(
 	}
 
 	if err == task.ErrTaskDiscarded {
-		scope.IncCounter(metrics.TaskDiscarded)
+		scope.IncCounter(metrics.TaskDiscardedPerDomain)
 		err = nil
 	}
 
@@ -308,14 +308,14 @@ func (t *taskProcessor) handleTaskError(
 	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*workflow.DomainNotActiveError); ok {
 		if t.timeSource.Now().Sub(taskInfo.startTime) > 2*cache.DomainCacheRefreshInterval {
-			scope.IncCounter(metrics.TaskNotActiveCounter)
+			scope.IncCounter(metrics.TaskNotActiveCounterPerDomain)
 			return nil
 		}
 
 		return err
 	}
 
-	scope.IncCounter(metrics.TaskFailures)
+	scope.IncCounter(metrics.TaskFailuresPerDomain)
 
 	if _, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
 		taskInfo.logger.Error("More than 2 workflow are running.", tag.Error(err), tag.LifeCycleProcessingFailed)
@@ -340,8 +340,8 @@ func (t *taskProcessor) ackTaskOnce(
 
 	task.processor.complete(task)
 	if task.shouldProcessTask {
-		scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(task.attempt))
-		scope.RecordTimer(metrics.TaskLatency, time.Since(task.startTime))
-		scope.RecordTimer(metrics.TaskQueueLatency, time.Since(task.task.GetVisibilityTimestamp()))
+		scope.RecordTimer(metrics.TaskAttemptTimerPerDomain, time.Duration(task.attempt))
+		scope.RecordTimer(metrics.TaskLatencyPerDomain, time.Since(task.startTime))
+		scope.RecordTimer(metrics.TaskQueueLatencyPerDomain, time.Since(task.task.GetVisibilityTimestamp()))
 	}
 }

@@ -218,7 +218,6 @@ func (s *taskSuite) newTestQueueTaskBase(
 		s.mockTaskExecutor,
 		s.timeSource,
 		s.maxRetryCount,
-		true,
 	)
 	taskBase.scope = s.mockShard.GetMetricsClient().Scope(0)
 	return taskBase

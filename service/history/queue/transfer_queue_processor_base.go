@@ -97,9 +97,6 @@ func newTransferQueueProcessorBase(
 		queueType = task.QueueTypeStandbyTransfer
 	}
 
-	// read dynamic config only once on startup to avoid gc pressure caused by keeping reading dynamic config
-	emitDomainTag := shard.GetConfig().QueueProcessorEnableDomainTaggedMetrics()
-
 	return &transferQueueProcessorBase{
 		processorBase: processorBase,
 
@@ -114,7 +111,6 @@ func newTransferQueueProcessorBase(
 				processorBase.redispatcher.AddTask,
 				shard.GetTimeSource(),
 				shard.GetConfig().TransferTaskMaxRetryCount,
-				emitDomainTag,
 				nil,
 			)
 		},
