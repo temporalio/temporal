@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	checks "github.com/uber/cadence/common/reconciliation/common"
 	"github.com/uber/cadence/common/xdc"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/queue"
@@ -69,6 +70,7 @@ func newTimerQueueProcessor(
 	historyService *historyEngineImpl,
 	matchingClient matching.Client,
 	queueTaskProcessor task.Processor,
+	openExecutionCheck checks.Invariant,
 	logger log.Logger,
 ) queue.Processor {
 
@@ -103,6 +105,7 @@ func newTimerQueueProcessor(
 				},
 				shard.GetService().GetPayloadSerializer(),
 				nil,
+				openExecutionCheck,
 				logger,
 			)
 			standbyTimerProcessors[clusterName] = newTimerQueueStandbyProcessor(

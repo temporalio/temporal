@@ -51,6 +51,8 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	checks "github.com/uber/cadence/common/reconciliation/common"
+	"github.com/uber/cadence/common/reconciliation/invariants"
 	sconfig "github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/xdc"
 	"github.com/uber/cadence/service/history/config"
@@ -225,6 +227,11 @@ func NewEngineWithShardContext(
 		failoverMarkerNotifier: failoverMarkerNotifier,
 	}
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
+	pRetry := checks.NewPersistenceRetryer(
+		shard.GetExecutionManager(),
+		shard.GetHistoryManager(),
+	)
+	openExecutionCheck := invariants.NewOpenCurrentExecution(pRetry)
 
 	if config.TransferProcessorEnableMultiCurosrProcessor() {
 		historyEngImpl.txProcessor = queue.NewTransferQueueProcessor(
@@ -235,9 +242,19 @@ func NewEngineWithShardContext(
 			historyEngImpl.resetor,
 			historyEngImpl.workflowResetter,
 			historyEngImpl.archivalClient,
+			openExecutionCheck,
 		)
 	} else {
-		historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
+		historyEngImpl.txProcessor = newTransferQueueProcessor(
+			shard,
+			historyEngImpl,
+			visibilityMgr,
+			matching,
+			historyClient,
+			queueTaskProcessor,
+			openExecutionCheck,
+			logger,
+		)
 	}
 	if config.TimerProcessorEnableMultiCurosrProcessor() {
 		historyEngImpl.timerProcessor = queue.NewTimerQueueProcessor(
@@ -246,9 +263,17 @@ func NewEngineWithShardContext(
 			queueTaskProcessor,
 			executionCache,
 			historyEngImpl.archivalClient,
+			openExecutionCheck,
 		)
 	} else {
-		historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
+		historyEngImpl.timerProcessor = newTimerQueueProcessor(
+			shard,
+			historyEngImpl,
+			matching,
+			queueTaskProcessor,
+			openExecutionCheck,
+			logger,
+		)
 	}
 	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsClient(), logger)
 
@@ -310,6 +335,7 @@ func NewEngineWithShardContext(
 			},
 			shard.GetService().GetPayloadSerializer(),
 			nil,
+			openExecutionCheck,
 			shard.GetLogger(),
 		)
 		historyRereplicator := xdc.NewHistoryRereplicator(

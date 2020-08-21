@@ -1070,6 +1070,7 @@ func (adh *AdminHandler) ResendReplicationTasks(
 		},
 		adh.eventSerializder,
 		nil,
+		nil,
 		adh.GetLogger(),
 	)
 	return resender.SendSingleWorkflowHistory(

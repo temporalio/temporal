@@ -35,6 +35,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	checks "github.com/uber/cadence/common/reconciliation/common"
 	"github.com/uber/cadence/common/xdc"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/engine"
@@ -77,6 +78,7 @@ func NewTimerQueueProcessor(
 	taskProcessor task.Processor,
 	executionCache *execution.Cache,
 	archivalClient archiver.Client,
+	executionCheck checks.Invariant,
 ) Processor {
 	logger := shard.GetLogger().WithTags(tag.ComponentTimerQueue)
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
@@ -105,6 +107,7 @@ func NewTimerQueueProcessor(
 	standbyQueueTimerGates := make(map[string]RemoteTimerGate)
 	rereplicatorLogger := shard.GetLogger().WithTags(tag.ComponentHistoryResender)
 	resenderLogger := shard.GetLogger().WithTags(tag.ComponentHistoryResender)
+
 	for clusterName, info := range shard.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled || clusterName == currentClusterName {
 			continue
@@ -130,6 +133,7 @@ func NewTimerQueueProcessor(
 			},
 			shard.GetService().GetPayloadSerializer(),
 			nil,
+			executionCheck,
 			resenderLogger,
 		)
 		standbyTaskExecutor := task.NewTimerStandbyTaskExecutor(
