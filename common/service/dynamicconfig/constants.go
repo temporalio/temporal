@@ -171,7 +171,6 @@ var keys = map[Key]string{
 	ActiveTaskRedispatchInterval:                          "history.activeTaskRedispatchInterval",
 	StandbyTaskRedispatchInterval:                         "history.standbyTaskRedispatchInterval",
 	TaskRedispatchIntervalJitterCoefficient:               "history.taskRedispatchIntervalJitterCoefficient",
-	QueueProcessorEnableDomainTaggedMetrics:               "history.queueProcessorEnableDomainTaggedMetrics",
 	QueueProcessorEnableSplit:                             "history.queueProcessorEnableSplit",
 	QueueProcessorSplitMaxLevel:                           "history.queueProcessorSplitMaxLevel",
 	QueueProcessorEnableRandomSplitByDomainID:             "history.queueProcessorEnableRandomSplitByDomain",
@@ -573,8 +572,6 @@ const (
 	StandbyTaskRedispatchInterval
 	// TaskRedispatchIntervalJitterCoefficient is the task redispatch interval jitter coefficient
 	TaskRedispatchIntervalJitterCoefficient
-	// QueueProcessorEnableDomainTaggedMetrics indicates whether task processing metrics should include domain tag
-	QueueProcessorEnableDomainTaggedMetrics
 	// QueueProcessorEnableSplit indicates whether processing queue split policy should be enabled
 	QueueProcessorEnableSplit
 	// QueueProcessorSplitMaxLevel is the max processing queue level
