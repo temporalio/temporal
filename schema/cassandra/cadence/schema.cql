@@ -11,10 +11,16 @@ CREATE TYPE shard (
   transfer_ack_level                bigint, -- TO BE DEPRECATED, IN FAVOR OF cluster_transfer_ack_level
   timer_ack_level                   timestamp, -- TO BE DEPRECATED, IN FAVOR OF cluster_timer_ack_level
   -- Mapping of cluster to corresponding transfer ack level
-  cluster_transfer_ack_level        map<text, bigint>,
+  cluster_transfer_ack_level        map<text, bigint>, -- TO BE DEPRECATED, IN FAVOR OF transfer_processing_queue_states
   -- Mapping of cluster to corresponding timer ack level
-  cluster_timer_ack_level           map<text, timestamp>,
+  cluster_timer_ack_level           map<text, timestamp>, -- TO BE DEPRECATED, IN FAVOR OF timer_processing_queue_states
   domain_notification_version       bigint, -- the global domain change version this shard is aware of
+  -- Mapping of cluster to corresponding list of transfer queue processing states
+  transfer_processing_queue_states  blob,
+  transfer_processing_queue_states_encoding  text,
+  -- Mapping of cluster to corresponding list of transfer queue processing states
+  timer_processing_queue_states     blob,
+  timer_processing_queue_states_encoding     text,
   -- Mapping of (remote) cluster to corresponding replication level (last replicated task_id)
   cluster_replication_level         map<text, bigint>,
   -- Mapping of (remote) cluster to corresponding replication DLQ ack level (last replicated task_id)

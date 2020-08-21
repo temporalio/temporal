@@ -1775,6 +1775,10 @@ func createShardInfo(
 
 	var pendingFailoverMarkersRawData []byte
 	var pendingFailoverMarkersEncoding string
+	var transferProcessingQueueStatesRawData []byte
+	var transferProcessingQueueStatesEncoding string
+	var timerProcessingQueueStatesRawData []byte
+	var timerProcessingQueueStatesEncoding string
 	info := &p.ShardInfo{}
 	for k, v := range result {
 		switch k {
@@ -1798,6 +1802,14 @@ func createShardInfo(
 			info.ClusterTransferAckLevel = v.(map[string]int64)
 		case "cluster_timer_ack_level":
 			info.ClusterTimerAckLevel = v.(map[string]time.Time)
+		case "transfer_processing_queue_states":
+			transferProcessingQueueStatesRawData = v.([]byte)
+		case "transfer_processing_queue_states_encoding":
+			transferProcessingQueueStatesEncoding = v.(string)
+		case "timer_processing_queue_states":
+			timerProcessingQueueStatesRawData = v.([]byte)
+		case "timer_processing_queue_states_encoding":
+			timerProcessingQueueStatesEncoding = v.(string)
 		case "domain_notification_version":
 			info.DomainNotificationVersion = v.(int64)
 		case "cluster_replication_level":
@@ -1830,6 +1842,14 @@ func createShardInfo(
 	info.PendingFailoverMarkers = p.NewDataBlob(
 		pendingFailoverMarkersRawData,
 		common.EncodingType(pendingFailoverMarkersEncoding),
+	)
+	info.TransferProcessingQueueStates = p.NewDataBlob(
+		transferProcessingQueueStatesRawData,
+		common.EncodingType(transferProcessingQueueStatesEncoding),
+	)
+	info.TimerProcessingQueueStates = p.NewDataBlob(
+		timerProcessingQueueStatesRawData,
+		common.EncodingType(timerProcessingQueueStatesEncoding),
 	)
 
 	return info

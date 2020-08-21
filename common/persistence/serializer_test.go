@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/uber/cadence/.gen/go/history"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -140,6 +142,30 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			},
 		},
 	}
+
+	domainFilter := &history.DomainFilter{
+		DomainIDs:    []string{"domain1", "domain2"},
+		ReverseMatch: common.BoolPtr(true),
+	}
+	processingQueueStateMap := map[string][]*history.ProcessingQueueState{
+		"cluster1": {
+			&history.ProcessingQueueState{
+				Level:        common.Int32Ptr(0),
+				AckLevel:     common.Int64Ptr(1),
+				MaxLevel:     common.Int64Ptr(2),
+				DomainFilter: domainFilter,
+			},
+		},
+		"cluster2": {
+			&history.ProcessingQueueState{
+				Level:        common.Int32Ptr(3),
+				AckLevel:     common.Int64Ptr(4),
+				MaxLevel:     common.Int64Ptr(5),
+				DomainFilter: domainFilter,
+			},
+		},
+	}
+	processingQueueStates := &history.ProcessingQueueStates{StatesByCluster: processingQueueStateMap}
 
 	for i := 0; i < concurrency; i++ {
 
@@ -402,6 +428,52 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			dHistoriesEmpty, err := serializer.DeserializeVersionHistories(historiesEmpty)
 			s.Nil(err)
 			s.True(dHistoriesEmpty.Equals(histories))
+
+			// serialize processing queue states
+
+			nilProcessingQueueStates, err := serializer.SerializeProcessingQueueStates(nil, common.EncodingTypeThriftRW)
+			s.Nil(err)
+			s.Nil(nilProcessingQueueStates)
+
+			_, err = serializer.SerializeProcessingQueueStates(processingQueueStates, common.EncodingTypeGob)
+			s.NotNil(err)
+			_, ok = err.(*UnknownEncodingTypeError)
+			s.True(ok)
+
+			processingQueueStatesJSON, err := serializer.SerializeProcessingQueueStates(processingQueueStates, common.EncodingTypeJSON)
+			s.Nil(err)
+			s.NotNil(processingQueueStatesJSON)
+
+			processingQueueStatesThrift, err := serializer.SerializeProcessingQueueStates(processingQueueStates, common.EncodingTypeThriftRW)
+			s.Nil(err)
+			s.NotNil(processingQueueStatesThrift)
+
+			processingQueueStatesEmpty, err := serializer.SerializeProcessingQueueStates(processingQueueStates, common.EncodingType(""))
+			s.Nil(err)
+			s.NotNil(processingQueueStatesEmpty)
+
+			// deserialize processing queue states
+
+			dNilProcessingQueueStates1, err := serializer.DeserializeProcessingQueueStates(nil)
+			s.Nil(err)
+			s.Nil(dNilProcessingQueueStates1)
+
+			dNilProcessingQueueStates2, err := serializer.DeserializeProcessingQueueStates(nilProcessingQueueStates)
+			s.Nil(err)
+			s.Nil(dNilProcessingQueueStates2)
+
+			dProcessingQueueStatesJSON, err := serializer.DeserializeProcessingQueueStates(processingQueueStatesJSON)
+			s.Nil(err)
+			s.True(dProcessingQueueStatesJSON.Equals(processingQueueStates))
+
+			dProcessingQueueStatesThrift, err := serializer.DeserializeProcessingQueueStates(processingQueueStatesThrift)
+			s.Nil(err)
+			s.True(dProcessingQueueStatesThrift.Equals(processingQueueStates))
+
+			dProcessingQueueStatesEmpty, err := serializer.DeserializeProcessingQueueStates(processingQueueStatesEmpty)
+			s.Nil(err)
+			s.True(dProcessingQueueStatesEmpty.Equals(processingQueueStates))
+
 		}()
 	}
 

@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.29",
+  "MinCompatibleVersion": "0.28",
+  "Description": "Add timer and transfer processing queue states to shard",
+  "SchemaUpdateCqlFiles": [
+    "processing_queue_states.cql"
+  ]
+}

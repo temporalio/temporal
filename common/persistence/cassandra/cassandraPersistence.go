@@ -109,6 +109,10 @@ const (
 		`timer_ack_level: ?, ` +
 		`cluster_transfer_ack_level: ?, ` +
 		`cluster_timer_ack_level: ?, ` +
+		`transfer_processing_queue_states: ?, ` +
+		`transfer_processing_queue_states_encoding: ?, ` +
+		`timer_processing_queue_states: ?, ` +
+		`timer_processing_queue_states_encoding: ?, ` +
 		`domain_notification_version: ?, ` +
 		`cluster_replication_level: ?, ` +
 		`replication_dlq_ack_level: ?, ` +
@@ -986,6 +990,8 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 	shardInfo := request.ShardInfo
 	markerData, markerEncoding := p.FromDataBlob(shardInfo.PendingFailoverMarkers)
+	transferPQS, transferPQSEncoding := p.FromDataBlob(shardInfo.TransferProcessingQueueStates)
+	timerPQS, timerPQSEncoding := p.FromDataBlob(shardInfo.TimerProcessingQueueStates)
 	query := d.session.Query(templateCreateShardQuery,
 		shardInfo.ShardID,
 		rowTypeShard,
@@ -1004,6 +1010,10 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 		shardInfo.TimerAckLevel,
 		shardInfo.ClusterTransferAckLevel,
 		shardInfo.ClusterTimerAckLevel,
+		transferPQS,
+		transferPQSEncoding,
+		timerPQS,
+		timerPQSEncoding,
 		shardInfo.DomainNotificationVersion,
 		shardInfo.ClusterReplicationLevel,
 		shardInfo.ReplicationDLQAckLevel,
@@ -1072,6 +1082,8 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 	shardInfo := request.ShardInfo
 	markerData, markerEncoding := p.FromDataBlob(shardInfo.PendingFailoverMarkers)
+	transferPQS, transferPQSEncoding := p.FromDataBlob(shardInfo.TransferProcessingQueueStates)
+	timerPQS, timerPQSEncoding := p.FromDataBlob(shardInfo.TimerProcessingQueueStates)
 
 	query := d.session.Query(templateUpdateShardQuery,
 		shardInfo.ShardID,
@@ -1084,6 +1096,10 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 		shardInfo.TimerAckLevel,
 		shardInfo.ClusterTransferAckLevel,
 		shardInfo.ClusterTimerAckLevel,
+		transferPQS,
+		transferPQSEncoding,
+		timerPQS,
+		timerPQSEncoding,
 		shardInfo.DomainNotificationVersion,
 		shardInfo.ClusterReplicationLevel,
 		shardInfo.ReplicationDLQAckLevel,

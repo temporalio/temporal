@@ -31,14 +31,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/uber/cadence/common/checksum"
-
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
+	"github.com/uber/cadence/.gen/go/history"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/checksum"
 	"github.com/uber/cadence/common/cluster"
 	p "github.com/uber/cadence/common/persistence"
 )
@@ -5134,6 +5134,9 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
 	s.Equal(shardInfo.TimerAckLevel.UnixNano(), resp.ShardInfo.TimerAckLevel.UnixNano())
+	s.Nil(resp.ShardInfo.TransferProcessingQueueStates)
+	s.Nil(resp.ShardInfo.TimerProcessingQueueStates)
+
 	resp.ShardInfo.TimerAckLevel = shardInfo.TimerAckLevel
 	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
@@ -5152,6 +5155,18 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	currentClusterTimerAck := timestampConvertor(time.Now().Add(-10 * time.Second))
 	alternativeClusterTimerAck := timestampConvertor(time.Now().Add(-20 * time.Second))
 	domainNotificationVersion := int64(8192)
+	transferPQS := createTransferPQS(cluster.TestCurrentClusterName, 0, currentClusterTransferAck,
+		cluster.TestAlternativeClusterName, 1, alternativeClusterTransferAck)
+	transferPQSBlob, _ := s.PayloadSerializer.SerializeProcessingQueueStates(
+		&transferPQS,
+		common.EncodingTypeThriftRW,
+	)
+	timerPQS := createTimerPQS(cluster.TestCurrentClusterName, 0, currentClusterTimerAck,
+		cluster.TestAlternativeClusterName, 1, alternativeClusterTimerAck)
+	timerPQSBlob, _ := s.PayloadSerializer.SerializeProcessingQueueStates(
+		&timerPQS,
+		common.EncodingTypeThriftRW,
+	)
 	shardInfo := &p.ShardInfo{
 		ShardID:             shardID,
 		Owner:               "some random owner",
@@ -5169,9 +5184,11 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 			cluster.TestCurrentClusterName:     currentClusterTimerAck,
 			cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 		},
-		DomainNotificationVersion: domainNotificationVersion,
-		ClusterReplicationLevel:   map[string]int64{},
-		ReplicationDLQAckLevel:    map[string]int64{},
+		TransferProcessingQueueStates: transferPQSBlob,
+		TimerProcessingQueueStates:    timerPQSBlob,
+		DomainNotificationVersion:     domainNotificationVersion,
+		ClusterReplicationLevel:       map[string]int64{},
+		ReplicationDLQAckLevel:        map[string]int64{},
 	}
 	createRequest := &p.CreateShardRequest{
 		ShardInfo: shardInfo,
@@ -5183,9 +5200,20 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
 	s.Equal(shardInfo.TimerAckLevel.UnixNano(), resp.ShardInfo.TimerAckLevel.UnixNano())
+	s.Equal(shardInfo.TransferProcessingQueueStates, resp.ShardInfo.TransferProcessingQueueStates)
+	s.Equal(shardInfo.TimerProcessingQueueStates, resp.ShardInfo.TimerProcessingQueueStates)
+	deserializedTransferPQS, err := s.PayloadSerializer.DeserializeProcessingQueueStates(resp.ShardInfo.TransferProcessingQueueStates)
+	s.Nil(err)
+	s.Equal(&transferPQS, deserializedTransferPQS)
+	deserializedTimerPQS, err := s.PayloadSerializer.DeserializeProcessingQueueStates(resp.ShardInfo.TimerProcessingQueueStates)
+	s.Nil(err)
+	s.Equal(&timerPQS, deserializedTimerPQS)
+
 	resp.ShardInfo.TimerAckLevel = shardInfo.TimerAckLevel
 	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
+	resp.ShardInfo.TransferProcessingQueueStates = shardInfo.TransferProcessingQueueStates
+	resp.ShardInfo.TimerProcessingQueueStates = shardInfo.TimerProcessingQueueStates
 	s.Equal(shardInfo, resp.ShardInfo)
 
 	// test update && get
@@ -5195,6 +5223,18 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	currentClusterTimerAck = timestampConvertor(time.Now().Add(-100 * time.Second))
 	alternativeClusterTimerAck = timestampConvertor(time.Now().Add(-200 * time.Second))
 	domainNotificationVersion = int64(16384)
+	transferPQS = createTransferPQS(cluster.TestCurrentClusterName, 0, currentClusterTransferAck,
+		cluster.TestAlternativeClusterName, 1, alternativeClusterTransferAck)
+	transferPQSBlob, _ = s.PayloadSerializer.SerializeProcessingQueueStates(
+		&transferPQS,
+		common.EncodingTypeThriftRW,
+	)
+	timerPQS = createTimerPQS(cluster.TestCurrentClusterName, 0, currentClusterTimerAck,
+		cluster.TestAlternativeClusterName, 1, alternativeClusterTimerAck)
+	timerPQSBlob, _ = s.PayloadSerializer.SerializeProcessingQueueStates(
+		&timerPQS,
+		common.EncodingTypeThriftRW,
+	)
 	shardInfo = &p.ShardInfo{
 		ShardID:             shardID,
 		Owner:               "some random owner",
@@ -5212,9 +5252,11 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 			cluster.TestCurrentClusterName:     currentClusterTimerAck,
 			cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 		},
-		DomainNotificationVersion: domainNotificationVersion,
-		ClusterReplicationLevel:   map[string]int64{cluster.TestAlternativeClusterName: 12345},
-		ReplicationDLQAckLevel:    map[string]int64{},
+		TransferProcessingQueueStates: transferPQSBlob,
+		TimerProcessingQueueStates:    timerPQSBlob,
+		DomainNotificationVersion:     domainNotificationVersion,
+		ClusterReplicationLevel:       map[string]int64{cluster.TestAlternativeClusterName: 12345},
+		ReplicationDLQAckLevel:        map[string]int64{},
 	}
 	updateRequest := &p.UpdateShardRequest{
 		ShardInfo:       shardInfo,
@@ -5228,9 +5270,20 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
 	s.Equal(shardInfo.TimerAckLevel.UnixNano(), resp.ShardInfo.TimerAckLevel.UnixNano())
+	s.Equal(shardInfo.TransferProcessingQueueStates, resp.ShardInfo.TransferProcessingQueueStates)
+	s.Equal(shardInfo.TimerProcessingQueueStates, resp.ShardInfo.TimerProcessingQueueStates)
+	deserializedTransferPQS, err = s.PayloadSerializer.DeserializeProcessingQueueStates(resp.ShardInfo.TransferProcessingQueueStates)
+	s.Nil(err)
+	s.Equal(&transferPQS, deserializedTransferPQS)
+	deserializedTimerPQS, err = s.PayloadSerializer.DeserializeProcessingQueueStates(resp.ShardInfo.TimerProcessingQueueStates)
+	s.Nil(err)
+	s.Equal(&timerPQS, deserializedTimerPQS)
+
 	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
 	resp.ShardInfo.TimerAckLevel = shardInfo.TimerAckLevel
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
+	resp.ShardInfo.TransferProcessingQueueStates = shardInfo.TransferProcessingQueueStates
+	resp.ShardInfo.TimerProcessingQueueStates = shardInfo.TimerProcessingQueueStates
 	s.Equal(shardInfo, resp.ShardInfo)
 }
 
@@ -5387,4 +5440,56 @@ func copyReplicationInfo(sourceInfo *p.ReplicationInfo) *p.ReplicationInfo {
 		Version:     sourceInfo.Version,
 		LastEventID: sourceInfo.LastEventID,
 	}
+}
+
+func createTransferPQS(cluster1 string, level1 int32, ackLevel1 int64, cluster2 string, level2 int32, ackLevel2 int64) history.ProcessingQueueStates {
+	domainFilter := &history.DomainFilter{
+		DomainIDs:    nil,
+		ReverseMatch: common.BoolPtr(true),
+	}
+	processingQueueStateMap := map[string][]*history.ProcessingQueueState{
+		cluster1: {
+			&history.ProcessingQueueState{
+				Level:        common.Int32Ptr(level1),
+				AckLevel:     common.Int64Ptr(ackLevel1),
+				MaxLevel:     common.Int64Ptr(ackLevel1),
+				DomainFilter: domainFilter,
+			},
+		},
+		cluster2: {
+			&history.ProcessingQueueState{
+				Level:        common.Int32Ptr(level2),
+				AckLevel:     common.Int64Ptr(ackLevel2),
+				MaxLevel:     common.Int64Ptr(ackLevel2),
+				DomainFilter: domainFilter,
+			},
+		},
+	}
+	return history.ProcessingQueueStates{StatesByCluster: processingQueueStateMap}
+}
+
+func createTimerPQS(cluster1 string, level1 int32, ackLevel1 time.Time, cluster2 string, level2 int32, ackLevel2 time.Time) history.ProcessingQueueStates {
+	domainFilter := &history.DomainFilter{
+		DomainIDs:    []string{},
+		ReverseMatch: common.BoolPtr(true),
+	}
+	processingQueueStateMap := map[string][]*history.ProcessingQueueState{
+		cluster1: {
+			&history.ProcessingQueueState{
+				Level:        common.Int32Ptr(level1),
+				AckLevel:     common.Int64Ptr(ackLevel1.UnixNano()),
+				MaxLevel:     common.Int64Ptr(ackLevel1.UnixNano()),
+				DomainFilter: domainFilter,
+			},
+		},
+		cluster2: {
+			&history.ProcessingQueueState{
+				Level:        common.Int32Ptr(level2),
+				AckLevel:     common.Int64Ptr(ackLevel2.UnixNano()),
+				MaxLevel:     common.Int64Ptr(ackLevel2.UnixNano()),
+				DomainFilter: domainFilter,
+			},
+		},
+	}
+	return history.ProcessingQueueStates{StatesByCluster: processingQueueStateMap}
 }

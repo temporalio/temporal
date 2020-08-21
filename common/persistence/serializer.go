@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/replicator"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -61,6 +62,10 @@ type (
 		// serialize/deserialize pending failover markers
 		SerializePendingFailoverMarkers(markers []*replicator.FailoverMarkerAttributes, encodingType common.EncodingType) (*DataBlob, error)
 		DeserializePendingFailoverMarkers(data *DataBlob) ([]*replicator.FailoverMarkerAttributes, error)
+
+		// serialize/deserialize processing queue states
+		SerializeProcessingQueueStates(states *history.ProcessingQueueStates, encodingType common.EncodingType) (*DataBlob, error)
+		DeserializeProcessingQueueStates(data *DataBlob) (*history.ProcessingQueueStates, error)
 	}
 
 	// CadenceSerializationError is an error type for cadence serialization
@@ -202,6 +207,31 @@ func (t *serializerImpl) DeserializePendingFailoverMarkers(
 	return markers, err
 }
 
+func (t *serializerImpl) SerializeProcessingQueueStates(
+	states *history.ProcessingQueueStates,
+	encodingType common.EncodingType,
+) (*DataBlob, error) {
+	if states == nil {
+		return nil, nil
+	}
+	return t.serialize(states, encodingType)
+}
+
+func (t *serializerImpl) DeserializeProcessingQueueStates(
+	data *DataBlob,
+) (*history.ProcessingQueueStates, error) {
+	if data == nil {
+		return nil, nil
+	}
+
+	var states history.ProcessingQueueStates
+	if data != nil && len(data.Data) == 0 {
+		return &states, nil
+	}
+	err := t.deserialize(data, &states)
+	return &states, err
+}
+
 func (t *serializerImpl) serialize(input interface{}, encodingType common.EncodingType) (*DataBlob, error) {
 	if input == nil {
 		return nil, nil
@@ -242,6 +272,8 @@ func (t *serializerImpl) thriftrwEncode(input interface{}) ([]byte, error) {
 		return t.thriftrwEncoder.Encode(input.(*workflow.VersionHistories))
 	case []*replicator.FailoverMarkerAttributes:
 		return t.thriftrwEncoder.Encode(&replicator.FailoverMarkers{FailoverMarkers: input.([]*replicator.FailoverMarkerAttributes)})
+	case *history.ProcessingQueueStates:
+		return t.thriftrwEncoder.Encode(input.(*history.ProcessingQueueStates))
 	default:
 		return nil, nil
 	}
@@ -297,6 +329,8 @@ func (t *serializerImpl) thriftrwDecode(data []byte, target interface{}) error {
 		}
 		*target = markers.GetFailoverMarkers()
 		return nil
+	case *history.ProcessingQueueStates:
+		return t.thriftrwEncoder.Decode(data, target)
 	default:
 		return nil
 	}

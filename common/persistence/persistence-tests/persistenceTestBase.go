@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
+	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/replicator"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -86,6 +87,7 @@ type (
 		DefaultTestCluster       PersistenceTestCluster
 		VisibilityTestCluster    PersistenceTestCluster
 		Logger                   log.Logger
+		PayloadSerializer        p.PayloadSerializer
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -145,6 +147,7 @@ func newTestBase(options *TestBaseOptions, testCluster PersistenceTestCluster) T
 		DefaultTestCluster:    testCluster,
 		VisibilityTestCluster: testCluster,
 		ClusterMetadata:       metadata,
+		PayloadSerializer:     p.NewPayloadSerializer(),
 	}
 	logger, err := loggerimpl.NewDevelopment()
 	if err != nil {
@@ -211,14 +214,52 @@ func (s *TestBase) Setup() {
 
 	s.ReadLevel = 0
 	s.ReplicationReadLevel = 0
+
+	domainFilter := &history.DomainFilter{
+		DomainIDs:    []string{},
+		ReverseMatch: common.BoolPtr(true),
+	}
+	transferPQSMap := map[string][]*history.ProcessingQueueState{
+		s.ClusterMetadata.GetCurrentClusterName(): {
+			&history.ProcessingQueueState{
+				Level:        common.Int32Ptr(0),
+				AckLevel:     common.Int64Ptr(0),
+				MaxLevel:     common.Int64Ptr(0),
+				DomainFilter: domainFilter,
+			},
+		},
+	}
+	transferPQS := history.ProcessingQueueStates{transferPQSMap}
+	transferPQSBlob, _ := s.PayloadSerializer.SerializeProcessingQueueStates(
+		&transferPQS,
+		common.EncodingTypeThriftRW,
+	)
+	timerPQSMap := map[string][]*history.ProcessingQueueState{
+		s.ClusterMetadata.GetCurrentClusterName(): {
+			&history.ProcessingQueueState{
+				Level:        common.Int32Ptr(0),
+				AckLevel:     common.Int64Ptr(time.Now().UnixNano()),
+				MaxLevel:     common.Int64Ptr(time.Now().UnixNano()),
+				DomainFilter: domainFilter,
+			},
+		},
+	}
+	timerPQS := history.ProcessingQueueStates{StatesByCluster: timerPQSMap}
+	timerPQSBlob, _ := s.PayloadSerializer.SerializeProcessingQueueStates(
+		&timerPQS,
+		common.EncodingTypeThriftRW,
+	)
+
 	s.ShardInfo = &p.ShardInfo{
-		ShardID:                 shardID,
-		RangeID:                 0,
-		TransferAckLevel:        0,
-		ReplicationAckLevel:     0,
-		TimerAckLevel:           time.Time{},
-		ClusterTimerAckLevel:    map[string]time.Time{clusterName: time.Time{}},
-		ClusterTransferAckLevel: map[string]int64{clusterName: 0},
+		ShardID:                       shardID,
+		RangeID:                       0,
+		TransferAckLevel:              0,
+		ReplicationAckLevel:           0,
+		TimerAckLevel:                 time.Time{},
+		ClusterTimerAckLevel:          map[string]time.Time{clusterName: time.Time{}},
+		ClusterTransferAckLevel:       map[string]int64{clusterName: 0},
+		TransferProcessingQueueStates: transferPQSBlob,
+		TimerProcessingQueueStates:    timerPQSBlob,
 	}
 
 	s.TaskIDGenerator = &TestTransferTaskIDGenerator{}
