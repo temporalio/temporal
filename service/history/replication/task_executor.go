@@ -186,7 +186,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 		stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.CadenceClientLatency)
 		defer stopwatch.Stop()
 
-		if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
 			retryV2Err.GetDomainId(),
 			retryV2Err.GetWorkflowId(),
 			retryV2Err.GetRunId(),
@@ -194,8 +194,26 @@ func (e *taskExecutorImpl) handleActivityTask(
 			retryV2Err.StartEventVersion,
 			retryV2Err.EndEventId,
 			retryV2Err.EndEventVersion,
-		); resendErr != nil {
-			e.logger.Error("error resend history for sync activity", tag.Error(resendErr))
+		)
+		switch {
+		case resendErr == nil:
+			break
+		case resendErr == xdc.ErrSkipTask:
+			e.logger.Error(
+				"skip replication sync activity task",
+				tag.WorkflowDomainID(retryV2Err.GetDomainId()),
+				tag.WorkflowID(retryV2Err.GetWorkflowId()),
+				tag.WorkflowRunID(retryV2Err.GetRunId()),
+			)
+			return nil
+		default:
+			e.logger.Error(
+				"error resend history for sync activity",
+				tag.WorkflowDomainID(retryV2Err.GetDomainId()),
+				tag.WorkflowID(retryV2Err.GetWorkflowId()),
+				tag.WorkflowRunID(retryV2Err.GetRunId()),
+				tag.Error(resendErr),
+			)
 			// should return the replication error, not the resending error
 			return err
 		}
@@ -299,7 +317,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTaskV2(
 	resendStopWatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.CadenceClientLatency)
 	defer resendStopWatch.Stop()
 
-	if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+	resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
 		retryErr.GetDomainId(),
 		retryErr.GetWorkflowId(),
 		retryErr.GetRunId(),
@@ -307,8 +325,26 @@ func (e *taskExecutorImpl) handleHistoryReplicationTaskV2(
 		retryErr.StartEventVersion,
 		retryErr.EndEventId,
 		retryErr.EndEventVersion,
-	); resendErr != nil {
-		e.logger.Error("error resend history for history event v2", tag.Error(resendErr))
+	)
+	switch {
+	case resendErr == nil:
+		break
+	case resendErr == xdc.ErrSkipTask:
+		e.logger.Error(
+			"skip replication history task",
+			tag.WorkflowDomainID(retryErr.GetDomainId()),
+			tag.WorkflowID(retryErr.GetWorkflowId()),
+			tag.WorkflowRunID(retryErr.GetRunId()),
+		)
+		return nil
+	default:
+		e.logger.Error(
+			"error resend history for history event v2",
+			tag.WorkflowDomainID(retryErr.GetDomainId()),
+			tag.WorkflowID(retryErr.GetWorkflowId()),
+			tag.WorkflowRunID(retryErr.GetRunId()),
+			tag.Error(resendErr),
+		)
 		// should return the replication error, not the resending error
 		return err
 	}

@@ -42,6 +42,7 @@ import (
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	checks "github.com/uber/cadence/common/reconciliation/common"
 )
 
 type (
@@ -116,6 +117,7 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 			return s.mockHistoryClient.ReplicateEventsV2(ctx, request)
 		},
 		persistence.NewPayloadSerializer(),
+		nil,
 		nil,
 		s.logger,
 	)
@@ -349,6 +351,51 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 		pageSize)
 	s.Nil(err)
 	s.Equal(response, out)
+}
+
+func (s *nDCHistoryResenderSuite) TestCurrentExecutionCheck() {
+	domainID := uuid.New()
+	workflowID1 := uuid.New()
+	workflowID2 := uuid.New()
+	runID := uuid.New()
+	invariantMock := checks.NewMockInvariant(s.controller)
+	s.rereplicator = NewNDCHistoryResender(
+		s.mockDomainCache,
+		s.mockAdminClient,
+		func(ctx context.Context, request *history.ReplicateEventsV2Request) error {
+			return s.mockHistoryClient.ReplicateEventsV2(ctx, request)
+		},
+		persistence.NewPayloadSerializer(),
+		nil,
+		invariantMock,
+		s.logger,
+	)
+	execution1 := checks.ConcreteExecution{
+		Execution: checks.Execution{
+			DomainID:   domainID,
+			WorkflowID: workflowID1,
+			State:      persistence.WorkflowStateRunning,
+		},
+	}
+	execution2 := checks.ConcreteExecution{
+		Execution: checks.Execution{
+			DomainID:   domainID,
+			WorkflowID: workflowID2,
+			State:      persistence.WorkflowStateRunning,
+		},
+	}
+	invariantMock.EXPECT().Check(execution1).Return(checks.CheckResult{
+		CheckResultType: checks.CheckResultTypeCorrupted,
+	}).Times(1)
+	invariantMock.EXPECT().Check(execution2).Return(checks.CheckResult{
+		CheckResultType: checks.CheckResultTypeHealthy,
+	}).Times(1)
+	invariantMock.EXPECT().Fix(gomock.Any()).Return(checks.FixResult{}).Times(1)
+
+	skipTask := s.rereplicator.fixCurrentExecution(domainID, workflowID1, runID)
+	s.False(skipTask)
+	skipTask = s.rereplicator.fixCurrentExecution(domainID, workflowID2, runID)
+	s.True(skipTask)
 }
 
 func (s *nDCHistoryResenderSuite) serializeEvents(events []*shared.HistoryEvent) *shared.DataBlob {

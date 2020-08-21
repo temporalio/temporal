@@ -24,6 +24,7 @@ package xdc
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/uber/cadence/.gen/go/admin"
@@ -36,7 +37,13 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
+	checks "github.com/uber/cadence/common/reconciliation/common"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+)
+
+var (
+	// ErrSkipTask is the error to skip task due to absence of the workflow in the source cluster
+	ErrSkipTask = errors.New("the source workflow does not exist")
 )
 
 const (
@@ -64,12 +71,13 @@ type (
 
 	// NDCHistoryResenderImpl is the implementation of NDCHistoryResender
 	NDCHistoryResenderImpl struct {
-		domainCache          cache.DomainCache
-		adminClient          adminClient.Client
-		historyReplicationFn nDCHistoryReplicationFn
-		serializer           persistence.PayloadSerializer
-		rereplicationTimeout dynamicconfig.DurationPropertyFnWithDomainIDFilter
-		logger               log.Logger
+		domainCache           cache.DomainCache
+		adminClient           adminClient.Client
+		historyReplicationFn  nDCHistoryReplicationFn
+		serializer            persistence.PayloadSerializer
+		rereplicationTimeout  dynamicconfig.DurationPropertyFnWithDomainIDFilter
+		currentExecutionCheck checks.Invariant
+		logger                log.Logger
 	}
 
 	historyBatch struct {
@@ -85,16 +93,18 @@ func NewNDCHistoryResender(
 	historyReplicationFn nDCHistoryReplicationFn,
 	serializer persistence.PayloadSerializer,
 	rereplicationTimeout dynamicconfig.DurationPropertyFnWithDomainIDFilter,
+	currentExecutionCheck checks.Invariant,
 	logger log.Logger,
 ) *NDCHistoryResenderImpl {
 
 	return &NDCHistoryResenderImpl{
-		domainCache:          domainCache,
-		adminClient:          adminClient,
-		historyReplicationFn: historyReplicationFn,
-		serializer:           serializer,
-		rereplicationTimeout: rereplicationTimeout,
-		logger:               logger,
+		domainCache:           domainCache,
+		adminClient:           adminClient,
+		historyReplicationFn:  historyReplicationFn,
+		serializer:            serializer,
+		rereplicationTimeout:  rereplicationTimeout,
+		currentExecutionCheck: currentExecutionCheck,
+		logger:                logger,
 	}
 }
 
@@ -131,7 +141,22 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 
 	for historyIterator.HasNext() {
 		result, err := historyIterator.Next()
-		if err != nil {
+		switch err.(type) {
+		case nil:
+			// continue to process the events
+			break
+		case *shared.EntityNotExistsError:
+			// Case 1: the workflow pass the retention period
+			// Case 2: the workflow is corrupted
+			if skipTask := n.fixCurrentExecution(
+				domainID,
+				workflowID,
+				runID,
+			); skipTask {
+				return ErrSkipTask
+			}
+			return err
+		default:
 			n.logger.Error("failed to get history events",
 				tag.WorkflowDomainID(domainID),
 				tag.WorkflowID(workflowID),
@@ -276,4 +301,39 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	}
 
 	return response, nil
+}
+
+func (n *NDCHistoryResenderImpl) fixCurrentExecution(
+	domainID string,
+	workflowID string,
+	runID string,
+) bool {
+
+	if n.currentExecutionCheck == nil {
+		return false
+	}
+
+	execution := checks.ConcreteExecution{
+		Execution: checks.Execution{
+			DomainID:   domainID,
+			WorkflowID: workflowID,
+			State:      persistence.WorkflowStateRunning,
+		},
+	}
+	res := n.currentExecutionCheck.Check(execution)
+	switch res.CheckResultType {
+	case checks.CheckResultTypeCorrupted:
+		n.logger.Error(
+			"Encounter corrupted workflow",
+			tag.WorkflowDomainID(domainID),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
+		)
+		n.currentExecutionCheck.Fix(res)
+		return false
+	case checks.CheckResultTypeFailed:
+		return false
+	default:
+		return true
+	}
 }
