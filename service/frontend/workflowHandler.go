@@ -152,6 +152,7 @@ func NewWorkflowHandler(
 	resource resource.Resource,
 	config *Config,
 	replicationMessageSink messaging.Producer,
+	versionChecker client.VersionChecker,
 ) Handler {
 	return &WorkflowHandler{
 		Resource:        resource,
@@ -173,7 +174,7 @@ func NewWorkflowHandler(
 				return float64(config.MaxDomainRPSPerInstance(domain))
 			},
 		),
-		versionChecker: client.NewVersionChecker(),
+		versionChecker: versionChecker,
 		domainHandler: domain.NewHandler(
 			config.MinRetentionDays(),
 			config.MaxBadBinaries,

@@ -22,6 +22,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -31,9 +32,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/common/client"
 
 	"github.com/uber/cadence/.gen/go/history/historyservicetest"
 	"github.com/uber/cadence/.gen/go/shared"
+	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
@@ -52,7 +55,7 @@ const (
 	numHistoryShards = 10
 
 	testWorkflowID            = "test-workflow-id"
-	testRunID                 = "test-run-id"
+	testRunID                 = "2c8b555f-1f55-4955-9d1c-b980194555c9"
 	testHistoryArchivalURI    = "testScheme://history/URI"
 	testVisibilityArchivalURI = "testScheme://visibility/URI"
 )
@@ -77,6 +80,7 @@ type (
 		mockArchiverProvider   *provider.MockArchiverProvider
 		mockHistoryArchiver    *archiver.HistoryArchiverMock
 		mockVisibilityArchiver *archiver.VisibilityArchiverMock
+		mockVersionChecker     *client.VersionCheckerMock
 
 		testDomain   string
 		testDomainID string
@@ -115,9 +119,11 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockHistoryArchiver = &archiver.HistoryArchiverMock{}
 	s.mockVisibilityArchiver = &archiver.VisibilityArchiverMock{}
+	s.mockVersionChecker = client.NewMockVersionChecker(s.controller)
 
 	mockMonitor := s.mockResource.MembershipMonitor
 	mockMonitor.EXPECT().GetMemberCount(common.FrontendServiceName).Return(5, nil).AnyTimes()
+	s.mockVersionChecker.EXPECT().ClientSupported(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 }
 
@@ -130,7 +136,7 @@ func (s *workflowHandlerSuite) TearDownTest() {
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
-	return NewWorkflowHandler(s.mockResource, config, s.mockProducer).(*WorkflowHandler)
+	return NewWorkflowHandler(s.mockResource, config, s.mockProducer, s.mockVersionChecker).(*WorkflowHandler)
 }
 
 func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
@@ -1096,6 +1102,73 @@ func (s *workflowHandlerSuite) TestGetSearchAttributes() {
 	s.NotNil(resp)
 }
 
+func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory__Success__RawHistoryEnabledTransientDecisionEmitted() {
+	var nextEventID int64 = 5
+	s.getWorkflowExecutionHistory(5, &shared.TransientDecisionInfo{
+		StartedEvent:   &shared.HistoryEvent{EventId: common.Int64Ptr(nextEventID + 1)},
+		ScheduledEvent: &shared.HistoryEvent{EventId: common.Int64Ptr(nextEventID)},
+	}, []*shared.HistoryEvent{{}, {}, {}})
+}
+
+func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory__Success__RawHistoryEnabledNoTransientDecisionEmitted() {
+	var nextEventID int64 = 5
+	s.getWorkflowExecutionHistory(5, &shared.TransientDecisionInfo{
+		StartedEvent:   &shared.HistoryEvent{EventId: common.Int64Ptr(nextEventID + 1)},
+		ScheduledEvent: &shared.HistoryEvent{EventId: common.Int64Ptr(nextEventID)},
+	}, []*shared.HistoryEvent{{}, {}, {}})
+}
+
+func (s *workflowHandlerSuite) getWorkflowExecutionHistory(nextEventID int64, transientDecision *gen.TransientDecisionInfo, historyEvents []*shared.HistoryEvent) {
+	wh := s.getWorkflowHandler(NewConfig(dc.NewCollection(dc.NewNopClient(), s.mockResource.GetLogger()), numHistoryShards, false, true))
+	ctx := context.Background()
+	s.mockDomainCache.EXPECT().GetDomainID(gomock.Any()).Return(s.testDomainID, nil).AnyTimes()
+	s.mockVersionChecker.EXPECT().SupportsRawHistoryQuery(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	blob, _ := wh.GetPayloadSerializer().SerializeBatchEvents(historyEvents, common.EncodingTypeThriftRW)
+	s.mockHistoryV2Mgr.On("ReadRawHistoryBranch", mock.Anything).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*persistence.DataBlob{blob},
+		NextPageToken:     []byte{},
+	}, nil).Once()
+	token, _ := json.Marshal(&getHistoryContinuationToken{
+		FirstEventID:      1,
+		NextEventID:       nextEventID,
+		RunID:             testRunID,
+		TransientDecision: transientDecision,
+	})
+	resp, err := wh.GetWorkflowExecutionHistory(ctx, &shared.GetWorkflowExecutionHistoryRequest{
+		Domain: common.StringPtr(s.testDomain),
+		Execution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(testWorkflowID),
+			RunId:      common.StringPtr(testRunID),
+		},
+		SkipArchival:  common.BoolPtr(true),
+		NextPageToken: token,
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.NotNil(resp.RawHistory)
+	s.Equal(2, len(resp.RawHistory))
+
+	events := deserializeBlobDataToHistoryEvents(wh, resp.RawHistory)
+	s.NotNil(events)
+	if transientDecision != nil {
+		s.Equal(len(historyEvents)+2, len(events))
+	} else {
+		s.Equal(len(historyEvents), len(events))
+	}
+}
+
+func deserializeBlobDataToHistoryEvents(wh *WorkflowHandler, dataBlobs []*shared.DataBlob) []*shared.HistoryEvent {
+	var historyEvents []*shared.HistoryEvent
+	for _, batch := range dataBlobs {
+		events, err := wh.GetPayloadSerializer().DeserializeBatchEvents(&persistence.DataBlob{Data: batch.Data, Encoding: common.EncodingTypeThriftRW})
+		if err != nil {
+			return nil
+		}
+		historyEvents = append(historyEvents, events...)
+	}
+	return historyEvents
+}
+
 func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
@@ -1279,7 +1352,7 @@ func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
-	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.mockResource.GetLogger()), numHistoryShards, false)
+	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.mockResource.GetLogger()), numHistoryShards, false, false)
 }
 
 func updateRequest(
