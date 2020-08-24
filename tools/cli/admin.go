@@ -342,6 +342,29 @@ func newAdminDomainCommands() []cli.Command {
 				AdminGetDomainIDOrName(c)
 			},
 		},
+		{
+			Name:    "list",
+			Aliases: []string{"l"},
+			Usage:   "List all domains in the cluster",
+			Flags: []cli.Flag{
+				cli.IntFlag{
+					Name:  FlagPageSizeWithAlias,
+					Value: 10,
+					Usage: "Result page size",
+				},
+				cli.BoolFlag{
+					Name:  FlagAllWithAlias,
+					Usage: "List all domains, by default only domains in REGISTERED status are listed",
+				},
+				cli.BoolFlag{
+					Name:  FlagPrintFullyDetailWithAlias,
+					Usage: "Print full domain detail",
+				},
+			},
+			Action: func(c *cli.Context) {
+				newDomainCLI(c, false).ListDomains(c)
+			},
+		},
 	}
 }
 

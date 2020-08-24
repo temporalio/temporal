@@ -437,6 +437,39 @@ func (d *domainCLIImpl) DescribeDomain(c *cli.Context) {
 	}
 }
 
+func (d *domainCLIImpl) ListDomains(c *cli.Context) {
+	domains := d.getAllDomains(c)
+	pageSize := c.Int(FlagPageSize)
+	printAll := c.Bool(FlagAll)
+	printFull := c.Bool(FlagPrintFullyDetail)
+
+	table := createTableForListDomains(printAll, printFull)
+
+	currentPageSize := 0
+	for i, domain := range domains {
+		if !printAll && !domain.DomainInfo.Status.Equals(shared.DomainStatusRegistered) {
+			continue
+		}
+
+		appendDomainToTable(table, domain, printAll, printFull)
+		currentPageSize++
+
+		if currentPageSize != pageSize {
+			continue
+		}
+
+		// page is full
+		table.Render()
+		if i == len(domains)-1 || !showNextPage() {
+			return
+		}
+		table.ClearRows()
+		currentPageSize = 0
+	}
+
+	table.Render()
+}
+
 func (d *domainCLIImpl) listDomains(
 	ctx context.Context,
 	request *shared.ListDomainsRequest,
@@ -483,6 +516,57 @@ func (d *domainCLIImpl) describeDomain(
 	}
 
 	return d.domainHandler.DescribeDomain(ctx, request)
+}
+
+func createTableForListDomains(printAll, printFull bool) *tablewriter.Table {
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetBorder(false)
+	table.SetColumnSeparator("|")
+	header := []string{"Name", "UUID", "Domain Data"}
+	if printAll || printFull {
+		header = append(header, "Status")
+	}
+	header = append(header, "Is Global Domain", "Active Cluster")
+	if printFull {
+		header = append(header, "Clusters", "Retention Days", "History Archival Status", "History Archival URI", "Visibility Archival Status", "Visibility Archival URI")
+	}
+	headerColor := make([]tablewriter.Colors, len(header))
+	for i := range headerColor {
+		headerColor[i] = tableHeaderBlue
+	}
+	table.SetHeader(header)
+	table.SetHeaderColor(headerColor...)
+	table.SetHeaderLine(false)
+
+	return table
+}
+
+func appendDomainToTable(
+	table *tablewriter.Table,
+	domain *shared.DescribeDomainResponse,
+	printAll bool,
+	printFull bool,
+) {
+	row := []string{
+		domain.DomainInfo.GetName(),
+		domain.DomainInfo.GetUUID(),
+		mapToString(domain.DomainInfo.GetData(), ", "),
+	}
+	if printAll || printFull {
+		row = append(row, domain.DomainInfo.GetStatus().String())
+	}
+	row = append(row, strconv.FormatBool(domain.GetIsGlobalDomain()), domain.ReplicationConfiguration.GetActiveClusterName())
+	if printFull {
+		row = append(row,
+			clustersToString(domain.ReplicationConfiguration.GetClusters()),
+			fmt.Sprintf("%v", domain.Configuration.GetWorkflowExecutionRetentionPeriodInDays()),
+			domain.Configuration.GetHistoryArchivalStatus().String(),
+			domain.Configuration.GetHistoryArchivalURI(),
+			domain.Configuration.GetVisibilityArchivalStatus().String(),
+			domain.Configuration.GetVisibilityArchivalURI(),
+		)
+	}
+	table.Append(row)
 }
 
 func archivalStatus(c *cli.Context, statusFlagName string) *shared.ArchivalStatus {

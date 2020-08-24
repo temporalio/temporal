@@ -511,6 +511,15 @@ func mapKeysToArray(m map[string]string) []string {
 	return out
 }
 
+func mapToString(m map[string]string, sep string) string {
+	kv := make([]string, 0, len(m))
+	for key, value := range m {
+		kv = append(kv, key+": "+value)
+	}
+
+	return strings.Join(kv, sep)
+}
+
 func intSliceToSet(s []int) map[int]struct{} {
 	var ret = make(map[int]struct{}, len(s))
 	for _, v := range s {
