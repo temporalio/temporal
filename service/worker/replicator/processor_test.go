@@ -74,8 +74,6 @@ type (
 		mockMsg                              *messageMocks.Message
 		mockNamespaceReplicationTaskExecutor *namespace.MockReplicationTaskExecutor
 
-		mockRereplicator *xdc.MockHistoryRereplicator
-
 		processor *replicationTaskProcessor
 	}
 )
@@ -129,7 +127,6 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.mockMsg.On("Partition").Return(int32(0))
 	s.mockMsg.On("Offset").Return(int64(0))
 	s.mockNamespaceReplicationTaskExecutor = namespace.NewMockReplicationTaskExecutor(s.controller)
-	s.mockRereplicator = &xdc.MockHistoryRereplicator{}
 
 	s.currentCluster = cluster.TestAlternativeClusterName
 	s.sourceCluster = cluster.TestCurrentClusterName
@@ -143,7 +140,6 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 		s.logger,
 		s.metricsClient,
 		s.mockNamespaceReplicationTaskExecutor,
-		s.mockRereplicator,
 		s.mockNDCResender,
 		s.mockHistoryClient,
 		s.mockNamespaceCache,
@@ -154,7 +150,6 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 func (s *replicationTaskProcessorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockMsg.AssertExpectations(s.T())
-	s.mockRereplicator.AssertExpectations(s.T())
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_BadEncoding() {

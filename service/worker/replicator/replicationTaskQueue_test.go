@@ -258,15 +258,6 @@ func (s *replicationSequentialTaskQueueSuite) generateActivityTask(taskID int64)
 	}
 }
 
-func (s *replicationSequentialTaskQueueSuite) generateHistoryTask(taskID int64) *historyReplicationTask {
-	return &historyReplicationTask{
-		workflowReplicationTask: workflowReplicationTask{
-			queueID: s.queueID,
-			taskID:  taskID,
-		},
-	}
-}
-
 func (s *replicationSequentialTaskQueueSuite) generateHistoryMetadataTask(taskID int64) *historyMetadataReplicationTask {
 	return &historyMetadataReplicationTask{
 		workflowReplicationTask: workflowReplicationTask{

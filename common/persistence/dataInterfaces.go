@@ -30,7 +30,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -476,7 +475,6 @@ type (
 		SignalRequestedIDs  map[string]struct{}
 		ExecutionInfo       *WorkflowExecutionInfo
 		ExecutionStats      *persistenceblobs.ExecutionStats
-		ReplicationState    *persistenceblobs.ReplicationState
 		BufferedEvents      []*historypb.HistoryEvent
 		VersionHistories    *VersionHistories
 		Checksum            checksum.Checksum
@@ -644,7 +642,6 @@ type (
 	WorkflowMutation struct {
 		ExecutionInfo    *WorkflowExecutionInfo
 		ExecutionStats   *persistenceblobs.ExecutionStats
-		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *VersionHistories
 
 		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
@@ -674,7 +671,6 @@ type (
 	WorkflowSnapshot struct {
 		ExecutionInfo    *WorkflowExecutionInfo
 		ExecutionStats   *persistenceblobs.ExecutionStats
-		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *VersionHistories
 
 		ActivityInfos       []*persistenceblobs.ActivityInfo
@@ -2152,13 +2148,6 @@ func NewGetReplicationTasksFromDLQRequest(
 			BatchSize:     batchSize,
 			NextPageToken: nextPageToken,
 		},
-	}
-}
-
-func GenerateVersionProto(r *persistenceblobs.ReplicationState) *persistenceblobs.ReplicationVersions {
-	return &persistenceblobs.ReplicationVersions{
-		StartVersion:     &types.Int64Value{Value: r.StartVersion},
-		LastWriteVersion: &types.Int64Value{Value: r.LastWriteVersion},
 	}
 }
 

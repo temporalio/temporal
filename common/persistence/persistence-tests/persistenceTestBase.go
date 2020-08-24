@@ -340,61 +340,6 @@ func (s *TestBase) CreateWorkflowExecution(namespaceID string, workflowExecution
 		nextEventID, lastProcessedEventID, workflowTaskScheduleID, nil, timerTasks)
 }
 
-// CreateWorkflowExecutionWithReplication is a utility method to create workflow executions
-func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, workflowExecution commonpb.WorkflowExecution,
-	taskQueue, wType string, wTimeout int64, workflowTaskTimeout int64, nextEventID int64,
-	lastProcessedEventID int64, workflowTaskScheduleID int64, state *persistenceblobs.ReplicationState, txTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
-	var transferTasks []p.Task
-	var replicationTasks []p.Task
-	for _, task := range txTasks {
-		switch t := task.(type) {
-		case *p.WorkflowTask, *p.ActivityTask, *p.CloseExecutionTask, *p.CancelExecutionTask, *p.StartChildExecutionTask, *p.SignalExecutionTask, *p.RecordWorkflowStartedTask:
-			transferTasks = append(transferTasks, t)
-		case *p.HistoryReplicationTask:
-			replicationTasks = append(replicationTasks, t)
-		default:
-			panic("Unknown transfer task type.")
-		}
-	}
-
-	transferTasks = append(transferTasks, &p.WorkflowTask{
-		TaskID:      s.GetNextSequenceNumber(),
-		NamespaceID: namespaceID,
-		TaskQueue:   taskQueue,
-		ScheduleID:  workflowTaskScheduleID,
-	})
-	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
-		NewWorkflowSnapshot: p.WorkflowSnapshot{
-			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestID:            uuid.New(),
-				NamespaceID:                namespaceID,
-				WorkflowID:                 workflowExecution.GetWorkflowId(),
-				RunID:                      workflowExecution.GetRunId(),
-				TaskQueue:                  taskQueue,
-				WorkflowTypeName:           wType,
-				WorkflowRunTimeout:         wTimeout,
-				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
-				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				LastFirstEventID:           common.FirstEventID,
-				NextEventID:                nextEventID,
-				LastProcessedEvent:         lastProcessedEventID,
-				WorkflowTaskScheduleID:     workflowTaskScheduleID,
-				WorkflowTaskStartedID:      common.EmptyEventID,
-				WorkflowTaskTimeout:        1,
-			},
-			ExecutionStats:   &persistenceblobs.ExecutionStats{},
-			ReplicationState: state,
-			TransferTasks:    transferTasks,
-			ReplicationTasks: replicationTasks,
-			Checksum:         testWorkflowChecksum,
-		},
-		RangeID: s.ShardInfo.GetRangeId(),
-	})
-
-	return response, err
-}
-
 // CreateWorkflowExecutionManyTasks is a utility method to create workflow executions
 func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflowExecution commonpb.WorkflowExecution,
 	taskQueue string, nextEventID int64, lastProcessedEventID int64,
@@ -541,15 +486,6 @@ func (s *TestBase) GetCurrentWorkflowRunID(namespaceID, workflowID string) (stri
 func (s *TestBase) ContinueAsNewExecution(updatedInfo *p.WorkflowExecutionInfo, updatedStats *persistenceblobs.ExecutionStats, condition int64,
 	newExecution commonpb.WorkflowExecution, nextEventID, workflowTaskScheduleID int64,
 	prevResetPoints *workflowpb.ResetPoints) error {
-	return s.ContinueAsNewExecutionWithReplication(
-		updatedInfo, updatedStats, condition, newExecution, nextEventID, workflowTaskScheduleID, prevResetPoints, nil, nil,
-	)
-}
-
-// ContinueAsNewExecutionWithReplication is a utility method to create workflow executions
-func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.WorkflowExecutionInfo, updatedStats *persistenceblobs.ExecutionStats, condition int64,
-	newExecution commonpb.WorkflowExecution, nextEventID, workflowTaskScheduleID int64,
-	prevResetPoints *workflowpb.ResetPoints, beforeState *persistenceblobs.ReplicationState, afterState *persistenceblobs.ReplicationState) error {
 	newworkflowTask := &p.WorkflowTask{
 		TaskID:      s.GetNextSequenceNumber(),
 		NamespaceID: updatedInfo.NamespaceID,
@@ -568,7 +504,6 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 			DeleteActivityInfos: nil,
 			UpsertTimerInfos:    nil,
 			DeleteTimerInfos:    nil,
-			ReplicationState:    beforeState,
 		},
 		NewWorkflowSnapshot: &p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
@@ -591,10 +526,9 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 				WorkflowTaskTimeout:    1,
 				AutoResetPoints:        prevResetPoints,
 			},
-			ExecutionStats:   updatedStats,
-			ReplicationState: afterState,
-			TransferTasks:    nil,
-			TimerTasks:       nil,
+			ExecutionStats: updatedStats,
+			TransferTasks:  nil,
+			TimerTasks:     nil,
 		},
 		RangeID:  s.ShardInfo.GetRangeId(),
 		Encoding: pickRandomEncoding(),
@@ -712,9 +646,9 @@ func (s *TestBase) DeleteSignalsRequestedState(updatedInfo *p.WorkflowExecutionI
 
 // UpdateWorklowStateAndReplication is a utility method to update workflow execution
 func (s *TestBase) UpdateWorklowStateAndReplication(updatedInfo *p.WorkflowExecutionInfo, updatedStats *persistenceblobs.ExecutionStats,
-	updatedReplicationState *persistenceblobs.ReplicationState, updatedVersionHistories *p.VersionHistories,
+	updatedVersionHistories *p.VersionHistories,
 	condition int64, txTasks []p.Task) error {
-	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedStats, updatedReplicationState, updatedVersionHistories, nil, nil,
+	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedStats, updatedVersionHistories, nil, nil,
 		s.ShardInfo.GetRangeId(), condition, nil, txTasks, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "",
 	)
 }
@@ -727,7 +661,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *p.WorkflowExe
 	upsertCancelInfos []*persistenceblobs.RequestCancelInfo, deleteCancelInfo *int64,
 	upsertSignalInfos []*persistenceblobs.SignalInfo, deleteSignalInfo *int64,
 	upsertSignalRequestedIDs []string, deleteSignalRequestedID string) error {
-	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedStats, nil, updatedVersionHistories, workflowTaskScheduleIDs, activityScheduleIDs, rangeID,
+	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedStats, updatedVersionHistories, workflowTaskScheduleIDs, activityScheduleIDs, rangeID,
 		condition, timerTasks, []p.Task{}, upsertActivityInfos, deleteActivityInfos, upsertTimerInfos, deleteTimerInfos,
 		upsertChildInfos, deleteChildInfo, upsertCancelInfos, deleteCancelInfo, upsertSignalInfos, deleteSignalInfo,
 		upsertSignalRequestedIDs, deleteSignalRequestedID)
@@ -735,7 +669,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *p.WorkflowExe
 
 // UpdateWorkflowExecutionWithReplication is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.WorkflowExecutionInfo, updatedStats *persistenceblobs.ExecutionStats,
-	updatedReplicationState *persistenceblobs.ReplicationState, updatedVersionHistories *p.VersionHistories, workflowTaskScheduleIDs []int64, activityScheduleIDs []int64, rangeID,
+	updatedVersionHistories *p.VersionHistories, workflowTaskScheduleIDs []int64, activityScheduleIDs []int64, rangeID,
 	condition int64, timerTasks []p.Task, txTasks []p.Task, upsertActivityInfos []*persistenceblobs.ActivityInfo,
 	deleteActivityInfos []int64, upsertTimerInfos []*persistenceblobs.TimerInfo, deleteTimerInfos []string,
 	upsertChildInfos []*persistenceblobs.ChildExecutionInfo, deleteChildInfo *int64, upsertCancelInfos []*persistenceblobs.RequestCancelInfo,
@@ -773,7 +707,6 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:    updatedInfo,
 			ExecutionStats:   updatedStats,
-			ReplicationState: updatedReplicationState,
 			VersionHistories: updatedVersionHistories,
 
 			UpsertActivityInfos:       upsertActivityInfos,
@@ -873,13 +806,12 @@ func (s *TestBase) UpdateWorkflowExecutionForSignal(
 
 // UpdateWorkflowExecutionForBufferEvents is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionForBufferEvents(
-	updatedInfo *p.WorkflowExecutionInfo, updatedStats *persistenceblobs.ExecutionStats, rState *persistenceblobs.ReplicationState, condition int64,
+	updatedInfo *p.WorkflowExecutionInfo, updatedStats *persistenceblobs.ExecutionStats, condition int64,
 	bufferEvents []*historypb.HistoryEvent, clearBufferedEvents bool) error {
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:       updatedInfo,
 			ExecutionStats:      updatedStats,
-			ReplicationState:    rState,
 			NewBufferedEvents:   bufferEvents,
 			Condition:           condition,
 			ClearBufferedEvents: clearBufferedEvents,
@@ -926,7 +858,6 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:             updatedMutableState.ExecutionInfo,
 			ExecutionStats:            updatedMutableState.ExecutionStats,
-			ReplicationState:          updatedMutableState.ReplicationState,
 			Condition:                 condition,
 			UpsertActivityInfos:       aInfos,
 			UpsertTimerInfos:          tInfos,
@@ -942,7 +873,7 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 
 // ConflictResolveWorkflowExecution is  utility method to reset mutable state
 func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWriteVersion int64, prevState enumsspb.WorkflowExecutionState,
-	info *p.WorkflowExecutionInfo, stats *persistenceblobs.ExecutionStats, replicationState *persistenceblobs.ReplicationState, nextEventID int64,
+	info *p.WorkflowExecutionInfo, stats *persistenceblobs.ExecutionStats, nextEventID int64,
 	activityInfos []*persistenceblobs.ActivityInfo, timerInfos []*persistenceblobs.TimerInfo, childExecutionInfos []*persistenceblobs.ChildExecutionInfo,
 	requestCancelInfos []*persistenceblobs.RequestCancelInfo, signalInfos []*persistenceblobs.SignalInfo, ids []string) error {
 	return s.ExecutionManager.ConflictResolveWorkflowExecution(&p.ConflictResolveWorkflowExecutionRequest{
@@ -955,7 +886,6 @@ func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWr
 		ResetWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo:       info,
 			ExecutionStats:      stats,
-			ReplicationState:    replicationState,
 			Condition:           nextEventID,
 			ActivityInfos:       activityInfos,
 			TimerInfos:          timerInfos,
@@ -971,10 +901,10 @@ func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWr
 
 // ResetWorkflowExecution is  utility method to reset WF
 func (s *TestBase) ResetWorkflowExecution(condition int64, info *p.WorkflowExecutionInfo,
-	executionStats *persistenceblobs.ExecutionStats, replicationState *persistenceblobs.ReplicationState,
+	executionStats *persistenceblobs.ExecutionStats,
 	activityInfos []*persistenceblobs.ActivityInfo, timerInfos []*persistenceblobs.TimerInfo, childExecutionInfos []*persistenceblobs.ChildExecutionInfo,
 	requestCancelInfos []*persistenceblobs.RequestCancelInfo, signalInfos []*persistenceblobs.SignalInfo, ids []string, trasTasks, timerTasks, replTasks []p.Task,
-	updateCurr bool, currInfo *p.WorkflowExecutionInfo, currExecutionStats *persistenceblobs.ExecutionStats, currReplicationState *persistenceblobs.ReplicationState,
+	updateCurr bool, currInfo *p.WorkflowExecutionInfo, currExecutionStats *persistenceblobs.ExecutionStats,
 	currTrasTasks, currTimerTasks []p.Task, forkRunID string, forkRunNextEventID int64) error {
 
 	req := &p.ResetWorkflowExecutionRequest{
@@ -989,9 +919,8 @@ func (s *TestBase) ResetWorkflowExecution(condition int64, info *p.WorkflowExecu
 		CurrentWorkflowMutation: nil,
 
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
-			ExecutionInfo:    info,
-			ExecutionStats:   executionStats,
-			ReplicationState: replicationState,
+			ExecutionInfo:  info,
+			ExecutionStats: executionStats,
 
 			ActivityInfos:       activityInfos,
 			TimerInfos:          timerInfos,
@@ -1009,9 +938,8 @@ func (s *TestBase) ResetWorkflowExecution(condition int64, info *p.WorkflowExecu
 
 	if updateCurr {
 		req.CurrentWorkflowMutation = &p.WorkflowMutation{
-			ExecutionInfo:    currInfo,
-			ExecutionStats:   currExecutionStats,
-			ReplicationState: currReplicationState,
+			ExecutionInfo:  currInfo,
+			ExecutionStats: currExecutionStats,
 
 			TransferTasks: currTrasTasks,
 			TimerTasks:    currTimerTasks,

@@ -51,7 +51,6 @@ func applyWorkflowMutationTx(
 	workflowMutation *p.InternalWorkflowMutation,
 ) error {
 	executionInfo := workflowMutation.ExecutionInfo
-	replicationState := workflowMutation.ReplicationState
 	versionHistories := workflowMutation.VersionHistories
 	startVersion := workflowMutation.StartVersion
 	lastWriteVersion := workflowMutation.LastWriteVersion
@@ -72,9 +71,6 @@ func applyWorkflowMutationTx(
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
 	currentVersion := lastWriteVersion
-	if replicationState != nil {
-		currentVersion = replicationState.CurrentVersion
-	}
 
 	// TODO Remove me if UPDATE holds the lock to the end of a transaction
 	if err := lockAndCheckNextEventID(tx,
@@ -93,7 +89,6 @@ func applyWorkflowMutationTx(
 
 	if err := updateExecution(tx,
 		executionInfo,
-		replicationState,
 		versionHistories,
 		startVersion,
 		lastWriteVersion,
@@ -201,7 +196,6 @@ func applyWorkflowSnapshotTxAsReset(
 ) error {
 
 	executionInfo := workflowSnapshot.ExecutionInfo
-	replicationState := workflowSnapshot.ReplicationState
 	versionHistories := workflowSnapshot.VersionHistories
 	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
@@ -220,9 +214,6 @@ func applyWorkflowSnapshotTxAsReset(
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
 	currentVersion := lastWriteVersion
-	if replicationState != nil {
-		currentVersion = replicationState.CurrentVersion
-	}
 
 	// TODO Is there a way to modify the various map tables without fear of other people adding rows after we delete, without locking the executions row?
 	if err := lockAndCheckNextEventID(tx,
@@ -241,7 +232,6 @@ func applyWorkflowSnapshotTxAsReset(
 
 	if err := updateExecution(tx,
 		executionInfo,
-		replicationState,
 		versionHistories,
 		startVersion,
 		lastWriteVersion,
@@ -386,7 +376,6 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 ) error {
 
 	executionInfo := workflowSnapshot.ExecutionInfo
-	replicationState := workflowSnapshot.ReplicationState
 	versionHistories := workflowSnapshot.VersionHistories
 	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
@@ -405,13 +394,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
 	currentVersion := lastWriteVersion
-	if replicationState != nil {
-		currentVersion = replicationState.CurrentVersion
-	}
 
 	if err := m.createExecution(tx,
 		executionInfo,
-		replicationState,
 		versionHistories,
 		startVersion,
 		lastWriteVersion,
@@ -1127,7 +1112,6 @@ func updateCurrentExecution(
 
 func buildExecutionRow(
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *persistenceblobs.ReplicationState,
 	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -1135,7 +1119,7 @@ func buildExecutionRow(
 	shardID int,
 ) (row *sqlplugin.ExecutionsRow, err error) {
 
-	info, state, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, replicationState, versionHistories)
+	info, state, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, versionHistories)
 	if err != nil {
 		return nil, err
 	}
@@ -1177,7 +1161,6 @@ func buildExecutionRow(
 func (m *sqlExecutionManager) createExecution(
 	tx sqlplugin.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *persistenceblobs.ReplicationState,
 	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -1198,7 +1181,6 @@ func (m *sqlExecutionManager) createExecution(
 
 	row, err := buildExecutionRow(
 		executionInfo,
-		replicationState,
 		versionHistories,
 		startVersion,
 		lastWriteVersion,
@@ -1236,7 +1218,6 @@ func (m *sqlExecutionManager) createExecution(
 func updateExecution(
 	tx sqlplugin.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *persistenceblobs.ReplicationState,
 	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -1256,7 +1237,6 @@ func updateExecution(
 
 	row, err := buildExecutionRow(
 		executionInfo,
-		replicationState,
 		versionHistories,
 		startVersion,
 		lastWriteVersion,

@@ -57,7 +57,6 @@ func newTimerQueueStandbyProcessor(
 	historyService *historyEngineImpl,
 	clusterName string,
 	taskAllocator taskAllocator,
-	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
@@ -102,7 +101,6 @@ func newTimerQueueStandbyProcessor(
 		taskExecutor: newTimerQueueStandbyTaskExecutor(
 			shard,
 			historyService,
-			historyRereplicator,
 			nDCHistoryResender,
 			logger,
 			historyService.metricsClient,

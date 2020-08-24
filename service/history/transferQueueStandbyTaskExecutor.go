@@ -44,16 +44,14 @@ type (
 	transferQueueStandbyTaskExecutor struct {
 		*transferQueueTaskExecutorBase
 
-		clusterName         string
-		historyRereplicator xdc.HistoryRereplicator
-		nDCHistoryResender  xdc.NDCHistoryResender
+		clusterName        string
+		nDCHistoryResender xdc.NDCHistoryResender
 	}
 )
 
 func newTransferQueueStandbyTaskExecutor(
 	shard ShardContext,
 	historyService *historyEngineImpl,
-	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
 	metricsClient metrics.Client,
@@ -68,9 +66,8 @@ func newTransferQueueStandbyTaskExecutor(
 			metricsClient,
 			config,
 		),
-		clusterName:         clusterName,
-		historyRereplicator: historyRereplicator,
-		nDCHistoryResender:  nDCHistoryResender,
+		clusterName:        clusterName,
+		nDCHistoryResender: nDCHistoryResender,
 	}
 }
 
@@ -575,15 +572,6 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			resendInfo.lastEventVersion,
 			0,
 			0,
-		)
-	} else if resendInfo.nextEventID != nil {
-		err = t.historyRereplicator.SendMultiWorkflowHistory(
-			transferTask.GetNamespaceId(),
-			transferTask.GetWorkflowId(),
-			transferTask.GetRunId(),
-			*resendInfo.nextEventID,
-			transferTask.GetRunId(),
-			common.EndEventID, // use common.EndEventID since we do not know where is the end
 		)
 	} else {
 		err = &serviceerror.Internal{

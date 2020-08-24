@@ -58,7 +58,6 @@ func newTransferQueueStandbyProcessor(
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,
 	taskAllocator taskAllocator,
-	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
@@ -109,7 +108,6 @@ func newTransferQueueStandbyProcessor(
 		taskExecutor: newTransferQueueStandbyTaskExecutor(
 			shard,
 			historyService,
-			historyRereplicator,
 			nDCHistoryResender,
 			logger,
 			historyService.metricsClient,

@@ -65,25 +65,17 @@ type (
 
 	activityReplicationTask struct {
 		workflowReplicationTask
-		req                 *historyservice.SyncActivityRequest
-		historyRereplicator xdc.HistoryRereplicator
-		nDCHistoryResender  xdc.NDCHistoryResender
-	}
-
-	historyReplicationTask struct {
-		workflowReplicationTask
-		req                 *historyservice.ReplicateEventsRequest
-		historyRereplicator xdc.HistoryRereplicator
+		req                *historyservice.SyncActivityRequest
+		nDCHistoryResender xdc.NDCHistoryResender
 	}
 
 	historyMetadataReplicationTask struct {
 		workflowReplicationTask
-		sourceCluster       string
-		firstEventID        int64
-		nextEventID         int64
-		version             int64
-		historyRereplicator xdc.HistoryRereplicator
-		nDCHistoryResender  xdc.NDCHistoryResender
+		sourceCluster      string
+		firstEventID       int64
+		nextEventID        int64
+		version            int64
+		nDCHistoryResender xdc.NDCHistoryResender
 	}
 
 	historyReplicationV2Task struct {
@@ -94,7 +86,6 @@ type (
 )
 
 var _ task.Task = (*activityReplicationTask)(nil)
-var _ task.Task = (*historyReplicationTask)(nil)
 var _ task.Task = (*historyMetadataReplicationTask)(nil)
 var _ task.Task = (*historyReplicationV2Task)(nil)
 
@@ -110,7 +101,6 @@ func newActivityReplicationTask(
 	timeSource clock.TimeSource,
 	historyClient history.Client,
 	metricsClient metrics.Client,
-	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 ) *activityReplicationTask {
 
@@ -154,65 +144,7 @@ func newActivityReplicationTask(
 			LastWorkerIdentity: attr.LastWorkerIdentity,
 			VersionHistory:     attr.VersionHistory,
 		},
-		historyRereplicator: historyRereplicator,
-		nDCHistoryResender:  nDCHistoryResender,
-	}
-}
-
-func newHistoryReplicationTask(
-	replicationTask *replicationspb.ReplicationTask,
-	msg messaging.Message,
-	sourceCluster string,
-	logger log.Logger,
-	config *Config,
-	timeSource clock.TimeSource,
-	historyClient history.Client,
-	metricsClient metrics.Client,
-	historyRereplicator xdc.HistoryRereplicator,
-) *historyReplicationTask {
-
-	attr := replicationTask.GetHistoryTaskAttributes()
-	logger = logger.WithTags(tag.WorkflowNamespaceID(attr.GetNamespaceId()),
-		tag.WorkflowID(attr.GetWorkflowId()),
-		tag.WorkflowRunID(attr.GetRunId()),
-		tag.WorkflowFirstEventID(attr.GetFirstEventId()),
-		tag.WorkflowNextEventID(attr.GetNextEventId()),
-		tag.FailoverVersion(attr.GetVersion()))
-	return &historyReplicationTask{
-		workflowReplicationTask: workflowReplicationTask{
-			metricsScope: metrics.HistoryReplicationTaskScope,
-			startTime:    timeSource.Now(),
-			queueID: definition.NewWorkflowIdentifier(
-				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
-			),
-			taskID:        attr.GetFirstEventId(),
-			attempt:       1,
-			kafkaMsg:      msg,
-			logger:        logger,
-			state:         task.TaskStatePending,
-			config:        config,
-			timeSource:    timeSource,
-			historyClient: historyClient,
-			metricsClient: metricsClient,
-		},
-		req: &historyservice.ReplicateEventsRequest{
-			SourceCluster: sourceCluster,
-			NamespaceId:   attr.NamespaceId,
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: attr.WorkflowId,
-				RunId:      attr.RunId,
-			},
-			FirstEventId:      attr.FirstEventId,
-			NextEventId:       attr.NextEventId,
-			Version:           attr.Version,
-			ReplicationInfo:   attr.ReplicationInfo,
-			History:           attr.History,
-			NewRunHistory:     attr.NewRunHistory,
-			ForceBufferEvents: false,
-			ResetWorkflow:     attr.ResetWorkflow,
-			NewRunNdc:         attr.NewRunNdc,
-		},
-		historyRereplicator: historyRereplicator,
+		nDCHistoryResender: nDCHistoryResender,
 	}
 }
 
@@ -225,7 +157,6 @@ func newHistoryMetadataReplicationTask(
 	timeSource clock.TimeSource,
 	historyClient history.Client,
 	metricsClient metrics.Client,
-	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 ) *historyMetadataReplicationTask {
 
@@ -253,12 +184,11 @@ func newHistoryMetadataReplicationTask(
 			historyClient: historyClient,
 			metricsClient: metricsClient,
 		},
-		sourceCluster:       sourceCluster,
-		firstEventID:        attr.GetFirstEventId(),
-		nextEventID:         attr.GetNextEventId(),
-		version:             attr.GetVersion(),
-		historyRereplicator: historyRereplicator,
-		nDCHistoryResender:  nDCHistoryResender,
+		sourceCluster:      sourceCluster,
+		firstEventID:       attr.GetFirstEventId(),
+		nextEventID:        attr.GetNextEventId(),
+		version:            attr.GetVersion(),
+		nDCHistoryResender: nDCHistoryResender,
 	}
 }
 
@@ -323,35 +253,10 @@ func (t *activityReplicationTask) HandleErr(
 		return err
 	}
 
-	retryV1Err, okV1 := err.(*serviceerrors.RetryTask)
 	retryV2Err, okV2 := err.(*serviceerrors.RetryTaskV2)
 
-	if !okV1 && !okV2 {
+	if !okV2 {
 		return err
-	} else if okV1 {
-		if retryV1Err.RunId == "" {
-			return err
-		}
-
-		t.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientRequests)
-		stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientLatency)
-		defer stopwatch.Stop()
-
-		// this is the retry error
-		beginRunID := retryV1Err.RunId
-		beginEventID := retryV1Err.NextEventId
-		endRunID := t.queueID.RunID
-		endEventID := t.taskID + 1 // the next event ID should be at activity schedule ID + 1
-		resendErr := t.historyRereplicator.SendMultiWorkflowHistory(
-			t.queueID.NamespaceID, t.queueID.WorkflowID,
-			beginRunID, beginEventID, endRunID, endEventID,
-		)
-
-		if resendErr != nil {
-			t.logger.Error("error resend history", tag.Error(resendErr))
-			// should return the replication error, not the resending error
-			return err
-		}
 	} else if okV2 {
 		t.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientRequests)
 		stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientLatency)
@@ -378,47 +283,6 @@ func (t *activityReplicationTask) HandleErr(
 	return t.Execute()
 }
 
-func (t *historyReplicationTask) Execute() error {
-	ctx, cancel := context.WithTimeout(context.Background(), t.config.ReplicationTaskContextTimeout())
-	defer cancel()
-	_, err := t.historyClient.ReplicateEvents(ctx, t.req)
-	return err
-}
-
-func (t *historyReplicationTask) HandleErr(
-	err error,
-) error {
-	if t.attempt <= t.config.ReplicatorHistoryBufferRetryCount() {
-		return err
-	}
-
-	retryErr, ok := err.(*serviceerrors.RetryTask)
-	if !ok || retryErr.RunId == "" {
-		return err
-	}
-
-	t.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientRequests)
-	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientLatency)
-	defer stopwatch.Stop()
-
-	// this is the retry error
-	beginRunID := retryErr.RunId
-	beginEventID := retryErr.NextEventId
-	endRunID := t.queueID.RunID
-	endEventID := t.taskID
-	resendErr := t.historyRereplicator.SendMultiWorkflowHistory(
-		t.queueID.NamespaceID, t.queueID.WorkflowID,
-		beginRunID, beginEventID, endRunID, endEventID,
-	)
-	if resendErr != nil {
-		t.logger.Error("error resend history", tag.Error(resendErr))
-		// should return the replication error, not the resending error
-		return err
-	}
-	// should try again
-	return t.Execute()
-}
-
 func (t *historyMetadataReplicationTask) Execute() error {
 	t.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryMetadataReplicationScope, metrics.ClientRequests)
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryMetadataReplicationScope, metrics.ClientLatency)
@@ -433,13 +297,9 @@ func (t *historyMetadataReplicationTask) Execute() error {
 			t.version,
 			t.nextEventID,
 			t.version)
-	} else {
-		return t.historyRereplicator.SendMultiWorkflowHistory(
-			t.queueID.NamespaceID, t.queueID.WorkflowID,
-			t.queueID.RunID, t.firstEventID,
-			t.queueID.RunID, t.nextEventID,
-		)
 	}
+
+	return serviceerror.NewInternal("historyMetadataReplicationTask encounter error which cannot be handled")
 }
 
 func (t *historyMetadataReplicationTask) HandleErr(

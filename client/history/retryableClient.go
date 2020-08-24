@@ -450,38 +450,6 @@ func (c *retryableClient) RecordChildExecutionCompleted(
 	return resp, err
 }
 
-func (c *retryableClient) ReplicateEvents(
-	ctx context.Context,
-	request *historyservice.ReplicateEventsRequest,
-	opts ...grpc.CallOption) (*historyservice.ReplicateEventsResponse, error) {
-
-	var resp *historyservice.ReplicateEventsResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.ReplicateEvents(ctx, request, opts...)
-		return err
-	}
-
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) ReplicateRawEvents(
-	ctx context.Context,
-	request *historyservice.ReplicateRawEventsRequest,
-	opts ...grpc.CallOption) (*historyservice.ReplicateRawEventsResponse, error) {
-
-	var resp *historyservice.ReplicateRawEventsResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.ReplicateRawEvents(ctx, request, opts...)
-		return err
-	}
-
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) ReplicateEventsV2(
 	ctx context.Context,
 	request *historyservice.ReplicateEventsV2Request,

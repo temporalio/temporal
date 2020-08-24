@@ -84,6 +84,10 @@ type (
 	}
 )
 
+const (
+	defaultPageSize = int32(100)
+)
+
 // NewNDCHistoryResender create a new NDCHistoryResenderImpl
 func NewNDCHistoryResender(
 	namespaceCache cache.NamespaceCache,

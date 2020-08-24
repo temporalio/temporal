@@ -43,7 +43,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -126,7 +125,6 @@ type (
 
 		executionInfo    *persistence.WorkflowExecutionInfo // Workflow mutable state info.
 		versionHistories *persistence.VersionHistories
-		replicationState *persistenceblobs.ReplicationState
 		hBuilder         *historyBuilder
 
 		// in memory only attributes
@@ -244,23 +242,6 @@ func newMutableStateBuilder(
 	return s
 }
 
-func newMutableStateBuilderWithReplicationState(
-	shard ShardContext,
-	eventsCache eventsCache,
-	logger log.Logger,
-	namespaceEntry *cache.NamespaceCacheEntry,
-) *mutableStateBuilder {
-	s := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry)
-	s.replicationState = &persistenceblobs.ReplicationState{
-		StartVersion:        s.currentVersion,
-		CurrentVersion:      s.currentVersion,
-		LastWriteVersion:    common.EmptyVersion,
-		LastWriteEventId:    common.EmptyEventID,
-		LastReplicationInfo: make(map[string]*replicationspb.ReplicationInfo),
-	}
-	return s
-}
-
 func newMutableStateBuilderWithVersionHistories(
 	shard ShardContext,
 	eventsCache eventsCache,
@@ -287,9 +268,6 @@ func (e *mutableStateBuilder) CopyToPersistence() *persistence.WorkflowMutableSt
 	state.VersionHistories = e.versionHistories
 	state.Checksum = e.checksum
 
-	// TODO when 2DC is deprecated, remove this
-	state.ReplicationState = e.replicationState
-
 	return state
 }
 
@@ -311,7 +289,6 @@ func (e *mutableStateBuilder) Load(
 	e.pendingSignalRequestedIDs = state.SignalRequestedIDs
 	e.executionInfo = state.ExecutionInfo
 
-	e.replicationState = state.ReplicationState
 	e.bufferedEvents = state.BufferedEvents
 
 	e.currentVersion = common.EmptyVersion
@@ -400,10 +377,6 @@ func (e *mutableStateBuilder) SetHistoryBuilder(hBuilder *historyBuilder) {
 
 func (e *mutableStateBuilder) GetExecutionInfo() *persistence.WorkflowExecutionInfo {
 	return e.executionInfo
-}
-
-func (e *mutableStateBuilder) GetReplicationState() *persistenceblobs.ReplicationState {
-	return e.replicationState
 }
 
 func (e *mutableStateBuilder) FlushBufferedEvents() error {
@@ -496,12 +469,6 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 		return nil
 	}
 
-	// TODO when 2DC is deprecated, remove this block
-	if e.replicationState != nil {
-		e.UpdateReplicationStateVersion(version, forceUpdate)
-		return nil
-	}
-
 	if e.versionHistories != nil {
 		versionHistory, err := e.versionHistories.GetCurrentVersionHistory()
 		if err != nil {
@@ -537,10 +504,6 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 
 func (e *mutableStateBuilder) GetCurrentVersion() int64 {
 
-	if e.replicationState != nil {
-		return e.replicationState.CurrentVersion
-	}
-
 	if e.versionHistories != nil {
 		return e.currentVersion
 	}
@@ -549,11 +512,6 @@ func (e *mutableStateBuilder) GetCurrentVersion() int64 {
 }
 
 func (e *mutableStateBuilder) GetStartVersion() (int64, error) {
-
-	if e.replicationState != nil {
-		return e.replicationState.StartVersion, nil
-
-	}
 
 	if e.versionHistories != nil {
 		versionHistory, err := e.versionHistories.GetCurrentVersionHistory()
@@ -572,10 +530,6 @@ func (e *mutableStateBuilder) GetStartVersion() (int64, error) {
 
 func (e *mutableStateBuilder) GetLastWriteVersion() (int64, error) {
 
-	if e.replicationState != nil {
-		return e.replicationState.LastWriteVersion, nil
-	}
-
 	if e.versionHistories != nil {
 		versionHistory, err := e.versionHistories.GetCurrentVersionHistory()
 		if err != nil {
@@ -589,42 +543,6 @@ func (e *mutableStateBuilder) GetLastWriteVersion() (int64, error) {
 	}
 
 	return common.EmptyVersion, nil
-}
-
-// TODO nDC deprecate once replication state is deprecated
-func (e *mutableStateBuilder) UpdateReplicationStateVersion(
-	version int64,
-	forceUpdate bool,
-) {
-
-	if version > e.replicationState.CurrentVersion || forceUpdate {
-		e.replicationState.CurrentVersion = version
-	}
-}
-
-// TODO nDC deprecate once replication state is deprecated
-// Assumption: It is expected CurrentVersion on replication state is updated at the start of transaction when
-// mutableState is loaded for this workflow execution.
-func (e *mutableStateBuilder) UpdateReplicationStateLastEventID(
-	lastWriteVersion,
-	lastEventID int64,
-) {
-	e.replicationState.LastWriteVersion = lastWriteVersion
-	e.replicationState.LastWriteEventId = lastEventID
-
-	lastEventSourceCluster := e.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
-	currentCluster := e.clusterMetadata.GetCurrentClusterName()
-	if lastEventSourceCluster != currentCluster {
-		info, ok := e.replicationState.LastReplicationInfo[lastEventSourceCluster]
-		if !ok {
-			// replicationspb.ReplicationInfo doesn't exist for this cluster, create one
-			info = &replicationspb.ReplicationInfo{}
-			e.replicationState.LastReplicationInfo[lastEventSourceCluster] = info
-		}
-
-		info.Version = lastWriteVersion
-		info.LastEventId = lastEventID
-	}
 }
 
 func (e *mutableStateBuilder) scanForBufferedActivityCompletion(
@@ -3366,20 +3284,6 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 			e.logger,
 			e.namespaceEntry,
 		)
-	} else {
-		if e.namespaceEntry.IsGlobalNamespace() {
-			// all workflows within a global namespace should have replication state,
-			// no matter whether it will be replicated to multiple
-			// target clusters or not, for 2DC case
-			newStateBuilder = newMutableStateBuilderWithReplicationState(
-				e.shard,
-				e.eventsCache,
-				e.logger,
-				e.namespaceEntry,
-			)
-		} else {
-			newStateBuilder = newMutableStateBuilder(e.shard, e.eventsCache, e.logger, e.namespaceEntry)
-		}
 	}
 
 	if _, err = newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(
@@ -3979,7 +3883,6 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 
 	workflowMutation := &persistence.WorkflowMutation{
 		ExecutionInfo:    e.executionInfo,
-		ReplicationState: e.replicationState,
 		VersionHistories: e.versionHistories,
 
 		UpsertActivityInfos:       convertUpdateActivityInfos(e.updateActivityInfos),
@@ -4064,7 +3967,6 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 
 	workflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    e.executionInfo,
-		ReplicationState: e.replicationState,
 		VersionHistories: e.versionHistories,
 
 		ActivityInfos:       convertPendingActivityInfos(e.pendingActivityInfoIDs),
@@ -4282,10 +4184,7 @@ func (e *mutableStateBuilder) eventsToReplicationTask(
 		NewRunBranchToken: nil,
 	}
 
-	// TODO after NDC release and migration is done, remove this check
-	if e.GetReplicationState() != nil {
-		replicationTask.LastReplicationInfo = e.GetReplicationState().LastReplicationInfo
-	} else if e.GetVersionHistories() != nil {
+	if e.GetVersionHistories() != nil {
 		replicationTask.LastReplicationInfo = nil
 	} else {
 		return nil, serviceerror.NewInternal("should not generate replication task when missing replication state & version history")
@@ -4321,10 +4220,6 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 
 	e.GetExecutionInfo().LastEventTaskID = lastEvent.GetTaskId()
 
-	if e.replicationState != nil {
-		e.UpdateReplicationStateLastEventID(lastEvent.GetVersion(), lastEvent.GetEventId())
-	}
-
 	if e.versionHistories != nil {
 		currentVersionHistory, err := e.versionHistories.GetCurrentVersionHistory()
 		if err != nil {
@@ -4346,8 +4241,7 @@ func (e *mutableStateBuilder) updateWithLastFirstEvent(
 }
 
 func (e *mutableStateBuilder) canReplicateEvents() bool {
-	return (e.GetReplicationState() != nil || e.GetVersionHistories() != nil) &&
-		e.namespaceEntry.GetReplicationPolicy() == cache.ReplicationPolicyMultiCluster
+	return e.namespaceEntry.GetReplicationPolicy() == cache.ReplicationPolicyMultiCluster
 }
 
 // validateNoEventsAfterWorkflowFinish perform check on history event batch

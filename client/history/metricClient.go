@@ -441,40 +441,6 @@ func (c *metricClient) RecordChildExecutionCompleted(
 	return resp, err
 }
 
-func (c *metricClient) ReplicateEvents(
-	context context.Context,
-	request *historyservice.ReplicateEventsRequest,
-	opts ...grpc.CallOption) (*historyservice.ReplicateEventsResponse, error) {
-	c.metricsClient.IncCounter(metrics.HistoryClientReplicateEventsScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.HistoryClientReplicateEventsScope, metrics.ClientLatency)
-	resp, err := c.client.ReplicateEvents(context, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientReplicateEventsScope, metrics.ClientFailures)
-	}
-
-	return resp, err
-}
-
-func (c *metricClient) ReplicateRawEvents(
-	context context.Context,
-	request *historyservice.ReplicateRawEventsRequest,
-	opts ...grpc.CallOption) (*historyservice.ReplicateRawEventsResponse, error) {
-	c.metricsClient.IncCounter(metrics.HistoryClientReplicateRawEventsScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.HistoryClientReplicateRawEventsScope, metrics.ClientLatency)
-	resp, err := c.client.ReplicateRawEvents(context, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientReplicateRawEventsScope, metrics.ClientFailures)
-	}
-
-	return resp, err
-}
-
 func (c *metricClient) ReplicateEventsV2(
 	context context.Context,
 	request *historyservice.ReplicateEventsV2Request,

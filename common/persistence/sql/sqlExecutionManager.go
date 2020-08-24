@@ -241,20 +241,6 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 
 	state := &p.InternalWorkflowMutableState{ExecutionInfo: executionInfo, VersionHistories: info.GetVersionHistories()}
 
-	if info.ReplicationData != nil {
-		state.ReplicationState = &persistenceblobs.ReplicationState{}
-
-		state.ReplicationState.StartVersion = info.StartVersion
-		state.ReplicationState.CurrentVersion = info.CurrentVersion
-		state.ReplicationState.LastWriteVersion = executionsRow.LastWriteVersion
-		state.ReplicationState.LastWriteEventId = info.ReplicationData.LastWriteEventId
-		state.ReplicationState.LastReplicationInfo = info.ReplicationData.LastReplicationInfo
-
-		if state.ReplicationState.LastReplicationInfo == nil {
-			state.ReplicationState.LastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo, 0)
-		}
-	}
-
 	// Populate Maps
 	{
 		var err error

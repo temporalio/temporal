@@ -107,8 +107,6 @@ type (
 		ResetWorkflowExecution(ctx context.Context, request *historyservice.ResetWorkflowExecutionRequest) (*historyservice.ResetWorkflowExecutionResponse, error)
 		ScheduleWorkflowTask(ctx context.Context, request *historyservice.ScheduleWorkflowTaskRequest) error
 		RecordChildExecutionCompleted(ctx context.Context, request *historyservice.RecordChildExecutionCompletedRequest) error
-		ReplicateEvents(ctx context.Context, request *historyservice.ReplicateEventsRequest) error
-		ReplicateRawEvents(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error
 		ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error
 		SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error
@@ -138,7 +136,6 @@ type (
 		visibilityMgr             persistence.VisibilityManager
 		txProcessor               transferQueueProcessor
 		timerProcessor            timerQueueProcessor
-		replicator                *historyReplicator
 		nDCReplicator             nDCHistoryReplicator
 		nDCActivityReplicator     nDCActivityReplicator
 		replicatorProcessor       ReplicatorQueueProcessor
@@ -150,7 +147,6 @@ type (
 		throttledLogger           log.Logger
 		config                    *Config
 		archivalClient            archiver.Client
-		resetor                   workflowResetor
 		workflowResetter          workflowResetter
 		queueTaskProcessor        queueTaskProcessor
 		replicationTaskProcessors []ReplicationTaskProcessor
@@ -198,6 +194,8 @@ var (
 	ErrQueryEnteredInvalidState = serviceerror.NewInvalidArgument("query entered invalid state, this should be impossible")
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
 	ErrConsistentQueryBufferExceeded = serviceerror.NewInternal("consistent query buffer is full, cannot accept new consistent queries")
+	// ErrEmptyHistoryRawEventBatch indicate that one single batch of history raw events is of size 0
+	ErrEmptyHistoryRawEventBatch = serviceerror.NewInvalidArgument("encounter empty history batch")
 
 	// FailedWorkflowStatuses is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
@@ -273,15 +271,6 @@ func NewEngineWithShardContext(
 			historyV2Manager,
 			logger,
 		)
-		historyEngImpl.replicator = newHistoryReplicator(
-			shard,
-			clock.NewRealTimeSource(),
-			historyEngImpl,
-			historyCache,
-			shard.GetNamespaceCache(),
-			historyV2Manager,
-			logger,
-		)
 		historyEngImpl.nDCReplicator = newNDCHistoryReplicator(
 			shard,
 			historyCache,
@@ -294,7 +283,6 @@ func NewEngineWithShardContext(
 			logger,
 		)
 	}
-	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl)
 	historyEngImpl.workflowResetter = newWorkflowResetter(
 		shard,
 		historyCache,
@@ -312,23 +300,10 @@ func NewEngineWithShardContext(
 		nil,
 		shard.GetLogger(),
 	)
-	historyRereplicator := xdc.NewHistoryRereplicator(
-		currentClusterName,
-		shard.GetNamespaceCache(),
-		shard.GetService().GetClientBean().GetRemoteAdminClient(currentClusterName),
-		func(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error {
-			return historyEngImpl.ReplicateRawEvents(ctx, request)
-		},
-		shard.GetService().GetPayloadSerializer(),
-		replicationTimeout,
-		nil,
-		shard.GetLogger(),
-	)
 	replicationTaskExecutor := newReplicationTaskExecutor(
 		currentClusterName,
 		shard.GetNamespaceCache(),
 		nDCHistoryResender,
-		historyRereplicator,
 		historyEngImpl,
 		shard.GetMetricsClient(),
 		shard.GetLogger(),
@@ -494,16 +469,6 @@ func (e *historyEngineImpl) createMutableState(
 	if enableNDC {
 		// version history applies to both local and global namespace
 		newMutableState = newMutableStateBuilderWithVersionHistories(
-			e.shard,
-			e.shard.GetEventsCache(),
-			e.logger,
-			namespaceEntry,
-		)
-	} else if namespaceEntry.IsGlobalNamespace() {
-		// 2DC XDC protocol
-		// all workflows within a global namespace should have replication state,
-		// no matter whether it will be replicated to multiple target clusters or not
-		newMutableState = newMutableStateBuilderWithReplicationState(
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
@@ -1093,16 +1058,6 @@ func (e *historyEngineImpl) getMutableState(
 		WorkflowState:                         workflowState,
 		WorkflowStatus:                        workflowStatus,
 		IsStickyTaskQueueEnabled:              mutableState.IsStickyTaskQueueEnabled(),
-	}
-	replicationState := mutableState.GetReplicationState()
-	if replicationState != nil {
-		retResp.ReplicationInfo = map[string]*replicationspb.ReplicationInfo{}
-		for k, v := range replicationState.LastReplicationInfo {
-			retResp.ReplicationInfo[k] = &replicationspb.ReplicationInfo{
-				Version:     v.Version,
-				LastEventId: v.LastEventId,
-			}
-		}
 	}
 	versionHistories := mutableState.GetVersionHistories()
 	if versionHistories != nil {
@@ -2261,22 +2216,6 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 		})
 }
 
-func (e *historyEngineImpl) ReplicateEvents(
-	ctx context.Context,
-	replicateRequest *historyservice.ReplicateEventsRequest,
-) error {
-
-	return e.replicator.ApplyEvents(ctx, replicateRequest)
-}
-
-func (e *historyEngineImpl) ReplicateRawEvents(
-	ctx context.Context,
-	replicateRequest *historyservice.ReplicateRawEventsRequest,
-) error {
-
-	return e.replicator.ApplyRawEvents(ctx, replicateRequest)
-}
-
 func (e *historyEngineImpl) ReplicateEventsV2(
 	ctx context.Context,
 	replicateRequest *historyservice.ReplicateEventsV2Request,
@@ -2390,18 +2329,6 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		return &historyservice.ResetWorkflowExecutionResponse{
 			RunId: currentRunID,
 		}, nil
-	}
-
-	// TODO when NDC is rolled out, remove this block
-	if baseMutableState.GetVersionHistories() == nil {
-		return e.resetor.ResetWorkflowExecution(
-			ctx,
-			request,
-			baseContext,
-			baseMutableState,
-			currentContext,
-			currentMutableState,
-		)
 	}
 
 	resetRunID := uuid.New()

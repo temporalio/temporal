@@ -49,17 +49,6 @@ message ExecutionStats {
     int64 history_size = 1;
 }
 
-// ReplicationState represents mutable state information for global namespaces.
-// This information is used by replication protocol when applying events from remote clusters
-// (not persisted)
-message ReplicationState {
-    int64 current_version = 1;
-    int64 start_version = 2;
-    int64 last_write_version = 3;
-    int64 last_write_event_id = 4;
-    map<string, temporal.server.api.replication.v1.ReplicationInfo> last_replication_info = 5;
-}
-
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster.
 message ImmutableClusterMetadata {
     string cluster_name = 1;

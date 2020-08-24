@@ -407,34 +407,6 @@ func (mr *MockEngineMockRecorder) RecordChildExecutionCompleted(ctx, request int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordChildExecutionCompleted", reflect.TypeOf((*MockEngine)(nil).RecordChildExecutionCompleted), ctx, request)
 }
 
-// ReplicateEvents mocks base method.
-func (m *MockEngine) ReplicateEvents(ctx context.Context, request *historyservice.ReplicateEventsRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReplicateEvents", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ReplicateEvents indicates an expected call of ReplicateEvents.
-func (mr *MockEngineMockRecorder) ReplicateEvents(ctx, request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateEvents", reflect.TypeOf((*MockEngine)(nil).ReplicateEvents), ctx, request)
-}
-
-// ReplicateRawEvents mocks base method.
-func (m *MockEngine) ReplicateRawEvents(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReplicateRawEvents", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ReplicateRawEvents indicates an expected call of ReplicateRawEvents.
-func (mr *MockEngineMockRecorder) ReplicateRawEvents(ctx, request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateRawEvents", reflect.TypeOf((*MockEngine)(nil).ReplicateRawEvents), ctx, request)
-}
-
 // ReplicateEventsV2 mocks base method.
 func (m *MockEngine) ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 	m.ctrl.T.Helper()

@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -60,19 +59,18 @@ type (
 		*require.Assertions
 		controller *gomock.Controller
 
-		currentCluster      string
-		mockResource        *resource.Test
-		mockShard           ShardContext
-		mockEngine          *MockEngine
-		config              *Config
-		historyClient       *historyservicemock.MockHistoryServiceClient
-		mockNamespaceCache  *cache.MockNamespaceCache
-		mockClientBean      *client.MockBean
-		adminClient         *adminservicemock.MockAdminServiceClient
-		clusterMetadata     *cluster.MockMetadata
-		executionManager    *mocks.ExecutionManager
-		nDCHistoryResender  *xdc.MockNDCHistoryResender
-		historyRereplicator *xdc.MockHistoryRereplicator
+		currentCluster     string
+		mockResource       *resource.Test
+		mockShard          ShardContext
+		mockEngine         *MockEngine
+		config             *Config
+		historyClient      *historyservicemock.MockHistoryServiceClient
+		mockNamespaceCache *cache.MockNamespaceCache
+		mockClientBean     *client.MockBean
+		adminClient        *adminservicemock.MockAdminServiceClient
+		clusterMetadata    *cluster.MockMetadata
+		executionManager   *mocks.ExecutionManager
+		nDCHistoryResender *xdc.MockNDCHistoryResender
 
 		replicationTaskHandler *replicationTaskExecutorImpl
 	}
@@ -103,7 +101,6 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 	s.clusterMetadata = s.mockResource.ClusterMetadata
 	s.executionManager = s.mockResource.ExecutionMgr
 	s.nDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
-	s.historyRereplicator = &xdc.MockHistoryRereplicator{}
 	logger := log.NewNoop()
 	s.mockShard = &shardContextImpl{
 		shardID:  0,
@@ -131,7 +128,6 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 		s.currentCluster,
 		s.mockNamespaceCache,
 		s.nDCHistoryResender,
-		s.historyRereplicator,
 		s.mockEngine,
 		metricsClient,
 		s.mockShard.GetLogger(),
@@ -210,43 +206,6 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 	}
 
 	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil).Times(1)
-	_, err := s.replicationTaskHandler.execute(s.currentCluster, task, true)
-	s.NoError(err)
-}
-
-func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTask() {
-	namespaceID := uuid.New()
-	workflowID := uuid.New()
-	runID := uuid.New()
-	task := &replicationspb.ReplicationTask{
-		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-				NamespaceId:  namespaceID,
-				WorkflowId:   workflowID,
-				RunId:        runID,
-				FirstEventId: 1,
-				NextEventId:  5,
-				Version:      common.EmptyVersion,
-			},
-		},
-	}
-	request := &historyservice.ReplicateEventsRequest{
-		NamespaceId: namespaceID,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-		SourceCluster:     "test",
-		ForceBufferEvents: false,
-		FirstEventId:      1,
-		NextEventId:       5,
-		Version:           common.EmptyVersion,
-		ResetWorkflow:     false,
-		NewRunNdc:         false,
-	}
-
-	s.mockEngine.EXPECT().ReplicateEvents(gomock.Any(), request).Return(nil).Times(1)
 	_, err := s.replicationTaskHandler.execute(s.currentCluster, task, true)
 	s.NoError(err)
 }

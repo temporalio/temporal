@@ -31,7 +31,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflow/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -272,7 +271,6 @@ type (
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
 	InternalWorkflowMutableState struct {
 		ExecutionInfo    *InternalWorkflowExecutionInfo
-		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *history.VersionHistories
 		ActivityInfos    map[int64]*persistenceblobs.ActivityInfo
 
@@ -339,7 +337,6 @@ type (
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
 	InternalWorkflowMutation struct {
 		ExecutionInfo    *InternalWorkflowExecutionInfo
-		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *history.VersionHistories
 		StartVersion     int64
 		LastWriteVersion int64
@@ -371,7 +368,6 @@ type (
 	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
 	InternalWorkflowSnapshot struct {
 		ExecutionInfo    *InternalWorkflowExecutionInfo
-		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *history.VersionHistories
 		StartVersion     int64
 		LastWriteVersion int64
@@ -675,7 +671,7 @@ func truncateDurationToSecondsInt64(d *time.Duration) int64 {
 	return int64(d.Truncate(time.Second).Seconds())
 }
 
-func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecutionInfo, startVersion int64, currentVersion int64, replicationState *persistenceblobs.ReplicationState, versionHistories *history.VersionHistories) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
+func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecutionInfo, startVersion int64, currentVersion int64, versionHistories *history.VersionHistories) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
 	state := &persistenceblobs.WorkflowExecutionState{
 		CreateRequestId: executionInfo.CreateRequestID,
 		State:           executionInfo.State,
@@ -736,16 +732,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 
 	info.StartVersion = startVersion
 	info.CurrentVersion = currentVersion
-	if replicationState == nil && versionHistories == nil {
-		// both unspecified
-		// this is allowed
-	} else if replicationState != nil && versionHistories == nil {
-		info.ReplicationData = &persistenceblobs.ReplicationData{LastReplicationInfo: replicationState.LastReplicationInfo, LastWriteEventId: replicationState.LastWriteEventId}
-	} else if versionHistories != nil && replicationState == nil {
-		info.VersionHistories = versionHistories
-	} else {
-		return nil, nil, serviceerror.NewInternal(fmt.Sprintf("build workflow execution with both version histories and replication state."))
-	}
+	info.VersionHistories = versionHistories
 
 	if executionInfo.ParentNamespaceID != "" {
 		info.ParentNamespaceId = executionInfo.ParentNamespaceID

@@ -56,7 +56,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -67,7 +66,6 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -5184,20 +5182,6 @@ func newMutableStateBuilderWithEventV2(shard ShardContext, eventsCache eventsCac
 	return msBuilder
 }
 
-func newMutableStateBuilderWithReplicationStateWithEventV2(shard ShardContext, eventsCache eventsCache,
-	logger log.Logger, version int64, runID string) *mutableStateBuilder {
-
-	msBuilder := newMutableStateBuilderWithReplicationState(shard, eventsCache, logger, testGlobalNamespaceEntry)
-	msBuilder.GetReplicationState().StartVersion = version
-	err := msBuilder.UpdateCurrentVersion(version, true)
-	if err != nil {
-		logger.Error("update current version error", tag.Error(err))
-	}
-	_ = msBuilder.SetHistoryTree(runID)
-
-	return msBuilder
-}
-
 func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	builder := ms.(*mutableStateBuilder)
 	builder.FlushBufferedEvents() // nolint:errcheck
@@ -5232,10 +5216,6 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	if len(builder.updateBufferedEvents) > 0 {
 		bufferedEvents = append(bufferedEvents, builder.updateBufferedEvents...)
 	}
-	var replicationState *persistenceblobs.ReplicationState
-	if builder.replicationState != nil {
-		replicationState = copyReplicationState(builder.replicationState)
-	}
 
 	return &persistence.WorkflowMutableState{
 		ExecutionInfo:       info,
@@ -5246,7 +5226,6 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 		SignalInfos:         signalInfos,
 		RequestCancelInfos:  cancellationInfos,
 		ChildExecutionInfos: childInfos,
-		ReplicationState:    replicationState,
 	}
 }
 
@@ -5406,26 +5385,5 @@ func copyChildInfo(sourceInfo *persistenceblobs.ChildExecutionInfo) *persistence
 		ParentClosePolicy:     sourceInfo.ParentClosePolicy,
 		InitiatedEvent:        copyHistoryEvent(sourceInfo.InitiatedEvent),
 		StartedEvent:          copyHistoryEvent(sourceInfo.StartedEvent),
-	}
-}
-
-func copyReplicationState(source *persistenceblobs.ReplicationState) *persistenceblobs.ReplicationState {
-	var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
-	if source.LastReplicationInfo != nil {
-		lastReplicationInfo = map[string]*replicationspb.ReplicationInfo{}
-		for k, v := range source.LastReplicationInfo {
-			lastReplicationInfo[k] = &replicationspb.ReplicationInfo{
-				Version:     v.Version,
-				LastEventId: v.LastEventId,
-			}
-		}
-	}
-
-	return &persistenceblobs.ReplicationState{
-		CurrentVersion:      source.CurrentVersion,
-		StartVersion:        source.StartVersion,
-		LastWriteVersion:    source.LastWriteVersion,
-		LastWriteEventId:    source.LastWriteEventId,
-		LastReplicationInfo: lastReplicationInfo,
 	}
 }

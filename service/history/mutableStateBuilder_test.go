@@ -40,12 +40,10 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -112,81 +110,6 @@ func (s *mutableStateSuite) SetupTest() {
 func (s *mutableStateSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.Finish(s.T())
-}
-
-func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplicated_ReplicateWorkflowTaskCompleted() {
-	version := int64(12)
-	runID := uuid.New()
-	s.msBuilder = newMutableStateBuilderWithReplicationStateWithEventV2(
-		s.mockShard,
-		s.mockEventsCache,
-		s.logger,
-		version,
-		runID,
-	)
-
-	newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
-
-	newWorkflowTaskCompletedEvent := &historypb.HistoryEvent{
-		Version:   version,
-		EventId:   newWorkflowTaskStartedEvent.GetEventId() + 1,
-		EventTime: timestamp.TimePtr(time.Now().UTC()),
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-			ScheduledEventId: newWorkflowTaskScheduleEvent.GetEventId(),
-			StartedEventId:   newWorkflowTaskStartedEvent.GetEventId(),
-			Identity:         "some random identity",
-		}},
-	}
-	err := s.msBuilder.ReplicateWorkflowTaskCompletedEvent(newWorkflowTaskCompletedEvent)
-	s.NoError(err)
-	s.Equal(0, len(s.msBuilder.GetHistoryBuilder().transientHistory))
-	s.Equal(0, len(s.msBuilder.GetHistoryBuilder().history))
-}
-
-func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplicated_FailoverWorkflowTaskTimeout() {
-	version := int64(12)
-	runID := uuid.New()
-	s.msBuilder = newMutableStateBuilderWithReplicationStateWithEventV2(
-		s.mockShard,
-		s.mockEventsCache,
-		s.logger,
-		version,
-		runID,
-	)
-
-	newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
-
-	s.msBuilder.UpdateReplicationStateVersion(version+1, true)
-	s.NotNil(s.msBuilder.AddWorkflowTaskTimedOutEvent(newWorkflowTaskScheduleEvent.GetEventId(), newWorkflowTaskStartedEvent.GetEventId()))
-	s.Equal(0, len(s.msBuilder.GetHistoryBuilder().transientHistory))
-	s.Equal(1, len(s.msBuilder.GetHistoryBuilder().history))
-}
-
-func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplicated_FailoverWorkflowTaskFailed() {
-	version := int64(12)
-	runID := uuid.New()
-	s.msBuilder = newMutableStateBuilderWithReplicationStateWithEventV2(
-		s.mockShard,
-		s.mockEventsCache,
-		s.logger,
-		version,
-		runID,
-	)
-
-	newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
-
-	s.msBuilder.UpdateReplicationStateVersion(version+1, true)
-	s.NotNil(s.msBuilder.AddWorkflowTaskFailedEvent(
-		newWorkflowTaskScheduleEvent.GetEventId(),
-		newWorkflowTaskStartedEvent.GetEventId(),
-		enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
-		failure.NewServerFailure("some random workflow task failure details", false),
-		"some random workflow task failure identity",
-		"", "", "", 0,
-	))
-	s.Equal(0, len(s.msBuilder.GetHistoryBuilder().transientHistory))
-	s.Equal(1, len(s.msBuilder.GetHistoryBuilder().history))
 }
 
 func (s *mutableStateSuite) TestShouldBufferEvent() {
@@ -331,19 +254,10 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		},
 	}
 
-	replicationState := &persistenceblobs.ReplicationState{
-		StartVersion:        int64(1),
-		CurrentVersion:      int64(1),
-		LastWriteVersion:    common.EmptyVersion,
-		LastWriteEventId:    common.EmptyEventID,
-		LastReplicationInfo: make(map[string]*replicationspb.ReplicationInfo),
-	}
-
 	dbState := &persistence.WorkflowMutableState{
-		ExecutionInfo:    info,
-		ActivityInfos:    activityInfos,
-		BufferedEvents:   bufferedEvents,
-		ReplicationState: replicationState,
+		ExecutionInfo:  info,
+		ActivityInfos:  activityInfos,
+		BufferedEvents: bufferedEvents,
 	}
 
 	s.msBuilder.Load(dbState)
@@ -818,14 +732,6 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		},
 	}
 
-	replicationState := &persistenceblobs.ReplicationState{
-		StartVersion:        failoverVersion,
-		CurrentVersion:      failoverVersion,
-		LastWriteVersion:    common.EmptyVersion,
-		LastWriteEventId:    common.EmptyEventID,
-		LastReplicationInfo: make(map[string]*replicationspb.ReplicationInfo),
-	}
-
 	versionHistories := &persistence.VersionHistories{
 		Histories: []*persistence.VersionHistory{
 			{
@@ -845,7 +751,6 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		SignalInfos:         signalInfos,
 		SignalRequestedIDs:  signalRequestIDs,
 		BufferedEvents:      bufferedEvents,
-		ReplicationState:    replicationState,
 		VersionHistories:    versionHistories,
 	}
 }

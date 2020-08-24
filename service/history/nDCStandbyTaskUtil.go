@@ -30,8 +30,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -107,9 +105,6 @@ func standbyTimerTaskPostActionTaskDiscarded(
 
 type (
 	historyResendInfo struct {
-		// used by 2DC, since 2DC only has one branch
-		// TODO deprecate this nextEventID
-		nextEventID *int64
 
 		// used by NDC
 		lastEventID      int64
@@ -136,17 +131,6 @@ func newHistoryResendInfo(
 	}
 }
 
-// TODO this logic is for 2DC, to be deprecated
-func newHistoryResendInfoFor2DC(
-	nextEventID int64,
-) *historyResendInfo {
-	return &historyResendInfo{
-		nextEventID:      convert.Int64Ptr(nextEventID),
-		lastEventID:      common.EmptyEventID,
-		lastEventVersion: common.EmptyVersion,
-	}
-}
-
 func newPushActivityToMatchingInfo(
 	activityScheduleToStartTimeout time.Duration,
 ) *pushActivityTaskToMatchingInfo {
@@ -170,11 +154,6 @@ func newPushWorkflowTaskToMatchingInfo(
 func getHistoryResendInfo(
 	mutableState mutableState,
 ) (*historyResendInfo, error) {
-
-	// TODO this logic is for 2DC, to be deprecated
-	if mutableState.GetVersionHistories() == nil {
-		return newHistoryResendInfoFor2DC(mutableState.GetNextEventID()), nil
-	}
 
 	currentBranch, err := mutableState.GetVersionHistories().GetCurrentVersionHistory()
 	if err != nil {

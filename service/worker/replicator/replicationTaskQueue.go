@@ -44,8 +44,6 @@ func newReplicationSequentialTaskQueue(task task.Task) task.SequentialTaskQueue 
 	switch t := task.(type) {
 	case *historyMetadataReplicationTask:
 		id = t.queueID
-	case *historyReplicationTask:
-		id = t.queueID
 	case *historyReplicationV2Task:
 		id = t.queueID
 	case *activityReplicationTask:
@@ -94,8 +92,6 @@ func replicationSequentialTaskQueueCompareLess(this interface{}, that interface{
 	fnGetTaskID := func(object interface{}) int64 {
 		switch task := object.(type) {
 		case *activityReplicationTask:
-			return task.taskID
-		case *historyReplicationTask:
 			return task.taskID
 		case *historyMetadataReplicationTask:
 			return task.taskID

@@ -172,19 +172,6 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 		common.IsWhitelistServiceTransientError,
 	)
 	logger := r.logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName), tag.KafkaConsumerName(consumerName))
-	historyRereplicator := xdc.NewHistoryRereplicator(
-		currentClusterName,
-		r.namespaceCache,
-		adminClient,
-		func(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error {
-			_, err := historyClient.ReplicateRawEvents(ctx, request)
-			return err
-		},
-		r.historySerializer,
-		r.config.ReplicationTaskContextTimeout(),
-		r.config.ReReplicationContextTimeout,
-		r.logger,
-	)
 	nDCHistoryReplicator := xdc.NewNDCHistoryResender(
 		r.namespaceCache,
 		adminClient,
@@ -205,7 +192,6 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 		logger,
 		r.metricsClient,
 		r.namespaceReplicationTaskExecutor,
-		historyRereplicator,
 		nDCHistoryReplicator,
 		r.historyClient,
 		r.namespaceCache,
