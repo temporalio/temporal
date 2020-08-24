@@ -21,7 +21,7 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
   temporal:
-    image: temporalio/server:${SERVER_TAG:-0.27.0}
+    image: temporalio/server:${SERVER_TAG:-0.29.0}
     ports:
       - "7233:7233"
     volumes:
@@ -48,7 +48,7 @@ services:
       - discovery.type=single-node
       - ES_JAVA_OPTS=-Xms100m -Xmx100m
   temporal-admin-tools:
-    image: temporalio/admin-tools:${SERVER_TAG:-0.27.0}
+    image: temporalio/admin-tools:${SERVER_TAG:-0.29.0}
     stdin_open: true
     tty: true
     environment:
@@ -56,7 +56,7 @@ services:
     depends_on:
       - temporal
   temporal-web:
-    image: temporalio/web:${WEB_TAG:-0.27.0}
+    image: temporalio/web:${WEB_TAG:-0.29.0}
     environment:
       - "TEMPORAL_GRPC_ENDPOINT=temporal:7233"
     ports:
