@@ -86,8 +86,8 @@
       "markerRecordedEventAttributes": {
         "markerName": "SideEffect",
         "details": {
-          "side-effect-id": {"payloads": [{"metadata":{"encoding":"anNvbi9wbGFpbg=="},"data":"Ng=="}]},
-          "data": {"payloads": [{"metadata":{"encoding":"anNvbi9wbGFpbg=="},"data":"Ng=="}]}
+          "side-effect-id": {"payloads": [{"metadata":{"encoding":"anNvbi9wbGFpbg=="},"data":"MQ=="}]},
+          "data": {"payloads": [{"metadata":{"encoding":"anNvbi9wbGFpbg=="},"data":"MQ=="}]}
         },
         "workflowTaskCompletedEventId": 5
       }
