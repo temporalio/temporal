@@ -101,7 +101,6 @@ func (s *localStoreRPCSuite) SetupTest() {
 func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendChain CertChain) {
 	localStoreServerTLS := &config.Global{
 		Membership: config.Membership{
-			Name:             "its-a-me-mario",
 			MaxJoinDuration:  5,
 			BroadcastAddress: "127.0.0.1",
 		},
@@ -118,7 +117,6 @@ func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendCha
 
 	localStoreMutualTLS := &config.Global{
 		Membership: config.Membership{
-			Name:             "its-a-me-mario",
 			MaxJoinDuration:  5,
 			BroadcastAddress: "127.0.0.1",
 		},
@@ -155,7 +153,6 @@ func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendCha
 func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendChain CertChain) {
 	localStoreServerTLS := &config.Global{
 		Membership: config.Membership{
-			Name:             "its-a-me-mario",
 			MaxJoinDuration:  5,
 			BroadcastAddress: "127.0.0.1",
 		},
@@ -179,7 +176,6 @@ func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendCh
 
 	localStoreMutualTLS := &config.Global{
 		Membership: config.Membership{
-			Name:             "its-a-me-mario",
 			MaxJoinDuration:  5,
 			BroadcastAddress: "127.0.0.1",
 		},

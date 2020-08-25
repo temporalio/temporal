@@ -81,10 +81,10 @@ var envKeysForUserName = []string{
 }
 
 var resetTypesMap = map[string]string{
-	"FirstWorkflowTask": "",
-	"LastWorkflowTask":  "",
-	"LastContinuedAsNew":         "",
-	"BadBinary":                  FlagResetBadBinaryChecksum,
+	"FirstWorkflowTask":  "",
+	"LastWorkflowTask":   "",
+	"LastContinuedAsNew": "",
+	"BadBinary":          FlagResetBadBinaryChecksum,
 }
 
 type jsonType int
