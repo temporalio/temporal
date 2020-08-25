@@ -65,7 +65,6 @@ var (
 	}
 	serverCfgInsecure = &config.Global{
 		Membership: config.Membership{
-			Name:             "its-a-me-mario",
 			MaxJoinDuration:  5,
 			BroadcastAddress: "127.0.0.1",
 		},
