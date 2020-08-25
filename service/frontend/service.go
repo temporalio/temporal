@@ -24,11 +24,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/cadence/common/client"
-
 	"github.com/stretchr/testify/mock"
 
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/domain"
 	"github.com/uber/cadence/common/log"
