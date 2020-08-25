@@ -260,12 +260,14 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 
 func (s *esProcessorSuite) TestBulkAfterAction_Error() {
 	version := int64(3)
+	testKey := "testKey"
 	request := elastic.NewBulkIndexRequest().
 		Index(testIndex).
 		Type(testType).
 		Id(testID).
 		VersionType(versionTypeExternal).
-		Version(version)
+		Version(version).
+		Doc(map[string]interface{}{es.KafkaKey: testKey})
 	requests := []elastic.BulkableRequest{request}
 
 	mFailed := map[string]*elastic.BulkResponseItem{
@@ -283,6 +285,16 @@ func (s *esProcessorSuite) TestBulkAfterAction_Error() {
 		Items:  []map[string]*elastic.BulkResponseItem{mFailed},
 	}
 
+	wid := "test-workflowID"
+	rid := "test-runID"
+	domainID := "test-domainID"
+	payload := s.getEncodedMsg(wid, rid, domainID)
+
+	mockKafkaMsg := &msgMocks.Message{}
+	mapVal := newKafkaMessageWithMetrics(mockKafkaMsg, &testStopWatch)
+	s.esProcessor.mapToKafkaMsg.Put(testKey, mapVal)
+	mockKafkaMsg.On("Nack").Return(nil).Once()
+	mockKafkaMsg.On("Value").Return(payload).Once()
 	s.mockMetricClient.On("IncCounter", metrics.ESProcessorScope, metrics.ESProcessorFailures).Once()
 	s.esProcessor.bulkAfterAction(0, requests, response, errors.New("some error"))
 }
@@ -424,6 +436,36 @@ func (s *esProcessorSuite) TestIsResponseRetriable() {
 	for _, code := range status {
 		s.True(isResponseRetriable(code))
 	}
+}
+
+func (s *esProcessorSuite) TestIsErrorRetriable() {
+	tests := []struct {
+		input    error
+		expected bool
+	}{
+		{
+			input:    &elastic.Error{Status: 400},
+			expected: false,
+		},
+		{
+			input:    &elastic.Error{Status: 408},
+			expected: true,
+		},
+		{
+			input:    errors.New("unknown"),
+			expected: false,
+		},
+	}
+	for _, test := range tests {
+		s.Equal(test.expected, isErrorRetriable(test.input))
+	}
+}
+
+func (s *esProcessorSuite) TestGetErrorStatusCode() {
+	err := elastic.Error{Status: 400}
+	s.Equal(400, getErrorStatusCode(err))
+	s.Equal(400, getErrorStatusCode(&err))
+	s.Equal(unknownStatusCode, getErrorStatusCode(errors.New("unknown")))
 }
 
 func (s *esProcessorSuite) TestGetErrorMsgFromESResp() {

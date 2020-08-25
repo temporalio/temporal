@@ -83,6 +83,7 @@ const (
 	// retry configs for es bulk processor
 	esProcessorInitialRetryInterval = 200 * time.Millisecond
 	esProcessorMaxRetryInterval     = 20 * time.Second
+	unknownStatusCode               = -1
 )
 
 // NewESProcessorAndStart create new ESProcessor and start
@@ -146,8 +147,21 @@ func (p *esProcessorImpl) bulkAfterAction(id int64, requests []elastic.BulkableR
 		// When cluster back to live, processor will re-commit those failure requests
 		p.logger.Error("Error commit bulk request.", tag.Error(err))
 
+		isRetryable := isErrorRetriable(err)
 		for _, request := range requests {
-			p.logger.Error("ES request failed.", tag.ESRequest(request.String()))
+			if !isRetryable {
+				key := p.getKeyForKafkaMsg(request)
+				if key == "" {
+					continue
+				}
+				wid, rid, domainID := p.getMsgWithInfo(key)
+				p.logger.Error("ES request failed.",
+					tag.ESResponseStatus(getErrorStatusCode(err)), tag.ESRequest(request.String()), tag.WorkflowID(wid), tag.WorkflowRunID(rid),
+					tag.WorkflowDomainID(domainID))
+				p.nackKafkaMsg(key)
+			} else {
+				p.logger.Error("ES request failed.", tag.ESRequest(request.String()))
+			}
 			p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorFailures)
 		}
 		return
@@ -302,12 +316,26 @@ func isResponseSuccess(status int) bool {
 // 500 - Node not connected
 // 503 - Service Unavailable
 // 507 - Insufficient Storage
+var retryableStatusCode = map[int]struct{}{408: {}, 429: {}, 500: {}, 503: {}, 507: {}}
+
 func isResponseRetriable(status int) bool {
-	switch status {
-	case 408, 429, 500, 503, 507:
-		return true
+	_, ok := retryableStatusCode[status]
+	return ok
+}
+
+func isErrorRetriable(err error) bool {
+	status := getErrorStatusCode(err)
+	return isResponseRetriable(status)
+}
+
+func getErrorStatusCode(err interface{}) int {
+	switch e := err.(type) {
+	case *elastic.Error:
+		return e.Status
+	case elastic.Error:
+		return e.Status
 	}
-	return false
+	return unknownStatusCode
 }
 
 func getErrorMsgFromESResp(resp *elastic.BulkResponseItem) string {
