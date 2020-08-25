@@ -212,19 +212,15 @@ Loop:
 			break Loop
 		}
 
-		if timerSequenceID.TimerType != execution.TimerTypeScheduleToStart {
-			// schedule to start timeout is not retriable
-			// customer should set larger schedule to start timeout if necessary
-			if ok, err := mutableState.RetryActivity(
-				activityInfo,
-				execution.TimerTypeToReason(timerSequenceID.TimerType),
-				nil,
-			); err != nil {
-				return err
-			} else if ok {
-				updateMutableState = true
-				continue Loop
-			}
+		if ok, err := mutableState.RetryActivity(
+			activityInfo,
+			execution.TimerTypeToReason(timerSequenceID.TimerType),
+			nil,
+		); err != nil {
+			return err
+		} else if ok {
+			updateMutableState = true
+			continue Loop
 		}
 
 		t.emitTimeoutMetricScopeWithDomainTag(

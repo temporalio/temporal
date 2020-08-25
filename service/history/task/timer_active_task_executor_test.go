@@ -453,7 +453,7 @@ func (s *timerActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPolicy_
 	s.NoError(err)
 }
 
-func (s *timerActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPolicy_Retry() {
+func (s *timerActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPolicy_Retry_StartToClose() {
 
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -550,7 +550,7 @@ func (s *timerActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPolicy_Re
 	s.Equal(int32(execution.TimerTaskStatusCreatedScheduleToStart), activityInfo.TimerTaskStatus)
 }
 
-func (s *timerActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPolicy_Fire() {
+func (s *timerActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPolicy_Retry_ScheduleToStart() {
 
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -630,15 +630,18 @@ func (s *timerActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPolicy_Fi
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.timeSource.Update(s.now.Add(2 * timerTimeout))
 	err = s.timerActiveTaskExecutor.Execute(timerTask, true)
 	s.NoError(err)
 
-	_, ok := s.getMutableStateFromCache(s.domainID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId()).GetActivityInfo(scheduledEvent.GetEventId())
-	s.False(ok)
+	activityInfo, ok := s.getMutableStateFromCache(s.domainID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId()).GetActivityInfo(scheduledEvent.GetEventId())
+	s.True(ok)
+	s.Equal(scheduledEvent.GetEventId(), activityInfo.ScheduleID)
+	s.Equal(common.EmptyEventID, activityInfo.StartedID)
+	// only a schedule to start timer will be created, apart from the retry timer
+	s.Equal(int32(execution.TimerTaskStatusCreatedScheduleToStart), activityInfo.TimerTaskStatus)
 }
 
 func (s *timerActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPolicy_Noop() {

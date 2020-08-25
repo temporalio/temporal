@@ -543,3 +543,182 @@ func (s *decisionAttrValidatorSuite) TestValidateTaskListName() {
 		})
 	}
 }
+
+func (s *decisionAttrValidatorSuite) TestValidateActivityScheduleAttributes_NoRetryPolicy() {
+	wfTimeout := int32(5)
+	attributes := &workflow.ScheduleActivityTaskDecisionAttributes{
+		ActivityId: common.StringPtr("some random activityID"),
+		ActivityType: &workflow.ActivityType{
+			Name: common.StringPtr("some random activity type"),
+		},
+		Domain: common.StringPtr(s.testDomainID),
+		TaskList: &workflow.TaskList{
+			Name: common.StringPtr("some random task list"),
+		},
+		Input:                         []byte{1, 2, 3},
+		ScheduleToCloseTimeoutSeconds: nil, // not set
+		ScheduleToStartTimeoutSeconds: common.Int32Ptr(3),
+		StartToCloseTimeoutSeconds:    common.Int32Ptr(3),  // ScheduleToStart + StartToClose > wfTimeout
+		HeartbeatTimeoutSeconds:       common.Int32Ptr(10), // larger then wfTimeout
+	}
+
+	expectedAttributesAfterValidation := &workflow.ScheduleActivityTaskDecisionAttributes{
+		ActivityId:                    attributes.ActivityId,
+		ActivityType:                  attributes.ActivityType,
+		Domain:                        attributes.Domain,
+		TaskList:                      attributes.TaskList,
+		Input:                         attributes.Input,
+		ScheduleToCloseTimeoutSeconds: common.Int32Ptr(wfTimeout),
+		ScheduleToStartTimeoutSeconds: attributes.ScheduleToStartTimeoutSeconds,
+		StartToCloseTimeoutSeconds:    attributes.StartToCloseTimeoutSeconds,
+		HeartbeatTimeoutSeconds:       common.Int32Ptr(wfTimeout),
+	}
+
+	domainEntry := cache.NewLocalDomainCacheEntryForTest(
+		&persistence.DomainInfo{Name: s.testDomainID},
+		nil,
+		cluster.TestCurrentClusterName,
+		nil,
+	)
+	targetDomainEntry := cache.NewLocalDomainCacheEntryForTest(
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
+		nil,
+		cluster.TestCurrentClusterName,
+		nil,
+	)
+	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
+	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+
+	err := s.validator.validateActivityScheduleAttributes(
+		s.testDomainID,
+		s.testTargetDomainID,
+		attributes,
+		wfTimeout,
+	)
+	s.Nil(err)
+	s.Equal(expectedAttributesAfterValidation, attributes)
+}
+
+func (s *decisionAttrValidatorSuite) TestValidateActivityScheduleAttributes_WithRetryPolicy_ScheduleToStartRetryable() {
+	wfTimeout := int32(2000)
+	attributes := &workflow.ScheduleActivityTaskDecisionAttributes{
+		ActivityId: common.StringPtr("some random activityID"),
+		ActivityType: &workflow.ActivityType{
+			Name: common.StringPtr("some random activity type"),
+		},
+		Domain: common.StringPtr(s.testDomainID),
+		TaskList: &workflow.TaskList{
+			Name: common.StringPtr("some random task list"),
+		},
+		Input:                         []byte{1, 2, 3},
+		ScheduleToCloseTimeoutSeconds: nil, // not set
+		ScheduleToStartTimeoutSeconds: common.Int32Ptr(3),
+		StartToCloseTimeoutSeconds:    common.Int32Ptr(500), // extended ScheduleToStart + StartToClose > wfTimeout
+		HeartbeatTimeoutSeconds:       common.Int32Ptr(1),
+		RetryPolicy: &workflow.RetryPolicy{
+			InitialIntervalInSeconds:    common.Int32Ptr(1),
+			BackoffCoefficient:          common.Float64Ptr(1.1),
+			ExpirationIntervalInSeconds: common.Int32Ptr(maximumScheduleToStartTimeoutForRetryInSeconds + 1000), // larger than wfTimeout and maximumScheduleToStartTimeoutForRetryInSeconds
+			NonRetriableErrorReasons:    []string{"non-retryable error"},
+		},
+	}
+
+	expectedAttributesAfterValidation := &workflow.ScheduleActivityTaskDecisionAttributes{
+		ActivityId:                    attributes.ActivityId,
+		ActivityType:                  attributes.ActivityType,
+		Domain:                        attributes.Domain,
+		TaskList:                      attributes.TaskList,
+		Input:                         attributes.Input,
+		ScheduleToCloseTimeoutSeconds: common.Int32Ptr(wfTimeout),
+		ScheduleToStartTimeoutSeconds: common.Int32Ptr(maximumScheduleToStartTimeoutForRetryInSeconds),
+		StartToCloseTimeoutSeconds:    attributes.StartToCloseTimeoutSeconds,
+		HeartbeatTimeoutSeconds:       attributes.HeartbeatTimeoutSeconds,
+		RetryPolicy:                   attributes.RetryPolicy,
+	}
+
+	domainEntry := cache.NewLocalDomainCacheEntryForTest(
+		&persistence.DomainInfo{Name: s.testDomainID},
+		nil,
+		cluster.TestCurrentClusterName,
+		nil,
+	)
+	targetDomainEntry := cache.NewLocalDomainCacheEntryForTest(
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
+		nil,
+		cluster.TestCurrentClusterName,
+		nil,
+	)
+	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
+	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+
+	err := s.validator.validateActivityScheduleAttributes(
+		s.testDomainID,
+		s.testTargetDomainID,
+		attributes,
+		wfTimeout,
+	)
+	s.Nil(err)
+	s.Equal(expectedAttributesAfterValidation, attributes)
+}
+
+func (s *decisionAttrValidatorSuite) TestValidateActivityScheduleAttributes_WithRetryPolicy_ScheduleToStartNonRetryable() {
+	wfTimeout := int32(1000)
+	attributes := &workflow.ScheduleActivityTaskDecisionAttributes{
+		ActivityId: common.StringPtr("some random activityID"),
+		ActivityType: &workflow.ActivityType{
+			Name: common.StringPtr("some random activity type"),
+		},
+		Domain: common.StringPtr(s.testDomainID),
+		TaskList: &workflow.TaskList{
+			Name: common.StringPtr("some random task list"),
+		},
+		Input:                         []byte{1, 2, 3},
+		ScheduleToCloseTimeoutSeconds: nil, // not set
+		ScheduleToStartTimeoutSeconds: common.Int32Ptr(3),
+		StartToCloseTimeoutSeconds:    common.Int32Ptr(500), // extended ScheduleToStart + StartToClose > wfTimeout
+		HeartbeatTimeoutSeconds:       common.Int32Ptr(1),
+		RetryPolicy: &workflow.RetryPolicy{
+			InitialIntervalInSeconds:    common.Int32Ptr(1),
+			BackoffCoefficient:          common.Float64Ptr(1.1),
+			ExpirationIntervalInSeconds: common.Int32Ptr(maximumScheduleToStartTimeoutForRetryInSeconds + 1000), // larger than wfTimeout and maximumScheduleToStartTimeoutForRetryInSeconds
+			NonRetriableErrorReasons:    []string{"cadenceInternal:Timeout SCHEDULE_TO_START"},
+		},
+	}
+
+	expectedAttributesAfterValidation := &workflow.ScheduleActivityTaskDecisionAttributes{
+		ActivityId:                    attributes.ActivityId,
+		ActivityType:                  attributes.ActivityType,
+		Domain:                        attributes.Domain,
+		TaskList:                      attributes.TaskList,
+		Input:                         attributes.Input,
+		ScheduleToCloseTimeoutSeconds: common.Int32Ptr(503),
+		ScheduleToStartTimeoutSeconds: attributes.ScheduleToStartTimeoutSeconds,
+		StartToCloseTimeoutSeconds:    attributes.StartToCloseTimeoutSeconds,
+		HeartbeatTimeoutSeconds:       attributes.HeartbeatTimeoutSeconds,
+		RetryPolicy:                   attributes.RetryPolicy,
+	}
+
+	domainEntry := cache.NewLocalDomainCacheEntryForTest(
+		&persistence.DomainInfo{Name: s.testDomainID},
+		nil,
+		cluster.TestCurrentClusterName,
+		nil,
+	)
+	targetDomainEntry := cache.NewLocalDomainCacheEntryForTest(
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
+		nil,
+		cluster.TestCurrentClusterName,
+		nil,
+	)
+	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
+	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+
+	err := s.validator.validateActivityScheduleAttributes(
+		s.testDomainID,
+		s.testTargetDomainID,
+		attributes,
+		wfTimeout,
+	)
+	s.Nil(err)
+	s.Equal(expectedAttributesAfterValidation, attributes)
+}

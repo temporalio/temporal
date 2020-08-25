@@ -66,6 +66,8 @@ type (
 
 const (
 	reservedTaskListPrefix = "/__cadence_sys/"
+
+	maximumScheduleToStartTimeoutForRetryInSeconds = 1800 // 30 minutes
 )
 
 func newDecisionAttrValidator(
@@ -273,18 +275,45 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 		// Deduction failed as there's not enough information to fill in missing timeouts.
 		return &workflow.BadRequestError{Message: "A valid ScheduleToCloseTimeout is not set on decision."}
 	}
+
 	// ensure activity's SCHEDULE_TO_START and SCHEDULE_TO_CLOSE is as long as expiration on retry policy
+	// if SCHEDULE_TO_START timeout is retryable
 	p := attributes.RetryPolicy
 	if p != nil {
-		expiration := p.GetExpirationIntervalInSeconds()
-		if expiration == 0 {
-			expiration = wfTimeout
+		isScheduleToStartRetryable := true
+		scheduleToStartErrorReason := execution.TimerTypeToReason(execution.TimerTypeScheduleToStart)
+		for _, reason := range p.GetNonRetriableErrorReasons() {
+			if reason == scheduleToStartErrorReason {
+				isScheduleToStartRetryable = false
+				break
+			}
 		}
-		if attributes.GetScheduleToStartTimeoutSeconds() < expiration {
-			attributes.ScheduleToStartTimeoutSeconds = common.Int32Ptr(expiration)
-		}
-		if attributes.GetScheduleToCloseTimeoutSeconds() < expiration {
-			attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(expiration)
+
+		if isScheduleToStartRetryable {
+			expiration := p.GetExpirationIntervalInSeconds()
+			if expiration == 0 || expiration > wfTimeout {
+				expiration = wfTimeout
+			}
+
+			// If schedule to start timeout is retryable, we don't need to fail the activity and schedule
+			// it again on the same tasklist, as it's a no-op). Extending schedule to start timeout to achieve
+			// the same thing.
+			//
+			// Theoretically, we can extend schedule to start to be as long as the expiration time,
+			// but if user specifies a very long expiration time and activity task got lost after the activity is
+			// scheduled, workflow will be stuck for a long time. So here, we cap the schedule to start timeout
+			// to a maximum value, so that when the activity task got lost, timeout can happen sooner and schedule
+			// the activity again.
+
+			scheduleToStartExpiration := common.MinInt32(expiration, maximumScheduleToStartTimeoutForRetryInSeconds)
+			if attributes.GetScheduleToStartTimeoutSeconds() < scheduleToStartExpiration {
+				attributes.ScheduleToStartTimeoutSeconds = common.Int32Ptr(scheduleToStartExpiration)
+			}
+
+			scheduleToCloseExpiration := common.MinInt32(expiration, scheduleToStartExpiration+attributes.GetStartToCloseTimeoutSeconds())
+			if attributes.GetScheduleToCloseTimeoutSeconds() < scheduleToCloseExpiration {
+				attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(scheduleToCloseExpiration)
+			}
 		}
 	}
 	return nil
