@@ -156,7 +156,10 @@ func (p *esProcessorImpl) bulkAfterAction(id int64, requests []elastic.BulkableR
 				}
 				wid, rid, domainID := p.getMsgWithInfo(key)
 				p.logger.Error("ES request failed.",
-					tag.ESResponseStatus(getErrorStatusCode(err)), tag.ESRequest(request.String()), tag.WorkflowID(wid), tag.WorkflowRunID(rid),
+					tag.ESResponseStatus(getErrorStatusCode(err)),
+					tag.ESRequest(request.String()),
+					tag.WorkflowID(wid),
+					tag.WorkflowRunID(rid),
 					tag.WorkflowDomainID(domainID))
 				p.nackKafkaMsg(key)
 			} else {
