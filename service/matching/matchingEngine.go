@@ -179,21 +179,21 @@ func (e *matchingEngineImpl) getTaskListManager(taskList *taskListID,
 		e.taskListsLock.Unlock()
 		return result, nil
 	}
-	e.logger.Info("", tag.LifeCycleStarting, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType))
+	e.logger.Info("Task list manager state changed", tag.LifeCycleStarting, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType))
 	mgr, err := newTaskListManager(e, taskList, taskListKind, e.config)
 	if err != nil {
 		e.taskListsLock.Unlock()
-		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
+		e.logger.Info("Task list manager state changed", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
 		return nil, err
 	}
 	e.taskLists[*taskList] = mgr
 	e.taskListsLock.Unlock()
 	err = mgr.Start()
 	if err != nil {
-		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
+		e.logger.Info("Task list manager state changed", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
 		return nil, err
 	}
-	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType))
+	e.logger.Info("Task list manager state changed", tag.LifeCycleStarted, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType))
 	return mgr, nil
 }
 

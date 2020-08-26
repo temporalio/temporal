@@ -79,7 +79,7 @@ func (m *markerNotifierImpl) Start() {
 	}
 
 	go m.notifyPendingFailoverMarker()
-	m.logger.Info("", tag.LifeCycleStarted)
+	m.logger.Info("Marker notifier state changed", tag.LifeCycleStarted)
 }
 
 func (m *markerNotifierImpl) Stop() {
@@ -92,7 +92,7 @@ func (m *markerNotifierImpl) Stop() {
 		return
 	}
 	close(m.shutdownCh)
-	m.logger.Info("", tag.LifeCycleStopped)
+	m.logger.Info("Marker notifier state changed", tag.LifeCycleStopped)
 }
 
 func (m *markerNotifierImpl) notifyPendingFailoverMarker() {

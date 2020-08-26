@@ -206,7 +206,7 @@ func (c *taskListManagerImpl) Stop() {
 	c.taskReader.Stop()
 	c.engine.removeTaskListManager(c.taskListID)
 	c.engine.removeTaskListManager(c.taskListID)
-	c.logger.Info("", tag.LifeCycleStopped)
+	c.logger.Info("Task list manager state changed", tag.LifeCycleStopped)
 }
 
 // AddTask adds a task to the task list. This method will first attempt a synchronous

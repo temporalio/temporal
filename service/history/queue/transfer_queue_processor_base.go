@@ -126,8 +126,8 @@ func (t *transferQueueProcessorBase) Start() {
 		return
 	}
 
-	t.logger.Info("", tag.LifeCycleStarting)
-	defer t.logger.Info("", tag.LifeCycleStarted)
+	t.logger.Info("Transfer queue processor state changed", tag.LifeCycleStarting)
+	defer t.logger.Info("Transfer queue processor state changed", tag.LifeCycleStarted)
 
 	t.redispatcher.Start()
 
@@ -144,8 +144,8 @@ func (t *transferQueueProcessorBase) Stop() {
 		return
 	}
 
-	t.logger.Info("", tag.LifeCycleStopping)
-	defer t.logger.Info("", tag.LifeCycleStopped)
+	t.logger.Info("Transfer queue processor state changed", tag.LifeCycleStopping)
+	defer t.logger.Info("Transfer queue processor state changed", tag.LifeCycleStopped)
 
 	t.nextPollTimer.Close()
 	close(t.shutdownCh)

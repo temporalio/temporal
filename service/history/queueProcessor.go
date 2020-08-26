@@ -167,8 +167,8 @@ func (p *queueProcessorBase) Start() {
 		return
 	}
 
-	p.logger.Info("", tag.LifeCycleStarting)
-	defer p.logger.Info("", tag.LifeCycleStarted)
+	p.logger.Info("Queue processor state changed", tag.LifeCycleStarting)
+	defer p.logger.Info("Queue processor state changed", tag.LifeCycleStarted)
 
 	if p.taskProcessor != nil {
 		p.taskProcessor.start()
@@ -186,8 +186,8 @@ func (p *queueProcessorBase) Stop() {
 		return
 	}
 
-	p.logger.Info("", tag.LifeCycleStopping)
-	defer p.logger.Info("", tag.LifeCycleStopped)
+	p.logger.Info("Queue processor state changed", tag.LifeCycleStopping)
+	defer p.logger.Info("Queue processor state changed", tag.LifeCycleStopped)
 
 	close(p.shutdownCh)
 	p.retryTasks()
@@ -271,7 +271,7 @@ processorPumpLoop:
 		}
 	}
 
-	p.logger.Info("Queue processor pump shut down.")
+	p.logger.Debug("Queue processor pump shut down.")
 }
 
 func (p *queueProcessorBase) processBatch() {

@@ -93,21 +93,21 @@ func (p *indexProcessor) Start() error {
 		return nil
 	}
 
-	p.logger.Info("", tag.LifeCycleStarting)
+	p.logger.Info("Index processor state changed", tag.LifeCycleStarting)
 	consumer, err := p.kafkaClient.NewConsumer(p.appName, p.consumerName, p.config.IndexerConcurrency())
 	if err != nil {
-		p.logger.Info("", tag.LifeCycleStartFailed, tag.Error(err))
+		p.logger.Info("Index processor state changed", tag.LifeCycleStartFailed, tag.Error(err))
 		return err
 	}
 
 	if err := consumer.Start(); err != nil {
-		p.logger.Info("", tag.LifeCycleStartFailed, tag.Error(err))
+		p.logger.Info("Index processor state changed", tag.LifeCycleStartFailed, tag.Error(err))
 		return err
 	}
 
 	esProcessor, err := NewESProcessorAndStart(p.config, p.esClient, p.esProcessorName, p.logger, p.metricsClient, p.msgEncoder)
 	if err != nil {
-		p.logger.Info("", tag.LifeCycleStartFailed, tag.Error(err))
+		p.logger.Info("Index processor state changed", tag.LifeCycleStartFailed, tag.Error(err))
 		return err
 	}
 
@@ -116,7 +116,7 @@ func (p *indexProcessor) Start() error {
 	p.shutdownWG.Add(1)
 	go p.processorPump()
 
-	p.logger.Info("", tag.LifeCycleStarted)
+	p.logger.Info("Index processor state changed", tag.LifeCycleStarted)
 	return nil
 }
 
@@ -125,15 +125,15 @@ func (p *indexProcessor) Stop() {
 		return
 	}
 
-	p.logger.Info("", tag.LifeCycleStopping)
-	defer p.logger.Info("", tag.LifeCycleStopped)
+	p.logger.Info("Index processor state changed", tag.LifeCycleStopping)
+	defer p.logger.Info("Index processor state changed", tag.LifeCycleStopped)
 
 	if atomic.LoadInt32(&p.isStarted) == 1 {
 		close(p.shutdownCh)
 	}
 
 	if success := common.AwaitWaitGroup(&p.shutdownWG, time.Minute); !success {
-		p.logger.Info("", tag.LifeCycleStopTimedout)
+		p.logger.Info("Index processor state changed", tag.LifeCycleStopTimedout)
 	}
 }
 

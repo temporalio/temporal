@@ -163,7 +163,7 @@ func (c *controller) Start() {
 		c.logger.Error("Error adding listener", tag.Error(err))
 	}
 
-	c.logger.Info("", tag.LifeCycleStarted)
+	c.logger.Info("Shard controller state changed", tag.LifeCycleStarted)
 }
 
 func (c *controller) Stop() {
@@ -182,7 +182,7 @@ func (c *controller) Stop() {
 		c.logger.Warn("", tag.LifeCycleStopTimedout)
 	}
 
-	c.logger.Info("", tag.LifeCycleStopped)
+	c.logger.Info("Shard controller state changed", tag.LifeCycleStopped)
 }
 
 func (c *controller) PrepareToStop() {
@@ -250,7 +250,7 @@ func (c *controller) removeEngineForShard(shardID int, shardItem *historyShardsI
 
 func (c *controller) shardClosedCallback(shardID int, shardItem *historyShardsItem) {
 	c.metricsScope.IncCounter(metrics.ShardClosedCounter)
-	c.logger.Info("", tag.LifeCycleStopping, tag.ComponentShard, tag.ShardID(shardID))
+	c.logger.Info("Shard controller state changed", tag.LifeCycleStopping, tag.ComponentShard, tag.ShardID(shardID))
 	c.removeEngineForShard(shardID, shardItem)
 }
 
@@ -296,7 +296,7 @@ func (c *controller) getOrCreateHistoryShardItem(shardID int) (*historyShardsIte
 		c.historyShards[shardID] = shardItem
 		c.metricsScope.IncCounter(metrics.ShardItemCreatedCounter)
 
-		shardItem.logger.Info("", tag.LifeCycleStarted, tag.ComponentShardItem)
+		shardItem.logger.Info("Shard item state changed", tag.LifeCycleStarted, tag.ComponentShardItem)
 		return shardItem, nil
 	}
 
@@ -323,7 +323,7 @@ func (c *controller) removeHistoryShardItem(shardID int, shardItem *historyShard
 
 	c.metricsScope.IncCounter(metrics.ShardItemRemovedCounter)
 
-	currentShardItem.logger.Info("", tag.LifeCycleStopped, tag.ComponentShardItem, tag.Number(int64(nShards)))
+	currentShardItem.logger.Info("Shard item state changed", tag.LifeCycleStopped, tag.ComponentShardItem, tag.Number(int64(nShards)))
 	return currentShardItem, nil
 }
 
@@ -352,7 +352,7 @@ func (c *controller) shardManagementPump() {
 		case changedEvent := <-c.membershipUpdateCh:
 			c.metricsScope.IncCounter(metrics.MembershipChangedCounter)
 
-			c.logger.Info("", tag.ValueRingMembershipChangedEvent,
+			c.logger.Info("Ring membership changed", tag.ValueRingMembershipChangedEvent,
 				tag.NumberProcessed(len(changedEvent.HostsAdded)),
 				tag.NumberDeleted(len(changedEvent.HostsRemoved)),
 				tag.Number(int64(len(changedEvent.HostsUpdated))))
@@ -408,7 +408,7 @@ func (c *controller) acquireShards() {
 }
 
 func (c *controller) doShutdown() {
-	c.logger.Info("", tag.LifeCycleStopping)
+	c.logger.Info("Shard controller state changed", tag.LifeCycleStopping)
 	c.Lock()
 	defer c.Unlock()
 	for _, item := range c.historyShards {
@@ -435,12 +435,12 @@ func (i *historyShardsItem) getOrCreateEngine(
 	defer i.Unlock()
 	switch i.status {
 	case historyShardsItemStatusInitialized:
-		i.logger.Info("", tag.LifeCycleStarting, tag.ComponentShardEngine)
+		i.logger.Info("Shard engine state changed", tag.LifeCycleStarting, tag.ComponentShardEngine)
 		context, err := acquireShard(i, closeCallback)
 		if err != nil {
 			// invalidate the shardItem so that the same shardItem won't be
 			// used to create another shardContext
-			i.logger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
+			i.logger.Info("Shard engine state changed", tag.LifeCycleStopped, tag.ComponentShardEngine)
 			i.status = historyShardsItemStatusStopped
 			return nil, err
 		}
@@ -450,7 +450,7 @@ func (i *historyShardsItem) getOrCreateEngine(
 		}
 		i.engine = i.engineFactory.CreateEngine(context)
 		i.engine.Start()
-		i.logger.Info("", tag.LifeCycleStarted, tag.ComponentShardEngine)
+		i.logger.Info("Shard engine state changed", tag.LifeCycleStarted, tag.ComponentShardEngine)
 		i.status = historyShardsItemStatusStarted
 		return i.engine, nil
 	case historyShardsItemStatusStarted:
@@ -470,10 +470,10 @@ func (i *historyShardsItem) stopEngine() {
 	case historyShardsItemStatusInitialized:
 		i.status = historyShardsItemStatusStopped
 	case historyShardsItemStatusStarted:
-		i.logger.Info("", tag.LifeCycleStopping, tag.ComponentShardEngine)
+		i.logger.Info("Shard engine state changed", tag.LifeCycleStopping, tag.ComponentShardEngine)
 		i.engine.Stop()
 		i.engine = nil
-		i.logger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
+		i.logger.Info("Shard engine state changed", tag.LifeCycleStopped, tag.ComponentShardEngine)
 		i.status = historyShardsItemStatusStopped
 	case historyShardsItemStatusStopped:
 		// no op
