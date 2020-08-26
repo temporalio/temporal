@@ -199,7 +199,7 @@ func (t *timerQueueProcessorBase) Stop() {
 	}
 	t.redispatcher.Stop()
 
-	t.logger.Info("Timer queue processor stopped.")
+	t.logger.Debug("Timer queue processor stopped.")
 }
 
 func (t *timerQueueProcessorBase) processorPump() {
@@ -218,7 +218,7 @@ RetryProcessor:
 		}
 	}
 
-	t.logger.Info("Timer queue processor pump shutting down.")
+	t.logger.Debug("Timer queue processor pump shutting down.")
 }
 
 // NotifyNewTimers - Notify the processor about the new timer events arrival.

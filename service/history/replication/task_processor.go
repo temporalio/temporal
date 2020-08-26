@@ -168,13 +168,13 @@ func (p *taskProcessorImpl) Stop() {
 		return
 	}
 
-	p.logger.Info("ReplicationTaskProcessor shutting down.")
+	p.logger.Debug("ReplicationTaskProcessor shutting down.")
 	close(p.done)
 }
 
 func (p *taskProcessorImpl) processorLoop() {
 	defer func() {
-		p.logger.Info("Closing replication task processor.", tag.ReadLevel(p.lastRetrievedMessageID))
+		p.logger.Debug("Closing replication task processor.", tag.ReadLevel(p.lastRetrievedMessageID))
 	}()
 
 Loop:
@@ -182,7 +182,7 @@ Loop:
 		// for each iteration, do close check first
 		select {
 		case <-p.done:
-			p.logger.Info("ReplicationTaskProcessor shutting down.")
+			p.logger.Debug("ReplicationTaskProcessor shutting down.")
 			return
 		default:
 		}
@@ -580,7 +580,7 @@ func (p *taskProcessorImpl) shouldRetryDLQ(err error) bool {
 
 	select {
 	case <-p.done:
-		p.logger.Info("ReplicationTaskProcessor shutting down.")
+		p.logger.Debug("ReplicationTaskProcessor shutting down.")
 		return false
 	default:
 		return true

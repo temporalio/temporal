@@ -125,15 +125,15 @@ func (p *replicationTaskProcessor) Start() error {
 		return nil
 	}
 
-	p.logger.Info("", tag.LifeCycleStarting, tag.ComponentReplicationTaskProcessor)
+	p.logger.Info("Replication task processor state changed", tag.LifeCycleStarting, tag.ComponentReplicationTaskProcessor)
 	consumer, err := p.client.NewConsumerWithClusterName(p.currentCluster, p.sourceCluster, p.consumerName, p.config.ReplicatorMessageConcurrency())
 	if err != nil {
-		p.logger.Info("", tag.LifeCycleStartFailed, tag.ComponentReplicationTaskProcessor, tag.Error(err))
+		p.logger.Info("Replication task processor state changed", tag.LifeCycleStartFailed, tag.ComponentReplicationTaskProcessor, tag.Error(err))
 		return err
 	}
 
 	if err := consumer.Start(); err != nil {
-		p.logger.Info("", tag.LifeCycleStartFailed, tag.ComponentReplicationTaskProcessor, tag.Error(err))
+		p.logger.Info("Replication task processor state changed", tag.LifeCycleStartFailed, tag.ComponentReplicationTaskProcessor, tag.Error(err))
 		return err
 	}
 
@@ -142,7 +142,7 @@ func (p *replicationTaskProcessor) Start() error {
 	go p.processorPump()
 	p.sequentialTaskProcessor.Start()
 
-	p.logger.Info("", tag.LifeCycleStarted, tag.ComponentReplicationTaskProcessor)
+	p.logger.Info("Replication task processor state changed", tag.LifeCycleStarted, tag.ComponentReplicationTaskProcessor)
 	return nil
 }
 
@@ -152,15 +152,15 @@ func (p *replicationTaskProcessor) Stop() {
 	}
 
 	p.sequentialTaskProcessor.Stop()
-	p.logger.Info("", tag.LifeCycleStopping, tag.ComponentReplicationTaskProcessor)
-	defer p.logger.Info("", tag.LifeCycleStopped, tag.ComponentReplicationTaskProcessor)
+	p.logger.Info("Replication task processor state changed", tag.LifeCycleStopping, tag.ComponentReplicationTaskProcessor)
+	defer p.logger.Info("Replication task processor state changed", tag.LifeCycleStopped, tag.ComponentReplicationTaskProcessor)
 
 	if atomic.LoadInt32(&p.isStarted) == 1 {
 		close(p.shutdownCh)
 	}
 
 	if success := common.AwaitWaitGroup(&p.shutdownWG, time.Minute); !success {
-		p.logger.Info("", tag.LifeCycleStopTimedout, tag.ComponentReplicationTaskProcessor)
+		p.logger.Info("Replication task processor state changed", tag.LifeCycleStopTimedout, tag.ComponentReplicationTaskProcessor)
 	}
 }
 

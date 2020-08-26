@@ -137,7 +137,7 @@ func (t *taskProcessor) stop() {
 	if success := common.AwaitWaitGroup(&t.workerWG, time.Minute); !success {
 		t.logger.Warn("Task processor timed out on shutdown.")
 	}
-	t.logger.Info("Task processor shutdown.")
+	t.logger.Debug("Task processor shutdown.")
 }
 
 func (t *taskProcessor) taskWorker(

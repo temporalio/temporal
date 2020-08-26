@@ -133,7 +133,7 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 	}
 
 	if info.Identity() != p.hostInfo.Identity() {
-		p.logger.Info(fmt.Sprintf("Worker not responsible for source cluster %v.", p.sourceCluster))
+		p.logger.Debug(fmt.Sprintf("Worker not responsible for source cluster %v.", p.sourceCluster))
 		return
 	}
 
