@@ -63,6 +63,7 @@ type indexProcessor struct {
 const (
 	esDocIDDelimiter = "~"
 	esDocType        = "_doc"
+	esDocIDSizeLimit = 512
 
 	versionTypeExternal = "external"
 )
@@ -192,7 +193,16 @@ func (p *indexProcessor) deserialize(payload []byte) (*indexer.Message, error) {
 }
 
 func (p *indexProcessor) addMessageToES(indexMsg *indexer.Message, kafkaMsg messaging.Message, logger log.Logger) error {
-	docID := indexMsg.GetWorkflowID() + esDocIDDelimiter + indexMsg.GetRunID()
+	docID := generateDocID(indexMsg.GetWorkflowID(), indexMsg.GetRunID())
+	// check and skip invalid docID
+	if len(docID) >= esDocIDSizeLimit {
+		logger.Error("Index message is too long",
+			tag.WorkflowDomainID(indexMsg.GetDomainID()),
+			tag.WorkflowID(indexMsg.GetWorkflowID()),
+			tag.WorkflowRunID(indexMsg.GetRunID()))
+		kafkaMsg.Nack()
+		return nil
+	}
 
 	var keyToKafkaMsg string
 	var req elastic.BulkableRequest
@@ -288,4 +298,8 @@ func fulfillDoc(doc map[string]interface{}, msg *indexer.Message, keyToKafkaMsg 
 	doc[definition.WorkflowID] = msg.GetWorkflowID()
 	doc[definition.RunID] = msg.GetRunID()
 	doc[definition.KafkaKey] = keyToKafkaMsg
+}
+
+func generateDocID(wid, rid string) string {
+	return wid + esDocIDDelimiter + rid
 }
