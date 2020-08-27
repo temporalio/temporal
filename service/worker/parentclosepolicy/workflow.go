@@ -116,7 +116,6 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 					Namespace: request.Namespace,
 					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
-						RunId:      execution.RunID,
 					},
 					Reason:   "by parent close policy",
 					Identity: processorWFTypeName,
@@ -129,7 +128,6 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 					Namespace: request.Namespace,
 					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
-						RunId:      execution.RunID,
 					},
 					Identity: processorWFTypeName,
 				},
