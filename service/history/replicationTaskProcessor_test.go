@@ -192,32 +192,6 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryReplicationTask() {
-	namespaceID := uuid.NewRandom().String()
-	workflowID := uuid.New()
-	runID := uuid.NewRandom().String()
-	task := &replicationspb.ReplicationTask{
-		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-			NamespaceId: namespaceID,
-			WorkflowId:  workflowID,
-			RunId:       runID,
-		}},
-	}
-	request := &persistence.PutReplicationTaskToDLQRequest{
-		SourceClusterName: "standby",
-		TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-			NamespaceId: namespaceID,
-			WorkflowId:  workflowID,
-			RunId:       runID,
-			TaskType:    enumsspb.TASK_TYPE_REPLICATION_HISTORY,
-		},
-	}
-	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
-	err := s.replicationTaskProcessor.putReplicationTaskToDLQ(task)
-	s.NoError(err)
-}
-
 func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2ReplicationTask() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()

@@ -5226,6 +5226,10 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	if len(builder.updateBufferedEvents) > 0 {
 		bufferedEvents = append(bufferedEvents, builder.updateBufferedEvents...)
 	}
+	var versionHistories *persistence.VersionHistories
+	if builder.versionHistories != nil {
+		versionHistories = builder.versionHistories.Duplicate()
+	}
 
 	return &persistence.WorkflowMutableState{
 		ExecutionInfo:       info,
@@ -5236,7 +5240,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 		SignalInfos:         signalInfos,
 		RequestCancelInfos:  cancellationInfos,
 		ChildExecutionInfos: childInfos,
-		VersionHistories:    builder.versionHistories.Duplicate(),
+		VersionHistories:    versionHistories,
 	}
 }
 
