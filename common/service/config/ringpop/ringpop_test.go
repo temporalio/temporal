@@ -56,7 +56,6 @@ func (s *RingpopSuite) TestHostsMode() {
 	var cfg config.Membership
 	err := yaml.Unmarshal([]byte(getHostsConfig()), &cfg)
 	s.Nil(err)
-	s.Equal("test", cfg.Name)
 	s.Equal("1.2.3.4", cfg.BroadcastAddress)
 	s.Equal(time.Second*30, cfg.MaxJoinDuration)
 	err = ValidateRingpopConfig(&cfg)
@@ -80,8 +79,7 @@ func (resolver *mockResolver) LookupHost(ctx context.Context, host string) ([]st
 
 func (s *RingpopSuite) TestInvalidConfig() {
 	var cfg config.Membership
-	s.Error(ValidateRingpopConfig(&cfg))
-	cfg.Name = "test"
+	cfg.MaxJoinDuration = time.Minute
 	s.NoError(ValidateRingpopConfig(&cfg))
 	cfg.BroadcastAddress = "sjhdfskdjhf"
 	s.Error(ValidateRingpopConfig(&cfg))

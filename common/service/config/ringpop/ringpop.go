@@ -72,9 +72,6 @@ func NewRingpopFactory(
 
 // ValidateRingpopConfig validates that ringpop config is parseable and valid
 func ValidateRingpopConfig(rpConfig *config.Membership) error {
-	if len(rpConfig.Name) == 0 {
-		return fmt.Errorf("ringpop config missing `name` param")
-	}
 	if rpConfig.BroadcastAddress != "" && net.ParseIP(rpConfig.BroadcastAddress) == nil {
 		return fmt.Errorf("ringpop config malformed `broadcastAddress` param")
 	}
@@ -158,7 +155,7 @@ func (factory *RingpopFactory) broadcastAddressResolver() (string, error) {
 }
 
 func (factory *RingpopFactory) createRingpop() (*membership.RingPop, error) {
-	rp, err := ringpop.New(factory.config.Name, ringpop.Channel(factory.channel), ringpop.AddressResolverFunc(factory.broadcastAddressResolver))
+	rp, err := ringpop.New("temporal", ringpop.Channel(factory.channel), ringpop.AddressResolverFunc(factory.broadcastAddressResolver))
 	if err != nil {
 		return nil, err
 	}

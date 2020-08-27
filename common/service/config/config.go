@@ -152,8 +152,6 @@ type (
 
 	// Membership contains config items related to the membership layer of temporal
 	Membership struct {
-		// Name to be used in advertisement to other nodes
-		Name string `yaml:"name" validate:"nonzero"`
 		// MaxJoinDuration is the max wait time to join the gossip ring
 		MaxJoinDuration time.Duration `yaml:"maxJoinDuration"`
 		// BroadcastAddress is used as the address that is communicated to remote nodes to connect on.
