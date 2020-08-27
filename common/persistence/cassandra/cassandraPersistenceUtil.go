@@ -60,10 +60,6 @@ func applyWorkflowMutationBatch(
 	condition := workflowMutation.Condition
 
 	startVersion := workflowMutation.StartVersion
-	lastWriteVersion := workflowMutation.LastWriteVersion
-	// TODO remove once 2DC is deprecated
-	//  since current version is only used by 2DC
-	currentVersion := lastWriteVersion
 
 	if err := updateExecution(
 		batch,
@@ -74,7 +70,6 @@ func applyWorkflowMutationBatch(
 		condition,
 		workflowMutation.Checksum,
 		startVersion,
-		currentVersion,
 	); err != nil {
 		return err
 	}
@@ -188,10 +183,6 @@ func applyWorkflowSnapshotBatchAsReset(
 	condition := workflowSnapshot.Condition
 
 	startVersion := workflowSnapshot.StartVersion
-	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	// TODO remove once 2DC is deprecated
-	//  since current version is only used by 2DC
-	currentVersion := lastWriteVersion
 
 	if err := updateExecution(
 		batch,
@@ -202,7 +193,6 @@ func applyWorkflowSnapshotBatchAsReset(
 		condition,
 		workflowSnapshot.Checksum,
 		startVersion,
-		currentVersion,
 	); err != nil {
 		return err
 	}
@@ -307,10 +297,6 @@ func applyWorkflowSnapshotBatchAsNew(
 	runID := executionInfo.RunID
 
 	startVersion := workflowSnapshot.StartVersion
-	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	// TODO remove once 2DC is deprecated
-	//  since current version is only used by 2DC
-	currentVersion := lastWriteVersion
 
 	if err := createExecution(
 		batch,
@@ -320,7 +306,6 @@ func applyWorkflowSnapshotBatchAsNew(
 		workflowSnapshot.Checksum,
 		cqlNowTimestampMillis,
 		startVersion,
-		currentVersion,
 	); err != nil {
 		return err
 	}
@@ -416,7 +401,6 @@ func createExecution(
 	checksum checksum.Checksum,
 	cqlNowTimestampMillis int64,
 	startVersion int64,
-	currentVersion int64,
 ) error {
 
 	// validate workflow state & close status
@@ -434,7 +418,7 @@ func createExecution(
 	executionInfo.StartTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis)).UTC()
 	executionInfo.LastUpdateTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis)).UTC()
 
-	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, versionHistories)
+	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, versionHistories)
 	if err != nil {
 		return err
 	}
@@ -501,7 +485,6 @@ func updateExecution(
 	condition int64,
 	checksum checksum.Checksum,
 	startVersion int64,
-	currentVersion int64,
 ) error {
 
 	// validate workflow state & close status
@@ -518,7 +501,7 @@ func updateExecution(
 	// TODO we should set the last update time on business logic layer
 	executionInfo.LastUpdateTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis)).UTC()
 
-	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, versionHistories)
+	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, versionHistories)
 	if err != nil {
 		return err
 	}

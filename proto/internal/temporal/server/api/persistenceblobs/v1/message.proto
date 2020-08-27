@@ -259,7 +259,6 @@ message WorkflowExecutionInfo {
     google.protobuf.Duration workflow_run_timeout = 12 [(gogoproto.stdduration) = true];
     google.protobuf.Duration default_workflow_task_timeout = 13 [(gogoproto.stdduration) = true];
     int64 start_version = 14;
-    int64 current_version = 15;
     ReplicationData replication_data = 16;
     int64 last_event_task_id = 17;
     int64 last_first_event_id = 18;

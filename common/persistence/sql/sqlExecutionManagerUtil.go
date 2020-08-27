@@ -67,10 +67,6 @@ func applyWorkflowMutationTx(
 		return serviceerror.NewInternal(fmt.Sprintf("uuid parse failed. Error: %v", err))
 	}
 
-	// TODO remove once 2DC is deprecated
-	//  since current version is only used by 2DC
-	currentVersion := lastWriteVersion
-
 	// TODO Remove me if UPDATE holds the lock to the end of a transaction
 	if err := lockAndCheckNextEventID(tx,
 		shardID,
@@ -91,7 +87,6 @@ func applyWorkflowMutationTx(
 		versionHistories,
 		startVersion,
 		lastWriteVersion,
-		currentVersion,
 		shardID); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Failed to update executions row. Erorr: %v", err))
 	}
@@ -210,10 +205,6 @@ func applyWorkflowSnapshotTxAsReset(
 		return err
 	}
 
-	// TODO remove once 2DC is deprecated
-	//  since current version is only used by 2DC
-	currentVersion := lastWriteVersion
-
 	// TODO Is there a way to modify the various map tables without fear of other people adding rows after we delete, without locking the executions row?
 	if err := lockAndCheckNextEventID(tx,
 		shardID,
@@ -234,7 +225,6 @@ func applyWorkflowSnapshotTxAsReset(
 		versionHistories,
 		startVersion,
 		lastWriteVersion,
-		currentVersion,
 		shardID); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to update executions row. Erorr: %v", err))
 	}
@@ -390,16 +380,11 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		return err
 	}
 
-	// TODO remove once 2DC is deprecated
-	//  since current version is only used by 2DC
-	currentVersion := lastWriteVersion
-
 	if err := m.createExecution(tx,
 		executionInfo,
 		versionHistories,
 		startVersion,
 		lastWriteVersion,
-		currentVersion,
 		shardID); err != nil {
 		return err
 	}
@@ -1104,11 +1089,10 @@ func buildExecutionRow(
 	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
-	currentVersion int64,
 	shardID int,
 ) (row *sqlplugin.ExecutionsRow, err error) {
 
-	info, state, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, versionHistories)
+	info, state, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, versionHistories)
 	if err != nil {
 		return nil, err
 	}
@@ -1153,7 +1137,6 @@ func (m *sqlExecutionManager) createExecution(
 	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
-	currentVersion int64,
 	shardID int,
 ) error {
 
@@ -1173,7 +1156,6 @@ func (m *sqlExecutionManager) createExecution(
 		versionHistories,
 		startVersion,
 		lastWriteVersion,
-		currentVersion,
 		shardID,
 	)
 	if err != nil {
@@ -1210,7 +1192,6 @@ func updateExecution(
 	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
-	currentVersion int64,
 	shardID int,
 ) error {
 
@@ -1229,7 +1210,6 @@ func updateExecution(
 		versionHistories,
 		startVersion,
 		lastWriteVersion,
-		currentVersion,
 		shardID,
 	)
 	if err != nil {

@@ -3269,18 +3269,15 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 		firstRunID = currentStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstExecutionRunId()
 	}
 
-	namespace := e.namespaceEntry.GetInfo().Name
 	namespaceID := e.namespaceEntry.GetInfo().Id
 	var newStateBuilder *mutableStateBuilder
-	// If a workflow is ndc enabled, the continue as new should be ndc enabled.
-	if e.config.EnableNDC(namespace) || e.GetVersionHistories() != nil {
-		newStateBuilder = newMutableStateBuilderWithVersionHistories(
-			e.shard,
-			e.shard.GetEventsCache(),
-			e.logger,
-			e.namespaceEntry,
-		)
-	}
+
+	newStateBuilder = newMutableStateBuilderWithVersionHistories(
+		e.shard,
+		e.shard.GetEventsCache(),
+		e.logger,
+		e.namespaceEntry,
+	)
 
 	if _, err = newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(
 		parentInfo,

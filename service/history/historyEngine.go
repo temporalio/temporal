@@ -462,26 +462,14 @@ func (e *historyEngineImpl) createMutableState(
 	runID string,
 ) (mutableState, error) {
 
-	namespace := namespaceEntry.GetInfo().Name
-	enableNDC := e.config.EnableNDC(namespace)
-
 	var newMutableState mutableState
-	if enableNDC {
-		// version history applies to both local and global namespace
-		newMutableState = newMutableStateBuilderWithVersionHistories(
-			e.shard,
-			e.shard.GetEventsCache(),
-			e.logger,
-			namespaceEntry,
-		)
-	} else {
-		newMutableState = newMutableStateBuilder(
-			e.shard,
-			e.shard.GetEventsCache(),
-			e.logger,
-			namespaceEntry,
-		)
-	}
+	// version history applies to both local and global namespace
+	newMutableState = newMutableStateBuilderWithVersionHistories(
+		e.shard,
+		e.shard.GetEventsCache(),
+		e.logger,
+		namespaceEntry,
+	)
 
 	if err := newMutableState.SetHistoryTree(runID); err != nil {
 		return nil, err

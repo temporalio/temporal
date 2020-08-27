@@ -112,9 +112,7 @@ message HistoryTaskAttributes {
     int64 version = 7;
     temporal.api.history.v1.History history = 9;
     temporal.api.history.v1.History new_run_history = 10;
-    int32 event_store_version = 11;
     int32 new_run_event_store_version = 12;
-    bool new_run_ndc = 14;
 }
 
 message HistoryMetadataTaskAttributes {

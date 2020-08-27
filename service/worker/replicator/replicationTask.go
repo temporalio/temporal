@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client/history"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -288,18 +287,14 @@ func (t *historyMetadataReplicationTask) Execute() error {
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryMetadataReplicationScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
-	if t.version != common.EmptyVersion {
-		return t.nDCHistoryResender.SendSingleWorkflowHistory(
-			t.queueID.NamespaceID,
-			t.queueID.WorkflowID,
-			t.queueID.RunID,
-			t.firstEventID-1, //NDC resend API is exclusive-exclusive.
-			t.version,
-			t.nextEventID,
-			t.version)
-	}
-
-	return serviceerror.NewInternal("historyMetadataReplicationTask encounter error which cannot be handled")
+	return t.nDCHistoryResender.SendSingleWorkflowHistory(
+		t.queueID.NamespaceID,
+		t.queueID.WorkflowID,
+		t.queueID.RunID,
+		t.firstEventID-1, //NDC resend API is exclusive-exclusive.
+		t.version,
+		t.nextEventID,
+		t.version)
 }
 
 func (t *historyMetadataReplicationTask) HandleErr(

@@ -50,6 +50,11 @@ const (
 	resendHigherVersionMessage = "Resend sync activity events due to a higher version received"
 )
 
+var (
+	// ErrRetrySyncActivityMsg is returned when sync activity replication tasks are arriving out of order, should retry
+	ErrRetrySyncActivityMsg = "retry on applying sync activity"
+)
+
 type (
 	nDCActivityReplicator interface {
 		SyncActivity(
