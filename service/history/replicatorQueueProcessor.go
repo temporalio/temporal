@@ -238,22 +238,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) *replicationspb.ReplicationTask {
 
-	if replicationTask.GetHistoryTaskAttributes() != nil {
-		return &replicationspb.ReplicationTask{
-			TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
-			Attributes: &replicationspb.ReplicationTask_HistoryMetadataTaskAttributes{
-				HistoryMetadataTaskAttributes: &replicationspb.HistoryMetadataTaskAttributes{
-					TargetClusters: replicationTask.GetHistoryTaskAttributes().GetTargetClusters(),
-					NamespaceId:    task.GetNamespaceId(),
-					WorkflowId:     task.GetWorkflowId(),
-					RunId:          task.GetRunId(),
-					FirstEventId:   task.GetFirstEventId(),
-					NextEventId:    task.GetNextEventId(),
-					Version:        common.EmptyVersion,
-				},
-			},
-		}
-	} else if replicationTask.GetHistoryTaskV2Attributes() != nil {
+	if replicationTask.GetHistoryTaskV2Attributes() != nil {
 		return &replicationspb.ReplicationTask{
 			TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
 			Attributes: &replicationspb.ReplicationTask_HistoryMetadataTaskAttributes{
@@ -706,42 +691,6 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 		task.GetWorkflowId(),
 		runID,
 		func(mutableState mutableState) (*replicationspb.ReplicationTask, error) {
-
-			versionHistories := mutableState.GetVersionHistories()
-
-			// TODO when 3+DC migration is done, remove this block of code
-			if versionHistories == nil {
-				namespaceEntry, err := p.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
-				if err != nil {
-					return nil, err
-				}
-
-				var targetClusters []string
-				for _, cluster := range namespaceEntry.GetReplicationConfig().Clusters {
-					targetClusters = append(targetClusters, cluster)
-				}
-
-				replicationTask, newRunID, err := GenerateReplicationTask(
-					targetClusters,
-					task,
-					p.historyV2Mgr,
-					p.metricsClient,
-					nil,
-					convert.IntPtr(p.shard.GetShardID()),
-				)
-				if err != nil {
-					return nil, err
-				}
-				if newRunID != "" {
-					isNDCWorkflow, err := p.isNewRunNDCEnabled(ctx, namespaceID, task.GetWorkflowId(), newRunID)
-					if err != nil {
-						return nil, err
-					}
-					replicationTask.GetHistoryTaskAttributes().NewRunNdc = isNDCWorkflow
-				}
-
-				return replicationTask, err
-			}
 
 			// NDC workflow
 			versionHistoryItems, branchToken, err := p.getVersionHistoryItems(

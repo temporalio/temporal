@@ -734,10 +734,8 @@ func createReplicationTasks(
 		firstEventID := common.EmptyEventID
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion // nolint:ineffassign
-		var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
 		activityScheduleID := common.EmptyEventID
 		var branchToken, newRunBranchToken []byte
-		resetWorkflow := false
 
 		switch task.GetType() {
 		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
@@ -747,17 +745,10 @@ func createReplicationTasks(
 			firstEventID = histTask.FirstEventID
 			nextEventID = histTask.NextEventID
 			version = task.GetVersion()
-			lastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo)
-			for k, v := range histTask.LastReplicationInfo {
-				lastReplicationInfo[k] = v
-			}
-			resetWorkflow = histTask.ResetWorkflow
 
 		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
-			// cassandra does not like null
-			lastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo)
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknow replication type: %v", task.GetType()))
@@ -777,8 +768,6 @@ func createReplicationTasks(
 			NewRunBranchToken:       newRunBranchToken,
 			NewRunEventStoreVersion: p.EventStoreVersion,
 			BranchToken:             branchToken,
-			LastReplicationInfo:     lastReplicationInfo,
-			ResetWorkflow:           resetWorkflow,
 		})
 
 		if err != nil {

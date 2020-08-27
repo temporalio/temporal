@@ -36,7 +36,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -783,10 +782,8 @@ func createReplicationTasks(
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion
 		activityScheduleID := common.EmptyEventID
-		var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
 
 		var branchToken, newRunBranchToken []byte
-		var resetWorkflow bool
 
 		switch task.GetType() {
 		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
@@ -799,16 +796,10 @@ func createReplicationTasks(
 			version = task.GetVersion()
 			branchToken = historyReplicationTask.BranchToken
 			newRunBranchToken = historyReplicationTask.NewRunBranchToken
-			resetWorkflow = historyReplicationTask.ResetWorkflow
-			lastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
-			for k, v := range historyReplicationTask.LastReplicationInfo {
-				lastReplicationInfo[k] = &replicationspb.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventId}
-			}
 
 		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
-			lastReplicationInfo = map[string]*replicationspb.ReplicationInfo{}
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknown replication task: %v", task.GetType()))
@@ -823,13 +814,11 @@ func createReplicationTasks(
 			FirstEventId:            firstEventID,
 			NextEventId:             nextEventID,
 			Version:                 version,
-			LastReplicationInfo:     lastReplicationInfo,
 			ScheduledId:             activityScheduleID,
 			EventStoreVersion:       p.EventStoreVersion,
 			NewRunEventStoreVersion: p.EventStoreVersion,
 			BranchToken:             branchToken,
 			NewRunBranchToken:       newRunBranchToken,
-			ResetWorkflow:           resetWorkflow,
 		})
 		if err != nil {
 			return err

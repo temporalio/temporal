@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/task"
 	"go.temporal.io/server/common/xdc"
 )
@@ -457,21 +456,6 @@ func (s *historyMetadataReplicationTaskSuite) TestNewHistoryMetadataReplicationT
 	)
 }
 
-func (s *historyMetadataReplicationTaskSuite) TestExecute() {
-	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
-		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockNDCResender)
-
-	randomErr := errors.New("some random error")
-	s.mockRereplicator.On("SendMultiWorkflowHistory",
-		task.queueID.NamespaceID, task.queueID.WorkflowID,
-		task.queueID.RunID, task.firstEventID,
-		task.queueID.RunID, task.nextEventID,
-	).Return(randomErr).Once()
-
-	err := task.Execute()
-	s.Equal(randomErr, err)
-}
-
 func (s *historyMetadataReplicationTaskSuite) TestHandleErr_NotRetryErr() {
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockNDCResender)
@@ -479,39 +463,6 @@ func (s *historyMetadataReplicationTaskSuite) TestHandleErr_NotRetryErr() {
 
 	err := task.HandleErr(randomErr)
 	s.Equal(randomErr, err)
-}
-
-func (s *historyMetadataReplicationTaskSuite) TestHandleErr_RetryErr() {
-	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
-		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockNDCResender)
-	retryErr := serviceerrors.NewRetryTask(
-		"",
-		task.queueID.NamespaceID,
-		task.queueID.WorkflowID,
-		"other random run ID",
-		447,
-	)
-
-	s.mockRereplicator.On("SendMultiWorkflowHistory",
-		task.queueID.NamespaceID, task.queueID.WorkflowID,
-		retryErr.RunId, retryErr.NextEventId,
-		task.queueID.RunID, task.taskID,
-	).Return(errors.New("some random error")).Once()
-	err := task.HandleErr(retryErr)
-	s.Equal(retryErr, err)
-
-	s.mockRereplicator.On("SendMultiWorkflowHistory",
-		task.queueID.NamespaceID, task.queueID.WorkflowID,
-		retryErr.RunId, retryErr.NextEventId,
-		task.queueID.RunID, task.taskID,
-	).Return(nil).Once()
-	s.mockRereplicator.On("SendMultiWorkflowHistory",
-		task.queueID.NamespaceID, task.queueID.WorkflowID,
-		task.queueID.RunID, task.firstEventID,
-		task.queueID.RunID, task.nextEventID,
-	).Return(nil).Once()
-	err = task.HandleErr(retryErr)
-	s.Nil(err)
 }
 
 func (s *historyMetadataReplicationTaskSuite) TestRetryErr_NonRetryable() {

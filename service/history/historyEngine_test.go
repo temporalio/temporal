@@ -5176,7 +5176,17 @@ func addFailWorkflowEvent(
 func newMutableStateBuilderWithEventV2(shard ShardContext, eventsCache eventsCache,
 	logger log.Logger, runID string) *mutableStateBuilder {
 
-	msBuilder := newMutableStateBuilder(shard, eventsCache, logger, testLocalNamespaceEntry)
+	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry)
+	_ = msBuilder.SetHistoryTree(runID)
+
+	return msBuilder
+}
+
+func newMutableStateBuilderWithVersionHistoriesForTest(shard ShardContext, eventsCache eventsCache,
+	logger log.Logger, version int64, runID string) *mutableStateBuilder {
+
+	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry)
+	msBuilder.UpdateCurrentVersion(version, false)
 	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
@@ -5226,6 +5236,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 		SignalInfos:         signalInfos,
 		RequestCancelInfos:  cancellationInfos,
 		ChildExecutionInfos: childInfos,
+		VersionHistories:    builder.versionHistories.Duplicate(),
 	}
 }
 

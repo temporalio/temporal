@@ -1895,24 +1895,12 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 			FirstEventID: int64(1),
 			NextEventID:  int64(3),
 			Version:      123,
-			LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
-				"dc1": {
-					Version:     int64(3),
-					LastEventId: int64(1),
-				},
-			},
 		},
 		&p.HistoryReplicationTask{
 			TaskID:       s.GetNextSequenceNumber(),
 			FirstEventID: int64(1),
 			NextEventID:  int64(3),
 			Version:      456,
-			LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
-				"dc1": {
-					Version:     int64(3),
-					LastEventId: int64(1),
-				},
-			},
 		},
 		&p.SyncActivityTask{
 			TaskID:      s.GetNextSequenceNumber(),
@@ -1938,14 +1926,7 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 			s.Equal(expected.NextEventID, respTasks[index].GetNextEventId())
 			s.Equal(expected.BranchToken, respTasks[index].BranchToken)
 			s.Equal(expected.NewRunBranchToken, respTasks[index].NewRunBranchToken)
-			s.Equal(expected.ResetWorkflow, respTasks[index].ResetWorkflow)
-			s.Equal(len(expected.LastReplicationInfo), len(respTasks[index].LastReplicationInfo))
-			for k, v := range expected.LastReplicationInfo {
-				got, ok := respTasks[index].LastReplicationInfo[k]
-				s.True(ok, "replication info missing key")
-				s.Equal(v.Version, got.Version)
-				s.Equal(v.LastEventId, got.LastEventId)
-			}
+
 		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 			expected := replicationTasks[index].(*p.SyncActivityTask)
 			s.Equal(expected.ScheduledID, respTasks[index].GetScheduledId())
@@ -2771,16 +2752,6 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 		FirstEventID: int64(1),
 		NextEventID:  int64(3),
 		Version:      int64(9),
-		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
-			"dc1": {
-				Version:     int64(3),
-				LastEventId: int64(1),
-			},
-			"dc2": {
-				Version:     int64(5),
-				LastEventId: int64(2),
-			},
-		},
 	}}
 	err = s.UpdateWorklowStateAndReplication(updatedInfo1, updatedStats1, nil, int64(3), replicationTasks)
 	s.NoError(err)
@@ -2850,32 +2821,12 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 			FirstEventID: int64(1),
 			NextEventID:  int64(3),
 			Version:      int64(9),
-			LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
-				"dc1": {
-					Version:     int64(3),
-					LastEventId: int64(1),
-				},
-				"dc2": {
-					Version:     int64(5),
-					LastEventId: int64(2),
-				},
-			},
 		},
 		&p.HistoryReplicationTask{
 			TaskID:       s.GetNextSequenceNumber(),
 			FirstEventID: int64(4),
 			NextEventID:  int64(5),
 			Version:      int64(9),
-			LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
-				"dc1": {
-					Version:     int64(3),
-					LastEventId: int64(1),
-				},
-				"dc2": {
-					Version:     int64(5),
-					LastEventId: int64(2),
-				},
-			},
 		},
 	}
 	err = s.UpdateWorklowStateAndReplication(

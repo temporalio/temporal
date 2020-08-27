@@ -305,31 +305,13 @@ func (t *historyMetadataReplicationTask) Execute() error {
 func (t *historyMetadataReplicationTask) HandleErr(
 	err error,
 ) error {
-	retryErr, ok := err.(*serviceerrors.RetryTask)
-	if !ok || retryErr.RunId == "" {
+	retryErr, ok := err.(*serviceerrors.RetryTaskV2)
+	if !ok {
 		return err
 	}
 
-	t.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientRequests)
-	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientLatency)
-	defer stopwatch.Stop()
-
-	// this is the retry error
-	beginRunID := retryErr.RunId
-	beginEventID := retryErr.NextEventId
-	endRunID := t.queueID.RunID
-	endEventID := t.taskID
-	resendErr := t.historyRereplicator.SendMultiWorkflowHistory(
-		t.queueID.NamespaceID, t.queueID.WorkflowID,
-		beginRunID, beginEventID, endRunID, endEventID,
-	)
-	if resendErr != nil {
-		t.logger.Error("error resend history", tag.Error(resendErr))
-		// should return the replication error, not the resending error
-		return err
-	}
-	// should try again
-	return t.Execute()
+	t.logger.Error("missing error handling for history metadata replication task", tag.Error(retryErr))
+	return err
 }
 
 func (t *historyReplicationV2Task) Execute() error {

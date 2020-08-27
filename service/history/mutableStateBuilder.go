@@ -491,13 +491,9 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 		return nil
 	}
 
-	// TODO when NDC is fully rolled out remove this block
-	//  since event local namespace workflow will have version history
-	if version != common.EmptyVersion {
-		err := serviceerror.NewInternal("cannot update current version of local namespace workflow to version other than empty version")
-		e.logError(err.Error())
-		return err
-	}
+	// TODO: All mutable state should have versioned histories.  Even local namespace should have it to allow for
+	// re-replication of local namespaces to other clusters.
+	// We probably need an error if mutableState does not have versioned history.
 	e.currentVersion = common.EmptyVersion
 	return nil
 }
@@ -4184,9 +4180,7 @@ func (e *mutableStateBuilder) eventsToReplicationTask(
 		NewRunBranchToken: nil,
 	}
 
-	if e.GetVersionHistories() != nil {
-		replicationTask.LastReplicationInfo = nil
-	} else {
+	if e.GetVersionHistories() == nil {
 		return nil, serviceerror.NewInternal("should not generate replication task when missing replication state & version history")
 	}
 
