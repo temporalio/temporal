@@ -117,8 +117,9 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
 					},
-					Reason:   "by parent close policy",
-					Identity: processorWFTypeName,
+					Reason:              "by parent close policy",
+					Identity:            processorWFTypeName,
+					FirstExecutionRunId: execution.RunID,
 				},
 			})
 		case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
@@ -129,7 +130,8 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
 					},
-					Identity: processorWFTypeName,
+					Identity:            processorWFTypeName,
+					FirstExecutionRunId: execution.RunID,
 				},
 			})
 		}
