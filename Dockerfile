@@ -91,6 +91,8 @@ ENTRYPOINT ["tctl"]
 # All temporal tool binaries
 FROM alpine AS temporal-admin-tools
 
+RUN apk add --update --no-cache jq
+
 ENV TEMPORAL_HOME /etc/temporal
 RUN mkdir -p /etc/temporal
 
