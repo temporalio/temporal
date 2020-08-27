@@ -544,23 +544,12 @@ func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replicationsp
 		Version:        1394,
 		FirstEventId:   728,
 		NextEventId:    1015,
-		ReplicationInfo: map[string]*replicationspb.ReplicationInfo{
-			cluster.TestCurrentClusterName: {
-				Version:     0644,
-				LastEventId: 0755,
-			},
-			cluster.TestAlternativeClusterName: {
-				Version:     0755,
-				LastEventId: 0644,
-			},
-		},
 		History: &historypb.History{
 			Events: []*historypb.HistoryEvent{{EventId: 1}},
 		},
 		NewRunHistory: &historypb.History{
 			Events: []*historypb.HistoryEvent{{EventId: 2}},
 		},
-		ResetWorkflow: true,
 	}
 	replicationTask := &replicationspb.ReplicationTask{
 		TaskType:   enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,

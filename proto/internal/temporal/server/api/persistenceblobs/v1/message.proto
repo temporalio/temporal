@@ -127,9 +127,7 @@ message ReplicationTaskInfo {
     int32 event_store_version = 9;
     int32 new_run_event_store_version = 10;
     bytes branch_token = 11;
-    map<string, temporal.server.api.replication.v1.ReplicationInfo> last_replication_info = 12;
     bytes new_run_branch_token = 13;
-    bool reset_workflow = 14;
     int64 task_id = 15;
 }
 

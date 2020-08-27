@@ -2768,20 +2768,6 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 	s.Equal(int64(1), task1.GetFirstEventId())
 	s.Equal(int64(3), task1.GetNextEventId())
 	s.Equal(int64(9), task1.Version)
-	s.Equal(2, len(task1.LastReplicationInfo))
-	for k, v := range task1.LastReplicationInfo {
-		log.Infof("replicationspb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
-		switch k {
-		case "dc1":
-			s.Equal(int64(3), v.Version)
-			s.Equal(int64(1), v.LastEventId)
-		case "dc2":
-			s.Equal(int64(5), v.Version)
-			s.Equal(int64(2), v.LastEventId)
-		default:
-			s.Fail("Unexpected key")
-		}
-	}
 
 	err = s.CompleteTransferTask(task1.GetTaskId())
 	s.NoError(err)
@@ -2850,7 +2836,6 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 	s.Equal(int64(1), task1.GetFirstEventId())
 	s.Equal(int64(3), task1.GetNextEventId())
 	s.Equal(int64(9), task1.Version)
-	s.Equal(2, len(task1.LastReplicationInfo))
 
 	err = s.RangeCompleteReplicationTask(task1.GetTaskId())
 	s.NoError(err)
@@ -2865,7 +2850,6 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 	s.Equal(int64(4), task2.GetFirstEventId())
 	s.Equal(int64(5), task2.GetNextEventId())
 	s.Equal(int64(9), task2.Version)
-	s.Equal(2, len(task2.LastReplicationInfo))
 	err = s.CompleteReplicationTask(task2.GetTaskId())
 	s.NoError(err)
 	tasks3, err := s.GetReplicationTasks(1, false)
