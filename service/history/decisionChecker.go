@@ -289,12 +289,12 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 			}
 		}
 
-		if isScheduleToStartRetryable {
-			expiration := p.GetExpirationIntervalInSeconds()
-			if expiration == 0 || expiration > wfTimeout {
-				expiration = wfTimeout
-			}
+		expiration := p.GetExpirationIntervalInSeconds()
+		if expiration == 0 || expiration > wfTimeout {
+			expiration = wfTimeout
+		}
 
+		if isScheduleToStartRetryable {
 			// If schedule to start timeout is retryable, we don't need to fail the activity and schedule
 			// it again on the same tasklist, as it's a no-op). Extending schedule to start timeout to achieve
 			// the same thing.
@@ -310,10 +310,17 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 				attributes.ScheduleToStartTimeoutSeconds = common.Int32Ptr(scheduleToStartExpiration)
 			}
 
-			scheduleToCloseExpiration := common.MinInt32(expiration, scheduleToStartExpiration+attributes.GetStartToCloseTimeoutSeconds())
-			if attributes.GetScheduleToCloseTimeoutSeconds() < scheduleToCloseExpiration {
-				attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(scheduleToCloseExpiration)
-			}
+			// TODO: uncomment the following code when the client side bug for calculating scheduleToClose deadline is fixed and
+			// fully rolled out. Before that, we still need to extend scheduleToClose timeout to be as long as the expiration interval
+			//
+			// scheduleToCloseExpiration := common.MinInt32(expiration, scheduleToStartExpiration+attributes.GetStartToCloseTimeoutSeconds())
+			// if attributes.GetScheduleToCloseTimeoutSeconds() < scheduleToCloseExpiration {
+			// 	attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(scheduleToCloseExpiration)
+			// }
+		}
+
+		if attributes.GetScheduleToCloseTimeoutSeconds() < expiration {
+			attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(expiration)
 		}
 	}
 	return nil
