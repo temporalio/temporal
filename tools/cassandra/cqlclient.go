@@ -74,12 +74,12 @@ const (
 	writeSchemaVersionCQL       = `INSERT into schema_version(keyspace_name, creation_time, curr_version, min_compatible_version) VALUES (?,?,?,?)`
 	writeSchemaUpdateHistoryCQL = `INSERT into schema_update_history(year, month, update_time, old_version, new_version, manifest_md5, description) VALUES(?,?,?,?,?,?,?)`
 
-	createSchemaVersionTableCQL = `CREATE TABLE schema_version(keyspace_name text PRIMARY KEY, ` +
+	createSchemaVersionTableCQL = `CREATE TABLE IF NOT EXISTS schema_version(keyspace_name text PRIMARY KEY, ` +
 		`creation_time timestamp, ` +
 		`curr_version text, ` +
 		`min_compatible_version text);`
 
-	createSchemaUpdateHistoryTableCQL = `CREATE TABLE schema_update_history(` +
+	createSchemaUpdateHistoryTableCQL = `CREATE TABLE IF NOT EXISTS schema_update_history(` +
 		`year int, ` +
 		`month int, ` +
 		`update_time timestamp, ` +
