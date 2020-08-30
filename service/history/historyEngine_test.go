@@ -1628,6 +1628,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 
 	var commands []*commandpb.Command
 
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil).AnyTimes()
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
 	ms2 := createMutableState(msBuilder)
 	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
@@ -1636,7 +1637,6 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil).AnyTimes()
 
 	_, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: namespaceID,
@@ -3675,6 +3675,12 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
 
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: "test-respond-activity-task-canceled-if-no-activity-id-provided",
+		RunId:      testRunID,
+	}
+	taskqueue := "testTaskQueue"
+
 	tt := &tokenspb.Task{
 		ScheduleAttempt: 1,
 		WorkflowId:      "wId",
@@ -3685,6 +3691,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), testRunID)
+	// Add dummy event
+	addWorkflowExecutionStartedEvent(msBuilder, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: testRunID}
@@ -3704,6 +3712,12 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {
 
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: "test-respond-activity-task-canceled-if-not-found",
+		RunId:      testRunID,
+	}
+	taskqueue := "testTaskQueue"
+
 	tt := &tokenspb.Task{
 		ScheduleAttempt: 1,
 		WorkflowId:      "wId",
@@ -3715,6 +3729,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), testRunID)
+	// Add dummy event
+	addWorkflowExecutionStartedEvent(msBuilder, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: testRunID}
@@ -4865,6 +4881,8 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 		WorkflowId: "test-reapply-reset-workflow",
 		RunId:      testRunID,
 	}
+	taskqueue := "testTaskQueue"
+	identity := "testIdentity"
 	history := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
@@ -4878,6 +4896,9 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 		loggerimpl.NewDevelopmentForTest(s.Suite),
 		workflowExecution.GetRunId(),
 	)
+	// Add dummy event
+	addWorkflowExecutionStartedEvent(msBuilder, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	ms.ExecutionInfo.LastProcessedEvent = 1
