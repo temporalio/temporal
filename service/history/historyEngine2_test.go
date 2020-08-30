@@ -1287,6 +1287,12 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning() {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: "wId",
+		RunId:      testRunID,
+	}
+	tl := "testTaskQueue"
+
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.EqualError(err, "Missing namespace UUID.")
@@ -1326,6 +1332,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), runID)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
@@ -1352,6 +1359,11 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
 	requestID := "testRequestID"
+	we := commonpb.WorkflowExecution{
+		WorkflowId: "wId",
+		RunId:      testRunID,
+	}
+	tl := "testTaskQueue"
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -1378,6 +1390,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), runID)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
@@ -1412,6 +1425,11 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
 	requestID := "testRequestID"
+	we := commonpb.WorkflowExecution{
+		WorkflowId: "wId",
+		RunId:      testRunID,
+	}
+	tl := "testTaskQueue"
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -1438,6 +1456,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), runID)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}

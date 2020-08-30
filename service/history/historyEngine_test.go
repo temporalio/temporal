@@ -4783,6 +4783,9 @@ func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
 		WorkflowId: "test-reapply",
 		RunId:      testRunID,
 	}
+	taskqueue := "testTaskQueue"
+	identity := "testIdentity"
+
 	history := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
@@ -4796,6 +4799,8 @@ func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
 		loggerimpl.NewDevelopmentForTest(s.Suite),
 		workflowExecution.GetRunId(),
 	)
+	// Add dummy event
+	addWorkflowExecutionStartedEvent(msBuilder, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: testRunID}
@@ -4818,6 +4823,10 @@ func (s *engineSuite) TestReapplyEvents_IgnoreSameVersionEvents() {
 		WorkflowId: "test-reapply-same-version",
 		RunId:      testRunID,
 	}
+	taskqueue := "testTaskQueue"
+	identity := "testIdentity"
+
+	// TODO: Figure out why version is empty?
 	history := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
@@ -4831,6 +4840,8 @@ func (s *engineSuite) TestReapplyEvents_IgnoreSameVersionEvents() {
 		loggerimpl.NewDevelopmentForTest(s.Suite),
 		workflowExecution.GetRunId(),
 	)
+	// Add dummy event
+	addWorkflowExecutionStartedEvent(msBuilder, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -5218,7 +5229,8 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 		childInfos[id] = copyChildInfo(info)
 	}
 
-	builder.FlushBufferedEvents() // nolint:errcheck
+	// FlushBuffer will also be called within the CloseTransactionAsMutation
+	builder.CloseTransactionAsMutation(time.Now(), transactionPolicyActive)
 	var bufferedEvents []*historypb.HistoryEvent
 	if len(builder.bufferedEvents) > 0 {
 		bufferedEvents = append(bufferedEvents, builder.bufferedEvents...)
