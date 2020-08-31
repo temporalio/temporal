@@ -29,9 +29,12 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/shard"
+)
+
+const (
+	defaultBeginningMessageID = -1
 )
 
 var (
@@ -95,14 +98,13 @@ func (r *dlqHandlerImpl) ReadMessages(
 	pageToken []byte,
 ) ([]*replicator.ReplicationTask, []byte, error) {
 
-	tasks, _, token, err := r.readMessagesWithAckLevel(
+	return r.readMessagesWithAckLevel(
 		ctx,
 		sourceCluster,
 		lastMessageID,
 		pageSize,
 		pageToken,
 	)
-	return tasks, token, err
 }
 
 func (r *dlqHandlerImpl) readMessagesWithAckLevel(
@@ -111,23 +113,26 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
-) ([]*replicator.ReplicationTask, int64, []byte, error) {
+) ([]*replicator.ReplicationTask, []byte, error) {
 
-	ackLevel := r.shard.GetReplicatorDLQAckLevel(sourceCluster)
 	resp, err := r.shard.GetExecutionManager().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
 		SourceClusterName: sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
-			ReadLevel:     ackLevel,
+			ReadLevel:     defaultBeginningMessageID,
 			MaxReadLevel:  lastMessageID,
 			BatchSize:     pageSize,
 			NextPageToken: pageToken,
 		},
 	})
 	if err != nil {
-		return nil, ackLevel, nil, err
+		return nil, nil, err
 	}
 
 	remoteAdminClient := r.shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster)
+	if remoteAdminClient == nil {
+		return nil, nil, errInvalidCluster
+	}
+
 	taskInfo := make([]*replicator.ReplicationTaskInfo, 0, len(resp.Tasks))
 	for _, task := range resp.Tasks {
 		taskInfo = append(taskInfo, &replicator.ReplicationTaskInfo{
@@ -151,11 +156,11 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 			},
 		)
 		if err != nil {
-			return nil, ackLevel, nil, err
+			return nil, nil, err
 		}
 	}
 
-	return response.ReplicationTasks, ackLevel, resp.NextPageToken, nil
+	return response.ReplicationTasks, resp.NextPageToken, nil
 }
 
 func (r *dlqHandlerImpl) PurgeMessages(
@@ -163,24 +168,15 @@ func (r *dlqHandlerImpl) PurgeMessages(
 	lastMessageID int64,
 ) error {
 
-	ackLevel := r.shard.GetReplicatorDLQAckLevel(sourceCluster)
 	err := r.shard.GetExecutionManager().RangeDeleteReplicationTaskFromDLQ(
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
 			SourceClusterName:    sourceCluster,
-			ExclusiveBeginTaskID: ackLevel,
+			ExclusiveBeginTaskID: defaultBeginningMessageID,
 			InclusiveEndTaskID:   lastMessageID,
 		},
 	)
 	if err != nil {
 		return err
-	}
-
-	if err = r.shard.UpdateReplicatorDLQAckLevel(
-		sourceCluster,
-		lastMessageID,
-	); err != nil {
-		r.logger.Error("Failed to purge history replication message", tag.Error(err))
-		// The update ack level should not block the call. Ignore the error.
 	}
 	return nil
 }
@@ -197,7 +193,7 @@ func (r *dlqHandlerImpl) MergeMessages(
 		return nil, errInvalidCluster
 	}
 
-	tasks, ackLevel, token, err := r.readMessagesWithAckLevel(
+	tasks, token, err := r.readMessagesWithAckLevel(
 		ctx,
 		sourceCluster,
 		lastMessageID,
@@ -205,6 +201,7 @@ func (r *dlqHandlerImpl) MergeMessages(
 		pageToken,
 	)
 
+	lastMessageID = defaultBeginningMessageID
 	for _, task := range tasks {
 		if _, err := r.taskExecutors[sourceCluster].execute(
 			task,
@@ -212,25 +209,21 @@ func (r *dlqHandlerImpl) MergeMessages(
 		); err != nil {
 			return nil, err
 		}
+
+		if lastMessageID < task.GetSourceTaskId() {
+			lastMessageID = task.GetSourceTaskId()
+		}
 	}
 
 	err = r.shard.GetExecutionManager().RangeDeleteReplicationTaskFromDLQ(
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
 			SourceClusterName:    sourceCluster,
-			ExclusiveBeginTaskID: ackLevel,
+			ExclusiveBeginTaskID: defaultBeginningMessageID,
 			InclusiveEndTaskID:   lastMessageID,
 		},
 	)
 	if err != nil {
 		return nil, err
-	}
-
-	if err = r.shard.UpdateReplicatorDLQAckLevel(
-		sourceCluster,
-		lastMessageID,
-	); err != nil {
-		r.logger.Error("Failed to merge history replication message", tag.Error(err))
-		// The update ack level should not block the call. Ignore the error.
 	}
 	return token, nil
 }

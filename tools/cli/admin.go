@@ -779,7 +779,7 @@ func newAdminDLQCommands() []cli.Command {
 					Usage: "Type of DLQ to manage. (Options: domain, history)",
 				},
 				cli.StringFlag{
-					Name:  FlagTargetCluster,
+					Name:  FlagSourceCluster,
 					Usage: "The cluster where the task is generated",
 				},
 				cli.IntFlag{
@@ -813,12 +813,16 @@ func newAdminDLQCommands() []cli.Command {
 					Usage: "Type of DLQ to manage. (Options: domain, history)",
 				},
 				cli.StringFlag{
-					Name:  FlagTargetCluster,
+					Name:  FlagSourceCluster,
 					Usage: "The cluster where the task is generated",
 				},
 				cli.IntFlag{
-					Name:  FlagShardIDWithAlias,
-					Usage: "ShardID",
+					Name:  FlagLowerShardBound,
+					Usage: "lower bound of shard to merge (inclusive)",
+				},
+				cli.IntFlag{
+					Name:  FlagUpperShardBound,
+					Usage: "upper bound of shard to merge (inclusive)",
 				},
 				cli.IntFlag{
 					Name:  FlagLastMessageIDWithAlias,
@@ -839,12 +843,16 @@ func newAdminDLQCommands() []cli.Command {
 					Usage: "Type of DLQ to manage. (Options: domain, history)",
 				},
 				cli.StringFlag{
-					Name:  FlagTargetCluster,
+					Name:  FlagSourceCluster,
 					Usage: "The cluster where the task is generated",
 				},
 				cli.IntFlag{
-					Name:  FlagShardIDWithAlias,
-					Usage: "ShardID",
+					Name:  FlagLowerShardBound,
+					Usage: "lower bound of shard to merge (inclusive)",
+				},
+				cli.IntFlag{
+					Name:  FlagUpperShardBound,
+					Usage: "upper bound of shard to merge (inclusive)",
 				},
 				cli.IntFlag{
 					Name:  FlagLastMessageIDWithAlias,

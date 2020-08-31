@@ -26,7 +26,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -162,7 +161,6 @@ func (s *dlqHandlerSuite) TestPurgeMessages_OK() {
 			InclusiveEndTaskID:   lastMessageID,
 		}).Return(nil).Times(1)
 
-	s.shardManager.On("UpdateShard", mock.Anything).Return(nil)
 	err := s.messageHandler.PurgeMessages(sourceCluster, lastMessageID)
 	s.NoError(err)
 }
@@ -214,8 +212,6 @@ func (s *dlqHandlerSuite) TestMergeMessages_OK() {
 			ExclusiveBeginTaskID: -1,
 			InclusiveEndTaskID:   lastMessageID,
 		}).Return(nil).Times(1)
-
-	s.shardManager.On("UpdateShard", mock.Anything).Return(nil)
 
 	token, err := s.messageHandler.MergeMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)

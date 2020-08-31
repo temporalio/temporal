@@ -24,6 +24,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/urfave/cli"
 
@@ -44,7 +45,7 @@ func AdminGetDLQMessages(c *cli.Context) {
 
 	adminClient := cFactory.ServerAdminClient(c)
 	dlqType := getRequiredOption(c, FlagDLQType)
-	sourceCluster := getRequiredOption(c, FlagTargetCluster)
+	sourceCluster := getRequiredOption(c, FlagSourceCluster)
 	shardID := getRequiredIntOption(c, FlagShardID)
 	serializer := persistence.NewPayloadSerializer()
 	outputFile := getOutputFile(c.String(FlagOutputFilename))
@@ -103,61 +104,70 @@ func AdminGetDLQMessages(c *cli.Context) {
 
 // AdminPurgeDLQMessages deletes messages from DLQ
 func AdminPurgeDLQMessages(c *cli.Context) {
-	ctx, cancel := newContext(c)
-	defer cancel()
-
 	dlqType := getRequiredOption(c, FlagDLQType)
-	sourceCluster := getRequiredOption(c, FlagTargetCluster)
-	shardID := getRequiredIntOption(c, FlagShardID)
-	lastMessageID := getRequiredInt64Option(c, FlagLastMessageID)
+	sourceCluster := getRequiredOption(c, FlagSourceCluster)
+	lowerShardBound := c.Int(FlagLowerShardBound)
+	upperShardBound := c.Int(FlagUpperShardBound)
+	var lastMessageID *int64
+	if c.IsSet(FlagLastMessageID) {
+		lastMessageID = common.Int64Ptr(c.Int64(FlagLastMessageID))
+	}
 
 	adminClient := cFactory.ServerAdminClient(c)
-	if err := adminClient.PurgeDLQMessages(ctx, &replicator.PurgeDLQMessagesRequest{
-		Type:                  toQueueType(dlqType),
-		SourceCluster:         common.StringPtr(sourceCluster),
-		ShardID:               common.Int32Ptr(int32(shardID)),
-		InclusiveEndMessageID: common.Int64Ptr(lastMessageID),
-	}); err != nil {
-		ErrorAndExit("Failed to purge dlq", err)
+	for shardID := lowerShardBound; shardID <= upperShardBound; shardID++ {
+		ctx, cancel := newContext(c)
+		if err := adminClient.PurgeDLQMessages(ctx, &replicator.PurgeDLQMessagesRequest{
+			Type:                  toQueueType(dlqType),
+			SourceCluster:         common.StringPtr(sourceCluster),
+			ShardID:               common.Int32Ptr(int32(shardID)),
+			InclusiveEndMessageID: lastMessageID,
+		}); err != nil {
+			cancel()
+			ErrorAndExit("Failed to purge dlq", err)
+		}
+		cancel()
+		time.Sleep(10 * time.Millisecond)
+		fmt.Printf("Successfully purge DLQ Messages in shard %v.\n", shardID)
 	}
-	fmt.Println("Successfully purge DLQ Messages.")
 }
 
 // AdminMergeDLQMessages merges message from DLQ
 func AdminMergeDLQMessages(c *cli.Context) {
-	ctx, cancel := newContext(c)
-	defer cancel()
-
 	dlqType := getRequiredOption(c, FlagDLQType)
-	sourceCluster := getRequiredOption(c, FlagTargetCluster)
-	shardID := getRequiredIntOption(c, FlagShardID)
-	lastMessageID := getRequiredInt64Option(c, FlagLastMessageID)
+	sourceCluster := getRequiredOption(c, FlagSourceCluster)
+	lowerShardBound := c.Int(FlagLowerShardBound)
+	upperShardBound := c.Int(FlagUpperShardBound)
+	var lastMessageID *int64
+	if c.IsSet(FlagLastMessageID) {
+		lastMessageID = common.Int64Ptr(c.Int64(FlagLastMessageID))
+	}
 
 	adminClient := cFactory.ServerAdminClient(c)
-	request := &replicator.MergeDLQMessagesRequest{
-		Type:                  toQueueType(dlqType),
-		SourceCluster:         common.StringPtr(sourceCluster),
-		ShardID:               common.Int32Ptr(int32(shardID)),
-		InclusiveEndMessageID: common.Int64Ptr(lastMessageID),
-		MaximumPageSize:       common.Int32Ptr(defaultPageSize),
-	}
-
-	var response *replicator.MergeDLQMessagesResponse
-	var err error
-	for {
-		response, err = adminClient.MergeDLQMessages(ctx, request)
-		if err != nil {
-			ErrorAndExit("Failed to merge DLQ message", err)
+	for shardID := lowerShardBound; shardID <= upperShardBound; shardID++ {
+		ctx, cancel := newContext(c)
+		request := &replicator.MergeDLQMessagesRequest{
+			Type:                  toQueueType(dlqType),
+			SourceCluster:         common.StringPtr(sourceCluster),
+			ShardID:               common.Int32Ptr(int32(shardID)),
+			InclusiveEndMessageID: lastMessageID,
+			MaximumPageSize:       common.Int32Ptr(defaultPageSize),
 		}
 
-		if len(response.NextPageToken) == 0 {
-			break
-		}
+		for {
+			response, err := adminClient.MergeDLQMessages(ctx, request)
+			if err != nil {
+				fmt.Printf("Failed to merge DLQ message in shard %v with error: %v.\n", shardID, err)
+			}
 
-		request.NextPageToken = response.NextPageToken
-		fmt.Printf("Successfully merged %v messages. More messages to merge.\n", defaultPageSize)
+			if len(response.NextPageToken) == 0 {
+				break
+			}
+
+			request.NextPageToken = response.NextPageToken
+		}
+		cancel()
+		fmt.Printf("Successfully merged all messages in shard %v.\n", shardID)
 	}
-	fmt.Println("Successfully merged all messages.")
 }
 
 func toQueueType(dlqType string) *replicator.DLQType {
