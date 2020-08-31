@@ -81,6 +81,7 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 	}
 	pendingTaskSplitPolicy := NewPendingTaskSplitPolicy(
 		pendingTaskThreshold,
+		dynamicconfig.GetBoolPropertyFnFilteredByDomain(true),
 		lookAheadFunc,
 		maxNewQueueLevel,
 		s.logger,
@@ -288,6 +289,7 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 
 	stuckTaskSplitPolicy := NewStuckTaskSplitPolicy(
 		attemptThreshold,
+		dynamicconfig.GetBoolPropertyFnFilteredByDomain(true),
 		maxNewQueueLevel,
 		s.logger,
 		s.metricsScope,

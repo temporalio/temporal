@@ -463,9 +463,9 @@ func newTransferQueueProcessorOptions(
 		options.SplitMaxLevel = config.QueueProcessorSplitMaxLevel
 		options.EnableRandomSplitByDomainID = config.QueueProcessorEnableRandomSplitByDomainID
 		options.RandomSplitProbability = config.QueueProcessorRandomSplitProbability
-		options.EnablePendingTaskSplit = config.QueueProcessorEnablePendingTaskSplit
+		options.EnablePendingTaskSplitByDomainID = config.QueueProcessorEnablePendingTaskSplitByDomainID
 		options.PendingTaskSplitThreshold = config.QueueProcessorPendingTaskSplitThreshold
-		options.EnableStuckTaskSplit = config.QueueProcessorEnableStuckTaskSplit
+		options.EnableStuckTaskSplitByDomainID = config.QueueProcessorEnableStuckTaskSplitByDomainID
 		options.StuckTaskSplitThreshold = config.QueueProcessorStuckTaskSplitThreshold
 		options.SplitLookAheadDurationByDomainID = config.QueueProcessorSplitLookAheadDurationByDomainID
 	}

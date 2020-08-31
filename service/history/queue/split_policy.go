@@ -42,6 +42,7 @@ type (
 
 	pendingTaskSplitPolicy struct {
 		pendingTaskThreshold map[int]int // queue level -> threshold
+		enabledByDomainID    dynamicconfig.BoolPropertyFnWithDomainIDFilter
 		maxNewQueueLevel     int
 		lookAheadFunc        lookAheadFunc
 
@@ -50,8 +51,9 @@ type (
 	}
 
 	stuckTaskSplitPolicy struct {
-		attemptThreshold map[int]int // queue level -> threshold
-		maxNewQueueLevel int
+		attemptThreshold  map[int]int // queue level -> threshold
+		enabledByDomainID dynamicconfig.BoolPropertyFnWithDomainIDFilter
+		maxNewQueueLevel  int
 
 		logger       log.Logger
 		metricsScope metrics.Scope
@@ -84,6 +86,7 @@ type (
 // based on the number of pending tasks
 func NewPendingTaskSplitPolicy(
 	pendingTaskThreshold map[int]int,
+	enabledByDomainID dynamicconfig.BoolPropertyFnWithDomainIDFilter,
 	lookAheadFunc lookAheadFunc,
 	maxNewQueueLevel int,
 	logger log.Logger,
@@ -91,6 +94,7 @@ func NewPendingTaskSplitPolicy(
 ) ProcessingQueueSplitPolicy {
 	return &pendingTaskSplitPolicy{
 		pendingTaskThreshold: pendingTaskThreshold,
+		enabledByDomainID:    enabledByDomainID,
 		lookAheadFunc:        lookAheadFunc,
 		maxNewQueueLevel:     maxNewQueueLevel,
 		logger:               logger,
@@ -102,15 +106,17 @@ func NewPendingTaskSplitPolicy(
 // based on the number of task attempts tasks
 func NewStuckTaskSplitPolicy(
 	attemptThreshold map[int]int,
+	enabledByDomainID dynamicconfig.BoolPropertyFnWithDomainIDFilter,
 	maxNewQueueLevel int,
 	logger log.Logger,
 	metricsScope metrics.Scope,
 ) ProcessingQueueSplitPolicy {
 	return &stuckTaskSplitPolicy{
-		attemptThreshold: attemptThreshold,
-		maxNewQueueLevel: maxNewQueueLevel,
-		logger:           logger,
-		metricsScope:     metricsScope,
+		attemptThreshold:  attemptThreshold,
+		enabledByDomainID: enabledByDomainID,
+		maxNewQueueLevel:  maxNewQueueLevel,
+		logger:            logger,
+		metricsScope:      metricsScope,
 	}
 }
 
@@ -185,7 +191,7 @@ func (p *pendingTaskSplitPolicy) Evaluate(
 
 	domainToSplit := make(map[string]struct{})
 	for domainID, pendingTasks := range pendingTasksPerDomain {
-		if pendingTasks > threshold {
+		if pendingTasks > threshold && p.enabledByDomainID(domainID) {
 			domainToSplit[domainID] = struct{}{}
 		}
 	}
@@ -231,7 +237,7 @@ func (p *stuckTaskSplitPolicy) Evaluate(
 	for _, task := range queueImpl.outstandingTasks {
 		domainID := task.GetDomainID()
 		attempt := task.GetAttempt()
-		if attempt > threshold {
+		if attempt > threshold && p.enabledByDomainID(domainID) {
 			domainToSplit[domainID] = struct{}{}
 		}
 	}

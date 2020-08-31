@@ -174,9 +174,9 @@ var keys = map[Key]string{
 	QueueProcessorSplitMaxLevel:                           "history.queueProcessorSplitMaxLevel",
 	QueueProcessorEnableRandomSplitByDomainID:             "history.queueProcessorEnableRandomSplitByDomainID",
 	QueueProcessorRandomSplitProbability:                  "history.queueProcessorRandomSplitProbability",
-	QueueProcessorEnablePendingTaskSplit:                  "history.queueProcessorEnablePendingTaskSplit",
+	QueueProcessorEnablePendingTaskSplitByDomainID:        "history.queueProcessorEnablePendingTaskSplitByDomainID",
 	QueueProcessorPendingTaskSplitThreshold:               "history.queueProcessorPendingTaskSplitThreshold",
-	QueueProcessorEnableStuckTaskSplit:                    "history.queueProcessorEnableStuckTaskSplit",
+	QueueProcessorEnableStuckTaskSplitByDomainID:          "history.queueProcessorEnableStuckTaskSplitByDomainID",
 	QueueProcessorStuckTaskSplitThreshold:                 "history.queueProcessorStuckTaskSplitThreshold",
 	QueueProcessorSplitLookAheadDurationByDomainID:        "history.queueProcessorSplitLookAheadDurationByDomainID",
 	QueueProcessorPollBackoffInterval:                     "history.queueProcessorPollBackoffInterval",
@@ -582,12 +582,12 @@ const (
 	QueueProcessorEnableRandomSplitByDomainID
 	// QueueProcessorRandomSplitProbability is the probability for a domain to be split to a new processing queue
 	QueueProcessorRandomSplitProbability
-	// QueueProcessorEnablePendingTaskSplit indicates whether pending task split policy should be enabled
-	QueueProcessorEnablePendingTaskSplit
+	// QueueProcessorEnablePendingTaskSplitByDomainID indicates whether pending task split policy should be enabled
+	QueueProcessorEnablePendingTaskSplitByDomainID
 	// QueueProcessorPendingTaskSplitThreshold is the threshold for the number of pending tasks per domain
 	QueueProcessorPendingTaskSplitThreshold
-	// QueueProcessorEnableStuckTaskSplit indicates whether stuck task split policy should be enabled
-	QueueProcessorEnableStuckTaskSplit
+	// QueueProcessorEnableStuckTaskSplitByDomainID indicates whether stuck task split policy should be enabled
+	QueueProcessorEnableStuckTaskSplitByDomainID
 	// QueueProcessorStuckTaskSplitThreshold is the threshold for the number of attempts of a task
 	QueueProcessorStuckTaskSplitThreshold
 	// QueueProcessorSplitLookAheadDurationByDomainID is the look ahead duration when spliting a domain to a new processing queue

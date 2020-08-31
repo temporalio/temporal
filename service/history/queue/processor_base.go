@@ -61,9 +61,9 @@ type (
 		SplitMaxLevel                        dynamicconfig.IntPropertyFn
 		EnableRandomSplitByDomainID          dynamicconfig.BoolPropertyFnWithDomainIDFilter
 		RandomSplitProbability               dynamicconfig.FloatPropertyFn
-		EnablePendingTaskSplit               dynamicconfig.BoolPropertyFn
+		EnablePendingTaskSplitByDomainID     dynamicconfig.BoolPropertyFnWithDomainIDFilter
 		PendingTaskSplitThreshold            dynamicconfig.MapPropertyFn
-		EnableStuckTaskSplit                 dynamicconfig.BoolPropertyFn
+		EnableStuckTaskSplitByDomainID       dynamicconfig.BoolPropertyFnWithDomainIDFilter
 		StuckTaskSplitThreshold              dynamicconfig.MapPropertyFn
 		SplitLookAheadDurationByDomainID     dynamicconfig.DurationPropertyFnWithDomainIDFilter
 		PollBackoffInterval                  dynamicconfig.DurationPropertyFn
@@ -219,22 +219,31 @@ func (p *processorBase) initializeSplitPolicy(
 	var policies []ProcessingQueueSplitPolicy
 	maxNewQueueLevel := p.options.SplitMaxLevel()
 
-	if p.options.EnablePendingTaskSplit() {
-		thresholds, err := common.ConvertDynamicConfigMapPropertyToIntMap(p.options.PendingTaskSplitThreshold())
-		if err != nil {
-			p.logger.Error("Failed to convert pending task threshold", tag.Error(err))
-		} else {
-			policies = append(policies, NewPendingTaskSplitPolicy(thresholds, lookAheadFunc, maxNewQueueLevel, p.logger, p.metricsScope))
-		}
+	pendingTaskThresholds, err := common.ConvertDynamicConfigMapPropertyToIntMap(p.options.PendingTaskSplitThreshold())
+	if err != nil {
+		p.logger.Error("Failed to convert pending task threshold", tag.Error(err))
+	} else {
+		policies = append(policies, NewPendingTaskSplitPolicy(
+			pendingTaskThresholds,
+			p.options.EnablePendingTaskSplitByDomainID,
+			lookAheadFunc,
+			maxNewQueueLevel,
+			p.logger,
+			p.metricsScope,
+		))
 	}
 
-	if p.options.EnableStuckTaskSplit() {
-		thresholds, err := common.ConvertDynamicConfigMapPropertyToIntMap(p.options.StuckTaskSplitThreshold())
-		if err != nil {
-			p.logger.Error("Failed to convert stuck task threshold", tag.Error(err))
-		} else {
-			policies = append(policies, NewStuckTaskSplitPolicy(thresholds, maxNewQueueLevel, p.logger, p.metricsScope))
-		}
+	taskAttemptThresholds, err := common.ConvertDynamicConfigMapPropertyToIntMap(p.options.StuckTaskSplitThreshold())
+	if err != nil {
+		p.logger.Error("Failed to convert stuck task threshold", tag.Error(err))
+	} else {
+		policies = append(policies, NewStuckTaskSplitPolicy(
+			taskAttemptThresholds,
+			p.options.EnableStuckTaskSplitByDomainID,
+			maxNewQueueLevel,
+			p.logger,
+			p.metricsScope,
+		))
 	}
 
 	randomSplitProbability := p.options.RandomSplitProbability()
