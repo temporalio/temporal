@@ -32,7 +32,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/zap"
 
@@ -531,29 +530,6 @@ func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replication
 	replicationTask := &replicationspb.ReplicationTask{
 		TaskType:   enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
-	}
-	return replicationTask
-}
-
-func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replicationspb.ReplicationTask {
-	replicationAttr := &replicationspb.HistoryTaskAttributes{
-		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		NamespaceId:    "some random namespace ID",
-		WorkflowId:     "some random workflow ID",
-		RunId:          "some random run ID",
-		Version:        1394,
-		FirstEventId:   728,
-		NextEventId:    1015,
-		History: &historypb.History{
-			Events: []*historypb.HistoryEvent{{EventId: 1}},
-		},
-		NewRunHistory: &historypb.History{
-			Events: []*historypb.HistoryEvent{{EventId: 2}},
-		},
-	}
-	replicationTask := &replicationspb.ReplicationTask{
-		TaskType:   enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
 	}
 	return replicationTask
 }

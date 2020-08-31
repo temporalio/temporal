@@ -30,7 +30,6 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -253,70 +252,6 @@ func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(
 		}
 	}
 	return nil
-}
-
-// GenerateReplicationTask generate replication task
-func GenerateReplicationTask(
-	targetClusters []string,
-	task *persistenceblobs.ReplicationTaskInfo,
-	historyV2Mgr persistence.HistoryManager,
-	metricsClient metrics.Client,
-	history *historypb.History,
-	shardID *int,
-) (*replicationspb.ReplicationTask, string, error) {
-	var err error
-	if history == nil {
-		history, _, err = GetAllHistory(historyV2Mgr, metricsClient, false,
-			task.GetFirstEventId(), task.GetNextEventId(), task.BranchToken, shardID)
-		if err != nil {
-			return nil, "", err
-		}
-		for _, event := range history.Events {
-			if task.Version != event.GetVersion() {
-				return nil, "", nil
-			}
-		}
-	}
-
-	var newRunID string
-	var newRunHistory *historypb.History
-	events := history.Events
-	if len(events) > 0 {
-		lastEvent := events[len(events)-1]
-		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
-			// Check if this is replication task for ContinueAsNew event, then retrieve the history for new execution
-			newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
-			newRunHistory, _, err = GetAllHistory(
-				historyV2Mgr,
-				metricsClient,
-				false,
-				common.FirstEventID,
-				common.FirstEventID+1, // [common.FirstEventID to common.FirstEventID+1) will get the first batch
-				task.NewRunBranchToken,
-				shardID)
-			if err != nil {
-				return nil, "", err
-			}
-		}
-	}
-
-	ret := &replicationspb.ReplicationTask{
-		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-				TargetClusters: targetClusters,
-				NamespaceId:    task.GetNamespaceId(),
-				WorkflowId:     task.GetWorkflowId(),
-				RunId:          task.GetRunId(),
-				FirstEventId:   task.GetFirstEventId(),
-				NextEventId:    task.GetNextEventId(),
-				Version:        task.Version,
-				History:        history,
-				NewRunHistory:  newRunHistory,
-			},
-		},
-	}
-	return ret, newRunID, nil
 }
 
 func (p *replicatorQueueProcessorImpl) readTasks(readLevel int64) ([]queueTaskInfo, bool, error) {

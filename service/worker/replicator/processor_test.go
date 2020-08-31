@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	historypb "go.temporal.io/api/history/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -310,56 +309,6 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Fail
 	replicationTask := &replicationspb.ReplicationTask{
 		TaskType:   enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
-	}
-	replicationTaskBinary, err := replicationTask.Marshal()
-	s.Nil(err)
-	s.mockMsg.On("Value").Return(replicationTaskBinary)
-	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(errors.New("some random error")).Times(1)
-	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(nil).Times(1)
-
-	s.processor.decodeMsgAndSubmit(s.mockMsg)
-}
-
-func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_Success() {
-	replicationAttr := &replicationspb.HistoryTaskAttributes{
-		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		NamespaceId:    "some random namespace ID",
-		WorkflowId:     "some random workflow ID",
-		RunId:          "some random run ID",
-		Version:        1394,
-		FirstEventId:   728,
-		NextEventId:    1015,
-		NewRunHistory:  nil,
-	}
-	replicationTask := &replicationspb.ReplicationTask{
-		TaskType:   enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
-	}
-	replicationTaskBinary, err := replicationTask.Marshal()
-	s.Nil(err)
-	s.mockMsg.On("Value").Return(replicationTaskBinary)
-	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(nil).Times(1)
-
-	s.processor.decodeMsgAndSubmit(s.mockMsg)
-}
-
-func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_FailedThenSuccess() {
-	replicationAttr := &replicationspb.HistoryTaskAttributes{
-		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		NamespaceId:    "some random namespace ID",
-		WorkflowId:     "some random workflow ID",
-		RunId:          "some random run ID",
-		Version:        1394,
-		FirstEventId:   728,
-		NextEventId:    1015,
-		History: &historypb.History{
-			Events: []*historypb.HistoryEvent{{EventId: 1}},
-		},
-		NewRunHistory: nil,
-	}
-	replicationTask := &replicationspb.ReplicationTask{
-		TaskType:   enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
