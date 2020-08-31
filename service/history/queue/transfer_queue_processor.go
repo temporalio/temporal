@@ -50,7 +50,7 @@ import (
 
 const (
 	// TODO: move this constant to xdc package
-	historyRereplicationTimeout = 30 * time.Second
+	historyReplicationTimeout = 30 * time.Second
 
 	defaultProcessingQueueLevel = 0
 )
@@ -100,6 +100,7 @@ func NewTransferQueueProcessor(
 ) Processor {
 	logger := shard.GetLogger().WithTags(tag.ComponentTransferQueue)
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
+	config := shard.GetConfig()
 	taskAllocator := NewTaskAllocator(shard)
 
 	activeTaskExecutor := task.NewTransferActiveTaskExecutor(
@@ -110,7 +111,7 @@ func NewTransferQueueProcessor(
 		workflowResetter,
 		logger,
 		shard.GetMetricsClient(),
-		shard.GetConfig(),
+		config,
 	)
 
 	activeQueueProcessor := newTransferQueueActiveProcessor(
@@ -138,8 +139,8 @@ func NewTransferQueueProcessor(
 				return historyEngine.ReplicateRawEvents(ctx, request)
 			},
 			shard.GetService().GetPayloadSerializer(),
-			historyRereplicationTimeout,
-			nil,
+			historyReplicationTimeout,
+			config.StandbyTaskReReplicationContextTimeout,
 			rereplicatorLogger,
 		)
 		nDCHistoryResender := xdc.NewNDCHistoryResender(
@@ -149,7 +150,7 @@ func NewTransferQueueProcessor(
 				return historyEngine.ReplicateEventsV2(ctx, request)
 			},
 			shard.GetService().GetPayloadSerializer(),
-			nil,
+			config.StandbyTaskReReplicationContextTimeout,
 			executionCheck,
 			resenderLogger,
 		)
@@ -162,7 +163,7 @@ func NewTransferQueueProcessor(
 			logger,
 			shard.GetMetricsClient(),
 			clusterName,
-			shard.GetConfig(),
+			config,
 		)
 		standbyQueueProcessors[clusterName] = newTransferQueueStandbyProcessor(
 			clusterName,
@@ -180,7 +181,7 @@ func NewTransferQueueProcessor(
 		historyEngine: historyEngine,
 		taskProcessor: taskProcessor,
 
-		config:                shard.GetConfig(),
+		config:                config,
 		isGlobalDomainEnabled: shard.GetClusterMetadata().IsGlobalDomainEnabled(),
 		currentClusterName:    currentClusterName,
 

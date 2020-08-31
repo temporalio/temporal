@@ -76,6 +76,7 @@ func newTimerQueueProcessor(
 
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ComponentTimerQueue)
+	config := shard.GetConfig()
 	taskAllocator := queue.NewTaskAllocator(shard)
 
 	standbyTimerProcessors := make(map[string]*timerQueueStandbyProcessorImpl)
@@ -93,8 +94,8 @@ func newTimerQueueProcessor(
 					return historyService.ReplicateRawEvents(ctx, request)
 				},
 				shard.GetService().GetPayloadSerializer(),
-				historyRereplicationTimeout,
-				nil,
+				historyReplicationTimeout,
+				config.StandbyTaskReReplicationContextTimeout,
 				logger,
 			)
 			nDCHistoryResender := xdc.NewNDCHistoryResender(
@@ -104,7 +105,7 @@ func newTimerQueueProcessor(
 					return historyService.ReplicateEventsV2(ctx, request)
 				},
 				shard.GetService().GetPayloadSerializer(),
-				nil,
+				config.StandbyTaskReReplicationContextTimeout,
 				openExecutionCheck,
 				logger,
 			)
@@ -126,7 +127,7 @@ func newTimerQueueProcessor(
 		currentClusterName:    currentClusterName,
 		shard:                 shard,
 		taskAllocator:         taskAllocator,
-		config:                shard.GetConfig(),
+		config:                config,
 		metricsClient:         historyService.metricsClient,
 		historyService:        historyService,
 		ackLevel:              timerKey{VisibilityTimestamp: shard.GetTimerAckLevel()},

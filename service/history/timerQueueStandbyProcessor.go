@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	historyRereplicationTimeout = 30 * time.Second
+	historyReplicationTimeout = 30 * time.Second
 )
 
 type (

@@ -169,6 +169,7 @@ var keys = map[Key]string{
 	ActiveTaskRedispatchInterval:                          "history.activeTaskRedispatchInterval",
 	StandbyTaskRedispatchInterval:                         "history.standbyTaskRedispatchInterval",
 	TaskRedispatchIntervalJitterCoefficient:               "history.taskRedispatchIntervalJitterCoefficient",
+	StandbyTaskReReplicationContextTimeout:                "history.standbyTaskReReplicationContextTimeout",
 	QueueProcessorEnableSplit:                             "history.queueProcessorEnableSplit",
 	QueueProcessorSplitMaxLevel:                           "history.queueProcessorSplitMaxLevel",
 	QueueProcessorEnableRandomSplitByDomainID:             "history.queueProcessorEnableRandomSplitByDomainID",
@@ -567,10 +568,12 @@ const (
 	TaskSchedulerRoundRobinWeights
 	// ActiveTaskRedispatchInterval is the active task redispatch interval
 	ActiveTaskRedispatchInterval
-	// StandbyTaskRedispatchInterval is the active task redispatch interval
+	// StandbyTaskRedispatchInterval is the standby task redispatch interval
 	StandbyTaskRedispatchInterval
 	// TaskRedispatchIntervalJitterCoefficient is the task redispatch interval jitter coefficient
 	TaskRedispatchIntervalJitterCoefficient
+	// StandbyTaskReReplicationContextTimeout is the context timeout for standby task re-replication
+	StandbyTaskReReplicationContextTimeout
 	// QueueProcessorEnableSplit indicates whether processing queue split policy should be enabled
 	QueueProcessorEnableSplit
 	// QueueProcessorSplitMaxLevel is the max processing queue level

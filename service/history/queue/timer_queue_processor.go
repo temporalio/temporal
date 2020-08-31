@@ -82,6 +82,7 @@ func NewTimerQueueProcessor(
 ) Processor {
 	logger := shard.GetLogger().WithTags(tag.ComponentTimerQueue)
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
+	config := shard.GetConfig()
 	taskAllocator := NewTaskAllocator(shard)
 
 	activeTaskExecutor := task.NewTimerActiveTaskExecutor(
@@ -90,7 +91,7 @@ func NewTimerQueueProcessor(
 		executionCache,
 		logger,
 		shard.GetMetricsClient(),
-		shard.GetConfig(),
+		config,
 	)
 
 	activeQueueProcessor := newTimerQueueActiveProcessor(
@@ -121,8 +122,8 @@ func NewTimerQueueProcessor(
 				return historyEngine.ReplicateRawEvents(ctx, request)
 			},
 			shard.GetService().GetPayloadSerializer(),
-			historyRereplicationTimeout,
-			nil,
+			historyReplicationTimeout,
+			config.StandbyTaskReReplicationContextTimeout,
 			rereplicatorLogger,
 		)
 		nDCHistoryResender := xdc.NewNDCHistoryResender(
@@ -132,7 +133,7 @@ func NewTimerQueueProcessor(
 				return historyEngine.ReplicateEventsV2(ctx, request)
 			},
 			shard.GetService().GetPayloadSerializer(),
-			nil,
+			config.StandbyTaskReReplicationContextTimeout,
 			executionCheck,
 			resenderLogger,
 		)
@@ -145,7 +146,7 @@ func NewTimerQueueProcessor(
 			logger,
 			shard.GetMetricsClient(),
 			clusterName,
-			shard.GetConfig(),
+			config,
 		)
 		standbyQueueProcessors[clusterName], standbyQueueTimerGates[clusterName] = newTimerQueueStandbyProcessor(
 			clusterName,
@@ -163,7 +164,7 @@ func NewTimerQueueProcessor(
 		historyEngine: historyEngine,
 		taskProcessor: taskProcessor,
 
-		config:                shard.GetConfig(),
+		config:                config,
 		isGlobalDomainEnabled: shard.GetClusterMetadata().IsGlobalDomainEnabled(),
 		currentClusterName:    currentClusterName,
 
