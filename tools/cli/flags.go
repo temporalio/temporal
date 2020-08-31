@@ -46,6 +46,7 @@ const (
 	FlagNumberOfShards                    = "number_of_shards"
 	FlagRunIDWithAlias                    = FlagRunID + ", rid, r"
 	FlagTargetCluster                     = "target_cluster"
+	FlagSourceCluster                     = "source_cluster"
 	FlagMinEventID                        = "min_event_id"
 	FlagMaxEventID                        = "max_event_id"
 	FlagStartEventVersion                 = "start_event_version"

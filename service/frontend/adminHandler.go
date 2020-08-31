@@ -54,6 +54,10 @@ import (
 
 var _ adminserviceserver.Interface = (*AdminHandler)(nil)
 
+const (
+	endMessageID int64 = 1<<63 - 1
+)
+
 var (
 	errMaxMessageIDNotSet = &gen.BadRequestError{Message: "Max messageID is not set."}
 )
@@ -897,7 +901,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 	}
 
 	if !request.IsSetInclusiveEndMessageID() {
-		return adh.error(errMaxMessageIDNotSet, scope)
+		request.InclusiveEndMessageID = common.Int64Ptr(endMessageID)
 	}
 
 	var op func() error
@@ -945,7 +949,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	}
 
 	if !request.IsSetInclusiveEndMessageID() {
-		return nil, adh.error(errMaxMessageIDNotSet, scope)
+		request.InclusiveEndMessageID = common.Int64Ptr(endMessageID)
 	}
 
 	var token []byte
