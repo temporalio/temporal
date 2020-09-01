@@ -609,7 +609,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	response.ScheduledTime = timestamp.UnixOrEmptyTimePtr(workflowTask.ScheduledTimestamp)
 	response.StartedTime = workflowTask.StartedTimestamp
 
-
 	if workflowTask.Attempt > 1 {
 		// This workflowTask is retried from mutable state
 		// Also return schedule and started which are not written to history yet

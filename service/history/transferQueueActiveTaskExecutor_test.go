@@ -1941,10 +1941,10 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	executionInfo := mutableState.GetExecutionInfo()
-	timeout := executionInfo.WorkflowRunTimeout
+	timeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
 	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
-		timeout = executionInfo.StickyScheduleToStartTimeout
+		timeout = timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout)
 	}
 
 	return &matchingservice.AddWorkflowTaskRequest{
@@ -1952,7 +1952,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		Execution:              &execution,
 		TaskQueue:              taskQueue,
 		ScheduleId:             task.GetScheduleId(),
-		ScheduleToStartTimeout: timeout,
+		ScheduleToStartTimeout: &timeout,
 	}
 }
 
@@ -1977,7 +1977,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStar
 		WorkflowTypeName:   executionInfo.WorkflowTypeName,
 		StartTimestamp:     timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
 		ExecutionTimestamp: executionTimestamp.UnixNano(),
-		RunTimeout:         int64(executionInfo.WorkflowRunTimeout.Round(time.Second).Seconds()),
+		RunTimeout:         int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 		TaskID:             task.GetTaskId(),
 		TaskQueue:          task.TaskQueue,
 	}
@@ -2107,7 +2107,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttribu
 		Execution:        *execution,
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTimestamp:   timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
-		WorkflowTimeout:  int64(executionInfo.WorkflowRunTimeout.Round(time.Second).Seconds()),
+		WorkflowTimeout:  int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 		TaskID:           task.GetTaskId(),
 		TaskQueue:        task.TaskQueue,
 	}

@@ -194,7 +194,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	runTimeoutSeconds := int64(executionInfo.WorkflowRunTimeout.Round(time.Second).Seconds())
+	runTimeoutSeconds := int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds())
 	taskTimeoutSeconds := common.MinInt64(runTimeoutSeconds, common.MaxTaskTimeoutSeconds)
 
 	// NOTE: previously this section check whether mutable state has enabled
@@ -210,13 +210,13 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// this workflowTask is an sticky workflowTask
 		// there shall already be an timer set
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
-		taskTimeoutSeconds = int64(executionInfo.StickyScheduleToStartTimeout.Seconds())
+		taskTimeoutSeconds = int64(timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout).Seconds())
 	}
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushWorkflowTask(task, taskQueue, timestamp.DurationPtr(time.Second*time.Duration(taskTimeoutSeconds)))
+	return t.pushWorkflowTask(task, taskQueue, timestamp.DurationFromSeconds(taskTimeoutSeconds))
 }
 
 func (t *transferQueueActiveTaskExecutor) processCloseExecution(
