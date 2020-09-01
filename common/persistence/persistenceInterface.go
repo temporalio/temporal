@@ -33,7 +33,6 @@ import (
 
 	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -663,8 +662,8 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *WorkflowExecutionInfo, 
 		ExecutionStats: executionInfo.ExecutionStats,
 	}
 
-	if !executionInfo.WorkflowExpirationTime.IsZero() {
-		info.RetryExpirationTime = timestamp.TimestampFromTimePtr(&executionInfo.WorkflowExpirationTime).ToTime()
+	if !timestamp.TimeValue(executionInfo.WorkflowExpirationTime).IsZero() {
+		info.RetryExpirationTime = timestamp.TimestampFromTimePtr(executionInfo.WorkflowExpirationTime).ToTime()
 	}
 
 	info.StartVersion = startVersion
@@ -721,7 +720,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		SignalCount:                            info.GetSignalCount(),
 		ExecutionStats:                         info.GetExecutionStats(),
 		CronSchedule:                           info.GetCronSchedule(),
-		CompletionEventBatchID:                 common.EmptyEventID,
+		CompletionEventBatchID:                 info.GetCompletionEventBatchId(),
 		HasRetryPolicy:                         info.GetHasRetryPolicy(),
 		Attempt:                                info.GetRetryAttempt(),
 		InitialInterval:                        info.GetRetryInitialInterval(),
@@ -746,7 +745,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 	}
 
 	if info.GetRetryExpirationTime() != nil {
-		executionInfo.WorkflowExpirationTime = *info.GetRetryExpirationTime()
+		executionInfo.WorkflowExpirationTime = info.GetRetryExpirationTime()
 	}
 
 	if info.ParentNamespaceId != "" {
@@ -764,6 +763,5 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		executionInfo.CancelRequestID = info.GetCancelRequestId()
 	}
 
-	executionInfo.CompletionEventBatchID = info.CompletionEventBatchId
 	return executionInfo
 }

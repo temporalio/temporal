@@ -984,7 +984,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				InitialInterval:            timestamp.DurationFromSeconds(int64(rand.Int31())),
 				BackoffCoefficient:         7.78,
 				MaximumInterval:            timestamp.DurationFromSeconds(int64(rand.Int31())),
-				WorkflowExpirationTime:     time.Now().UTC(),
+				WorkflowExpirationTime:     timestamp.TimeNowPtrUtc(),
 				MaximumAttempts:            rand.Int31(),
 				NonRetryableErrorTypes:     []string{"badRequestError", "accessDeniedError"},
 				CronSchedule:               "* * * * *",
@@ -1041,7 +1041,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.BackoffCoefficient, info.BackoffCoefficient)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.MaximumAttempts, info.MaximumAttempts)
 	s.EqualValues(createReq.NewWorkflowSnapshot.ExecutionInfo.MaximumInterval, info.MaximumInterval)
-	s.EqualTimes(createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime, info.WorkflowExpirationTime)
+	s.EqualTimes(*createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime, *info.WorkflowExpirationTime)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.CronSchedule, info.CronSchedule)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.NonRetryableErrorTypes, info.NonRetryableErrorTypes)
 	s.Equal(testResetPoints.String(), info.AutoResetPoints.String())
@@ -1125,7 +1125,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.BackoffCoefficient = 4.45
 	updatedInfo.MaximumInterval = timestamp.DurationFromSeconds(math.MaxInt32)
 	updatedInfo.MaximumAttempts = math.MaxInt32
-	updatedInfo.WorkflowExpirationTime = time.Now().UTC()
+	updatedInfo.WorkflowExpirationTime = timestamp.TimeNowPtrUtc()
 	updatedInfo.NonRetryableErrorTypes = []string{"accessDenied", "badRequest"}
 	searchAttrKey := "env"
 	searchAttrVal := payload.EncodeBytes([]byte("test"))
@@ -1175,7 +1175,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.BackoffCoefficient, info1.BackoffCoefficient)
 	s.Equal(updatedInfo.MaximumInterval, info1.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info1.MaximumAttempts)
-	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info1.WorkflowExpirationTime)
+	s.EqualTimes(*updatedInfo.WorkflowExpirationTime, *info1.WorkflowExpirationTime)
 	s.Equal(updatedInfo.NonRetryableErrorTypes, info1.NonRetryableErrorTypes)
 	searchAttrVal1, ok := info1.SearchAttributes[searchAttrKey]
 	s.True(ok)
@@ -1224,7 +1224,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.BackoffCoefficient, info2.BackoffCoefficient)
 	s.Equal(updatedInfo.MaximumInterval, info2.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info2.MaximumAttempts)
-	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info2.WorkflowExpirationTime)
+	s.EqualTimes(*updatedInfo.WorkflowExpirationTime, *info2.WorkflowExpirationTime)
 	s.Equal(updatedInfo.NonRetryableErrorTypes, info2.NonRetryableErrorTypes)
 	searchAttrVal2, ok := info2.SearchAttributes[searchAttrKey]
 	s.True(ok)
@@ -1270,7 +1270,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.BackoffCoefficient, info3.BackoffCoefficient)
 	s.Equal(updatedInfo.MaximumInterval, info3.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info3.MaximumAttempts)
-	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info3.WorkflowExpirationTime)
+	s.EqualTimes(*updatedInfo.WorkflowExpirationTime, *info3.WorkflowExpirationTime)
 	s.Equal(updatedInfo.NonRetryableErrorTypes, info3.NonRetryableErrorTypes)
 	searchAttrVal3, ok := info3.SearchAttributes[searchAttrKey]
 	s.True(ok)
@@ -1316,7 +1316,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.BackoffCoefficient, info4.BackoffCoefficient)
 	s.Equal(updatedInfo.MaximumInterval, info4.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info4.MaximumAttempts)
-	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info4.WorkflowExpirationTime)
+	s.EqualTimes(*updatedInfo.WorkflowExpirationTime, *info4.WorkflowExpirationTime)
 	s.Equal(updatedInfo.NonRetryableErrorTypes, info4.NonRetryableErrorTypes)
 	searchAttrVal4, ok := info4.SearchAttributes[searchAttrKey]
 	s.True(ok)

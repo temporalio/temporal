@@ -247,7 +247,7 @@ type (
 		InitialInterval        *time.Duration
 		BackoffCoefficient     float64
 		MaximumInterval        *time.Duration
-		WorkflowExpirationTime time.Time
+		WorkflowExpirationTime *time.Time
 		MaximumAttempts        int32
 		NonRetryableErrorTypes []string
 		BranchToken            []byte
