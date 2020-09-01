@@ -30,10 +30,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/workflow/v1"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
@@ -206,71 +203,9 @@ type (
 		NewWorkflowSnapshot InternalWorkflowSnapshot
 	}
 
-	// InternalWorkflowExecutionInfo describes a workflow execution for Persistence Interface
-	InternalWorkflowExecutionInfo struct {
-		NamespaceID                            string
-		WorkflowID                             string
-		RunID                                  string
-		FirstExecutionRunID                    string
-		ParentNamespaceID                      string
-		ParentWorkflowID                       string
-		ParentRunID                            string
-		InitiatedID                            int64
-		CompletionEventBatchID                 int64
-		CompletionEvent                        *historypb.HistoryEvent
-		TaskQueue                              string
-		WorkflowTypeName                       string
-		WorkflowRunTimeout                     int64
-		WorkflowExecutionTimeout               int64
-		DefaultWorkflowTaskTimeout             int64
-		State                                  enumsspb.WorkflowExecutionState
-		Status                                 enumspb.WorkflowExecutionStatus
-		LastFirstEventID                       int64
-		LastEventTaskID                        int64
-		NextEventID                            int64
-		LastProcessedEvent                     int64
-		StartTimestamp                         time.Time
-		LastUpdatedTimestamp                   time.Time
-		CreateRequestID                        string
-		SignalCount                            int64
-		WorkflowTaskVersion                    int64
-		WorkflowTaskScheduleID                 int64
-		WorkflowTaskStartedID                  int64
-		WorkflowTaskRequestID                  string
-		WorkflowTaskTimeout                    int64
-		WorkflowTaskAttempt                    int32
-		WorkflowTaskStartedTimestamp           int64
-		WorkflowTaskScheduledTimestamp         int64
-		WorkflowTaskOriginalScheduledTimestamp int64
-		CancelRequested                        bool
-		CancelRequestID                        string
-		StickyTaskQueue                        string
-		StickyScheduleToStartTimeout           int64
-		ClientLibraryVersion                   string
-		ClientFeatureVersion                   string
-		ClientImpl                             string
-		AutoResetPoints                        *workflow.ResetPoints
-		// for retry
-		Attempt                int32
-		HasRetryPolicy         bool
-		InitialInterval        int64
-		BackoffCoefficient     float64
-		MaximumInterval        int64
-		ExpirationTime         time.Time
-		MaximumAttempts        int32
-		NonRetryableErrorTypes []string
-		BranchToken            []byte
-		CronSchedule           string
-		Memo                   map[string]*commonpb.Payload
-		SearchAttributes       map[string]*commonpb.Payload
-
-		// attributes which are not related to mutable state at all
-		ExecutionStats *persistenceblobs.ExecutionStats
-	}
-
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
 	InternalWorkflowMutableState struct {
-		ExecutionInfo    *InternalWorkflowExecutionInfo
+		ExecutionInfo    *WorkflowExecutionInfo
 		VersionHistories *history.VersionHistories
 		ActivityInfos    map[int64]*persistenceblobs.ActivityInfo
 
@@ -336,7 +271,7 @@ type (
 
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
 	InternalWorkflowMutation struct {
-		ExecutionInfo    *InternalWorkflowExecutionInfo
+		ExecutionInfo    *WorkflowExecutionInfo
 		VersionHistories *history.VersionHistories
 		StartVersion     int64
 		LastWriteVersion int64
@@ -367,7 +302,7 @@ type (
 
 	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
 	InternalWorkflowSnapshot struct {
-		ExecutionInfo    *InternalWorkflowExecutionInfo
+		ExecutionInfo    *WorkflowExecutionInfo
 		VersionHistories *history.VersionHistories
 		StartVersion     int64
 		LastWriteVersion int64
@@ -425,7 +360,7 @@ type (
 
 	// InternalListConcreteExecutionsResponse is the response to ListConcreteExecutions for Persistence Interface
 	InternalListConcreteExecutionsResponse struct {
-		ExecutionInfos []*InternalWorkflowExecutionInfo
+		ExecutionInfos []*WorkflowExecutionInfo
 		NextPageToken  []byte
 	}
 
@@ -671,7 +606,7 @@ func truncateDurationToSecondsInt64(d *time.Duration) int64 {
 	return int64(d.Truncate(time.Second).Seconds())
 }
 
-func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecutionInfo, startVersion int64, versionHistories *history.VersionHistories) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
+func InternalWorkflowExecutionInfoToProto(executionInfo *WorkflowExecutionInfo, startVersion int64, versionHistories *history.VersionHistories) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
 	state := &persistenceblobs.WorkflowExecutionState{
 		CreateRequestId: executionInfo.CreateRequestID,
 		State:           executionInfo.State,
@@ -728,8 +663,8 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		ExecutionStats: 				   executionInfo.ExecutionStats,
 	}
 
-	if !executionInfo.ExpirationTime.IsZero() {
-		info.RetryExpirationTime = timestamp.TimestampFromTimePtr(&executionInfo.ExpirationTime).ToTime()
+	if !executionInfo.WorkflowExpirationTime.IsZero() {
+		info.RetryExpirationTime = timestamp.TimestampFromTimePtr(&executionInfo.WorkflowExpirationTime).ToTime()
 	}
 
 	info.StartVersion = startVersion
@@ -750,8 +685,8 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 	return info, state, nil
 }
 
-func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.WorkflowExecutionInfo, state *persistenceblobs.WorkflowExecutionState, nextEventID int64) *InternalWorkflowExecutionInfo {
-	executionInfo := &InternalWorkflowExecutionInfo{
+func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.WorkflowExecutionInfo, state *persistenceblobs.WorkflowExecutionState, nextEventID int64) *WorkflowExecutionInfo {
+	executionInfo := &WorkflowExecutionInfo{
 		NamespaceID:                            info.NamespaceId,
 		WorkflowID:                             info.WorkflowId,
 		RunID:                                  state.RunId,
@@ -811,7 +746,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 	}
 
 	if info.GetRetryExpirationTime() != nil {
-		executionInfo.ExpirationTime = *info.GetRetryExpirationTime()
+		executionInfo.WorkflowExpirationTime = *info.GetRetryExpirationTime()
 	}
 
 	if info.ParentNamespaceId != "" {

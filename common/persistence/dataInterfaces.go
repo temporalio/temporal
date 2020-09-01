@@ -252,7 +252,8 @@ type (
 		NonRetryableErrorTypes []string
 		BranchToken            []byte
 		// Cron
-		CronSchedule string
+		CronSchedule   string
+		ExecutionStats *persistenceblobs.ExecutionStats
 	}
 
 	// ReplicationTaskInfoWrapper describes a replication task.

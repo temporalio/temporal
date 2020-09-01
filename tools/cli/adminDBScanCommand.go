@@ -399,7 +399,7 @@ func scanShard(
 }
 
 func verifyHistoryExists(
-	execution *persistence.InternalWorkflowExecutionInfo,
+	execution *persistence.WorkflowExecutionInfo,
 	branchDecoder *codec.JSONPBEncoder,
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
@@ -495,7 +495,7 @@ func verifyHistoryExists(
 }
 
 func verifyFirstHistoryEvent(
-	execution *persistence.InternalWorkflowExecutionInfo,
+	execution *persistence.WorkflowExecutionInfo,
 	branch *persistenceblobs.HistoryBranch,
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
@@ -557,7 +557,7 @@ func verifyFirstHistoryEvent(
 }
 
 func verifyCurrentExecution(
-	execution *persistence.InternalWorkflowExecutionInfo,
+	execution *persistence.WorkflowExecutionInfo,
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
 	shardID int,
@@ -640,7 +640,7 @@ func verifyCurrentExecution(
 }
 
 func concreteExecutionStillExists(
-	execution *persistence.InternalWorkflowExecutionInfo,
+	execution *persistence.WorkflowExecutionInfo,
 	shardID int,
 	execStore persistence.ExecutionStore,
 	limiter *quotas.DynamicRateLimiter,
@@ -675,7 +675,7 @@ func concreteExecutionStillExists(
 }
 
 func concreteExecutionStillOpen(
-	execution *persistence.InternalWorkflowExecutionInfo,
+	execution *persistence.WorkflowExecutionInfo,
 	shardID int,
 	execStore persistence.ExecutionStore,
 	limiter *quotas.DynamicRateLimiter,
@@ -846,6 +846,6 @@ func preconditionForDBCall(totalDBRequests *int64, limiter *quotas.DynamicRateLi
 	limiter.Wait(context.Background())
 }
 
-func executionOpen(execution *persistence.InternalWorkflowExecutionInfo) bool {
+func executionOpen(execution *persistence.WorkflowExecutionInfo) bool {
 	return execution.State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED || execution.State == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 }

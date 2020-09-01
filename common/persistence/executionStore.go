@@ -107,7 +107,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 }
 
 func (m *executionManagerImpl) DeserializeExecutionInfo(
-	info *InternalWorkflowExecutionInfo,
+	info *WorkflowExecutionInfo,
 ) (*WorkflowExecutionInfo, *persistenceblobs.ExecutionStats, error) {
 	newInfo := &WorkflowExecutionInfo{
 		CompletionEvent:                        info.CompletionEvent,
@@ -156,7 +156,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		InitialInterval:                        info.InitialInterval,
 		BackoffCoefficient:                     info.BackoffCoefficient,
 		MaximumInterval:                        info.MaximumInterval,
-		WorkflowExpirationTime:                 info.ExpirationTime,
+		WorkflowExpirationTime:                 info.WorkflowExpirationTime,
 		MaximumAttempts:                        info.MaximumAttempts,
 		NonRetryableErrorTypes:                 info.NonRetryableErrorTypes,
 		BranchToken:                            info.BranchToken,
@@ -221,13 +221,13 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 func (m *executionManagerImpl) SerializeExecutionInfo(
 	info *WorkflowExecutionInfo,
 	stats *persistenceblobs.ExecutionStats,
-) (*InternalWorkflowExecutionInfo, error) {
+) (*WorkflowExecutionInfo, error) {
 
 	if info == nil {
-		return &InternalWorkflowExecutionInfo{}, nil
+		return &WorkflowExecutionInfo{}, nil
 	}
 
-	return &InternalWorkflowExecutionInfo{
+	return &WorkflowExecutionInfo{
 		NamespaceID:                            info.NamespaceID,
 		WorkflowID:                             info.WorkflowID,
 		RunID:                                  info.RunID,
@@ -275,7 +275,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		InitialInterval:                        info.InitialInterval,
 		BackoffCoefficient:                     info.BackoffCoefficient,
 		MaximumInterval:                        info.MaximumInterval,
-		ExpirationTime:                         info.WorkflowExpirationTime,
+		WorkflowExpirationTime:                 info.WorkflowExpirationTime,
 		MaximumAttempts:                        info.MaximumAttempts,
 		NonRetryableErrorTypes:                 info.NonRetryableErrorTypes,
 		BranchToken:                            info.BranchToken,

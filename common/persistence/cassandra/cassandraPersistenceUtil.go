@@ -396,7 +396,7 @@ func applyWorkflowSnapshotBatchAsNew(
 func createExecution(
 	batch *gocql.Batch,
 	shardID int,
-	executionInfo *p.InternalWorkflowExecutionInfo,
+	executionInfo *p.WorkflowExecutionInfo,
 	versionHistories *history.VersionHistories,
 	checksum checksum.Checksum,
 	cqlNowTimestampMillis int64,
@@ -479,7 +479,7 @@ func createExecution(
 func updateExecution(
 	batch *gocql.Batch,
 	shardID int,
-	executionInfo *p.InternalWorkflowExecutionInfo,
+	executionInfo *p.WorkflowExecutionInfo,
 	versionHistories *history.VersionHistories,
 	cqlNowTimestampMillis int64,
 	condition int64,

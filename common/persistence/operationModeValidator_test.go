@@ -405,7 +405,7 @@ func (s *validateOperationWorkflowModeStateSuite) newTestWorkflowSnapshot(
 	state enumsspb.WorkflowExecutionState,
 ) InternalWorkflowSnapshot {
 	return InternalWorkflowSnapshot{
-		ExecutionInfo: &InternalWorkflowExecutionInfo{
+		ExecutionInfo: &WorkflowExecutionInfo{
 			State: state,
 		},
 	}
@@ -415,7 +415,7 @@ func (s *validateOperationWorkflowModeStateSuite) newTestWorkflowMutation(
 	state enumsspb.WorkflowExecutionState,
 ) InternalWorkflowMutation {
 	return InternalWorkflowMutation{
-		ExecutionInfo: &InternalWorkflowExecutionInfo{
+		ExecutionInfo: &WorkflowExecutionInfo{
 			State: state,
 		},
 	}
