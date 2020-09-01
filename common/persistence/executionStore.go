@@ -406,7 +406,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 	}
 
 	var serializedNewBufferedEvents *serialization.DataBlob
-	if input.NewBufferedEvents != nil && len(input.NewBufferedEvents) > 0 {
+	if len(input.NewBufferedEvents) > 0 {
 		serializedNewBufferedEvents, err = m.serializer.SerializeBatchEvents(input.NewBufferedEvents, encoding)
 		if err != nil {
 			return nil, err
