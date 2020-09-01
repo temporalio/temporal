@@ -658,7 +658,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *WorkflowExecutionInfo, 
 		SearchAttributes:                  executionInfo.SearchAttributes,
 		Memo:                              executionInfo.Memo,
 		CompletionEvent:                   executionInfo.CompletionEvent,
-		// Dual write to move away from HistorySize
+		// Dual write to move away from HistorySize in future
 		HistorySize:                       executionInfo.ExecutionStats.GetHistorySize(),
 		ExecutionStats: 				   executionInfo.ExecutionStats,
 	}
@@ -737,7 +737,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 	}
 
 	// Back compat for GetHistorySize
-	if info.GetHistorySize() > 0 && info.GetExecutionStats() == nil {
+	if info.GetHistorySize() >= 0 && info.GetExecutionStats() == nil {
 		executionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{HistorySize: 0}
 	}
 
