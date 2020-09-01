@@ -337,7 +337,7 @@ type (
 		BranchToken        []byte
 		// Cron
 		CronSchedule      string
-		ExpirationSeconds int32
+		ExpirationSeconds int32 // TODO: is this field useful?
 	}
 
 	// ExecutionStats is the statistics about workflow execution
