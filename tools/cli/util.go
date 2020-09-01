@@ -117,7 +117,7 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 			if buf.Len() > 1 {
 				buf.WriteString(", ")
 			}
-			if !isAttributeName(fieldName) {
+			if !isAttributeName(fieldName) && !strings.HasSuffix(fieldName, "Failure") {
 				if !printFully {
 					fieldValue = trimTextAndBreakWords(fieldValue, maxFieldLength)
 				} else if maxFieldLength != 0 { // for command run workflow and observe history
@@ -126,9 +126,10 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 			}
 			if fieldName == "Reason" ||
 				fieldName == "Cause" ||
-				strings.HasSuffix(fieldName, "Details") ||
-				strings.HasSuffix(fieldName, "Failure") {
-				buf.WriteString(fmt.Sprintf("%s:%s", color.RedString(fieldName), color.MagentaString(fieldValue)))
+				strings.HasSuffix(fieldName, "Details") {
+				buf.WriteString(fmt.Sprintf("%s:%s", color.MagentaString(fieldName), fieldValue))
+			} else if strings.HasSuffix(fieldName, "Failure") {
+				buf.WriteString(fmt.Sprintf("%s:%s", color.RedString(fieldName), fieldValue))
 			} else {
 				buf.WriteString(fmt.Sprintf("%s:%s", fieldName, fieldValue))
 			}
