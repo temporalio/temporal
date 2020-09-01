@@ -1384,7 +1384,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Cr
 	)
 	s.Nil(err)
 	executionInfo := mutableState.executionInfo
-	executionInfo.StartTimestamp = s.now
+	executionInfo.StartTimestamp = &s.now
 	executionInfo.CronSchedule = "* * * * *"
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
@@ -1445,7 +1445,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_WorkflowExpired(
 	)
 	s.Nil(err)
 	executionInfo := mutableState.executionInfo
-	executionInfo.StartTimestamp = s.now
+	executionInfo.StartTimestamp = &s.now
 	executionInfo.CronSchedule = "* * * * *"
 
 	di := addWorkflowTaskScheduledEvent(mutableState)

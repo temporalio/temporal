@@ -218,8 +218,8 @@ type (
 		LastEventTaskID                        int64
 		NextEventID                            int64
 		LastProcessedEvent                     int64
-		StartTimestamp                         time.Time
-		LastUpdatedTimestamp                   time.Time
+		StartTimestamp                         *time.Time
+		LastUpdatedTimestamp                   *time.Time
 		CreateRequestID                        string
 		SignalCount                            int64
 		WorkflowTaskVersion                    int64

@@ -27,7 +27,6 @@ package history
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -41,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -128,7 +128,7 @@ func (s *nDCWorkflowResetterSuite) TearDownTest() {
 
 func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	ctx := context.Background()
-	now := time.Now().UTC()
+	now := timestamp.TimeNowPtrUtc()
 
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(500)
@@ -208,7 +208,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 
 func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 	ctx := context.Background()
-	now := time.Now().UTC()
+	now := timestamp.TimeNowPtrUtc()
 
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(500)

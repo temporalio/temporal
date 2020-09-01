@@ -1049,7 +1049,7 @@ func (e *mutableStateBuilder) GetCronBackoffDuration() (time.Duration, error) {
 		return backoff.NoBackoff, nil
 	}
 	// TODO: decide if we can add execution time in execution info.
-	executionTime := e.executionInfo.StartTimestamp
+	executionTime := timestamp.TimeValue(e.executionInfo.StartTimestamp)
 	// This only call when doing ContinueAsNew. At this point, the workflow should have a start event
 	workflowStartEvent, err := e.GetStartEvent()
 	if err != nil {
@@ -3865,7 +3865,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 	setTaskInfo(e.GetCurrentVersion(), now, e.insertTransferTasks, e.insertTimerTasks)
 
 	// update last update time
-	e.executionInfo.LastUpdatedTimestamp = now
+	e.executionInfo.LastUpdatedTimestamp = &now
 
 	// we generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only
@@ -3949,7 +3949,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 	setTaskInfo(e.GetCurrentVersion(), now, e.insertTransferTasks, e.insertTimerTasks)
 
 	// update last update time
-	e.executionInfo.LastUpdatedTimestamp = now
+	e.executionInfo.LastUpdatedTimestamp = &now
 
 	// we generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only

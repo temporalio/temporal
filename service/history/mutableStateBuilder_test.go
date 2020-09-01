@@ -283,7 +283,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		NextEventID:                int64(8),
 		LastProcessedEvent:         int64(3),
-		LastUpdatedTimestamp:       time.Now().UTC(),
+		LastUpdatedTimestamp:       timestamp.TimeNowPtrUtc(),
 		WorkflowTaskVersion:        common.EmptyVersion,
 		WorkflowTaskScheduleID:     common.EmptyEventID,
 		WorkflowTaskStartedID:      common.EmptyEventID,
@@ -458,7 +458,7 @@ func (s *mutableStateSuite) TestChecksumProbabilities() {
 func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
 	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 { return 0 }
 	s.False(s.msBuilder.shouldInvalidateCheckum())
-	s.msBuilder.executionInfo.LastUpdatedTimestamp = time.Now().UTC()
+	s.msBuilder.executionInfo.LastUpdatedTimestamp = timestamp.TimeNowPtrUtc()
 	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
 		return float64((s.msBuilder.executionInfo.LastUpdatedTimestamp.UnixNano() / int64(time.Second)) + 1)
 	}
@@ -733,7 +733,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		NextEventID:                int64(101),
 		LastProcessedEvent:         int64(99),
-		LastUpdatedTimestamp:       time.Now().UTC(),
+		LastUpdatedTimestamp:       timestamp.TimeNowPtrUtc(),
 		WorkflowTaskVersion:        failoverVersion,
 		WorkflowTaskScheduleID:     common.EmptyEventID,
 		WorkflowTaskStartedID:      common.EmptyEventID,

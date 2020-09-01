@@ -44,13 +44,14 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
 	nDCStateRebuilder interface {
 		rebuild(
 			ctx context.Context,
-			now time.Time,
+			now *time.Time,
 			baseWorkflowIdentifier definition.WorkflowIdentifier,
 			baseBranchToken []byte,
 			baseLastEventID int64,
@@ -100,7 +101,7 @@ func newNDCStateRebuilder(
 
 func (r *nDCStateRebuilderImpl) rebuild(
 	ctx context.Context,
-	now time.Time,
+	now *time.Time,
 	baseWorkflowIdentifier definition.WorkflowIdentifier,
 	baseBranchToken []byte,
 	baseLastEventID int64,
@@ -164,19 +165,20 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		return nil, 0, serviceerror.NewInternal(fmt.Sprintf("nDCStateRebuilder unable to rebuild mutable state to event ID: %v, version: %v", baseLastEventID, baseLastEventVersion))
 	}
 
+	nowValue := timestamp.TimeValue(now)
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
-	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(now, transactionPolicyPassive)
+	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(nowValue, transactionPolicyPassive)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	// refresh tasks to be generated
-	if err := r.taskRefresher.refreshTasks(now, rebuiltMutableState); err != nil {
+	if err := r.taskRefresher.refreshTasks(nowValue, rebuiltMutableState); err != nil {
 		return nil, 0, err
 	}
 
 	// mutable state rebuild should use the same time stamp
-	rebuiltMutableState.GetExecutionInfo().StartTimestamp = now
+	rebuiltMutableState.GetExecutionInfo().StartTimestamp = &nowValue
 	return rebuiltMutableState, r.rebuiltHistorySize, nil
 }
 

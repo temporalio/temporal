@@ -1182,7 +1182,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				RunId:      executionInfo.RunID,
 			},
 			Type:             &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-			StartTime:        &executionInfo.StartTimestamp,
+			StartTime:        executionInfo.StartTimestamp,
 			HistoryLength:    mutableState.GetNextEventID() - common.FirstEventID,
 			AutoResetPoints:  executionInfo.AutoResetPoints,
 			Memo:             &commonpb.Memo{Fields: executionInfo.Memo},

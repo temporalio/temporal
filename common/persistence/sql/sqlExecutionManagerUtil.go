@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -1148,7 +1147,7 @@ func (m *sqlExecutionManager) createExecution(
 	}
 
 	// TODO we should set the start time and last update time on business logic layer
-	executionInfo.StartTimestamp = time.Now().UTC()
+	executionInfo.StartTimestamp = timestamp.TimeNowPtrUtc()
 	executionInfo.LastUpdatedTimestamp = executionInfo.StartTimestamp
 
 	row, err := buildExecutionRow(
@@ -1203,7 +1202,7 @@ func updateExecution(
 	}
 
 	// TODO we should set the last update time on business logic layer
-	executionInfo.LastUpdatedTimestamp = time.Now().UTC()
+	executionInfo.LastUpdatedTimestamp = timestamp.TimeNowPtrUtc()
 
 	row, err := buildExecutionRow(
 		executionInfo,

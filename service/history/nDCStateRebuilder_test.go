@@ -240,7 +240,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	lastEventID := int64(2)
 	branchToken := []byte("other random branch token")
 	targetBranchToken := []byte("some other random branch token")
-	now := time.Now().UTC()
+	now := timestamp.TimeNowPtrUtc()
 
 	targetNamespaceID := uuid.New()
 	targetNamespace := "other random namespace name"
