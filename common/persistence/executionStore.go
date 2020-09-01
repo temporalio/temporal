@@ -170,10 +170,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		newInfo.AutoResetPoints = &workflowpb.ResetPoints{}
 	}
 
-	newStats := &persistenceblobs.ExecutionStats{
-		HistorySize: info.HistorySize,
-	}
-	return newInfo, newStats, nil
+	return newInfo, info.ExecutionStats, nil
 }
 
 func (m *executionManagerImpl) DeserializeBufferedEvents(
@@ -287,7 +284,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		SearchAttributes:                       info.SearchAttributes,
 
 		// attributes which are not related to mutable state
-		HistorySize: stats.HistorySize,
+		ExecutionStats: stats,
 	}, nil
 }
 

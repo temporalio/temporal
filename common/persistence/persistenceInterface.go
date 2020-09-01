@@ -265,7 +265,7 @@ type (
 		SearchAttributes       map[string]*commonpb.Payload
 
 		// attributes which are not related to mutable state at all
-		HistorySize int64
+		ExecutionStats *persistenceblobs.ExecutionStats
 	}
 
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
@@ -708,7 +708,6 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		ClientFeatureVersion:              executionInfo.ClientFeatureVersion,
 		ClientImpl:                        executionInfo.ClientImpl,
 		SignalCount:                       executionInfo.SignalCount,
-		HistorySize:                       executionInfo.HistorySize,
 		CronSchedule:                      executionInfo.CronSchedule,
 		CompletionEventBatchId:            executionInfo.CompletionEventBatchID,
 		HasRetryPolicy:                    executionInfo.HasRetryPolicy,
@@ -724,6 +723,9 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		SearchAttributes:                  executionInfo.SearchAttributes,
 		Memo:                              executionInfo.Memo,
 		CompletionEvent:                   executionInfo.CompletionEvent,
+		// Dual write to move away from HistorySize
+		HistorySize:                       executionInfo.ExecutionStats.GetHistorySize(),
+		ExecutionStats: 				   executionInfo.ExecutionStats,
 	}
 
 	if !executionInfo.ExpirationTime.IsZero() {
@@ -782,7 +784,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		ClientFeatureVersion:                   info.GetClientFeatureVersion(),
 		ClientImpl:                             info.GetClientImpl(),
 		SignalCount:                            info.GetSignalCount(),
-		HistorySize:                            info.GetHistorySize(),
+		ExecutionStats:                         info.GetExecutionStats(),
 		CronSchedule:                           info.GetCronSchedule(),
 		CompletionEventBatchID:                 common.EmptyEventID,
 		HasRetryPolicy:                         info.GetHasRetryPolicy(),
@@ -797,6 +799,15 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		Memo:                                   info.GetMemo(),
 		CompletionEvent:                        info.GetCompletionEvent(),
 		AutoResetPoints:                        info.GetAutoResetPoints(),
+	}
+
+	// Back compat for GetHistorySize
+	if info.GetHistorySize() > 0 && info.GetExecutionStats() == nil {
+		executionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{HistorySize: 0}
+	}
+
+	if info.GetExecutionStats() == nil {
+		executionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{}
 	}
 
 	if info.GetRetryExpirationTime() != nil {
