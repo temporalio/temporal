@@ -29,7 +29,6 @@ package history
 import (
 	"context"
 	"fmt"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -196,8 +196,10 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	// Reset expiration time
 	resetMutableState := resetWorkflow.getMutableState()
 	executionInfo := resetMutableState.GetExecutionInfo()
-	if executionInfo.WorkflowExecutionTimeout > 0 {
-		executionInfo.WorkflowExpirationTime = time.Now().UTC().Add(time.Duration(executionInfo.WorkflowExecutionTimeout) * time.Second)
+
+	weTimeout := timestamp.DurationValue(executionInfo.WorkflowExecutionTimeout)
+	if weTimeout > 0 {
+		executionInfo.WorkflowExpirationTime = *timestamp.TimeNowPtrUtcAddDuration(weTimeout)
 	}
 
 	baseLastEventVersion := resetMutableState.GetCurrentVersion()

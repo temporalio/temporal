@@ -1628,7 +1628,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		WorkflowId:               execution.WorkflowId,
 		TaskQueue:                tq,
 		WorkflowType:             wType,
-		WorkflowExecutionTimeout: timestamp.DurationPtr(time.Duration(previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout) * time.Second),
+		WorkflowExecutionTimeout: previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout,
 		WorkflowRunTimeout:       runTimeout,
 		WorkflowTaskTimeout:      taskTimeout,
 		Input:                    attributes.Input,
@@ -1765,7 +1765,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	e.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
 	e.executionInfo.WorkflowRunTimeout = int64(timestamp.DurationValue(event.GetWorkflowRunTimeout()).Seconds())
-	e.executionInfo.WorkflowExecutionTimeout = int64(timestamp.DurationValue(event.GetWorkflowExecutionTimeout()).Seconds())
+	e.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeout()
 	e.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 
 	if err := e.UpdateWorkflowStateStatus(

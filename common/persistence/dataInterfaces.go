@@ -210,7 +210,7 @@ type (
 		TaskQueue                              string
 		WorkflowTypeName                       string
 		WorkflowRunTimeout                     int64
-		WorkflowExecutionTimeout               int64
+		WorkflowExecutionTimeout               *time.Duration
 		DefaultWorkflowTaskTimeout             *time.Duration
 		State                                  enumsspb.WorkflowExecutionState
 		Status                                 enumspb.WorkflowExecutionStatus
