@@ -1035,7 +1035,7 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 		info.WorkflowExpirationTime,
 		info.Attempt,
 		info.MaximumAttempts,
-		*timestamp.DurationFromSeconds(info.InitialInterval),
+		info.InitialInterval,
 		info.MaximumInterval,
 		info.BackoffCoefficient,
 		failure,
@@ -1804,7 +1804,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	if event.RetryPolicy != nil {
 		e.executionInfo.HasRetryPolicy = true
 		e.executionInfo.BackoffCoefficient = event.RetryPolicy.GetBackoffCoefficient()
-		e.executionInfo.InitialInterval = int64(timestamp.DurationValue(event.RetryPolicy.GetInitialInterval()).Seconds())
+		e.executionInfo.InitialInterval = event.RetryPolicy.GetInitialInterval()
 		e.executionInfo.MaximumAttempts = event.RetryPolicy.GetMaximumAttempts()
 		e.executionInfo.MaximumInterval = event.RetryPolicy.GetMaximumInterval()
 		e.executionInfo.NonRetryableErrorTypes = event.RetryPolicy.GetNonRetryableErrorTypes()
@@ -3726,7 +3726,7 @@ func (e *mutableStateBuilder) RetryActivity(
 		timestamp.TimeValue(ai.RetryExpirationTime),
 		ai.Attempt,
 		ai.RetryMaximumAttempts,
-		timestamp.DurationValue(ai.RetryInitialInterval),
+		ai.RetryInitialInterval,
 		ai.RetryMaximumInterval,
 		ai.RetryBackoffCoefficient,
 		failure,

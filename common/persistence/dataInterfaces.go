@@ -244,7 +244,7 @@ type (
 		// for retry
 		Attempt                int32
 		HasRetryPolicy         bool
-		InitialInterval        int64
+		InitialInterval        *time.Duration
 		BackoffCoefficient     float64
 		MaximumInterval        *time.Duration
 		WorkflowExpirationTime time.Time

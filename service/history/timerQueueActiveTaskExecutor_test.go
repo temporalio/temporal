@@ -1321,7 +1321,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Re
 	executionInfo.HasRetryPolicy = true
 	executionInfo.WorkflowExpirationTime = s.now.Add(1000 * time.Second)
 	executionInfo.MaximumAttempts = 10
-	executionInfo.InitialInterval = 1
+	executionInfo.InitialInterval = timestamp.DurationFromSeconds(1)
 	executionInfo.MaximumInterval = timestamp.DurationFromSeconds(1)
 	executionInfo.BackoffCoefficient = 1
 

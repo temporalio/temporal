@@ -40,7 +40,7 @@ func getBackoffInterval(
 	expirationTime time.Time,
 	currentAttemptCounterValue int32,
 	maxAttempts int32,
-	initInterval time.Duration,
+	initInterval *time.Duration,
 	maxInterval *time.Duration,
 	backoffCoefficient float64,
 	failure *failurepb.Failure,
@@ -72,7 +72,7 @@ func getBackoffInterval(
 	}
 
 	maxIntervalSeconds := int64(timestamp.DurationValue(maxInterval).Round(time.Second).Seconds())
-	nextIntervalSeconds := int64(initInterval.Seconds() * math.Pow(backoffCoefficient, float64(currentAttemptCounterValue-1)))
+	nextIntervalSeconds := int64(timestamp.DurationValue(initInterval).Seconds() * math.Pow(backoffCoefficient, float64(currentAttemptCounterValue-1)))
 	if nextIntervalSeconds <= 0 {
 		// math.Pow() could overflow
 		if maxIntervalSeconds > 0 {

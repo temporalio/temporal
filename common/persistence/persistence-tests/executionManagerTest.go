@@ -981,7 +981,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				WorkflowTaskTimeout:        int64(rand.Int31()),
 				Attempt:                    rand.Int31(),
 				HasRetryPolicy:             true,
-				InitialInterval:            int64(rand.Int31()),
+				InitialInterval:            timestamp.DurationFromSeconds(int64(rand.Int31())),
 				BackoffCoefficient:         7.78,
 				MaximumInterval:            timestamp.DurationFromSeconds(int64(rand.Int31())),
 				WorkflowExpirationTime:     time.Now().UTC(),
@@ -1037,7 +1037,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.SignalCount, info.SignalCount)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.Attempt, info.Attempt)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.HasRetryPolicy, info.HasRetryPolicy)
-	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.InitialInterval, info.InitialInterval)
+	s.EqualValues(createReq.NewWorkflowSnapshot.ExecutionInfo.InitialInterval, info.InitialInterval)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.BackoffCoefficient, info.BackoffCoefficient)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.MaximumAttempts, info.MaximumAttempts)
 	s.EqualValues(createReq.NewWorkflowSnapshot.ExecutionInfo.MaximumInterval, info.MaximumInterval)
@@ -1121,7 +1121,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.ClientFeatureVersion = "random client feature version"
 	updatedInfo.ClientImpl = "random client impl"
 	updatedInfo.SignalCount = 9
-	updatedInfo.InitialInterval = math.MaxInt32
+	updatedInfo.InitialInterval = timestamp.DurationFromSeconds(math.MaxInt32)
 	updatedInfo.BackoffCoefficient = 4.45
 	updatedInfo.MaximumInterval = timestamp.DurationFromSeconds(math.MaxInt32)
 	updatedInfo.MaximumAttempts = math.MaxInt32
@@ -1171,7 +1171,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.ClientImpl, info1.ClientImpl)
 	s.Equal(updatedInfo.SignalCount, info1.SignalCount)
 	s.EqualValues(updatedStats.HistorySize, state1.ExecutionStats.HistorySize)
-	s.Equal(updatedInfo.InitialInterval, info1.InitialInterval)
+	s.EqualValues(updatedInfo.InitialInterval, info1.InitialInterval)
 	s.Equal(updatedInfo.BackoffCoefficient, info1.BackoffCoefficient)
 	s.Equal(updatedInfo.MaximumInterval, info1.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info1.MaximumAttempts)
@@ -1220,7 +1220,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(655), info2.WorkflowTaskOriginalScheduledTimestamp)
 	s.Equal(updatedInfo.SignalCount, info2.SignalCount)
 	s.EqualValues(updatedStats.HistorySize, state2.ExecutionStats.HistorySize)
-	s.Equal(updatedInfo.InitialInterval, info2.InitialInterval)
+	s.EqualValues(updatedInfo.InitialInterval, info2.InitialInterval)
 	s.Equal(updatedInfo.BackoffCoefficient, info2.BackoffCoefficient)
 	s.Equal(updatedInfo.MaximumInterval, info2.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info2.MaximumAttempts)
@@ -1266,7 +1266,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(655), info3.WorkflowTaskOriginalScheduledTimestamp)
 	s.Equal(updatedInfo.SignalCount, info3.SignalCount)
 	s.EqualValues(updatedStats.HistorySize, state3.ExecutionStats.HistorySize)
-	s.Equal(updatedInfo.InitialInterval, info3.InitialInterval)
+	s.EqualValues(updatedInfo.InitialInterval, info3.InitialInterval)
 	s.Equal(updatedInfo.BackoffCoefficient, info3.BackoffCoefficient)
 	s.Equal(updatedInfo.MaximumInterval, info3.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info3.MaximumAttempts)
@@ -1312,7 +1312,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(321), info4.WorkflowTaskStartedTimestamp)
 	s.Equal(updatedInfo.SignalCount, info4.SignalCount)
 	s.EqualValues(updatedStats.HistorySize, state4.ExecutionStats.HistorySize)
-	s.Equal(updatedInfo.InitialInterval, info4.InitialInterval)
+	s.EqualValues(updatedInfo.InitialInterval, info4.InitialInterval)
 	s.Equal(updatedInfo.BackoffCoefficient, info4.BackoffCoefficient)
 	s.Equal(updatedInfo.MaximumInterval, info4.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info4.MaximumAttempts)
@@ -2341,7 +2341,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	s.Equal(activityInfos[0].StartedIdentity, ai.StartedIdentity)
 	s.Equal(activityInfos[0].TaskQueue, ai.TaskQueue)
 	s.Equal(activityInfos[0].HasRetryPolicy, ai.HasRetryPolicy)
-	s.Equal(activityInfos[0].RetryInitialInterval, ai.RetryInitialInterval)
+	s.EqualValues(activityInfos[0].RetryInitialInterval, ai.RetryInitialInterval)
 	s.Equal(activityInfos[0].RetryMaximumInterval, ai.RetryMaximumInterval)
 	s.Equal(activityInfos[0].RetryMaximumAttempts, ai.RetryMaximumAttempts)
 	s.Equal(activityInfos[0].RetryBackoffCoefficient, ai.RetryBackoffCoefficient)
