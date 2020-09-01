@@ -141,6 +141,23 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 
 	for historyIterator.HasNext() {
 		result, err := historyIterator.Next()
+		if err != nil {
+			n.logger.Error("failed to get history events",
+				tag.WorkflowDomainID(domainID),
+				tag.WorkflowID(workflowID),
+				tag.WorkflowRunID(runID),
+				tag.Error(err))
+			return err
+		}
+		historyBatch := result.(*historyBatch)
+		replicationRequest := n.createReplicationRawRequest(
+			domainID,
+			workflowID,
+			runID,
+			historyBatch.rawEventBatch,
+			historyBatch.versionHistory.GetItems())
+
+		err = n.sendReplicationRawRequest(ctx, replicationRequest)
 		switch err.(type) {
 		case nil:
 			// continue to process the events
@@ -157,24 +174,6 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 			}
 			return err
 		default:
-			n.logger.Error("failed to get history events",
-				tag.WorkflowDomainID(domainID),
-				tag.WorkflowID(workflowID),
-				tag.WorkflowRunID(runID),
-				tag.Error(err))
-			return err
-		}
-		historyBatch := result.(*historyBatch)
-
-		replicationRequest := n.createReplicationRawRequest(
-			domainID,
-			workflowID,
-			runID,
-			historyBatch.rawEventBatch,
-			historyBatch.versionHistory.GetItems())
-
-		err = n.sendReplicationRawRequest(ctx, replicationRequest)
-		if err != nil {
 			n.logger.Error("failed to replicate events",
 				tag.WorkflowDomainID(domainID),
 				tag.WorkflowID(workflowID),
@@ -312,8 +311,7 @@ func (n *NDCHistoryResenderImpl) fixCurrentExecution(
 	if n.currentExecutionCheck == nil {
 		return false
 	}
-
-	execution := checks.ConcreteExecution{
+	execution := &checks.CurrentExecution{
 		Execution: checks.Execution{
 			DomainID:   domainID,
 			WorkflowID: workflowID,
@@ -329,7 +327,7 @@ func (n *NDCHistoryResenderImpl) fixCurrentExecution(
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(runID),
 		)
-		n.currentExecutionCheck.Fix(res)
+		n.currentExecutionCheck.Fix(execution)
 		return false
 	case checks.CheckResultTypeFailed:
 		return false

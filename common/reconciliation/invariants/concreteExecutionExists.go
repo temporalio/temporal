@@ -25,6 +25,7 @@ package invariants
 import (
 	"fmt"
 
+	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/reconciliation/common"
 )
@@ -44,7 +45,10 @@ func NewConcreteExecutionExists(
 	}
 }
 
-func (c *concreteExecutionExists) Check(execution interface{}) common.CheckResult {
+func (c *concreteExecutionExists) Check(
+	execution interface{},
+) common.CheckResult {
+
 	currentExecution, ok := execution.(*common.CurrentExecution)
 	if !ok {
 		return common.CheckResult{
@@ -53,27 +57,35 @@ func (c *concreteExecutionExists) Check(execution interface{}) common.CheckResul
 			Info:            "failed to check: expected current execution",
 		}
 	}
-	if !common.Open(currentExecution.State) {
-		return common.CheckResult{
-			CheckResultType: common.CheckResultTypeHealthy,
-			InvariantType:   c.InvariantType(),
+
+	if len(currentExecution.CurrentRunID) == 0 {
+		// set the current run id
+		var runIDCheckResult *common.CheckResult
+		currentExecution, runIDCheckResult = c.validateCurrentRunID(currentExecution)
+		if runIDCheckResult != nil {
+			return *runIDCheckResult
 		}
 	}
-	// by this point the corresponding concrete execution must exist and can be already closed
-	currentExecResp, currentExecErr := c.pr.IsWorkflowExecutionExists(&persistence.IsWorkflowExecutionExistsRequest{
+
+	concreteExecResp, concreteExecErr := c.pr.IsWorkflowExecutionExists(&persistence.IsWorkflowExecutionExistsRequest{
 		DomainID:   currentExecution.DomainID,
 		WorkflowID: currentExecution.WorkflowID,
 		RunID:      currentExecution.CurrentRunID,
 	})
-	if currentExecErr != nil {
+	if concreteExecErr != nil {
 		return common.CheckResult{
 			CheckResultType: common.CheckResultTypeFailed,
 			InvariantType:   c.InvariantType(),
 			Info:            "failed to check if concrete execution exists",
-			InfoDetails:     currentExecErr.Error(),
+			InfoDetails:     concreteExecErr.Error(),
 		}
 	}
-	if !currentExecResp.Exists {
+	if !concreteExecResp.Exists {
+		//verify if the current execution exists
+		_, checkResult := c.validateCurrentRunID(currentExecution)
+		if checkResult != nil {
+			return *checkResult
+		}
 		return common.CheckResult{
 			CheckResultType: common.CheckResultTypeCorrupted,
 			InvariantType:   c.InvariantType(),
@@ -88,12 +100,27 @@ func (c *concreteExecutionExists) Check(execution interface{}) common.CheckResul
 	}
 }
 
-func (c *concreteExecutionExists) Fix(execution interface{}) common.FixResult {
-	fixResult, checkResult := checkBeforeFix(c, execution)
+func (c *concreteExecutionExists) Fix(
+	execution interface{},
+) common.FixResult {
+
+	currentExecution, _ := execution.(*common.CurrentExecution)
+	var runIDCheckResult *common.CheckResult
+	if len(currentExecution.CurrentRunID) == 0 {
+		// this is to set the current run ID prior to the check and fix operations
+		currentExecution, runIDCheckResult = c.validateCurrentRunID(currentExecution)
+		if runIDCheckResult != nil {
+			return common.FixResult{
+				FixResultType: common.FixResultTypeSkipped,
+				CheckResult:   *runIDCheckResult,
+				InvariantType: c.InvariantType(),
+			}
+		}
+	}
+	fixResult, checkResult := checkBeforeFix(c, currentExecution)
 	if fixResult != nil {
 		return *fixResult
 	}
-	currentExecution, _ := execution.(*common.CurrentExecution)
 	if err := c.pr.DeleteCurrentWorkflowExecution(&persistence.DeleteCurrentWorkflowExecutionRequest{
 		DomainID:   currentExecution.DomainID,
 		WorkflowID: currentExecution.WorkflowID,
@@ -114,4 +141,44 @@ func (c *concreteExecutionExists) Fix(execution interface{}) common.FixResult {
 
 func (c *concreteExecutionExists) InvariantType() common.InvariantType {
 	return common.ConcreteExecutionExistsInvariantType
+}
+
+func (c *concreteExecutionExists) validateCurrentRunID(
+	currentExecution *common.CurrentExecution,
+) (*common.CurrentExecution, *common.CheckResult) {
+
+	resp, err := c.pr.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
+		DomainID:   currentExecution.DomainID,
+		WorkflowID: currentExecution.WorkflowID,
+	})
+	if err != nil {
+		switch err.(type) {
+		case *shared.EntityNotExistsError:
+			return nil, &common.CheckResult{
+				CheckResultType: common.CheckResultTypeHealthy,
+				InvariantType:   c.InvariantType(),
+				Info:            "current execution does not exist.",
+				InfoDetails:     err.Error(),
+			}
+		default:
+			return nil, &common.CheckResult{
+				CheckResultType: common.CheckResultTypeFailed,
+				InvariantType:   c.InvariantType(),
+				Info:            "failed to get current execution.",
+				InfoDetails:     err.Error(),
+			}
+		}
+	}
+
+	if len(currentExecution.CurrentRunID) == 0 {
+		currentExecution.CurrentRunID = resp.RunID
+	}
+
+	if currentExecution.CurrentRunID != resp.RunID {
+		return nil, &common.CheckResult{
+			CheckResultType: common.CheckResultTypeHealthy,
+			InvariantType:   c.InvariantType(),
+		}
+	}
+	return currentExecution, nil
 }

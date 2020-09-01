@@ -231,7 +231,7 @@ func NewEngineWithShardContext(
 		shard.GetExecutionManager(),
 		shard.GetHistoryManager(),
 	)
-	openExecutionCheck := invariants.NewOpenCurrentExecution(pRetry)
+	openExecutionCheck := invariants.NewConcreteExecutionExists(pRetry)
 
 	if config.TransferProcessorEnableMultiCurosrProcessor() {
 		historyEngImpl.txProcessor = queue.NewTransferQueueProcessor(
