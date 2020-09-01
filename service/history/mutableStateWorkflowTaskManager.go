@@ -291,7 +291,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHea
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
 	} else {
 		// It can be because stickyness has expired due to StickyTTL config
-		// In that case we need to clear stickyness so that the LastUpdateTimestamp is not corrupted.
+		// In that case we need to clear stickyness so that the LastUpdatedTimestamp is not corrupted.
 		// In other cases, clearing stickyness shouldn't hurt anything.
 		// TODO: https://github.com/temporalio/temporal/issues/2357:
 		//  if we can use a new field(LastWorkflowTaskUpdateTimestamp), then we could get rid of it.

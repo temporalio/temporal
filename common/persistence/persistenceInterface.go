@@ -230,7 +230,7 @@ type (
 		NextEventID                            int64
 		LastProcessedEvent                     int64
 		StartTimestamp                         time.Time
-		LastUpdateTimestamp                    time.Time
+		LastUpdatedTimestamp                   time.Time
 		CreateRequestID                        string
 		SignalCount                            int64
 		WorkflowTaskVersion                    int64
@@ -692,7 +692,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		LastEventTaskId:                   executionInfo.LastEventTaskID,
 		LastProcessedEvent:                executionInfo.LastProcessedEvent,
 		StartTime:                         &executionInfo.StartTimestamp,
-		LastUpdateTime:                    &executionInfo.LastUpdateTimestamp,
+		LastUpdateTime:                    &executionInfo.LastUpdatedTimestamp,
 		WorkflowTaskVersion:               executionInfo.WorkflowTaskVersion,
 		WorkflowTaskScheduleId:            executionInfo.WorkflowTaskScheduleID,
 		WorkflowTaskStartedId:             executionInfo.WorkflowTaskStartedID,
@@ -765,7 +765,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		LastFirstEventID:                       info.GetLastFirstEventId(),
 		LastProcessedEvent:                     info.GetLastProcessedEvent(),
 		StartTimestamp:                         *timestamp.TimestampFromTime(*info.GetStartTime()).ToTime(),
-		LastUpdateTimestamp:                    *timestamp.TimestampFromTime(*info.GetLastUpdateTime()).ToTime(),
+		LastUpdatedTimestamp:                   *timestamp.TimestampFromTime(*info.GetLastUpdateTime()).ToTime(),
 		CreateRequestID:                        state.GetCreateRequestId(),
 		WorkflowTaskVersion:                    info.GetWorkflowTaskVersion(),
 		WorkflowTaskScheduleID:                 info.GetWorkflowTaskScheduleId(),
