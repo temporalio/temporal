@@ -261,9 +261,7 @@ func (r *mutableStateTaskGeneratorImpl) generateScheduleWorkflowTaskTasks(
 
 	if r.mutableState.IsStickyTaskQueueEnabled() {
 		scheduledTime := time.Unix(0, workflowTask.ScheduledTimestamp).UTC()
-		scheduleToStartTimeout := time.Duration(
-			r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout,
-		) * time.Second
+		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
 
 		r.mutableState.AddTimerTasks(&persistence.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard

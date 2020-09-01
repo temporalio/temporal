@@ -458,7 +458,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 	stickyTaskQueueName := "some random sticky task queue"
-	stickyTaskQueueTimeout := int32(233)
+	stickyTaskQueueTimeout := timestamp.DurationFromSeconds(233)
 
 	mutableState := newMutableStateBuilderWithVersionHistoriesForTest(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
@@ -484,7 +484,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 	// set the sticky taskqueue attr
 	executionInfo := mutableState.GetExecutionInfo()
 	executionInfo.StickyTaskQueue = stickyTaskQueueName
-	executionInfo.StickyScheduleToStartTimeout = int64(stickyTaskQueueTimeout)
+	executionInfo.StickyScheduleToStartTimeout = stickyTaskQueueTimeout
 
 	// make another round of workflow task
 	taskID := int64(59)
@@ -518,7 +518,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_WorkflowT
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 	stickyTaskQueueName := "some random sticky task queue"
-	stickyTaskQueueTimeout := int32(233)
+	stickyTaskQueueTimeout := timestamp.DurationFromSeconds(233)
 
 	mutableState := newMutableStateBuilderWithVersionHistoriesForTest(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
@@ -547,7 +547,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_WorkflowT
 	// set the sticky taskqueue attr
 	executionInfo := mutableState.GetExecutionInfo()
 	executionInfo.StickyTaskQueue = stickyTaskQueueName
-	executionInfo.StickyScheduleToStartTimeout = int64(stickyTaskQueueTimeout)
+	executionInfo.StickyScheduleToStartTimeout = stickyTaskQueueTimeout
 
 	// make another round of workflow task
 	taskID := int64(59)
@@ -1944,7 +1944,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 	timeout := timestamp.DurationFromSeconds(executionInfo.WorkflowRunTimeout)
 	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
-		timeout = timestamp.DurationFromSeconds(executionInfo.StickyScheduleToStartTimeout)
+		timeout = executionInfo.StickyScheduleToStartTimeout
 	}
 
 	return &matchingservice.AddWorkflowTaskRequest{

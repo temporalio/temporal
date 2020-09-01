@@ -210,7 +210,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// this workflowTask is an sticky workflowTask
 		// there shall already be an timer set
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
-		taskTimeout = executionInfo.StickyScheduleToStartTimeout
+		taskTimeout = int64(executionInfo.StickyScheduleToStartTimeout.Seconds())
 	}
 
 	// release the context lock since we no longer need mutable state builder and

@@ -1041,7 +1041,7 @@ func (e *historyEngineImpl) getMutableState(
 		ClientLibraryVersion:                  executionInfo.ClientLibraryVersion,
 		ClientFeatureVersion:                  executionInfo.ClientFeatureVersion,
 		ClientImpl:                            executionInfo.ClientImpl,
-		StickyTaskQueueScheduleToStartTimeout: timestamp.DurationFromSeconds(executionInfo.StickyScheduleToStartTimeout),
+		StickyTaskQueueScheduleToStartTimeout: executionInfo.StickyScheduleToStartTimeout,
 		CurrentBranchToken:                    currentBranchToken,
 		WorkflowState:                         workflowState,
 		WorkflowStatus:                        workflowStatus,

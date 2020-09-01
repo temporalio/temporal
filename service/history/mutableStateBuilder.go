@@ -1507,7 +1507,7 @@ func (e *mutableStateBuilder) FailWorkflowTask(
 
 func (e *mutableStateBuilder) ClearStickyness() {
 	e.executionInfo.StickyTaskQueue = ""
-	e.executionInfo.StickyScheduleToStartTimeout = 0
+	e.executionInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(0)
 	e.executionInfo.ClientLibraryVersion = ""
 	e.executionInfo.ClientFeatureVersion = ""
 	e.executionInfo.ClientImpl = ""

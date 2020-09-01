@@ -384,11 +384,11 @@ Update_History_Loop:
 		if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskQueue == nil {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.CompleteWorkflowTaskWithStickyDisabledCounter)
 			executionInfo.StickyTaskQueue = ""
-			executionInfo.StickyScheduleToStartTimeout = 0
+			executionInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(0)
 		} else {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.CompleteWorkflowTaskWithStickyEnabledCounter)
 			executionInfo.StickyTaskQueue = request.StickyAttributes.WorkerTaskQueue.GetName()
-			executionInfo.StickyScheduleToStartTimeout = int64(timestamp.DurationValue(request.StickyAttributes.GetScheduleToStartTimeout()).Seconds())
+			executionInfo.StickyScheduleToStartTimeout = request.StickyAttributes.GetScheduleToStartTimeout()
 		}
 		executionInfo.ClientLibraryVersion = clientLibVersion
 		executionInfo.ClientFeatureVersion = clientFeatureVersion

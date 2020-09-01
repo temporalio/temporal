@@ -234,7 +234,7 @@ type (
 		CancelRequested                        bool
 		CancelRequestID                        string
 		StickyTaskQueue                        string
-		StickyScheduleToStartTimeout           int64
+		StickyScheduleToStartTimeout           *time.Duration
 		ClientLibraryVersion                   string
 		ClientFeatureVersion                   string
 		ClientImpl                             string

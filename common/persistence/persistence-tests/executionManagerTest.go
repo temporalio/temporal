@@ -1093,7 +1093,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(0), info0.WorkflowTaskScheduledTimestamp)
 	s.Equal(int64(0), info0.WorkflowTaskOriginalScheduledTimestamp)
 	s.Empty(info0.StickyTaskQueue)
-	s.Equal(int64(0), info0.StickyScheduleToStartTimeout)
+	s.EqualValues(int64(0), timestamp.DurationValue(info0.StickyScheduleToStartTimeout))
 	s.Empty(info0.ClientLibraryVersion)
 	s.Empty(info0.ClientFeatureVersion)
 	s.Empty(info0.ClientImpl)
@@ -1116,7 +1116,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.WorkflowTaskScheduledTimestamp = int64(654)
 	updatedInfo.WorkflowTaskOriginalScheduledTimestamp = int64(655)
 	updatedInfo.StickyTaskQueue = "random sticky taskqueue"
-	updatedInfo.StickyScheduleToStartTimeout = 876
+	updatedInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(876)
 	updatedInfo.ClientLibraryVersion = "random client library version"
 	updatedInfo.ClientFeatureVersion = "random client feature version"
 	updatedInfo.ClientImpl = "random client impl"
@@ -1165,7 +1165,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(654), info1.WorkflowTaskScheduledTimestamp)
 	s.Equal(int64(655), info1.WorkflowTaskOriginalScheduledTimestamp)
 	s.Equal(updatedInfo.StickyTaskQueue, info1.StickyTaskQueue)
-	s.Equal(updatedInfo.StickyScheduleToStartTimeout, info1.StickyScheduleToStartTimeout)
+	s.EqualValues(timestamp.DurationValue(updatedInfo.StickyScheduleToStartTimeout), timestamp.DurationValue(info1.StickyScheduleToStartTimeout))
 	s.Equal(updatedInfo.ClientLibraryVersion, info1.ClientLibraryVersion)
 	s.Equal(updatedInfo.ClientFeatureVersion, info1.ClientFeatureVersion)
 	s.Equal(updatedInfo.ClientImpl, info1.ClientImpl)
