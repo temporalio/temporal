@@ -263,7 +263,8 @@ func (t *queueTaskBase) HandleErr(
 	// TODO remove this error check special case
 	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
-		if t.timeSource.Now().Sub(t.submitTime) > 2*cache.NamespaceCacheRefreshInterval {
+		submitTimeDiff := t.timeSource.Now().Sub(t.submitTime)
+		if  submitTimeDiff >= 2*cache.NamespaceCacheRefreshInterval {
 			t.scope.IncCounter(metrics.TaskNotActiveCounter)
 			return nil
 		}

@@ -261,7 +261,7 @@ func (r *mutableStateTaskGeneratorImpl) generateScheduleWorkflowTaskTasks(
 	})
 
 	if r.mutableState.IsStickyTaskQueueEnabled() {
-		scheduledTime := time.Unix(0, workflowTask.ScheduledTimestamp).UTC()
+		scheduledTime := timestamp.TimeValue(workflowTask.ScheduledTimestamp)
 		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
 
 		r.mutableState.AddTimerTasks(&persistence.WorkflowTaskTimeoutTask{

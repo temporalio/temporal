@@ -191,8 +191,8 @@ func (b *stateBuilderImpl) applyEvents(
 				attributes.TaskQueue,
 				int32(timestamp.DurationValue(attributes.GetStartToCloseTimeout()).Seconds()),
 				attributes.GetAttempt(),
-				timestamp.TimeValue(event.GetEventTime()).UnixNano(),
-				timestamp.TimeValue(event.GetEventTime()).UnixNano(),
+				event.GetEventTime(),
+				event.GetEventTime(),
 			)
 			if err != nil {
 				return nil, err

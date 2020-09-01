@@ -810,7 +810,7 @@ func (e *mutableStateBuilder) IsStickyTaskQueueEnabled() bool {
 		return false
 	}
 	ttl := e.config.StickyTTL(e.GetNamespaceEntry().GetInfo().Name)
-	if e.timeSource.Now().After(e.executionInfo.LastUpdatedTimestamp.Add(ttl)) {
+	if e.timeSource.Now().After(timestamp.TimeValue(e.executionInfo.LastUpdatedTimestamp).Add(ttl)) {
 		return false
 	}
 	return true
@@ -1851,7 +1851,7 @@ func (e *mutableStateBuilder) AddWorkflowTaskScheduledEvent(
 // originalScheduledTimestamp is to record the first WorkflowTaskScheduledEvent during workflow task heartbeat.
 func (e *mutableStateBuilder) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
-	originalScheduledTimestamp int64,
+	originalScheduledTimestamp *time.Time,
 ) (*workflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
 	if err := e.checkMutability(opTag); err != nil {
@@ -1870,8 +1870,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowTaskScheduledEvent(
 	taskQueue *taskqueuepb.TaskQueue,
 	startToCloseTimeoutSeconds int32,
 	attempt int32,
-	scheduleTimestamp int64,
-	originalScheduledTimestamp int64,
+	scheduleTimestamp *time.Time,
+	originalScheduledTimestamp *time.Time,
 ) (*workflowTaskInfo, error) {
 	return e.workflowTaskManager.ReplicateWorkflowTaskScheduledEvent(version, scheduleID, taskQueue, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
 }

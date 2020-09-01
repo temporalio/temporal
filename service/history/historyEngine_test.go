@@ -1749,7 +1749,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTime
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = time.Now().UTC().Add(-time.Hour).UnixNano()
+	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = timestamp.TimeNowPtrUtcAddDuration(-time.Hour)
 
 	commands := []*commandpb.Command{}
 
@@ -1793,7 +1793,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = time.Now().UTC().Add(-time.Minute).UnixNano()
+	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = timestamp.TimeNowPtrUtcAddDuration(-time.Minute)
 
 	commands := []*commandpb.Command{}
 
@@ -1837,7 +1837,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = 0
+	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = nil
 
 	commands := []*commandpb.Command{}
 
@@ -5313,6 +5313,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		WorkflowTaskAttempt:                    sourceInfo.WorkflowTaskAttempt,
 		WorkflowTaskStartedTimestamp:           sourceInfo.WorkflowTaskStartedTimestamp,
 		WorkflowTaskOriginalScheduledTimestamp: sourceInfo.WorkflowTaskOriginalScheduledTimestamp,
+		WorkflowTaskScheduledTimestamp: 		sourceInfo.WorkflowTaskScheduledTimestamp,
 		CancelRequested:                        sourceInfo.CancelRequested,
 		CancelRequestID:                        sourceInfo.CancelRequestID,
 		CronSchedule:                           sourceInfo.CronSchedule,

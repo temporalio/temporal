@@ -212,6 +212,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		expectedResponse.PreviousStartedEventId = executionInfo.LastProcessedEvent
 	}
 	expectedResponse.ScheduledEventId = di.ScheduleID
+	expectedResponse.ScheduledTime = di.ScheduledTimestamp
 	expectedResponse.StartedEventId = di.ScheduleID + 1
 	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
@@ -225,8 +226,8 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
 	s.Nil(err)
 	s.NotNil(response)
+	s.True(response.StartedTime.After(*expectedResponse.ScheduledTime))
 	expectedResponse.StartedTime = response.StartedTime
-	expectedResponse.ScheduledTime = &time.Time{}
 	expectedResponse.Queries = make(map[string]*querypb.WorkflowQuery)
 	s.Equal(&expectedResponse, response)
 }
