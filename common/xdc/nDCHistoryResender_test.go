@@ -370,14 +370,14 @@ func (s *nDCHistoryResenderSuite) TestCurrentExecutionCheck() {
 		invariantMock,
 		s.logger,
 	)
-	execution1 := checks.ConcreteExecution{
+	execution1 := &checks.CurrentExecution{
 		Execution: checks.Execution{
 			DomainID:   domainID,
 			WorkflowID: workflowID1,
 			State:      persistence.WorkflowStateRunning,
 		},
 	}
-	execution2 := checks.ConcreteExecution{
+	execution2 := &checks.CurrentExecution{
 		Execution: checks.Execution{
 			DomainID:   domainID,
 			WorkflowID: workflowID2,
