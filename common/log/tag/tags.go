@@ -216,6 +216,11 @@ func WorkflowStartedID(id int64) Tag {
 	return newInt64("wf-started-id", id)
 }
 
+// WorkflowStartedID returns tag for WorkflowStartedTimestamp
+func WorkflowStartedTimestamp(t *time.Time) Tag {
+	return newTimePtrTag("wf-started-timestamp", t)
+}
+
 // WorkflowInitiatedID returns tag for WorkflowInitiatedID
 func WorkflowInitiatedID(id int64) Tag {
 	return newInt64("wf-initiated-id", id)

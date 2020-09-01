@@ -228,7 +228,7 @@ type (
 		WorkflowTaskRequestID                  string
 		WorkflowTaskTimeout                    *time.Duration
 		WorkflowTaskAttempt                    int32
-		WorkflowTaskStartedTimestamp           int64
+		WorkflowTaskStartedTimestamp           *time.Time
 		WorkflowTaskScheduledTimestamp         int64
 		WorkflowTaskOriginalScheduledTimestamp int64
 		CancelRequested                        bool

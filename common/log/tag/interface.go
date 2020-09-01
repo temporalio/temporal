@@ -105,6 +105,12 @@ func newTimeTag(key string, value time.Time) Tag {
 	}
 }
 
+func newTimePtrTag(key string, value *time.Time) Tag {
+	return Tag{
+		field: zap.Time(key, timestamp.TimeValue(value)),
+	}
+}
+
 func newObjectTag(key string, value interface{}) Tag {
 	return Tag{
 		field: zap.String(key, fmt.Sprintf("%v", value)),

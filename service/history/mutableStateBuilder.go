@@ -1894,7 +1894,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowTaskStartedEvent(
 	scheduleID int64,
 	startedID int64,
 	requestID string,
-	timestamp int64,
+	timestamp time.Time,
 ) (*workflowTaskInfo, error) {
 
 	return e.workflowTaskManager.ReplicateWorkflowTaskStartedEvent(workflowTask, version, scheduleID, startedID, requestID, timestamp)

@@ -642,7 +642,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		workflowTaskScheduleEvent.GetEventId(),
 		workflowTaskStartedEvent.GetEventId(),
 		workflowTaskStartedEvent.GetWorkflowTaskStartedEventAttributes().GetRequestId(),
-		timestamp.TimeValue(workflowTaskStartedEvent.GetEventTime()).UnixNano(),
+		timestamp.TimeValue(workflowTaskStartedEvent.GetEventTime()),
 	)
 	s.Nil(err)
 	s.NotNil(di)
@@ -693,7 +693,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		newWorkflowTaskScheduleEvent.GetEventId(),
 		newWorkflowTaskStartedEvent.GetEventId(),
 		newWorkflowTaskStartedEvent.GetWorkflowTaskStartedEventAttributes().GetRequestId(),
-		timestamp.TimeValue(newWorkflowTaskStartedEvent.GetEventTime()).UnixNano(),
+		timestamp.TimeValue(newWorkflowTaskStartedEvent.GetEventTime()),
 	)
 	s.Nil(err)
 	s.NotNil(di)

@@ -1829,7 +1829,7 @@ func (mr *MockmutableStateMockRecorder) ReplicateWorkflowTaskScheduledEvent(arg0
 }
 
 // ReplicateWorkflowTaskStartedEvent mocks base method.
-func (m *MockmutableState) ReplicateWorkflowTaskStartedEvent(arg0 *workflowTaskInfo, arg1, arg2, arg3 int64, arg4 string, arg5 int64) (*workflowTaskInfo, error) {
+func (m *MockmutableState) ReplicateWorkflowTaskStartedEvent(arg0 *workflowTaskInfo, arg1, arg2, arg3 int64, arg4 string, arg5 time.Time) (*workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateWorkflowTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5)
 	ret0, _ := ret[0].(*workflowTaskInfo)

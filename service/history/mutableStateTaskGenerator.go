@@ -288,12 +288,12 @@ func (r *mutableStateTaskGeneratorImpl) generateStartWorkflowTaskTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflowTaskInfo: %v", workflowTaskScheduleID))
 	}
 
-	startedTime := time.Unix(0, workflowTask.StartedTimestamp).UTC()
-	workflowTaskTimeout := workflowTask.WorkflowTaskTimeout
+	startedTime := timestamp.TimeValue(workflowTask.StartedTimestamp)
+	workflowTaskTimeout := timestamp.DurationValue(workflowTask.WorkflowTaskTimeout)
 
 	r.mutableState.AddTimerTasks(&persistence.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
-		VisibilityTimestamp: startedTime.Add(timestamp.DurationValue(workflowTaskTimeout)),
+		VisibilityTimestamp: startedTime.Add(workflowTaskTimeout),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		EventID:             workflowTask.ScheduleID,
 		ScheduleAttempt:     workflowTask.Attempt,

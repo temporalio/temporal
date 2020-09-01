@@ -30,6 +30,7 @@ package history
 
 import (
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 	enums "go.temporal.io/api/enums/v1"
@@ -93,7 +94,7 @@ func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) ReplicateTransientWor
 }
 
 // ReplicateWorkflowTaskStartedEvent mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) ReplicateWorkflowTaskStartedEvent(workflowTask *workflowTaskInfo, version, scheduleID, startedID int64, requestID string, timestamp int64) (*workflowTaskInfo, error) {
+func (m *MockmutableStateWorkflowTaskManager) ReplicateWorkflowTaskStartedEvent(workflowTask *workflowTaskInfo, version, scheduleID, startedID int64, requestID string, timestamp time.Time) (*workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateWorkflowTaskStartedEvent", workflowTask, version, scheduleID, startedID, requestID, timestamp)
 	ret0, _ := ret[0].(*workflowTaskInfo)

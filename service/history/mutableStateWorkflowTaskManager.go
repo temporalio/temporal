@@ -29,6 +29,7 @@ package history
 import (
 	"fmt"
 	"math"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -53,7 +54,7 @@ type (
 			scheduleID int64,
 			startedID int64,
 			requestID string,
-			timestamp int64,
+			timestamp time.Time,
 		) (*workflowTaskInfo, error)
 		ReplicateWorkflowTaskCompletedEvent(event *historypb.HistoryEvent) error
 		ReplicateWorkflowTaskFailedEvent() error
@@ -138,7 +139,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskScheduledEven
 		TaskQueue:                  taskQueue,
 		Attempt:                    attempt,
 		ScheduledTimestamp:         scheduleTimestamp,
-		StartedTimestamp:           0,
+		StartedTimestamp:           timestamp.UnixOrZeroTimePtr(0),
 		OriginalScheduledTimestamp: originalScheduledTimestamp,
 	}
 
@@ -170,7 +171,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateTransientWorkflowTaskSche
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: m.msb.GetExecutionInfo().TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Attempt:             m.msb.GetExecutionInfo().WorkflowTaskAttempt,
 		ScheduledTimestamp:  m.msb.timeSource.Now().UnixNano(),
-		StartedTimestamp:    0,
+		StartedTimestamp:    timestamp.UnixOrZeroTimePtr(0),
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
@@ -183,7 +184,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskStartedEvent(
 	scheduleID int64,
 	startedID int64,
 	requestID string,
-	timestamp int64,
+	timestamp time.Time,
 ) (*workflowTaskInfo, error) {
 	// Replicator calls it with a nil workflow task info, and it is safe to always lookup the workflow task in this case as it
 	// does not have to deal with transient workflow task case.
@@ -212,7 +213,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskStartedEvent(
 		RequestID:                  requestID,
 		WorkflowTaskTimeout:        workflowTask.WorkflowTaskTimeout,
 		Attempt:                    workflowTask.Attempt,
-		StartedTimestamp:           timestamp,
+		StartedTimestamp:           &timestamp,
 		ScheduledTimestamp:         workflowTask.ScheduledTimestamp,
 		TaskQueue:                  workflowTask.TaskQueue,
 		OriginalScheduledTimestamp: workflowTask.OriginalScheduledTimestamp,
@@ -428,7 +429,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskStartedEvent(
 		startTime = timestamp.TimeValue(event.GetEventTime())
 	}
 
-	workflowTask, err := m.ReplicateWorkflowTaskStartedEvent(workflowTask, m.msb.GetCurrentVersion(), scheduleID, startedID, requestID, startTime.UnixNano())
+	workflowTask, err := m.ReplicateWorkflowTaskStartedEvent(workflowTask, m.msb.GetCurrentVersion(), scheduleID, startedID, requestID, startTime)
 	// TODO merge active & passive task generation
 	if err := m.msb.taskGenerator.generateStartWorkflowTaskTasks(
 		startTime, // start time is now
@@ -467,7 +468,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskCompletedEvent(
 		scheduledEvent := m.msb.hBuilder.AddTransientWorkflowTaskScheduledEvent(taskQueue, int32(workflowTask.WorkflowTaskTimeout.Seconds()),
 			workflowTask.Attempt, timestamp.UnixOrZeroTime(workflowTask.ScheduledTimestamp))
 		startedEvent := m.msb.hBuilder.AddTransientWorkflowTaskStartedEvent(scheduledEvent.GetEventId(), workflowTask.RequestID,
-			request.GetIdentity(), timestamp.UnixOrZeroTime(workflowTask.StartedTimestamp))
+			request.GetIdentity(), timestamp.TimeValue(workflowTask.StartedTimestamp))
 		startedEventID = startedEvent.GetEventId()
 	}
 	// Now write the completed event
@@ -571,7 +572,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) FailWorkflowTask(
 		StartedID:                  common.EmptyEventID,
 		RequestID:                  emptyUUID,
 		WorkflowTaskTimeout:        timestamp.DurationFromSeconds(0),
-		StartedTimestamp:           0,
+		StartedTimestamp:           timestamp.UnixOrZeroTimePtr(0),
 		TaskQueue:                  nil,
 		OriginalScheduledTimestamp: 0,
 		Attempt:                    1,
@@ -592,7 +593,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) DeleteWorkflowTask() {
 		RequestID:           emptyUUID,
 		WorkflowTaskTimeout: timestamp.DurationFromSeconds(0),
 		Attempt:             1,
-		StartedTimestamp:    0,
+		StartedTimestamp:    timestamp.UnixOrZeroTimePtr(0),
 		ScheduledTimestamp:  0,
 
 		TaskQueue: nil,
@@ -624,7 +625,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) UpdateWorkflowTask(
 		tag.WorkflowTaskRequestId(workflowTask.RequestID),
 		tag.WorkflowTaskTimeout(workflowTask.WorkflowTaskTimeout),
 		tag.Attempt(workflowTask.Attempt),
-		tag.TimestampInt(workflowTask.StartedTimestamp))
+		tag.WorkflowStartedTimestamp(workflowTask.StartedTimestamp))
 }
 
 func (m *mutableStateWorkflowTaskManagerImpl) HasPendingWorkflowTask() bool {
@@ -679,7 +680,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) CreateTransientWorkflowTaskEvents(
 	}
 	scheduledEvent := newWorkflowTaskScheduledEventWithInfo(
 		workflowTask.ScheduleID,
-		workflowTask.ScheduledTimestamp,
+		timestamp.UnixOrZeroTimePtr(workflowTask.ScheduledTimestamp),
 		taskqueue,
 		int32(workflowTask.WorkflowTaskTimeout.Seconds()),
 		workflowTask.Attempt,

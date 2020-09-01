@@ -634,7 +634,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *WorkflowExecutionInfo, 
 		WorkflowTaskRequestId:             executionInfo.WorkflowTaskRequestID,
 		WorkflowTaskTimeout:               executionInfo.WorkflowTaskTimeout,
 		WorkflowTaskAttempt:               executionInfo.WorkflowTaskAttempt,
-		WorkflowTaskStartedTime:           timestamp.UnixOrZeroTimePtr(executionInfo.WorkflowTaskStartedTimestamp),
+		WorkflowTaskStartedTime:           executionInfo.WorkflowTaskStartedTimestamp,
 		WorkflowTaskScheduledTime:         timestamp.UnixOrZeroTimePtr(executionInfo.WorkflowTaskScheduledTimestamp),
 		WorkflowTaskOriginalScheduledTime: timestamp.UnixOrZeroTimePtr(executionInfo.WorkflowTaskOriginalScheduledTimestamp),
 		StickyTaskQueue:                   executionInfo.StickyTaskQueue,
@@ -659,8 +659,8 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *WorkflowExecutionInfo, 
 		Memo:                              executionInfo.Memo,
 		CompletionEvent:                   executionInfo.CompletionEvent,
 		// Dual write to move away from HistorySize in future
-		HistorySize:                       executionInfo.ExecutionStats.GetHistorySize(),
-		ExecutionStats: 				   executionInfo.ExecutionStats,
+		HistorySize:    executionInfo.ExecutionStats.GetHistorySize(),
+		ExecutionStats: executionInfo.ExecutionStats,
 	}
 
 	if !executionInfo.WorkflowExpirationTime.IsZero() {
@@ -710,7 +710,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		WorkflowTaskRequestID:                  info.GetWorkflowTaskRequestId(),
 		WorkflowTaskTimeout:                    info.GetWorkflowTaskTimeout(),
 		WorkflowTaskAttempt:                    info.GetWorkflowTaskAttempt(),
-		WorkflowTaskStartedTimestamp:           timestamp.TimeValue(info.GetWorkflowTaskStartedTime()).UnixNano(),
+		WorkflowTaskStartedTimestamp:           info.GetWorkflowTaskStartedTime(),
 		WorkflowTaskScheduledTimestamp:         timestamp.TimeValue(info.GetWorkflowTaskScheduledTime()).UnixNano(),
 		WorkflowTaskOriginalScheduledTimestamp: timestamp.TimeValue(info.GetWorkflowTaskOriginalScheduledTime()).UnixNano(),
 		StickyTaskQueue:                        info.GetStickyTaskQueue(),

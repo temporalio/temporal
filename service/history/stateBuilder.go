@@ -216,7 +216,7 @@ func (b *stateBuilderImpl) applyEvents(
 				attributes.GetScheduledEventId(),
 				event.GetEventId(),
 				attributes.GetRequestId(),
-				timestamp.TimeValue(event.GetEventTime()).UnixNano(),
+				timestamp.TimeValue(event.GetEventTime()),
 			)
 			if err != nil {
 				return nil, err

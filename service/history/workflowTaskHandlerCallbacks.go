@@ -607,7 +607,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	response.ScheduledTime = timestamp.UnixOrEmptyTimePtr(workflowTask.ScheduledTimestamp)
-	response.StartedTime = timestamp.UnixOrEmptyTimePtr(workflowTask.StartedTimestamp)
+	response.StartedTime = workflowTask.StartedTimestamp
+
 
 	if workflowTask.Attempt > 1 {
 		// This workflowTask is retried from mutable state

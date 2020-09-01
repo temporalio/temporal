@@ -59,7 +59,7 @@ type (
 		// use these timestamp to create scheduled/started events.
 		// Also used for recording latency metrics
 		ScheduledTimestamp int64
-		StartedTimestamp   int64
+		StartedTimestamp   *time.Time
 		// OriginalScheduledTimestamp is to record the first scheduled workflow task during workflow task heartbeat.
 		// Client may heartbeat workflow task by RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true
 		// In this case, OriginalScheduledTimestamp won't change. Then when current time - OriginalScheduledTimestamp exceeds
@@ -189,7 +189,7 @@ type (
 		ReplicateWorkflowTaskCompletedEvent(*historypb.HistoryEvent) error
 		ReplicateWorkflowTaskFailedEvent() error
 		ReplicateWorkflowTaskScheduledEvent(int64, int64, *taskqueuepb.TaskQueue, int32, int32, int64, int64) (*workflowTaskInfo, error)
-		ReplicateWorkflowTaskStartedEvent(*workflowTaskInfo, int64, int64, int64, string, int64) (*workflowTaskInfo, error)
+		ReplicateWorkflowTaskStartedEvent(*workflowTaskInfo, int64, int64, int64, string, time.Time) (*workflowTaskInfo, error)
 		ReplicateWorkflowTaskTimedOutEvent(enumspb.TimeoutType) error
 		ReplicateExternalWorkflowExecutionCancelRequested(*historypb.HistoryEvent) error
 		ReplicateExternalWorkflowExecutionSignaled(*historypb.HistoryEvent) error
