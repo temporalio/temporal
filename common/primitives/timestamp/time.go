@@ -209,7 +209,7 @@ func RoundUp(d time.Duration) time.Duration {
 
 func UnixOrZeroTime(nanos int64) time.Time {
 	if nanos <= 0 {
-		return time.Time{}
+		nanos = 0
 	}
 
 	return time.Unix(0, nanos).UTC()
