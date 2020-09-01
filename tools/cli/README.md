@@ -1,4 +1,4 @@
-Documentation for the Temporal command line interface is located at our [main site](https://docs.temporal.io/docs/learn-cli/).
+Documentation for the Temporal command line interface is located at our [main site](https://docs.temporal.io/docs/tctl/).
 
 ## Quick Start
 Run `make` from the project root. You should see an executable file called `tctl`. Try a few example commands to 
