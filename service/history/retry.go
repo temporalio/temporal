@@ -32,6 +32,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func getBackoffInterval(
@@ -40,7 +41,7 @@ func getBackoffInterval(
 	currentAttemptCounterValue int32,
 	maxAttempts int32,
 	initInterval time.Duration,
-	maxInterval time.Duration,
+	maxInterval *time.Duration,
 	backoffCoefficient float64,
 	failure *failurepb.Failure,
 	nonRetryableTypes []string,
@@ -70,18 +71,18 @@ func getBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
 	}
 
-	maxIntervalSeconds := int64(maxInterval.Round(time.Second).Seconds())
+	maxIntervalSeconds := int64(timestamp.DurationValue(maxInterval).Round(time.Second).Seconds())
 	nextIntervalSeconds := int64(initInterval.Seconds() * math.Pow(backoffCoefficient, float64(currentAttemptCounterValue-1)))
 	if nextIntervalSeconds <= 0 {
 		// math.Pow() could overflow
-		if maxInterval > 0 {
+		if maxIntervalSeconds > 0 {
 			nextIntervalSeconds = maxIntervalSeconds
 		} else {
 			return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
 		}
 	}
 
-	if maxInterval > 0 && nextIntervalSeconds > maxIntervalSeconds {
+	if maxIntervalSeconds > 0 && nextIntervalSeconds > maxIntervalSeconds {
 		// cap next interval to MaxInterval
 		nextIntervalSeconds = maxIntervalSeconds
 	}

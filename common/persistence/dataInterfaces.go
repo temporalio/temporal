@@ -246,7 +246,7 @@ type (
 		HasRetryPolicy         bool
 		InitialInterval        int64
 		BackoffCoefficient     float64
-		MaximumInterval        int64
+		MaximumInterval        *time.Duration
 		WorkflowExpirationTime time.Time
 		MaximumAttempts        int32
 		NonRetryableErrorTypes []string

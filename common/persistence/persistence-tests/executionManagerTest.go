@@ -983,7 +983,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				HasRetryPolicy:             true,
 				InitialInterval:            int64(rand.Int31()),
 				BackoffCoefficient:         7.78,
-				MaximumInterval:            int64(rand.Int31()),
+				MaximumInterval:            timestamp.DurationFromSeconds(int64(rand.Int31())),
 				WorkflowExpirationTime:     time.Now().UTC(),
 				MaximumAttempts:            rand.Int31(),
 				NonRetryableErrorTypes:     []string{"badRequestError", "accessDeniedError"},
@@ -1040,7 +1040,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.InitialInterval, info.InitialInterval)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.BackoffCoefficient, info.BackoffCoefficient)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.MaximumAttempts, info.MaximumAttempts)
-	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.MaximumInterval, info.MaximumInterval)
+	s.EqualValues(createReq.NewWorkflowSnapshot.ExecutionInfo.MaximumInterval, info.MaximumInterval)
 	s.EqualTimes(createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime, info.WorkflowExpirationTime)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.CronSchedule, info.CronSchedule)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.NonRetryableErrorTypes, info.NonRetryableErrorTypes)
@@ -1123,7 +1123,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.SignalCount = 9
 	updatedInfo.InitialInterval = math.MaxInt32
 	updatedInfo.BackoffCoefficient = 4.45
-	updatedInfo.MaximumInterval = math.MaxInt32
+	updatedInfo.MaximumInterval = timestamp.DurationFromSeconds(math.MaxInt32)
 	updatedInfo.MaximumAttempts = math.MaxInt32
 	updatedInfo.WorkflowExpirationTime = time.Now().UTC()
 	updatedInfo.NonRetryableErrorTypes = []string{"accessDenied", "badRequest"}
