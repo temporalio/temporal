@@ -139,7 +139,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
 	executionInfo := r.mutableState.GetExecutionInfo()
 	startVersion := startEvent.GetVersion()
 
-	runTimeoutDuration := time.Duration(executionInfo.WorkflowRunTimeout) * time.Second
+	runTimeoutDuration := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
 	runTimeoutDuration = runTimeoutDuration + firstWorkflowTaskDelayDuration
 	workflowExpirationTimestamp := now.Add(runTimeoutDuration)
 	if !executionInfo.WorkflowExpirationTime.IsZero() && workflowExpirationTimestamp.After(executionInfo.WorkflowExpirationTime) {

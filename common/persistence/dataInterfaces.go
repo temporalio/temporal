@@ -209,7 +209,7 @@ type (
 		CompletionEvent                        *historypb.HistoryEvent
 		TaskQueue                              string
 		WorkflowTypeName                       string
-		WorkflowRunTimeout                     int64
+		WorkflowRunTimeout                     *time.Duration
 		WorkflowExecutionTimeout               *time.Duration
 		DefaultWorkflowTaskTimeout             *time.Duration
 		State                                  enumsspb.WorkflowExecutionState

@@ -1173,7 +1173,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 			WorkflowExecutionTimeout:   executionInfo.WorkflowExecutionTimeout,
-			WorkflowRunTimeout:         timestamp.DurationPtr(time.Duration(executionInfo.WorkflowRunTimeout) * time.Second),
+			WorkflowRunTimeout:         executionInfo.WorkflowRunTimeout,
 			DefaultWorkflowTaskTimeout: executionInfo.DefaultWorkflowTaskTimeout,
 		},
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{

@@ -124,7 +124,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				RunID:                      workflowExecution.GetRunId(),
 				TaskQueue:                  "taskQueue",
 				WorkflowTypeName:           "wType",
-				WorkflowRunTimeout:         20,
+				WorkflowRunTimeout:         timestamp.DurationFromSeconds(20),
 				DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(13),
 				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -227,7 +227,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 				RunID:                      workflowExecution.GetRunId(),
 				TaskQueue:                  "taskQueue",
 				WorkflowTypeName:           "wType",
-				WorkflowRunTimeout:         20,
+				WorkflowRunTimeout:         timestamp.DurationFromSeconds(20),
 				DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(13),
 
 				State:                  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
@@ -305,7 +305,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 		RunId:      "551c88d2-d9e6-404f-8131-9eec14f36643",
 	}
 
-	_, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "queue1", "wType", 20, timestamp.DurationFromSeconds(13), 3, 0, 2, nil)
+	_, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "queue1", "wType", timestamp.DurationFromSeconds(20), timestamp.DurationFromSeconds(13), 3, 0, 2, nil)
 	s.NoError(err0)
 
 	state0, err1 := s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
@@ -410,7 +410,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 			VisibilityTimestamp: currentTime,
 		}}
 
-	task0, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "taskQueue", "wType", 20, timestamp.DurationFromSeconds(13), 3, 0, 2, txTasks)
+	task0, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "taskQueue", "wType", timestamp.DurationFromSeconds(20), timestamp.DurationFromSeconds(13), 3, 0, 2, txTasks)
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
@@ -437,7 +437,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	s.Equal(namespaceID, info0.NamespaceID)
 	s.Equal("taskQueue", info0.TaskQueue)
 	s.Equal("wType", info0.WorkflowTypeName)
-	s.Equal(int64(20), info0.WorkflowRunTimeout)
+	s.EqualValues(int64(20), info0.WorkflowRunTimeout.Seconds())
 	s.EqualValues(13, int64(info0.DefaultWorkflowTaskTimeout.Seconds()))
 	s.Equal(int64(3), info0.NextEventID)
 	s.Equal(int64(0), info0.LastProcessedEvent)
@@ -543,7 +543,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	s.Equal(namespaceID, info1.NamespaceID)
 	s.Equal("taskQueue", info1.TaskQueue)
 	s.Equal("wType", info1.WorkflowTypeName)
-	s.Equal(int64(20), info1.WorkflowRunTimeout)
+	s.EqualValues(int64(20), info1.WorkflowRunTimeout.Seconds())
 	s.EqualValues(13, int64(info1.DefaultWorkflowTaskTimeout.Seconds()))
 	s.Equal(int64(2), info1.WorkflowTaskScheduleID)
 
@@ -559,7 +559,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	s.Equal(namespaceID, info2.NamespaceID)
 	s.Equal("taskQueue", info2.TaskQueue)
 	s.Equal("wType", info2.WorkflowTypeName)
-	s.Equal(int64(20), info2.WorkflowRunTimeout)
+	s.EqualValues(int64(20), info2.WorkflowRunTimeout.Seconds())
 	s.EqualValues(13, int64(info2.DefaultWorkflowTaskTimeout.Seconds()))
 	s.Equal(int64(2), info2.WorkflowTaskScheduleID)
 

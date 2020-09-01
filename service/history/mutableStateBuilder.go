@@ -1764,7 +1764,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.FirstExecutionRunID = event.GetFirstExecutionRunId()
 	e.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	e.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
-	e.executionInfo.WorkflowRunTimeout = int64(timestamp.DurationValue(event.GetWorkflowRunTimeout()).Seconds())
+	e.executionInfo.WorkflowRunTimeout = event.GetWorkflowRunTimeout()
 	e.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeout()
 	e.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 

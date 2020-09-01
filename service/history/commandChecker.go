@@ -530,11 +530,11 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 		if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) > 0 {
 			runTimeout = timestamp.MinDuration(runTimeout, timestamp.DurationValue(attributes.GetWorkflowRunTimeout()))
 		} else {
-			runTimeout = timestamp.MinDuration(runTimeout, time.Duration(executionInfo.WorkflowRunTimeout)*time.Second)
+			runTimeout = timestamp.MinDuration(runTimeout, timestamp.DurationValue(executionInfo.WorkflowRunTimeout))
 		}
 		attributes.WorkflowRunTimeout = &runTimeout
 	} else if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) == 0 {
-		attributes.WorkflowRunTimeout = timestamp.DurationPtr(time.Duration(executionInfo.WorkflowRunTimeout) * time.Second)
+		attributes.WorkflowRunTimeout = executionInfo.WorkflowRunTimeout
 	}
 
 	// Inherit workflow task timeout from previous execution if not provided on command

@@ -165,7 +165,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		}
 
 		executionInfo := mutableState.GetExecutionInfo()
-		workflowTimeout := executionInfo.WorkflowRunTimeout
+		workflowTimeout := int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds())
 		wtTimeout := common.MinInt64(workflowTimeout, common.MaxTaskTimeoutSeconds)
 
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), wtInfo.Version, transferTask.Version, transferTask)
@@ -425,7 +425,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	workflowTimeout := int32(executionInfo.WorkflowRunTimeout)
+	workflowTimeout := executionInfo.WorkflowRunTimeout
 	wfTypeName := executionInfo.WorkflowTypeName
 	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {
