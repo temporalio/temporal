@@ -183,6 +183,12 @@ func (m *executionManagerImpl) DeserializeBufferedEvents(
 
 	events := make([]*historypb.HistoryEvent, 0)
 	for _, b := range blobs {
+		if b == nil {
+			// Should not happen, log and discard to prevent callers from consuming
+			m.logger.Warn("discarding nil buffered event")
+			continue
+		}
+
 		history, err := m.serializer.DeserializeBatchEvents(b)
 		if err != nil {
 			return nil, err
