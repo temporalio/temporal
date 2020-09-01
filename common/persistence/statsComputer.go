@@ -67,6 +67,11 @@ func (sc *statsComputer) computeMutableStateStats(req *InternalGetWorkflowExecut
 
 	for _, be := range req.State.BufferedEvents {
 		bufferedEventsCount++
+
+		if be == nil {
+			continue
+		}
+
 		bufferedEventsSize += len(be.Data)
 	}
 
@@ -182,6 +187,10 @@ func (sc *statsComputer) computeMutableStateUpdateStats(req *InternalUpdateWorkf
 }
 
 func computeExecutionInfoSize(executionInfo *InternalWorkflowExecutionInfo) int {
+	if executionInfo == nil {
+		return 0
+	}
+
 	size := len(executionInfo.WorkflowID)
 	size += len(executionInfo.TaskQueue)
 	size += len(executionInfo.WorkflowTypeName)
@@ -191,6 +200,10 @@ func computeExecutionInfoSize(executionInfo *InternalWorkflowExecutionInfo) int 
 }
 
 func computeActivityInfoSize(ai *persistenceblobs.ActivityInfo) int {
+	if ai == nil {
+		return 0
+	}
+
 	size := len(ai.ActivityId)
 	if ai.ScheduledEvent != nil {
 		size += ai.ScheduledEvent.Size()
@@ -206,12 +219,19 @@ func computeActivityInfoSize(ai *persistenceblobs.ActivityInfo) int {
 }
 
 func computeTimerInfoSize(ti *persistenceblobs.TimerInfo) int {
+	if ti == nil {
+		return 0
+	}
+
 	size := len(ti.GetTimerId())
 
 	return size
 }
 
 func computeChildInfoSize(ci *persistenceblobs.ChildExecutionInfo) int {
+	if ci == nil {
+		return 0
+	}
 	size := 0
 	if ci.InitiatedEvent != nil {
 		size += ci.InitiatedEvent.Size()
@@ -223,6 +243,10 @@ func computeChildInfoSize(ci *persistenceblobs.ChildExecutionInfo) int {
 }
 
 func computeSignalInfoSize(si *persistenceblobs.SignalInfo) int {
+	if si == nil {
+		return 0
+	}
+
 	size := len(si.Name)
 	size += si.GetInput().Size()
 	size += len(si.Control)
