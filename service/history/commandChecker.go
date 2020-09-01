@@ -539,7 +539,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 
 	// Inherit workflow task timeout from previous execution if not provided on command
 	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) <= 0 {
-		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(time.Duration(executionInfo.DefaultWorkflowTaskTimeout) * time.Second)
+		attributes.WorkflowTaskTimeout = executionInfo.DefaultWorkflowTaskTimeout
 	}
 
 	// Check next run workflow task delay
@@ -616,7 +616,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 
 	// Inherit workflow task timeout from parent workflow execution if not provided on command
 	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) <= 0 {
-		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(time.Duration(parentInfo.DefaultWorkflowTaskTimeout) * time.Second)
+		attributes.WorkflowTaskTimeout = parentInfo.DefaultWorkflowTaskTimeout
 	}
 
 	return nil

@@ -289,13 +289,11 @@ func (r *mutableStateTaskGeneratorImpl) generateStartWorkflowTaskTasks(
 	}
 
 	startedTime := time.Unix(0, workflowTask.StartedTimestamp).UTC()
-	workflowTaskTimeout := time.Duration(
-		workflowTask.WorkflowTaskTimeout,
-	) * time.Second
+	workflowTaskTimeout := workflowTask.WorkflowTaskTimeout
 
 	r.mutableState.AddTimerTasks(&persistence.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
-		VisibilityTimestamp: startedTime.Add(workflowTaskTimeout),
+		VisibilityTimestamp: startedTime.Add(timestamp.DurationValue(workflowTaskTimeout)),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		EventID:             workflowTask.ScheduleID,
 		ScheduleAttempt:     workflowTask.Attempt,

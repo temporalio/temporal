@@ -52,7 +52,7 @@ type (
 		ScheduleID          int64
 		StartedID           int64
 		RequestID           string
-		WorkflowTaskTimeout int64
+		WorkflowTaskTimeout *time.Duration
 		TaskQueue           *taskqueuepb.TaskQueue // This is only needed to communicate task queue used after AddWorkflowTaskScheduledEvent
 		Attempt             int32
 		// Scheduled and Started timestamps are useful for transient workflow task: when transient workflow task finally completes,

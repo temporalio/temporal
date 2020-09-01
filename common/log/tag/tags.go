@@ -167,6 +167,11 @@ func WorkflowTaskTimeoutSeconds(s int64) Tag {
 	return newInt64("workflow-task-timeout", s)
 }
 
+// WorkflowTaskTimeoutSeconds returns tag for WorkflowTaskTimeoutSeconds
+func WorkflowTaskTimeout(s *time.Duration) Tag {
+	return newDurationPtrTag("workflow-task-timeout", s)
+}
+
 // QueryID returns tag for QueryID
 func QueryID(queryID string) Tag {
 	return newStringTag("query-id", queryID)

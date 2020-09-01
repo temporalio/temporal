@@ -702,7 +702,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskScheduled() {
 		ScheduleID:          event.GetEventId(),
 		StartedID:           common.EmptyEventID,
 		RequestID:           emptyUUID,
-		WorkflowTaskTimeout: int64(timeout.Seconds()),
+		WorkflowTaskTimeout: &timeout,
 		TaskQueue:           taskqueue,
 		Attempt:             workflowTaskAttempt,
 	}
@@ -734,7 +734,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 
 	now := time.Now().UTC()
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
-	timeoutSecond := int64(11)
+	timeout := time.Second * 11
 	scheduleID := int64(111)
 	workflowTaskRequestID := uuid.New()
 	evenType := enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED
@@ -753,7 +753,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 		ScheduleID:          scheduleID,
 		StartedID:           event.GetEventId(),
 		RequestID:           workflowTaskRequestID,
-		WorkflowTaskTimeout: timeoutSecond,
+		WorkflowTaskTimeout: &timeout,
 		TaskQueue:           taskqueue,
 		Attempt:             1,
 	}

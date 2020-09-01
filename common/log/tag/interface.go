@@ -29,6 +29,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // Tag is the interface for logging system
@@ -88,6 +90,12 @@ func newErrorTag(key string, value error) Tag {
 func newDurationTag(key string, value time.Duration) Tag {
 	return Tag{
 		field: zap.Duration(key, value),
+	}
+}
+
+func newDurationPtrTag(key string, value *time.Duration) Tag {
+	return Tag{
+		field: zap.Duration(key, timestamp.DurationValue(value)),
 	}
 }
 

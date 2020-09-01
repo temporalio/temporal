@@ -1174,7 +1174,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			},
 			WorkflowExecutionTimeout:   timestamp.DurationPtr(time.Duration(executionInfo.WorkflowExecutionTimeout) * time.Second),
 			WorkflowRunTimeout:         timestamp.DurationPtr(time.Duration(executionInfo.WorkflowRunTimeout) * time.Second),
-			DefaultWorkflowTaskTimeout: timestamp.DurationPtr(time.Duration(executionInfo.DefaultWorkflowTaskTimeout) * time.Second),
+			DefaultWorkflowTaskTimeout: executionInfo.DefaultWorkflowTaskTimeout,
 		},
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 			Execution: &commonpb.WorkflowExecution{

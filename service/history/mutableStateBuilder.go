@@ -227,7 +227,7 @@ func newMutableStateBuilder(
 		WorkflowTaskScheduleID: common.EmptyEventID,
 		WorkflowTaskStartedID:  common.EmptyEventID,
 		WorkflowTaskRequestID:  emptyUUID,
-		WorkflowTaskTimeout:    0,
+		WorkflowTaskTimeout:    timestamp.DurationFromSeconds(0),
 		WorkflowTaskAttempt:    1,
 
 		NextEventID:        common.FirstEventID,
@@ -1613,7 +1613,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	var taskTimeout *time.Duration
 	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) == 0 {
-		taskTimeout = timestamp.DurationPtr(time.Duration(previousExecutionInfo.DefaultWorkflowTaskTimeout) * time.Second)
+		taskTimeout = previousExecutionInfo.DefaultWorkflowTaskTimeout
 	} else {
 		taskTimeout = attributes.GetWorkflowTaskTimeout()
 	}
@@ -1766,7 +1766,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
 	e.executionInfo.WorkflowRunTimeout = int64(timestamp.DurationValue(event.GetWorkflowRunTimeout()).Seconds())
 	e.executionInfo.WorkflowExecutionTimeout = int64(timestamp.DurationValue(event.GetWorkflowExecutionTimeout()).Seconds())
-	e.executionInfo.DefaultWorkflowTaskTimeout = int64(timestamp.DurationValue(event.GetWorkflowTaskTimeout()).Seconds())
+	e.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 
 	if err := e.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1781,7 +1781,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.WorkflowTaskScheduleID = common.EmptyEventID
 	e.executionInfo.WorkflowTaskStartedID = common.EmptyEventID
 	e.executionInfo.WorkflowTaskRequestID = emptyUUID
-	e.executionInfo.WorkflowTaskTimeout = 0
+	e.executionInfo.WorkflowTaskTimeout = timestamp.DurationFromSeconds(0)
 
 	e.executionInfo.CronSchedule = event.GetCronSchedule()
 	e.executionInfo.ParentNamespaceID = parentNamespaceID

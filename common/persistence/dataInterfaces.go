@@ -211,7 +211,7 @@ type (
 		WorkflowTypeName                       string
 		WorkflowRunTimeout                     int64
 		WorkflowExecutionTimeout               int64
-		DefaultWorkflowTaskTimeout             int64
+		DefaultWorkflowTaskTimeout             *time.Duration
 		State                                  enumsspb.WorkflowExecutionState
 		Status                                 enumspb.WorkflowExecutionStatus
 		LastFirstEventID                       int64
@@ -226,7 +226,7 @@ type (
 		WorkflowTaskScheduleID                 int64
 		WorkflowTaskStartedID                  int64
 		WorkflowTaskRequestID                  string
-		WorkflowTaskTimeout                    int64
+		WorkflowTaskTimeout                    *time.Duration
 		WorkflowTaskAttempt                    int32
 		WorkflowTaskStartedTimestamp           int64
 		WorkflowTaskScheduledTimestamp         int64
