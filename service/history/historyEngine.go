@@ -387,10 +387,15 @@ func (e *historyEngineImpl) Start() {
 	e.logger.Info("History engine state changed", tag.LifeCycleStarting)
 	defer e.logger.Info("History engine state changed", tag.LifeCycleStarted)
 
-	e.registerDomainFailoverCallback()
-
 	e.txProcessor.Start()
 	e.timerProcessor.Start()
+
+	// failover callback will try to create a failover queue processor to scan all inflight tasks
+	// if domain needs to be failovered. However, in the multicursor queue logic, the scan range
+	// can't be retrieved before the processor is started. If failover callback is registered
+	// before queue processor is started, it may result in a deadline as to create the failover queue,
+	// queue processor need to be started.
+	e.registerDomainFailoverCallback()
 
 	clusterMetadata := e.shard.GetClusterMetadata()
 	if e.replicatorProcessor != nil && clusterMetadata.GetReplicationConsumerConfig().Type != sconfig.ReplicationConsumerTypeRPC {

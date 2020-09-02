@@ -367,7 +367,7 @@ func (c *Collection) GetBoolPropertyFilteredByDomain(key Key, defaultValue bool)
 // GetBoolPropertyFilteredByDomainID gets property with domainID filter and asserts that it's a bool
 func (c *Collection) GetBoolPropertyFilteredByDomainID(key Key, defaultValue bool) BoolPropertyFnWithDomainIDFilter {
 	return func(domainID string) bool {
-		val, err := c.client.GetBoolValue(key, getFilterMap(DomainFilter(domainID)), defaultValue)
+		val, err := c.client.GetBoolValue(key, getFilterMap(DomainIDFilter(domainID)), defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}
