@@ -30,7 +30,6 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -238,22 +237,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) *replicationspb.ReplicationTask {
 
-	if replicationTask.GetHistoryTaskAttributes() != nil {
-		return &replicationspb.ReplicationTask{
-			TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
-			Attributes: &replicationspb.ReplicationTask_HistoryMetadataTaskAttributes{
-				HistoryMetadataTaskAttributes: &replicationspb.HistoryMetadataTaskAttributes{
-					TargetClusters: replicationTask.GetHistoryTaskAttributes().GetTargetClusters(),
-					NamespaceId:    task.GetNamespaceId(),
-					WorkflowId:     task.GetWorkflowId(),
-					RunId:          task.GetRunId(),
-					FirstEventId:   task.GetFirstEventId(),
-					NextEventId:    task.GetNextEventId(),
-					Version:        common.EmptyVersion,
-				},
-			},
-		}
-	} else if replicationTask.GetHistoryTaskV2Attributes() != nil {
+	if replicationTask.GetHistoryTaskV2Attributes() != nil {
 		return &replicationspb.ReplicationTask{
 			TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
 			Attributes: &replicationspb.ReplicationTask_HistoryMetadataTaskAttributes{
@@ -268,72 +252,6 @@ func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(
 		}
 	}
 	return nil
-}
-
-// GenerateReplicationTask generate replication task
-func GenerateReplicationTask(
-	targetClusters []string,
-	task *persistenceblobs.ReplicationTaskInfo,
-	historyV2Mgr persistence.HistoryManager,
-	metricsClient metrics.Client,
-	history *historypb.History,
-	shardID *int,
-) (*replicationspb.ReplicationTask, string, error) {
-	var err error
-	if history == nil {
-		history, _, err = GetAllHistory(historyV2Mgr, metricsClient, false,
-			task.GetFirstEventId(), task.GetNextEventId(), task.BranchToken, shardID)
-		if err != nil {
-			return nil, "", err
-		}
-		for _, event := range history.Events {
-			if task.Version != event.GetVersion() {
-				return nil, "", nil
-			}
-		}
-	}
-
-	var newRunID string
-	var newRunHistory *historypb.History
-	events := history.Events
-	if len(events) > 0 {
-		lastEvent := events[len(events)-1]
-		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
-			// Check if this is replication task for ContinueAsNew event, then retrieve the history for new execution
-			newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
-			newRunHistory, _, err = GetAllHistory(
-				historyV2Mgr,
-				metricsClient,
-				false,
-				common.FirstEventID,
-				common.FirstEventID+1, // [common.FirstEventID to common.FirstEventID+1) will get the first batch
-				task.NewRunBranchToken,
-				shardID)
-			if err != nil {
-				return nil, "", err
-			}
-		}
-	}
-
-	ret := &replicationspb.ReplicationTask{
-		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-				TargetClusters:  targetClusters,
-				NamespaceId:     task.GetNamespaceId(),
-				WorkflowId:      task.GetWorkflowId(),
-				RunId:           task.GetRunId(),
-				FirstEventId:    task.GetFirstEventId(),
-				NextEventId:     task.GetNextEventId(),
-				Version:         task.Version,
-				ReplicationInfo: task.LastReplicationInfo,
-				History:         history,
-				NewRunHistory:   newRunHistory,
-				ResetWorkflow:   task.ResetWorkflow,
-			},
-		},
-	}
-	return ret, newRunID, nil
 }
 
 func (p *replicatorQueueProcessorImpl) readTasks(readLevel int64) ([]queueTaskInfo, bool, error) {
@@ -706,42 +624,6 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 		task.GetWorkflowId(),
 		runID,
 		func(mutableState mutableState) (*replicationspb.ReplicationTask, error) {
-
-			versionHistories := mutableState.GetVersionHistories()
-
-			// TODO when 3+DC migration is done, remove this block of code
-			if versionHistories == nil {
-				namespaceEntry, err := p.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
-				if err != nil {
-					return nil, err
-				}
-
-				var targetClusters []string
-				for _, cluster := range namespaceEntry.GetReplicationConfig().Clusters {
-					targetClusters = append(targetClusters, cluster)
-				}
-
-				replicationTask, newRunID, err := GenerateReplicationTask(
-					targetClusters,
-					task,
-					p.historyV2Mgr,
-					p.metricsClient,
-					nil,
-					convert.IntPtr(p.shard.GetShardID()),
-				)
-				if err != nil {
-					return nil, err
-				}
-				if newRunID != "" {
-					isNDCWorkflow, err := p.isNewRunNDCEnabled(ctx, namespaceID, task.GetWorkflowId(), newRunID)
-					if err != nil {
-						return nil, err
-					}
-					replicationTask.GetHistoryTaskAttributes().NewRunNdc = isNDCWorkflow
-				}
-
-				return replicationTask, err
-			}
 
 			// NDC workflow
 			versionHistoryItems, branchToken, err := p.getVersionHistoryItems(

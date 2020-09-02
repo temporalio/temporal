@@ -60,7 +60,6 @@ var keys = map[Key]string{
 
 	// system settings
 	EnableGlobalNamespace:                  "system.enableGlobalNamespace",
-	EnableNDC:                              "system.enableNDC",
 	EnableVisibilitySampling:               "system.enableVisibilitySampling",
 	AdvancedVisibilityWritingMode:          "system.advancedVisibilityWritingMode",
 	EnableReadVisibilityFromES:             "system.enableReadVisibilityFromES",
@@ -312,8 +311,6 @@ const (
 
 	// EnableGlobalNamespace is key for enable global namespace
 	EnableGlobalNamespace
-	// EnableNDC is key for enable N data center events replication
-	EnableNDC
 	// EnableVisibilitySampling is key for enable visibility sampling
 	EnableVisibilitySampling
 	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility

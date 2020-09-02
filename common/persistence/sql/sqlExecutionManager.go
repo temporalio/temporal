@@ -36,7 +36,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
@@ -240,20 +239,6 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 	executionInfo := p.ProtoWorkflowExecutionToPartialInternalExecution(info, executionState, executionsRow.NextEventID)
 
 	state := &p.InternalWorkflowMutableState{ExecutionInfo: executionInfo, VersionHistories: info.GetVersionHistories()}
-
-	if info.ReplicationData != nil {
-		state.ReplicationState = &persistenceblobs.ReplicationState{}
-
-		state.ReplicationState.StartVersion = info.StartVersion
-		state.ReplicationState.CurrentVersion = info.CurrentVersion
-		state.ReplicationState.LastWriteVersion = executionsRow.LastWriteVersion
-		state.ReplicationState.LastWriteEventId = info.ReplicationData.LastWriteEventId
-		state.ReplicationState.LastReplicationInfo = info.ReplicationData.LastReplicationInfo
-
-		if state.ReplicationState.LastReplicationInfo == nil {
-			state.ReplicationState.LastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo, 0)
-		}
-	}
 
 	// Populate Maps
 	{
@@ -869,14 +854,6 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 		info, err := serialization.ReplicationTaskInfoFromBlob(row.Data, row.DataEncoding)
 		if err != nil {
 			return nil, err
-		}
-
-		var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
-		if info.GetTaskType() == enumsspb.TASK_TYPE_REPLICATION_HISTORY {
-			lastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo, len(info.LastReplicationInfo))
-			for k, v := range info.LastReplicationInfo {
-				lastReplicationInfo[k] = &replicationspb.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.GetLastEventId()}
-			}
 		}
 
 		tasks[i] = info

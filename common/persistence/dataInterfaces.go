@@ -30,7 +30,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -39,7 +38,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
@@ -434,10 +432,6 @@ type (
 		Version             int64
 		BranchToken         []byte
 		NewRunBranchToken   []byte
-
-		// TODO when 2DC is deprecated remove these 2 attributes
-		ResetWorkflow       bool
-		LastReplicationInfo map[string]*replicationspb.ReplicationInfo
 	}
 
 	// SyncActivityTask is the replication task created for shipping activity info to other clusters
@@ -476,7 +470,6 @@ type (
 		SignalRequestedIDs  map[string]struct{}
 		ExecutionInfo       *WorkflowExecutionInfo
 		ExecutionStats      *persistenceblobs.ExecutionStats
-		ReplicationState    *persistenceblobs.ReplicationState
 		BufferedEvents      []*historypb.HistoryEvent
 		VersionHistories    *VersionHistories
 		Checksum            checksum.Checksum
@@ -644,7 +637,6 @@ type (
 	WorkflowMutation struct {
 		ExecutionInfo    *WorkflowExecutionInfo
 		ExecutionStats   *persistenceblobs.ExecutionStats
-		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *VersionHistories
 
 		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
@@ -674,7 +666,6 @@ type (
 	WorkflowSnapshot struct {
 		ExecutionInfo    *WorkflowExecutionInfo
 		ExecutionStats   *persistenceblobs.ExecutionStats
-		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *VersionHistories
 
 		ActivityInfos       []*persistenceblobs.ActivityInfo
@@ -2152,13 +2143,6 @@ func NewGetReplicationTasksFromDLQRequest(
 			BatchSize:     batchSize,
 			NextPageToken: nextPageToken,
 		},
-	}
-}
-
-func GenerateVersionProto(r *persistenceblobs.ReplicationState) *persistenceblobs.ReplicationVersions {
-	return &persistenceblobs.ReplicationVersions{
-		StartVersion:     &types.Int64Value{Value: r.StartVersion},
-		LastWriteVersion: &types.Int64Value{Value: r.LastWriteVersion},
 	}
 }
 

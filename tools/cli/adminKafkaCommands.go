@@ -35,7 +35,6 @@ import (
 	"io/ioutil"
 	"os"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -46,23 +45,18 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	"gopkg.in/yaml.v2"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	indexerspb "go.temporal.io/server/api/indexer/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/codec"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
-	"go.temporal.io/server/common/service/dynamicconfig"
-	"go.temporal.io/server/service/history"
 )
 
 type filterFn func(*replicationspb.ReplicationTask) bool
@@ -508,9 +502,6 @@ func doRereplicate(
 		maxID = maxRereplicateEventID
 	}
 
-	histV2 := cassandra.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
-	historyV2Mgr := persistence.NewHistoryV2ManagerImpl(histV2, loggerimpl.NewNopLogger(), dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit))
-
 	exeM, _ := cassandra.NewWorkflowExecutionPersistence(shardID, session, loggerimpl.NewNopLogger())
 	exeMgr := persistence.NewExecutionManagerImpl(exeM, loggerimpl.NewNopLogger())
 
@@ -545,77 +536,6 @@ func doRereplicate(
 				ErrorAndExit("Failed to resend ndc workflow", err)
 			}
 			return
-		}
-
-		currVersion := resp.State.ReplicationState.CurrentVersion
-		repInfo := map[string]*replicationspb.ReplicationInfo{
-			"": {
-				Version:     currVersion,
-				LastEventId: 0,
-			},
-		}
-
-		exeInfo := resp.State.ExecutionInfo
-		taskTemplate := &persistenceblobs.ReplicationTaskInfo{
-			NamespaceId:         namespaceID,
-			WorkflowId:          wid,
-			RunId:               rid,
-			Version:             currVersion,
-			LastReplicationInfo: repInfo,
-			BranchToken:         exeInfo.BranchToken,
-		}
-
-		_, historyBatches, err := history.GetAllHistory(historyV2Mgr, nil, true,
-			minID, maxID, exeInfo.BranchToken, convert.IntPtr(shardID))
-
-		if err != nil {
-			ErrorAndExit("GetAllHistory error", err)
-		}
-
-		continueAsNew := false
-		var newRunID string
-		for _, batch := range historyBatches {
-
-			events := batch.Events
-			firstEvent := events[0]
-			lastEvent := events[len(events)-1]
-			if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
-				continueAsNew = true
-				newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
-				resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
-					NamespaceID: namespaceID,
-					Execution: commonpb.WorkflowExecution{
-						WorkflowId: wid,
-						RunId:      newRunID,
-					},
-				})
-				if err != nil {
-					ErrorAndExit("GetWorkflowExecution error", err)
-				}
-				taskTemplate.NewRunBranchToken = resp.State.ExecutionInfo.BranchToken
-			}
-			taskTemplate.Version = firstEvent.GetVersion()
-			taskTemplate.FirstEventId = firstEvent.GetEventId()
-			taskTemplate.NextEventId = lastEvent.GetEventId() + 1
-			task, _, err := history.GenerateReplicationTask(targets, taskTemplate, historyV2Mgr, nil, batch, convert.IntPtr(shardID))
-			if err != nil {
-				ErrorAndExit("GenerateReplicationTask error", err)
-			}
-			err = producer.Publish(task)
-			if err != nil {
-				ErrorAndExit("Publish task error", err)
-			}
-			fmt.Printf("publish task successfully firstEventId %v, lastEventId %v \n", firstEvent.GetEventId(), lastEvent.GetEventId())
-		}
-
-		fmt.Printf("Done rereplicate for wid: %v, rid:%v \n", wid, rid)
-		runtime.GC()
-		if continueAsNew {
-			rid = newRunID
-			minID = 1
-			maxID = maxRereplicateEventID
-		} else {
-			break
 		}
 	}
 }

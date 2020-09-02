@@ -98,18 +98,6 @@ func newTimerQueueProcessor(
 		}
 
 		if clusterName != shard.GetService().GetClusterMetadata().GetCurrentClusterName() {
-			historyRereplicator := xdc.NewHistoryRereplicator(
-				currentClusterName,
-				shard.GetNamespaceCache(),
-				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
-				func(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error {
-					return historyService.ReplicateRawEvents(ctx, request)
-				},
-				shard.GetService().GetPayloadSerializer(),
-				historyRereplicationTimeout,
-				nil,
-				logger,
-			)
 			nDCHistoryResender := xdc.NewNDCHistoryResender(
 				shard.GetNamespaceCache(),
 				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
@@ -125,7 +113,6 @@ func newTimerQueueProcessor(
 				historyService,
 				clusterName,
 				taskAllocator,
-				historyRereplicator,
 				nDCHistoryResender,
 				queueTaskProcessor,
 				logger,

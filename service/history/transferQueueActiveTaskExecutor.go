@@ -1263,64 +1263,42 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	workflowID := task.GetWorkflowId()
 	baseRunID := baseMutableState.GetExecutionInfo().RunID
 
-	// TODO when NDC is rolled out, remove this block
-	if baseMutableState.GetVersionHistories() == nil {
-		_, err = t.historyService.resetor.ResetWorkflowExecution(
+	resetRunID := uuid.New()
+	baseRebuildLastEventID := resetPoint.GetFirstWorkflowTaskCompletedId() - 1
+	baseVersionHistories := baseMutableState.GetVersionHistories()
+	baseCurrentVersionHistory, err := baseVersionHistories.GetCurrentVersionHistory()
+	if err != nil {
+		return err
+	}
+	baseRebuildLastEventVersion, err := baseCurrentVersionHistory.GetEventVersion(baseRebuildLastEventID)
+	if err != nil {
+		return err
+	}
+	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
+	baseNextEventID := baseMutableState.GetNextEventID()
+
+	err = t.historyService.workflowResetter.resetWorkflow(
+		ctx,
+		namespaceID,
+		workflowID,
+		baseRunID,
+		baseCurrentBranchToken,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+		baseNextEventID,
+		resetRunID,
+		uuid.New(),
+		newNDCWorkflow(
 			ctx,
-			&workflowservice.ResetWorkflowExecutionRequest{
-				Namespace: namespace,
-				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: workflowID,
-					RunId:      baseRunID,
-				},
-				Reason:                    fmt.Sprintf("auto-reset reason:%v, binaryChecksum:%v ", reason, resetPoint.GetBinaryChecksum()),
-				WorkflowTaskFinishEventId: resetPoint.GetFirstWorkflowTaskCompletedId(),
-				RequestId:                 uuid.New(),
-			},
-			baseContext,
-			baseMutableState,
+			t.shard.GetNamespaceCache(),
+			t.shard.GetClusterMetadata(),
 			currentContext,
 			currentMutableState,
-		)
-	} else {
-		resetRunID := uuid.New()
-		baseRunID := baseMutableState.GetExecutionInfo().RunID
-		baseRebuildLastEventID := resetPoint.GetFirstWorkflowTaskCompletedId() - 1
-		baseVersionHistories := baseMutableState.GetVersionHistories()
-		baseCurrentVersionHistory, err := baseVersionHistories.GetCurrentVersionHistory()
-		if err != nil {
-			return err
-		}
-		baseRebuildLastEventVersion, err := baseCurrentVersionHistory.GetEventVersion(baseRebuildLastEventID)
-		if err != nil {
-			return err
-		}
-		baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
-		baseNextEventID := baseMutableState.GetNextEventID()
-
-		err = t.historyService.workflowResetter.resetWorkflow(
-			ctx,
-			namespaceID,
-			workflowID,
-			baseRunID,
-			baseCurrentBranchToken,
-			baseRebuildLastEventID,
-			baseRebuildLastEventVersion,
-			baseNextEventID,
-			resetRunID,
-			uuid.New(),
-			newNDCWorkflow(
-				ctx,
-				t.shard.GetNamespaceCache(),
-				t.shard.GetClusterMetadata(),
-				currentContext,
-				currentMutableState,
-				noopReleaseFn, // this is fine since caller will defer on release
-			),
-			reason,
-			nil,
-		)
-	}
+			noopReleaseFn, // this is fine since caller will defer on release
+		),
+		reason,
+		nil,
+	)
 
 	switch err.(type) {
 	case nil:

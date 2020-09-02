@@ -36,7 +36,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -51,7 +50,6 @@ func applyWorkflowMutationTx(
 	workflowMutation *p.InternalWorkflowMutation,
 ) error {
 	executionInfo := workflowMutation.ExecutionInfo
-	replicationState := workflowMutation.ReplicationState
 	versionHistories := workflowMutation.VersionHistories
 	startVersion := workflowMutation.StartVersion
 	lastWriteVersion := workflowMutation.LastWriteVersion
@@ -67,13 +65,6 @@ func applyWorkflowMutationTx(
 	runIDBytes, err := primitives.ParseUUID(runID)
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("uuid parse failed. Error: %v", err))
-	}
-
-	// TODO remove once 2DC is deprecated
-	//  since current version is only used by 2DC
-	currentVersion := lastWriteVersion
-	if replicationState != nil {
-		currentVersion = replicationState.CurrentVersion
 	}
 
 	// TODO Remove me if UPDATE holds the lock to the end of a transaction
@@ -93,11 +84,9 @@ func applyWorkflowMutationTx(
 
 	if err := updateExecution(tx,
 		executionInfo,
-		replicationState,
 		versionHistories,
 		startVersion,
 		lastWriteVersion,
-		currentVersion,
 		shardID); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Failed to update executions row. Erorr: %v", err))
 	}
@@ -201,7 +190,6 @@ func applyWorkflowSnapshotTxAsReset(
 ) error {
 
 	executionInfo := workflowSnapshot.ExecutionInfo
-	replicationState := workflowSnapshot.ReplicationState
 	versionHistories := workflowSnapshot.VersionHistories
 	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
@@ -215,13 +203,6 @@ func applyWorkflowSnapshotTxAsReset(
 	runIDBytes, err := primitives.ParseUUID(runID)
 	if err != nil {
 		return err
-	}
-
-	// TODO remove once 2DC is deprecated
-	//  since current version is only used by 2DC
-	currentVersion := lastWriteVersion
-	if replicationState != nil {
-		currentVersion = replicationState.CurrentVersion
 	}
 
 	// TODO Is there a way to modify the various map tables without fear of other people adding rows after we delete, without locking the executions row?
@@ -241,11 +222,9 @@ func applyWorkflowSnapshotTxAsReset(
 
 	if err := updateExecution(tx,
 		executionInfo,
-		replicationState,
 		versionHistories,
 		startVersion,
 		lastWriteVersion,
-		currentVersion,
 		shardID); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to update executions row. Erorr: %v", err))
 	}
@@ -386,7 +365,6 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 ) error {
 
 	executionInfo := workflowSnapshot.ExecutionInfo
-	replicationState := workflowSnapshot.ReplicationState
 	versionHistories := workflowSnapshot.VersionHistories
 	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
@@ -402,20 +380,11 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		return err
 	}
 
-	// TODO remove once 2DC is deprecated
-	//  since current version is only used by 2DC
-	currentVersion := lastWriteVersion
-	if replicationState != nil {
-		currentVersion = replicationState.CurrentVersion
-	}
-
 	if err := m.createExecution(tx,
 		executionInfo,
-		replicationState,
 		versionHistories,
 		startVersion,
 		lastWriteVersion,
-		currentVersion,
 		shardID); err != nil {
 		return err
 	}
@@ -798,10 +767,8 @@ func createReplicationTasks(
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion
 		activityScheduleID := common.EmptyEventID
-		var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
 
 		var branchToken, newRunBranchToken []byte
-		var resetWorkflow bool
 
 		switch task.GetType() {
 		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
@@ -814,16 +781,10 @@ func createReplicationTasks(
 			version = task.GetVersion()
 			branchToken = historyReplicationTask.BranchToken
 			newRunBranchToken = historyReplicationTask.NewRunBranchToken
-			resetWorkflow = historyReplicationTask.ResetWorkflow
-			lastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
-			for k, v := range historyReplicationTask.LastReplicationInfo {
-				lastReplicationInfo[k] = &replicationspb.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventId}
-			}
 
 		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
-			lastReplicationInfo = map[string]*replicationspb.ReplicationInfo{}
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknown replication task: %v", task.GetType()))
@@ -838,13 +799,11 @@ func createReplicationTasks(
 			FirstEventId:            firstEventID,
 			NextEventId:             nextEventID,
 			Version:                 version,
-			LastReplicationInfo:     lastReplicationInfo,
 			ScheduledId:             activityScheduleID,
 			EventStoreVersion:       p.EventStoreVersion,
 			NewRunEventStoreVersion: p.EventStoreVersion,
 			BranchToken:             branchToken,
 			NewRunBranchToken:       newRunBranchToken,
-			ResetWorkflow:           resetWorkflow,
 		})
 		if err != nil {
 			return err
@@ -1127,15 +1086,13 @@ func updateCurrentExecution(
 
 func buildExecutionRow(
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *persistenceblobs.ReplicationState,
 	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
-	currentVersion int64,
 	shardID int,
 ) (row *sqlplugin.ExecutionsRow, err error) {
 
-	info, state, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, replicationState, versionHistories)
+	info, state, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, versionHistories)
 	if err != nil {
 		return nil, err
 	}
@@ -1177,11 +1134,9 @@ func buildExecutionRow(
 func (m *sqlExecutionManager) createExecution(
 	tx sqlplugin.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *persistenceblobs.ReplicationState,
 	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
-	currentVersion int64,
 	shardID int,
 ) error {
 
@@ -1198,11 +1153,9 @@ func (m *sqlExecutionManager) createExecution(
 
 	row, err := buildExecutionRow(
 		executionInfo,
-		replicationState,
 		versionHistories,
 		startVersion,
 		lastWriteVersion,
-		currentVersion,
 		shardID,
 	)
 	if err != nil {
@@ -1236,11 +1189,9 @@ func (m *sqlExecutionManager) createExecution(
 func updateExecution(
 	tx sqlplugin.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *persistenceblobs.ReplicationState,
 	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
-	currentVersion int64,
 	shardID int,
 ) error {
 
@@ -1256,11 +1207,9 @@ func updateExecution(
 
 	row, err := buildExecutionRow(
 		executionInfo,
-		replicationState,
 		versionHistories,
 		startVersion,
 		lastWriteVersion,
-		currentVersion,
 		shardID,
 	)
 	if err != nil {

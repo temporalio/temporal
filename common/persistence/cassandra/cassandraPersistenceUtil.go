@@ -53,7 +53,6 @@ func applyWorkflowMutationBatch(
 	cqlNowTimestampMillis := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 
 	executionInfo := workflowMutation.ExecutionInfo
-	replicationState := workflowMutation.ReplicationState
 	versionHistories := workflowMutation.VersionHistories
 	namespaceID := executionInfo.NamespaceID
 	workflowID := executionInfo.WorkflowID
@@ -61,25 +60,16 @@ func applyWorkflowMutationBatch(
 	condition := workflowMutation.Condition
 
 	startVersion := workflowMutation.StartVersion
-	lastWriteVersion := workflowMutation.LastWriteVersion
-	// TODO remove once 2DC is deprecated
-	//  since current version is only used by 2DC
-	currentVersion := lastWriteVersion
-	if replicationState != nil {
-		currentVersion = replicationState.CurrentVersion
-	}
 
 	if err := updateExecution(
 		batch,
 		shardID,
 		executionInfo,
-		replicationState,
 		versionHistories,
 		cqlNowTimestampMillis,
 		condition,
 		workflowMutation.Checksum,
 		startVersion,
-		currentVersion,
 	); err != nil {
 		return err
 	}
@@ -186,7 +176,6 @@ func applyWorkflowSnapshotBatchAsReset(
 	cqlNowTimestampMillis := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 
 	executionInfo := workflowSnapshot.ExecutionInfo
-	replicationState := workflowSnapshot.ReplicationState
 	versionHistories := workflowSnapshot.VersionHistories
 	namespaceID := executionInfo.NamespaceID
 	workflowID := executionInfo.WorkflowID
@@ -194,25 +183,16 @@ func applyWorkflowSnapshotBatchAsReset(
 	condition := workflowSnapshot.Condition
 
 	startVersion := workflowSnapshot.StartVersion
-	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	// TODO remove once 2DC is deprecated
-	//  since current version is only used by 2DC
-	currentVersion := lastWriteVersion
-	if replicationState != nil {
-		currentVersion = replicationState.CurrentVersion
-	}
 
 	if err := updateExecution(
 		batch,
 		shardID,
 		executionInfo,
-		replicationState,
 		versionHistories,
 		cqlNowTimestampMillis,
 		condition,
 		workflowSnapshot.Checksum,
 		startVersion,
-		currentVersion,
 	); err != nil {
 		return err
 	}
@@ -311,31 +291,21 @@ func applyWorkflowSnapshotBatchAsNew(
 	cqlNowTimestampMillis := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 
 	executionInfo := workflowSnapshot.ExecutionInfo
-	replicationState := workflowSnapshot.ReplicationState
 	versionHistories := workflowSnapshot.VersionHistories
 	namespaceID := executionInfo.NamespaceID
 	workflowID := executionInfo.WorkflowID
 	runID := executionInfo.RunID
 
 	startVersion := workflowSnapshot.StartVersion
-	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	// TODO remove once 2DC is deprecated
-	//  since current version is only used by 2DC
-	currentVersion := lastWriteVersion
-	if replicationState != nil {
-		currentVersion = replicationState.CurrentVersion
-	}
 
 	if err := createExecution(
 		batch,
 		shardID,
 		executionInfo,
-		replicationState,
 		versionHistories,
 		workflowSnapshot.Checksum,
 		cqlNowTimestampMillis,
 		startVersion,
-		currentVersion,
 	); err != nil {
 		return err
 	}
@@ -427,12 +397,10 @@ func createExecution(
 	batch *gocql.Batch,
 	shardID int,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *persistenceblobs.ReplicationState,
 	versionHistories *history.VersionHistories,
 	checksum checksum.Checksum,
 	cqlNowTimestampMillis int64,
 	startVersion int64,
-	currentVersion int64,
 ) error {
 
 	// validate workflow state & close status
@@ -450,7 +418,7 @@ func createExecution(
 	executionInfo.StartTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis)).UTC()
 	executionInfo.LastUpdateTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis)).UTC()
 
-	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, replicationState, versionHistories)
+	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, versionHistories)
 	if err != nil {
 		return err
 	}
@@ -470,8 +438,8 @@ func createExecution(
 		return err
 	}
 
-	if replicationState == nil && versionHistories == nil {
-		// Cross DC feature is currently disabled so we will be creating workflow executions without replication state
+	if versionHistories == nil {
+		// Cross DC feature is currently disabled so we will be creating workflow executions without versioned history
 		batch.Query(templateCreateWorkflowExecutionQuery,
 			shardID,
 			namespaceID,
@@ -487,7 +455,7 @@ func createExecution(
 			rowTypeExecutionTaskID,
 			checksumDatablob.Data,
 			checksumDatablob.Encoding.String())
-	} else if versionHistories != nil {
+	} else {
 		// TODO also need to set the start / current / last write version
 		batch.Query(templateCreateWorkflowExecutionQuery,
 			shardID,
@@ -504,30 +472,6 @@ func createExecution(
 			rowTypeExecutionTaskID,
 			checksumDatablob.Data,
 			checksumDatablob.Encoding.String())
-	} else if replicationState != nil {
-		replicationVersions, err := serialization.ReplicationVersionsToBlob(p.GenerateVersionProto(replicationState))
-		if err != nil {
-			return err
-		}
-		batch.Query(templateCreateWorkflowExecutionWithReplicationQuery,
-			shardID,
-			namespaceID,
-			workflowID,
-			runID,
-			rowTypeExecution,
-			executionDatablob.Data,
-			executionDatablob.Encoding.String(),
-			executionStateDatablob.Data,
-			executionStateDatablob.Encoding.String(),
-			replicationVersions.Data,
-			replicationVersions.Encoding.String(),
-			executionInfo.NextEventID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			checksumDatablob.Data,
-			checksumDatablob.Encoding.String())
-	} else {
-		return serviceerror.NewInternal(fmt.Sprintf("Create workflow execution with both version histories and replication state."))
 	}
 	return nil
 }
@@ -536,13 +480,11 @@ func updateExecution(
 	batch *gocql.Batch,
 	shardID int,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *persistenceblobs.ReplicationState,
 	versionHistories *history.VersionHistories,
 	cqlNowTimestampMillis int64,
 	condition int64,
 	checksum checksum.Checksum,
 	startVersion int64,
-	currentVersion int64,
 ) error {
 
 	// validate workflow state & close status
@@ -559,7 +501,7 @@ func updateExecution(
 	// TODO we should set the last update time on business logic layer
 	executionInfo.LastUpdateTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis)).UTC()
 
-	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, replicationState, versionHistories)
+	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, versionHistories)
 	if err != nil {
 		return err
 	}
@@ -579,7 +521,7 @@ func updateExecution(
 		return err
 	}
 
-	if replicationState == nil && versionHistories == nil {
+	if versionHistories == nil {
 		// Updates will be called with null ReplicationState while the feature is disabled
 		batch.Query(templateUpdateWorkflowExecutionQuery,
 			executionDatablob.Data,
@@ -597,7 +539,7 @@ func updateExecution(
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
 			condition)
-	} else if versionHistories != nil {
+	} else {
 		// TODO also need to set the start / current / last write version
 		batch.Query(templateUpdateWorkflowExecutionQuery,
 			executionDatablob.Data,
@@ -615,31 +557,6 @@ func updateExecution(
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
 			condition)
-	} else if replicationState != nil {
-		replicationVersions, err := serialization.ReplicationVersionsToBlob(p.GenerateVersionProto(replicationState))
-		if err != nil {
-			return err
-		}
-		batch.Query(templateUpdateWorkflowExecutionWithReplicationQuery,
-			executionDatablob.Data,
-			executionDatablob.Encoding.String(),
-			executionStateDatablob.Data,
-			executionStateDatablob.Encoding.String(),
-			replicationVersions.Data,
-			replicationVersions.Encoding.String(),
-			executionInfo.NextEventID,
-			checksumDatablob.Data,
-			checksumDatablob.Encoding.String(),
-			shardID,
-			rowTypeExecution,
-			namespaceID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	} else {
-		return serviceerror.NewInternal(fmt.Sprintf("Update workflow execution with both version histories and replication state."))
 	}
 
 	return nil
@@ -800,10 +717,8 @@ func createReplicationTasks(
 		firstEventID := common.EmptyEventID
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion // nolint:ineffassign
-		var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
 		activityScheduleID := common.EmptyEventID
 		var branchToken, newRunBranchToken []byte
-		resetWorkflow := false
 
 		switch task.GetType() {
 		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
@@ -813,17 +728,10 @@ func createReplicationTasks(
 			firstEventID = histTask.FirstEventID
 			nextEventID = histTask.NextEventID
 			version = task.GetVersion()
-			lastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo)
-			for k, v := range histTask.LastReplicationInfo {
-				lastReplicationInfo[k] = v
-			}
-			resetWorkflow = histTask.ResetWorkflow
 
 		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
-			// cassandra does not like null
-			lastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo)
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknow replication type: %v", task.GetType()))
@@ -843,8 +751,6 @@ func createReplicationTasks(
 			NewRunBranchToken:       newRunBranchToken,
 			NewRunEventStoreVersion: p.EventStoreVersion,
 			BranchToken:             branchToken,
-			LastReplicationInfo:     lastReplicationInfo,
-			ResetWorkflow:           resetWorkflow,
 		})
 
 		if err != nil {
@@ -1519,31 +1425,6 @@ func updateBufferedEvents(
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID)
 	}
-}
-
-func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv *persistenceblobs.ReplicationVersions) *persistenceblobs.ReplicationState {
-	if rv == nil && wei.ReplicationData == nil {
-		return nil
-	}
-
-	info := &persistenceblobs.ReplicationState{}
-	info.CurrentVersion = wei.CurrentVersion
-
-	if rv != nil {
-		info.StartVersion = rv.GetStartVersion().GetValue()
-		info.LastWriteVersion = rv.GetLastWriteVersion().GetValue()
-	}
-
-	if wei.ReplicationData != nil {
-		info.LastReplicationInfo = wei.ReplicationData.LastReplicationInfo
-		info.LastWriteEventId = wei.ReplicationData.LastWriteEventId
-	}
-
-	if info.LastReplicationInfo == nil {
-		info.LastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo, 0)
-	}
-
-	return info
 }
 
 func resetActivityInfoMap(

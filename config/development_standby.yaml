@@ -148,4 +148,4 @@ namespaceDefaults:
       URI: "file:///tmp/temporal_vis_archival/development"
 
 publicClient:
-  hostPort: "localhost:8933"
+  hostPort: "localhost:8233"

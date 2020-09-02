@@ -289,34 +289,8 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 		if state, _ := mutableState.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return false, nil
 		}
-	} else if mutableState.GetReplicationState() != nil {
-		// TODO when 2DC is deprecated, remove this block
-		if !mutableState.IsWorkflowExecutionRunning() {
-			// perhaps conflict resolution force termination
-			return false, nil
-		}
-
-		if scheduleID >= mutableState.GetNextEventID() {
-			lastWriteVersion, err := mutableState.GetLastWriteVersion()
-			if err != nil {
-				return false, err
-			}
-			if activityVersion < lastWriteVersion {
-				// this can happen if target workflow has different history branch
-				return false, nil
-			}
-			// version >= last write version
-			// this can happen if out of order delivery happens
-			return false, serviceerrors.NewRetryTask(
-				ErrRetrySyncActivityMsg,
-				namespaceID,
-				workflowID,
-				runID,
-				mutableState.GetNextEventID(),
-			)
-		}
 	} else {
-		return false, serviceerror.NewInternal("The workflow is neither 2DC nor 3DC enabled.")
+		return false, serviceerror.NewInternal("The workflow is not nDC enabled.")
 	}
 
 	return true, nil

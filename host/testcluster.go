@@ -73,7 +73,6 @@ type (
 	// TestClusterConfig are config for a test cluster
 	TestClusterConfig struct {
 		FrontendAddress       string
-		EnableNDC             bool
 		EnableArchival        bool
 		IsMasterCluster       bool
 		ClusterNo             int
@@ -188,7 +187,6 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		VisibilityMgr:                    visibilityMgr,
 		Logger:                           logger,
 		ClusterNo:                        options.ClusterNo,
-		EnableNDC:                        options.EnableNDC,
 		ESConfig:                         options.ESConfig,
 		ESClient:                         esClient,
 		ArchiverMetadata:                 archiverBase.metadata,

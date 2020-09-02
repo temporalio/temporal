@@ -52,7 +52,6 @@ type (
 			execution commonpb.WorkflowExecution,
 			history []*historypb.HistoryEvent,
 			newRunHistory []*historypb.HistoryEvent,
-			newRunNDC bool,
 		) (mutableState, error)
 	}
 
@@ -97,7 +96,6 @@ func (b *stateBuilderImpl) applyEvents(
 	execution commonpb.WorkflowExecution,
 	history []*historypb.HistoryEvent,
 	newRunHistory []*historypb.HistoryEvent,
-	newRunNDC bool,
 ) (mutableState, error) {
 
 	if len(history) == 0 {
@@ -114,12 +112,7 @@ func (b *stateBuilderImpl) applyEvents(
 
 	for _, event := range history {
 		// NOTE: stateBuilder is also being used in the active side
-		if b.mutableState.GetReplicationState() != nil {
-			// this function must be called within the for loop, in case
-			// history event version changed during for loop
-			b.mutableState.UpdateReplicationStateVersion(event.GetVersion(), true)
-			b.mutableState.UpdateReplicationStateLastEventID(lastEvent.GetVersion(), lastEvent.GetEventId())
-		} else if b.mutableState.GetVersionHistories() != nil {
+		if b.mutableState.GetVersionHistories() != nil {
 			if err := b.mutableState.UpdateCurrentVersion(event.GetVersion(), true); err != nil {
 				return nil, err
 			}
@@ -187,11 +180,6 @@ func (b *stateBuilderImpl) applyEvents(
 				execution.GetRunId(),
 			); err != nil {
 				return nil, err
-			}
-
-			// TODO remove after NDC is fully migrated
-			if b.mutableState.GetReplicationState() != nil {
-				b.mutableState.GetReplicationState().StartVersion = event.GetVersion()
 			}
 
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
@@ -604,21 +592,13 @@ func (b *stateBuilderImpl) applyEvents(
 
 			// The length of newRunHistory can be zero in resend case
 			if len(newRunHistory) != 0 {
-				if newRunNDC {
-					newRunMutableStateBuilder = newMutableStateBuilderWithVersionHistories(
-						b.shard,
-						b.shard.GetEventsCache(),
-						b.logger,
-						b.mutableState.GetNamespaceEntry(),
-					)
-				} else {
-					newRunMutableStateBuilder = newMutableStateBuilderWithReplicationState(
-						b.shard,
-						b.shard.GetEventsCache(),
-						b.logger,
-						b.mutableState.GetNamespaceEntry(),
-					)
-				}
+				newRunMutableStateBuilder = newMutableStateBuilderWithVersionHistories(
+					b.shard,
+					b.shard.GetEventsCache(),
+					b.logger,
+					b.mutableState.GetNamespaceEntry(),
+				)
+
 				newRunStateBuilder := newStateBuilder(b.shard, b.logger, newRunMutableStateBuilder, b.taskGeneratorProvider)
 
 				newRunID := event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
@@ -632,7 +612,6 @@ func (b *stateBuilderImpl) applyEvents(
 					newExecution,
 					newRunHistory,
 					nil,
-					false,
 				)
 				if err != nil {
 					return nil, err

@@ -220,7 +220,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		Name: executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	expectedResponse.BranchToken = msBuilder.GetExecutionInfo().BranchToken
+	expectedResponse.BranchToken, _ = msBuilder.GetCurrentBranchToken()
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
 	s.Nil(err)

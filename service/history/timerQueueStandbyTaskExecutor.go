@@ -46,16 +46,14 @@ type (
 	timerQueueStandbyTaskExecutor struct {
 		*timerQueueTaskExecutorBase
 
-		clusterName         string
-		historyRereplicator xdc.HistoryRereplicator
-		nDCHistoryResender  xdc.NDCHistoryResender
+		clusterName        string
+		nDCHistoryResender xdc.NDCHistoryResender
 	}
 )
 
 func newTimerQueueStandbyTaskExecutor(
 	shard ShardContext,
 	historyService *historyEngineImpl,
-	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
 	metricsClient metrics.Client,
@@ -70,9 +68,8 @@ func newTimerQueueStandbyTaskExecutor(
 			metricsClient,
 			config,
 		),
-		clusterName:         clusterName,
-		historyRereplicator: historyRereplicator,
-		nDCHistoryResender:  nDCHistoryResender,
+		clusterName:        clusterName,
+		nDCHistoryResender: nDCHistoryResender,
 	}
 }
 
@@ -462,15 +459,6 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			resendInfo.lastEventVersion,
 			common.EmptyEventID,
 			common.EmptyVersion,
-		)
-	} else if resendInfo.nextEventID != nil {
-		err = t.historyRereplicator.SendMultiWorkflowHistory(
-			timerTask.GetNamespaceId(),
-			timerTask.GetWorkflowId(),
-			timerTask.GetRunId(),
-			*resendInfo.nextEventID,
-			timerTask.GetRunId(),
-			common.EndEventID, // use common.EndEventID since we do not know where is the end
 		)
 	} else {
 		err = serviceerror.NewInternal("timerQueueStandbyProcessor encounter empty historyResendInfo")
