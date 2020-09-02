@@ -29,7 +29,6 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -252,9 +251,9 @@ func (t *activityReplicationTask) HandleErr(
 		return err
 	}
 
-	retryV2Err, okV2 := err.(*serviceerrors.RetryTaskV2)
+	retryV2Err, ok := err.(*serviceerrors.RetryTaskV2)
 
-	if okV2 {
+	if ok {
 		t.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientRequests)
 		stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientLatency)
 		defer stopwatch.Stop()
@@ -273,7 +272,7 @@ func (t *activityReplicationTask) HandleErr(
 			return err
 		}
 	} else {
-		return serviceerror.NewInternal("activityReplicationTask encounter error which cannot be handled")
+		return err
 	}
 
 	// should try again
