@@ -254,9 +254,7 @@ func (t *activityReplicationTask) HandleErr(
 
 	retryV2Err, okV2 := err.(*serviceerrors.RetryTaskV2)
 
-	if !okV2 {
-		return err
-	} else if okV2 {
+	if okV2 {
 		t.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientRequests)
 		stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientLatency)
 		defer stopwatch.Stop()
