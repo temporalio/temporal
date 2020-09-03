@@ -171,12 +171,6 @@ service HistoryService {
     rpc DescribeWorkflowExecution (DescribeWorkflowExecutionRequest) returns (DescribeWorkflowExecutionResponse) {
     }
 
-    rpc ReplicateEvents (ReplicateEventsRequest) returns (ReplicateEventsResponse) {
-    }
-
-    rpc ReplicateRawEvents (ReplicateRawEventsRequest) returns (ReplicateRawEventsResponse) {
-    }
-
     rpc ReplicateEventsV2 (ReplicateEventsV2Request) returns (ReplicateEventsV2Response) {
     }
 

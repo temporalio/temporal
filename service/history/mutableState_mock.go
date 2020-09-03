@@ -1261,20 +1261,6 @@ func (mr *MockmutableStateMockRecorder) GetPendingSignalExternalInfos() *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingSignalExternalInfos", reflect.TypeOf((*MockmutableState)(nil).GetPendingSignalExternalInfos))
 }
 
-// GetReplicationState mocks base method.
-func (m *MockmutableState) GetReplicationState() *persistenceblobs.ReplicationState {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationState")
-	ret0, _ := ret[0].(*persistenceblobs.ReplicationState)
-	return ret0
-}
-
-// GetReplicationState indicates an expected call of GetReplicationState.
-func (mr *MockmutableStateMockRecorder) GetReplicationState() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationState", reflect.TypeOf((*MockmutableState)(nil).GetReplicationState))
-}
-
 // GetRequestCancelInfo mocks base method.
 func (m *MockmutableState) GetRequestCancelInfo(arg0 int64) (*persistenceblobs.RequestCancelInfo, bool) {
 	m.ctrl.T.Helper()
@@ -2286,30 +2272,6 @@ func (m *MockmutableState) UpdateWorkflowTask(arg0 *workflowTaskInfo) {
 func (mr *MockmutableStateMockRecorder) UpdateWorkflowTask(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowTask", reflect.TypeOf((*MockmutableState)(nil).UpdateWorkflowTask), arg0)
-}
-
-// UpdateReplicationStateVersion mocks base method.
-func (m *MockmutableState) UpdateReplicationStateVersion(arg0 int64, arg1 bool) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateReplicationStateVersion", arg0, arg1)
-}
-
-// UpdateReplicationStateVersion indicates an expected call of UpdateReplicationStateVersion.
-func (mr *MockmutableStateMockRecorder) UpdateReplicationStateVersion(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReplicationStateVersion", reflect.TypeOf((*MockmutableState)(nil).UpdateReplicationStateVersion), arg0, arg1)
-}
-
-// UpdateReplicationStateLastEventID mocks base method.
-func (m *MockmutableState) UpdateReplicationStateLastEventID(arg0, arg1 int64) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateReplicationStateLastEventID", arg0, arg1)
-}
-
-// UpdateReplicationStateLastEventID indicates an expected call of UpdateReplicationStateLastEventID.
-func (mr *MockmutableStateMockRecorder) UpdateReplicationStateLastEventID(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReplicationStateLastEventID", reflect.TypeOf((*MockmutableState)(nil).UpdateReplicationStateLastEventID), arg0, arg1)
 }
 
 // UpdateUserTimer mocks base method.

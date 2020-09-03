@@ -441,23 +441,6 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 			},
 		}, nil
 
-	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK:
-		taskAttributes := replicationTask.GetHistoryTaskAttributes()
-		return &persistence.PutReplicationTaskToDLQRequest{
-			SourceClusterName: p.sourceCluster,
-			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-				NamespaceId:         taskAttributes.GetNamespaceId(),
-				WorkflowId:          taskAttributes.GetWorkflowId(),
-				RunId:               taskAttributes.GetRunId(),
-				TaskId:              replicationTask.GetSourceTaskId(),
-				TaskType:            enumsspb.TASK_TYPE_REPLICATION_HISTORY,
-				FirstEventId:        taskAttributes.GetFirstEventId(),
-				NextEventId:         taskAttributes.GetNextEventId(),
-				Version:             taskAttributes.GetVersion(),
-				LastReplicationInfo: taskAttributes.GetReplicationInfo(),
-				ResetWorkflow:       taskAttributes.GetResetWorkflow(),
-			},
-		}, nil
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		taskAttributes := replicationTask.GetHistoryTaskV2Attributes()
 

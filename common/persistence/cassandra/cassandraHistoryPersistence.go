@@ -115,7 +115,7 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 
 	var err error
 	if request.IsNewBranch {
-		h.sortAncestors(&branchInfo.Ancestors)
+		h.sortAncestors(branchInfo.Ancestors)
 		treeInfoDataBlob, err := serialization.HistoryTreeInfoToBlob(&persistenceblobs.HistoryTreeInfo{
 			BranchInfo: branchInfo,
 			ForkTime:   timestamp.TimeNowPtrUtc(),
@@ -501,14 +501,14 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 }
 
 func (h *cassandraHistoryV2Persistence) sortAncestors(
-	ans *[]*persistenceblobs.HistoryBranchRange,
+	ans []*persistenceblobs.HistoryBranchRange,
 ) {
-	if len(*ans) > 0 {
+	if len(ans) > 0 {
 		// sort ans based onf EndNodeID so that we can set BeginNodeID
-		sort.Slice(ans, func(i, j int) bool { return (*ans)[i].GetEndNodeId() < (*ans)[j].GetEndNodeId() })
-		(*ans)[0].BeginNodeId = int64(1)
-		for i := 1; i < len(*ans); i++ {
-			(*ans)[i].BeginNodeId = (*ans)[i-1].GetEndNodeId()
+		sort.Slice(ans, func(i, j int) bool { return (ans)[i].GetEndNodeId() < (ans)[j].GetEndNodeId() })
+		(ans)[0].BeginNodeId = int64(1)
+		for i := 1; i < len(ans); i++ {
+			(ans)[i].BeginNodeId = (ans)[i-1].GetEndNodeId()
 		}
 	}
 }

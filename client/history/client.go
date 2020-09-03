@@ -719,56 +719,6 @@ func (c *clientImpl) RecordChildExecutionCompleted(
 
 }
 
-func (c *clientImpl) ReplicateEvents(
-	ctx context.Context,
-	request *historyservice.ReplicateEventsRequest,
-	opts ...grpc.CallOption) (*historyservice.ReplicateEventsResponse, error) {
-	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.GetWorkflowId())
-	if err != nil {
-		return nil, err
-	}
-
-	var response *historyservice.ReplicateEventsResponse
-	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
-		var err error
-		ctx, cancel := c.createContext(ctx)
-		defer cancel()
-		response, err = client.ReplicateEvents(ctx, request, opts...)
-		return err
-	}
-	err = c.executeWithRedirect(ctx, client, op)
-	if err != nil {
-		return nil, err
-	}
-	return response, nil
-
-}
-
-func (c *clientImpl) ReplicateRawEvents(
-	ctx context.Context,
-	request *historyservice.ReplicateRawEventsRequest,
-	opts ...grpc.CallOption) (*historyservice.ReplicateRawEventsResponse, error) {
-	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.GetWorkflowId())
-	if err != nil {
-		return nil, err
-	}
-
-	var response *historyservice.ReplicateRawEventsResponse
-	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
-		var err error
-		ctx, cancel := c.createContext(ctx)
-		defer cancel()
-		response, err = client.ReplicateRawEvents(ctx, request, opts...)
-		return err
-	}
-	err = c.executeWithRedirect(ctx, client, op)
-	if err != nil {
-		return nil, err
-	}
-	return response, nil
-
-}
-
 func (c *clientImpl) ReplicateEventsV2(
 	ctx context.Context,
 	request *historyservice.ReplicateEventsV2Request,

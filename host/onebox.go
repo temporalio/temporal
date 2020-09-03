@@ -103,7 +103,6 @@ type (
 		replicator                       *replicator.Replicator
 		clientWorker                     archiver.ClientWorker
 		indexer                          *indexer.Indexer
-		enableNDC                        bool
 		archiverMetadata                 carchiver.ArchivalMetadata
 		archiverProvider                 provider.ArchiverProvider
 		historyConfig                    *HistoryConfig
@@ -136,7 +135,6 @@ type (
 		NamespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		Logger                           log.Logger
 		ClusterNo                        int
-		EnableNDC                        bool
 		ArchiverMetadata                 carchiver.ArchivalMetadata
 		ArchiverProvider                 provider.ArchiverProvider
 		EnableReadHistoryFromArchival    bool
@@ -170,7 +168,6 @@ func NewTemporal(params *TemporalParams) Temporal {
 		namespaceReplicationQueue:        params.NamespaceReplicationQueue,
 		shutdownCh:                       make(chan struct{}),
 		clusterNo:                        params.ClusterNo,
-		enableNDC:                        params.EnableNDC,
 		esConfig:                         params.ESConfig,
 		esClient:                         params.ESClient,
 		archiverMetadata:                 params.ArchiverMetadata,
@@ -722,7 +719,6 @@ func (c *temporalImpl) GetExecutionManagerFactory() persistence.ExecutionManager
 func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	client.OverrideValue(dynamicconfig.HistoryMgrNumConns, c.historyConfig.NumHistoryShards)
 	client.OverrideValue(dynamicconfig.ExecutionMgrNumConns, c.historyConfig.NumHistoryShards)
-	client.OverrideValue(dynamicconfig.EnableNDC, c.enableNDC)
 
 	if c.workerConfig.EnableIndexer {
 		client.OverrideValue(dynamicconfig.AdvancedVisibilityWritingMode, common.AdvancedVisibilityWritingModeDual)

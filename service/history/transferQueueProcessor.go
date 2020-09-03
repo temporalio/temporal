@@ -101,18 +101,6 @@ func newTransferQueueProcessor(
 		}
 
 		if clusterName != currentClusterName {
-			historyRereplicator := xdc.NewHistoryRereplicator(
-				currentClusterName,
-				shard.GetNamespaceCache(),
-				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
-				func(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error {
-					return historyService.ReplicateRawEvents(ctx, request)
-				},
-				persistence.NewPayloadSerializer(),
-				historyRereplicationTimeout,
-				nil,
-				logger,
-			)
 			nDCHistoryResender := xdc.NewNDCHistoryResender(
 				shard.GetNamespaceCache(),
 				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
@@ -130,7 +118,6 @@ func newTransferQueueProcessor(
 				visibilityMgr,
 				matchingClient,
 				taskAllocator,
-				historyRereplicator,
 				nDCHistoryResender,
 				queueTaskProcessor,
 				logger,

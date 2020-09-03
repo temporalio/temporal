@@ -58,7 +58,6 @@ func verifyMutableStateChecksum(
 
 func newMutableStateChecksumPayload(ms mutableState) *checksumproto.MutableStateChecksumPayload {
 	executionInfo := ms.GetExecutionInfo()
-	replicationState := ms.GetReplicationState()
 	payload := &checksumproto.MutableStateChecksumPayload{
 		CancelRequested:         executionInfo.CancelRequested,
 		State:                   executionInfo.State,
@@ -71,11 +70,6 @@ func newMutableStateChecksumPayload(ms mutableState) *checksumproto.MutableState
 		WorkflowTaskStartedId:   executionInfo.WorkflowTaskStartedID,
 		WorkflowTaskVersion:     executionInfo.WorkflowTaskVersion,
 		StickyTaskQueueName:     executionInfo.StickyTaskQueue,
-	}
-
-	if replicationState != nil {
-		payload.LastWriteVersion = replicationState.LastWriteVersion
-		payload.LastWriteEventId = replicationState.LastWriteEventId
 	}
 
 	versionHistories := ms.GetVersionHistories()

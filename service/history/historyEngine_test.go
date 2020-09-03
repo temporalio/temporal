@@ -56,7 +56,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -67,7 +66,6 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -1630,6 +1628,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 
 	var commands []*commandpb.Command
 
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil).AnyTimes()
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
 	ms2 := createMutableState(msBuilder)
 	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
@@ -1638,7 +1637,6 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil).AnyTimes()
 
 	_, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: namespaceID,
@@ -3677,6 +3675,12 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
 
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: "test-respond-activity-task-canceled-if-no-activity-id-provided",
+		RunId:      testRunID,
+	}
+	taskqueue := "testTaskQueue"
+
 	tt := &tokenspb.Task{
 		ScheduleAttempt: 1,
 		WorkflowId:      "wId",
@@ -3687,6 +3691,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), testRunID)
+	// Add dummy event
+	addWorkflowExecutionStartedEvent(msBuilder, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: testRunID}
@@ -3706,6 +3712,12 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {
 
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: "test-respond-activity-task-canceled-if-not-found",
+		RunId:      testRunID,
+	}
+	taskqueue := "testTaskQueue"
+
 	tt := &tokenspb.Task{
 		ScheduleAttempt: 1,
 		WorkflowId:      "wId",
@@ -3717,6 +3729,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), testRunID)
+	// Add dummy event
+	addWorkflowExecutionStartedEvent(msBuilder, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: testRunID}
@@ -4785,6 +4799,9 @@ func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
 		WorkflowId: "test-reapply",
 		RunId:      testRunID,
 	}
+	taskqueue := "testTaskQueue"
+	identity := "testIdentity"
+
 	history := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
@@ -4798,6 +4815,8 @@ func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
 		loggerimpl.NewDevelopmentForTest(s.Suite),
 		workflowExecution.GetRunId(),
 	)
+	// Add dummy event
+	addWorkflowExecutionStartedEvent(msBuilder, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: testRunID}
@@ -4820,6 +4839,10 @@ func (s *engineSuite) TestReapplyEvents_IgnoreSameVersionEvents() {
 		WorkflowId: "test-reapply-same-version",
 		RunId:      testRunID,
 	}
+	taskqueue := "testTaskQueue"
+	identity := "testIdentity"
+
+	// TODO: Figure out why version is empty?
 	history := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
@@ -4833,6 +4856,8 @@ func (s *engineSuite) TestReapplyEvents_IgnoreSameVersionEvents() {
 		loggerimpl.NewDevelopmentForTest(s.Suite),
 		workflowExecution.GetRunId(),
 	)
+	// Add dummy event
+	addWorkflowExecutionStartedEvent(msBuilder, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -4856,6 +4881,8 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 		WorkflowId: "test-reapply-reset-workflow",
 		RunId:      testRunID,
 	}
+	taskqueue := "testTaskQueue"
+	identity := "testIdentity"
 	history := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
@@ -4869,6 +4896,9 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 		loggerimpl.NewDevelopmentForTest(s.Suite),
 		workflowExecution.GetRunId(),
 	)
+	// Add dummy event
+	addWorkflowExecutionStartedEvent(msBuilder, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	ms.ExecutionInfo.LastProcessedEvent = 1
@@ -5178,21 +5208,17 @@ func addFailWorkflowEvent(
 func newMutableStateBuilderWithEventV2(shard ShardContext, eventsCache eventsCache,
 	logger log.Logger, runID string) *mutableStateBuilder {
 
-	msBuilder := newMutableStateBuilder(shard, eventsCache, logger, testLocalNamespaceEntry)
+	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry)
 	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
 }
 
-func newMutableStateBuilderWithReplicationStateWithEventV2(shard ShardContext, eventsCache eventsCache,
+func newMutableStateBuilderWithVersionHistoriesForTest(shard ShardContext, eventsCache eventsCache,
 	logger log.Logger, version int64, runID string) *mutableStateBuilder {
 
-	msBuilder := newMutableStateBuilderWithReplicationState(shard, eventsCache, logger, testGlobalNamespaceEntry)
-	msBuilder.GetReplicationState().StartVersion = version
-	err := msBuilder.UpdateCurrentVersion(version, true)
-	if err != nil {
-		logger.Error("update current version error", tag.Error(err))
-	}
+	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry)
+	msBuilder.UpdateCurrentVersion(version, false)
 	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
@@ -5224,7 +5250,8 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 		childInfos[id] = copyChildInfo(info)
 	}
 
-	builder.FlushBufferedEvents() // nolint:errcheck
+	// FlushBuffer will also be called within the CloseTransactionAsMutation
+	builder.CloseTransactionAsMutation(time.Now(), transactionPolicyActive)
 	var bufferedEvents []*historypb.HistoryEvent
 	if len(builder.bufferedEvents) > 0 {
 		bufferedEvents = append(bufferedEvents, builder.bufferedEvents...)
@@ -5232,9 +5259,9 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	if len(builder.updateBufferedEvents) > 0 {
 		bufferedEvents = append(bufferedEvents, builder.updateBufferedEvents...)
 	}
-	var replicationState *persistenceblobs.ReplicationState
-	if builder.replicationState != nil {
-		replicationState = copyReplicationState(builder.replicationState)
+	var versionHistories *persistence.VersionHistories
+	if builder.versionHistories != nil {
+		versionHistories = builder.versionHistories.Duplicate()
 	}
 
 	return &persistence.WorkflowMutableState{
@@ -5246,7 +5273,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 		SignalInfos:         signalInfos,
 		RequestCancelInfos:  cancellationInfos,
 		ChildExecutionInfos: childInfos,
-		ReplicationState:    replicationState,
+		VersionHistories:    versionHistories,
 	}
 }
 
@@ -5406,26 +5433,5 @@ func copyChildInfo(sourceInfo *persistenceblobs.ChildExecutionInfo) *persistence
 		ParentClosePolicy:     sourceInfo.ParentClosePolicy,
 		InitiatedEvent:        copyHistoryEvent(sourceInfo.InitiatedEvent),
 		StartedEvent:          copyHistoryEvent(sourceInfo.StartedEvent),
-	}
-}
-
-func copyReplicationState(source *persistenceblobs.ReplicationState) *persistenceblobs.ReplicationState {
-	var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
-	if source.LastReplicationInfo != nil {
-		lastReplicationInfo = map[string]*replicationspb.ReplicationInfo{}
-		for k, v := range source.LastReplicationInfo {
-			lastReplicationInfo[k] = &replicationspb.ReplicationInfo{
-				Version:     v.Version,
-				LastEventId: v.LastEventId,
-			}
-		}
-	}
-
-	return &persistenceblobs.ReplicationState{
-		CurrentVersion:      source.CurrentVersion,
-		StartVersion:        source.StartVersion,
-		LastWriteVersion:    source.LastWriteVersion,
-		LastWriteEventId:    source.LastWriteEventId,
-		LastReplicationInfo: lastReplicationInfo,
 	}
 }

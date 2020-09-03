@@ -328,10 +328,6 @@ const (
 	HistoryClientScheduleWorkflowTaskScope
 	// HistoryClientRecordChildExecutionCompletedScope tracks RPC calls to history service
 	HistoryClientRecordChildExecutionCompletedScope
-	// HistoryClientReplicateEventsScope tracks RPC calls to history service
-	HistoryClientReplicateEventsScope
-	// HistoryClientReplicateRawEventsScope tracks RPC calls to history service
-	HistoryClientReplicateRawEventsScope
 	// HistoryClientSyncShardStatusScope tracks RPC calls to history service
 	HistoryClientReplicateEventsV2Scope
 	// HistoryClientReplicateRawEventsV2Scope tracks RPC calls to history service
@@ -1177,8 +1173,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientResetWorkflowExecutionScope:              {operation: "HistoryClientResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientScheduleWorkflowTaskScope:                {operation: "HistoryClientScheduleWorkflowTask", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRecordChildExecutionCompletedScope:       {operation: "HistoryClientRecordChildExecutionCompleted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientReplicateEventsScope:                     {operation: "HistoryClientReplicateEvents", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientReplicateRawEventsScope:                  {operation: "HistoryClientReplicateRawEvents", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientReplicateEventsV2Scope:                   {operation: "HistoryClientReplicateEventsV2", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientSyncShardStatusScope:                     {operation: "HistoryClientSyncShardStatusScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientSyncActivityScope:                        {operation: "HistoryClientSyncActivityScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},

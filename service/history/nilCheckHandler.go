@@ -221,22 +221,6 @@ func (h *NilCheckHandler) DescribeWorkflowExecution(ctx context.Context, request
 	return resp, err
 }
 
-func (h *NilCheckHandler) ReplicateEvents(ctx context.Context, request *historyservice.ReplicateEventsRequest) (_ *historyservice.ReplicateEventsResponse, retError error) {
-	resp, err := h.parentHandler.ReplicateEvents(ctx, request)
-	if resp == nil && err == nil {
-		resp = &historyservice.ReplicateEventsResponse{}
-	}
-	return resp, err
-}
-
-func (h *NilCheckHandler) ReplicateRawEvents(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) (_ *historyservice.ReplicateRawEventsResponse, retError error) {
-	resp, err := h.parentHandler.ReplicateRawEvents(ctx, request)
-	if resp == nil && err == nil {
-		resp = &historyservice.ReplicateRawEventsResponse{}
-	}
-	return resp, err
-}
-
 func (h *NilCheckHandler) ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) (_ *historyservice.ReplicateEventsV2Response, retError error) {
 	resp, err := h.parentHandler.ReplicateEventsV2(ctx, request)
 	if resp == nil && err == nil {

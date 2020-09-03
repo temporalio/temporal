@@ -30,9 +30,12 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -247,4 +250,28 @@ func getWorkflowRunTimeout(namespace string, requestedTimeout, executionTimeout 
 	runTimeoutSeconds = timestamp.MinDuration(runTimeoutSeconds, executionTimeout)
 
 	return runTimeoutSeconds
+}
+
+// FindAutoResetPoint returns the auto reset point
+func FindAutoResetPoint(
+	timeSource clock.TimeSource,
+	badBinaries *namespacepb.BadBinaries,
+	autoResetPoints *workflowpb.ResetPoints,
+) (string, *workflowpb.ResetPointInfo) {
+	if badBinaries == nil || badBinaries.Binaries == nil || autoResetPoints == nil || autoResetPoints.Points == nil {
+		return "", nil
+	}
+	now := timeSource.Now()
+	for _, p := range autoResetPoints.Points {
+		bin, ok := badBinaries.Binaries[p.GetBinaryChecksum()]
+		if ok && p.GetResettable() {
+			expireTime := timestamp.TimeValue(p.GetExpireTime())
+			if !expireTime.IsZero() && now.After(expireTime) {
+				// reset point has expired and we may already deleted the history
+				continue
+			}
+			return bin.GetReason(), p
+		}
+	}
+	return "", nil
 }

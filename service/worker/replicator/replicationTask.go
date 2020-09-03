@@ -29,12 +29,10 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client/history"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -65,25 +63,17 @@ type (
 
 	activityReplicationTask struct {
 		workflowReplicationTask
-		req                 *historyservice.SyncActivityRequest
-		historyRereplicator xdc.HistoryRereplicator
-		nDCHistoryResender  xdc.NDCHistoryResender
-	}
-
-	historyReplicationTask struct {
-		workflowReplicationTask
-		req                 *historyservice.ReplicateEventsRequest
-		historyRereplicator xdc.HistoryRereplicator
+		req                *historyservice.SyncActivityRequest
+		nDCHistoryResender xdc.NDCHistoryResender
 	}
 
 	historyMetadataReplicationTask struct {
 		workflowReplicationTask
-		sourceCluster       string
-		firstEventID        int64
-		nextEventID         int64
-		version             int64
-		historyRereplicator xdc.HistoryRereplicator
-		nDCHistoryResender  xdc.NDCHistoryResender
+		sourceCluster      string
+		firstEventID       int64
+		nextEventID        int64
+		version            int64
+		nDCHistoryResender xdc.NDCHistoryResender
 	}
 
 	historyReplicationV2Task struct {
@@ -94,7 +84,6 @@ type (
 )
 
 var _ task.Task = (*activityReplicationTask)(nil)
-var _ task.Task = (*historyReplicationTask)(nil)
 var _ task.Task = (*historyMetadataReplicationTask)(nil)
 var _ task.Task = (*historyReplicationV2Task)(nil)
 
@@ -110,7 +99,6 @@ func newActivityReplicationTask(
 	timeSource clock.TimeSource,
 	historyClient history.Client,
 	metricsClient metrics.Client,
-	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 ) *activityReplicationTask {
 
@@ -154,65 +142,7 @@ func newActivityReplicationTask(
 			LastWorkerIdentity: attr.LastWorkerIdentity,
 			VersionHistory:     attr.VersionHistory,
 		},
-		historyRereplicator: historyRereplicator,
-		nDCHistoryResender:  nDCHistoryResender,
-	}
-}
-
-func newHistoryReplicationTask(
-	replicationTask *replicationspb.ReplicationTask,
-	msg messaging.Message,
-	sourceCluster string,
-	logger log.Logger,
-	config *Config,
-	timeSource clock.TimeSource,
-	historyClient history.Client,
-	metricsClient metrics.Client,
-	historyRereplicator xdc.HistoryRereplicator,
-) *historyReplicationTask {
-
-	attr := replicationTask.GetHistoryTaskAttributes()
-	logger = logger.WithTags(tag.WorkflowNamespaceID(attr.GetNamespaceId()),
-		tag.WorkflowID(attr.GetWorkflowId()),
-		tag.WorkflowRunID(attr.GetRunId()),
-		tag.WorkflowFirstEventID(attr.GetFirstEventId()),
-		tag.WorkflowNextEventID(attr.GetNextEventId()),
-		tag.FailoverVersion(attr.GetVersion()))
-	return &historyReplicationTask{
-		workflowReplicationTask: workflowReplicationTask{
-			metricsScope: metrics.HistoryReplicationTaskScope,
-			startTime:    timeSource.Now(),
-			queueID: definition.NewWorkflowIdentifier(
-				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
-			),
-			taskID:        attr.GetFirstEventId(),
-			attempt:       1,
-			kafkaMsg:      msg,
-			logger:        logger,
-			state:         task.TaskStatePending,
-			config:        config,
-			timeSource:    timeSource,
-			historyClient: historyClient,
-			metricsClient: metricsClient,
-		},
-		req: &historyservice.ReplicateEventsRequest{
-			SourceCluster: sourceCluster,
-			NamespaceId:   attr.NamespaceId,
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: attr.WorkflowId,
-				RunId:      attr.RunId,
-			},
-			FirstEventId:      attr.FirstEventId,
-			NextEventId:       attr.NextEventId,
-			Version:           attr.Version,
-			ReplicationInfo:   attr.ReplicationInfo,
-			History:           attr.History,
-			NewRunHistory:     attr.NewRunHistory,
-			ForceBufferEvents: false,
-			ResetWorkflow:     attr.ResetWorkflow,
-			NewRunNdc:         attr.NewRunNdc,
-		},
-		historyRereplicator: historyRereplicator,
+		nDCHistoryResender: nDCHistoryResender,
 	}
 }
 
@@ -225,7 +155,6 @@ func newHistoryMetadataReplicationTask(
 	timeSource clock.TimeSource,
 	historyClient history.Client,
 	metricsClient metrics.Client,
-	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 ) *historyMetadataReplicationTask {
 
@@ -253,12 +182,11 @@ func newHistoryMetadataReplicationTask(
 			historyClient: historyClient,
 			metricsClient: metricsClient,
 		},
-		sourceCluster:       sourceCluster,
-		firstEventID:        attr.GetFirstEventId(),
-		nextEventID:         attr.GetNextEventId(),
-		version:             attr.GetVersion(),
-		historyRereplicator: historyRereplicator,
-		nDCHistoryResender:  nDCHistoryResender,
+		sourceCluster:      sourceCluster,
+		firstEventID:       attr.GetFirstEventId(),
+		nextEventID:        attr.GetNextEventId(),
+		version:            attr.GetVersion(),
+		nDCHistoryResender: nDCHistoryResender,
 	}
 }
 
@@ -323,36 +251,9 @@ func (t *activityReplicationTask) HandleErr(
 		return err
 	}
 
-	retryV1Err, okV1 := err.(*serviceerrors.RetryTask)
-	retryV2Err, okV2 := err.(*serviceerrors.RetryTaskV2)
+	retryV2Err, ok := err.(*serviceerrors.RetryTaskV2)
 
-	if !okV1 && !okV2 {
-		return err
-	} else if okV1 {
-		if retryV1Err.RunId == "" {
-			return err
-		}
-
-		t.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientRequests)
-		stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientLatency)
-		defer stopwatch.Stop()
-
-		// this is the retry error
-		beginRunID := retryV1Err.RunId
-		beginEventID := retryV1Err.NextEventId
-		endRunID := t.queueID.RunID
-		endEventID := t.taskID + 1 // the next event ID should be at activity schedule ID + 1
-		resendErr := t.historyRereplicator.SendMultiWorkflowHistory(
-			t.queueID.NamespaceID, t.queueID.WorkflowID,
-			beginRunID, beginEventID, endRunID, endEventID,
-		)
-
-		if resendErr != nil {
-			t.logger.Error("error resend history", tag.Error(resendErr))
-			// should return the replication error, not the resending error
-			return err
-		}
-	} else if okV2 {
+	if ok {
 		t.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientRequests)
 		stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientLatency)
 		defer stopwatch.Stop()
@@ -371,50 +272,9 @@ func (t *activityReplicationTask) HandleErr(
 			return err
 		}
 	} else {
-		return serviceerror.NewInternal("activityReplicationTask encounter error which cannot be handled")
-	}
-
-	// should try again
-	return t.Execute()
-}
-
-func (t *historyReplicationTask) Execute() error {
-	ctx, cancel := context.WithTimeout(context.Background(), t.config.ReplicationTaskContextTimeout())
-	defer cancel()
-	_, err := t.historyClient.ReplicateEvents(ctx, t.req)
-	return err
-}
-
-func (t *historyReplicationTask) HandleErr(
-	err error,
-) error {
-	if t.attempt <= t.config.ReplicatorHistoryBufferRetryCount() {
 		return err
 	}
 
-	retryErr, ok := err.(*serviceerrors.RetryTask)
-	if !ok || retryErr.RunId == "" {
-		return err
-	}
-
-	t.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientRequests)
-	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientLatency)
-	defer stopwatch.Stop()
-
-	// this is the retry error
-	beginRunID := retryErr.RunId
-	beginEventID := retryErr.NextEventId
-	endRunID := t.queueID.RunID
-	endEventID := t.taskID
-	resendErr := t.historyRereplicator.SendMultiWorkflowHistory(
-		t.queueID.NamespaceID, t.queueID.WorkflowID,
-		beginRunID, beginEventID, endRunID, endEventID,
-	)
-	if resendErr != nil {
-		t.logger.Error("error resend history", tag.Error(resendErr))
-		// should return the replication error, not the resending error
-		return err
-	}
 	// should try again
 	return t.Execute()
 }
@@ -424,52 +284,26 @@ func (t *historyMetadataReplicationTask) Execute() error {
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryMetadataReplicationScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
-	if t.version != common.EmptyVersion {
-		return t.nDCHistoryResender.SendSingleWorkflowHistory(
-			t.queueID.NamespaceID,
-			t.queueID.WorkflowID,
-			t.queueID.RunID,
-			t.firstEventID-1, //NDC resend API is exclusive-exclusive.
-			t.version,
-			t.nextEventID,
-			t.version)
-	} else {
-		return t.historyRereplicator.SendMultiWorkflowHistory(
-			t.queueID.NamespaceID, t.queueID.WorkflowID,
-			t.queueID.RunID, t.firstEventID,
-			t.queueID.RunID, t.nextEventID,
-		)
-	}
+	return t.nDCHistoryResender.SendSingleWorkflowHistory(
+		t.queueID.NamespaceID,
+		t.queueID.WorkflowID,
+		t.queueID.RunID,
+		t.firstEventID-1, //NDC resend API is exclusive-exclusive.
+		t.version,
+		t.nextEventID,
+		t.version)
 }
 
 func (t *historyMetadataReplicationTask) HandleErr(
 	err error,
 ) error {
-	retryErr, ok := err.(*serviceerrors.RetryTask)
-	if !ok || retryErr.RunId == "" {
+	retryErr, ok := err.(*serviceerrors.RetryTaskV2)
+	if !ok {
 		return err
 	}
 
-	t.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientRequests)
-	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientLatency)
-	defer stopwatch.Stop()
-
-	// this is the retry error
-	beginRunID := retryErr.RunId
-	beginEventID := retryErr.NextEventId
-	endRunID := t.queueID.RunID
-	endEventID := t.taskID
-	resendErr := t.historyRereplicator.SendMultiWorkflowHistory(
-		t.queueID.NamespaceID, t.queueID.WorkflowID,
-		beginRunID, beginEventID, endRunID, endEventID,
-	)
-	if resendErr != nil {
-		t.logger.Error("error resend history", tag.Error(resendErr))
-		// should return the replication error, not the resending error
-		return err
-	}
-	// should try again
-	return t.Execute()
+	t.logger.Error("missing error handling for history metadata replication task", tag.Error(retryErr))
+	return err
 }
 
 func (t *historyReplicationV2Task) Execute() error {

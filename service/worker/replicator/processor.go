@@ -65,7 +65,6 @@ type (
 		logger                           log.Logger
 		metricsClient                    metrics.Client
 		namespacereplicationTaskExecutor namespace.ReplicationTaskExecutor
-		historyRereplicator              xdc.HistoryRereplicator
 		nDCHistoryResender               xdc.NDCHistoryResender
 		historyClient                    history.Client
 		namespaceCache                   cache.NamespaceCache
@@ -96,7 +95,6 @@ func newReplicationTaskProcessor(
 	logger log.Logger,
 	metricsClient metrics.Client,
 	namespacereplicationTaskExecutor namespace.ReplicationTaskExecutor,
-	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	historyClient history.Client,
 	namespaceCache cache.NamespaceCache,
@@ -116,7 +114,6 @@ func newReplicationTaskProcessor(
 		logger:                           logger,
 		metricsClient:                    metricsClient,
 		namespacereplicationTaskExecutor: namespacereplicationTaskExecutor,
-		historyRereplicator:              historyRereplicator,
 		nDCHistoryResender:               nDCHistoryResender,
 		historyClient:                    retryableHistoryClient,
 		timeSource:                       clock.NewRealTimeSource(),
@@ -227,9 +224,6 @@ SubmitLoop:
 		case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 			scope = metrics.SyncActivityTaskScope
 			err = p.handleActivityTask(replicationTask, msg, logger)
-		case enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK:
-			scope = metrics.HistoryReplicationTaskScope
-			err = p.handleHistoryReplicationTask(replicationTask, msg, logger)
 		case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
 			scope = metrics.HistoryMetadataReplicationTaskScope
 			err = p.handleHistoryMetadataReplicationTask(replicationTask, msg, logger)
@@ -357,35 +351,9 @@ func (p *replicationTaskProcessor) handleActivityTask(
 		p.timeSource,
 		p.historyClient,
 		p.metricsClient,
-		p.historyRereplicator,
 		p.nDCHistoryResender,
 	)
 	return p.sequentialTaskProcessor.Submit(activityReplicationTask)
-}
-
-func (p *replicationTaskProcessor) handleHistoryReplicationTask(
-	task *replicationspb.ReplicationTask,
-	msg messaging.Message,
-	logger log.Logger,
-) error {
-
-	doContinue, err := p.filterTask(task.GetHistoryTaskAttributes().GetNamespaceId())
-	if err != nil || !doContinue {
-		return err
-	}
-
-	historyReplicationTask := newHistoryReplicationTask(
-		task,
-		msg,
-		p.sourceCluster,
-		logger,
-		p.config,
-		p.timeSource,
-		p.historyClient,
-		p.metricsClient,
-		p.historyRereplicator,
-	)
-	return p.sequentialTaskProcessor.Submit(historyReplicationTask)
 }
 
 func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(
@@ -408,7 +376,6 @@ func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(
 		p.timeSource,
 		p.historyClient,
 		p.metricsClient,
-		p.historyRereplicator,
 		p.nDCHistoryResender,
 	)
 	return p.sequentialTaskProcessor.Submit(historyMetadataReplicationTask)

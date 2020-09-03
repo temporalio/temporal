@@ -1090,10 +1090,6 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
 	}
 
-	if state.VersionHistories != nil && state.ReplicationState != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. VersionHistories and ReplicationState both are set."))
-	}
-
 	activityInfos := make(map[int64]*persistenceblobs.ActivityInfo)
 	aMap := result["activity_map"].(map[int64][]byte)
 	aMapEncoding := result["activity_map_encoding"].(string)
@@ -2809,19 +2805,8 @@ func mutableStateFromRow(result map[string]interface{}) (*p.InternalWorkflowMuta
 
 	info := p.ProtoWorkflowExecutionToPartialInternalExecution(protoInfo, protoState, nextEventID)
 
-	var state *persistenceblobs.ReplicationState
-	if protoInfo.ReplicationData != nil {
-		protoReplVersions, err := ProtoReplicationVersionsFromResultMap(result)
-		if err != nil {
-			return nil, err
-		}
-
-		state = ReplicationStateFromProtos(protoInfo, protoReplVersions)
-	}
-
 	mutableState := &p.InternalWorkflowMutableState{
 		ExecutionInfo:    info,
-		ReplicationState: state,
 		VersionHistories: protoInfo.VersionHistories,
 	}
 	return mutableState, nil

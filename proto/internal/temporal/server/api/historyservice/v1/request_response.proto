@@ -324,40 +324,6 @@ message DescribeWorkflowExecutionResponse {
     repeated temporal.api.workflow.v1.PendingChildExecutionInfo pending_children = 4;
 }
 
-message ReplicateEventsRequest {
-    string source_cluster = 1;
-    string namespace_id = 2;
-    temporal.api.common.v1.WorkflowExecution workflow_execution = 3;
-    int64 first_event_id = 4;
-    int64 next_event_id = 5;
-    int64 version = 6;
-    map<string, temporal.server.api.replication.v1.ReplicationInfo> replication_info = 7;
-    temporal.api.history.v1.History history = 8;
-    temporal.api.history.v1.History new_run_history = 9;
-    // this attribute is deprecated
-    bool force_buffer_events = 10;
-    int32 event_store_version = 11;
-    int32 new_run_event_store_version = 12;
-    bool reset_workflow = 13;
-    bool new_run_ndc = 14;
-}
-
-message ReplicateEventsResponse {
-}
-
-message ReplicateRawEventsRequest {
-    string namespace_id = 1;
-    temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
-    map<string, temporal.server.api.replication.v1.ReplicationInfo> replication_info = 3;
-    temporal.api.common.v1.DataBlob history = 4;
-    temporal.api.common.v1.DataBlob new_run_history = 5;
-    int32 event_store_version = 6;
-    int32 new_run_event_store_version = 7;
-}
-
-message ReplicateRawEventsResponse {
-}
-
 message ReplicateEventsV2Request {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;

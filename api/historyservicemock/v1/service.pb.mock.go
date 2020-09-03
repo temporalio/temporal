@@ -480,46 +480,6 @@ func (mr *MockHistoryServiceClientMockRecorder) DescribeWorkflowExecution(ctx, i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).DescribeWorkflowExecution), varargs...)
 }
 
-// ReplicateEvents mocks base method.
-func (m *MockHistoryServiceClient) ReplicateEvents(ctx context.Context, in *historyservice.ReplicateEventsRequest, opts ...grpc.CallOption) (*historyservice.ReplicateEventsResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "ReplicateEvents", varargs...)
-	ret0, _ := ret[0].(*historyservice.ReplicateEventsResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ReplicateEvents indicates an expected call of ReplicateEvents.
-func (mr *MockHistoryServiceClientMockRecorder) ReplicateEvents(ctx, in interface{}, opts ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateEvents", reflect.TypeOf((*MockHistoryServiceClient)(nil).ReplicateEvents), varargs...)
-}
-
-// ReplicateRawEvents mocks base method.
-func (m *MockHistoryServiceClient) ReplicateRawEvents(ctx context.Context, in *historyservice.ReplicateRawEventsRequest, opts ...grpc.CallOption) (*historyservice.ReplicateRawEventsResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "ReplicateRawEvents", varargs...)
-	ret0, _ := ret[0].(*historyservice.ReplicateRawEventsResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ReplicateRawEvents indicates an expected call of ReplicateRawEvents.
-func (mr *MockHistoryServiceClientMockRecorder) ReplicateRawEvents(ctx, in interface{}, opts ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateRawEvents", reflect.TypeOf((*MockHistoryServiceClient)(nil).ReplicateRawEvents), varargs...)
-}
-
 // ReplicateEventsV2 mocks base method.
 func (m *MockHistoryServiceClient) ReplicateEventsV2(ctx context.Context, in *historyservice.ReplicateEventsV2Request, opts ...grpc.CallOption) (*historyservice.ReplicateEventsV2Response, error) {
 	m.ctrl.T.Helper()
@@ -1156,36 +1116,6 @@ func (m *MockHistoryServiceServer) DescribeWorkflowExecution(arg0 context.Contex
 func (mr *MockHistoryServiceServerMockRecorder) DescribeWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).DescribeWorkflowExecution), arg0, arg1)
-}
-
-// ReplicateEvents mocks base method.
-func (m *MockHistoryServiceServer) ReplicateEvents(arg0 context.Context, arg1 *historyservice.ReplicateEventsRequest) (*historyservice.ReplicateEventsResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReplicateEvents", arg0, arg1)
-	ret0, _ := ret[0].(*historyservice.ReplicateEventsResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ReplicateEvents indicates an expected call of ReplicateEvents.
-func (mr *MockHistoryServiceServerMockRecorder) ReplicateEvents(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateEvents", reflect.TypeOf((*MockHistoryServiceServer)(nil).ReplicateEvents), arg0, arg1)
-}
-
-// ReplicateRawEvents mocks base method.
-func (m *MockHistoryServiceServer) ReplicateRawEvents(arg0 context.Context, arg1 *historyservice.ReplicateRawEventsRequest) (*historyservice.ReplicateRawEventsResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReplicateRawEvents", arg0, arg1)
-	ret0, _ := ret[0].(*historyservice.ReplicateRawEventsResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ReplicateRawEvents indicates an expected call of ReplicateRawEvents.
-func (mr *MockHistoryServiceServerMockRecorder) ReplicateRawEvents(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateRawEvents", reflect.TypeOf((*MockHistoryServiceServer)(nil).ReplicateRawEvents), arg0, arg1)
 }
 
 // ReplicateEventsV2 mocks base method.
