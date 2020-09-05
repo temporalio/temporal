@@ -123,6 +123,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 			if rowsAffected != 1 {
 				return fmt.Errorf("expected 1 row to be affected for node table, got %v", rowsAffected)
 			}
+
 			result, err = tx.InsertIntoHistoryTree(treeRow)
 			if err != nil {
 				return err
@@ -131,7 +132,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 			if err != nil {
 				return err
 			}
-			if rowsAffected != 1 {
+			if !(rowsAffected == 1 || rowsAffected == 2) {
 				return fmt.Errorf("expected 1 row to be affected for tree table, got %v", rowsAffected)
 			}
 			return nil
@@ -355,6 +356,7 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 		Data:         blob.Data,
 		DataEncoding: blob.Encoding.String(),
 	}
+
 	result, err := m.db.InsertIntoHistoryTree(row)
 	if err != nil {
 		return nil, err
