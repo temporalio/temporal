@@ -42,7 +42,7 @@ const (
 	deleteHistoryNodesQuery = `DELETE FROM history_node WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id >= ? `
 
 	// below are templates for history_tree table
-	addHistoryTreeQuery = `INSERT INTO history_tree (` +
+	upsertHistoryTreeQuery = `INSERT INTO history_tree (` +
 		`shard_id, tree_id, branch_id, data, data_encoding) ` +
 		`VALUES (:shard_id, :tree_id, :branch_id, :data, :data_encoding) ` +
 		`ON DUPLICATE KEY UPDATE ` +
@@ -83,7 +83,7 @@ func (mdb *db) DeleteFromHistoryNode(filter *sqlplugin.HistoryNodeFilter) (sql.R
 
 // InsertIntoHistoryTree inserts a row into history_tree table
 func (mdb *db) InsertIntoHistoryTree(row *sqlplugin.HistoryTreeRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(addHistoryTreeQuery, row)
+	return mdb.conn.NamedExec(upsertHistoryTreeQuery, row)
 }
 
 // SelectFromHistoryTree reads one or more rows from history_tree table

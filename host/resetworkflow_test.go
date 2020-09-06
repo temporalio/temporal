@@ -46,12 +46,12 @@ import (
 func (s *integrationSuite) TestResetWorkflow() {
 	id := "integration-reset-workflow-test"
 	wt := "integration-reset-workflow-test-type"
-	tl := "integration-reset-workflow-test-taskqueue"
+	tq := "integration-reset-workflow-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -94,7 +94,7 @@ func (s *integrationSuite) TestResetWorkflow() {
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:             strconv.Itoa(i),
 						ActivityType:           &commonpb.ActivityType{Name: "ResetActivity"},
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
 						Input:                  payloads.EncodeBytes(buf.Bytes()),
 						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -155,7 +155,7 @@ func (s *integrationSuite) TestResetWorkflow() {
 	s.Logger.Info("Poll and process first activity", tag.Error(err))
 	s.NoError(err)
 
-	// Process second workflow task which checks
+	// Process second workflow task which checks activity completion
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Poll and process second workflow task", tag.Error(err))
 	s.NoError(err)
@@ -186,11 +186,11 @@ func (s *integrationSuite) TestResetWorkflow() {
 	s.NoError(err)
 
 	err = poller.PollAndProcessActivityTask(false)
-	s.Logger.Info("Poll and process first activity", tag.Error(err))
+	s.Logger.Info("Poll and process second activity", tag.Error(err))
 	s.NoError(err)
 
 	err = poller.PollAndProcessActivityTask(false)
-	s.Logger.Info("Poll and process first activity", tag.Error(err))
+	s.Logger.Info("Poll and process third activity", tag.Error(err))
 	s.NoError(err)
 
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
