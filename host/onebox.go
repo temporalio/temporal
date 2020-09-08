@@ -634,20 +634,13 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 }
 
 func (c *cadenceImpl) startWorkerReplicator(params *service.BootstrapParams, service service.Service, domainCache cache.DomainCache) {
-	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-	workerConfig := worker.NewConfig(params)
-	workerConfig.ReplicationCfg.ReplicatorMessageConcurrency = dynamicconfig.GetIntPropertyFn(10)
 	serviceResolver, err := service.GetMembershipMonitor().GetResolver(common.WorkerServiceName)
 	if err != nil {
 		c.logger.Fatal("Fail to start replicator when start worker", tag.Error(err))
 	}
 	c.replicator = replicator.NewReplicator(
 		c.clusterMetadata,
-		metadataManager,
-		domainCache,
 		service.GetClientBean(),
-		workerConfig.ReplicationCfg,
-		c.messagingClient,
 		c.logger,
 		service.GetMetricsClient(),
 		service.GetHostInfo(),

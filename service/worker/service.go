@@ -1,4 +1,6 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License (MIT)
+//
+// Copyright (c) 2017-2020 Uber Technologies Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -7,16 +9,16 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 package worker
 
@@ -60,13 +62,13 @@ type (
 
 	// Config contains all the service config for worker
 	Config struct {
-		ReplicationCfg                *replicator.Config
 		ArchiverConfig                *archiver.Config
 		IndexerCfg                    *indexer.Config
 		ScannerCfg                    *scanner.Config
 		BatcherCfg                    *batcher.Config
 		ThrottledLogRPS               dynamicconfig.IntPropertyFn
 		PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
+		PersistenceMaxQPS             dynamicconfig.IntPropertyFn
 		EnableBatcher                 dynamicconfig.BoolPropertyFn
 		EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
 	}
@@ -82,7 +84,7 @@ func NewService(
 	serviceResource, err := resource.New(
 		params,
 		common.WorkerServiceName,
-		serviceConfig.ReplicationCfg.PersistenceMaxQPS,
+		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.ThrottledLogRPS,
 		func(
@@ -109,19 +111,6 @@ func NewService(
 func NewConfig(params *service.BootstrapParams) *Config {
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
 	config := &Config{
-		ReplicationCfg: &replicator.Config{
-			PersistenceMaxQPS:                  dc.GetIntProperty(dynamicconfig.WorkerPersistenceMaxQPS, 500),
-			ReplicatorMetaTaskConcurrency:      dc.GetIntProperty(dynamicconfig.WorkerReplicatorMetaTaskConcurrency, 64),
-			ReplicatorTaskConcurrency:          dc.GetIntProperty(dynamicconfig.WorkerReplicatorTaskConcurrency, 256),
-			ReplicatorMessageConcurrency:       dc.GetIntProperty(dynamicconfig.WorkerReplicatorMessageConcurrency, 2048),
-			ReplicatorActivityBufferRetryCount: dc.GetIntProperty(dynamicconfig.WorkerReplicatorActivityBufferRetryCount, 8),
-			ReplicatorHistoryBufferRetryCount:  dc.GetIntProperty(dynamicconfig.WorkerReplicatorHistoryBufferRetryCount, 8),
-			ReplicationTaskMaxRetryCount:       dc.GetIntProperty(dynamicconfig.WorkerReplicationTaskMaxRetryCount, 400),
-			ReplicationTaskMaxRetryDuration:    dc.GetDurationProperty(dynamicconfig.WorkerReplicationTaskMaxRetryDuration, 15*time.Minute),
-			ReplicationTaskContextTimeout:      dc.GetDurationProperty(dynamicconfig.WorkerReplicationTaskContextDuration, 30*time.Second),
-			ReReplicationContextTimeout:        dc.GetDurationPropertyFilteredByDomainID(dynamicconfig.WorkerReReplicationContextTimeout, 0*time.Second),
-			EnableReplication:                  dc.GetBoolProperty(dynamicconfig.WorkerEnableReplication, true),
-		},
 		ArchiverConfig: &archiver.Config{
 			ArchiverConcurrency:           dc.GetIntProperty(dynamicconfig.WorkerArchiverConcurrency, 50),
 			ArchivalsPerIteration:         dc.GetIntProperty(dynamicconfig.WorkerArchivalsPerIteration, 1000),
@@ -164,6 +153,7 @@ func NewConfig(params *service.BootstrapParams) *Config {
 		EnableParentClosePolicyWorker: dc.GetBoolProperty(dynamicconfig.EnableParentClosePolicyWorker, true),
 		ThrottledLogRPS:               dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
 		PersistenceGlobalMaxQPS:       dc.GetIntProperty(dynamicconfig.WorkerPersistenceGlobalMaxQPS, 0),
+		PersistenceMaxQPS:             dc.GetIntProperty(dynamicconfig.WorkerPersistenceMaxQPS, 500),
 	}
 	advancedVisWritingMode := dc.GetStringProperty(
 		dynamicconfig.AdvancedVisibilityWritingMode,
@@ -198,7 +188,7 @@ func (s *Service) Start() {
 		s.startIndexer()
 	}
 
-	if s.GetClusterMetadata().IsGlobalDomainEnabled() && s.config.ReplicationCfg.EnableReplication() {
+	if s.GetClusterMetadata().IsGlobalDomainEnabled() {
 		s.startReplicator()
 	}
 	if s.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival() {
@@ -273,11 +263,7 @@ func (s *Service) startReplicator() {
 	)
 	msgReplicator := replicator.NewReplicator(
 		s.GetClusterMetadata(),
-		s.GetMetadataManager(),
-		s.GetDomainCache(),
 		s.GetClientBean(),
-		s.config.ReplicationCfg,
-		s.GetMessagingClient(),
 		s.GetLogger(),
 		s.GetMetricsClient(),
 		s.GetHostInfo(),

@@ -1,4 +1,6 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License (MIT)
+//
+// Copyright (c) 2017-2020 Uber Technologies Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -7,16 +9,16 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 package replicator
 
@@ -25,6 +27,8 @@ import (
 	"fmt"
 	"sync/atomic"
 	"time"
+
+	"go.uber.org/cadence/.gen/go/shared"
 
 	"github.com/uber/cadence/.gen/go/replicator"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -48,7 +52,7 @@ const (
 	taskProcessorErrorRetryMaxAttampts        = 5
 )
 
-func newDomainReplicationMessageProcessor(
+func newDomainReplicationProcessor(
 	sourceCluster string,
 	logger log.Logger,
 	remotePeer admin.Client,
@@ -57,12 +61,12 @@ func newDomainReplicationMessageProcessor(
 	hostInfo *membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 	domainReplicationQueue persistence.DomainReplicationQueue,
-) *domainReplicationMessageProcessor {
+) *domainReplicationProcessor {
 	retryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait)
 	retryPolicy.SetBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient)
 	retryPolicy.SetMaximumAttempts(taskProcessorErrorRetryMaxAttampts)
 
-	return &domainReplicationMessageProcessor{
+	return &domainReplicationProcessor{
 		hostInfo:               hostInfo,
 		serviceResolver:        serviceResolver,
 		status:                 common.DaemonStatusInitialized,
@@ -80,7 +84,7 @@ func newDomainReplicationMessageProcessor(
 }
 
 type (
-	domainReplicationMessageProcessor struct {
+	domainReplicationProcessor struct {
 		hostInfo               *membership.HostInfo
 		serviceResolver        membership.ServiceResolver
 		status                 int32
@@ -97,7 +101,7 @@ type (
 	}
 )
 
-func (p *domainReplicationMessageProcessor) Start() {
+func (p *domainReplicationProcessor) Start() {
 	if !atomic.CompareAndSwapInt32(&p.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
@@ -105,13 +109,13 @@ func (p *domainReplicationMessageProcessor) Start() {
 	go p.processorLoop()
 }
 
-func (p *domainReplicationMessageProcessor) processorLoop() {
+func (p *domainReplicationProcessor) processorLoop() {
 	timer := time.NewTimer(getWaitDuration())
 
 	for {
 		select {
 		case <-timer.C:
-			p.getAndHandleDomainReplicationTasks()
+			p.fetchDomainReplicationTasks()
 			timer.Reset(getWaitDuration())
 		case <-p.done:
 			timer.Stop()
@@ -120,7 +124,7 @@ func (p *domainReplicationMessageProcessor) processorLoop() {
 	}
 }
 
-func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks() {
+func (p *domainReplicationProcessor) fetchDomainReplicationTasks() {
 	// The following is a best effort to make sure only one worker is processing tasks for a
 	// particular source cluster. When the ring is under reconfiguration, it is possible that
 	// for a small period of time two or more workers think they are the owner and try to execute
@@ -177,7 +181,7 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 	p.lastRetrievedMessageID = response.Messages.GetLastRetrievedMessageId()
 }
 
-func (p *domainReplicationMessageProcessor) putDomainReplicationTaskToDLQ(
+func (p *domainReplicationProcessor) putDomainReplicationTaskToDLQ(
 	task *replicator.ReplicationTask,
 ) error {
 
@@ -194,7 +198,7 @@ func (p *domainReplicationMessageProcessor) putDomainReplicationTaskToDLQ(
 	return p.domainReplicationQueue.PublishToDLQ(task)
 }
 
-func (p *domainReplicationMessageProcessor) handleDomainReplicationTask(
+func (p *domainReplicationProcessor) handleDomainReplicationTask(
 	task *replicator.ReplicationTask,
 ) error {
 	p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorMessages)
@@ -204,10 +208,19 @@ func (p *domainReplicationMessageProcessor) handleDomainReplicationTask(
 	return p.taskExecutor.Execute(task.DomainTaskAttributes)
 }
 
-func (p *domainReplicationMessageProcessor) Stop() {
+func (p *domainReplicationProcessor) Stop() {
 	close(p.done)
 }
 
 func getWaitDuration() time.Duration {
 	return backoff.JitDuration(time.Duration(pollIntervalSecs)*time.Second, pollTimerJitterCoefficient)
+}
+
+func isTransientRetryableError(err error) bool {
+	switch err.(type) {
+	case *shared.BadRequestError:
+		return false
+	default:
+		return true
+	}
 }
