@@ -39,6 +39,8 @@ run_id = $4`
 	// %[2]v is the columns of the value struct (i.e. no primary key columns), comma separated
 	// %[3]v should be %[2]v with colons prepended.
 	// i.e. %[3]v = ",".join(":" + s for s in %[2]v)
+	// %[5]v should be %[2]v with "excluded." prepended.
+	// i.e. %[5]v = ",".join("excluded." + s for s in %[2]v)
 	// So that this query can be used with BindNamed
 	// %[4]v should be the name of the key associated with the map
 	// e.g. for ActivityInfo it is "schedule_id"
@@ -46,12 +48,9 @@ run_id = $4`
 (shard_id, domain_id, workflow_id, run_id, %[4]v, %[2]v)
 VALUES
 (:shard_id, :domain_id, :workflow_id, :run_id, :%[4]v, %[3]v)
-ON CONFLICT (shard_id, domain_id, workflow_id, run_id, %[4]v) DO UPDATE 
-  SET shard_id = excluded.shard_id,
-      domain_id = excluded.domain_id,
-      workflow_id = excluded.workflow_id,
-	  run_id = excluded.run_id,
-      %[4]v = excluded.%[4]v `
+ON CONFLICT (shard_id, domain_id, workflow_id, run_id, %[4]v) DO UPDATE
+	SET (shard_id, domain_id, workflow_id, run_id, %[4]v, %[2]v)
+  	  = (excluded.shard_id, excluded.domain_id, excluded.workflow_id, excluded.run_id, excluded.%[4]v, %[5]v)`
 
 	// %[2]v is the name of the key
 	deleteKeyInMapQueryTemplate = `DELETE FROM %[1]v
@@ -121,7 +120,10 @@ func makeSetKeyInMapQry(tableName string, nonPrimaryKeyColumns []string, mapKeyN
 		strings.Join(stringMap(nonPrimaryKeyColumns, func(x string) string {
 			return ":" + x
 		}), ","),
-		mapKeyName)
+		mapKeyName,
+		strings.Join(stringMap(nonPrimaryKeyColumns, func(x string) string {
+			return "excluded." + x
+		}), ","))
 }
 
 func makeDeleteKeyInMapQry(tableName string, mapKeyName string) string {
