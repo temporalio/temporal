@@ -751,6 +751,109 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, alreadyStartedErr.State)
 }
 
+// TestUpsertWorkflowActivity test
+func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
+	namespaceID := uuid.New()
+	workflowID := "create-workflow-test-with-upsert-activity"
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      uuid.New(),
+	}
+	taskqueue := "some random tasklist"
+	workflowType := "some random workflow type"
+	workflowTimeout := timestamp.DurationFromSeconds(10)
+	workflowTaskTimeout := timestamp.DurationFromSeconds(14)
+	lastProcessedEventID := int64(0)
+	nextEventID := int64(3)
+	csum := s.newRandomChecksum()
+
+	// create and update a workflow to make it completed
+	req := &p.CreateWorkflowExecutionRequest{
+		NewWorkflowSnapshot: p.WorkflowSnapshot{
+			ExecutionInfo: &p.WorkflowExecutionInfo{
+				NamespaceId:                namespaceID,
+				WorkflowId:                 workflowExecution.GetWorkflowId(),
+				TaskQueue:                  taskqueue,
+				WorkflowTypeName:           workflowType,
+				WorkflowRunTimeout:         workflowTimeout,
+				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{
+					RunId:           workflowExecution.GetRunId(),
+					CreateRequestId: uuid.New(),
+					State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
+				LastFirstEventId:   common.FirstEventID,
+				NextEventId:        nextEventID,
+				LastProcessedEvent: lastProcessedEventID,
+			},
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
+		},
+		RangeID: s.ShardInfo.GetRangeId(),
+		Mode:    p.CreateWorkflowModeBrandNew,
+	}
+	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
+	s.Nil(err)
+	currentRunID, err := s.GetCurrentWorkflowRunID(namespaceID, workflowID)
+	s.Nil(err)
+	s.Equal(workflowExecution.GetRunId(), currentRunID)
+
+	info, err := s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
+	s.Nil(err)
+	s.assertChecksumsEqual(csum, info.Checksum)
+	s.Equal(0, len(info.ActivityInfos))
+
+	// insert a new activity
+	updatedInfo := copyWorkflowExecutionInfo(info.ExecutionInfo)
+	updateStats := copyExecutionStats(info.ExecutionStats)
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:  updatedInfo,
+			ExecutionStats: updateStats,
+			Condition:      nextEventID,
+			Checksum:       csum,
+			UpsertActivityInfos: []*persistenceblobs.ActivityInfo{
+				{
+					Version:    0,
+					ScheduleId: 100,
+					TaskQueue:  "test-activity-tasktlist-1",
+				},
+			},
+		},
+		RangeID: s.ShardInfo.RangeId,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+	})
+	s.Nil(err)
+
+	info2, err := s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
+	s.Nil(err)
+	s.Equal(1, len(info2.ActivityInfos))
+	s.Equal("test-activity-tasktlist-1", info2.ActivityInfos[100].TaskQueue)
+
+	// upsert the previous activity
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:  updatedInfo,
+			ExecutionStats: updateStats,
+			Condition:      nextEventID,
+			Checksum:       csum,
+			UpsertActivityInfos: []*persistenceblobs.ActivityInfo{
+				{
+					Version:    0,
+					ScheduleId: 100,
+					TaskQueue:  "test-activity-tasktlist-2",
+				},
+			},
+		},
+		RangeID: s.ShardInfo.RangeId,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+	})
+	info3, err := s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
+	s.Nil(err)
+	s.Equal(1, len(info3.ActivityInfos))
+	s.Equal("test-activity-tasktlist-2", info3.ActivityInfos[100].TaskQueue)
+}
+
 // TestCreateWorkflowExecutionRunIDReuseWithoutReplication test
 func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutReplication() {
 	namespaceID := uuid.New()
@@ -1385,7 +1488,8 @@ func (s *ExecutionManagerSuite) TestDeleteWorkflow() {
 // TestDeleteCurrentWorkflow test
 func (s *ExecutionManagerSuite) TestDeleteCurrentWorkflow() {
 	if s.ExecutionManager.GetName() != "cassandra" {
-		s.T().Skip("this test is only applicable for cassandra (uses TTL based deletes)")
+		// "this test is only applicable for cassandra (uses TTL based deletes)"
+		return
 	}
 	namespaceID := "54d15308-e20e-4b91-a00f-a518a3892790"
 	workflowExecution := commonpb.WorkflowExecution{
