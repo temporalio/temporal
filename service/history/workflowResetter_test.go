@@ -193,7 +193,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		gomock.Any(),
 		transactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil).Times(1)
-	resetContext.EXPECT().persistFirstWorkflowEvents(resetEventsSeq[0]).Return(resetEventsSize, nil).Times(1)
+	resetContext.EXPECT().persistNonFirstWorkflowEvents(resetEventsSeq[0]).Return(resetEventsSize, nil).Times(1)
 	resetContext.EXPECT().createWorkflowExecution(
 		resetSnapshot,
 		resetEventsSize,
@@ -314,7 +314,7 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 		ShardID:         &shardId,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil).Times(1)
 
-	newBranchToken, err := s.workflowResetter.generateBranchToken(
+	newBranchToken, err := s.workflowResetter.forkAndGenerateBranchToken(
 		s.namespaceID, s.workflowID, baseBranchToken, baseNodeID, s.resetRunID,
 	)
 	s.NoError(err)

@@ -292,7 +292,7 @@ func (r *workflowResetterImpl) persistToDB(
 	if err != nil {
 		return err
 	}
-	resetHistorySize, err := resetWorkflow.getContext().persistFirstWorkflowEvents(resetWorkflowEventsSeq[0])
+	resetHistorySize, err := resetWorkflow.getContext().persistNonFirstWorkflowEvents(resetWorkflowEventsSeq[0])
 	if err != nil {
 		return err
 	}
@@ -319,7 +319,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	resetRequestID string,
 ) (nDCWorkflow, error) {
 
-	resetBranchToken, err := r.generateBranchToken(
+	resetBranchToken, err := r.forkAndGenerateBranchToken(
 		namespaceID,
 		workflowID,
 		baseBranchToken,
@@ -402,7 +402,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 	return nil
 }
 
-func (r *workflowResetterImpl) generateBranchToken(
+func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 	namespaceID string,
 	workflowID string,
 	forkBranchToken []byte,
