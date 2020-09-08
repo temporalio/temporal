@@ -700,6 +700,7 @@ func (b *historyBuilder) newMarkerRecordedEventAttributes(workflowTaskCompletedE
 	attributes.Details = request.Details
 	attributes.WorkflowTaskCompletedEventId = workflowTaskCompletedEventID
 	attributes.Header = request.Header
+	attributes.Failure = request.Failure
 	historyEvent.Attributes = &historypb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: attributes}
 
 	return historyEvent
