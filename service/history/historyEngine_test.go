@@ -5313,7 +5313,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		WorkflowTaskAttempt:                    sourceInfo.WorkflowTaskAttempt,
 		WorkflowTaskStartedTimestamp:           sourceInfo.WorkflowTaskStartedTimestamp,
 		WorkflowTaskOriginalScheduledTimestamp: sourceInfo.WorkflowTaskOriginalScheduledTimestamp,
-		WorkflowTaskScheduledTimestamp: 		sourceInfo.WorkflowTaskScheduledTimestamp,
+		WorkflowTaskScheduledTimestamp:         sourceInfo.WorkflowTaskScheduledTimestamp,
 		CancelRequested:                        sourceInfo.CancelRequested,
 		CancelRequestID:                        sourceInfo.CancelRequestID,
 		CronSchedule:                           sourceInfo.CronSchedule,
