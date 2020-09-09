@@ -157,17 +157,3 @@ func (_m *ClusterMetadata) IsMasterCluster() bool {
 
 	return r0
 }
-
-// GetReplicationConsumerConfig provides a mock function with given fields:
-func (_m *ClusterMetadata) GetReplicationConsumerConfig() *config.ReplicationConsumerConfig {
-	ret := _m.Called()
-
-	var r0 *config.ReplicationConsumerConfig
-	if rf, ok := ret.Get(0).(func() *config.ReplicationConsumerConfig); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(*config.ReplicationConsumerConfig)
-	}
-
-	return r0
-}

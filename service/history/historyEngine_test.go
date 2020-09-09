@@ -67,17 +67,16 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller               *gomock.Controller
-		mockShard                *shard.TestContext
-		mockTxProcessor          *queue.MockProcessor
-		mockTimerProcessor       *queue.MockProcessor
-		mockReplicationProcessor *MockReplicatorQueueProcessor
-		mockDomainCache          *cache.MockDomainCache
-		mockMatchingClient       *matchingservicetest.MockClient
-		mockHistoryClient        *historyservicetest.MockClient
-		mockClusterMetadata      *cluster.MockMetadata
-		mockEventsReapplier      *ndc.MockEventsReapplier
-		mockWorkflowResetter     *reset.MockWorkflowResetter
+		controller           *gomock.Controller
+		mockShard            *shard.TestContext
+		mockTxProcessor      *queue.MockProcessor
+		mockTimerProcessor   *queue.MockProcessor
+		mockDomainCache      *cache.MockDomainCache
+		mockMatchingClient   *matchingservicetest.MockClient
+		mockHistoryClient    *historyservicetest.MockClient
+		mockClusterMetadata  *cluster.MockMetadata
+		mockEventsReapplier  *ndc.MockEventsReapplier
+		mockWorkflowResetter *reset.MockWorkflowResetter
 
 		mockHistoryEngine *historyEngineImpl
 		mockExecutionMgr  *mocks.ExecutionManager
@@ -107,12 +106,10 @@ func (s *engineSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockTxProcessor = queue.NewMockProcessor(s.controller)
 	s.mockTimerProcessor = queue.NewMockProcessor(s.controller)
-	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockEventsReapplier = ndc.NewMockEventsReapplier(s.controller)
 	s.mockWorkflowResetter = reset.NewMockWorkflowResetter(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -166,7 +163,6 @@ func (s *engineSuite) SetupTest() {
 		historyEventNotifier: historyEventNotifier,
 		config:               config.NewForTest(),
 		txProcessor:          s.mockTxProcessor,
-		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
 		clientChecker:        cc.NewVersionChecker(),
 		eventsReapplier:      s.mockEventsReapplier,

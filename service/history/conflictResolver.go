@@ -33,6 +33,10 @@ import (
 	"github.com/uber/cadence/service/history/shard"
 )
 
+var (
+	defaultHistoryPageSize = 1000
+)
+
 type (
 	conflictResolver interface {
 		reset(

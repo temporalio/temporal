@@ -37,7 +37,6 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/quotas"
-	serviceConfig "github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/service/history/config"
 )
 
@@ -91,30 +90,27 @@ var _ TaskFetchers = (*taskFetchersImpl)(nil)
 func NewTaskFetchers(
 	logger log.Logger,
 	config *config.Config,
-	consumerConfig *serviceConfig.ReplicationConsumerConfig,
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
 ) TaskFetchers {
 
 	var fetchers []TaskFetcher
-	if consumerConfig.Type == serviceConfig.ReplicationConsumerTypeRPC {
-		for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
-			if !info.Enabled {
-				continue
-			}
+	for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
+		if !info.Enabled {
+			continue
+		}
 
-			currentCluster := clusterMetadata.GetCurrentClusterName()
-			if clusterName != currentCluster {
-				remoteFrontendClient := clientBean.GetRemoteAdminClient(clusterName)
-				fetcher := newReplicationTaskFetcher(
-					logger,
-					clusterName,
-					currentCluster,
-					config,
-					remoteFrontendClient,
-				)
-				fetchers = append(fetchers, fetcher)
-			}
+		currentCluster := clusterMetadata.GetCurrentClusterName()
+		if clusterName != currentCluster {
+			remoteFrontendClient := clientBean.GetRemoteAdminClient(clusterName)
+			fetcher := newReplicationTaskFetcher(
+				logger,
+				clusterName,
+				currentCluster,
+				config,
+				remoteFrontendClient,
+			)
+			fetchers = append(fetchers, fetcher)
 		}
 	}
 

@@ -39,7 +39,6 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -664,9 +663,6 @@ func Test_DomainCacheEntry_GetDomainNotActiveErr(t *testing.T) {
 		cluster.TestCurrentClusterName,
 		cluster.TestCurrentClusterName,
 		cluster.TestAllClusterInfo,
-		&config.ReplicationConsumerConfig{
-			Type: config.ReplicationConsumerTypeRPC,
-		},
 	)
 	domainEntry := NewGlobalDomainCacheEntryForTest(
 		&persistence.DomainInfo{Name: "test-domain"},

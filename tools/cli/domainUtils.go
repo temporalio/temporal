@@ -324,7 +324,6 @@ func initializeClusterMetadata(
 		clusterMetadata.MasterClusterName,
 		clusterMetadata.CurrentClusterName,
 		clusterMetadata.ClusterInformation,
-		clusterMetadata.ReplicationConsumer,
 	)
 }
 

@@ -35,13 +35,6 @@ import (
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
-const (
-	// ReplicationConsumerTypeKafka means consuming replication tasks from kafka.
-	ReplicationConsumerTypeKafka = "kafka"
-	// ReplicationConsumerTypeRPC means pulling source DC for replication tasks.
-	ReplicationConsumerTypeRPC = "rpc"
-)
-
 type (
 	// Config contains the configuration for a set of cadence services
 	Config struct {
@@ -259,8 +252,6 @@ type (
 	// ClusterMetadata contains the all cluster which participated in cross DC
 	ClusterMetadata struct {
 		EnableGlobalDomain bool `yaml:"enableGlobalDomain"`
-		// ReplicationConsumerConfig determines how we consume replication tasks.
-		ReplicationConsumer *ReplicationConsumerConfig `yaml:"replicationConsumer"`
 		// FailoverVersionIncrement is the increment of each cluster version when failover happens
 		FailoverVersionIncrement int64 `yaml:"failoverVersionIncrement"`
 		// MasterClusterName is the master cluster name, only the master cluster can register / update domain
@@ -280,12 +271,6 @@ type (
 		RPCName string `yaml:"rpcName"`
 		// Address indicate the remote service address(Host:Port). Host can be DNS name.
 		RPCAddress string `yaml:"rpcAddress"`
-	}
-
-	// ReplicationConsumerConfig contains config for replication consumer
-	ReplicationConsumerConfig struct {
-		// Type determines how we consume replication tasks. It can be either kafka(default) or rpc.
-		Type string `yaml:"type"`
 	}
 
 	// ReplicationTaskProcessorConfig is the config for replication task processor.

@@ -57,14 +57,13 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller               *gomock.Controller
-		mockShard                *shard.TestContext
-		mockTxProcessor          *queue.MockProcessor
-		mockTimerProcessor       *queue.MockProcessor
-		mockReplicationProcessor *MockReplicatorQueueProcessor
-		mockEventsCache          *events.MockCache
-		mockDomainCache          *cache.MockDomainCache
-		mockClusterMetadata      *cluster.MockMetadata
+		controller          *gomock.Controller
+		mockShard           *shard.TestContext
+		mockTxProcessor     *queue.MockProcessor
+		mockTimerProcessor  *queue.MockProcessor
+		mockEventsCache     *events.MockCache
+		mockDomainCache     *cache.MockDomainCache
+		mockClusterMetadata *cluster.MockMetadata
 
 		historyEngine    *historyEngineImpl
 		mockExecutionMgr *mocks.ExecutionManager
@@ -93,10 +92,8 @@ func (s *engine3Suite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockTxProcessor = queue.NewMockProcessor(s.controller)
 	s.mockTimerProcessor = queue.NewMockProcessor(s.controller)
-	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -136,7 +133,6 @@ func (s *engine3Suite) SetupTest() {
 		timeSource:           s.mockShard.GetTimeSource(),
 		historyEventNotifier: events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
 		txProcessor:          s.mockTxProcessor,
-		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
 	}
 	s.mockShard.SetEngine(h)

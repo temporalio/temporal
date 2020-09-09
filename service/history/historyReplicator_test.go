@@ -65,15 +65,14 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller               *gomock.Controller
-		mockShard                *shard.TestContext
-		mockWorkflowResetor      *reset.MockWorkflowResetor
-		mockTxProcessor          *queue.MockProcessor
-		mockTimerProcessor       *queue.MockProcessor
-		mockReplicationProcessor *MockReplicatorQueueProcessor
-		mockStateBuilder         *execution.MockStateBuilder
-		mockDomainCache          *cache.MockDomainCache
-		mockClusterMetadata      *cluster.MockMetadata
+		controller          *gomock.Controller
+		mockShard           *shard.TestContext
+		mockWorkflowResetor *reset.MockWorkflowResetor
+		mockTxProcessor     *queue.MockProcessor
+		mockTimerProcessor  *queue.MockProcessor
+		mockStateBuilder    *execution.MockStateBuilder
+		mockDomainCache     *cache.MockDomainCache
+		mockClusterMetadata *cluster.MockMetadata
 
 		logger           log.Logger
 		mockExecutionMgr *mocks.ExecutionManager
@@ -104,11 +103,9 @@ func (s *historyReplicatorSuite) SetupTest() {
 	s.mockWorkflowResetor = reset.NewMockWorkflowResetor(s.controller)
 	s.mockTxProcessor = queue.NewMockProcessor(s.controller)
 	s.mockTimerProcessor = queue.NewMockProcessor(s.controller)
-	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockStateBuilder = execution.NewMockStateBuilder(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -144,7 +141,6 @@ func (s *historyReplicatorSuite) SetupTest() {
 		timeSource:           s.mockShard.GetTimeSource(),
 		historyEventNotifier: events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
 		txProcessor:          s.mockTxProcessor,
-		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
 	}
 	s.mockShard.SetEngine(engine)

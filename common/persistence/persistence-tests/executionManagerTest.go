@@ -785,9 +785,9 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 			Checksum:       csum,
 			UpsertActivityInfos: []*p.ActivityInfo{
 				&p.ActivityInfo{
-					Version: 0,
+					Version:    0,
 					ScheduleID: 100,
-					TaskList: "test-activity-tasktlist-1",
+					TaskList:   "test-activity-tasktlist-1",
 				},
 			},
 		},
@@ -810,9 +810,9 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 			Checksum:       csum,
 			UpsertActivityInfos: []*p.ActivityInfo{
 				&p.ActivityInfo{
-					Version: 0,
+					Version:    0,
 					ScheduleID: 100,
-					TaskList: "test-activity-tasktlist-2",
+					TaskList:   "test-activity-tasktlist-2",
 				},
 			},
 		},

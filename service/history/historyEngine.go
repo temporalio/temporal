@@ -53,7 +53,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	checks "github.com/uber/cadence/common/reconciliation/common"
 	"github.com/uber/cadence/common/reconciliation/invariants"
-	sconfig "github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/xdc"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/engine"
@@ -99,7 +98,6 @@ type (
 		replicator                *historyReplicator
 		nDCReplicator             ndc.HistoryReplicator
 		nDCActivityReplicator     ndc.ActivityReplicator
-		replicatorProcessor       ReplicatorQueueProcessor
 		historyEventNotifier      events.Notifier
 		tokenSerializer           common.TaskTokenSerializer
 		executionCache            *execution.Cache
@@ -112,6 +110,7 @@ type (
 		workflowResetter          reset.WorkflowResetter
 		queueTaskProcessor        task.Processor
 		replicationTaskProcessors []replication.TaskProcessor
+		replicationAckManager     replication.TaskAckManager
 		publicClient              workflowserviceclient.Interface
 		eventsReapplier           ndc.EventsReapplier
 		matchingClient            matching.Client
@@ -225,6 +224,10 @@ func NewEngineWithShardContext(
 		queueTaskProcessor:     queueTaskProcessor,
 		clientChecker:          client.NewVersionChecker(),
 		failoverMarkerNotifier: failoverMarkerNotifier,
+		replicationAckManager: replication.NewTaskAckManager(
+			shard,
+			executionCache,
+		),
 	}
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
 	pRetry := checks.NewPersistenceRetryer(
@@ -279,14 +282,6 @@ func NewEngineWithShardContext(
 
 	// Only start the replicator processor if valid publisher is passed in
 	if publisher != nil {
-		historyEngImpl.replicatorProcessor = newReplicatorQueueProcessor(
-			shard,
-			historyEngImpl.executionCache,
-			publisher,
-			executionManager,
-			historyV2Manager,
-			logger,
-		)
 		historyEngImpl.replicator = newHistoryReplicator(
 			shard,
 			clock.NewRealTimeSource(),
@@ -397,11 +392,6 @@ func (e *historyEngineImpl) Start() {
 	// queue processor need to be started.
 	e.registerDomainFailoverCallback()
 
-	clusterMetadata := e.shard.GetClusterMetadata()
-	if e.replicatorProcessor != nil && clusterMetadata.GetReplicationConsumerConfig().Type != sconfig.ReplicationConsumerTypeRPC {
-		e.replicatorProcessor.Start()
-	}
-
 	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
 		replicationTaskProcessor.Start()
 	}
@@ -417,9 +407,6 @@ func (e *historyEngineImpl) Stop() {
 
 	e.txProcessor.Stop()
 	e.timerProcessor.Stop()
-	if e.replicatorProcessor != nil {
-		e.replicatorProcessor.Stop()
-	}
 
 	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
 		replicationTaskProcessor.Stop()
@@ -2800,15 +2787,6 @@ func (e *historyEngineImpl) NotifyNewTransferTasks(
 	}
 }
 
-func (e *historyEngineImpl) NotifyNewReplicationTasks(
-	tasks []persistence.Task,
-) {
-
-	if len(tasks) > 0 && e.replicatorProcessor != nil {
-		e.replicatorProcessor.notifyNewTask()
-	}
-}
-
 func (e *historyEngineImpl) NotifyNewTimerTasks(
 	tasks []persistence.Task,
 ) {
@@ -3112,7 +3090,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	sw := e.metricsClient.StartTimer(scope, metrics.GetReplicationMessagesForShardLatency)
 	defer sw.Stop()
 
-	replicationMessages, err := e.replicatorProcessor.getTasks(
+	replicationMessages, err := e.replicationAckManager.GetTasks(
 		ctx,
 		pollingCluster,
 		lastReadMessageID,
@@ -3141,7 +3119,7 @@ func (e *historyEngineImpl) GetDLQReplicationMessages(
 
 	tasks := make([]*r.ReplicationTask, 0, len(taskInfos))
 	for _, taskInfo := range taskInfos {
-		task, err := e.replicatorProcessor.getTask(ctx, taskInfo)
+		task, err := e.replicationAckManager.GetTask(ctx, taskInfo)
 		if err != nil {
 			e.logger.Error("Failed to fetch DLQ replication messages.", tag.Error(err))
 			return nil, err

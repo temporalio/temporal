@@ -24,16 +24,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/stretchr/testify/mock"
-
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/domain"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
-	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	persistenceClient "github.com/uber/cadence/common/persistence/client"
 	espersistence "github.com/uber/cadence/common/persistence/elasticsearch"
@@ -228,21 +224,9 @@ func (s *Service) Start() {
 	var replicationMessageSink messaging.Producer
 	clusterMetadata := s.GetClusterMetadata()
 	if clusterMetadata.IsGlobalDomainEnabled() {
-		consumerConfig := clusterMetadata.GetReplicationConsumerConfig()
-		if consumerConfig != nil &&
-			consumerConfig.Type == config.ReplicationConsumerTypeRPC {
-			replicationMessageSink = s.GetDomainReplicationQueue()
-		} else {
-			var err error
-			replicationMessageSink, err = s.GetMessagingClient().NewProducerWithClusterName(
-				s.GetClusterMetadata().GetCurrentClusterName())
-			if err != nil {
-				logger.Fatal("Creating replicationMessageSink producer failed", tag.Error(err))
-			}
-		}
+		replicationMessageSink = s.GetDomainReplicationQueue()
 	} else {
-		replicationMessageSink = &mocks.KafkaProducer{}
-		replicationMessageSink.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
+		replicationMessageSink = messaging.NewNoopProducer()
 	}
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink, client.NewVersionChecker())

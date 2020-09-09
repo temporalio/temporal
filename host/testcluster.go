@@ -114,7 +114,6 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			options.ClusterMetadata.MasterClusterName,
 			options.ClusterMetadata.CurrentClusterName,
 			options.ClusterMetadata.ClusterInformation,
-			options.ClusterMetadata.ReplicationConsumer,
 		)
 	}
 

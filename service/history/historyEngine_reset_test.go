@@ -57,14 +57,13 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller               *gomock.Controller
-		mockShard                *shard.TestContext
-		mockTxProcessor          *queue.MockProcessor
-		mockTimerProcessor       *queue.MockProcessor
-		mockReplicationProcessor *MockReplicatorQueueProcessor
-		mockEventsCache          *events.MockCache
-		mockDomainCache          *cache.MockDomainCache
-		mockClusterMetadata      *cluster.MockMetadata
+		controller          *gomock.Controller
+		mockShard           *shard.TestContext
+		mockTxProcessor     *queue.MockProcessor
+		mockTimerProcessor  *queue.MockProcessor
+		mockEventsCache     *events.MockCache
+		mockDomainCache     *cache.MockDomainCache
+		mockClusterMetadata *cluster.MockMetadata
 
 		mockExecutionMgr *mocks.ExecutionManager
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
@@ -99,10 +98,8 @@ func (s *resetorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockTxProcessor = queue.NewMockProcessor(s.controller)
 	s.mockTimerProcessor = queue.NewMockProcessor(s.controller)
-	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -140,7 +137,6 @@ func (s *resetorSuite) SetupTest() {
 		config:               s.config,
 		historyEventNotifier: events.NewNotifier(clock.NewRealTimeSource(), s.mockShard.GetMetricsClient(), func(string) int { return 0 }),
 		txProcessor:          s.mockTxProcessor,
-		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
 	}
 	s.mockShard.SetEngine(h)

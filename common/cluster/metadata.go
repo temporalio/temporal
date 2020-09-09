@@ -51,8 +51,6 @@ type (
 		GetAllClusterInfo() map[string]config.ClusterInformation
 		// ClusterNameForFailoverVersion return the corresponding cluster name for a given failover version
 		ClusterNameForFailoverVersion(failoverVersion int64) string
-		// GetReplicationConsumerConfig returns the config for replication task consumer.
-		GetReplicationConsumerConfig() *config.ReplicationConsumerConfig
 	}
 
 	metadataImpl struct {
@@ -71,8 +69,6 @@ type (
 		clusterInfo map[string]config.ClusterInformation
 		// versionToClusterName contains all initial version -> corresponding cluster name
 		versionToClusterName map[int64]string
-		//replicationConsumer returns the config for replication task consumer.
-		replicationConsumer *config.ReplicationConsumerConfig
 	}
 )
 
@@ -84,7 +80,6 @@ func NewMetadata(
 	masterClusterName string,
 	currentClusterName string,
 	clusterInfo map[string]config.ClusterInformation,
-	replicationConsumer *config.ReplicationConsumerConfig,
 ) Metadata {
 
 	if len(clusterInfo) == 0 {
@@ -129,7 +124,6 @@ func NewMetadata(
 	return &metadataImpl{
 		logger:                   logger,
 		enableGlobalDomain:       enableGlobalDomain,
-		replicationConsumer:      replicationConsumer,
 		failoverVersionIncrement: failoverVersionIncrement,
 		masterClusterName:        masterClusterName,
 		currentClusterName:       currentClusterName,
@@ -202,12 +196,4 @@ func (metadata *metadataImpl) ClusterNameForFailoverVersion(failoverVersion int6
 		))
 	}
 	return clusterName
-}
-
-func (metadata *metadataImpl) GetReplicationConsumerConfig() *config.ReplicationConsumerConfig {
-	if metadata.replicationConsumer == nil {
-		return &config.ReplicationConsumerConfig{Type: config.ReplicationConsumerTypeKafka}
-	}
-
-	return metadata.replicationConsumer
 }

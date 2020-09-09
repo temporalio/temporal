@@ -81,6 +81,5 @@ type (
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTransferTasks(tasks []persistence.Task)
 		NotifyNewTimerTasks(tasks []persistence.Task)
-		NotifyNewReplicationTasks(tasks []persistence.Task)
 	}
 )

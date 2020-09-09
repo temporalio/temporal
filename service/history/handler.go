@@ -130,7 +130,6 @@ func (h *Handler) Start() {
 	h.replicationTaskFetchers = replication.NewTaskFetchers(
 		h.GetLogger(),
 		h.config,
-		h.GetClusterMetadata().GetReplicationConsumerConfig(),
 		h.GetClusterMetadata(),
 		h.GetClientBean(),
 	)

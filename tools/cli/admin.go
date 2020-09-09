@@ -410,118 +410,19 @@ func newAdminKafkaCommands() []cli.Command {
 			},
 		},
 		{
-			Name:    "purgeTopic",
-			Aliases: []string{"purge"},
-			Usage:   "purge Kafka topic by consumer group",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagCluster,
-					Usage: "Name of the Kafka cluster to publish replicationTasks",
-				},
-				cli.StringFlag{
-					Name:  FlagTopic,
-					Usage: "Topic to publish replication task",
-				},
-				cli.StringFlag{
-					Name:  FlagGroup,
-					Usage: "Group to read DLQ",
-				},
-				cli.StringFlag{
-					Name: FlagHostFile,
-					Usage: "Kafka host config file in format of: " + `
-tls:
-    enabled: false
-    certFile: ""
-    keyFile: ""
-    caFile: ""
-clusters:
-	localKafka:
-		brokers:
-		- 127.0.0.1
-		- 127.0.0.2`,
-				},
-			},
-			Action: func(c *cli.Context) {
-				AdminPurgeTopic(c)
-			},
-		},
-		{
-			Name:    "mergeDLQ",
-			Aliases: []string{"mgdlq"},
-			Usage:   "Merge replication tasks to target topic(from input file or DLQ topic)",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagInputFileWithAlias,
-					Usage: "Input file to use to read as JSON of ReplicationTask, separated by line",
-				},
-				cli.StringFlag{
-					Name:  FlagInputTopicWithAlias,
-					Usage: "Input topic to read ReplicationTask",
-				},
-				cli.StringFlag{
-					Name:  FlagInputCluster,
-					Usage: "Name of the Kafka cluster for reading DLQ topic for ReplicationTask",
-				},
-				cli.Int64Flag{
-					Name:  FlagStartOffset,
-					Usage: "Starting offset for reading DLQ topic for ReplicationTask",
-				},
-				cli.StringFlag{
-					Name:  FlagCluster,
-					Usage: "Name of the Kafka cluster to publish replicationTasks",
-				},
-				cli.StringFlag{
-					Name:  FlagTopic,
-					Usage: "Topic to publish replication task",
-				},
-				cli.StringFlag{
-					Name:  FlagGroup,
-					Usage: "Group to read DLQ",
-				},
-				cli.StringFlag{
-					Name: FlagHostFile,
-					Usage: "Kafka host config file in format of: " + `
-tls:
-    enabled: false
-    certFile: ""
-    keyFile: ""
-    caFile: ""
-clusters:
-	localKafka:
-		brokers:
-		- 127.0.0.1
-		- 127.0.0.2`,
-				},
-			},
-			Action: func(c *cli.Context) {
-				AdminMergeDLQ(c)
-			},
-		},
-		{
 			Name:    "rereplicate",
 			Aliases: []string{"rrp"},
 			Usage:   "Rereplicate replication tasks to target topic from history tables",
 			Flags: append(getDBFlags(),
 				cli.StringFlag{
-					Name:  FlagTargetCluster,
-					Usage: "Name of targetCluster to receive the replication task",
+					Name:  FlagSourceCluster,
+					Usage: "Name of source cluster to resend the replication task",
 				},
 				cli.IntFlag{
 					Name:  FlagNumberOfShards,
 					Usage: "NumberOfShards is required to calculate shardID. (see server config for numHistoryShards)",
 				},
-
-				// for multiple workflow
-				cli.StringFlag{
-					Name:  FlagInputFileWithAlias,
-					Usage: "Input file to read multiple workflow line by line. For each line: domainID,workflowID,runID,minEventID,maxEventID (minEventID/maxEventID are optional.)",
-				},
-
 				// for one workflow
-				cli.Int64Flag{
-					Name:  FlagMinEventID,
-					Usage: "MinEventID. Optional, default to all events",
-				},
 				cli.Int64Flag{
 					Name:  FlagMaxEventID,
 					Usage: "MaxEventID Optional, default to all events",
@@ -539,31 +440,8 @@ clusters:
 					Usage: "DomainID",
 				},
 				cli.StringFlag{
-					Name:  FlagStartEventVersion,
-					Usage: "Workflow start event version",
-				},
-				// kafka
-				cli.StringFlag{
-					Name:  FlagCluster,
-					Usage: "Name of the Kafka cluster to publish replicationTasks",
-				},
-				cli.StringFlag{
-					Name:  FlagTopic,
-					Usage: "Topic to publish replication task",
-				},
-				cli.StringFlag{
-					Name: FlagHostFile,
-					Usage: "Kafka host config file in format of: " + `
-tls:
-    enabled: false
-    certFile: ""
-    keyFile: ""
-    caFile: ""
-clusters:
-	localKafka:
-		brokers:
-		- 127.0.0.1
-		- 127.0.0.2`,
+					Name:  FlagEndEventVersion,
+					Usage: "Workflow end event version",
 				}),
 			Action: func(c *cli.Context) {
 				AdminRereplicate(c)

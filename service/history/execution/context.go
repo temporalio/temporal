@@ -810,7 +810,6 @@ func (c *contextImpl) notifyTasks(
 	timerTasks []persistence.Task,
 ) {
 	c.shard.GetEngine().NotifyNewTransferTasks(transferTasks)
-	c.shard.GetEngine().NotifyNewReplicationTasks(replicationTasks)
 	c.shard.GetEngine().NotifyNewTimerTasks(timerTasks)
 }
 

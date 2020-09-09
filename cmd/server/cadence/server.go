@@ -143,7 +143,6 @@ func (s *server) startService() common.Daemon {
 		clusterMetadata.MasterClusterName,
 		clusterMetadata.CurrentClusterName,
 		clusterMetadata.ClusterInformation,
-		clusterMetadata.ReplicationConsumer,
 	)
 
 	if s.cfg.PublicClient.HostPort != "" {
