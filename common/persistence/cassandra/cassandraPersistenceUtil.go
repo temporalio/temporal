@@ -2106,6 +2106,8 @@ func createReplicationTaskInfo(
 			info.ResetWorkflow = v.(bool)
 		case "new_run_branch_token":
 			info.NewRunBranchToken = v.([]byte)
+		case "created_time":
+			info.CreationTime = v.(int64)
 		}
 	}
 

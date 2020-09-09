@@ -2967,9 +2967,26 @@ func getActiveDomainEntryFromShard(
 		return nil, err
 	}
 	if err = domainEntry.GetDomainNotActiveErr(); err != nil {
-		return nil, err
+		return domainEntry, err
 	}
 	return domainEntry, nil
+}
+
+func (e *historyEngineImpl) getPendingActiveDomainEntry(
+	domainUUID *string,
+) (bool, error) {
+
+	domainID, err := validateDomainUUID(domainUUID)
+	if err != nil {
+		return false, err
+	}
+
+	domainEntry, err := e.shard.GetDomainCache().GetDomainByID(domainID)
+	if err != nil {
+		return false, err
+	}
+
+	return domainEntry.IsDomainPendingActive(), nil
 }
 
 func getScheduleID(
@@ -3147,7 +3164,12 @@ func (e *historyEngineImpl) ReapplyEvents(
 
 	domainEntry, err := e.getActiveDomainEntry(common.StringPtr(domainUUID))
 	if err != nil {
-		return err
+		switch {
+		case domainEntry != nil && domainEntry.IsDomainPendingActive():
+			return nil
+		default:
+			return err
+		}
 	}
 	domainID := domainEntry.GetInfo().ID
 	// remove run id from the execution so that reapply events to the current run

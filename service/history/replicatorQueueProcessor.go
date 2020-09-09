@@ -758,7 +758,7 @@ func (p *replicatorQueueProcessorImpl) generateFailoverMarkerTask(
 		FailoverMarkerAttributes: &replicator.FailoverMarkerAttributes{
 			DomainID:        common.StringPtr(taskInfo.GetDomainID()),
 			FailoverVersion: common.Int64Ptr(taskInfo.GetVersion()),
-			CreationTime:    common.Int64Ptr(taskInfo.GetVisibilityTimestamp().UnixNano()),
+			CreationTime:    common.Int64Ptr(taskInfo.CreationTime),
 		},
 	}
 }
