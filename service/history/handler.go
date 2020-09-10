@@ -1004,6 +1004,9 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 		select {
 		case <-ctx.Done():
 			isContextDone = true
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				err2 = ctxErr
+			}
 		default:
 		}
 
