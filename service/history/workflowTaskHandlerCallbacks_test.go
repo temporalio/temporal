@@ -72,8 +72,8 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	s.mockMutableState = NewMockmutableState(s.controller)
 	s.mockMutableState.EXPECT().GetQueryRegistry().Return(s.queryRegistry)
 	workflowInfo := &persistence.WorkflowExecutionInfo{
-		WorkflowID: testWorkflowID,
-		RunID:      testRunID,
+		WorkflowId: testWorkflowID,
+		RunId:      testRunID,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(workflowInfo).AnyTimes()
 }

@@ -6855,7 +6855,7 @@ func (this *StartWorkflowExecutionRequest) GoString() string {
 	if this.ParentExecutionInfo != nil {
 		s = append(s, "ParentExecutionInfo: "+fmt.Sprintf("%#v", this.ParentExecutionInfo)+",\n")
 	}
-	s = append(s, "Attempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
+	s = append(s, "RetryAttempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
 	s = append(s, "WorkflowExecutionExpirationTime: "+fmt.Sprintf("%#v", this.WorkflowExecutionExpirationTime)+",\n")
 	s = append(s, "ContinueAsNewInitiator: "+fmt.Sprintf("%#v", this.ContinueAsNewInitiator)+",\n")
 	if this.ContinuedFailure != nil {
@@ -7058,7 +7058,7 @@ func (this *RecordWorkflowTaskStartedResponse) GoString() string {
 	s = append(s, "ScheduledEventId: "+fmt.Sprintf("%#v", this.ScheduledEventId)+",\n")
 	s = append(s, "StartedEventId: "+fmt.Sprintf("%#v", this.StartedEventId)+",\n")
 	s = append(s, "NextEventId: "+fmt.Sprintf("%#v", this.NextEventId)+",\n")
-	s = append(s, "Attempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
+	s = append(s, "RetryAttempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
 	s = append(s, "StickyExecutionEnabled: "+fmt.Sprintf("%#v", this.StickyExecutionEnabled)+",\n")
 	if this.WorkflowTaskInfo != nil {
 		s = append(s, "WorkflowTaskInfo: "+fmt.Sprintf("%#v", this.WorkflowTaskInfo)+",\n")
@@ -7115,7 +7115,7 @@ func (this *RecordActivityTaskStartedResponse) GoString() string {
 		s = append(s, "ScheduledEvent: "+fmt.Sprintf("%#v", this.ScheduledEvent)+",\n")
 	}
 	s = append(s, "StartedTime: "+fmt.Sprintf("%#v", this.StartedTime)+",\n")
-	s = append(s, "Attempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
+	s = append(s, "RetryAttempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
 	s = append(s, "CurrentAttemptScheduledTime: "+fmt.Sprintf("%#v", this.CurrentAttemptScheduledTime)+",\n")
 	if this.HeartbeatDetails != nil {
 		s = append(s, "HeartbeatDetails: "+fmt.Sprintf("%#v", this.HeartbeatDetails)+",\n")
@@ -7563,7 +7563,7 @@ func (this *SyncActivityRequest) GoString() string {
 	if this.Details != nil {
 		s = append(s, "Details: "+fmt.Sprintf("%#v", this.Details)+",\n")
 	}
-	s = append(s, "Attempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
+	s = append(s, "RetryAttempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
 	if this.LastFailure != nil {
 		s = append(s, "LastFailure: "+fmt.Sprintf("%#v", this.LastFailure)+",\n")
 	}
@@ -12901,7 +12901,7 @@ func (this *StartWorkflowExecutionRequest) String() string {
 		`NamespaceId:` + fmt.Sprintf("%v", this.NamespaceId) + `,`,
 		`StartRequest:` + strings.Replace(fmt.Sprintf("%v", this.StartRequest), "StartWorkflowExecutionRequest", "v1.StartWorkflowExecutionRequest", 1) + `,`,
 		`ParentExecutionInfo:` + strings.Replace(fmt.Sprintf("%v", this.ParentExecutionInfo), "ParentExecutionInfo", "v11.ParentExecutionInfo", 1) + `,`,
-		`Attempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
+		`RetryAttempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
 		`WorkflowExecutionExpirationTime:` + strings.Replace(fmt.Sprintf("%v", this.WorkflowExecutionExpirationTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`ContinueAsNewInitiator:` + fmt.Sprintf("%v", this.ContinueAsNewInitiator) + `,`,
 		`ContinuedFailure:` + strings.Replace(fmt.Sprintf("%v", this.ContinuedFailure), "Failure", "v13.Failure", 1) + `,`,
@@ -13074,7 +13074,7 @@ func (this *RecordWorkflowTaskStartedResponse) String() string {
 		`ScheduledEventId:` + fmt.Sprintf("%v", this.ScheduledEventId) + `,`,
 		`StartedEventId:` + fmt.Sprintf("%v", this.StartedEventId) + `,`,
 		`NextEventId:` + fmt.Sprintf("%v", this.NextEventId) + `,`,
-		`Attempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
+		`RetryAttempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
 		`StickyExecutionEnabled:` + fmt.Sprintf("%v", this.StickyExecutionEnabled) + `,`,
 		`WorkflowTaskInfo:` + strings.Replace(fmt.Sprintf("%v", this.WorkflowTaskInfo), "TransientWorkflowTaskInfo", "v18.TransientWorkflowTaskInfo", 1) + `,`,
 		`WorkflowExecutionTaskQueue:` + strings.Replace(fmt.Sprintf("%v", this.WorkflowExecutionTaskQueue), "TaskQueue", "v15.TaskQueue", 1) + `,`,
@@ -13109,7 +13109,7 @@ func (this *RecordActivityTaskStartedResponse) String() string {
 	s := strings.Join([]string{`&RecordActivityTaskStartedResponse{`,
 		`ScheduledEvent:` + strings.Replace(fmt.Sprintf("%v", this.ScheduledEvent), "HistoryEvent", "v110.HistoryEvent", 1) + `,`,
 		`StartedTime:` + strings.Replace(fmt.Sprintf("%v", this.StartedTime), "Timestamp", "types.Timestamp", 1) + `,`,
-		`Attempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
+		`RetryAttempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
 		`CurrentAttemptScheduledTime:` + strings.Replace(fmt.Sprintf("%v", this.CurrentAttemptScheduledTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`HeartbeatDetails:` + strings.Replace(fmt.Sprintf("%v", this.HeartbeatDetails), "Payloads", "v14.Payloads", 1) + `,`,
 		`WorkflowType:` + strings.Replace(fmt.Sprintf("%v", this.WorkflowType), "WorkflowType", "v14.WorkflowType", 1) + `,`,
@@ -13510,7 +13510,7 @@ func (this *SyncActivityRequest) String() string {
 		`StartedTime:` + strings.Replace(fmt.Sprintf("%v", this.StartedTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`LastHeartbeatTime:` + strings.Replace(fmt.Sprintf("%v", this.LastHeartbeatTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`Details:` + strings.Replace(fmt.Sprintf("%v", this.Details), "Payloads", "v14.Payloads", 1) + `,`,
-		`Attempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
+		`RetryAttempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
 		`LastFailure:` + strings.Replace(fmt.Sprintf("%v", this.LastFailure), "Failure", "v13.Failure", 1) + `,`,
 		`LastWorkerIdentity:` + fmt.Sprintf("%v", this.LastWorkerIdentity) + `,`,
 		`VersionHistory:` + strings.Replace(fmt.Sprintf("%v", this.VersionHistory), "VersionHistory", "v18.VersionHistory", 1) + `,`,
@@ -13966,7 +13966,7 @@ func (m *StartWorkflowExecutionRequest) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 4:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Attempt", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RetryAttempt", wireType)
 			}
 			m.Attempt = 0
 			for shift := uint(0); ; shift += 7 {
@@ -16432,7 +16432,7 @@ func (m *RecordWorkflowTaskStartedResponse) Unmarshal(dAtA []byte) error {
 			}
 		case 6:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Attempt", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RetryAttempt", wireType)
 			}
 			m.Attempt = 0
 			for shift := uint(0); ; shift += 7 {
@@ -17149,7 +17149,7 @@ func (m *RecordActivityTaskStartedResponse) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 3:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Attempt", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RetryAttempt", wireType)
 			}
 			m.Attempt = 0
 			for shift := uint(0); ; shift += 7 {
@@ -21275,7 +21275,7 @@ func (m *SyncActivityRequest) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 11:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Attempt", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RetryAttempt", wireType)
 			}
 			m.Attempt = 0
 			for shift := uint(0); ; shift += 7 {

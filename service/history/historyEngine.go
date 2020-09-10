@@ -1178,11 +1178,11 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		},
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: executionInfo.WorkflowID,
-				RunId:      executionInfo.RunID,
+				WorkflowId: executionInfo.WorkflowId,
+				RunId:      executionInfo.RunId,
 			},
 			Type:             &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-			StartTime:        executionInfo.StartTimestamp,
+			StartTime:        executionInfo.StartTime,
 			HistoryLength:    mutableState.GetNextEventID() - common.FirstEventID,
 			AutoResetPoints:  executionInfo.AutoResetPoints,
 			Memo:             &commonpb.Memo{Fields: executionInfo.Memo},
@@ -1201,12 +1201,12 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
 	result.WorkflowExecutionInfo.ExecutionTime = timestamp.TimePtr(timestamp.TimeValue(result.WorkflowExecutionInfo.GetStartTime()).Add(backoffDuration))
 
-	if executionInfo.ParentRunID != "" {
+	if executionInfo.ParentRunId != "" {
 		result.WorkflowExecutionInfo.ParentExecution = &commonpb.WorkflowExecution{
-			WorkflowId: executionInfo.ParentWorkflowID,
-			RunId:      executionInfo.ParentRunID,
+			WorkflowId: executionInfo.ParentWorkflowId,
+			RunId:      executionInfo.ParentRunId,
 		}
-		result.WorkflowExecutionInfo.ParentNamespaceId = executionInfo.ParentNamespaceID
+		result.WorkflowExecutionInfo.ParentNamespaceId = executionInfo.ParentNamespaceId
 	}
 	if executionInfo.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// for closed workflow
@@ -1750,13 +1750,13 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 			// let's compare the FirstExecutionRunID on the request to make sure we cancel the correct workflow
 			// execution.
 			executionInfo := mutableState.GetExecutionInfo()
-			if len(firstExecutionRunID) > 0 && executionInfo.FirstExecutionRunID != firstExecutionRunID {
+			if len(firstExecutionRunID) > 0 && executionInfo.FirstExecutionRunId != firstExecutionRunID {
 				return nil, ErrWorkflowExecutionNotFound
 			}
 
 			if childWorkflowOnly {
-				parentWorkflowID := executionInfo.ParentWorkflowID
-				parentRunID := executionInfo.ParentRunID
+				parentWorkflowID := executionInfo.ParentWorkflowId
+				parentRunID := executionInfo.ParentRunId
 				if parentExecution.GetWorkflowId() != parentWorkflowID ||
 					parentExecution.GetRunId() != parentRunID {
 					return nil, ErrWorkflowParent
@@ -1833,8 +1833,8 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 			}
 
 			if childWorkflowOnly {
-				parentWorkflowID := executionInfo.ParentWorkflowID
-				parentRunID := executionInfo.ParentRunID
+				parentWorkflowID := executionInfo.ParentWorkflowId
+				parentRunID := executionInfo.ParentRunId
 				if parentExecution.GetWorkflowId() != parentWorkflowID ||
 					parentExecution.GetRunId() != parentRunID {
 					return nil, ErrWorkflowParent
@@ -2040,7 +2040,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	prevLastWriteVersion := int64(0)
 	if prevMutableState != nil {
 		createMode = persistence.CreateWorkflowModeWorkflowIDReuse
-		prevRunID = prevMutableState.GetExecutionInfo().RunID
+		prevRunID = prevMutableState.GetExecutionInfo().RunId
 		prevLastWriteVersion, err = prevMutableState.GetLastWriteVersion()
 		if err != nil {
 			return nil, err
@@ -2134,7 +2134,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 			// let's compare the FirstExecutionRunID on the request to make sure we terminate the correct workflow
 			// execution.
 			executionInfo := mutableState.GetExecutionInfo()
-			if len(firstExecutionRunID) > 0 && executionInfo.FirstExecutionRunID != firstExecutionRunID {
+			if len(firstExecutionRunID) > 0 && executionInfo.FirstExecutionRunId != firstExecutionRunID {
 				return nil, ErrWorkflowExecutionNotFound
 			}
 
@@ -2309,7 +2309,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	}
 
 	// dedup by requestID
-	if currentMutableState.GetExecutionInfo().CreateRequestID == request.GetRequestId() {
+	if currentMutableState.GetExecutionInfo().CreateRequestId == request.GetRequestId() {
 		e.logger.Info("Duplicated reset request",
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(currentRunID),
@@ -2743,8 +2743,8 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
 	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
 ) error {
 
-	prevStartRequestID := prevExecutionInfo.CreateRequestID
-	prevRunID := prevExecutionInfo.RunID
+	prevStartRequestID := prevExecutionInfo.CreateRequestId
+	prevRunID := prevExecutionInfo.RunId
 	prevState := prevExecutionInfo.State
 	prevStatus := prevExecutionInfo.Status
 
@@ -2914,7 +2914,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// need to reset target workflow (which is also the current workflow)
 				// to accept events to be reapplied
-				baseRunID := mutableState.GetExecutionInfo().RunID
+				baseRunID := mutableState.GetExecutionInfo().RunId
 				resetRunID := uuid.New()
 				baseRebuildLastEventID := mutableState.GetPreviousStartedEventID()
 

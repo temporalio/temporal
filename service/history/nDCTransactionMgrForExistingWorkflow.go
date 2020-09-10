@@ -90,9 +90,9 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	}
 
 	targetExecutionInfo := targetWorkflow.getMutableState().GetExecutionInfo()
-	namespaceID := targetExecutionInfo.NamespaceID
-	workflowID := targetExecutionInfo.WorkflowID
-	targetRunID := targetExecutionInfo.RunID
+	namespaceID := targetExecutionInfo.NamespaceId
+	workflowID := targetExecutionInfo.WorkflowId
+	targetRunID := targetExecutionInfo.RunId
 
 	// the target workflow is rebuilt
 	// we need to check the current workflow execution
@@ -278,9 +278,9 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		newExecutionInfo := newWorkflow.getMutableState().GetExecutionInfo()
 		newWorkflowExists, err := r.transactionMgr.checkWorkflowExists(
 			ctx,
-			newExecutionInfo.NamespaceID,
-			newExecutionInfo.WorkflowID,
-			newExecutionInfo.RunID,
+			newExecutionInfo.NamespaceId,
+			newExecutionInfo.WorkflowId,
+			newExecutionInfo.RunId,
 		)
 		if err != nil {
 			return err
@@ -422,9 +422,9 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		newExecutionInfo := newWorkflow.getMutableState().GetExecutionInfo()
 		newWorkflowExists, err := r.transactionMgr.checkWorkflowExists(
 			ctx,
-			newExecutionInfo.NamespaceID,
-			newExecutionInfo.WorkflowID,
-			newExecutionInfo.RunID,
+			newExecutionInfo.NamespaceId,
+			newExecutionInfo.WorkflowId,
+			newExecutionInfo.RunId,
 		)
 		if err != nil {
 			return err

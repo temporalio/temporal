@@ -910,7 +910,7 @@ func (this *PendingActivityInfo) GoString() string {
 	s = append(s, "HeartbeatDetails: "+fmt.Sprintf("%#v", this.HeartbeatDetails)+",\n")
 	s = append(s, "LastHeartbeatTime: "+fmt.Sprintf("%#v", this.LastHeartbeatTime)+",\n")
 	s = append(s, "LastStartedTime: "+fmt.Sprintf("%#v", this.LastStartedTime)+",\n")
-	s = append(s, "Attempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
+	s = append(s, "RetryAttempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
 	s = append(s, "MaximumAttempts: "+fmt.Sprintf("%#v", this.MaximumAttempts)+",\n")
 	s = append(s, "ScheduledTime: "+fmt.Sprintf("%#v", this.ScheduledTime)+",\n")
 	s = append(s, "ExpirationTime: "+fmt.Sprintf("%#v", this.ExpirationTime)+",\n")
@@ -1668,7 +1668,7 @@ func (this *PendingActivityInfo) String() string {
 		`HeartbeatDetails:` + fmt.Sprintf("%v", this.HeartbeatDetails) + `,`,
 		`LastHeartbeatTime:` + strings.Replace(fmt.Sprintf("%v", this.LastHeartbeatTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`LastStartedTime:` + strings.Replace(fmt.Sprintf("%v", this.LastStartedTime), "Timestamp", "types.Timestamp", 1) + `,`,
-		`Attempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
+		`RetryAttempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
 		`MaximumAttempts:` + fmt.Sprintf("%v", this.MaximumAttempts) + `,`,
 		`ScheduledTime:` + strings.Replace(fmt.Sprintf("%v", this.ScheduledTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`ExpirationTime:` + strings.Replace(fmt.Sprintf("%v", this.ExpirationTime), "Timestamp", "types.Timestamp", 1) + `,`,
@@ -2582,7 +2582,7 @@ func (m *PendingActivityInfo) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 7:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Attempt", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RetryAttempt", wireType)
 			}
 			m.Attempt = 0
 			for shift := uint(0); ; shift += 7 {

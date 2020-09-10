@@ -2132,7 +2132,7 @@ func (this *SyncActivityTaskAttributes) GoString() string {
 	if this.Details != nil {
 		s = append(s, "Details: "+fmt.Sprintf("%#v", this.Details)+",\n")
 	}
-	s = append(s, "Attempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
+	s = append(s, "RetryAttempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
 	if this.LastFailure != nil {
 		s = append(s, "LastFailure: "+fmt.Sprintf("%#v", this.LastFailure)+",\n")
 	}
@@ -3770,7 +3770,7 @@ func (this *SyncActivityTaskAttributes) String() string {
 		`StartedTime:` + strings.Replace(fmt.Sprintf("%v", this.StartedTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`LastHeartbeatTime:` + strings.Replace(fmt.Sprintf("%v", this.LastHeartbeatTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`Details:` + strings.Replace(fmt.Sprintf("%v", this.Details), "Payloads", "v14.Payloads", 1) + `,`,
-		`Attempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
+		`RetryAttempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
 		`LastFailure:` + strings.Replace(fmt.Sprintf("%v", this.LastFailure), "Failure", "v15.Failure", 1) + `,`,
 		`LastWorkerIdentity:` + fmt.Sprintf("%v", this.LastWorkerIdentity) + `,`,
 		`VersionHistory:` + strings.Replace(fmt.Sprintf("%v", this.VersionHistory), "VersionHistory", "v16.VersionHistory", 1) + `,`,
@@ -6108,7 +6108,7 @@ func (m *SyncActivityTaskAttributes) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 11:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Attempt", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RetryAttempt", wireType)
 			}
 			m.Attempt = 0
 			for shift := uint(0); ; shift += 7 {

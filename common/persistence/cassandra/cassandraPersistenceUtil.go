@@ -54,9 +54,9 @@ func applyWorkflowMutationBatch(
 
 	executionInfo := workflowMutation.ExecutionInfo
 	versionHistories := workflowMutation.VersionHistories
-	namespaceID := executionInfo.NamespaceID
-	workflowID := executionInfo.WorkflowID
-	runID := executionInfo.RunID
+	namespaceID := executionInfo.NamespaceId
+	workflowID := executionInfo.WorkflowId
+	runID := executionInfo.RunId
 	condition := workflowMutation.Condition
 
 	startVersion := workflowMutation.StartVersion
@@ -177,9 +177,9 @@ func applyWorkflowSnapshotBatchAsReset(
 
 	executionInfo := workflowSnapshot.ExecutionInfo
 	versionHistories := workflowSnapshot.VersionHistories
-	namespaceID := executionInfo.NamespaceID
-	workflowID := executionInfo.WorkflowID
-	runID := executionInfo.RunID
+	namespaceID := executionInfo.NamespaceId
+	workflowID := executionInfo.WorkflowId
+	runID := executionInfo.RunId
 	condition := workflowSnapshot.Condition
 
 	startVersion := workflowSnapshot.StartVersion
@@ -292,9 +292,9 @@ func applyWorkflowSnapshotBatchAsNew(
 
 	executionInfo := workflowSnapshot.ExecutionInfo
 	versionHistories := workflowSnapshot.VersionHistories
-	namespaceID := executionInfo.NamespaceID
-	workflowID := executionInfo.WorkflowID
-	runID := executionInfo.RunID
+	namespaceID := executionInfo.NamespaceId
+	workflowID := executionInfo.WorkflowId
+	runID := executionInfo.RunId
 
 	startVersion := workflowSnapshot.StartVersion
 
@@ -410,13 +410,13 @@ func createExecution(
 		return err
 	}
 
-	namespaceID := executionInfo.NamespaceID
-	workflowID := executionInfo.WorkflowID
-	runID := executionInfo.RunID
+	namespaceID := executionInfo.NamespaceId
+	workflowID := executionInfo.WorkflowId
+	runID := executionInfo.RunId
 
 	// TODO we should set the start time and last update time on business logic layer
-	executionInfo.StartTimestamp = timestamp.UnixOrZeroTimePtr(p.DBTimestampToUnixNano(cqlNowTimestampMillis))
-	executionInfo.LastUpdatedTimestamp = timestamp.UnixOrZeroTimePtr(p.DBTimestampToUnixNano(cqlNowTimestampMillis))
+	executionInfo.StartTime = timestamp.UnixOrZeroTimePtr(p.DBTimestampToUnixNano(cqlNowTimestampMillis))
+	executionInfo.LastUpdatedTime = timestamp.UnixOrZeroTimePtr(p.DBTimestampToUnixNano(cqlNowTimestampMillis))
 
 	protoExecution, protoState, err := p.WorkflowExecutionToProto(executionInfo, startVersion, versionHistories)
 	if err != nil {
@@ -450,7 +450,7 @@ func createExecution(
 			executionDatablob.Encoding.String(),
 			executionStateDatablob.Data,
 			executionStateDatablob.Encoding.String(),
-			executionInfo.NextEventID,
+			executionInfo.NextEventId,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
 			checksumDatablob.Data,
@@ -467,7 +467,7 @@ func createExecution(
 			executionDatablob.Encoding.String(),
 			executionStateDatablob.Data,
 			executionStateDatablob.Encoding.String(),
-			executionInfo.NextEventID,
+			executionInfo.NextEventId,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
 			checksumDatablob.Data,
@@ -494,12 +494,12 @@ func updateExecution(
 		return err
 	}
 
-	namespaceID := executionInfo.NamespaceID
-	workflowID := executionInfo.WorkflowID
-	runID := executionInfo.RunID
+	namespaceID := executionInfo.NamespaceId
+	workflowID := executionInfo.WorkflowId
+	runID := executionInfo.RunId
 
 	// TODO we should set the last update time on business logic layer
-	executionInfo.LastUpdatedTimestamp = timestamp.UnixOrZeroTimePtr(p.DBTimestampToUnixNano(cqlNowTimestampMillis))
+	executionInfo.LastUpdatedTime = timestamp.UnixOrZeroTimePtr(p.DBTimestampToUnixNano(cqlNowTimestampMillis))
 
 	protoExecution, protoState, err := p.WorkflowExecutionToProto(executionInfo, startVersion, versionHistories)
 	if err != nil {
@@ -528,7 +528,7 @@ func updateExecution(
 			executionDatablob.Encoding.String(),
 			executionStateDatablob.Data,
 			executionStateDatablob.Encoding.String(),
-			executionInfo.NextEventID,
+			executionInfo.NextEventId,
 			checksumDatablob.Data,
 			checksumDatablob.Encoding.String(),
 			shardID,
@@ -546,7 +546,7 @@ func updateExecution(
 			executionDatablob.Encoding.String(),
 			executionStateDatablob.Data,
 			executionStateDatablob.Encoding.String(),
-			executionInfo.NextEventID,
+			executionInfo.NextEventId,
 			checksumDatablob.Data,
 			checksumDatablob.Encoding.String(),
 			shardID,

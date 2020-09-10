@@ -197,15 +197,15 @@ type (
 
 	// WorkflowExecutionInfo describes a workflow execution
 	WorkflowExecutionInfo struct {
-		NamespaceID                            string
-		WorkflowID                             string
-		RunID                                  string
-		FirstExecutionRunID                    string
-		ParentNamespaceID                      string
-		ParentWorkflowID                       string
-		ParentRunID                            string
-		InitiatedID                            int64
-		CompletionEventBatchID                 int64
+		NamespaceId                            string
+		WorkflowId                             string
+		RunId                                  string
+		FirstExecutionRunId                    string
+		ParentNamespaceId                      string
+		ParentWorkflowId                       string
+		ParentRunId                            string
+		InitiatedId                            int64
+		CompletionEventBatchId                 int64
 		CompletionEvent                        *historypb.HistoryEvent
 		TaskQueue                              string
 		WorkflowTypeName                       string
@@ -214,18 +214,18 @@ type (
 		DefaultWorkflowTaskTimeout             *time.Duration
 		State                                  enumsspb.WorkflowExecutionState
 		Status                                 enumspb.WorkflowExecutionStatus
-		LastFirstEventID                       int64
-		LastEventTaskID                        int64
-		NextEventID                            int64
+		LastFirstEventId                       int64
+		LastEventTaskId                        int64
+		NextEventId                            int64
 		LastProcessedEvent                     int64
-		StartTimestamp                         *time.Time
-		LastUpdatedTimestamp                   *time.Time
-		CreateRequestID                        string
+		StartTime                              *time.Time
+		LastUpdatedTime                        *time.Time
+		CreateRequestId                        string
 		SignalCount                            int64
 		WorkflowTaskVersion                    int64
-		WorkflowTaskScheduleID                 int64
-		WorkflowTaskStartedID                  int64
-		WorkflowTaskRequestID                  string
+		WorkflowTaskScheduleId                 int64
+		WorkflowTaskStartedId                  int64
+		WorkflowTaskRequestId                  string
 		WorkflowTaskTimeout                    *time.Duration
 		WorkflowTaskAttempt                    int32
 		WorkflowTaskStartedTimestamp           *time.Time
@@ -242,15 +242,15 @@ type (
 		Memo                                   map[string]*commonpb.Payload
 		SearchAttributes                       map[string]*commonpb.Payload
 		// for retry
-		Attempt                int32
-		HasRetryPolicy         bool
-		InitialInterval        *time.Duration
-		BackoffCoefficient     float64
-		MaximumInterval        *time.Duration
-		WorkflowExpirationTime *time.Time
-		MaximumAttempts        int32
-		NonRetryableErrorTypes []string
-		BranchToken            []byte
+		RetryAttempt                int32
+		HasRetryPolicy              bool
+		RetryInitialInterval        *time.Duration
+		RetryBackoffCoefficient     float64
+		RetryMaximumInterval        *time.Duration
+		WorkflowExpirationTime      *time.Time
+		RetryMaximumAttempts        int32
+		RetryNonRetryableErrorTypes []string
+		EventBranchToken            []byte
 		// Cron
 		CronSchedule   string
 		ExecutionStats *persistenceblobs.ExecutionStats

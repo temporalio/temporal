@@ -502,10 +502,10 @@ Update_History_Loop:
 			updateErr = weContext.updateWorkflowExecutionWithNewAsActive(
 				handler.shard.GetTimeSource().Now(),
 				newWorkflowExecutionContext(
-					continueAsNewExecutionInfo.NamespaceID,
+					continueAsNewExecutionInfo.NamespaceId,
 					commonpb.WorkflowExecution{
-						WorkflowId: continueAsNewExecutionInfo.WorkflowID,
-						RunId:      continueAsNewExecutionInfo.RunID,
+						WorkflowId: continueAsNewExecutionInfo.WorkflowId,
+						RunId:      continueAsNewExecutionInfo.RunId,
 					},
 					handler.shard,
 					handler.shard.GetExecutionManager(),
@@ -645,8 +645,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 
 	namespaceID := namespaceEntry.GetInfo().Id
 	namespace := namespaceEntry.GetInfo().Name
-	workflowID := msBuilder.GetExecutionInfo().WorkflowID
-	runID := msBuilder.GetExecutionInfo().RunID
+	workflowID := msBuilder.GetExecutionInfo().WorkflowId
+	runID := msBuilder.GetExecutionInfo().RunId
 
 	scope := handler.metricsClient.Scope(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,

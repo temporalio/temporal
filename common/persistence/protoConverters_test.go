@@ -98,7 +98,7 @@ func (s *protoConverterSuite) TestConvertWorkflowExecution_Success() {
 		LastProcessedEvent:         lastProcessedEventID,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		ExecutionStats:				stats,
+		ExecutionStats:             stats,
 	}
 
 	protoWei, protoState, err := WorkflowExecutionToProto(wei, startVersion, vh)
@@ -153,7 +153,7 @@ func (s *protoConverterSuite) TestConvertWorkflowExecution_HistorySizeMigration(
 		LastProcessedEvent:         lastProcessedEventID,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		ExecutionStats:				stats,
+		ExecutionStats:             stats,
 	}
 
 	protoWei, protoState, err := WorkflowExecutionToProto(wei, startVersion, vh)

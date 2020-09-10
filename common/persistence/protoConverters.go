@@ -32,30 +32,30 @@ import (
 
 func WorkflowExecutionToProto(executionInfo *WorkflowExecutionInfo, startVersion int64, versionHistories *history.VersionHistories) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
 	state := &persistenceblobs.WorkflowExecutionState{
-		CreateRequestId: executionInfo.CreateRequestID,
+		CreateRequestId: executionInfo.CreateRequestId,
 		State:           executionInfo.State,
 		Status:          executionInfo.Status,
-		RunId:           executionInfo.RunID,
+		RunId:           executionInfo.RunId,
 	}
 
 	info := &persistenceblobs.WorkflowExecutionInfo{
-		NamespaceId:                 executionInfo.NamespaceID,
-		WorkflowId:                  executionInfo.WorkflowID,
-		FirstExecutionRunId:               executionInfo.FirstExecutionRunID,
+		NamespaceId:                       executionInfo.NamespaceId,
+		WorkflowId:                        executionInfo.WorkflowId,
+		FirstExecutionRunId:               executionInfo.FirstExecutionRunId,
 		TaskQueue:                         executionInfo.TaskQueue,
 		WorkflowTypeName:                  executionInfo.WorkflowTypeName,
 		WorkflowRunTimeout:                executionInfo.WorkflowRunTimeout,
 		WorkflowExecutionTimeout:          executionInfo.WorkflowExecutionTimeout,
 		DefaultWorkflowTaskTimeout:        executionInfo.DefaultWorkflowTaskTimeout,
-		LastFirstEventId:                  executionInfo.LastFirstEventID,
-		LastEventTaskId:                   executionInfo.LastEventTaskID,
+		LastFirstEventId:                  executionInfo.LastFirstEventId,
+		LastEventTaskId:                   executionInfo.LastEventTaskId,
 		LastProcessedEvent:                executionInfo.LastProcessedEvent,
-		StartTime:                         executionInfo.StartTimestamp,
-		LastUpdateTime:                    executionInfo.LastUpdatedTimestamp,
+		StartTime:                         executionInfo.StartTime,
+		LastUpdateTime:                    executionInfo.LastUpdatedTime,
 		WorkflowTaskVersion:               executionInfo.WorkflowTaskVersion,
-		WorkflowTaskScheduleId:            executionInfo.WorkflowTaskScheduleID,
-		WorkflowTaskStartedId:             executionInfo.WorkflowTaskStartedID,
-		WorkflowTaskRequestId:             executionInfo.WorkflowTaskRequestID,
+		WorkflowTaskScheduleId:            executionInfo.WorkflowTaskScheduleId,
+		WorkflowTaskStartedId:             executionInfo.WorkflowTaskStartedId,
+		WorkflowTaskRequestId:             executionInfo.WorkflowTaskRequestId,
 		WorkflowTaskTimeout:               executionInfo.WorkflowTaskTimeout,
 		WorkflowTaskAttempt:               executionInfo.WorkflowTaskAttempt,
 		WorkflowTaskStartedTime:           executionInfo.WorkflowTaskStartedTimestamp,
@@ -66,22 +66,22 @@ func WorkflowExecutionToProto(executionInfo *WorkflowExecutionInfo, startVersion
 		ClientLibraryVersion:              executionInfo.ClientLibraryVersion,
 		ClientFeatureVersion:              executionInfo.ClientFeatureVersion,
 		ClientImpl:                        executionInfo.ClientImpl,
-		SignalCount:                 executionInfo.SignalCount,
-		CronSchedule:                executionInfo.CronSchedule,
-		CompletionEventBatchId:      executionInfo.CompletionEventBatchID,
-		HasRetryPolicy:              executionInfo.HasRetryPolicy,
-		RetryAttempt:                executionInfo.Attempt,
-		RetryInitialInterval:        executionInfo.InitialInterval,
-		RetryBackoffCoefficient:     executionInfo.BackoffCoefficient,
-		RetryMaximumInterval:        executionInfo.MaximumInterval,
-		RetryMaximumAttempts:        executionInfo.MaximumAttempts,
-		RetryNonRetryableErrorTypes: executionInfo.NonRetryableErrorTypes,
-		EventStoreVersion:           EventStoreVersion,
-		EventBranchToken:            executionInfo.BranchToken,
-		AutoResetPoints:             executionInfo.AutoResetPoints,
-		SearchAttributes:            executionInfo.SearchAttributes,
-		Memo:                        executionInfo.Memo,
-		CompletionEvent:             executionInfo.CompletionEvent,
+		SignalCount:                       executionInfo.SignalCount,
+		CronSchedule:                      executionInfo.CronSchedule,
+		CompletionEventBatchId:            executionInfo.CompletionEventBatchId,
+		HasRetryPolicy:                    executionInfo.HasRetryPolicy,
+		RetryAttempt:                      executionInfo.RetryAttempt,
+		RetryInitialInterval:              executionInfo.RetryInitialInterval,
+		RetryBackoffCoefficient:           executionInfo.RetryBackoffCoefficient,
+		RetryMaximumInterval:              executionInfo.RetryMaximumInterval,
+		RetryMaximumAttempts:              executionInfo.RetryMaximumAttempts,
+		RetryNonRetryableErrorTypes:       executionInfo.RetryNonRetryableErrorTypes,
+		EventStoreVersion:                 EventStoreVersion,
+		EventBranchToken:                  executionInfo.EventBranchToken,
+		AutoResetPoints:                   executionInfo.AutoResetPoints,
+		SearchAttributes:                  executionInfo.SearchAttributes,
+		Memo:                              executionInfo.Memo,
+		CompletionEvent:                   executionInfo.CompletionEvent,
 		// Dual write to move away from HistorySize in future
 		HistorySize:    executionInfo.ExecutionStats.GetHistorySize(),
 		ExecutionStats: executionInfo.ExecutionStats,
@@ -94,11 +94,11 @@ func WorkflowExecutionToProto(executionInfo *WorkflowExecutionInfo, startVersion
 	info.StartVersion = startVersion
 	info.VersionHistories = versionHistories
 
-	if executionInfo.ParentNamespaceID != "" {
-		info.ParentNamespaceId = executionInfo.ParentNamespaceID
-		info.ParentWorkflowId = executionInfo.ParentWorkflowID
-		info.ParentRunId = executionInfo.ParentRunID
-		info.InitiatedId = executionInfo.InitiatedID
+	if executionInfo.ParentNamespaceId != "" {
+		info.ParentNamespaceId = executionInfo.ParentNamespaceId
+		info.ParentWorkflowId = executionInfo.ParentWorkflowId
+		info.ParentRunId = executionInfo.ParentRunId
+		info.InitiatedId = executionInfo.InitiatedId
 		info.CompletionEvent = nil
 	}
 
@@ -111,11 +111,11 @@ func WorkflowExecutionToProto(executionInfo *WorkflowExecutionInfo, startVersion
 
 func WorkflowExecutionFromProto(info *persistenceblobs.WorkflowExecutionInfo, state *persistenceblobs.WorkflowExecutionState, nextEventID int64) *WorkflowExecutionInfo {
 	executionInfo := &WorkflowExecutionInfo{
-		NamespaceID:                            info.NamespaceId,
-		WorkflowID:                             info.WorkflowId,
-		RunID:                                  state.RunId,
-		FirstExecutionRunID:                    info.FirstExecutionRunId,
-		NextEventID:                            nextEventID,
+		NamespaceId:                            info.NamespaceId,
+		WorkflowId:                             info.WorkflowId,
+		RunId:                                  state.RunId,
+		FirstExecutionRunId:                    info.FirstExecutionRunId,
+		NextEventId:                            nextEventID,
 		TaskQueue:                              info.GetTaskQueue(),
 		WorkflowTypeName:                       info.GetWorkflowTypeName(),
 		WorkflowExecutionTimeout:               info.GetWorkflowExecutionTimeout(),
@@ -123,15 +123,15 @@ func WorkflowExecutionFromProto(info *persistenceblobs.WorkflowExecutionInfo, st
 		DefaultWorkflowTaskTimeout:             info.GetDefaultWorkflowTaskTimeout(),
 		State:                                  state.GetState(),
 		Status:                                 state.GetStatus(),
-		LastFirstEventID:                       info.GetLastFirstEventId(),
+		LastFirstEventId:                       info.GetLastFirstEventId(),
 		LastProcessedEvent:                     info.GetLastProcessedEvent(),
-		StartTimestamp:                         info.GetStartTime(),
-		LastUpdatedTimestamp:                   info.GetLastUpdateTime(),
-		CreateRequestID:                        state.GetCreateRequestId(),
+		StartTime:                              info.GetStartTime(),
+		LastUpdatedTime:                        info.GetLastUpdateTime(),
+		CreateRequestId:                        state.GetCreateRequestId(),
 		WorkflowTaskVersion:                    info.GetWorkflowTaskVersion(),
-		WorkflowTaskScheduleID:                 info.GetWorkflowTaskScheduleId(),
-		WorkflowTaskStartedID:                  info.GetWorkflowTaskStartedId(),
-		WorkflowTaskRequestID:                  info.GetWorkflowTaskRequestId(),
+		WorkflowTaskScheduleId:                 info.GetWorkflowTaskScheduleId(),
+		WorkflowTaskStartedId:                  info.GetWorkflowTaskStartedId(),
+		WorkflowTaskRequestId:                  info.GetWorkflowTaskRequestId(),
 		WorkflowTaskTimeout:                    info.GetWorkflowTaskTimeout(),
 		WorkflowTaskAttempt:                    info.GetWorkflowTaskAttempt(),
 		WorkflowTaskStartedTimestamp:           info.GetWorkflowTaskStartedTime(),
@@ -145,15 +145,15 @@ func WorkflowExecutionFromProto(info *persistenceblobs.WorkflowExecutionInfo, st
 		SignalCount:                            info.GetSignalCount(),
 		ExecutionStats:                         info.GetExecutionStats(),
 		CronSchedule:                           info.GetCronSchedule(),
-		CompletionEventBatchID:                 info.GetCompletionEventBatchId(),
+		CompletionEventBatchId:                 info.GetCompletionEventBatchId(),
 		HasRetryPolicy:                         info.GetHasRetryPolicy(),
-		Attempt:                                info.GetRetryAttempt(),
-		InitialInterval:                        info.GetRetryInitialInterval(),
-		BackoffCoefficient:                     info.GetRetryBackoffCoefficient(),
-		MaximumInterval:                        info.GetRetryMaximumInterval(),
-		MaximumAttempts:                        info.GetRetryMaximumAttempts(),
-		BranchToken:                            info.GetEventBranchToken(),
-		NonRetryableErrorTypes:                 info.GetRetryNonRetryableErrorTypes(),
+		RetryAttempt:                           info.GetRetryAttempt(),
+		RetryInitialInterval:                   info.GetRetryInitialInterval(),
+		RetryBackoffCoefficient:                info.GetRetryBackoffCoefficient(),
+		RetryMaximumInterval:                   info.GetRetryMaximumInterval(),
+		RetryMaximumAttempts:                   info.GetRetryMaximumAttempts(),
+		EventBranchToken:                       info.GetEventBranchToken(),
+		RetryNonRetryableErrorTypes:            info.GetRetryNonRetryableErrorTypes(),
 		SearchAttributes:                       info.GetSearchAttributes(),
 		Memo:                                   info.GetMemo(),
 		CompletionEvent:                        info.GetCompletionEvent(),
@@ -161,11 +161,11 @@ func WorkflowExecutionFromProto(info *persistenceblobs.WorkflowExecutionInfo, st
 	}
 
 	// Back compat for GetHistorySize
-	if info.GetHistorySize() >= 0 {
-		executionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{HistorySize: info.GetHistorySize()}
+	if info.GetHistorySize() >= 0 && info.GetExecutionStats() == nil {
+		executionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{HistorySize: 0}
 	}
 
-	if executionInfo.ExecutionStats == nil {
+	if info.GetExecutionStats() == nil {
 		executionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{}
 	}
 
@@ -174,10 +174,10 @@ func WorkflowExecutionFromProto(info *persistenceblobs.WorkflowExecutionInfo, st
 	}
 
 	if info.ParentNamespaceId != "" {
-		executionInfo.ParentNamespaceID = info.ParentNamespaceId
-		executionInfo.ParentWorkflowID = info.GetParentWorkflowId()
-		executionInfo.ParentRunID = info.ParentRunId
-		executionInfo.InitiatedID = info.GetInitiatedId()
+		executionInfo.ParentNamespaceId = info.ParentNamespaceId
+		executionInfo.ParentWorkflowId = info.GetParentWorkflowId()
+		executionInfo.ParentRunId = info.ParentRunId
+		executionInfo.InitiatedId = info.GetInitiatedId()
 		if executionInfo.CompletionEvent != nil {
 			executionInfo.CompletionEvent = nil
 		}

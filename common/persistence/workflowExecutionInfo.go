@@ -35,17 +35,17 @@ import (
 
 // SetNextEventID sets the nextEventID
 func (e *WorkflowExecutionInfo) SetNextEventID(id int64) {
-	e.NextEventID = id
+	e.NextEventId = id
 }
 
 // IncreaseNextEventID increase the nextEventID by 1
 func (e *WorkflowExecutionInfo) IncreaseNextEventID() {
-	e.NextEventID++
+	e.NextEventId++
 }
 
 // SetLastFirstEventID set the LastFirstEventID
 func (e *WorkflowExecutionInfo) SetLastFirstEventID(id int64) {
-	e.LastFirstEventID = id
+	e.LastFirstEventId = id
 }
 
 // UpdateWorkflowStateStatus update the workflow state

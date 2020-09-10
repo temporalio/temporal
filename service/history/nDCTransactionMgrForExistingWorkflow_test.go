@@ -123,9 +123,9 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       targetRunID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       targetRunID,
 	}).AnyTimes()
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(targetRunID, nil).Times(1)
 
@@ -175,9 +175,9 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       targetRunID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       targetRunID,
 	}).AnyTimes()
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
@@ -249,9 +249,9 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       targetRunID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       targetRunID,
 	}).AnyTimes()
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
@@ -319,14 +319,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       targetRunID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       targetRunID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       newRunID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       newRunID,
 	}).AnyTimes()
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
@@ -390,14 +390,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       targetRunID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       targetRunID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       newRunID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       newRunID,
 	}).AnyTimes()
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
@@ -453,9 +453,9 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	newWorkflow.EXPECT().getReleaseFn().Return(newReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       targetRunID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       targetRunID,
 	}).AnyTimes()
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(targetRunID, nil).Times(1)
 
@@ -518,9 +518,9 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       targetRunID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       targetRunID,
 	}).AnyTimes()
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
@@ -587,14 +587,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       targetRunID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       targetRunID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       newRunID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       newRunID,
 	}).AnyTimes()
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
@@ -660,14 +660,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       targetRunID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       targetRunID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       newRunID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       newRunID,
 	}).AnyTimes()
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)

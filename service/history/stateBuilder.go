@@ -128,7 +128,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 		}
-		b.mutableState.GetExecutionInfo().LastEventTaskID = event.GetTaskId()
+		b.mutableState.GetExecutionInfo().LastEventTaskId = event.GetTaskId()
 
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:

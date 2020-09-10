@@ -61,13 +61,13 @@ func newMutableStateChecksumPayload(ms mutableState) *checksumproto.MutableState
 	payload := &checksumproto.MutableStateChecksumPayload{
 		CancelRequested:         executionInfo.CancelRequested,
 		State:                   executionInfo.State,
-		LastFirstEventId:        executionInfo.LastFirstEventID,
-		NextEventId:             executionInfo.NextEventID,
+		LastFirstEventId:        executionInfo.LastFirstEventId,
+		NextEventId:             executionInfo.NextEventId,
 		LastProcessedEventId:    executionInfo.LastProcessedEvent,
 		SignalCount:             int64(executionInfo.SignalCount),
 		WorkflowTaskAttempt:     int32(executionInfo.WorkflowTaskAttempt),
-		WorkflowTaskScheduledId: executionInfo.WorkflowTaskScheduleID,
-		WorkflowTaskStartedId:   executionInfo.WorkflowTaskStartedID,
+		WorkflowTaskScheduledId: executionInfo.WorkflowTaskScheduleId,
+		WorkflowTaskStartedId:   executionInfo.WorkflowTaskStartedId,
 		WorkflowTaskVersion:     executionInfo.WorkflowTaskVersion,
 		StickyTaskQueueName:     executionInfo.StickyTaskQueue,
 	}

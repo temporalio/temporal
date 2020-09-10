@@ -239,7 +239,7 @@ Loop:
 		}
 
 		t.emitTimeoutMetricScopeWithNamespaceTag(
-			mutableState.GetExecutionInfo().NamespaceID,
+			mutableState.GetExecutionInfo().NamespaceId,
 			metrics.TimerActiveTaskActivityTimeoutScope,
 			timerSequenceID.timerType,
 		)
@@ -300,7 +300,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	switch task.TimeoutType {
 	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 		t.emitTimeoutMetricScopeWithNamespaceTag(
-			mutableState.GetExecutionInfo().NamespaceID,
+			mutableState.GetExecutionInfo().NamespaceId,
 			metrics.TimerActiveTaskWorkflowTaskTimeoutScope,
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		)
@@ -319,7 +319,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 		}
 
 		t.emitTimeoutMetricScopeWithNamespaceTag(
-			mutableState.GetExecutionInfo().NamespaceID,
+			mutableState.GetExecutionInfo().NamespaceId,
 			metrics.TimerActiveTaskWorkflowTaskTimeoutScope,
 			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		)
@@ -394,9 +394,9 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	if !ok || task.ScheduleAttempt < activityInfo.Attempt || activityInfo.StartedId != common.EmptyEventID {
 		if ok {
 			t.logger.Info("Duplicate activity retry timer task",
-				tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowID),
-				tag.WorkflowRunID(mutableState.GetExecutionInfo().RunID),
-				tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceID),
+				tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
+				tag.WorkflowRunID(mutableState.GetExecutionInfo().RunId),
+				tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
 				tag.WorkflowScheduleID(activityInfo.ScheduleId),
 				tag.Attempt(activityInfo.Attempt),
 				tag.FailoverVersion(activityInfo.Version),
@@ -553,10 +553,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	return weContext.updateWorkflowExecutionWithNewAsActive(
 		t.shard.GetTimeSource().Now(),
 		newWorkflowExecutionContext(
-			newExecutionInfo.NamespaceID,
+			newExecutionInfo.NamespaceId,
 			commonpb.WorkflowExecution{
-				WorkflowId: newExecutionInfo.WorkflowID,
-				RunId:      newExecutionInfo.RunID,
+				WorkflowId: newExecutionInfo.WorkflowId,
+				RunId:      newExecutionInfo.RunId,
 			},
 			t.shard,
 			t.shard.GetExecutionManager(),

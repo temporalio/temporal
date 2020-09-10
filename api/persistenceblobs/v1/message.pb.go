@@ -4610,7 +4610,7 @@ func (this *ActivityInfo) GoString() string {
 	s = append(s, "CancelRequested: "+fmt.Sprintf("%#v", this.CancelRequested)+",\n")
 	s = append(s, "CancelRequestId: "+fmt.Sprintf("%#v", this.CancelRequestId)+",\n")
 	s = append(s, "TimerTaskStatus: "+fmt.Sprintf("%#v", this.TimerTaskStatus)+",\n")
-	s = append(s, "Attempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
+	s = append(s, "RetryAttempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
 	s = append(s, "TaskQueue: "+fmt.Sprintf("%#v", this.TaskQueue)+",\n")
 	s = append(s, "StartedIdentity: "+fmt.Sprintf("%#v", this.StartedIdentity)+",\n")
 	s = append(s, "HasRetryPolicy: "+fmt.Sprintf("%#v", this.HasRetryPolicy)+",\n")
@@ -8818,7 +8818,7 @@ func (this *ActivityInfo) String() string {
 		`CancelRequested:` + fmt.Sprintf("%v", this.CancelRequested) + `,`,
 		`CancelRequestId:` + fmt.Sprintf("%v", this.CancelRequestId) + `,`,
 		`TimerTaskStatus:` + fmt.Sprintf("%v", this.TimerTaskStatus) + `,`,
-		`Attempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
+		`RetryAttempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
 		`TaskQueue:` + fmt.Sprintf("%v", this.TaskQueue) + `,`,
 		`StartedIdentity:` + fmt.Sprintf("%v", this.StartedIdentity) + `,`,
 		`HasRetryPolicy:` + fmt.Sprintf("%v", this.HasRetryPolicy) + `,`,
@@ -10003,7 +10003,7 @@ func (m *ActivityInfo) Unmarshal(dAtA []byte) error {
 			}
 		case 17:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Attempt", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RetryAttempt", wireType)
 			}
 			m.Attempt = 0
 			for shift := uint(0); ; shift += 7 {

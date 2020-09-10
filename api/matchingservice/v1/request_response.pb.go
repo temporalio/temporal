@@ -2176,7 +2176,7 @@ func (this *PollWorkflowTaskQueueResponse) GoString() string {
 	}
 	s = append(s, "PreviousStartedEventId: "+fmt.Sprintf("%#v", this.PreviousStartedEventId)+",\n")
 	s = append(s, "StartedEventId: "+fmt.Sprintf("%#v", this.StartedEventId)+",\n")
-	s = append(s, "Attempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
+	s = append(s, "RetryAttempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
 	s = append(s, "NextEventId: "+fmt.Sprintf("%#v", this.NextEventId)+",\n")
 	s = append(s, "BacklogCountHint: "+fmt.Sprintf("%#v", this.BacklogCountHint)+",\n")
 	s = append(s, "StickyExecutionEnabled: "+fmt.Sprintf("%#v", this.StickyExecutionEnabled)+",\n")
@@ -2246,7 +2246,7 @@ func (this *PollActivityTaskQueueResponse) GoString() string {
 	s = append(s, "StartedTime: "+fmt.Sprintf("%#v", this.StartedTime)+",\n")
 	s = append(s, "StartToCloseTimeout: "+fmt.Sprintf("%#v", this.StartToCloseTimeout)+",\n")
 	s = append(s, "HeartbeatTimeout: "+fmt.Sprintf("%#v", this.HeartbeatTimeout)+",\n")
-	s = append(s, "Attempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
+	s = append(s, "RetryAttempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
 	s = append(s, "CurrentAttemptScheduledTime: "+fmt.Sprintf("%#v", this.CurrentAttemptScheduledTime)+",\n")
 	if this.HeartbeatDetails != nil {
 		s = append(s, "HeartbeatDetails: "+fmt.Sprintf("%#v", this.HeartbeatDetails)+",\n")
@@ -4142,7 +4142,7 @@ func (this *PollWorkflowTaskQueueResponse) String() string {
 		`WorkflowType:` + strings.Replace(fmt.Sprintf("%v", this.WorkflowType), "WorkflowType", "v11.WorkflowType", 1) + `,`,
 		`PreviousStartedEventId:` + fmt.Sprintf("%v", this.PreviousStartedEventId) + `,`,
 		`StartedEventId:` + fmt.Sprintf("%v", this.StartedEventId) + `,`,
-		`Attempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
+		`RetryAttempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
 		`NextEventId:` + fmt.Sprintf("%v", this.NextEventId) + `,`,
 		`BacklogCountHint:` + fmt.Sprintf("%v", this.BacklogCountHint) + `,`,
 		`StickyExecutionEnabled:` + fmt.Sprintf("%v", this.StickyExecutionEnabled) + `,`,
@@ -4186,7 +4186,7 @@ func (this *PollActivityTaskQueueResponse) String() string {
 		`StartedTime:` + strings.Replace(fmt.Sprintf("%v", this.StartedTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`StartToCloseTimeout:` + strings.Replace(fmt.Sprintf("%v", this.StartToCloseTimeout), "Duration", "types.Duration", 1) + `,`,
 		`HeartbeatTimeout:` + strings.Replace(fmt.Sprintf("%v", this.HeartbeatTimeout), "Duration", "types.Duration", 1) + `,`,
-		`Attempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
+		`RetryAttempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
 		`CurrentAttemptScheduledTime:` + strings.Replace(fmt.Sprintf("%v", this.CurrentAttemptScheduledTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`HeartbeatDetails:` + strings.Replace(fmt.Sprintf("%v", this.HeartbeatDetails), "Payloads", "v11.Payloads", 1) + `,`,
 		`WorkflowType:` + strings.Replace(fmt.Sprintf("%v", this.WorkflowType), "WorkflowType", "v11.WorkflowType", 1) + `,`,
@@ -4742,7 +4742,7 @@ func (m *PollWorkflowTaskQueueResponse) Unmarshal(dAtA []byte) error {
 			}
 		case 6:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Attempt", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RetryAttempt", wireType)
 			}
 			m.Attempt = 0
 			for shift := uint(0); ; shift += 7 {
@@ -5773,7 +5773,7 @@ func (m *PollActivityTaskQueueResponse) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 11:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Attempt", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RetryAttempt", wireType)
 			}
 			m.Attempt = 0
 			for shift := uint(0); ; shift += 7 {

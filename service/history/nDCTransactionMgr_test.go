@@ -165,7 +165,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(true).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{RunID: runID}).Times(1)
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{RunId: runID}).Times(1)
 	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyActive, (*transactionPolicy)(nil),
@@ -210,9 +210,9 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       runID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       runID,
 	}).AnyTimes()
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	mutableState.EXPECT().GetPreviousStartedEventID().Return(lastWorkflowTaskStartedEventID).Times(1)
@@ -311,9 +311,9 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Cl
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       runID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       runID,
 	}).AnyTimes()
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
@@ -366,9 +366,9 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       runID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       runID,
 	}).AnyTimes()
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
@@ -420,9 +420,9 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       runID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       runID,
 	}).AnyTimes()
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{

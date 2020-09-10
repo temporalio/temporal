@@ -101,7 +101,7 @@ func (r *nDCWorkflowImpl) getVectorClock() (int64, int64, error) {
 		return 0, 0, err
 	}
 
-	lastEventTaskID := r.mutableState.GetExecutionInfo().LastEventTaskID
+	lastEventTaskID := r.mutableState.GetExecutionInfo().LastEventTaskId
 	return lastWriteVersion, lastEventTaskID, nil
 }
 
