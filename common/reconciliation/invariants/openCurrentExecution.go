@@ -32,13 +32,13 @@ import (
 
 type (
 	openCurrentExecution struct {
-		pr common.PersistenceRetryer
+		pr persistence.Retryer
 	}
 )
 
 // NewOpenCurrentExecution returns a new invariant for checking open current execution
 func NewOpenCurrentExecution(
-	pr common.PersistenceRetryer,
+	pr persistence.Retryer,
 ) common.Invariant {
 	return &openCurrentExecution{
 		pr: pr,

@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2017-2020 Uber Technologies Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,48 +20,58 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package common
+package persistence
 
 import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/persistence"
 )
+
+// Retryer is used to retry requests to persistence with provided retry policy
+type Retryer interface {
+	ListConcreteExecutions(*ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error)
+	ListCurrentExecutions(request *ListCurrentExecutionsRequest) (*ListCurrentExecutionsResponse, error)
+	GetWorkflowExecution(*GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
+	GetCurrentExecution(*GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
+	IsWorkflowExecutionExists(request *IsWorkflowExecutionExistsRequest) (*IsWorkflowExecutionExistsResponse, error)
+	ReadHistoryBranch(*ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
+	DeleteWorkflowExecution(*DeleteWorkflowExecutionRequest) error
+	DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
+}
 
 type (
 	persistenceRetryer struct {
-		execManager    persistence.ExecutionManager
-		historyManager persistence.HistoryManager
+		execManager    ExecutionManager
+		historyManager HistoryManager
+		policy         backoff.RetryPolicy
 	}
 )
 
-var (
-	retryPolicy = common.CreatePersistenceRetryPolicy()
-)
-
-// NewPersistenceRetryer constructs a new PersistenceRetryer
+// NewPersistenceRetryer constructs a new Retryer
 func NewPersistenceRetryer(
-	execManager persistence.ExecutionManager,
-	historyManager persistence.HistoryManager,
-) PersistenceRetryer {
+	execManager ExecutionManager,
+	historyManager HistoryManager,
+	policy backoff.RetryPolicy,
+) Retryer {
 	return &persistenceRetryer{
 		execManager:    execManager,
 		historyManager: historyManager,
+		policy:         policy,
 	}
 }
 
 // ListConcreteExecutions retries ListConcreteExecutions
 func (pr *persistenceRetryer) ListConcreteExecutions(
-	req *persistence.ListConcreteExecutionsRequest,
-) (*persistence.ListConcreteExecutionsResponse, error) {
-	var resp *persistence.ListConcreteExecutionsResponse
+	req *ListConcreteExecutionsRequest,
+) (*ListConcreteExecutionsResponse, error) {
+	var resp *ListConcreteExecutionsResponse
 	op := func() error {
 		var err error
 		resp, err = pr.execManager.ListConcreteExecutions(req)
 		return err
 	}
 	var err error
-	err = backoff.Retry(op, retryPolicy, common.IsPersistenceTransientError)
+	err = backoff.Retry(op, pr.policy, common.IsPersistenceTransientError)
 	if err == nil {
 		return resp, nil
 	}
@@ -70,15 +80,15 @@ func (pr *persistenceRetryer) ListConcreteExecutions(
 
 // GetWorkflowExecution retries GetWorkflowExecution
 func (pr *persistenceRetryer) GetWorkflowExecution(
-	req *persistence.GetWorkflowExecutionRequest,
-) (*persistence.GetWorkflowExecutionResponse, error) {
-	var resp *persistence.GetWorkflowExecutionResponse
+	req *GetWorkflowExecutionRequest,
+) (*GetWorkflowExecutionResponse, error) {
+	var resp *GetWorkflowExecutionResponse
 	op := func() error {
 		var err error
 		resp, err = pr.execManager.GetWorkflowExecution(req)
 		return err
 	}
-	err := backoff.Retry(op, retryPolicy, common.IsPersistenceTransientError)
+	err := backoff.Retry(op, pr.policy, common.IsPersistenceTransientError)
 	if err != nil {
 		return nil, err
 	}
@@ -87,15 +97,15 @@ func (pr *persistenceRetryer) GetWorkflowExecution(
 
 // GetCurrentExecution retries GetCurrentExecution
 func (pr *persistenceRetryer) GetCurrentExecution(
-	req *persistence.GetCurrentExecutionRequest,
-) (*persistence.GetCurrentExecutionResponse, error) {
-	var resp *persistence.GetCurrentExecutionResponse
+	req *GetCurrentExecutionRequest,
+) (*GetCurrentExecutionResponse, error) {
+	var resp *GetCurrentExecutionResponse
 	op := func() error {
 		var err error
 		resp, err = pr.execManager.GetCurrentExecution(req)
 		return err
 	}
-	err := backoff.Retry(op, retryPolicy, common.IsPersistenceTransientError)
+	err := backoff.Retry(op, pr.policy, common.IsPersistenceTransientError)
 	if err != nil {
 		return nil, err
 	}
@@ -104,16 +114,16 @@ func (pr *persistenceRetryer) GetCurrentExecution(
 
 // ListCurrentExecutions retries ListCurrentExecutions
 func (pr *persistenceRetryer) ListCurrentExecutions(
-	req *persistence.ListCurrentExecutionsRequest,
-) (*persistence.ListCurrentExecutionsResponse, error) {
-	var resp *persistence.ListCurrentExecutionsResponse
+	req *ListCurrentExecutionsRequest,
+) (*ListCurrentExecutionsResponse, error) {
+	var resp *ListCurrentExecutionsResponse
 	op := func() error {
 		var err error
 		resp, err = pr.execManager.ListCurrentExecutions(req)
 		return err
 	}
 	var err error
-	err = backoff.Retry(op, retryPolicy, common.IsPersistenceTransientError)
+	err = backoff.Retry(op, pr.policy, common.IsPersistenceTransientError)
 	if err == nil {
 		return resp, nil
 	}
@@ -122,15 +132,15 @@ func (pr *persistenceRetryer) ListCurrentExecutions(
 
 // IsWorkflowExecutionExists retries IsWorkflowExecutionExists
 func (pr *persistenceRetryer) IsWorkflowExecutionExists(
-	req *persistence.IsWorkflowExecutionExistsRequest,
-) (*persistence.IsWorkflowExecutionExistsResponse, error) {
-	var resp *persistence.IsWorkflowExecutionExistsResponse
+	req *IsWorkflowExecutionExistsRequest,
+) (*IsWorkflowExecutionExistsResponse, error) {
+	var resp *IsWorkflowExecutionExistsResponse
 	op := func() error {
 		var err error
 		resp, err = pr.execManager.IsWorkflowExecutionExists(req)
 		return err
 	}
-	err := backoff.Retry(op, retryPolicy, common.IsPersistenceTransientError)
+	err := backoff.Retry(op, pr.policy, common.IsPersistenceTransientError)
 	if err != nil {
 		return nil, err
 	}
@@ -139,15 +149,15 @@ func (pr *persistenceRetryer) IsWorkflowExecutionExists(
 
 // ReadHistoryBranch retries ReadHistoryBranch
 func (pr *persistenceRetryer) ReadHistoryBranch(
-	req *persistence.ReadHistoryBranchRequest,
-) (*persistence.ReadHistoryBranchResponse, error) {
-	var resp *persistence.ReadHistoryBranchResponse
+	req *ReadHistoryBranchRequest,
+) (*ReadHistoryBranchResponse, error) {
+	var resp *ReadHistoryBranchResponse
 	op := func() error {
 		var err error
 		resp, err = pr.historyManager.ReadHistoryBranch(req)
 		return err
 	}
-	err := backoff.Retry(op, retryPolicy, common.IsPersistenceTransientError)
+	err := backoff.Retry(op, pr.policy, common.IsPersistenceTransientError)
 	if err != nil {
 		return nil, err
 	}
@@ -156,20 +166,20 @@ func (pr *persistenceRetryer) ReadHistoryBranch(
 
 // DeleteWorkflowExecution retries DeleteWorkflowExecution
 func (pr *persistenceRetryer) DeleteWorkflowExecution(
-	req *persistence.DeleteWorkflowExecutionRequest,
+	req *DeleteWorkflowExecutionRequest,
 ) error {
 	op := func() error {
 		return pr.execManager.DeleteWorkflowExecution(req)
 	}
-	return backoff.Retry(op, retryPolicy, common.IsPersistenceTransientError)
+	return backoff.Retry(op, pr.policy, common.IsPersistenceTransientError)
 }
 
 // DeleteCurrentWorkflowExecution retries DeleteCurrentWorkflowExecution
 func (pr *persistenceRetryer) DeleteCurrentWorkflowExecution(
-	req *persistence.DeleteCurrentWorkflowExecutionRequest,
+	req *DeleteCurrentWorkflowExecutionRequest,
 ) error {
 	op := func() error {
 		return pr.execManager.DeleteCurrentWorkflowExecution(req)
 	}
-	return backoff.Retry(op, retryPolicy, common.IsPersistenceTransientError)
+	return backoff.Retry(op, pr.policy, common.IsPersistenceTransientError)
 }

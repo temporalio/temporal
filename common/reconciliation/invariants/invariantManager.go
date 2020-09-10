@@ -23,6 +23,7 @@
 package invariants
 
 import (
+	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/reconciliation/common"
 )
 
@@ -36,7 +37,7 @@ type (
 // NewInvariantManager handles running a collection of invariants according to the invariant collection provided.
 func NewInvariantManager(
 	invariantCollections []common.InvariantCollection,
-	pr common.PersistenceRetryer,
+	pr persistence.Retryer,
 	scanType common.ScanType,
 ) common.InvariantManager {
 	manager := &invariantManager{}
@@ -127,7 +128,7 @@ func (i *invariantManager) nextCheckResultType(
 
 func flattenInvariants(
 	collections []common.InvariantCollection,
-	pr common.PersistenceRetryer,
+	pr persistence.Retryer,
 	scanType common.ScanType,
 ) ([]common.Invariant, []common.InvariantType) {
 	var ivs []common.Invariant
@@ -146,7 +147,7 @@ func flattenInvariants(
 	return ivs, types
 }
 
-func getHistoryCollection(pr common.PersistenceRetryer, scanType common.ScanType) []common.Invariant {
+func getHistoryCollection(pr persistence.Retryer, scanType common.ScanType) []common.Invariant {
 	switch scanType {
 	case common.ConcreteExecutionType:
 		return []common.Invariant{NewHistoryExists(pr)}
@@ -157,7 +158,7 @@ func getHistoryCollection(pr common.PersistenceRetryer, scanType common.ScanType
 	}
 }
 
-func getMutableStateCollection(pr common.PersistenceRetryer, scanType common.ScanType) []common.Invariant {
+func getMutableStateCollection(pr persistence.Retryer, scanType common.ScanType) []common.Invariant {
 	switch scanType {
 	case common.ConcreteExecutionType:
 		return []common.Invariant{NewOpenCurrentExecution(pr)}

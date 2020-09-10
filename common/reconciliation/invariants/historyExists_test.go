@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/uber/cadence/.gen/go/shared"
+	c2 "github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/reconciliation/common"
@@ -133,7 +134,7 @@ func (s *HistoryExistsSuite) TestCheck() {
 		historyManager := &mocks.HistoryV2Manager{}
 		execManager.On("GetWorkflowExecution", mock.Anything).Return(tc.getExecResp, tc.getExecErr)
 		historyManager.On("ReadHistoryBranch", mock.Anything).Return(tc.getHistoryResp, tc.getHistoryErr)
-		i := NewHistoryExists(common.NewPersistenceRetryer(execManager, historyManager))
+		i := NewHistoryExists(persistence.NewPersistenceRetryer(execManager, historyManager, c2.CreatePersistenceRetryPolicy()))
 		result := i.Check(getOpenConcreteExecution())
 		s.Equal(tc.expectedResult, result)
 	}

@@ -36,13 +36,13 @@ const (
 
 type (
 	historyExists struct {
-		pr common.PersistenceRetryer
+		pr persistence.Retryer
 	}
 )
 
 // NewHistoryExists returns a new history exists invariant
 func NewHistoryExists(
-	pr common.PersistenceRetryer,
+	pr persistence.Retryer,
 ) common.Invariant {
 	return &historyExists{
 		pr: pr,

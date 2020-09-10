@@ -34,14 +34,14 @@ type (
 	}
 )
 
-var scanTypeFetchFnMap = map[ScanType]func(PersistenceRetryer, *codec.ThriftRWEncoder, int, int) pagination.FetchFn{
+var scanTypeFetchFnMap = map[ScanType]func(persistence.Retryer, *codec.ThriftRWEncoder, int, int) pagination.FetchFn{
 	ConcreteExecutionType: getConcreteExecutionsPersistenceFetchPageFn,
 	CurrentExecutionType:  getCurrentExecutionsPersistenceFetchPageFn,
 }
 
 // NewPersistenceIterator returns a new paginated iterator over persistence
 func NewPersistenceIterator(
-	pr PersistenceRetryer,
+	pr persistence.Retryer,
 	pageSize int,
 	shardID int,
 	scanType ScanType,
@@ -67,7 +67,7 @@ func (i *persistenceIterator) HasNext() bool {
 }
 
 func getConcreteExecutionsPersistenceFetchPageFn(
-	pr PersistenceRetryer,
+	pr persistence.Retryer,
 	encoder *codec.ThriftRWEncoder,
 	pageSize int,
 	shardID int,
@@ -120,7 +120,7 @@ func getConcreteExecutionsPersistenceFetchPageFn(
 }
 
 func getCurrentExecutionsPersistenceFetchPageFn(
-	pr PersistenceRetryer,
+	pr persistence.Retryer,
 	encoder *codec.ThriftRWEncoder,
 	pageSize int,
 	shardID int,

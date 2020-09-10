@@ -28,6 +28,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/uber/cadence/common"
+
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -59,7 +61,7 @@ func (s *WriterIteratorSuite) SetupTest() {
 }
 
 func (s *WriterIteratorSuite) TestWriterIterator() {
-	pr := NewPersistenceRetryer(getMockExecutionManager(10, 10), nil)
+	pr := persistence.NewPersistenceRetryer(getMockExecutionManager(10, 10), nil, common.CreatePersistenceRetryPolicy())
 	pItr := NewPersistenceIterator(pr, executionPageSize, testShardID, ConcreteExecutionType)
 	uuid := "uuid"
 	extension := Extension("test")

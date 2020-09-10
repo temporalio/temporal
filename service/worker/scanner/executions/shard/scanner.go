@@ -25,6 +25,8 @@ package shard
 import (
 	"fmt"
 
+	"github.com/uber/cadence/common/persistence"
+
 	"github.com/pborman/uuid"
 
 	"github.com/uber/cadence/common/blobstore"
@@ -46,7 +48,7 @@ type (
 // NewScanner constructs a new scanner
 func NewScanner(
 	shardID int,
-	pr common.PersistenceRetryer,
+	pr persistence.Retryer,
 	persistencePageSize int,
 	blobstoreClient blobstore.Client,
 	blobstoreFlushThreshold int,

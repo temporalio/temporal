@@ -339,7 +339,7 @@ func (s *UtilSuite) TestExecutionStillOpen() {
 	for _, tc := range testCases {
 		execManager := &mocks.ExecutionManager{}
 		execManager.On("GetWorkflowExecution", mock.Anything).Return(tc.getExecResp, tc.getExecErr)
-		pr := NewPersistenceRetryer(execManager, nil)
+		pr := persistence.NewPersistenceRetryer(execManager, nil, common.CreatePersistenceRetryPolicy())
 		open, err := ExecutionStillOpen(&Execution{}, pr)
 		if tc.expectError {
 			s.Error(err)
@@ -384,7 +384,7 @@ func (s *UtilSuite) TestExecutionStillExists() {
 	for _, tc := range testCases {
 		execManager := &mocks.ExecutionManager{}
 		execManager.On("GetWorkflowExecution", mock.Anything).Return(tc.getExecResp, tc.getExecErr)
-		pr := NewPersistenceRetryer(execManager, nil)
+		pr := persistence.NewPersistenceRetryer(execManager, nil, common.CreatePersistenceRetryPolicy())
 		exists, err := ExecutionStillExists(&Execution{}, pr)
 		if tc.expectError {
 			s.Error(err)
@@ -434,7 +434,7 @@ func (s *UtilSuite) TestDeleteExecution() {
 		if tc.deleteConcreteErr == nil {
 			execManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(tc.deleteCurrentErr).Once()
 		}
-		pr := NewPersistenceRetryer(execManager, nil)
+		pr := persistence.NewPersistenceRetryer(execManager, nil, common.CreatePersistenceRetryPolicy())
 		result := DeleteExecution(&ConcreteExecution{}, pr)
 		s.Equal(tc.expectedFixResult, result)
 	}

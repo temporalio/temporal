@@ -32,13 +32,13 @@ import (
 
 type (
 	concreteExecutionExists struct {
-		pr common.PersistenceRetryer
+		pr persistence.Retryer
 	}
 )
 
 // NewConcreteExecutionExists returns a new invariant for checking concrete execution
 func NewConcreteExecutionExists(
-	pr common.PersistenceRetryer,
+	pr persistence.Retryer,
 ) common.Invariant {
 	return &concreteExecutionExists{
 		pr: pr,

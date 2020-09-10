@@ -34,7 +34,7 @@ import (
 	persistence "github.com/uber/cadence/common/persistence"
 )
 
-// MockPersistenceRetryer is a mock of PersistenceRetryer interface
+// MockPersistenceRetryer is a mock of Retryer interface
 type MockPersistenceRetryer struct {
 	ctrl     *gomock.Controller
 	recorder *MockPersistenceRetryerMockRecorder

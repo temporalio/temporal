@@ -28,6 +28,7 @@ import (
 	"github.com/pborman/uuid"
 
 	"github.com/uber/cadence/common/blobstore"
+	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/reconciliation/common"
 	"github.com/uber/cadence/common/reconciliation/invariants"
 )
@@ -47,7 +48,7 @@ type (
 // NewFixer constructs a new fixer
 func NewFixer(
 	shardID int,
-	pr common.PersistenceRetryer,
+	pr persistence.Retryer,
 	blobstoreClient blobstore.Client,
 	keys common.Keys,
 	blobstoreFlushThreshold int,

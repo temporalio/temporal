@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/uber/cadence/.gen/go/shared"
+	c "github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/reconciliation/common"
@@ -154,7 +155,7 @@ func (s *ConcreteExecutionExistsSuite) TestCheck() {
 		execManager := &mocks.ExecutionManager{}
 		execManager.On("IsWorkflowExecutionExists", mock.Anything).Return(tc.getConcreteResp, tc.getConcreteErr)
 		execManager.On("GetCurrentExecution", mock.Anything).Return(tc.getCurrentResp, tc.getCurrentErr)
-		o := NewConcreteExecutionExists(common.NewPersistenceRetryer(execManager, nil))
+		o := NewConcreteExecutionExists(persistence.NewPersistenceRetryer(execManager, nil, c.CreatePersistenceRetryPolicy()))
 		s.Equal(tc.expectedResult, o.Check(tc.execution))
 	}
 }
