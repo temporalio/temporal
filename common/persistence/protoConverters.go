@@ -70,7 +70,7 @@ func WorkflowExecutionToProto(executionInfo *WorkflowExecutionInfo, startVersion
 		CronSchedule:                      executionInfo.CronSchedule,
 		CompletionEventBatchId:            executionInfo.CompletionEventBatchId,
 		HasRetryPolicy:                    executionInfo.HasRetryPolicy,
-		RetryAttempt:                      executionInfo.RetryAttempt,
+		Attempt:                           executionInfo.Attempt,
 		RetryInitialInterval:              executionInfo.RetryInitialInterval,
 		RetryBackoffCoefficient:           executionInfo.RetryBackoffCoefficient,
 		RetryMaximumInterval:              executionInfo.RetryMaximumInterval,
@@ -147,7 +147,7 @@ func WorkflowExecutionFromProto(info *persistenceblobs.WorkflowExecutionInfo, st
 		CronSchedule:                           info.GetCronSchedule(),
 		CompletionEventBatchId:                 info.GetCompletionEventBatchId(),
 		HasRetryPolicy:                         info.GetHasRetryPolicy(),
-		RetryAttempt:                           info.GetRetryAttempt(),
+		Attempt:                                info.GetAttempt(),
 		RetryInitialInterval:                   info.GetRetryInitialInterval(),
 		RetryBackoffCoefficient:                info.GetRetryBackoffCoefficient(),
 		RetryMaximumInterval:                   info.GetRetryMaximumInterval(),
@@ -161,11 +161,11 @@ func WorkflowExecutionFromProto(info *persistenceblobs.WorkflowExecutionInfo, st
 	}
 
 	// Back compat for GetHistorySize
-	if info.GetHistorySize() >= 0 && info.GetExecutionStats() == nil {
-		executionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{HistorySize: 0}
+	if info.GetHistorySize() >= 0 {
+		executionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{HistorySize: info.GetHistorySize()}
 	}
 
-	if info.GetExecutionStats() == nil {
+	if executionInfo.ExecutionStats == nil {
 		executionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{}
 	}
 

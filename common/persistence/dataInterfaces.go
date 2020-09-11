@@ -242,7 +242,7 @@ type (
 		Memo                                   map[string]*commonpb.Payload
 		SearchAttributes                       map[string]*commonpb.Payload
 		// for retry
-		RetryAttempt                int32
+		Attempt                     int32
 		HasRetryPolicy              bool
 		RetryInitialInterval        *time.Duration
 		RetryBackoffCoefficient     float64

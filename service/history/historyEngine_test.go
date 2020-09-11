@@ -1304,7 +1304,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 	s.Equal(workflowTaskStartedEvent1.EventId, ms2.ExecutionInfo.LastProcessedEvent)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.State)
 	s.Equal(ms2.ExecutionInfo.NextEventId-1, ms2.ExecutionInfo.WorkflowTaskScheduleId)
-	s.Equal(int32(1), ms2.ExecutionInfo.RetryAttempt)
+	s.Equal(int32(1), ms2.ExecutionInfo.Attempt)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
@@ -1384,7 +1384,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 	s.Equal(workflowTaskStartedEvent1.EventId, ms2.ExecutionInfo.LastProcessedEvent)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.State)
 	s.Equal(ms2.ExecutionInfo.NextEventId-1, ms2.ExecutionInfo.WorkflowTaskScheduleId)
-	s.Equal(int32(1), ms2.ExecutionInfo.RetryAttempt)
+	s.Equal(int32(1), ms2.ExecutionInfo.Attempt)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedBadCommandAttributes() {
@@ -5323,7 +5323,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		AutoResetPoints:                        sourceInfo.AutoResetPoints,
 		Memo:                                   sourceInfo.Memo,
 		SearchAttributes:                       sourceInfo.SearchAttributes,
-		RetryAttempt:                           sourceInfo.RetryAttempt,
+		Attempt:                                sourceInfo.Attempt,
 		HasRetryPolicy:                         sourceInfo.HasRetryPolicy,
 		RetryInitialInterval:                   sourceInfo.RetryInitialInterval,
 		RetryBackoffCoefficient:                sourceInfo.RetryBackoffCoefficient,

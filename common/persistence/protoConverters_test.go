@@ -86,15 +86,15 @@ func (s *protoConverterSuite) TestConvertWorkflowExecution_Success() {
 		Histories:                  nil,
 	}
 	wei := &WorkflowExecutionInfo{
-		CreateRequestID:            uuid.New(),
-		NamespaceID:                namespaceID,
-		WorkflowID:                 workflowID,
-		RunID:                      runID,
+		CreateRequestId:            uuid.New(),
+		NamespaceId:                namespaceID,
+		WorkflowId:                 workflowID,
+		RunId:                      runID,
 		TaskQueue:                  taskqueue,
 		WorkflowTypeName:           workflowType,
 		WorkflowRunTimeout:         workflowTimeout,
 		DefaultWorkflowTaskTimeout: workflowTaskTimeout,
-		LastFirstEventID:           common.FirstEventID,
+		LastFirstEventId:           common.FirstEventID,
 		LastProcessedEvent:         lastProcessedEventID,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -120,8 +120,8 @@ func (s *protoConverterSuite) TestConvertWorkflowExecution_Success() {
 
 	newNextEventId := int64(10)
 	decodedWei := WorkflowExecutionFromProto(newProtoWei, newProtoState, newNextEventId)
-	s.EqualValues(newNextEventId, decodedWei.NextEventID)
-	wei.NextEventID = newNextEventId
+	s.EqualValues(newNextEventId, decodedWei.NextEventId)
+	wei.NextEventId = newNextEventId
 	s.EqualValues(decodedWei, wei)
 }
 
@@ -141,15 +141,15 @@ func (s *protoConverterSuite) TestConvertWorkflowExecution_HistorySizeMigration(
 		Histories:                  nil,
 	}
 	wei := &WorkflowExecutionInfo{
-		CreateRequestID:            uuid.New(),
-		NamespaceID:                namespaceID,
-		WorkflowID:                 workflowID,
-		RunID:                      runID,
+		CreateRequestId:            uuid.New(),
+		NamespaceId:                namespaceID,
+		WorkflowId:                 workflowID,
+		RunId:                      runID,
 		TaskQueue:                  taskqueue,
 		WorkflowTypeName:           workflowType,
 		WorkflowRunTimeout:         workflowTimeout,
 		DefaultWorkflowTaskTimeout: workflowTaskTimeout,
-		LastFirstEventID:           common.FirstEventID,
+		LastFirstEventId:           common.FirstEventID,
 		LastProcessedEvent:         lastProcessedEventID,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -182,7 +182,7 @@ func (s *protoConverterSuite) TestConvertWorkflowExecution_HistorySizeMigration(
 
 	newNextEventId := int64(10)
 	decodedWei := WorkflowExecutionFromProto(newProtoWei, newProtoState, newNextEventId)
-	s.EqualValues(newNextEventId, decodedWei.NextEventID)
-	wei.NextEventID = newNextEventId
+	s.EqualValues(newNextEventId, decodedWei.NextEventId)
+	wei.NextEventId = newNextEventId
 	s.EqualValues(decodedWei, wei)
 }

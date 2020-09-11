@@ -1033,7 +1033,7 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 	return getBackoffInterval(
 		e.timeSource.Now(),
 		timestamp.TimeValue(info.WorkflowExpirationTime),
-		info.RetryAttempt,
+		info.Attempt,
 		info.RetryMaximumAttempts,
 		info.RetryInitialInterval,
 		info.RetryMaximumInterval,
@@ -1649,7 +1649,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		FirstWorkflowTaskBackoff: attributes.BackoffStartInterval,
 	}
 	if attributes.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
-		req.Attempt = previousExecutionState.GetExecutionInfo().RetryAttempt + 1
+		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
 	} else {
 		req.Attempt = 1
 	}
@@ -1797,7 +1797,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 		e.executionInfo.InitiatedId = common.EmptyEventID
 	}
 
-	e.executionInfo.RetryAttempt = event.GetAttempt()
+	e.executionInfo.Attempt = event.GetAttempt()
 	if !timestamp.TimeValue(event.GetWorkflowExecutionExpirationTime()).IsZero() {
 		e.executionInfo.WorkflowExpirationTime = event.GetWorkflowExecutionExpirationTime()
 	}

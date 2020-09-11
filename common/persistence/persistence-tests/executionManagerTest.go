@@ -979,7 +979,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				WorkflowTaskScheduleId:      int64(rand.Int31()),
 				WorkflowTaskStartedId:       int64(rand.Int31()),
 				WorkflowTaskTimeout:         timestamp.DurationFromSeconds(int64(rand.Int31())),
-				RetryAttempt:                rand.Int31(),
+				Attempt:                     rand.Int31(),
 				HasRetryPolicy:              true,
 				RetryInitialInterval:        timestamp.DurationFromSeconds(int64(rand.Int31())),
 				RetryBackoffCoefficient:     7.78,
@@ -1035,7 +1035,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTaskStartedId, info.WorkflowTaskStartedId)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTaskTimeout, info.WorkflowTaskTimeout)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.SignalCount, info.SignalCount)
-	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.RetryAttempt, info.RetryAttempt)
+	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.Attempt, info.Attempt)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.HasRetryPolicy, info.HasRetryPolicy)
 	s.EqualValues(createReq.NewWorkflowSnapshot.ExecutionInfo.RetryInitialInterval, info.RetryInitialInterval)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.RetryBackoffCoefficient, info.RetryBackoffCoefficient)

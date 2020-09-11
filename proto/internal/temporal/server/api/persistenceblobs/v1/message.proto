@@ -280,7 +280,7 @@ message WorkflowExecutionInfo {
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     google.protobuf.Duration sticky_schedule_to_start_timeout = 34 [(gogoproto.stdduration) = true];
-    int32 retry_attempt = 35;
+    int32 attempt = 35;
     google.protobuf.Duration retry_initial_interval = 36 [(gogoproto.stdduration) = true];
     google.protobuf.Duration retry_maximum_interval = 37 [(gogoproto.stdduration) = true];
     int32 retry_maximum_attempts = 38;
