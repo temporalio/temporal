@@ -1091,7 +1091,7 @@ func buildExecutionRow(
 	shardID int,
 ) (row *sqlplugin.ExecutionsRow, err error) {
 
-	info, state, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, versionHistories)
+	info, state, err := p.WorkflowExecutionToProto(executionInfo, startVersion, versionHistories)
 	if err != nil {
 		return nil, err
 	}
