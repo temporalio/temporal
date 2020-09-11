@@ -35,11 +35,46 @@ brew services start mysql
 cd $GOPATH/github.com/uber/cadence
 make install-schema-mysql
 ```
+When run tests and CLI command locally, Cadence by default uses a user `uber` with password `uber`, with privileges of creating databases. 
+You can use the following command to create user(role) and grant access. 
+In the mysql shell:
+```
+> CREATE USER 'uber' IDENTIFIED BY 'uber';
+> GRANT All Privileges to 'uber';
 
+```
 ### Start cadence server
 ```
 cd $GOPATH/github.com/uber/cadence
 cp config/development_mysql.yaml config/development.yaml
+./cadence-server start --services=frontend,matching,history,worker
+```
+
+## PostgresQL
+### Start PostgresQL server
+```
+brew install postgres
+brew services start postgres
+```
+When run tests and CLI command locally, Cadence by default uses a superuser `postgres` with password `cadence`.
+You can use the following command to create user(role) and grant access:
+```
+$psql postgres
+postgres=# CREATE USER postgres WITH PASSWORD 'cadence';
+CREATE ROLE
+postgres=# ALTER USER postgres WITH SUPERUSER;
+ALTER ROLE
+``` 
+### Install cadence schema
+```
+cd $GOPATH/github.com/uber/cadence
+make install-schema-postgres
+```
+
+### Start cadence server
+```
+cd $GOPATH/github.com/uber/cadence
+cp config/development_postgres.yaml config/development.yaml
 ./cadence-server start --services=frontend,matching,history,worker
 ```
 

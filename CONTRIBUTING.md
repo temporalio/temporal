@@ -2,11 +2,12 @@
 
 This doc is intended for contributors to `cadence` server (hopefully that's you!)
 
-**Note:** All contributors also need to fill out the [Uber Contributor License Agreement](http://t.uber.com/cla) before we can merge in any of your changes
+>Note: All contributors also need to fill out the [Uber Contributor License Agreement](http://t.uber.com/cla) before we can merge in any of your changes
 
 ## Development Environment
 
-* Go. Install on OS X with `brew install go`.
+* Golang. Install on OS X with `brew install go`. 
+>Note: If running into any compiling issue, make sure you upgrade to the latest stable version of Golang. 
 
 ## Checking out the code
 
@@ -58,6 +59,9 @@ make bins
 ```
 
 ## Testing
+
+>Note: The default setup of Cadence depends on Cassandra and Kafka(is being deprecated). 
+This section assumes you are testing with them, too. Please refer to [persistence documentation](https://github.com/uber/cadence/blob/master/docs/persistence.md) if you want to test with others like MySQL/Postgres. 
 
 Before running the tests you must have `cassandra`, `kafka`, and its `zookeeper` dependency:
 
