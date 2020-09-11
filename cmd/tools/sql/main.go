@@ -29,5 +29,8 @@ import (
 )
 
 func main() {
-	sql.RunTool(os.Args) //nolint:errcheck
+	err := sql.RunTool(os.Args)
+	if err != nil {
+		panic(err)
+	}
 }

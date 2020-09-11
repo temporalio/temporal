@@ -27,5 +27,8 @@ import (
 )
 
 func main() {
-	cassandra.RunTool(os.Args) //nolint:errcheck
+	err := cassandra.RunTool(os.Args)
+	if err != nil {
+		panic(err)
+	}
 }

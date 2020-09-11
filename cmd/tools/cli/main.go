@@ -30,5 +30,8 @@ import (
 // See cadence/tools/cli/README.md for usage
 func main() {
 	app := cli.NewCliApp()
-	app.Run(os.Args)
+	err := app.Run(os.Args)
+	if err != nil {
+		panic(err)
+	}
 }

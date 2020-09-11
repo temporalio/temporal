@@ -33,7 +33,7 @@ const (
 	// CassandraSeeds env
 	CassandraSeeds = "CASSANDRA_SEEDS"
 	// CassandraPort env
-	CassandraPort = "CASSANDRA_PORT"
+	CassandraPort = "CASSANDRA_DB_PORT"
 	// CassandraDefaultPort Cassandra default port
 	CassandraDefaultPort = "9042"
 

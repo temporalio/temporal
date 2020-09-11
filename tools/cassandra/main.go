@@ -73,7 +73,7 @@ func buildCLIOptions() *cli.App {
 			Name:   schema.CLIFlagPort,
 			Value:  defaultCassandraPort,
 			Usage:  "Port of cassandra host to connect to",
-			EnvVar: "CASSANDRA_PORT",
+			EnvVar: "CASSANDRA_DB_PORT",
 		},
 		cli.StringFlag{
 			Name:   schema.CLIFlagUser,
