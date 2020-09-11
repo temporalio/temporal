@@ -52,7 +52,8 @@ services:
 
   worker:
     rpc:
-      port: 7940
+      grpcPort: 7940
+      membershipPort: 6940
       bindOnLocalHost: true
     metrics:
       statsd:
