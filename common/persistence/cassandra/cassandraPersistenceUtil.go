@@ -396,7 +396,7 @@ func applyWorkflowSnapshotBatchAsNew(
 func createExecution(
 	batch *gocql.Batch,
 	shardID int,
-	executionInfo *p.InternalWorkflowExecutionInfo,
+	executionInfo *p.WorkflowExecutionInfo,
 	versionHistories *history.VersionHistories,
 	checksum checksum.Checksum,
 	cqlNowTimestampMillis int64,
@@ -415,10 +415,10 @@ func createExecution(
 	runID := executionInfo.RunID
 
 	// TODO we should set the start time and last update time on business logic layer
-	executionInfo.StartTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis)).UTC()
-	executionInfo.LastUpdateTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis)).UTC()
+	executionInfo.StartTimestamp = timestamp.UnixOrZeroTimePtr(p.DBTimestampToUnixNano(cqlNowTimestampMillis))
+	executionInfo.LastUpdatedTimestamp = timestamp.UnixOrZeroTimePtr(p.DBTimestampToUnixNano(cqlNowTimestampMillis))
 
-	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, versionHistories)
+	protoExecution, protoState, err := p.WorkflowExecutionToProto(executionInfo, startVersion, versionHistories)
 	if err != nil {
 		return err
 	}
@@ -479,7 +479,7 @@ func createExecution(
 func updateExecution(
 	batch *gocql.Batch,
 	shardID int,
-	executionInfo *p.InternalWorkflowExecutionInfo,
+	executionInfo *p.WorkflowExecutionInfo,
 	versionHistories *history.VersionHistories,
 	cqlNowTimestampMillis int64,
 	condition int64,
@@ -499,9 +499,9 @@ func updateExecution(
 	runID := executionInfo.RunID
 
 	// TODO we should set the last update time on business logic layer
-	executionInfo.LastUpdateTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis)).UTC()
+	executionInfo.LastUpdatedTimestamp = timestamp.UnixOrZeroTimePtr(p.DBTimestampToUnixNano(cqlNowTimestampMillis))
 
-	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, versionHistories)
+	protoExecution, protoState, err := p.WorkflowExecutionToProto(executionInfo, startVersion, versionHistories)
 	if err != nil {
 		return err
 	}

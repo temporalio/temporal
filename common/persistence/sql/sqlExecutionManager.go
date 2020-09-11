@@ -240,7 +240,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 	}
 
 	// Build partial from proto
-	executionInfo := p.ProtoWorkflowExecutionToPartialInternalExecution(info, executionState, executionsRow.NextEventID)
+	executionInfo := p.WorkflowExecutionFromProto(info, executionState, executionsRow.NextEventID)
 
 	state := &p.InternalWorkflowMutableState{ExecutionInfo: executionInfo, VersionHistories: info.GetVersionHistories()}
 

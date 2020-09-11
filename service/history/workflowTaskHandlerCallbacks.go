@@ -27,7 +27,6 @@ package history
 import (
 	"context"
 	"fmt"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -350,7 +349,8 @@ Update_History_Loop:
 		if workflowTaskHeartbeating {
 			namespace := namespaceEntry.GetInfo().Name
 			timeout := handler.config.WorkflowTaskHeartbeatTimeout(namespace)
-			if currentWorkflowTask.OriginalScheduledTimestamp > 0 && handler.timeSource.Now().After(time.Unix(0, currentWorkflowTask.OriginalScheduledTimestamp).UTC().Add(timeout)) {
+			origSchedTime := timestamp.TimeValue(currentWorkflowTask.OriginalScheduledTimestamp)
+			if origSchedTime.UnixNano() > 0 && handler.timeSource.Now().After(origSchedTime.Add(timeout)) {
 				workflowTaskHeartbeatTimeout = true
 				scope := handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace))
 				scope.IncCounter(metrics.WorkflowTaskHeartbeatTimeoutCounter)
@@ -384,11 +384,11 @@ Update_History_Loop:
 		if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskQueue == nil {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.CompleteWorkflowTaskWithStickyDisabledCounter)
 			executionInfo.StickyTaskQueue = ""
-			executionInfo.StickyScheduleToStartTimeout = 0
+			executionInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(0)
 		} else {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.CompleteWorkflowTaskWithStickyEnabledCounter)
 			executionInfo.StickyTaskQueue = request.StickyAttributes.WorkerTaskQueue.GetName()
-			executionInfo.StickyScheduleToStartTimeout = int64(timestamp.DurationValue(request.StickyAttributes.GetScheduleToStartTimeout()).Seconds())
+			executionInfo.StickyScheduleToStartTimeout = request.StickyAttributes.GetScheduleToStartTimeout()
 		}
 		executionInfo.ClientLibraryVersion = clientLibVersion
 		executionInfo.ClientFeatureVersion = clientFeatureVersion
@@ -606,8 +606,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		Name: executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	response.ScheduledTime = timestamp.UnixOrZeroTimePtr(workflowTask.ScheduledTimestamp)
-	response.StartedTime = timestamp.UnixOrZeroTimePtr(workflowTask.StartedTimestamp)
+	response.ScheduledTime = workflowTask.ScheduledTimestamp
+	response.StartedTime = workflowTask.StartedTimestamp
 
 	if workflowTask.Attempt > 1 {
 		// This workflowTask is retried from mutable state

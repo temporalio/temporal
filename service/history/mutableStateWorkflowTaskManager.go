@@ -29,6 +29,7 @@ package history
 import (
 	"fmt"
 	"math"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -45,7 +46,7 @@ import (
 
 type (
 	mutableStateWorkflowTaskManager interface {
-		ReplicateWorkflowTaskScheduledEvent(version int64, scheduleID int64, taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32, attempt int32, scheduleTimestamp int64, originalScheduledTimestamp int64) (*workflowTaskInfo, error)
+		ReplicateWorkflowTaskScheduledEvent(version int64, scheduleID int64, taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32, attempt int32, scheduleTimestamp *time.Time, originalScheduledTimestamp *time.Time) (*workflowTaskInfo, error)
 		ReplicateTransientWorkflowTaskScheduled() (*workflowTaskInfo, error)
 		ReplicateWorkflowTaskStartedEvent(
 			workflowTask *workflowTaskInfo,
@@ -53,7 +54,7 @@ type (
 			scheduleID int64,
 			startedID int64,
 			requestID string,
-			timestamp int64,
+			timestamp time.Time,
 		) (*workflowTaskInfo, error)
 		ReplicateWorkflowTaskCompletedEvent(event *historypb.HistoryEvent) error
 		ReplicateWorkflowTaskFailedEvent() error
@@ -62,7 +63,7 @@ type (
 		AddWorkflowTaskScheduleToStartTimeoutEvent(scheduleEventID int64) (*historypb.HistoryEvent, error)
 		AddWorkflowTaskScheduledEventAsHeartbeat(
 			bypassTaskGeneration bool,
-			originalScheduledTimestamp int64,
+			originalScheduledTimestamp *time.Time,
 		) (*workflowTaskInfo, error)
 		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool) (*workflowTaskInfo, error)
 		AddFirstWorkflowTaskScheduled(startEvent *historypb.HistoryEvent) error
@@ -115,7 +116,7 @@ func newMutableStateWorkflowTaskManager(msb *mutableStateBuilder) mutableStateWo
 	}
 }
 
-func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskScheduledEvent(version int64, scheduleID int64, taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32, attempt int32, scheduleTimestamp int64, originalScheduledTimestamp int64) (*workflowTaskInfo, error) {
+func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskScheduledEvent(version int64, scheduleID int64, taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32, attempt int32, scheduleTimestamp *time.Time, originalScheduledTimestamp *time.Time) (*workflowTaskInfo, error) {
 
 	// set workflow state to running, since workflow task is scheduled
 	// NOTE: for zombie workflow, should not change the state
@@ -134,11 +135,11 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskScheduledEven
 		ScheduleID:                 scheduleID,
 		StartedID:                  common.EmptyEventID,
 		RequestID:                  emptyUUID,
-		WorkflowTaskTimeout:        int64(startToCloseTimeoutSeconds),
+		WorkflowTaskTimeout:        timestamp.DurationFromSeconds(int64(startToCloseTimeoutSeconds)),
 		TaskQueue:                  taskQueue,
 		Attempt:                    attempt,
 		ScheduledTimestamp:         scheduleTimestamp,
-		StartedTimestamp:           0,
+		StartedTimestamp:           nil,
 		OriginalScheduledTimestamp: originalScheduledTimestamp,
 	}
 
@@ -169,8 +170,8 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateTransientWorkflowTaskSche
 		WorkflowTaskTimeout: m.msb.GetExecutionInfo().DefaultWorkflowTaskTimeout,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: m.msb.GetExecutionInfo().TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Attempt:             m.msb.GetExecutionInfo().WorkflowTaskAttempt,
-		ScheduledTimestamp:  m.msb.timeSource.Now().UnixNano(),
-		StartedTimestamp:    0,
+		ScheduledTimestamp:  timestamp.TimePtr(m.msb.timeSource.Now()),
+		StartedTimestamp:    timestamp.UnixOrZeroTimePtr(0),
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
@@ -183,7 +184,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskStartedEvent(
 	scheduleID int64,
 	startedID int64,
 	requestID string,
-	timestamp int64,
+	timestamp time.Time,
 ) (*workflowTaskInfo, error) {
 	// Replicator calls it with a nil workflow task info, and it is safe to always lookup the workflow task in this case as it
 	// does not have to deal with transient workflow task case.
@@ -212,7 +213,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskStartedEvent(
 		RequestID:                  requestID,
 		WorkflowTaskTimeout:        workflowTask.WorkflowTaskTimeout,
 		Attempt:                    workflowTask.Attempt,
-		StartedTimestamp:           timestamp,
+		StartedTimestamp:           &timestamp,
 		ScheduledTimestamp:         workflowTask.ScheduledTimestamp,
 		TaskQueue:                  workflowTask.TaskQueue,
 		OriginalScheduledTimestamp: workflowTask.OriginalScheduledTimestamp,
@@ -273,7 +274,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduleToStartTime
 // originalScheduledTimestamp is to record the first scheduled workflow task during workflow task heartbeat.
 func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
-	originalScheduledTimestamp int64,
+	originalScheduledTimestamp *time.Time,
 ) (*workflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
 	if m.HasPendingWorkflowTask() {
@@ -291,7 +292,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHea
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
 	} else {
 		// It can be because stickyness has expired due to StickyTTL config
-		// In that case we need to clear stickyness so that the LastUpdateTimestamp is not corrupted.
+		// In that case we need to clear stickyness so that the LastUpdatedTimestamp is not corrupted.
 		// In other cases, clearing stickyness shouldn't hurt anything.
 		// TODO: https://github.com/temporalio/temporal/issues/2357:
 		//  if we can use a new field(LastWorkflowTaskUpdateTimestamp), then we could get rid of it.
@@ -299,7 +300,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHea
 		taskQueue.Name = m.msb.executionInfo.TaskQueue
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_NORMAL
 	}
-	taskTimeout := int32(m.msb.executionInfo.DefaultWorkflowTaskTimeout)
+	taskTimeout := timestamp.DurationValue(m.msb.executionInfo.DefaultWorkflowTaskTimeout)
 
 	// Flush any buffered events before creating the workflow task, otherwise it will result in invalid IDs for transient
 	// workflow task and will cause in timeout processing to not work for transient workflow tasks
@@ -315,9 +316,9 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHea
 	var newWorkflowTaskEvent *historypb.HistoryEvent
 	scheduleID := m.msb.GetNextEventID() // we will generate the schedule event later for repeatedly failing workflow tasks
 	// Avoid creating new history events when workflow tasks are continuously failing
-	scheduleTime := m.msb.timeSource.Now()
+	scheduleTime := m.msb.timeSource.Now().UTC()
 	if m.msb.executionInfo.WorkflowTaskAttempt == 1 {
-		newWorkflowTaskEvent = m.msb.hBuilder.AddWorkflowTaskScheduledEvent(taskQueue, taskTimeout,
+		newWorkflowTaskEvent = m.msb.hBuilder.AddWorkflowTaskScheduledEvent(taskQueue, int32(taskTimeout.Seconds()),
 			m.msb.executionInfo.WorkflowTaskAttempt)
 		scheduleID = newWorkflowTaskEvent.GetEventId()
 		scheduleTime = timestamp.TimeValue(newWorkflowTaskEvent.GetEventTime())
@@ -327,9 +328,9 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHea
 		m.msb.GetCurrentVersion(),
 		scheduleID,
 		taskQueue,
-		taskTimeout,
+		int32(taskTimeout.Seconds()),
 		m.msb.executionInfo.WorkflowTaskAttempt,
-		scheduleTime.UnixNano(),
+		&scheduleTime,
 		originalScheduledTimestamp,
 	)
 	if err != nil {
@@ -352,7 +353,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHea
 func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEvent(
 	bypassTaskGeneration bool,
 ) (*workflowTaskInfo, error) {
-	return m.AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration, m.msb.timeSource.Now().UnixNano())
+	return m.AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration, timestamp.TimePtr(m.msb.timeSource.Now()))
 }
 
 func (m *mutableStateWorkflowTaskManagerImpl) AddFirstWorkflowTaskScheduled(
@@ -415,7 +416,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskStartedEvent(
 	// First check to see if new events came since transient workflowTask was scheduled
 	if workflowTask.Attempt > 1 && workflowTask.ScheduleID != m.msb.GetNextEventID() {
 		// Also create a new WorkflowTaskScheduledEvent since new events came in when it was scheduled
-		scheduleEvent := m.msb.hBuilder.AddWorkflowTaskScheduledEvent(request.GetTaskQueue(), int32(workflowTask.WorkflowTaskTimeout), 0)
+		scheduleEvent := m.msb.hBuilder.AddWorkflowTaskScheduledEvent(request.GetTaskQueue(), int32(workflowTask.WorkflowTaskTimeout.Seconds()), 0)
 		scheduleID = scheduleEvent.GetEventId()
 		workflowTask.Attempt = 1
 	}
@@ -428,7 +429,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskStartedEvent(
 		startTime = timestamp.TimeValue(event.GetEventTime())
 	}
 
-	workflowTask, err := m.ReplicateWorkflowTaskStartedEvent(workflowTask, m.msb.GetCurrentVersion(), scheduleID, startedID, requestID, startTime.UnixNano())
+	workflowTask, err := m.ReplicateWorkflowTaskStartedEvent(workflowTask, m.msb.GetCurrentVersion(), scheduleID, startedID, requestID, startTime)
 	// TODO merge active & passive task generation
 	if err := m.msb.taskGenerator.generateStartWorkflowTaskTasks(
 		startTime, // start time is now
@@ -464,10 +465,10 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskCompletedEvent(
 			Name: m.msb.executionInfo.TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
-		scheduledEvent := m.msb.hBuilder.AddTransientWorkflowTaskScheduledEvent(taskQueue, int32(workflowTask.WorkflowTaskTimeout),
-			workflowTask.Attempt, timestamp.UnixOrZeroTime(workflowTask.ScheduledTimestamp))
+		scheduledEvent := m.msb.hBuilder.AddTransientWorkflowTaskScheduledEvent(taskQueue, int32(workflowTask.WorkflowTaskTimeout.Seconds()),
+			workflowTask.Attempt, timestamp.TimeValue(workflowTask.ScheduledTimestamp))
 		startedEvent := m.msb.hBuilder.AddTransientWorkflowTaskStartedEvent(scheduledEvent.GetEventId(), workflowTask.RequestID,
-			request.GetIdentity(), timestamp.UnixOrZeroTime(workflowTask.StartedTimestamp))
+			request.GetIdentity(), timestamp.TimeValue(workflowTask.StartedTimestamp))
 		startedEventID = startedEvent.GetEventId()
 	}
 	// Now write the completed event
@@ -570,15 +571,15 @@ func (m *mutableStateWorkflowTaskManagerImpl) FailWorkflowTask(
 		ScheduleID:                 common.EmptyEventID,
 		StartedID:                  common.EmptyEventID,
 		RequestID:                  emptyUUID,
-		WorkflowTaskTimeout:        0,
-		StartedTimestamp:           0,
+		WorkflowTaskTimeout:        timestamp.DurationFromSeconds(0),
+		StartedTimestamp:           timestamp.UnixOrZeroTimePtr(0),
 		TaskQueue:                  nil,
-		OriginalScheduledTimestamp: 0,
+		OriginalScheduledTimestamp: timestamp.UnixOrZeroTimePtr(0),
 		Attempt:                    1,
 	}
 	if incrementAttempt {
 		failWorkflowTaskInfo.Attempt = m.msb.executionInfo.WorkflowTaskAttempt + 1
-		failWorkflowTaskInfo.ScheduledTimestamp = m.msb.timeSource.Now().UnixNano()
+		failWorkflowTaskInfo.ScheduledTimestamp = timestamp.TimePtr(m.msb.timeSource.Now().UTC())
 	}
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 }
@@ -590,10 +591,10 @@ func (m *mutableStateWorkflowTaskManagerImpl) DeleteWorkflowTask() {
 		ScheduleID:          common.EmptyEventID,
 		StartedID:           common.EmptyEventID,
 		RequestID:           emptyUUID,
-		WorkflowTaskTimeout: 0,
+		WorkflowTaskTimeout: timestamp.DurationFromSeconds(0),
 		Attempt:             1,
-		StartedTimestamp:    0,
-		ScheduledTimestamp:  0,
+		StartedTimestamp:    timestamp.UnixOrZeroTimePtr(0),
+		ScheduledTimestamp:  timestamp.UnixOrZeroTimePtr(0),
 
 		TaskQueue: nil,
 		// Keep the last original scheduled timestamp, so that AddWorkflowTaskScheduledEventAsHeartbeat can continue with it.
@@ -622,9 +623,9 @@ func (m *mutableStateWorkflowTaskManagerImpl) UpdateWorkflowTask(
 		tag.WorkflowScheduleID(workflowTask.ScheduleID),
 		tag.WorkflowStartedID(workflowTask.StartedID),
 		tag.WorkflowTaskRequestId(workflowTask.RequestID),
-		tag.WorkflowTaskTimeoutSeconds(workflowTask.WorkflowTaskTimeout),
+		tag.WorkflowTaskTimeout(workflowTask.WorkflowTaskTimeout),
 		tag.Attempt(workflowTask.Attempt),
-		tag.TimestampInt(workflowTask.StartedTimestamp))
+		tag.WorkflowStartedTimestamp(workflowTask.StartedTimestamp))
 }
 
 func (m *mutableStateWorkflowTaskManagerImpl) HasPendingWorkflowTask() bool {
@@ -681,7 +682,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) CreateTransientWorkflowTaskEvents(
 		workflowTask.ScheduleID,
 		workflowTask.ScheduledTimestamp,
 		taskqueue,
-		int32(workflowTask.WorkflowTaskTimeout),
+		int32(workflowTask.WorkflowTaskTimeout.Seconds()),
 		workflowTask.Attempt,
 	)
 

@@ -26,8 +26,9 @@ package cassandra
 
 import (
 	"crypto/tls"
-	"github.com/gocql/gocql"
 	"strings"
+
+	"github.com/gocql/gocql"
 
 	"go.temporal.io/server/common/service/config"
 )

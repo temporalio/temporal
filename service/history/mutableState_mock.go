@@ -374,7 +374,7 @@ func (mr *MockmutableStateMockRecorder) AddWorkflowTaskScheduledEvent(bypassTask
 }
 
 // AddWorkflowTaskScheduledEventAsHeartbeat mocks base method.
-func (m *MockmutableState) AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp int64) (*workflowTaskInfo, error) {
+func (m *MockmutableState) AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *time.Time) (*workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWorkflowTaskScheduledEventAsHeartbeat", bypassTaskGeneration, originalScheduledTimestamp)
 	ret0, _ := ret[0].(*workflowTaskInfo)
@@ -1814,7 +1814,7 @@ func (mr *MockmutableStateMockRecorder) ReplicateWorkflowTaskFailedEvent() *gomo
 }
 
 // ReplicateWorkflowTaskScheduledEvent mocks base method.
-func (m *MockmutableState) ReplicateWorkflowTaskScheduledEvent(arg0, arg1 int64, arg2 *taskqueue.TaskQueue, arg3, arg4 int32, arg5, arg6 int64) (*workflowTaskInfo, error) {
+func (m *MockmutableState) ReplicateWorkflowTaskScheduledEvent(arg0, arg1 int64, arg2 *taskqueue.TaskQueue, arg3, arg4 int32, arg5, arg6 *time.Time) (*workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateWorkflowTaskScheduledEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 	ret0, _ := ret[0].(*workflowTaskInfo)
@@ -1829,7 +1829,7 @@ func (mr *MockmutableStateMockRecorder) ReplicateWorkflowTaskScheduledEvent(arg0
 }
 
 // ReplicateWorkflowTaskStartedEvent mocks base method.
-func (m *MockmutableState) ReplicateWorkflowTaskStartedEvent(arg0 *workflowTaskInfo, arg1, arg2, arg3 int64, arg4 string, arg5 int64) (*workflowTaskInfo, error) {
+func (m *MockmutableState) ReplicateWorkflowTaskStartedEvent(arg0 *workflowTaskInfo, arg1, arg2, arg3 int64, arg4 string, arg5 time.Time) (*workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateWorkflowTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5)
 	ret0, _ := ret[0].(*workflowTaskInfo)

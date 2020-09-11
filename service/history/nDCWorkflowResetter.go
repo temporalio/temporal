@@ -48,7 +48,7 @@ type (
 	nDCWorkflowResetter interface {
 		resetWorkflow(
 			ctx context.Context,
-			now time.Time,
+			now *time.Time,
 			baseLastEventID int64,
 			baseLastEventVersion int64,
 			incomingFirstEventID int64,
@@ -102,7 +102,7 @@ func newNDCWorkflowResetter(
 
 func (r *nDCWorkflowResetterImpl) resetWorkflow(
 	ctx context.Context,
-	now time.Time,
+	now *time.Time,
 	baseLastEventID int64,
 	baseLastEventVersion int64,
 	incomingFirstEventID int64,

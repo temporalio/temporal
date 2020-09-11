@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -642,7 +643,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 
 	resetMutableState, err := workflowResetter.resetWorkflow(
 		ctx,
-		task.getEventTime(),
+		timestamp.TimePtr(task.getEventTime()),
 		baseEventID,
 		baseEventVersion,
 		task.getFirstEvent().GetEventId(),

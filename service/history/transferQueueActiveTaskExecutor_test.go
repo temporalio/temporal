@@ -458,7 +458,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 	stickyTaskQueueName := "some random sticky task queue"
-	stickyTaskQueueTimeout := int32(233)
+	stickyTaskQueueTimeout := timestamp.DurationFromSeconds(233)
 
 	mutableState := newMutableStateBuilderWithVersionHistoriesForTest(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
@@ -484,7 +484,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 	// set the sticky taskqueue attr
 	executionInfo := mutableState.GetExecutionInfo()
 	executionInfo.StickyTaskQueue = stickyTaskQueueName
-	executionInfo.StickyScheduleToStartTimeout = int64(stickyTaskQueueTimeout)
+	executionInfo.StickyScheduleToStartTimeout = stickyTaskQueueTimeout
 
 	// make another round of workflow task
 	taskID := int64(59)
@@ -518,7 +518,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_WorkflowT
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 	stickyTaskQueueName := "some random sticky task queue"
-	stickyTaskQueueTimeout := int32(233)
+	stickyTaskQueueTimeout := timestamp.DurationFromSeconds(233)
 
 	mutableState := newMutableStateBuilderWithVersionHistoriesForTest(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
@@ -547,7 +547,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_WorkflowT
 	// set the sticky taskqueue attr
 	executionInfo := mutableState.GetExecutionInfo()
 	executionInfo.StickyTaskQueue = stickyTaskQueueName
-	executionInfo.StickyScheduleToStartTimeout = int64(stickyTaskQueueTimeout)
+	executionInfo.StickyScheduleToStartTimeout = stickyTaskQueueTimeout
 
 	// make another round of workflow task
 	taskID := int64(59)
@@ -1941,10 +1941,10 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	executionInfo := mutableState.GetExecutionInfo()
-	timeout := timestamp.DurationFromSeconds(executionInfo.WorkflowRunTimeout)
+	timeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
 	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
-		timeout = timestamp.DurationFromSeconds(executionInfo.StickyScheduleToStartTimeout)
+		timeout = timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout)
 	}
 
 	return &matchingservice.AddWorkflowTaskRequest{
@@ -1952,7 +1952,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		Execution:              &execution,
 		TaskQueue:              taskQueue,
 		ScheduleId:             task.GetScheduleId(),
-		ScheduleToStartTimeout: timeout,
+		ScheduleToStartTimeout: &timeout,
 	}
 }
 
@@ -1977,7 +1977,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStar
 		WorkflowTypeName:   executionInfo.WorkflowTypeName,
 		StartTimestamp:     timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
 		ExecutionTimestamp: executionTimestamp.UnixNano(),
-		RunTimeout:         executionInfo.WorkflowRunTimeout,
+		RunTimeout:         int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 		TaskID:             task.GetTaskId(),
 		TaskQueue:          task.TaskQueue,
 	}
@@ -2107,7 +2107,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttribu
 		Execution:        *execution,
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTimestamp:   timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
-		WorkflowTimeout:  executionInfo.WorkflowRunTimeout,
+		WorkflowTimeout:  int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 		TaskID:           task.GetTaskId(),
 		TaskQueue:        task.TaskQueue,
 	}

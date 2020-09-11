@@ -277,17 +277,17 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		RunID:                      we.GetRunId(),
 		TaskQueue:                  tl,
 		WorkflowTypeName:           "wType",
-		WorkflowRunTimeout:         200,
-		DefaultWorkflowTaskTimeout: 100,
+		WorkflowRunTimeout:         timestamp.DurationFromSeconds(200),
+		DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(100),
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		NextEventID:                int64(8),
 		LastProcessedEvent:         int64(3),
-		LastUpdatedTimestamp:       time.Now().UTC(),
+		LastUpdatedTimestamp:       timestamp.TimeNowPtrUtc(),
 		WorkflowTaskVersion:        common.EmptyVersion,
 		WorkflowTaskScheduleID:     common.EmptyEventID,
 		WorkflowTaskStartedID:      common.EmptyEventID,
-		WorkflowTaskTimeout:        100,
+		WorkflowTaskTimeout:        timestamp.DurationFromSeconds(100),
 		WorkflowTaskAttempt:        1,
 	}
 
@@ -458,7 +458,7 @@ func (s *mutableStateSuite) TestChecksumProbabilities() {
 func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
 	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 { return 0 }
 	s.False(s.msBuilder.shouldInvalidateCheckum())
-	s.msBuilder.executionInfo.LastUpdatedTimestamp = time.Now().UTC()
+	s.msBuilder.executionInfo.LastUpdatedTimestamp = timestamp.TimeNowPtrUtc()
 	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
 		return float64((s.msBuilder.executionInfo.LastUpdatedTimestamp.UnixNano() / int64(time.Second)) + 1)
 	}
@@ -631,8 +631,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetTaskQueue(),
 		int32(timestamp.DurationValue(workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetStartToCloseTimeout()).Seconds()),
 		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt(),
-		0,
-		0,
+		nil,
+		nil,
 	)
 	s.Nil(err)
 	s.NotNil(di)
@@ -642,7 +642,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		workflowTaskScheduleEvent.GetEventId(),
 		workflowTaskStartedEvent.GetEventId(),
 		workflowTaskStartedEvent.GetWorkflowTaskStartedEventAttributes().GetRequestId(),
-		timestamp.TimeValue(workflowTaskStartedEvent.GetEventTime()).UnixNano(),
+		timestamp.TimeValue(workflowTaskStartedEvent.GetEventTime()),
 	)
 	s.Nil(err)
 	s.NotNil(di)
@@ -682,8 +682,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetTaskQueue(),
 		int32(timestamp.DurationValue(newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetStartToCloseTimeout()).Seconds()),
 		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt(),
-		0,
-		0,
+		nil,
+		nil,
 	)
 	s.Nil(err)
 	s.NotNil(di)
@@ -693,7 +693,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		newWorkflowTaskScheduleEvent.GetEventId(),
 		newWorkflowTaskStartedEvent.GetEventId(),
 		newWorkflowTaskStartedEvent.GetWorkflowTaskStartedEventAttributes().GetRequestId(),
-		timestamp.TimeValue(newWorkflowTaskStartedEvent.GetEventTime()).UnixNano(),
+		timestamp.TimeValue(newWorkflowTaskStartedEvent.GetEventTime()),
 	)
 	s.Nil(err)
 	s.NotNil(di)
@@ -727,17 +727,17 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		RunID:                      we.GetRunId(),
 		TaskQueue:                  tl,
 		WorkflowTypeName:           "wType",
-		WorkflowRunTimeout:         200,
-		DefaultWorkflowTaskTimeout: 100,
+		WorkflowRunTimeout:         timestamp.DurationFromSeconds(200),
+		DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(100),
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		NextEventID:                int64(101),
 		LastProcessedEvent:         int64(99),
-		LastUpdatedTimestamp:       time.Now().UTC(),
+		LastUpdatedTimestamp:       timestamp.TimeNowPtrUtc(),
 		WorkflowTaskVersion:        failoverVersion,
 		WorkflowTaskScheduleID:     common.EmptyEventID,
 		WorkflowTaskStartedID:      common.EmptyEventID,
-		WorkflowTaskTimeout:        100,
+		WorkflowTaskTimeout:        timestamp.DurationFromSeconds(100),
 		WorkflowTaskAttempt:        1,
 	}
 

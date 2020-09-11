@@ -139,11 +139,12 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
 	executionInfo := r.mutableState.GetExecutionInfo()
 	startVersion := startEvent.GetVersion()
 
-	runTimeoutDuration := time.Duration(executionInfo.WorkflowRunTimeout) * time.Second
+	runTimeoutDuration := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
 	runTimeoutDuration = runTimeoutDuration + firstWorkflowTaskDelayDuration
 	workflowExpirationTimestamp := now.Add(runTimeoutDuration)
-	if !executionInfo.WorkflowExpirationTime.IsZero() && workflowExpirationTimestamp.After(executionInfo.WorkflowExpirationTime) {
-		workflowExpirationTimestamp = executionInfo.WorkflowExpirationTime
+	wfExpTime := timestamp.TimeValue(executionInfo.WorkflowExpirationTime)
+	if !wfExpTime.IsZero() && workflowExpirationTimestamp.After(wfExpTime) {
+		workflowExpirationTimestamp = wfExpTime
 	}
 	r.mutableState.AddTimerTasks(&persistence.WorkflowTimeoutTask{
 		// TaskID is set by shard
@@ -260,10 +261,8 @@ func (r *mutableStateTaskGeneratorImpl) generateScheduleWorkflowTaskTasks(
 	})
 
 	if r.mutableState.IsStickyTaskQueueEnabled() {
-		scheduledTime := time.Unix(0, workflowTask.ScheduledTimestamp).UTC()
-		scheduleToStartTimeout := time.Duration(
-			r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout,
-		) * time.Second
+		scheduledTime := timestamp.TimeValue(workflowTask.ScheduledTimestamp)
+		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
 
 		r.mutableState.AddTimerTasks(&persistence.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard
@@ -290,10 +289,8 @@ func (r *mutableStateTaskGeneratorImpl) generateStartWorkflowTaskTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflowTaskInfo: %v", workflowTaskScheduleID))
 	}
 
-	startedTime := time.Unix(0, workflowTask.StartedTimestamp).UTC()
-	workflowTaskTimeout := time.Duration(
-		workflowTask.WorkflowTaskTimeout,
-	) * time.Second
+	startedTime := timestamp.TimeValue(workflowTask.StartedTimestamp)
+	workflowTaskTimeout := timestamp.DurationValue(workflowTask.WorkflowTaskTimeout)
 
 	r.mutableState.AddTimerTasks(&persistence.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard

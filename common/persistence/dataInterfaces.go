@@ -209,32 +209,32 @@ type (
 		CompletionEvent                        *historypb.HistoryEvent
 		TaskQueue                              string
 		WorkflowTypeName                       string
-		WorkflowRunTimeout                     int64
-		WorkflowExecutionTimeout               int64
-		DefaultWorkflowTaskTimeout             int64
+		WorkflowRunTimeout                     *time.Duration
+		WorkflowExecutionTimeout               *time.Duration
+		DefaultWorkflowTaskTimeout             *time.Duration
 		State                                  enumsspb.WorkflowExecutionState
 		Status                                 enumspb.WorkflowExecutionStatus
 		LastFirstEventID                       int64
 		LastEventTaskID                        int64
 		NextEventID                            int64
 		LastProcessedEvent                     int64
-		StartTimestamp                         time.Time
-		LastUpdatedTimestamp                   time.Time
+		StartTimestamp                         *time.Time
+		LastUpdatedTimestamp                   *time.Time
 		CreateRequestID                        string
 		SignalCount                            int64
 		WorkflowTaskVersion                    int64
 		WorkflowTaskScheduleID                 int64
 		WorkflowTaskStartedID                  int64
 		WorkflowTaskRequestID                  string
-		WorkflowTaskTimeout                    int64
+		WorkflowTaskTimeout                    *time.Duration
 		WorkflowTaskAttempt                    int32
-		WorkflowTaskStartedTimestamp           int64
-		WorkflowTaskScheduledTimestamp         int64
-		WorkflowTaskOriginalScheduledTimestamp int64
+		WorkflowTaskStartedTimestamp           *time.Time
+		WorkflowTaskScheduledTimestamp         *time.Time
+		WorkflowTaskOriginalScheduledTimestamp *time.Time
 		CancelRequested                        bool
 		CancelRequestID                        string
 		StickyTaskQueue                        string
-		StickyScheduleToStartTimeout           int64
+		StickyScheduleToStartTimeout           *time.Duration
 		ClientLibraryVersion                   string
 		ClientFeatureVersion                   string
 		ClientImpl                             string
@@ -244,15 +244,16 @@ type (
 		// for retry
 		Attempt                int32
 		HasRetryPolicy         bool
-		InitialInterval        int64
+		InitialInterval        *time.Duration
 		BackoffCoefficient     float64
-		MaximumInterval        int64
-		WorkflowExpirationTime time.Time
+		MaximumInterval        *time.Duration
+		WorkflowExpirationTime *time.Time
 		MaximumAttempts        int32
 		NonRetryableErrorTypes []string
 		BranchToken            []byte
 		// Cron
-		CronSchedule string
+		CronSchedule   string
+		ExecutionStats *persistenceblobs.ExecutionStats
 	}
 
 	// ReplicationTaskInfoWrapper describes a replication task.

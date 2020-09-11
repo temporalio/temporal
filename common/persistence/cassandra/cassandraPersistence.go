@@ -2803,7 +2803,7 @@ func mutableStateFromRow(result map[string]interface{}) (*p.InternalWorkflowMuta
 		return nil, err
 	}
 
-	info := p.ProtoWorkflowExecutionToPartialInternalExecution(protoInfo, protoState, nextEventID)
+	info := p.WorkflowExecutionFromProto(protoInfo, protoState, nextEventID)
 
 	mutableState := &p.InternalWorkflowMutableState{
 		ExecutionInfo:    info,

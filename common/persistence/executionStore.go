@@ -107,7 +107,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 }
 
 func (m *executionManagerImpl) DeserializeExecutionInfo(
-	info *InternalWorkflowExecutionInfo,
+	info *WorkflowExecutionInfo,
 ) (*WorkflowExecutionInfo, *persistenceblobs.ExecutionStats, error) {
 	newInfo := &WorkflowExecutionInfo{
 		CompletionEvent:                        info.CompletionEvent,
@@ -132,7 +132,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		NextEventID:                            info.NextEventID,
 		LastProcessedEvent:                     info.LastProcessedEvent,
 		StartTimestamp:                         info.StartTimestamp,
-		LastUpdatedTimestamp:                   info.LastUpdateTimestamp,
+		LastUpdatedTimestamp:                   info.LastUpdatedTimestamp,
 		CreateRequestID:                        info.CreateRequestID,
 		SignalCount:                            info.SignalCount,
 		WorkflowTaskVersion:                    info.WorkflowTaskVersion,
@@ -156,7 +156,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		InitialInterval:                        info.InitialInterval,
 		BackoffCoefficient:                     info.BackoffCoefficient,
 		MaximumInterval:                        info.MaximumInterval,
-		WorkflowExpirationTime:                 info.ExpirationTime,
+		WorkflowExpirationTime:                 info.WorkflowExpirationTime,
 		MaximumAttempts:                        info.MaximumAttempts,
 		NonRetryableErrorTypes:                 info.NonRetryableErrorTypes,
 		BranchToken:                            info.BranchToken,
@@ -164,16 +164,14 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		AutoResetPoints:                        info.AutoResetPoints,
 		SearchAttributes:                       info.SearchAttributes,
 		Memo:                                   info.Memo,
+		ExecutionStats:                         info.ExecutionStats,
 	}
 
 	if newInfo.AutoResetPoints == nil {
 		newInfo.AutoResetPoints = &workflowpb.ResetPoints{}
 	}
 
-	newStats := &persistenceblobs.ExecutionStats{
-		HistorySize: info.HistorySize,
-	}
-	return newInfo, newStats, nil
+	return newInfo, info.ExecutionStats, nil
 }
 
 func (m *executionManagerImpl) DeserializeBufferedEvents(
@@ -230,13 +228,13 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 func (m *executionManagerImpl) SerializeExecutionInfo(
 	info *WorkflowExecutionInfo,
 	stats *persistenceblobs.ExecutionStats,
-) (*InternalWorkflowExecutionInfo, error) {
+) (*WorkflowExecutionInfo, error) {
 
 	if info == nil {
-		return &InternalWorkflowExecutionInfo{}, nil
+		return &WorkflowExecutionInfo{}, nil
 	}
 
-	return &InternalWorkflowExecutionInfo{
+	return &WorkflowExecutionInfo{
 		NamespaceID:                            info.NamespaceID,
 		WorkflowID:                             info.WorkflowID,
 		RunID:                                  info.RunID,
@@ -259,7 +257,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		NextEventID:                            info.NextEventID,
 		LastProcessedEvent:                     info.LastProcessedEvent,
 		StartTimestamp:                         info.StartTimestamp,
-		LastUpdateTimestamp:                    info.LastUpdatedTimestamp,
+		LastUpdatedTimestamp:                   info.LastUpdatedTimestamp,
 		CreateRequestID:                        info.CreateRequestID,
 		SignalCount:                            info.SignalCount,
 		WorkflowTaskVersion:                    info.WorkflowTaskVersion,
@@ -284,7 +282,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		InitialInterval:                        info.InitialInterval,
 		BackoffCoefficient:                     info.BackoffCoefficient,
 		MaximumInterval:                        info.MaximumInterval,
-		ExpirationTime:                         info.WorkflowExpirationTime,
+		WorkflowExpirationTime:                 info.WorkflowExpirationTime,
 		MaximumAttempts:                        info.MaximumAttempts,
 		NonRetryableErrorTypes:                 info.NonRetryableErrorTypes,
 		BranchToken:                            info.BranchToken,
@@ -293,7 +291,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		SearchAttributes:                       info.SearchAttributes,
 
 		// attributes which are not related to mutable state
-		HistorySize: stats.HistorySize,
+		ExecutionStats: stats,
 	}, nil
 }
 

@@ -227,7 +227,7 @@ func newMutableStateBuilder(
 		WorkflowTaskScheduleID: common.EmptyEventID,
 		WorkflowTaskStartedID:  common.EmptyEventID,
 		WorkflowTaskRequestID:  emptyUUID,
-		WorkflowTaskTimeout:    0,
+		WorkflowTaskTimeout:    timestamp.DurationFromSeconds(0),
 		WorkflowTaskAttempt:    1,
 
 		NextEventID:        common.FirstEventID,
@@ -810,7 +810,7 @@ func (e *mutableStateBuilder) IsStickyTaskQueueEnabled() bool {
 		return false
 	}
 	ttl := e.config.StickyTTL(e.GetNamespaceEntry().GetInfo().Name)
-	if e.timeSource.Now().After(e.executionInfo.LastUpdatedTimestamp.Add(ttl)) {
+	if e.timeSource.Now().After(timestamp.TimeValue(e.executionInfo.LastUpdatedTimestamp).Add(ttl)) {
 		return false
 	}
 	return true
@@ -1032,11 +1032,11 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 
 	return getBackoffInterval(
 		e.timeSource.Now(),
-		info.WorkflowExpirationTime,
+		timestamp.TimeValue(info.WorkflowExpirationTime),
 		info.Attempt,
 		info.MaximumAttempts,
-		*timestamp.DurationFromSeconds(info.InitialInterval),
-		*timestamp.DurationFromSeconds(info.MaximumInterval),
+		info.InitialInterval,
+		info.MaximumInterval,
 		info.BackoffCoefficient,
 		failure,
 		info.NonRetryableErrorTypes,
@@ -1049,7 +1049,7 @@ func (e *mutableStateBuilder) GetCronBackoffDuration() (time.Duration, error) {
 		return backoff.NoBackoff, nil
 	}
 	// TODO: decide if we can add execution time in execution info.
-	executionTime := e.executionInfo.StartTimestamp
+	executionTime := timestamp.TimeValue(e.executionInfo.StartTimestamp)
 	// This only call when doing ContinueAsNew. At this point, the workflow should have a start event
 	workflowStartEvent, err := e.GetStartEvent()
 	if err != nil {
@@ -1507,7 +1507,7 @@ func (e *mutableStateBuilder) FailWorkflowTask(
 
 func (e *mutableStateBuilder) ClearStickyness() {
 	e.executionInfo.StickyTaskQueue = ""
-	e.executionInfo.StickyScheduleToStartTimeout = 0
+	e.executionInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(0)
 	e.executionInfo.ClientLibraryVersion = ""
 	e.executionInfo.ClientFeatureVersion = ""
 	e.executionInfo.ClientImpl = ""
@@ -1613,7 +1613,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	var taskTimeout *time.Duration
 	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) == 0 {
-		taskTimeout = timestamp.DurationPtr(time.Duration(previousExecutionInfo.DefaultWorkflowTaskTimeout) * time.Second)
+		taskTimeout = previousExecutionInfo.DefaultWorkflowTaskTimeout
 	} else {
 		taskTimeout = attributes.GetWorkflowTaskTimeout()
 	}
@@ -1628,7 +1628,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		WorkflowId:               execution.WorkflowId,
 		TaskQueue:                tq,
 		WorkflowType:             wType,
-		WorkflowExecutionTimeout: timestamp.DurationPtr(time.Duration(previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout) * time.Second),
+		WorkflowExecutionTimeout: previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout,
 		WorkflowRunTimeout:       runTimeout,
 		WorkflowTaskTimeout:      taskTimeout,
 		Input:                    attributes.Input,
@@ -1653,7 +1653,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	} else {
 		req.Attempt = 1
 	}
-	workflowTimeoutTime := previousExecutionState.GetExecutionInfo().WorkflowExpirationTime
+	workflowTimeoutTime := timestamp.TimeValue(previousExecutionState.GetExecutionInfo().WorkflowExpirationTime)
 	if !workflowTimeoutTime.IsZero() {
 		req.WorkflowExecutionExpirationTime = &workflowTimeoutTime
 	}
@@ -1764,9 +1764,9 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.FirstExecutionRunID = event.GetFirstExecutionRunId()
 	e.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	e.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
-	e.executionInfo.WorkflowRunTimeout = int64(timestamp.DurationValue(event.GetWorkflowRunTimeout()).Seconds())
-	e.executionInfo.WorkflowExecutionTimeout = int64(timestamp.DurationValue(event.GetWorkflowExecutionTimeout()).Seconds())
-	e.executionInfo.DefaultWorkflowTaskTimeout = int64(timestamp.DurationValue(event.GetWorkflowTaskTimeout()).Seconds())
+	e.executionInfo.WorkflowRunTimeout = event.GetWorkflowRunTimeout()
+	e.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeout()
+	e.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 
 	if err := e.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1781,7 +1781,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.WorkflowTaskScheduleID = common.EmptyEventID
 	e.executionInfo.WorkflowTaskStartedID = common.EmptyEventID
 	e.executionInfo.WorkflowTaskRequestID = emptyUUID
-	e.executionInfo.WorkflowTaskTimeout = 0
+	e.executionInfo.WorkflowTaskTimeout = timestamp.DurationFromSeconds(0)
 
 	e.executionInfo.CronSchedule = event.GetCronSchedule()
 	e.executionInfo.ParentNamespaceID = parentNamespaceID
@@ -1799,14 +1799,14 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 
 	e.executionInfo.Attempt = event.GetAttempt()
 	if !timestamp.TimeValue(event.GetWorkflowExecutionExpirationTime()).IsZero() {
-		e.executionInfo.WorkflowExpirationTime = timestamp.TimeValue(event.GetWorkflowExecutionExpirationTime())
+		e.executionInfo.WorkflowExpirationTime = event.GetWorkflowExecutionExpirationTime()
 	}
 	if event.RetryPolicy != nil {
 		e.executionInfo.HasRetryPolicy = true
 		e.executionInfo.BackoffCoefficient = event.RetryPolicy.GetBackoffCoefficient()
-		e.executionInfo.InitialInterval = int64(timestamp.DurationValue(event.RetryPolicy.GetInitialInterval()).Seconds())
+		e.executionInfo.InitialInterval = event.RetryPolicy.GetInitialInterval()
 		e.executionInfo.MaximumAttempts = event.RetryPolicy.GetMaximumAttempts()
-		e.executionInfo.MaximumInterval = int64(timestamp.DurationValue(event.RetryPolicy.GetMaximumInterval()).Seconds())
+		e.executionInfo.MaximumInterval = event.RetryPolicy.GetMaximumInterval()
 		e.executionInfo.NonRetryableErrorTypes = event.RetryPolicy.GetNonRetryableErrorTypes()
 	}
 
@@ -1851,7 +1851,7 @@ func (e *mutableStateBuilder) AddWorkflowTaskScheduledEvent(
 // originalScheduledTimestamp is to record the first WorkflowTaskScheduledEvent during workflow task heartbeat.
 func (e *mutableStateBuilder) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
-	originalScheduledTimestamp int64,
+	originalScheduledTimestamp *time.Time,
 ) (*workflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
 	if err := e.checkMutability(opTag); err != nil {
@@ -1870,8 +1870,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowTaskScheduledEvent(
 	taskQueue *taskqueuepb.TaskQueue,
 	startToCloseTimeoutSeconds int32,
 	attempt int32,
-	scheduleTimestamp int64,
-	originalScheduledTimestamp int64,
+	scheduleTimestamp *time.Time,
+	originalScheduledTimestamp *time.Time,
 ) (*workflowTaskInfo, error) {
 	return e.workflowTaskManager.ReplicateWorkflowTaskScheduledEvent(version, scheduleID, taskQueue, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
 }
@@ -1894,7 +1894,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowTaskStartedEvent(
 	scheduleID int64,
 	startedID int64,
 	requestID string,
-	timestamp int64,
+	timestamp time.Time,
 ) (*workflowTaskInfo, error) {
 
 	return e.workflowTaskManager.ReplicateWorkflowTaskStartedEvent(workflowTask, version, scheduleID, startedID, requestID, timestamp)
@@ -3726,8 +3726,8 @@ func (e *mutableStateBuilder) RetryActivity(
 		timestamp.TimeValue(ai.RetryExpirationTime),
 		ai.Attempt,
 		ai.RetryMaximumAttempts,
-		timestamp.DurationValue(ai.RetryInitialInterval),
-		timestamp.DurationValue(ai.RetryMaximumInterval),
+		ai.RetryInitialInterval,
+		ai.RetryMaximumInterval,
 		ai.RetryBackoffCoefficient,
 		failure,
 		ai.RetryNonRetryableErrorTypes,
@@ -3865,7 +3865,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 	setTaskInfo(e.GetCurrentVersion(), now, e.insertTransferTasks, e.insertTimerTasks)
 
 	// update last update time
-	e.executionInfo.LastUpdatedTimestamp = now
+	e.executionInfo.LastUpdatedTimestamp = &now
 
 	// we generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only
@@ -3949,7 +3949,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 	setTaskInfo(e.GetCurrentVersion(), now, e.insertTransferTasks, e.insertTimerTasks)
 
 	// update last update time
-	e.executionInfo.LastUpdatedTimestamp = now
+	e.executionInfo.LastUpdatedTimestamp = &now
 
 	// we generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only

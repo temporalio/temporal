@@ -58,7 +58,7 @@ func (s *statsComputerSuite) SetupTest() {
 func (s *statsComputerSuite) createRequest() *InternalUpdateWorkflowExecutionRequest {
 	return &InternalUpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: InternalWorkflowMutation{
-			ExecutionInfo: &InternalWorkflowExecutionInfo{},
+			ExecutionInfo: &WorkflowExecutionInfo{},
 		},
 	}
 }

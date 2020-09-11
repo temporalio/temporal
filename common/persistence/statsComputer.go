@@ -186,7 +186,7 @@ func (sc *statsComputer) computeMutableStateUpdateStats(req *InternalUpdateWorkf
 	}
 }
 
-func computeExecutionInfoSize(executionInfo *InternalWorkflowExecutionInfo) int {
+func computeExecutionInfoSize(executionInfo *WorkflowExecutionInfo) int {
 	if executionInfo == nil {
 		return 0
 	}

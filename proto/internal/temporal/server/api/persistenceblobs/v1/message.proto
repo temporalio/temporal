@@ -292,7 +292,7 @@ message WorkflowExecutionInfo {
     int32 event_store_version = 44;
     bytes event_branch_token = 45;
     int64 signal_count = 46;
-    int64 history_size = 47;
+    int64 history_size = 47 [deprecated = true];
     string client_library_version = 48;
     string client_feature_version = 49;
     string client_impl = 50;
@@ -301,6 +301,7 @@ message WorkflowExecutionInfo {
     map<string, temporal.api.common.v1.Payload> memo = 53;
     temporal.server.api.history.v1.VersionHistories version_histories = 54;
     string first_execution_run_id = 55;
+    ExecutionStats execution_stats = 56;
 }
 
 message Checksum {

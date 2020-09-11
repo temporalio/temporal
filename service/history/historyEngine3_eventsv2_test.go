@@ -175,7 +175,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
 	executionInfo := msBuilder.GetExecutionInfo()
-	executionInfo.LastUpdatedTimestamp = time.Now().UTC()
+	executionInfo.LastUpdatedTimestamp = timestamp.TimeNowPtrUtc()
 	executionInfo.StickyTaskQueue = stickyTl
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
@@ -212,6 +212,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		expectedResponse.PreviousStartedEventId = executionInfo.LastProcessedEvent
 	}
 	expectedResponse.ScheduledEventId = di.ScheduleID
+	expectedResponse.ScheduledTime = di.ScheduledTimestamp
 	expectedResponse.StartedEventId = di.ScheduleID + 1
 	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
@@ -225,8 +226,8 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
 	s.Nil(err)
 	s.NotNil(response)
+	s.True(response.StartedTime.After(*expectedResponse.ScheduledTime))
 	expectedResponse.StartedTime = response.StartedTime
-	expectedResponse.ScheduledTime = &time.Time{}
 	expectedResponse.Queries = make(map[string]*querypb.WorkflowQuery)
 	s.Equal(&expectedResponse, response)
 }

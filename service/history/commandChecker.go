@@ -524,22 +524,22 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	// Reduce runTimeout if it is going to exceed WorkflowExpirationTime
 	// Note that this calculation can produce negative result
 	// handleCommandContinueAsNewWorkflow must handle negative runTimeout value
-	timeoutTime := executionInfo.WorkflowExpirationTime
+	timeoutTime := timestamp.TimeValue(executionInfo.WorkflowExpirationTime)
 	if !timeoutTime.IsZero() {
 		runTimeout := timestamp.RoundUp(timeoutTime.Sub(time.Now().UTC()))
 		if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) > 0 {
 			runTimeout = timestamp.MinDuration(runTimeout, timestamp.DurationValue(attributes.GetWorkflowRunTimeout()))
 		} else {
-			runTimeout = timestamp.MinDuration(runTimeout, time.Duration(executionInfo.WorkflowRunTimeout)*time.Second)
+			runTimeout = timestamp.MinDuration(runTimeout, timestamp.DurationValue(executionInfo.WorkflowRunTimeout))
 		}
 		attributes.WorkflowRunTimeout = &runTimeout
 	} else if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) == 0 {
-		attributes.WorkflowRunTimeout = timestamp.DurationPtr(time.Duration(executionInfo.WorkflowRunTimeout) * time.Second)
+		attributes.WorkflowRunTimeout = executionInfo.WorkflowRunTimeout
 	}
 
 	// Inherit workflow task timeout from previous execution if not provided on command
 	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) <= 0 {
-		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(time.Duration(executionInfo.DefaultWorkflowTaskTimeout) * time.Second)
+		attributes.WorkflowTaskTimeout = executionInfo.DefaultWorkflowTaskTimeout
 	}
 
 	// Check next run workflow task delay
@@ -616,7 +616,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 
 	// Inherit workflow task timeout from parent workflow execution if not provided on command
 	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) <= 0 {
-		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(time.Duration(parentInfo.DefaultWorkflowTaskTimeout) * time.Second)
+		attributes.WorkflowTaskTimeout = parentInfo.DefaultWorkflowTaskTimeout
 	}
 
 	return nil

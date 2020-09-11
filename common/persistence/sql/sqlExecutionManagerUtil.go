@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -1085,14 +1084,14 @@ func updateCurrentExecution(
 }
 
 func buildExecutionRow(
-	executionInfo *p.InternalWorkflowExecutionInfo,
+	executionInfo *p.WorkflowExecutionInfo,
 	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
 	shardID int,
 ) (row *sqlplugin.ExecutionsRow, err error) {
 
-	info, state, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, versionHistories)
+	info, state, err := p.WorkflowExecutionToProto(executionInfo, startVersion, versionHistories)
 	if err != nil {
 		return nil, err
 	}
@@ -1133,7 +1132,7 @@ func buildExecutionRow(
 
 func (m *sqlExecutionManager) createExecution(
 	tx sqlplugin.Tx,
-	executionInfo *p.InternalWorkflowExecutionInfo,
+	executionInfo *p.WorkflowExecutionInfo,
 	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -1148,8 +1147,8 @@ func (m *sqlExecutionManager) createExecution(
 	}
 
 	// TODO we should set the start time and last update time on business logic layer
-	executionInfo.StartTimestamp = time.Now().UTC()
-	executionInfo.LastUpdateTimestamp = executionInfo.StartTimestamp
+	executionInfo.StartTimestamp = timestamp.TimeNowPtrUtc()
+	executionInfo.LastUpdatedTimestamp = executionInfo.StartTimestamp
 
 	row, err := buildExecutionRow(
 		executionInfo,
@@ -1188,7 +1187,7 @@ func (m *sqlExecutionManager) createExecution(
 
 func updateExecution(
 	tx sqlplugin.Tx,
-	executionInfo *p.InternalWorkflowExecutionInfo,
+	executionInfo *p.WorkflowExecutionInfo,
 	versionHistories *history.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -1203,7 +1202,7 @@ func updateExecution(
 	}
 
 	// TODO we should set the last update time on business logic layer
-	executionInfo.LastUpdateTimestamp = time.Now().UTC()
+	executionInfo.LastUpdatedTimestamp = timestamp.TimeNowPtrUtc()
 
 	row, err := buildExecutionRow(
 		executionInfo,

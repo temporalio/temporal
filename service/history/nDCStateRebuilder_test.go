@@ -240,7 +240,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	lastEventID := int64(2)
 	branchToken := []byte("other random branch token")
 	targetBranchToken := []byte("some other random branch token")
-	now := time.Now().UTC()
+	now := timestamp.TimeNowPtrUtc()
 
 	targetNamespaceID := uuid.New()
 	targetNamespace := "other random namespace name"
@@ -318,7 +318,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		1234,
 		s.mockClusterMetadata,
 	), nil).AnyTimes()
-	s.mockTaskRefresher.EXPECT().refreshTasks(now, gomock.Any()).Return(nil).Times(1)
+	s.mockTaskRefresher.EXPECT().refreshTasks(*now, gomock.Any()).Return(nil).Times(1)
 
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(
 		context.Background(),

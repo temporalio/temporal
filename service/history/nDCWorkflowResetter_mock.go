@@ -60,7 +60,7 @@ func (m *MocknDCWorkflowResetter) EXPECT() *MocknDCWorkflowResetterMockRecorder 
 }
 
 // resetWorkflow mocks base method.
-func (m *MocknDCWorkflowResetter) resetWorkflow(ctx context.Context, now time.Time, baseLastEventID, baseLastEventVersion, incomingFirstEventID, incomingFirstEventVersion int64) (mutableState, error) {
+func (m *MocknDCWorkflowResetter) resetWorkflow(ctx context.Context, now *time.Time, baseLastEventID, baseLastEventVersion, incomingFirstEventID, incomingFirstEventVersion int64) (mutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "resetWorkflow", ctx, now, baseLastEventID, baseLastEventVersion, incomingFirstEventID, incomingFirstEventVersion)
 	ret0, _ := ret[0].(mutableState)

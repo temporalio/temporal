@@ -1148,7 +1148,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedConflictOnUpdate() {
 
 	di, ok := executionBuilder.GetWorkflowTaskInfo(15)
 	s.True(ok)
-	s.Equal(int64(100), di.WorkflowTaskTimeout)
+	s.EqualValues(int64(100), di.WorkflowTaskTimeout.Seconds())
 }
 
 func (s *engineSuite) TestValidateSignalRequest() {
@@ -1749,7 +1749,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTime
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = time.Now().UTC().Add(-time.Hour).UnixNano()
+	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = timestamp.TimeNowPtrUtcAddDuration(-time.Hour)
 
 	commands := []*commandpb.Command{}
 
@@ -1793,7 +1793,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = time.Now().UTC().Add(-time.Minute).UnixNano()
+	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = timestamp.TimeNowPtrUtcAddDuration(-time.Minute)
 
 	commands := []*commandpb.Command{}
 
@@ -1837,7 +1837,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = 0
+	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = nil
 
 	commands := []*commandpb.Command{}
 
@@ -2624,7 +2624,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(10))
 	s.True(ok)
-	s.Equal(int64(100), di.WorkflowTaskTimeout)
+	s.EqualValues(int64(100), di.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(10), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -2731,7 +2731,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(8))
 	s.True(ok)
-	s.Equal(int64(100), di.WorkflowTaskTimeout)
+	s.EqualValues(int64(100), di.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(8), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -2792,7 +2792,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(8))
 	s.True(ok)
-	s.Equal(int64(100), di.WorkflowTaskTimeout)
+	s.EqualValues(int64(100), di.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(8), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -3167,7 +3167,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(10))
 	s.True(ok)
-	s.Equal(int64(25), di.WorkflowTaskTimeout)
+	s.EqualValues(int64(25), di.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(10), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -3272,7 +3272,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(8))
 	s.True(ok)
-	s.Equal(int64(100), di.WorkflowTaskTimeout)
+	s.EqualValues(int64(100), di.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(8), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -3333,7 +3333,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(8))
 	s.True(ok)
-	s.Equal(int64(100), di.WorkflowTaskTimeout)
+	s.EqualValues(int64(100), di.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(8), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -3584,7 +3584,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(9))
 	s.True(ok)
-	s.Equal(int64(100), di.WorkflowTaskTimeout)
+	s.EqualValues(int64(100), di.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(9), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -3645,7 +3645,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(9))
 	s.True(ok)
-	s.Equal(int64(100), di.WorkflowTaskTimeout)
+	s.EqualValues(int64(100), di.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(9), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -5313,6 +5313,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		WorkflowTaskAttempt:                    sourceInfo.WorkflowTaskAttempt,
 		WorkflowTaskStartedTimestamp:           sourceInfo.WorkflowTaskStartedTimestamp,
 		WorkflowTaskOriginalScheduledTimestamp: sourceInfo.WorkflowTaskOriginalScheduledTimestamp,
+		WorkflowTaskScheduledTimestamp:         sourceInfo.WorkflowTaskScheduledTimestamp,
 		CancelRequested:                        sourceInfo.CancelRequested,
 		CancelRequestID:                        sourceInfo.CancelRequestID,
 		CronSchedule:                           sourceInfo.CronSchedule,

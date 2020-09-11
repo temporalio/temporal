@@ -30,16 +30,11 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/workflow/v1"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -206,71 +201,9 @@ type (
 		NewWorkflowSnapshot InternalWorkflowSnapshot
 	}
 
-	// InternalWorkflowExecutionInfo describes a workflow execution for Persistence Interface
-	InternalWorkflowExecutionInfo struct {
-		NamespaceID                            string
-		WorkflowID                             string
-		RunID                                  string
-		FirstExecutionRunID                    string
-		ParentNamespaceID                      string
-		ParentWorkflowID                       string
-		ParentRunID                            string
-		InitiatedID                            int64
-		CompletionEventBatchID                 int64
-		CompletionEvent                        *historypb.HistoryEvent
-		TaskQueue                              string
-		WorkflowTypeName                       string
-		WorkflowRunTimeout                     int64
-		WorkflowExecutionTimeout               int64
-		DefaultWorkflowTaskTimeout             int64
-		State                                  enumsspb.WorkflowExecutionState
-		Status                                 enumspb.WorkflowExecutionStatus
-		LastFirstEventID                       int64
-		LastEventTaskID                        int64
-		NextEventID                            int64
-		LastProcessedEvent                     int64
-		StartTimestamp                         time.Time
-		LastUpdateTimestamp                    time.Time
-		CreateRequestID                        string
-		SignalCount                            int64
-		WorkflowTaskVersion                    int64
-		WorkflowTaskScheduleID                 int64
-		WorkflowTaskStartedID                  int64
-		WorkflowTaskRequestID                  string
-		WorkflowTaskTimeout                    int64
-		WorkflowTaskAttempt                    int32
-		WorkflowTaskStartedTimestamp           int64
-		WorkflowTaskScheduledTimestamp         int64
-		WorkflowTaskOriginalScheduledTimestamp int64
-		CancelRequested                        bool
-		CancelRequestID                        string
-		StickyTaskQueue                        string
-		StickyScheduleToStartTimeout           int64
-		ClientLibraryVersion                   string
-		ClientFeatureVersion                   string
-		ClientImpl                             string
-		AutoResetPoints                        *workflow.ResetPoints
-		// for retry
-		Attempt                int32
-		HasRetryPolicy         bool
-		InitialInterval        int64
-		BackoffCoefficient     float64
-		MaximumInterval        int64
-		ExpirationTime         time.Time
-		MaximumAttempts        int32
-		NonRetryableErrorTypes []string
-		BranchToken            []byte
-		CronSchedule           string
-		Memo                   map[string]*commonpb.Payload
-		SearchAttributes       map[string]*commonpb.Payload
-
-		// attributes which are not related to mutable state at all
-		HistorySize int64
-	}
-
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
 	InternalWorkflowMutableState struct {
-		ExecutionInfo    *InternalWorkflowExecutionInfo
+		ExecutionInfo    *WorkflowExecutionInfo
 		VersionHistories *history.VersionHistories
 		ActivityInfos    map[int64]*persistenceblobs.ActivityInfo
 
@@ -336,7 +269,7 @@ type (
 
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
 	InternalWorkflowMutation struct {
-		ExecutionInfo    *InternalWorkflowExecutionInfo
+		ExecutionInfo    *WorkflowExecutionInfo
 		VersionHistories *history.VersionHistories
 		StartVersion     int64
 		LastWriteVersion int64
@@ -367,7 +300,7 @@ type (
 
 	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
 	InternalWorkflowSnapshot struct {
-		ExecutionInfo    *InternalWorkflowExecutionInfo
+		ExecutionInfo    *WorkflowExecutionInfo
 		VersionHistories *history.VersionHistories
 		StartVersion     int64
 		LastWriteVersion int64
@@ -425,7 +358,7 @@ type (
 
 	// InternalListConcreteExecutionsResponse is the response to ListConcreteExecutions for Persistence Interface
 	InternalListConcreteExecutionsResponse struct {
-		ExecutionInfos []*InternalWorkflowExecutionInfo
+		ExecutionInfos []*WorkflowExecutionInfo
 		NextPageToken  []byte
 	}
 
@@ -665,159 +598,4 @@ func NewDataBlobFromProto(blob *commonpb.DataBlob) *serialization.DataBlob {
 		Encoding: blob.GetEncodingType(),
 		Data:     blob.Data,
 	}
-}
-
-func truncateDurationToSecondsInt64(d *time.Duration) int64 {
-	return int64(d.Truncate(time.Second).Seconds())
-}
-
-func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecutionInfo, startVersion int64, versionHistories *history.VersionHistories) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
-	state := &persistenceblobs.WorkflowExecutionState{
-		CreateRequestId: executionInfo.CreateRequestID,
-		State:           executionInfo.State,
-		Status:          executionInfo.Status,
-		RunId:           executionInfo.RunID,
-	}
-
-	info := &persistenceblobs.WorkflowExecutionInfo{
-		NamespaceId:                       executionInfo.NamespaceID,
-		WorkflowId:                        executionInfo.WorkflowID,
-		FirstExecutionRunId:               executionInfo.FirstExecutionRunID,
-		TaskQueue:                         executionInfo.TaskQueue,
-		WorkflowTypeName:                  executionInfo.WorkflowTypeName,
-		WorkflowRunTimeout:                timestamp.DurationFromSeconds(executionInfo.WorkflowRunTimeout),
-		WorkflowExecutionTimeout:          timestamp.DurationFromSeconds(executionInfo.WorkflowExecutionTimeout),
-		DefaultWorkflowTaskTimeout:        timestamp.DurationFromSeconds(executionInfo.DefaultWorkflowTaskTimeout),
-		LastFirstEventId:                  executionInfo.LastFirstEventID,
-		LastEventTaskId:                   executionInfo.LastEventTaskID,
-		LastProcessedEvent:                executionInfo.LastProcessedEvent,
-		StartTime:                         &executionInfo.StartTimestamp,
-		LastUpdateTime:                    &executionInfo.LastUpdateTimestamp,
-		WorkflowTaskVersion:               executionInfo.WorkflowTaskVersion,
-		WorkflowTaskScheduleId:            executionInfo.WorkflowTaskScheduleID,
-		WorkflowTaskStartedId:             executionInfo.WorkflowTaskStartedID,
-		WorkflowTaskRequestId:             executionInfo.WorkflowTaskRequestID,
-		WorkflowTaskTimeout:               timestamp.DurationFromSeconds(executionInfo.WorkflowTaskTimeout),
-		WorkflowTaskAttempt:               executionInfo.WorkflowTaskAttempt,
-		WorkflowTaskStartedTime:           timestamp.TimestampFromTime(time.Unix(0, executionInfo.WorkflowTaskStartedTimestamp).UTC()).ToTime(),
-		WorkflowTaskScheduledTime:         timestamp.TimestampFromTime(time.Unix(0, executionInfo.WorkflowTaskScheduledTimestamp).UTC()).ToTime(),
-		WorkflowTaskOriginalScheduledTime: timestamp.TimestampFromTime(time.Unix(0, executionInfo.WorkflowTaskOriginalScheduledTimestamp).UTC()).ToTime(),
-		StickyTaskQueue:                   executionInfo.StickyTaskQueue,
-		StickyScheduleToStartTimeout:      timestamp.DurationFromSeconds(executionInfo.StickyScheduleToStartTimeout),
-		ClientLibraryVersion:              executionInfo.ClientLibraryVersion,
-		ClientFeatureVersion:              executionInfo.ClientFeatureVersion,
-		ClientImpl:                        executionInfo.ClientImpl,
-		SignalCount:                       executionInfo.SignalCount,
-		HistorySize:                       executionInfo.HistorySize,
-		CronSchedule:                      executionInfo.CronSchedule,
-		CompletionEventBatchId:            executionInfo.CompletionEventBatchID,
-		HasRetryPolicy:                    executionInfo.HasRetryPolicy,
-		RetryAttempt:                      executionInfo.Attempt,
-		RetryInitialInterval:              timestamp.DurationFromSeconds(executionInfo.InitialInterval),
-		RetryBackoffCoefficient:           executionInfo.BackoffCoefficient,
-		RetryMaximumInterval:              timestamp.DurationFromSeconds(executionInfo.MaximumInterval),
-		RetryMaximumAttempts:              executionInfo.MaximumAttempts,
-		RetryNonRetryableErrorTypes:       executionInfo.NonRetryableErrorTypes,
-		EventStoreVersion:                 EventStoreVersion,
-		EventBranchToken:                  executionInfo.BranchToken,
-		AutoResetPoints:                   executionInfo.AutoResetPoints,
-		SearchAttributes:                  executionInfo.SearchAttributes,
-		Memo:                              executionInfo.Memo,
-		CompletionEvent:                   executionInfo.CompletionEvent,
-	}
-
-	if !executionInfo.ExpirationTime.IsZero() {
-		info.RetryExpirationTime = timestamp.TimestampFromTimePtr(&executionInfo.ExpirationTime).ToTime()
-	}
-
-	info.StartVersion = startVersion
-	info.VersionHistories = versionHistories
-
-	if executionInfo.ParentNamespaceID != "" {
-		info.ParentNamespaceId = executionInfo.ParentNamespaceID
-		info.ParentWorkflowId = executionInfo.ParentWorkflowID
-		info.ParentRunId = executionInfo.ParentRunID
-		info.InitiatedId = executionInfo.InitiatedID
-		info.CompletionEvent = nil
-	}
-
-	if executionInfo.CancelRequested {
-		info.CancelRequested = true
-		info.CancelRequestId = executionInfo.CancelRequestID
-	}
-	return info, state, nil
-}
-
-func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.WorkflowExecutionInfo, state *persistenceblobs.WorkflowExecutionState, nextEventID int64) *InternalWorkflowExecutionInfo {
-	executionInfo := &InternalWorkflowExecutionInfo{
-		NamespaceID:                            info.NamespaceId,
-		WorkflowID:                             info.WorkflowId,
-		RunID:                                  state.RunId,
-		FirstExecutionRunID:                    info.FirstExecutionRunId,
-		NextEventID:                            nextEventID,
-		TaskQueue:                              info.GetTaskQueue(),
-		WorkflowTypeName:                       info.GetWorkflowTypeName(),
-		WorkflowExecutionTimeout:               truncateDurationToSecondsInt64(info.GetWorkflowExecutionTimeout()),
-		WorkflowRunTimeout:                     truncateDurationToSecondsInt64(info.GetWorkflowRunTimeout()),
-		DefaultWorkflowTaskTimeout:             truncateDurationToSecondsInt64(info.GetDefaultWorkflowTaskTimeout()),
-		State:                                  state.GetState(),
-		Status:                                 state.GetStatus(),
-		LastFirstEventID:                       info.GetLastFirstEventId(),
-		LastProcessedEvent:                     info.GetLastProcessedEvent(),
-		StartTimestamp:                         *timestamp.TimestampFromTime(*info.GetStartTime()).ToTime(),
-		LastUpdateTimestamp:                    *timestamp.TimestampFromTime(*info.GetLastUpdateTime()).ToTime(),
-		CreateRequestID:                        state.GetCreateRequestId(),
-		WorkflowTaskVersion:                    info.GetWorkflowTaskVersion(),
-		WorkflowTaskScheduleID:                 info.GetWorkflowTaskScheduleId(),
-		WorkflowTaskStartedID:                  info.GetWorkflowTaskStartedId(),
-		WorkflowTaskRequestID:                  info.GetWorkflowTaskRequestId(),
-		WorkflowTaskTimeout:                    truncateDurationToSecondsInt64(info.GetWorkflowTaskTimeout()),
-		WorkflowTaskAttempt:                    info.GetWorkflowTaskAttempt(),
-		WorkflowTaskStartedTimestamp:           timestamp.TimestampFromTime(*info.GetWorkflowTaskStartedTime()).UnixNano(),
-		WorkflowTaskScheduledTimestamp:         timestamp.TimestampFromTime(*info.GetWorkflowTaskScheduledTime()).UnixNano(),
-		WorkflowTaskOriginalScheduledTimestamp: timestamp.TimestampFromTime(*info.GetWorkflowTaskOriginalScheduledTime()).UnixNano(),
-		StickyTaskQueue:                        info.GetStickyTaskQueue(),
-		StickyScheduleToStartTimeout:           truncateDurationToSecondsInt64(info.GetStickyScheduleToStartTimeout()),
-		ClientLibraryVersion:                   info.GetClientLibraryVersion(),
-		ClientFeatureVersion:                   info.GetClientFeatureVersion(),
-		ClientImpl:                             info.GetClientImpl(),
-		SignalCount:                            info.GetSignalCount(),
-		HistorySize:                            info.GetHistorySize(),
-		CronSchedule:                           info.GetCronSchedule(),
-		CompletionEventBatchID:                 common.EmptyEventID,
-		HasRetryPolicy:                         info.GetHasRetryPolicy(),
-		Attempt:                                info.GetRetryAttempt(),
-		InitialInterval:                        truncateDurationToSecondsInt64(info.GetRetryInitialInterval()),
-		BackoffCoefficient:                     info.GetRetryBackoffCoefficient(),
-		MaximumInterval:                        truncateDurationToSecondsInt64(info.GetRetryMaximumInterval()),
-		MaximumAttempts:                        info.GetRetryMaximumAttempts(),
-		BranchToken:                            info.GetEventBranchToken(),
-		NonRetryableErrorTypes:                 info.GetRetryNonRetryableErrorTypes(),
-		SearchAttributes:                       info.GetSearchAttributes(),
-		Memo:                                   info.GetMemo(),
-		CompletionEvent:                        info.GetCompletionEvent(),
-		AutoResetPoints:                        info.GetAutoResetPoints(),
-	}
-
-	if info.GetRetryExpirationTime() != nil {
-		executionInfo.ExpirationTime = *info.GetRetryExpirationTime()
-	}
-
-	if info.ParentNamespaceId != "" {
-		executionInfo.ParentNamespaceID = info.ParentNamespaceId
-		executionInfo.ParentWorkflowID = info.GetParentWorkflowId()
-		executionInfo.ParentRunID = info.ParentRunId
-		executionInfo.InitiatedID = info.GetInitiatedId()
-		if executionInfo.CompletionEvent != nil {
-			executionInfo.CompletionEvent = nil
-		}
-	}
-
-	if info.GetCancelRequested() {
-		executionInfo.CancelRequested = true
-		executionInfo.CancelRequestID = info.GetCancelRequestId()
-	}
-
-	executionInfo.CompletionEventBatchID = info.CompletionEventBatchId
-	return executionInfo
 }

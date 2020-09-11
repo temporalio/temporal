@@ -1008,23 +1008,23 @@ func (b *historyBuilder) newChildWorkflowExecutionTimedOutEvent(namespace string
 	return historyEvent
 }
 
-func newWorkflowTaskScheduledEventWithInfo(eventID, timestamp int64, taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds, attempt int32) *historypb.HistoryEvent {
+func newWorkflowTaskScheduledEventWithInfo(eventID int64, timestamp *time.Time, taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds, attempt int32) *historypb.HistoryEvent {
 	historyEvent := createNewHistoryEvent(eventID, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, timestamp)
 
 	return setWorkflowTaskScheduledEventInfo(historyEvent, taskQueue, startToCloseTimeoutSeconds, attempt)
 }
 
-func newWorkflowTaskStartedEventWithInfo(eventID, timestamp int64, scheduledEventID int64, requestID string,
+func newWorkflowTaskStartedEventWithInfo(eventID int64, timestamp *time.Time, scheduledEventID int64, requestID string,
 	identity string) *historypb.HistoryEvent {
 	historyEvent := createNewHistoryEvent(eventID, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, timestamp)
 
 	return setWorkflowTaskStartedEventInfo(historyEvent, scheduledEventID, requestID, identity)
 }
 
-func createNewHistoryEvent(eventID int64, eventType enumspb.EventType, eventTime int64) *historypb.HistoryEvent {
+func createNewHistoryEvent(eventID int64, eventType enumspb.EventType, eventTime *time.Time) *historypb.HistoryEvent {
 	historyEvent := &historypb.HistoryEvent{}
 	historyEvent.EventId = eventID
-	historyEvent.EventTime = timestamp.TimePtr(timestamp.UnixOrZeroTime(eventTime))
+	historyEvent.EventTime = eventTime
 	historyEvent.EventType = eventType
 
 	return historyEvent

@@ -354,17 +354,3 @@ func (mr *MockworkflowExecutionContextMockRecorder) updateWorkflowExecutionWithN
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "updateWorkflowExecutionWithNew", reflect.TypeOf((*MockworkflowExecutionContext)(nil).updateWorkflowExecutionWithNew), now, updateMode, newContext, newMutableState, currentWorkflowTransactionPolicy, newWorkflowTransactionPolicy)
 }
-
-// resetWorkflowExecution mocks base method.
-func (m *MockworkflowExecutionContext) resetWorkflowExecution(currMutableState mutableState, updateCurr bool, closeTask, cleanupTask persistence.Task, newMutableState mutableState, newHistorySize int64, newTransferTasks, newTimerTasks, currentReplicationTasks, newReplicationTasks []persistence.Task, baseRunID string, baseRunNextEventID int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "resetWorkflowExecution", currMutableState, updateCurr, closeTask, cleanupTask, newMutableState, newHistorySize, newTransferTasks, newTimerTasks, currentReplicationTasks, newReplicationTasks, baseRunID, baseRunNextEventID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// resetWorkflowExecution indicates an expected call of resetWorkflowExecution.
-func (mr *MockworkflowExecutionContextMockRecorder) resetWorkflowExecution(currMutableState, updateCurr, closeTask, cleanupTask, newMutableState, newHistorySize, newTransferTasks, newTimerTasks, currentReplicationTasks, newReplicationTasks, baseRunID, baseRunNextEventID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "resetWorkflowExecution", reflect.TypeOf((*MockworkflowExecutionContext)(nil).resetWorkflowExecution), currMutableState, updateCurr, closeTask, cleanupTask, newMutableState, newHistorySize, newTransferTasks, newTimerTasks, currentReplicationTasks, newReplicationTasks, baseRunID, baseRunNextEventID)
-}
