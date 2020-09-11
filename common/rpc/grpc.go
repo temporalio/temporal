@@ -64,7 +64,6 @@ func Dial(hostName string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
 	// If connection goes down, gRPC will try to reconnect using exponential backoff strategy:
 	// https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md.
 	// Default MaxDelay is 120 seconds which is too high.
-	// Setting it to retryPollOperationMaxInterval here will correlate with poll reconnect interval.
 	var cp = grpc.ConnectParams{
 		Backoff: backoff.DefaultConfig,
 	}
