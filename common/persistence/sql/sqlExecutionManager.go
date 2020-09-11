@@ -121,14 +121,6 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 		return nil, err
 	}
 
-	switch request.Mode {
-	case p.CreateWorkflowModeContinueAsNew:
-		// cannot create workflow with continue as new mode
-		return nil, &workflow.InternalServiceError{
-			Message: "CreateWorkflowExecution: operation failed, encounter invalid CreateWorkflowModeContinueAsNew",
-		}
-	}
-
 	var err error
 	var row *sqlplugin.CurrentExecutionsRow
 	if row, err = lockCurrentExecutionIfExists(tx, m.shardID, domainID, workflowID); err != nil {
@@ -175,6 +167,12 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 
 		case p.CreateWorkflowModeZombie:
 			// zombie workflow creation with existence of current record, this is a noop
+			if err := assertRunIDMismatch(sqlplugin.MustParseUUID(executionInfo.RunID), row.RunID); err != nil {
+				return nil, err
+			}
+
+		case p.CreateWorkflowModeContinueAsNew:
+			// continueAsNew mode expects a current run exists
 			if err := assertRunIDMismatch(sqlplugin.MustParseUUID(executionInfo.RunID), row.RunID); err != nil {
 				return nil, err
 			}
