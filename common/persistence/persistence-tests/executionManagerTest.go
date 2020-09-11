@@ -1046,6 +1046,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.NonRetryableErrorTypes, info.NonRetryableErrorTypes)
 	s.Equal(testResetPoints.String(), info.AutoResetPoints.String())
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionStats.HistorySize, state.ExecutionStats.HistorySize)
+	s.Equal(createReq.NewWorkflowSnapshot.ExecutionStats.HistorySize, state.ExecutionInfo.ExecutionStats.HistorySize)
 	saVal, ok := info.SearchAttributes[testSearchAttrKey]
 	s.True(ok)
 	s.True(proto.Equal(testSearchAttrVal, saVal))

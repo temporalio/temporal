@@ -164,6 +164,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		AutoResetPoints:                        info.AutoResetPoints,
 		SearchAttributes:                       info.SearchAttributes,
 		Memo:                                   info.Memo,
+		ExecutionStats:                         info.ExecutionStats,
 	}
 
 	if newInfo.AutoResetPoints == nil {

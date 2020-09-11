@@ -736,8 +736,8 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 	}
 
 	// Back compat for GetHistorySize
-	if info.GetHistorySize() >= 0 && info.GetExecutionStats() == nil {
-		executionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{HistorySize: 0}
+	if info.GetHistorySize() >= 0 {
+		executionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{HistorySize: info.GetHistorySize()}
 	}
 
 	if info.GetExecutionStats() == nil {
