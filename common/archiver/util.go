@@ -42,8 +42,8 @@ var (
 	errEmptyRunID            = errors.New("RunId is empty")
 	errInvalidPageSize       = errors.New("PageSize should be greater than 0")
 	errEmptyWorkflowTypeName = errors.New("WorkflowTypeName is empty")
-	errEmptyStartTime        = errors.New("StartTimestamp is empty")
-	errEmptyCloseTime        = errors.New("CloseTimestamp is empty")
+	errEmptyStartTime        = errors.New("StartTime is empty")
+	errEmptyCloseTime        = errors.New("CloseTime is empty")
 	errEmptyQuery            = errors.New("Query string is empty")
 )
 

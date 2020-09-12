@@ -443,10 +443,10 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 	if newMutableState != nil {
 		newExecutionInfo := newMutableState.GetExecutionInfo()
 		newContext := newWorkflowExecutionContext(
-			newExecutionInfo.NamespaceID,
+			newExecutionInfo.NamespaceId,
 			commonpb.WorkflowExecution{
-				WorkflowId: newExecutionInfo.WorkflowID,
-				RunId:      newExecutionInfo.RunID,
+				WorkflowId: newExecutionInfo.WorkflowId,
+				RunId:      newExecutionInfo.RunId,
 			},
 			r.shard,
 			r.shard.GetExecutionManager(),

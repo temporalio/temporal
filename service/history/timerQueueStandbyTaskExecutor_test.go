@@ -701,10 +701,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.MatchedBy(func(input *persistence.UpdateWorkflowExecutionRequest) bool {
 		s.Equal(1, len(input.UpdateWorkflowMutation.TimerTasks))
 		s.Equal(1, len(input.UpdateWorkflowMutation.UpsertActivityInfos))
-		mutableState.executionInfo.LastUpdatedTimestamp = input.UpdateWorkflowMutation.ExecutionInfo.LastUpdatedTimestamp
+		mutableState.executionInfo.LastUpdatedTime = input.UpdateWorkflowMutation.ExecutionInfo.LastUpdatedTime
 		input.RangeID = 0
-		input.UpdateWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
-		mutableState.executionInfo.LastEventTaskID = 0
+		input.UpdateWorkflowMutation.ExecutionInfo.LastEventTaskId = 0
+		mutableState.executionInfo.LastEventTaskId = 0
 		mutableState.executionInfo.WorkflowTaskOriginalScheduledTimestamp = input.UpdateWorkflowMutation.ExecutionInfo.WorkflowTaskOriginalScheduledTimestamp
 		s.Equal(&persistence.UpdateWorkflowExecutionRequest{
 			UpdateWorkflowMutation: persistence.WorkflowMutation{

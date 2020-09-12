@@ -191,10 +191,10 @@ func computeExecutionInfoSize(executionInfo *WorkflowExecutionInfo) int {
 		return 0
 	}
 
-	size := len(executionInfo.WorkflowID)
+	size := len(executionInfo.WorkflowId)
 	size += len(executionInfo.TaskQueue)
 	size += len(executionInfo.WorkflowTypeName)
-	size += len(executionInfo.ParentWorkflowID)
+	size += len(executionInfo.ParentWorkflowId)
 
 	return size
 }

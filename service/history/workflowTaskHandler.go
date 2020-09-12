@@ -197,7 +197,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := executionInfo.NamespaceID
+	namespaceID := executionInfo.NamespaceId
 	targetNamespaceID := namespaceID
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
@@ -565,7 +565,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := executionInfo.NamespaceID
+	namespaceID := executionInfo.NamespaceId
 	targetNamespaceID := namespaceID
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
@@ -674,7 +674,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 	handler.logger.Debug("!!!! Continued as new without timeout",
-		tag.WorkflowRunID(executionInfo.RunID))
+		tag.WorkflowRunID(executionInfo.RunId))
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
@@ -693,7 +693,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	// Extract parentNamespace so it can be passed down to next run of workflow execution
 	var parentNamespace string
 	if handler.mutableState.HasParentExecution() {
-		parentNamespaceID := executionInfo.ParentNamespaceID
+		parentNamespaceID := executionInfo.ParentNamespaceId
 		parentNamespaceEntry, err := handler.namespaceCache.GetNamespaceByID(parentNamespaceID)
 		if err != nil {
 			return err
@@ -725,7 +725,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := executionInfo.NamespaceID
+	namespaceID := executionInfo.NamespaceId
 	parentNamespace := handler.namespaceEntry.GetInfo().GetName()
 	targetNamespaceID := namespaceID
 	targetNamespace := parentNamespace
@@ -793,7 +793,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := executionInfo.NamespaceID
+	namespaceID := executionInfo.NamespaceId
 	targetNamespaceID := namespaceID
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
@@ -844,7 +844,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := executionInfo.NamespaceID
+	namespaceID := executionInfo.NamespaceId
 	namespaceEntry, err := handler.namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))

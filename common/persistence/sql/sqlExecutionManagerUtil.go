@@ -52,9 +52,9 @@ func applyWorkflowMutationTx(
 	versionHistories := workflowMutation.VersionHistories
 	startVersion := workflowMutation.StartVersion
 	lastWriteVersion := workflowMutation.LastWriteVersion
-	namespaceID := executionInfo.NamespaceID
-	workflowID := executionInfo.WorkflowID
-	runID := executionInfo.RunID
+	namespaceID := executionInfo.NamespaceId
+	workflowID := executionInfo.WorkflowId
+	runID := executionInfo.RunId
 
 	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
 	if err != nil {
@@ -192,9 +192,9 @@ func applyWorkflowSnapshotTxAsReset(
 	versionHistories := workflowSnapshot.VersionHistories
 	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	workflowID := executionInfo.WorkflowID
-	namespaceID := executionInfo.NamespaceID
-	runID := executionInfo.RunID
+	workflowID := executionInfo.WorkflowId
+	namespaceID := executionInfo.NamespaceId
+	runID := executionInfo.RunId
 	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
 	if err != nil {
 		return err
@@ -367,9 +367,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 	versionHistories := workflowSnapshot.VersionHistories
 	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	workflowID := executionInfo.WorkflowID
-	namespaceID := executionInfo.NamespaceID
-	runID := executionInfo.RunID
+	workflowID := executionInfo.WorkflowId
+	namespaceID := executionInfo.NamespaceId
+	runID := executionInfo.RunId
 	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
 	if err != nil {
 		return err
@@ -1106,12 +1106,12 @@ func buildExecutionRow(
 		return nil, err
 	}
 
-	nsBytes, err := primitives.ParseUUID(executionInfo.NamespaceID)
+	nsBytes, err := primitives.ParseUUID(executionInfo.NamespaceId)
 	if err != nil {
 		return nil, err
 	}
 
-	ridBytes, err := primitives.ParseUUID(executionInfo.RunID)
+	ridBytes, err := primitives.ParseUUID(executionInfo.RunId)
 	if err != nil {
 		return nil, err
 	}
@@ -1119,9 +1119,9 @@ func buildExecutionRow(
 	return &sqlplugin.ExecutionsRow{
 		ShardID:          shardID,
 		NamespaceID:      nsBytes,
-		WorkflowID:       executionInfo.WorkflowID,
+		WorkflowID:       executionInfo.WorkflowId,
 		RunID:            ridBytes,
-		NextEventID:      executionInfo.NextEventID,
+		NextEventID:      executionInfo.NextEventId,
 		LastWriteVersion: lastWriteVersion,
 		Data:             infoBlob.Data,
 		DataEncoding:     infoBlob.Encoding.String(),
@@ -1147,8 +1147,8 @@ func (m *sqlExecutionManager) createExecution(
 	}
 
 	// TODO we should set the start time and last update time on business logic layer
-	executionInfo.StartTimestamp = timestamp.TimeNowPtrUtc()
-	executionInfo.LastUpdatedTimestamp = executionInfo.StartTimestamp
+	executionInfo.StartTime = timestamp.TimeNowPtrUtc()
+	executionInfo.LastUpdatedTime = executionInfo.StartTime
 
 	row, err := buildExecutionRow(
 		executionInfo,
@@ -1164,9 +1164,9 @@ func (m *sqlExecutionManager) createExecution(
 	if err != nil {
 		if m.db.IsDupEntryError(err) {
 			return &p.WorkflowExecutionAlreadyStartedError{
-				Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", executionInfo.WorkflowID),
-				StartRequestID:   executionInfo.CreateRequestID,
-				RunID:            executionInfo.RunID,
+				Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", executionInfo.WorkflowId),
+				StartRequestID:   executionInfo.CreateRequestId,
+				RunID:            executionInfo.RunId,
 				State:            executionInfo.State,
 				Status:           executionInfo.Status,
 				LastWriteVersion: row.LastWriteVersion,
@@ -1202,7 +1202,7 @@ func updateExecution(
 	}
 
 	// TODO we should set the last update time on business logic layer
-	executionInfo.LastUpdatedTimestamp = timestamp.TimeNowPtrUtc()
+	executionInfo.LastUpdatedTime = timestamp.TimeNowPtrUtc()
 
 	row, err := buildExecutionRow(
 		executionInfo,

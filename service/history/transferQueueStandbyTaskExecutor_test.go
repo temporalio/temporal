@@ -1110,8 +1110,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		Execution: commonpb.WorkflowExecution{
-			WorkflowId: executionInfo.WorkflowID,
-			RunId:      executionInfo.RunID,
+			WorkflowId: executionInfo.WorkflowId,
+			RunId:      executionInfo.RunId,
 		},
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTimestamp:   timestamp.TimeValue(event.GetEventTime()).UnixNano(),
@@ -1174,8 +1174,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		Execution: commonpb.WorkflowExecution{
-			WorkflowId: executionInfo.WorkflowID,
-			RunId:      executionInfo.RunID,
+			WorkflowId: executionInfo.WorkflowId,
+			RunId:      executionInfo.RunId,
 		},
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTimestamp:   timestamp.TimeValue(event.GetEventTime()).UnixNano(),

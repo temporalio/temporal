@@ -251,7 +251,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 		c.mutableState.Load(response.State)
 
 		c.stats = response.State.ExecutionStats
-		c.updateCondition = response.State.ExecutionInfo.NextEventID
+		c.updateCondition = response.State.ExecutionInfo.NextEventId
 
 		// finally emit execution and session stats
 		emitWorkflowExecutionStats(
@@ -324,7 +324,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 		c.mutableState.Load(response.State)
 
 		c.stats = response.State.ExecutionStats
-		c.updateCondition = response.State.ExecutionInfo.NextEventID
+		c.updateCondition = response.State.ExecutionInfo.NextEventId
 
 		// finally emit execution and session stats
 		emitWorkflowExecutionStats(
@@ -722,7 +722,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	}
 
 	// TODO remove updateCondition in favor of condition in mutable state
-	c.updateCondition = currentWorkflow.ExecutionInfo.NextEventID
+	c.updateCondition = currentWorkflow.ExecutionInfo.NextEventId
 
 	// for any change in the workflow, send a event
 	currentBranchToken, err := c.mutableState.GetCurrentBranchToken()

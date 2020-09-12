@@ -877,9 +877,9 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 	executionInfo := newWorkflow.ExecutionInfo
 	startVersion := newWorkflow.StartVersion
 	lastWriteVersion := newWorkflow.LastWriteVersion
-	namespaceID := executionInfo.NamespaceID
-	workflowID := executionInfo.WorkflowID
-	runID := executionInfo.RunID
+	namespaceID := executionInfo.NamespaceId
+	workflowID := executionInfo.WorkflowId
+	runID := executionInfo.RunId
 
 	if err := p.ValidateCreateWorkflowModeState(
 		request.Mode,
@@ -901,7 +901,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 			runID,
 			executionInfo.State,
 			executionInfo.Status,
-			executionInfo.CreateRequestID,
+			executionInfo.CreateRequestId,
 			startVersion,
 			lastWriteVersion,
 			request.PreviousRunID,
@@ -997,7 +997,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 					lastWriteVersion := protoReplVersions.LastWriteVersion.GetValue()
 
 					msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
-						executionInfo.WorkflowID, protoState.RunId, request.RangeID, strings.Join(columns, ","))
+						executionInfo.WorkflowId, protoState.RunId, request.RangeID, strings.Join(columns, ","))
 					if request.Mode == p.CreateWorkflowModeBrandNew {
 						// todo: Look at moving these errors upstream to manager
 						return nil, &p.WorkflowExecutionAlreadyStartedError{
@@ -1015,16 +1015,16 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 				if prevRunID := previous["current_run_id"].(gocql.UUID).String(); prevRunID != request.PreviousRunID {
 					// currentRunID on previous run has been changed, return to caller to handle
 					msg := fmt.Sprintf("Workflow execution creation condition failed by mismatch runID. WorkflowId: %v, Expected Current RunId: %v, Actual Current RunId: %v",
-						executionInfo.WorkflowID, request.PreviousRunID, prevRunID)
+						executionInfo.WorkflowId, request.PreviousRunID, prevRunID)
 					return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
 				}
 
 				msg := fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, CurrentRunId: %v, columns: (%v)",
-					executionInfo.WorkflowID, executionInfo.RunID, strings.Join(columns, ","))
+					executionInfo.WorkflowId, executionInfo.RunId, strings.Join(columns, ","))
 				return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
-			} else if rowType == rowTypeExecution && runID == executionInfo.RunID {
+			} else if rowType == rowTypeExecution && runID == executionInfo.RunId {
 				msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeId: %v",
-					executionInfo.WorkflowID, executionInfo.RunID, request.RangeID)
+					executionInfo.WorkflowId, executionInfo.RunId, request.RangeID)
 				lastWriteVersion = common.EmptyVersion
 				protoReplVersions, err := ProtoReplicationVersionsFromResultMap(previous)
 				if err != nil {
@@ -1035,8 +1035,8 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 				}
 				return nil, &p.WorkflowExecutionAlreadyStartedError{
 					Msg:              msg,
-					StartRequestID:   executionInfo.CreateRequestID,
-					RunID:            executionInfo.RunID,
+					StartRequestID:   executionInfo.CreateRequestId,
+					RunID:            executionInfo.RunId,
 					State:            executionInfo.State,
 					Status:           executionInfo.Status,
 					LastWriteVersion: lastWriteVersion,
@@ -1200,9 +1200,9 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	newWorkflow := request.NewWorkflowSnapshot
 
 	executionInfo := updateWorkflow.ExecutionInfo
-	namespaceID := executionInfo.NamespaceID
-	workflowID := executionInfo.WorkflowID
-	runID := executionInfo.RunID
+	namespaceID := executionInfo.NamespaceId
+	workflowID := executionInfo.WorkflowId
+	runID := executionInfo.RunId
 	shardID := d.shardID
 
 	if err := p.ValidateUpdateWorkflowModeState(
@@ -1227,9 +1227,9 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			newExecutionInfo := newWorkflow.ExecutionInfo
 			newStartVersion := newWorkflow.StartVersion
 			newLastWriteVersion := newWorkflow.LastWriteVersion
-			newNamespaceID := newExecutionInfo.NamespaceID
-			newWorkflowID := newExecutionInfo.WorkflowID
-			newRunID := newExecutionInfo.RunID
+			newNamespaceID := newExecutionInfo.NamespaceId
+			newWorkflowID := newExecutionInfo.WorkflowId
+			newRunID := newExecutionInfo.RunId
 
 			if namespaceID != newNamespaceID {
 				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
@@ -1243,7 +1243,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 				newRunID,
 				newExecutionInfo.State,
 				newExecutionInfo.Status,
-				newExecutionInfo.CreateRequestID,
+				newExecutionInfo.CreateRequestId,
 				newStartVersion,
 				newLastWriteVersion,
 				runID,
@@ -1258,7 +1258,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 
 			executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
 				RunId:           runID,
-				CreateRequestId: executionInfo.CreateRequestID,
+				CreateRequestId: executionInfo.CreateRequestId,
 				State:           executionInfo.State,
 				Status:          executionInfo.Status,
 			})
@@ -1345,7 +1345,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	}
 
 	if !applied {
-		return d.getExecutionConditionalUpdateFailure(previous, iter, executionInfo.RunID, updateWorkflow.Condition, request.RangeID, executionInfo.RunID)
+		return d.getExecutionConditionalUpdateFailure(previous, iter, executionInfo.RunId, updateWorkflow.Condition, request.RangeID, executionInfo.RunId)
 	}
 	return nil
 }
@@ -1357,8 +1357,8 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 
 	shardID := d.shardID
 
-	namespaceID := request.NewWorkflowSnapshot.ExecutionInfo.NamespaceID
-	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowID
+	namespaceID := request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId
+	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
 
 	baseRunID := request.BaseRunID
 	baseRunNextEventID := request.BaseRunNextEventID
@@ -1366,14 +1366,14 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 	currentRunID := request.CurrentRunID
 	currentRunNextEventID := request.CurrentRunNextEventID
 
-	newRunID := request.NewWorkflowSnapshot.ExecutionInfo.RunID
+	newRunID := request.NewWorkflowSnapshot.ExecutionInfo.RunId
 	newExecutionInfo := request.NewWorkflowSnapshot.ExecutionInfo
 
 	startVersion := request.NewWorkflowSnapshot.StartVersion
 	lastWriteVersion := request.NewWorkflowSnapshot.LastWriteVersion
 
 	stateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
-		CreateRequestId: newExecutionInfo.CreateRequestID,
+		CreateRequestId: newExecutionInfo.CreateRequestId,
 		State:           newExecutionInfo.State,
 		Status:          newExecutionInfo.Status,
 		RunId:           newRunID,
@@ -1401,8 +1401,8 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 		newExecutionInfo.State,
 		d.shardID,
 		rowTypeExecution,
-		newExecutionInfo.NamespaceID,
-		newExecutionInfo.WorkflowID,
+		newExecutionInfo.NamespaceId,
+		newExecutionInfo.WorkflowId,
 		permanentRunID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
@@ -1497,8 +1497,8 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 
 	shardID := d.shardID
 
-	namespaceID := resetWorkflow.ExecutionInfo.NamespaceID
-	workflowID := resetWorkflow.ExecutionInfo.WorkflowID
+	namespaceID := resetWorkflow.ExecutionInfo.NamespaceId
+	workflowID := resetWorkflow.ExecutionInfo.WorkflowId
 
 	if err := p.ValidateConflictResolveWorkflowModeState(
 		request.Mode,
@@ -1516,7 +1516,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 		if err := d.assertNotCurrentExecution(
 			namespaceID,
 			workflowID,
-			resetWorkflow.ExecutionInfo.RunID); err != nil {
+			resetWorkflow.ExecutionInfo.RunId); err != nil {
 			return err
 		}
 
@@ -1529,8 +1529,8 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 			startVersion = newWorkflow.StartVersion
 			lastWriteVersion = newWorkflow.LastWriteVersion
 		}
-		runID := executionInfo.RunID
-		createRequestID := executionInfo.CreateRequestID
+		runID := executionInfo.RunId
+		createRequestID := executionInfo.CreateRequestId
 		state := executionInfo.State
 		status := executionInfo.Status
 
@@ -1579,7 +1579,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 				prevState,
 			)
 		} else if currentWorkflow != nil {
-			prevRunID = currentWorkflow.ExecutionInfo.RunID
+			prevRunID = currentWorkflow.ExecutionInfo.RunId
 
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 				runID,
@@ -1600,7 +1600,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 			)
 		} else {
 			// reset workflow is current
-			prevRunID = resetWorkflow.ExecutionInfo.RunID
+			prevRunID = resetWorkflow.ExecutionInfo.RunId
 
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 				runID,
@@ -1675,7 +1675,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 	}
 
 	if !applied {
-		return d.getExecutionConditionalUpdateFailure(previous, iter, resetWorkflow.ExecutionInfo.RunID, request.ResetWorkflowSnapshot.Condition, request.RangeID, prevRunID)
+		return d.getExecutionConditionalUpdateFailure(previous, iter, resetWorkflow.ExecutionInfo.RunId, request.ResetWorkflowSnapshot.Condition, request.RangeID, prevRunID)
 	}
 	return nil
 }

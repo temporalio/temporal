@@ -334,9 +334,9 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	s.NoError(err)
 	s.NotNil(rebuildMutableState)
 	rebuildExecutionInfo := rebuildMutableState.GetExecutionInfo()
-	s.Equal(targetNamespaceID, rebuildExecutionInfo.NamespaceID)
-	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowID)
-	s.Equal(targetRunID, rebuildExecutionInfo.RunID)
+	s.Equal(targetNamespaceID, rebuildExecutionInfo.NamespaceId)
+	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowId)
+	s.Equal(targetRunID, rebuildExecutionInfo.RunId)
 	s.Equal(int64(historySize1+historySize2), rebuiltHistorySize)
 	s.Equal(persistence.NewVersionHistories(
 		persistence.NewVersionHistory(
@@ -344,5 +344,5 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 			[]*persistence.VersionHistoryItem{persistence.NewVersionHistoryItem(lastEventID, version)},
 		),
 	), rebuildMutableState.GetVersionHistories())
-	s.Equal(rebuildMutableState.GetExecutionInfo().StartTimestamp, now)
+	s.Equal(rebuildMutableState.GetExecutionInfo().StartTime, now)
 }

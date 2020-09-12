@@ -77,9 +77,9 @@ func (s *statsComputerSuite) TestStatsWithStartedEvent() {
 		Name: "test-taskqueue",
 	}
 
-	ms.UpdateWorkflowMutation.ExecutionInfo.NamespaceID = namespaceID
-	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowID = execution.GetWorkflowId()
-	ms.UpdateWorkflowMutation.ExecutionInfo.RunID = execution.GetRunId()
+	ms.UpdateWorkflowMutation.ExecutionInfo.NamespaceId = namespaceID
+	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowId = execution.GetWorkflowId()
+	ms.UpdateWorkflowMutation.ExecutionInfo.RunId = execution.GetRunId()
 	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowTypeName = workflowType.GetName()
 	ms.UpdateWorkflowMutation.ExecutionInfo.TaskQueue = taskQueue.GetName()
 

@@ -142,9 +142,9 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 		payloadSize,
 		c.blobSizeLimitWarn,
 		c.blobSizeLimitError,
-		executionInfo.NamespaceID,
-		executionInfo.WorkflowID,
-		executionInfo.RunID,
+		executionInfo.NamespaceId,
+		executionInfo.WorkflowId,
+		executionInfo.RunId,
 		c.metricsScope.Tagged(commandTypeTag),
 		c.logger,
 		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
@@ -171,9 +171,9 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 	if historySize > c.historySizeLimitError || historyCount > c.historyCountLimitError {
 		executionInfo := c.mutableState.GetExecutionInfo()
 		c.logger.Error("history size exceeds error limit.",
-			tag.WorkflowNamespaceID(executionInfo.NamespaceID),
-			tag.WorkflowID(executionInfo.WorkflowID),
-			tag.WorkflowRunID(executionInfo.RunID),
+			tag.WorkflowNamespaceID(executionInfo.NamespaceId),
+			tag.WorkflowID(executionInfo.WorkflowId),
+			tag.WorkflowRunID(executionInfo.RunId),
 			tag.WorkflowHistorySize(historySize),
 			tag.WorkflowEventCount(historyCount))
 
@@ -190,9 +190,9 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 	if historySize > c.historySizeLimitWarn || historyCount > c.historyCountLimitWarn {
 		executionInfo := c.mutableState.GetExecutionInfo()
 		c.logger.Warn("history size exceeds warn limit.",
-			tag.WorkflowNamespaceID(executionInfo.NamespaceID),
-			tag.WorkflowID(executionInfo.WorkflowID),
-			tag.WorkflowRunID(executionInfo.RunID),
+			tag.WorkflowNamespaceID(executionInfo.NamespaceId),
+			tag.WorkflowID(executionInfo.WorkflowId),
+			tag.WorkflowRunID(executionInfo.RunId),
 			tag.WorkflowHistorySize(historySize),
 			tag.WorkflowEventCount(historyCount))
 		return false, nil
@@ -547,7 +547,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 		return serviceerror.NewInvalidArgument("BackoffStartInterval is less than 0.")
 	}
 
-	namespaceEntry, err := v.namespaceCache.GetNamespaceByID(executionInfo.NamespaceID)
+	namespaceEntry, err := v.namespaceCache.GetNamespaceByID(executionInfo.NamespaceId)
 	if err != nil {
 		return err
 	}

@@ -272,21 +272,21 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	activityResult := payloads.EncodeString("activity_result")
 
 	info := &persistence.WorkflowExecutionInfo{
-		NamespaceID:                namespaceID,
-		WorkflowID:                 we.GetWorkflowId(),
-		RunID:                      we.GetRunId(),
+		NamespaceId:                namespaceID,
+		WorkflowId:                 we.GetWorkflowId(),
+		RunId:                      we.GetRunId(),
 		TaskQueue:                  tl,
 		WorkflowTypeName:           "wType",
 		WorkflowRunTimeout:         timestamp.DurationFromSeconds(200),
 		DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(100),
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		NextEventID:                int64(8),
+		NextEventId:                int64(8),
 		LastProcessedEvent:         int64(3),
-		LastUpdatedTimestamp:       timestamp.TimeNowPtrUtc(),
+		LastUpdatedTime:            timestamp.TimeNowPtrUtc(),
 		WorkflowTaskVersion:        common.EmptyVersion,
-		WorkflowTaskScheduleID:     common.EmptyEventID,
-		WorkflowTaskStartedID:      common.EmptyEventID,
+		WorkflowTaskScheduleId:     common.EmptyEventID,
+		WorkflowTaskStartedId:      common.EmptyEventID,
 		WorkflowTaskTimeout:        timestamp.DurationFromSeconds(100),
 		WorkflowTaskAttempt:        1,
 	}
@@ -428,7 +428,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			// test checksum is invalidated
 			loadErrors = loadErrorsFunc()
 			s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
-				return float64((s.msBuilder.executionInfo.LastUpdatedTimestamp.UnixNano() / int64(time.Second)) + 1)
+				return float64((s.msBuilder.executionInfo.LastUpdatedTime.UnixNano() / int64(time.Second)) + 1)
 			}
 			s.msBuilder.Load(dbState)
 			s.Equal(loadErrors, loadErrorsFunc())
@@ -458,13 +458,13 @@ func (s *mutableStateSuite) TestChecksumProbabilities() {
 func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
 	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 { return 0 }
 	s.False(s.msBuilder.shouldInvalidateCheckum())
-	s.msBuilder.executionInfo.LastUpdatedTimestamp = timestamp.TimeNowPtrUtc()
+	s.msBuilder.executionInfo.LastUpdatedTime = timestamp.TimeNowPtrUtc()
 	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
-		return float64((s.msBuilder.executionInfo.LastUpdatedTimestamp.UnixNano() / int64(time.Second)) + 1)
+		return float64((s.msBuilder.executionInfo.LastUpdatedTime.UnixNano() / int64(time.Second)) + 1)
 	}
 	s.True(s.msBuilder.shouldInvalidateCheckum())
 	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
-		return float64((s.msBuilder.executionInfo.LastUpdatedTimestamp.UnixNano() / int64(time.Second)) - 1)
+		return float64((s.msBuilder.executionInfo.LastUpdatedTime.UnixNano() / int64(time.Second)) - 1)
 	}
 	s.False(s.msBuilder.shouldInvalidateCheckum())
 }
@@ -722,21 +722,21 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 	failoverVersion := int64(300)
 
 	info := &persistence.WorkflowExecutionInfo{
-		NamespaceID:                namespaceID,
-		WorkflowID:                 we.GetWorkflowId(),
-		RunID:                      we.GetRunId(),
+		NamespaceId:                namespaceID,
+		WorkflowId:                 we.GetWorkflowId(),
+		RunId:                      we.GetRunId(),
 		TaskQueue:                  tl,
 		WorkflowTypeName:           "wType",
 		WorkflowRunTimeout:         timestamp.DurationFromSeconds(200),
 		DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(100),
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		NextEventID:                int64(101),
+		NextEventId:                int64(101),
 		LastProcessedEvent:         int64(99),
-		LastUpdatedTimestamp:       timestamp.TimeNowPtrUtc(),
+		LastUpdatedTime:            timestamp.TimeNowPtrUtc(),
 		WorkflowTaskVersion:        failoverVersion,
-		WorkflowTaskScheduleID:     common.EmptyEventID,
-		WorkflowTaskStartedID:      common.EmptyEventID,
+		WorkflowTaskScheduleId:     common.EmptyEventID,
+		WorkflowTaskStartedId:      common.EmptyEventID,
 		WorkflowTaskTimeout:        timestamp.DurationFromSeconds(100),
 		WorkflowTaskAttempt:        1,
 	}

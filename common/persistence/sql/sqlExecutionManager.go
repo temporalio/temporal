@@ -113,9 +113,9 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 	startVersion := newWorkflow.StartVersion
 	lastWriteVersion := newWorkflow.LastWriteVersion
 	shardID := m.shardID
-	namespaceID := primitives.MustParseUUID(executionInfo.NamespaceID)
-	workflowID := executionInfo.WorkflowID
-	runID := primitives.MustParseUUID(executionInfo.RunID)
+	namespaceID := primitives.MustParseUUID(executionInfo.NamespaceId)
+	workflowID := executionInfo.WorkflowId
+	runID := primitives.MustParseUUID(executionInfo.RunId)
 
 	if err := p.ValidateCreateWorkflowModeState(
 		request.Mode,
@@ -170,7 +170,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 
 		case p.CreateWorkflowModeZombie:
 			// zombie workflow creation with existence of current record, this is a noop
-			if err := assertRunIDMismatch(primitives.MustParseUUID(executionInfo.RunID), row.RunID); err != nil {
+			if err := assertRunIDMismatch(primitives.MustParseUUID(executionInfo.RunId), row.RunID); err != nil {
 				return nil, err
 			}
 
@@ -197,7 +197,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 		runID,
 		executionInfo.State,
 		executionInfo.Status,
-		executionInfo.CreateRequestID,
+		executionInfo.CreateRequestId,
 		startVersion,
 		lastWriteVersion); err != nil {
 		return nil, err
@@ -350,9 +350,9 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 	newWorkflow := request.NewWorkflowSnapshot
 
 	executionInfo := updateWorkflow.ExecutionInfo
-	namespaceID := primitives.MustParseUUID(executionInfo.NamespaceID)
-	workflowID := executionInfo.WorkflowID
-	runID := primitives.MustParseUUID(executionInfo.RunID)
+	namespaceID := primitives.MustParseUUID(executionInfo.NamespaceId)
+	workflowID := executionInfo.WorkflowId
+	runID := primitives.MustParseUUID(executionInfo.RunId)
 	shardID := m.shardID
 
 	if err := p.ValidateUpdateWorkflowModeState(
@@ -378,8 +378,8 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 			newExecutionInfo := newWorkflow.ExecutionInfo
 			startVersion := newWorkflow.StartVersion
 			lastWriteVersion := newWorkflow.LastWriteVersion
-			newNamespaceID := primitives.MustParseUUID(newExecutionInfo.NamespaceID)
-			newRunID := primitives.MustParseUUID(newExecutionInfo.RunID)
+			newNamespaceID := primitives.MustParseUUID(newExecutionInfo.NamespaceId)
+			newRunID := primitives.MustParseUUID(newExecutionInfo.RunId)
 
 			if !bytes.Equal(namespaceID, newNamespaceID) {
 				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
@@ -391,7 +391,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 				workflowID,
 				newRunID,
 				runID,
-				newWorkflow.ExecutionInfo.CreateRequestID,
+				newWorkflow.ExecutionInfo.CreateRequestId,
 				newWorkflow.ExecutionInfo.State,
 				newWorkflow.ExecutionInfo.Status,
 				startVersion,
@@ -408,7 +408,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 				workflowID,
 				runID,
 				runID,
-				executionInfo.CreateRequestID,
+				executionInfo.CreateRequestId,
 				executionInfo.State,
 				executionInfo.Status,
 				startVersion,
@@ -448,8 +448,8 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 
 	shardID := m.shardID
 
-	namespaceID := primitives.MustParseUUID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceID)
-	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowID
+	namespaceID := primitives.MustParseUUID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId)
+	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
 
 	baseRunID := primitives.MustParseUUID(request.BaseRunID)
 	baseRunNextEventID := request.BaseRunNextEventID
@@ -457,7 +457,7 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 	currentRunID := primitives.MustParseUUID(request.CurrentRunID)
 	currentRunNextEventID := request.CurrentRunNextEventID
 
-	newWorkflowRunID := primitives.MustParseUUID(request.NewWorkflowSnapshot.ExecutionInfo.RunID)
+	newWorkflowRunID := primitives.MustParseUUID(request.NewWorkflowSnapshot.ExecutionInfo.RunId)
 	newExecutionInfo := request.NewWorkflowSnapshot.ExecutionInfo
 	startVersion := request.NewWorkflowSnapshot.StartVersion
 	lastWriteVersion := request.NewWorkflowSnapshot.LastWriteVersion
@@ -468,7 +468,7 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 		namespaceID,
 		workflowID,
 		newWorkflowRunID,
-		newExecutionInfo.CreateRequestID,
+		newExecutionInfo.CreateRequestId,
 		newExecutionInfo.State,
 		newExecutionInfo.Status,
 		startVersion,
@@ -533,8 +533,8 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 
 	shardID := m.shardID
 
-	namespaceID := primitives.MustParseUUID(resetWorkflow.ExecutionInfo.NamespaceID)
-	workflowID := resetWorkflow.ExecutionInfo.WorkflowID
+	namespaceID := primitives.MustParseUUID(resetWorkflow.ExecutionInfo.NamespaceId)
+	workflowID := resetWorkflow.ExecutionInfo.WorkflowId
 
 	if err := p.ValidateConflictResolveWorkflowModeState(
 		request.Mode,
@@ -551,7 +551,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 			shardID,
 			namespaceID,
 			workflowID,
-			primitives.MustParseUUID(resetWorkflow.ExecutionInfo.RunID)); err != nil {
+			primitives.MustParseUUID(resetWorkflow.ExecutionInfo.RunId)); err != nil {
 			return err
 		}
 
@@ -564,8 +564,8 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 			startVersion = newWorkflow.StartVersion
 			lastWriteVersion = newWorkflow.LastWriteVersion
 		}
-		runID := primitives.MustParseUUID(executionInfo.RunID)
-		createRequestID := executionInfo.CreateRequestID
+		runID := primitives.MustParseUUID(executionInfo.RunId)
+		createRequestID := executionInfo.CreateRequestId
 		state := executionInfo.State
 		status := executionInfo.Status
 
@@ -590,7 +590,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
 			}
 		} else if currentWorkflow != nil {
-			prevRunID := primitives.MustParseUUID(currentWorkflow.ExecutionInfo.RunID)
+			prevRunID := primitives.MustParseUUID(currentWorkflow.ExecutionInfo.RunId)
 
 			if err := assertRunIDAndUpdateCurrentExecution(tx,
 				m.shardID,
@@ -607,7 +607,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 			}
 		} else {
 			// reset workflow is current
-			prevRunID := primitives.MustParseUUID(resetWorkflow.ExecutionInfo.RunID)
+			prevRunID := primitives.MustParseUUID(resetWorkflow.ExecutionInfo.RunId)
 
 			if err := assertRunIDAndUpdateCurrentExecution(tx,
 				m.shardID,

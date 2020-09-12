@@ -169,10 +169,10 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 	})
 
 	retentionInDays := defaultWorkflowRetentionInDays
-	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(executionInfo.NamespaceID)
+	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(executionInfo.NamespaceId)
 	switch err.(type) {
 	case nil:
-		retentionInDays = namespaceEntry.GetRetentionDays(executionInfo.WorkflowID)
+		retentionInDays = namespaceEntry.GetRetentionDays(executionInfo.WorkflowId)
 	case *serviceerror.NotFound:
 		// namespace is not accessible, use default value above
 	default:
@@ -254,7 +254,7 @@ func (r *mutableStateTaskGeneratorImpl) generateScheduleWorkflowTaskTasks(
 	r.mutableState.AddTransferTasks(&persistence.WorkflowTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
-		NamespaceID:         executionInfo.NamespaceID,
+		NamespaceID:         executionInfo.NamespaceId,
 		TaskQueue:           workflowTask.TaskQueue.GetName(),
 		ScheduleID:          workflowTask.ScheduleID,
 		Version:             workflowTask.Version,
@@ -524,7 +524,7 @@ func (r *mutableStateTaskGeneratorImpl) getTargetNamespaceID(
 	targetNamespace string,
 ) (string, error) {
 
-	targetNamespaceID := r.mutableState.GetExecutionInfo().NamespaceID
+	targetNamespaceID := r.mutableState.GetExecutionInfo().NamespaceId
 	if targetNamespace != "" {
 		targetNamespaceEntry, err := r.namespaceCache.GetNamespace(targetNamespace)
 		if err != nil {

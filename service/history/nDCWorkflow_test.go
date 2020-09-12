@@ -89,10 +89,10 @@ func (s *nDCWorkflowSuite) TestGetMethods() {
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID:     s.namespaceID,
-		WorkflowID:      s.workflowID,
-		RunID:           s.runID,
-		LastEventTaskID: lastEventTaskID,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      s.workflowID,
+		RunId:           s.runID,
+		LastEventTaskId: lastEventTaskID,
 	}).AnyTimes()
 
 	nDCWorkflow := newNDCWorkflow(
@@ -200,10 +200,10 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Error() {
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID:     s.namespaceID,
-		WorkflowID:      s.workflowID,
-		RunID:           s.runID,
-		LastEventTaskID: lastEventTaskID,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      s.workflowID,
+		RunId:           s.runID,
+		LastEventTaskId: lastEventTaskID,
 	}).AnyTimes()
 
 	incomingRunID := uuid.New()
@@ -211,10 +211,10 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Error() {
 	incomingLastEventVersion := lastEventVersion - 1
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID:     s.namespaceID,
-		WorkflowID:      s.workflowID,
-		RunID:           incomingRunID,
-		LastEventTaskID: incomingLastEventTaskID,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      s.workflowID,
+		RunId:           incomingRunID,
+		LastEventTaskId: incomingLastEventTaskID,
 	}).AnyTimes()
 
 	_, err := nDCWorkflow.suppressBy(incomingNDCWorkflow)
@@ -228,10 +228,10 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	s.mockMutableState.EXPECT().GetNextEventID().Return(lastEventID + 1).AnyTimes()
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID:     s.namespaceID,
-		WorkflowID:      s.workflowID,
-		RunID:           s.runID,
-		LastEventTaskID: lastEventTaskID,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      s.workflowID,
+		RunId:           s.runID,
+		LastEventTaskId: lastEventTaskID,
 	}).AnyTimes()
 	nDCWorkflow := newNDCWorkflow(
 		context.Background(),
@@ -257,10 +257,10 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	)
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID:     s.namespaceID,
-		WorkflowID:      s.workflowID,
-		RunID:           incomingRunID,
-		LastEventTaskID: incomingLastEventTaskID,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      s.workflowID,
+		RunId:           incomingRunID,
+		LastEventTaskId: incomingLastEventTaskID,
 	}).AnyTimes()
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(lastEventVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -307,10 +307,10 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:     s.namespaceID,
-		WorkflowID:      s.workflowID,
-		RunID:           s.runID,
-		LastEventTaskID: lastEventTaskID,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      s.workflowID,
+		RunId:           s.runID,
+		LastEventTaskId: lastEventTaskID,
 		State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -339,10 +339,10 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	)
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID:     s.namespaceID,
-		WorkflowID:      s.workflowID,
-		RunID:           incomingRunID,
-		LastEventTaskID: incomingLastEventTaskID,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      s.workflowID,
+		RunId:           incomingRunID,
+		LastEventTaskId: incomingLastEventTaskID,
 	}).AnyTimes()
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(lastEventVersion).Return(cluster.TestAlternativeClusterName).AnyTimes()

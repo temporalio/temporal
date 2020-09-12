@@ -214,9 +214,9 @@ func (r *nDCBranchMgrImpl) verifyEventsOrder(
 		executionInfo := r.mutableState.GetExecutionInfo()
 		return false, serviceerrors.NewRetryTaskV2(
 			outOfOrderDeliveryMessage,
-			executionInfo.NamespaceID,
-			executionInfo.WorkflowID,
-			executionInfo.RunID,
+			executionInfo.NamespaceId,
+			executionInfo.WorkflowId,
+			executionInfo.RunId,
 			lastVersionHistoryItem.GetEventID(),
 			lastVersionHistoryItem.GetVersion(),
 			incomingFirstEventID,
@@ -235,8 +235,8 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 
 	shardID := r.shard.GetShardID()
 	executionInfo := r.mutableState.GetExecutionInfo()
-	namespaceID := executionInfo.NamespaceID
-	workflowID := executionInfo.WorkflowID
+	namespaceID := executionInfo.NamespaceId
+	workflowID := executionInfo.WorkflowId
 
 	resp, err := r.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
