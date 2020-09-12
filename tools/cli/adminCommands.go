@@ -135,7 +135,7 @@ func AdminDescribeWorkflow(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit("json.Unmarshal err", err)
 		}
-		currentBranchToken := ms.ExecutionInfo.BranchToken
+		currentBranchToken := ms.ExecutionInfo.EventBranchToken
 		if ms.VersionHistories != nil {
 			// if VersionHistories is set, then all branch infos are stored in VersionHistories
 			currentVersionHistory, err := ms.VersionHistories.GetCurrentVersionHistory()
@@ -223,7 +223,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("json.Unmarshal err", err)
 	}
-	namespaceID := ms.ExecutionInfo.NamespaceID
+	namespaceID := ms.ExecutionInfo.NamespaceId
 	skipError := c.Bool(FlagSkipErrorMode)
 	session := connectToCassandra(c)
 	shardID := resp.GetShardId()
@@ -232,7 +232,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		ErrorAndExit("strconv.Atoi(shardID) err", err)
 	}
 
-	branchTokens := [][]byte{ms.ExecutionInfo.BranchToken}
+	branchTokens := [][]byte{ms.ExecutionInfo.EventBranchToken}
 	if ms.VersionHistories != nil {
 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
 		branchTokens = [][]byte{}

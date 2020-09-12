@@ -457,7 +457,7 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	var prevRunID string
 	var resetPoints *workflowpb.ResetPoints
 	if previousExecution != nil {
-		prevRunID = previousExecution.RunID
+		prevRunID = previousExecution.RunId
 		resetPoints = previousExecution.AutoResetPoints
 	}
 	request := startRequest.StartRequest

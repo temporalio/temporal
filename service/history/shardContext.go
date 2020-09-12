@@ -455,8 +455,8 @@ func (s *shardContextImpl) CreateWorkflowExecution(
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
 
-	namespaceID := request.NewWorkflowSnapshot.ExecutionInfo.NamespaceID
-	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowID
+	namespaceID := request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId
+	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
 
 	// do not try to get namespace cache within shard lock
 	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
@@ -542,8 +542,8 @@ func (s *shardContextImpl) UpdateWorkflowExecution(
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
 
-	namespaceID := request.UpdateWorkflowMutation.ExecutionInfo.NamespaceID
-	workflowID := request.UpdateWorkflowMutation.ExecutionInfo.WorkflowID
+	namespaceID := request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId
+	workflowID := request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId
 
 	// do not try to get namespace cache within shard lock
 	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
@@ -628,8 +628,8 @@ Update_Loop:
 
 func (s *shardContextImpl) ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error {
 
-	namespaceID := request.NewWorkflowSnapshot.ExecutionInfo.NamespaceID
-	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowID
+	namespaceID := request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId
+	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
 
 	// do not try to get namespace cache within shard lock
 	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
@@ -717,8 +717,8 @@ func (s *shardContextImpl) ConflictResolveWorkflowExecution(
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) error {
 
-	namespaceID := request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceID
-	workflowID := request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowID
+	namespaceID := request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId
+	workflowID := request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId
 
 	// do not try to get namespace cache within shard lock
 	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)

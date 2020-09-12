@@ -1320,10 +1320,10 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Re
 	executionInfo := mutableState.executionInfo
 	executionInfo.HasRetryPolicy = true
 	executionInfo.WorkflowExpirationTime = timestamp.TimeNowPtrUtcAddSeconds(1000)
-	executionInfo.MaximumAttempts = 10
-	executionInfo.InitialInterval = timestamp.DurationFromSeconds(1)
-	executionInfo.MaximumInterval = timestamp.DurationFromSeconds(1)
-	executionInfo.BackoffCoefficient = 1
+	executionInfo.RetryMaximumAttempts = 10
+	executionInfo.RetryInitialInterval = timestamp.DurationFromSeconds(1)
+	executionInfo.RetryMaximumInterval = timestamp.DurationFromSeconds(1)
+	executionInfo.RetryBackoffCoefficient = 1
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
 	startEvent := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
@@ -1384,7 +1384,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Cr
 	)
 	s.Nil(err)
 	executionInfo := mutableState.executionInfo
-	executionInfo.StartTimestamp = &s.now
+	executionInfo.StartTime = &s.now
 	executionInfo.CronSchedule = "* * * * *"
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
@@ -1445,7 +1445,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_WorkflowExpired(
 	)
 	s.Nil(err)
 	executionInfo := mutableState.executionInfo
-	executionInfo.StartTimestamp = &s.now
+	executionInfo.StartTime = &s.now
 	executionInfo.CronSchedule = "* * * * *"
 
 	di := addWorkflowTaskScheduledEvent(mutableState)

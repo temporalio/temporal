@@ -134,14 +134,14 @@ func (r *nDCConflictResolverImpl) rebuild(
 
 	executionInfo := r.mutableState.GetExecutionInfo()
 	workflowIdentifier := definition.NewWorkflowIdentifier(
-		executionInfo.NamespaceID,
-		executionInfo.WorkflowID,
-		executionInfo.RunID,
+		executionInfo.NamespaceId,
+		executionInfo.WorkflowId,
+		executionInfo.RunId,
 	)
 
 	rebuildMutableState, rebuiltHistorySize, err := r.stateRebuilder.rebuild(
 		ctx,
-		executionInfo.StartTimestamp,
+		executionInfo.StartTime,
 		workflowIdentifier,
 		replayVersionHistory.GetBranchToken(),
 		lastItem.GetEventID(),

@@ -779,7 +779,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationFailed() {
 }
 
 func (s *historyBuilderSuite) getNextEventID() int64 {
-	return s.msBuilder.GetExecutionInfo().NextEventID
+	return s.msBuilder.GetExecutionInfo().NextEventId
 }
 
 func (s *historyBuilderSuite) getPreviousWorkflowTaskStartedEventID() int64 {

@@ -299,9 +299,9 @@ Loop:
 		}
 
 		scheduleEvent, err := r.eventsCache.getEvent(
-			executionInfo.NamespaceID,
-			executionInfo.WorkflowID,
-			executionInfo.RunID,
+			executionInfo.NamespaceId,
+			executionInfo.WorkflowId,
+			executionInfo.RunId,
 			activityInfo.ScheduledEventBatchId,
 			activityInfo.ScheduleId,
 			currentBranchToken,
@@ -379,9 +379,9 @@ Loop:
 		}
 
 		scheduleEvent, err := r.eventsCache.getEvent(
-			executionInfo.NamespaceID,
-			executionInfo.WorkflowID,
-			executionInfo.RunID,
+			executionInfo.NamespaceId,
+			executionInfo.WorkflowId,
+			executionInfo.RunId,
 			childWorkflowInfo.InitiatedEventBatchId,
 			childWorkflowInfo.InitiatedId,
 			currentBranchToken,
@@ -417,9 +417,9 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRequestCancelExternalWork
 
 	for _, requestCancelInfo := range pendingRequestCancelInfos {
 		initiateEvent, err := r.eventsCache.getEvent(
-			executionInfo.NamespaceID,
-			executionInfo.WorkflowID,
-			executionInfo.RunID,
+			executionInfo.NamespaceId,
+			executionInfo.WorkflowId,
+			executionInfo.RunId,
 			requestCancelInfo.GetInitiatedEventBatchId(),
 			requestCancelInfo.GetInitiatedId(),
 			currentBranchToken,
@@ -455,9 +455,9 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 
 	for _, signalInfo := range pendingSignalInfos {
 		initiateEvent, err := r.eventsCache.getEvent(
-			executionInfo.NamespaceID,
-			executionInfo.WorkflowID,
-			executionInfo.RunID,
+			executionInfo.NamespaceId,
+			executionInfo.WorkflowId,
+			executionInfo.RunId,
 			signalInfo.GetInitiatedEventBatchId(),
 			signalInfo.GetInitiatedId(),
 			currentBranchToken,

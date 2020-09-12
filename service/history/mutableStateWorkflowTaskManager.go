@@ -251,7 +251,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduleToStartTime
 	scheduleEventID int64,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskTimedOut
-	if m.msb.executionInfo.WorkflowTaskScheduleID != scheduleEventID || m.msb.executionInfo.WorkflowTaskStartedID > 0 {
+	if m.msb.executionInfo.WorkflowTaskScheduleId != scheduleEventID || m.msb.executionInfo.WorkflowTaskStartedId > 0 {
 		m.msb.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(m.msb.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -281,7 +281,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHea
 		m.msb.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(m.msb.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowScheduleID(m.msb.executionInfo.WorkflowTaskScheduleID))
+			tag.WorkflowScheduleID(m.msb.executionInfo.WorkflowTaskScheduleId))
 		return nil, m.msb.createInternalServerError(opTag)
 	}
 
@@ -608,9 +608,9 @@ func (m *mutableStateWorkflowTaskManagerImpl) UpdateWorkflowTask(
 	workflowTask *workflowTaskInfo,
 ) {
 	m.msb.executionInfo.WorkflowTaskVersion = workflowTask.Version
-	m.msb.executionInfo.WorkflowTaskScheduleID = workflowTask.ScheduleID
-	m.msb.executionInfo.WorkflowTaskStartedID = workflowTask.StartedID
-	m.msb.executionInfo.WorkflowTaskRequestID = workflowTask.RequestID
+	m.msb.executionInfo.WorkflowTaskScheduleId = workflowTask.ScheduleID
+	m.msb.executionInfo.WorkflowTaskStartedId = workflowTask.StartedID
+	m.msb.executionInfo.WorkflowTaskRequestId = workflowTask.RequestID
 	m.msb.executionInfo.WorkflowTaskTimeout = workflowTask.WorkflowTaskTimeout
 	m.msb.executionInfo.WorkflowTaskAttempt = workflowTask.Attempt
 	m.msb.executionInfo.WorkflowTaskStartedTimestamp = workflowTask.StartedTimestamp
@@ -629,11 +629,11 @@ func (m *mutableStateWorkflowTaskManagerImpl) UpdateWorkflowTask(
 }
 
 func (m *mutableStateWorkflowTaskManagerImpl) HasPendingWorkflowTask() bool {
-	return m.msb.executionInfo.WorkflowTaskScheduleID != common.EmptyEventID
+	return m.msb.executionInfo.WorkflowTaskScheduleId != common.EmptyEventID
 }
 
 func (m *mutableStateWorkflowTaskManagerImpl) GetPendingWorkflowTask() (*workflowTaskInfo, bool) {
-	if m.msb.executionInfo.WorkflowTaskScheduleID == common.EmptyEventID {
+	if m.msb.executionInfo.WorkflowTaskScheduleId == common.EmptyEventID {
 		return nil, false
 	}
 
@@ -642,12 +642,12 @@ func (m *mutableStateWorkflowTaskManagerImpl) GetPendingWorkflowTask() (*workflo
 }
 
 func (m *mutableStateWorkflowTaskManagerImpl) HasInFlightWorkflowTask() bool {
-	return m.msb.executionInfo.WorkflowTaskStartedID > 0
+	return m.msb.executionInfo.WorkflowTaskStartedId > 0
 }
 
 func (m *mutableStateWorkflowTaskManagerImpl) GetInFlightWorkflowTask() (*workflowTaskInfo, bool) {
-	if m.msb.executionInfo.WorkflowTaskScheduleID == common.EmptyEventID ||
-		m.msb.executionInfo.WorkflowTaskStartedID == common.EmptyEventID {
+	if m.msb.executionInfo.WorkflowTaskScheduleId == common.EmptyEventID ||
+		m.msb.executionInfo.WorkflowTaskStartedId == common.EmptyEventID {
 		return nil, false
 	}
 
@@ -709,9 +709,9 @@ func (m *mutableStateWorkflowTaskManagerImpl) getWorkflowTaskInfo() *workflowTas
 
 	return &workflowTaskInfo{
 		Version:                    m.msb.executionInfo.WorkflowTaskVersion,
-		ScheduleID:                 m.msb.executionInfo.WorkflowTaskScheduleID,
-		StartedID:                  m.msb.executionInfo.WorkflowTaskStartedID,
-		RequestID:                  m.msb.executionInfo.WorkflowTaskRequestID,
+		ScheduleID:                 m.msb.executionInfo.WorkflowTaskScheduleId,
+		StartedID:                  m.msb.executionInfo.WorkflowTaskStartedId,
+		RequestID:                  m.msb.executionInfo.WorkflowTaskRequestId,
 		WorkflowTaskTimeout:        m.msb.executionInfo.WorkflowTaskTimeout,
 		Attempt:                    m.msb.executionInfo.WorkflowTaskAttempt,
 		StartedTimestamp:           m.msb.executionInfo.WorkflowTaskStartedTimestamp,
