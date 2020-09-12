@@ -505,7 +505,7 @@ Update_History_Loop:
 					continueAsNewExecutionInfo.NamespaceId,
 					commonpb.WorkflowExecution{
 						WorkflowId: continueAsNewExecutionInfo.WorkflowId,
-						RunId:      continueAsNewExecutionInfo.RunId,
+						RunId:      continueAsNewExecutionInfo.ExecutionState.RunId,
 					},
 					handler.shard,
 					handler.shard.GetExecutionManager(),
@@ -646,7 +646,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 	namespaceID := namespaceEntry.GetInfo().Id
 	namespace := namespaceEntry.GetInfo().Name
 	workflowID := msBuilder.GetExecutionInfo().WorkflowId
-	runID := msBuilder.GetExecutionInfo().RunId
+	runID := msBuilder.GetExecutionInfo().GetRunId()
 
 	scope := handler.metricsClient.Scope(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,

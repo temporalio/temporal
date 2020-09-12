@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
 
+	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
@@ -72,8 +73,8 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	s.mockMutableState = NewMockmutableState(s.controller)
 	s.mockMutableState.EXPECT().GetQueryRegistry().Return(s.queryRegistry)
 	workflowInfo := &persistence.WorkflowExecutionInfo{
-		WorkflowId: testWorkflowID,
-		RunId:      testRunID,
+		WorkflowId:     testWorkflowID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: testRunID},
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(workflowInfo).AnyTimes()
 }

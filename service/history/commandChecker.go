@@ -144,7 +144,7 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 		c.blobSizeLimitError,
 		executionInfo.NamespaceId,
 		executionInfo.WorkflowId,
-		executionInfo.RunId,
+		executionInfo.ExecutionState.RunId,
 		c.metricsScope.Tagged(commandTypeTag),
 		c.logger,
 		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
@@ -173,7 +173,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 		c.logger.Error("history size exceeds error limit.",
 			tag.WorkflowNamespaceID(executionInfo.NamespaceId),
 			tag.WorkflowID(executionInfo.WorkflowId),
-			tag.WorkflowRunID(executionInfo.RunId),
+			tag.WorkflowRunID(executionInfo.ExecutionState.RunId),
 			tag.WorkflowHistorySize(historySize),
 			tag.WorkflowEventCount(historyCount))
 
@@ -192,7 +192,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 		c.logger.Warn("history size exceeds warn limit.",
 			tag.WorkflowNamespaceID(executionInfo.NamespaceId),
 			tag.WorkflowID(executionInfo.WorkflowId),
-			tag.WorkflowRunID(executionInfo.RunId),
+			tag.WorkflowRunID(executionInfo.ExecutionState.RunId),
 			tag.WorkflowHistorySize(historySize),
 			tag.WorkflowEventCount(historyCount))
 		return false, nil

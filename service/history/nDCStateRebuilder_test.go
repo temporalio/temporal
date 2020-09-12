@@ -336,7 +336,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	rebuildExecutionInfo := rebuildMutableState.GetExecutionInfo()
 	s.Equal(targetNamespaceID, rebuildExecutionInfo.NamespaceId)
 	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowId)
-	s.Equal(targetRunID, rebuildExecutionInfo.RunId)
+	s.Equal(targetRunID, rebuildExecutionInfo.ExecutionState.RunId)
 	s.Equal(int64(historySize1+historySize2), rebuiltHistorySize)
 	s.Equal(persistence.NewVersionHistories(
 		persistence.NewVersionHistory(

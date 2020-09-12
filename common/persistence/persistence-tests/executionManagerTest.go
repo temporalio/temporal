@@ -131,10 +131,8 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestId:            uuid.New(),
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowID,
-				RunId:                      runID,
 				TaskQueue:                  taskqueue,
 				WorkflowTypeName:           workflowType,
 				WorkflowRunTimeout:         workflowTimeout,
@@ -142,8 +140,12 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 				LastFirstEventId:           common.FirstEventID,
 				NextEventId:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
-				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{
+					RunId:                      runID,
+					CreateRequestId:            uuid.New(),
+					State:  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
 			},
 			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			Checksum:       csum,
@@ -159,8 +161,8 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 	s.assertChecksumsEqual(csum, info.Checksum)
 	updatedInfo := copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updatedStats := copyExecutionStats(info.ExecutionStats)
-	updatedInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-	updatedInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	updatedInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	updatedInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
@@ -202,7 +204,6 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestId:            uuid.New(),
 				NamespaceId:                namespaceID,
 				TaskQueue:                  taskqueue,
 				WorkflowTypeName:           workflowType,
@@ -211,6 +212,9 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 				LastFirstEventId:           common.FirstEventID,
 				NextEventId:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
+				ExecutionState:                     &persistenceblobs.WorkflowExecutionState{
+					CreateRequestId:            uuid.New(),
+				},
 			},
 			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			Checksum:       csum,
@@ -224,20 +228,20 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 		RunId:      uuid.New(),
 	}
 	req.NewWorkflowSnapshot.ExecutionInfo.WorkflowId = workflowExecutionStatusCreated.GetWorkflowId()
-	req.NewWorkflowSnapshot.ExecutionInfo.RunId = workflowExecutionStatusCreated.GetRunId()
-	req.NewWorkflowSnapshot.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.RunId = workflowExecutionStatusCreated.GetRunId()
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
 	for _, invalidStatus := range invalidStatuses {
-		req.NewWorkflowSnapshot.ExecutionInfo.Status = invalidStatus
+		req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.Status = invalidStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
 		s.IsType(&serviceerror.Internal{}, err)
 	}
-	req.NewWorkflowSnapshot.ExecutionInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
 	s.Nil(err)
 	info, err := s.GetWorkflowExecutionInfo(namespaceID, workflowExecutionStatusCreated)
 	s.Nil(err)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, info.ExecutionInfo.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, info.ExecutionInfo.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.ExecutionState.Status)
 	s.assertChecksumsEqual(csum, info.Checksum)
 
 	workflowExecutionStatusRunning := commonpb.WorkflowExecution{
@@ -245,20 +249,20 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 		RunId:      uuid.New(),
 	}
 	req.NewWorkflowSnapshot.ExecutionInfo.WorkflowId = workflowExecutionStatusRunning.GetWorkflowId()
-	req.NewWorkflowSnapshot.ExecutionInfo.RunId = workflowExecutionStatusRunning.GetRunId()
-	req.NewWorkflowSnapshot.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.RunId = workflowExecutionStatusRunning.GetRunId()
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	for _, invalidStatus := range invalidStatuses {
-		req.NewWorkflowSnapshot.ExecutionInfo.Status = invalidStatus
+		req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.Status = invalidStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
 		s.IsType(&serviceerror.Internal{}, err)
 	}
-	req.NewWorkflowSnapshot.ExecutionInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
 	s.Nil(err)
 	info, err = s.GetWorkflowExecutionInfo(namespaceID, workflowExecutionStatusRunning)
 	s.Nil(err)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info.ExecutionInfo.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info.ExecutionInfo.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.ExecutionState.Status)
 	s.assertChecksumsEqual(csum, info.Checksum)
 
 	workflowExecutionStatusCompleted := commonpb.WorkflowExecution{
@@ -266,14 +270,14 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 		RunId:      uuid.New(),
 	}
 	req.NewWorkflowSnapshot.ExecutionInfo.WorkflowId = workflowExecutionStatusCompleted.GetWorkflowId()
-	req.NewWorkflowSnapshot.ExecutionInfo.RunId = workflowExecutionStatusCompleted.GetRunId()
-	req.NewWorkflowSnapshot.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.RunId = workflowExecutionStatusCompleted.GetRunId()
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	for _, invalidStatus := range invalidStatuses {
-		req.NewWorkflowSnapshot.ExecutionInfo.Status = invalidStatus
+		req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.Status = invalidStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
 		s.IsType(&serviceerror.Internal{}, err)
 	}
-	req.NewWorkflowSnapshot.ExecutionInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
 	s.IsType(&serviceerror.Internal{}, err)
 
@@ -285,20 +289,20 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 	}
 	req.Mode = p.CreateWorkflowModeZombie
 	req.NewWorkflowSnapshot.ExecutionInfo.WorkflowId = workflowExecutionStatusZombie.GetWorkflowId()
-	req.NewWorkflowSnapshot.ExecutionInfo.RunId = workflowExecutionStatusZombie.GetRunId()
-	req.NewWorkflowSnapshot.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.RunId = workflowExecutionStatusZombie.GetRunId()
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
 	for _, invalidStatus := range invalidStatuses {
-		req.NewWorkflowSnapshot.ExecutionInfo.Status = invalidStatus
+		req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.Status = invalidStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
 		s.IsType(&serviceerror.Internal{}, err)
 	}
-	req.NewWorkflowSnapshot.ExecutionInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
 	s.Nil(err)
 	info, err = s.GetWorkflowExecutionInfo(namespaceID, workflowExecutionStatusZombie)
 	s.Nil(err)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, info.ExecutionInfo.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, info.ExecutionInfo.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.ExecutionState.Status)
 	s.assertChecksumsEqual(csum, info.Checksum)
 }
 
@@ -321,18 +325,20 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestId:            uuid.New(),
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowID,
-				RunId:                      workflowExecutionZombie1.GetRunId(),
 				TaskQueue:                  taskqueue,
 				WorkflowTypeName:           workflowType,
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				NextEventId:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
-				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
-				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{
+					RunId:                      workflowExecutionZombie1.GetRunId(),
+					CreateRequestId:            uuid.New(),
+					State: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
 			},
 			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			Checksum:       csum,
@@ -349,10 +355,10 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 		WorkflowId: workflowID,
 		RunId:      uuid.New(),
 	}
-	req.NewWorkflowSnapshot.ExecutionInfo.RunId = workflowExecutionRunning.GetRunId()
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.RunId = workflowExecutionRunning.GetRunId()
 	req.Mode = p.CreateWorkflowModeBrandNew
-	req.NewWorkflowSnapshot.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
-	req.NewWorkflowSnapshot.ExecutionInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
 	s.Nil(err)
 	currentRunID, err := s.GetCurrentWorkflowRunID(namespaceID, workflowID)
@@ -363,10 +369,10 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 		WorkflowId: workflowID,
 		RunId:      uuid.New(),
 	}
-	req.NewWorkflowSnapshot.ExecutionInfo.RunId = workflowExecutionZombie.GetRunId()
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.RunId = workflowExecutionZombie.GetRunId()
 	req.Mode = p.CreateWorkflowModeZombie
-	req.NewWorkflowSnapshot.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
-	req.NewWorkflowSnapshot.ExecutionInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
 	s.Nil(err)
 	// current run ID is still the prev running run ID
@@ -375,8 +381,8 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 	s.Equal(workflowExecutionRunning.GetRunId(), currentRunID)
 	info, err := s.GetWorkflowExecutionInfo(namespaceID, workflowExecutionZombie)
 	s.Nil(err)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, info.ExecutionInfo.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, info.ExecutionInfo.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.ExecutionState.Status)
 	s.assertChecksumsEqual(csum, info.Checksum)
 }
 
@@ -406,10 +412,8 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestId:            uuid.New(),
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowExecution.GetWorkflowId(),
-				RunId:                      workflowExecution.GetRunId(),
 				TaskQueue:                  taskqueue,
 				WorkflowTypeName:           workflowType,
 				WorkflowRunTimeout:         workflowTimeout,
@@ -417,6 +421,10 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 				LastFirstEventId:           common.FirstEventID,
 				NextEventId:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
+				ExecutionState:                     &persistenceblobs.WorkflowExecutionState{
+					RunId:                      workflowExecution.GetRunId(),
+					CreateRequestId:            uuid.New(),
+				},
 			},
 			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			Checksum:       csum,
@@ -425,21 +433,21 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 		Mode:    p.CreateWorkflowModeBrandNew,
 	}
 
-	req.NewWorkflowSnapshot.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
-	req.NewWorkflowSnapshot.ExecutionInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
 	s.Nil(err)
 	info, err := s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
 	s.Nil(err)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, info.ExecutionInfo.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, info.ExecutionInfo.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.ExecutionState.Status)
 	s.assertChecksumsEqual(csum, info.Checksum)
 
 	csum = s.newRandomChecksum() // update the checksum to new value
 	updatedInfo := copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updatedStats := copyExecutionStats(info.ExecutionStats)
-	updatedInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
-	updatedInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	updatedInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+	updatedInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
@@ -453,15 +461,15 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 	s.NoError(err)
 	info, err = s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
 	s.Nil(err)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info.ExecutionInfo.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info.ExecutionInfo.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.ExecutionState.Status)
 	s.assertChecksumsEqual(csum, info.Checksum)
 
 	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updatedStats = copyExecutionStats(info.ExecutionStats)
-	updatedInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+	updatedInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	for _, status := range statuses {
-		updatedInfo.Status = status
+		updatedInfo.ExecutionState.Status = status
 		_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 			UpdateWorkflowMutation: p.WorkflowMutation{
 				ExecutionInfo:  updatedInfo,
@@ -476,8 +484,8 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 
 	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updatedStats = copyExecutionStats(info.ExecutionStats)
-	updatedInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-	updatedInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	updatedInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	updatedInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
@@ -490,7 +498,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 	s.IsType(&serviceerror.Internal{}, err)
 
 	for _, status := range statuses {
-		updatedInfo.Status = status
+		updatedInfo.ExecutionState.Status = status
 		_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 			UpdateWorkflowMutation: p.WorkflowMutation{
 				ExecutionInfo:  updatedInfo,
@@ -503,8 +511,8 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 		s.Nil(err)
 		info, err = s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
 		s.Nil(err)
-		s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, info.ExecutionInfo.State)
-		s.EqualValues(status, info.ExecutionInfo.Status)
+		s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, info.ExecutionInfo.ExecutionState.State)
+		s.EqualValues(status, info.ExecutionInfo.ExecutionState.Status)
 	}
 
 	// create a new workflow with same namespace ID & workflow ID
@@ -514,19 +522,19 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 		RunId:      uuid.New(),
 	}
 	req.NewWorkflowSnapshot.ExecutionInfo.WorkflowId = workflowExecutionRunning.GetWorkflowId()
-	req.NewWorkflowSnapshot.ExecutionInfo.RunId = workflowExecutionRunning.GetRunId()
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.RunId = workflowExecutionRunning.GetRunId()
 	req.Mode = p.CreateWorkflowModeWorkflowIDReuse
 	req.PreviousRunID = workflowExecution.GetRunId()
 	req.PreviousLastWriteVersion = common.EmptyVersion
-	req.NewWorkflowSnapshot.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
-	req.NewWorkflowSnapshot.ExecutionInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
 	s.Nil(err)
 
 	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updatedStats = copyExecutionStats(info.ExecutionStats)
-	updatedInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
-	updatedInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	updatedInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
+	updatedInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
@@ -539,14 +547,14 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 	s.NoError(err)
 	info, err = s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
 	s.Nil(err)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, info.ExecutionInfo.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, info.ExecutionInfo.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.ExecutionState.Status)
 
 	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updatedStats = copyExecutionStats(info.ExecutionStats)
-	updatedInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
+	updatedInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
 	for _, status := range statuses {
-		updatedInfo.Status = status
+		updatedInfo.ExecutionState.Status = status
 		_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 			UpdateWorkflowMutation: p.WorkflowMutation{
 				ExecutionInfo:  updatedInfo,
@@ -580,18 +588,20 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestId:            uuid.New(),
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowExecution.GetWorkflowId(),
-				RunId:                      workflowExecution.GetRunId(),
 				TaskQueue:                  taskqueue,
 				WorkflowTypeName:           workflowType,
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				NextEventId:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
-				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{
+					RunId:                      workflowExecution.GetRunId(),
+					CreateRequestId:            uuid.New(),
+					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
 			},
 			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			Checksum:       csum,
@@ -612,8 +622,8 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	// try to turn current workflow into zombie state, this should end with an error
 	updatedInfo := copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updateStats := copyExecutionStats(info.ExecutionStats)
-	updatedInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
-	updatedInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	updatedInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
+	updatedInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
@@ -628,8 +638,8 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 
 	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updateStats = copyExecutionStats(info.ExecutionStats)
-	updatedInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-	updatedInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	updatedInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	updatedInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
@@ -648,12 +658,12 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	}
 	csum = checksum.Checksum{} // set checksum to nil
 	req.NewWorkflowSnapshot.ExecutionInfo.WorkflowId = workflowExecutionRunning.GetWorkflowId()
-	req.NewWorkflowSnapshot.ExecutionInfo.RunId = workflowExecutionRunning.GetRunId()
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.RunId = workflowExecutionRunning.GetRunId()
 	req.Mode = p.CreateWorkflowModeWorkflowIDReuse
 	req.PreviousRunID = workflowExecution.GetRunId()
 	req.PreviousLastWriteVersion = common.EmptyVersion
-	req.NewWorkflowSnapshot.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
-	req.NewWorkflowSnapshot.ExecutionInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	req.NewWorkflowSnapshot.Checksum = csum
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
 	s.Nil(err)
@@ -667,8 +677,8 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	s.assertChecksumsEqual(csum, info.Checksum)
 	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updateStats = copyExecutionStats(info.ExecutionStats)
-	updatedInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
-	updatedInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	updatedInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
+	updatedInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
@@ -682,8 +692,8 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	s.NoError(err)
 	info, err = s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
 	s.Nil(err)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, info.ExecutionInfo.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, info.ExecutionInfo.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionInfo.ExecutionState.Status)
 	s.assertChecksumsEqual(csum, info.Checksum)
 	// check current run ID is un touched
 	currentRunID, err = s.GetCurrentWorkflowRunID(namespaceID, workflowID)
@@ -708,19 +718,21 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestId:            uuid.New(),
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowExecution.GetWorkflowId(),
-				RunId:                      workflowExecution.GetRunId(),
 				TaskQueue:                  taskqueue,
 				WorkflowTypeName:           workflowType,
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
-				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				LastFirstEventId:           common.FirstEventID,
-				NextEventId:                nextEventID,
-				LastProcessedEvent:         lastProcessedEventID,
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{
+					RunId:                      workflowExecution.GetRunId(),
+					CreateRequestId:            uuid.New(),
+					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
+				LastFirstEventId:   common.FirstEventID,
+				NextEventId:        nextEventID,
+				LastProcessedEvent: lastProcessedEventID,
 			},
 			ExecutionStats: &persistenceblobs.ExecutionStats{},
 		},
@@ -734,7 +746,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 	s.NotNil(err)
 	alreadyStartedErr, ok := err.(*p.WorkflowExecutionAlreadyStartedError)
 	s.True(ok, "err is not WorkflowExecutionAlreadyStartedError")
-	s.Equal(req.NewWorkflowSnapshot.ExecutionInfo.CreateRequestId, alreadyStartedErr.StartRequestID)
+	s.Equal(req.NewWorkflowSnapshot.ExecutionInfo.GetExecutionState().CreateRequestId, alreadyStartedErr.StartRequestID)
 	s.Equal(workflowExecution.GetRunId(), alreadyStartedErr.RunID)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, alreadyStartedErr.Status)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, alreadyStartedErr.State)
@@ -764,8 +776,8 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 	s.assertChecksumsEqual(testWorkflowChecksum, state0.Checksum)
 	info0 := state0.ExecutionInfo
 	closeInfo := copyWorkflowExecutionInfo(info0)
-	closeInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-	closeInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	closeInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	closeInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	closeInfo.NextEventId = int64(5)
 	closeInfo.LastProcessedEvent = int64(2)
 
@@ -782,19 +794,21 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 	_, err3 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestId:            uuid.New(),
 				NamespaceId:                namespaceID,
 				WorkflowId:                 newExecution.GetWorkflowId(),
-				RunId:                      newExecution.GetRunId(),
 				TaskQueue:                  taskqueue,
 				WorkflowTypeName:           workflowType,
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
-				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				LastFirstEventId:           common.FirstEventID,
-				NextEventId:                nextEventID,
-				LastProcessedEvent:         lastProcessedEventID,
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{
+					RunId:                      newExecution.GetRunId(),
+					CreateRequestId:            uuid.New(),
+					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
+				LastFirstEventId:   common.FirstEventID,
+				NextEventId:        nextEventID,
+				LastProcessedEvent: lastProcessedEventID,
 			},
 			ExecutionStats: &persistenceblobs.ExecutionStats{},
 		},
@@ -841,7 +855,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionConcurrentCreate() {
 			s.NoError(err1)
 			info0 := state0.ExecutionInfo
 			continueAsNewInfo := copyWorkflowExecutionInfo(info0)
-			continueAsNewInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+			continueAsNewInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 			continueAsNewInfo.NextEventId = int64(5)
 			continueAsNewInfo.LastProcessedEvent = int64(2)
 
@@ -888,22 +902,24 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 	response, err2 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestId:            uuid.New(),
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowExecution.GetWorkflowId(),
-				RunId:                      workflowExecution.GetRunId(),
 				TaskQueue:                  "queue1",
 				WorkflowTypeName:           "workflow_type_test",
 				WorkflowRunTimeout:         timestamp.DurationFromSeconds(20),
 				DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(13),
-				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				LastFirstEventId:           common.FirstEventID,
-				NextEventId:                int64(3),
-				LastProcessedEvent:         0,
-				WorkflowTaskScheduleId:     int64(2),
-				WorkflowTaskStartedId:      common.EmptyEventID,
-				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{
+					RunId:                      workflowExecution.GetRunId(),
+					CreateRequestId:            uuid.New(),
+					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
+				LastFirstEventId:       common.FirstEventID,
+				NextEventId:            int64(3),
+				LastProcessedEvent:     0,
+				WorkflowTaskScheduleId: int64(2),
+				WorkflowTaskStartedId:  common.EmptyEventID,
+				WorkflowTaskTimeout:    timestamp.DurationFromSeconds(1),
 			},
 			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			TransferTasks: []p.Task{
@@ -956,21 +972,23 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	createReq := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestId:             uuid.New(),
-				NamespaceId:                 uuid.New(),
-				WorkflowId:                  "get-workflow-test",
-				RunId:                       uuid.New(),
-				FirstExecutionRunId:         uuid.New(),
-				ParentNamespaceId:           uuid.New(),
-				ParentWorkflowId:            "get-workflow-test-parent",
-				ParentRunId:                 uuid.New(),
-				InitiatedId:                 rand.Int63(),
-				TaskQueue:                   "get-wf-test-taskqueue",
-				WorkflowTypeName:            "code.uber.internal/test/workflow",
-				WorkflowRunTimeout:          timestamp.DurationFromSeconds(int64(rand.Int31())),
-				DefaultWorkflowTaskTimeout:  timestamp.DurationFromSeconds(int64(rand.Int31())),
-				State:                       enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-				Status:                      enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				NamespaceId:                uuid.New(),
+				WorkflowId:                 "get-workflow-test",
+				FirstExecutionRunId:        uuid.New(),
+				ParentNamespaceId:          uuid.New(),
+				ParentWorkflowId:           "get-workflow-test-parent",
+				ParentRunId:                uuid.New(),
+				InitiatedId:                rand.Int63(),
+				TaskQueue:                  "get-wf-test-taskqueue",
+				WorkflowTypeName:           "code.uber.internal/test/workflow",
+				WorkflowRunTimeout:         timestamp.DurationFromSeconds(int64(rand.Int31())),
+				DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(int64(rand.Int31())),
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{
+					RunId:                      uuid.New(),
+					CreateRequestId:            uuid.New(),
+					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
 				LastFirstEventId:            common.FirstEventID,
 				NextEventId:                 rand.Int63(),
 				LastProcessedEvent:          int64(rand.Int31()),
@@ -1007,15 +1025,15 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	state, err := s.GetWorkflowExecutionInfo(createReq.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
 		commonpb.WorkflowExecution{
 			WorkflowId: createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
-			RunId:      createReq.NewWorkflowSnapshot.ExecutionInfo.RunId,
+			RunId:      createReq.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.RunId,
 		})
 	s.NoError(err)
 	info := state.ExecutionInfo
 	s.NotNil(info, "Valid Workflow response expected.")
-	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.CreateRequestId, info.CreateRequestId)
+	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.GetExecutionState().CreateRequestId, info.ExecutionState.CreateRequestId)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.NamespaceId, info.NamespaceId)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowId, info.WorkflowId)
-	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.RunId, info.RunId)
+	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.RunId, info.GetRunId())
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.FirstExecutionRunId, info.FirstExecutionRunId)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.ParentNamespaceId, info.ParentNamespaceId)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.ParentWorkflowId, info.ParentWorkflowId)
@@ -1025,8 +1043,8 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName, info.WorkflowTypeName)
 	s.EqualValues(*createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowRunTimeout, *info.WorkflowRunTimeout)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.DefaultWorkflowTaskTimeout, info.DefaultWorkflowTaskTimeout)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionState.Status)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.NextEventId, info.NextEventId)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.LastProcessedEvent, info.LastProcessedEvent)
 	s.True(s.validateTimeRange(timestamp.TimeValue(info.LastUpdatedTime), time.Hour))
@@ -1074,13 +1092,13 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.NotNil(info0, "Valid Workflow info expected.")
 	s.Equal(namespaceID, info0.NamespaceId)
 	s.Equal("update-workflow-test", info0.WorkflowId)
-	s.Equal("5ba5e531-e46b-48d9-b4b3-859919839553", info0.RunId)
+	s.Equal("5ba5e531-e46b-48d9-b4b3-859919839553", info0.GetRunId())
 	s.Equal("queue1", info0.TaskQueue)
 	s.Equal("wType", info0.WorkflowTypeName)
 	s.EqualValues(int64(20), info0.WorkflowRunTimeout.Seconds())
 	s.EqualValues(int64(13), info0.DefaultWorkflowTaskTimeout.Seconds())
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info0.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info0.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info0.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info0.ExecutionState.Status)
 	s.Equal(int64(1), info0.LastFirstEventId)
 	s.Equal(int64(3), info0.NextEventId)
 	s.Equal(int64(0), info0.LastProcessedEvent)
@@ -1146,13 +1164,13 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.NotNil(info1, "Valid Workflow info expected.")
 	s.Equal(namespaceID, info1.NamespaceId)
 	s.Equal("update-workflow-test", info1.WorkflowId)
-	s.Equal("5ba5e531-e46b-48d9-b4b3-859919839553", info1.RunId)
+	s.Equal("5ba5e531-e46b-48d9-b4b3-859919839553", info1.GetRunId())
 	s.Equal("queue1", info1.TaskQueue)
 	s.Equal("wType", info1.WorkflowTypeName)
 	s.EqualValues(int64(20), info1.WorkflowRunTimeout.Seconds())
 	s.EqualValues(13, int64(info1.DefaultWorkflowTaskTimeout.Seconds()))
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info1.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info1.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info1.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info1.ExecutionState.Status)
 	s.Equal(int64(3), info1.LastFirstEventId)
 	s.Equal(int64(5), info1.NextEventId)
 	s.Equal(int64(2), info1.LastProcessedEvent)
@@ -1201,13 +1219,13 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.NotNil(info2, "Valid Workflow info expected.")
 	s.Equal(namespaceID, info2.NamespaceId)
 	s.Equal("update-workflow-test", info2.WorkflowId)
-	s.Equal("5ba5e531-e46b-48d9-b4b3-859919839553", info2.RunId)
+	s.Equal("5ba5e531-e46b-48d9-b4b3-859919839553", info2.GetRunId())
 	s.Equal("queue1", info2.TaskQueue)
 	s.Equal("wType", info2.WorkflowTypeName)
 	s.EqualValues(int64(20), info2.WorkflowRunTimeout.Seconds())
 	s.EqualValues(13, int64(info2.DefaultWorkflowTaskTimeout.Seconds()))
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info2.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info2.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info2.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info2.ExecutionState.Status)
 	s.Equal(int64(5), info2.NextEventId)
 	s.Equal(int64(2), info2.LastProcessedEvent)
 	s.True(s.validateTimeRange(*info2.LastUpdatedTime, time.Hour))
@@ -1247,13 +1265,13 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.NotNil(info3, "Valid Workflow info expected.")
 	s.Equal(namespaceID, info3.NamespaceId)
 	s.Equal("update-workflow-test", info3.WorkflowId)
-	s.Equal("5ba5e531-e46b-48d9-b4b3-859919839553", info3.RunId)
+	s.Equal("5ba5e531-e46b-48d9-b4b3-859919839553", info3.GetRunId())
 	s.Equal("queue1", info3.TaskQueue)
 	s.Equal("wType", info3.WorkflowTypeName)
 	s.EqualValues(int64(20), info3.WorkflowRunTimeout.Seconds())
 	s.EqualValues(13, int64(info3.DefaultWorkflowTaskTimeout.Seconds()))
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info3.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info3.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info3.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info3.ExecutionState.Status)
 	s.Equal(int64(5), info3.NextEventId)
 	s.Equal(int64(2), info3.LastProcessedEvent)
 	s.True(s.validateTimeRange(*info3.LastUpdatedTime, time.Hour))
@@ -1295,13 +1313,13 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.NotNil(info4, "Valid Workflow info expected.")
 	s.Equal(namespaceID, info4.NamespaceId)
 	s.Equal("update-workflow-test", info4.WorkflowId)
-	s.Equal("5ba5e531-e46b-48d9-b4b3-859919839553", info4.RunId)
+	s.Equal("5ba5e531-e46b-48d9-b4b3-859919839553", info4.GetRunId())
 	s.Equal("queue1", info4.TaskQueue)
 	s.Equal("wType", info4.WorkflowTypeName)
 	s.EqualValues(int64(20), info4.WorkflowRunTimeout.Seconds())
 	s.EqualValues(int64(13), info4.DefaultWorkflowTaskTimeout.Seconds())
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info4.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info4.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info4.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info4.ExecutionState.Status)
 	s.Equal(int64(5), info4.NextEventId)
 	s.Equal(int64(2), info4.LastProcessedEvent)
 	s.True(s.validateTimeRange(*info4.LastUpdatedTime, time.Hour))
@@ -1347,13 +1365,13 @@ func (s *ExecutionManagerSuite) TestDeleteWorkflow() {
 	s.NotNil(info0, "Valid Workflow info expected.")
 	s.Equal(namespaceID, info0.NamespaceId)
 	s.Equal("delete-workflow-test", info0.WorkflowId)
-	s.Equal("4e0917f2-9361-4a14-b16f-1fafe09b287a", info0.RunId)
+	s.Equal("4e0917f2-9361-4a14-b16f-1fafe09b287a", info0.GetRunId())
 	s.Equal("queue1", info0.TaskQueue)
 	s.Equal("wType", info0.WorkflowTypeName)
 	s.EqualValues(int64(20), info0.WorkflowRunTimeout.Seconds())
 	s.EqualValues(13, int64(info0.DefaultWorkflowTaskTimeout.Seconds()))
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info0.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info0.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info0.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info0.ExecutionState.Status)
 	s.Equal(int64(3), info0.NextEventId)
 	s.Equal(int64(0), info0.LastProcessedEvent)
 	s.True(s.validateTimeRange(*info0.LastUpdatedTime, time.Hour))
@@ -1408,9 +1426,9 @@ func (s *ExecutionManagerSuite) TestDeleteCurrentWorkflow() {
 	s.Equal(workflowExecution.GetRunId(), runID4)
 
 	fakeInfo := &p.WorkflowExecutionInfo{
-		NamespaceId: info0.ExecutionInfo.NamespaceId,
-		WorkflowId:  info0.ExecutionInfo.WorkflowId,
-		RunId:       uuid.New(),
+		NamespaceId:    info0.ExecutionInfo.NamespaceId,
+		WorkflowId:     info0.ExecutionInfo.WorkflowId,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: uuid.New()},
 	}
 
 	// test wrong run id with conditional delete
@@ -1518,7 +1536,7 @@ func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
 	s.Equal(info0, info1)
 
 	// mark it as corrupted
-	info0.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED
+	info0.ExecutionInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED
 	_, err6 := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  info0.ExecutionInfo,
@@ -1534,8 +1552,8 @@ func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
 	// we should still be able to load with runID
 	info2, err7 := s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
 	s.NoError(err7)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED, info2.ExecutionInfo.State)
-	info2.ExecutionInfo.State = info1.ExecutionInfo.State
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED, info2.ExecutionInfo.ExecutionState.State)
+	info2.ExecutionInfo.ExecutionState.State = info1.ExecutionInfo.ExecutionState.State
 	info2.ExecutionInfo.LastUpdatedTime = info1.ExecutionInfo.LastUpdatedTime
 	s.Equal(info2, info1)
 
@@ -2654,7 +2672,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateInfo() {
 	s.NotNil(state, "expected valid state.")
 	s.NotNil(state.ExecutionInfo, "expected valid MS Info state.")
 	s.Equal(updatedInfo.NextEventId, state.ExecutionInfo.NextEventId)
-	s.Equal(updatedInfo.State, state.ExecutionInfo.State)
+	s.Equal(updatedInfo.ExecutionState.State, state.ExecutionInfo.ExecutionState.State)
 }
 
 // TestContinueAsNew test
@@ -2673,8 +2691,8 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 	info0 := state0.ExecutionInfo
 	continueAsNewInfo := copyWorkflowExecutionInfo(info0)
 	continueAsNewStats := copyExecutionStats(state0.ExecutionStats)
-	continueAsNewInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
-	continueAsNewInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	continueAsNewInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
+	continueAsNewInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	continueAsNewInfo.NextEventId = int64(5)
 	continueAsNewInfo.LastProcessedEvent = int64(2)
 
@@ -2702,8 +2720,8 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 	prevExecutionState, err3 := s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
 	s.NoError(err3)
 	prevExecutionInfo := prevExecutionState.ExecutionInfo
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, prevExecutionInfo.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, prevExecutionInfo.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, prevExecutionInfo.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, prevExecutionInfo.ExecutionState.Status)
 	s.Equal(int64(5), prevExecutionInfo.NextEventId)
 	s.Equal(int64(2), prevExecutionInfo.LastProcessedEvent)
 	s.True(reflect.DeepEqual(prevExecutionInfo.AutoResetPoints, &workflowpb.ResetPoints{}))
@@ -2711,8 +2729,8 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 	newExecutionState, err4 := s.GetWorkflowExecutionInfo(namespaceID, newWorkflowExecution)
 	s.NoError(err4)
 	newExecutionInfo := newExecutionState.ExecutionInfo
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, newExecutionInfo.State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, newExecutionInfo.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, newExecutionInfo.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, newExecutionInfo.ExecutionState.Status)
 	s.Equal(int64(3), newExecutionInfo.NextEventId)
 	s.Equal(common.EmptyEventID, newExecutionInfo.LastProcessedEvent)
 	s.Equal(int64(2), newExecutionInfo.WorkflowTaskScheduleId)
@@ -3049,7 +3067,6 @@ func copyWorkflowExecutionInfo(sourceInfo *p.WorkflowExecutionInfo) *p.WorkflowE
 	return &p.WorkflowExecutionInfo{
 		NamespaceId:                sourceInfo.NamespaceId,
 		WorkflowId:                 sourceInfo.WorkflowId,
-		RunId:                      sourceInfo.RunId,
 		ParentNamespaceId:          sourceInfo.ParentNamespaceId,
 		ParentWorkflowId:           sourceInfo.ParentWorkflowId,
 		ParentRunId:                sourceInfo.ParentRunId,
@@ -3059,14 +3076,16 @@ func copyWorkflowExecutionInfo(sourceInfo *p.WorkflowExecutionInfo) *p.WorkflowE
 		WorkflowTypeName:           sourceInfo.WorkflowTypeName,
 		WorkflowRunTimeout:         sourceInfo.WorkflowRunTimeout,
 		DefaultWorkflowTaskTimeout: sourceInfo.DefaultWorkflowTaskTimeout,
-
-		State:                  sourceInfo.State,
-		Status:                 sourceInfo.Status,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			RunId:           sourceInfo.ExecutionState.RunId,
+			State:           sourceInfo.ExecutionState.State,
+			Status:          sourceInfo.ExecutionState.Status,
+			CreateRequestId: sourceInfo.ExecutionState.CreateRequestId,
+		},
 		LastFirstEventId:       sourceInfo.LastFirstEventId,
 		NextEventId:            sourceInfo.NextEventId,
 		LastProcessedEvent:     sourceInfo.LastProcessedEvent,
 		LastUpdatedTime:        sourceInfo.LastUpdatedTime,
-		CreateRequestId:        sourceInfo.CreateRequestId,
 		WorkflowTaskVersion:    sourceInfo.WorkflowTaskVersion,
 		WorkflowTaskScheduleId: sourceInfo.WorkflowTaskScheduleId,
 		WorkflowTaskStartedId:  sourceInfo.WorkflowTaskStartedId,

@@ -674,7 +674,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 	handler.logger.Debug("!!!! Continued as new without timeout",
-		tag.WorkflowRunID(executionInfo.RunId))
+		tag.WorkflowRunID(executionInfo.ExecutionState.RunId))
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {

@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 )
 
 type (
@@ -406,7 +407,7 @@ func (s *validateOperationWorkflowModeStateSuite) newTestWorkflowSnapshot(
 ) InternalWorkflowSnapshot {
 	return InternalWorkflowSnapshot{
 		ExecutionInfo: &WorkflowExecutionInfo{
-			State: state,
+			ExecutionState: &persistenceblobs.WorkflowExecutionState{State: state},
 		},
 	}
 }
@@ -416,7 +417,7 @@ func (s *validateOperationWorkflowModeStateSuite) newTestWorkflowMutation(
 ) InternalWorkflowMutation {
 	return InternalWorkflowMutation{
 		ExecutionInfo: &WorkflowExecutionInfo{
-			State: state,
+			ExecutionState: &persistenceblobs.WorkflowExecutionState{State: state},
 		},
 	}
 }

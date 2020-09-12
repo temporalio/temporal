@@ -446,7 +446,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 			newExecutionInfo.NamespaceId,
 			commonpb.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowId,
-				RunId:      newExecutionInfo.RunId,
+				RunId:      newExecutionInfo.ExecutionState.RunId,
 			},
 			r.shard,
 			r.shard.GetExecutionManager(),

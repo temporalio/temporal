@@ -56,7 +56,7 @@ func applyWorkflowMutationBatch(
 	versionHistories := workflowMutation.VersionHistories
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
-	runID := executionInfo.RunId
+	runID := executionInfo.ExecutionState.RunId
 	condition := workflowMutation.Condition
 
 	startVersion := workflowMutation.StartVersion
@@ -179,7 +179,7 @@ func applyWorkflowSnapshotBatchAsReset(
 	versionHistories := workflowSnapshot.VersionHistories
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
-	runID := executionInfo.RunId
+	runID := executionInfo.ExecutionState.RunId
 	condition := workflowSnapshot.Condition
 
 	startVersion := workflowSnapshot.StartVersion
@@ -294,7 +294,7 @@ func applyWorkflowSnapshotBatchAsNew(
 	versionHistories := workflowSnapshot.VersionHistories
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
-	runID := executionInfo.RunId
+	runID := executionInfo.ExecutionState.RunId
 
 	startVersion := workflowSnapshot.StartVersion
 
@@ -405,14 +405,14 @@ func createExecution(
 
 	// validate workflow state & close status
 	if err := p.ValidateCreateWorkflowStateStatus(
-		executionInfo.State,
-		executionInfo.Status); err != nil {
+		executionInfo.ExecutionState.State,
+		executionInfo.ExecutionState.Status); err != nil {
 		return err
 	}
 
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
-	runID := executionInfo.RunId
+	runID := executionInfo.ExecutionState.RunId
 
 	// TODO we should set the start time and last update time on business logic layer
 	executionInfo.StartTime = timestamp.UnixOrZeroTimePtr(p.DBTimestampToUnixNano(cqlNowTimestampMillis))
@@ -489,14 +489,14 @@ func updateExecution(
 
 	// validate workflow state & close status
 	if err := p.ValidateUpdateWorkflowStateStatus(
-		executionInfo.State,
-		executionInfo.Status); err != nil {
+		executionInfo.ExecutionState.State,
+		executionInfo.ExecutionState.Status); err != nil {
 		return err
 	}
 
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
-	runID := executionInfo.RunId
+	runID := executionInfo.ExecutionState.RunId
 
 	// TODO we should set the last update time on business logic layer
 	executionInfo.LastUpdatedTime = timestamp.UnixOrZeroTimePtr(p.DBTimestampToUnixNano(cqlNowTimestampMillis))

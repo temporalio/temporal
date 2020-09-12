@@ -129,9 +129,9 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId: s.namespaceID,
-		WorkflowId:  s.workflowID,
-		RunId:       s.runID,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     s.workflowID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: s.runID},
 	}).AnyTimes()
 
 	workflowIdentifier := definition.NewWorkflowIdentifier(
@@ -222,9 +222,9 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId: s.namespaceID,
-		WorkflowId:  s.workflowID,
-		RunId:       s.runID,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     s.workflowID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: s.runID},
 	}).AnyTimes()
 
 	workflowIdentifier := definition.NewWorkflowIdentifier(

@@ -133,9 +133,9 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId: s.namespaceID,
-		WorkflowId:  s.workflowID,
-		RunId:       s.runID,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     s.workflowID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: s.runID},
 	}).AnyTimes()
 
 	shardId := s.mockShard.GetShardID()
@@ -265,9 +265,9 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEv
 	s.NoError(err)
 
 	execution := &persistence.WorkflowExecutionInfo{
-		NamespaceId: s.namespaceID,
-		WorkflowId:  s.workflowID,
-		RunId:       s.runID,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     s.workflowID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: s.runID},
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
@@ -306,9 +306,9 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId: s.namespaceID,
-		WorkflowId:  s.workflowID,
-		RunId:       s.runID,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     s.workflowID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: s.runID},
 	}).AnyTimes()
 
 	shardId := s.mockShard.GetShardID()
@@ -359,9 +359,9 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_Missin
 	})
 
 	execution := &persistence.WorkflowExecutionInfo{
-		NamespaceId: s.namespaceID,
-		WorkflowId:  s.workflowID,
-		RunId:       s.runID,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     s.workflowID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: s.runID},
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()

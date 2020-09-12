@@ -300,7 +300,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 				ctx,
 				targetWorkflow.getMutableState(),
 				targetWorkflowEvents.Events,
-				targetWorkflow.getMutableState().GetExecutionInfo().RunId,
+				targetWorkflow.getMutableState().GetExecutionInfo().GetRunId(),
 			); err != nil {
 				return 0, transactionPolicyActive, err
 			}
@@ -313,7 +313,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 		baseMutableState := targetWorkflow.getMutableState()
 		namespaceID := baseMutableState.GetExecutionInfo().NamespaceId
 		workflowID := baseMutableState.GetExecutionInfo().WorkflowId
-		baseRunID := baseMutableState.GetExecutionInfo().RunId
+		baseRunID := baseMutableState.GetExecutionInfo().GetRunId()
 		resetRunID := uuid.New()
 		baseRebuildLastEventID := baseMutableState.GetPreviousStartedEventID()
 
@@ -470,7 +470,7 @@ func (r *nDCTransactionMgrImpl) isWorkflowCurrent(
 	executionInfo := targetWorkflow.getMutableState().GetExecutionInfo()
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
-	runID := executionInfo.RunId
+	runID := executionInfo.ExecutionState.RunId
 
 	currentRunID, err := r.getCurrentWorkflowRunID(
 		ctx,

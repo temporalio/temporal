@@ -395,7 +395,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		if ok {
 			t.logger.Info("Duplicate activity retry timer task",
 				tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(mutableState.GetExecutionInfo().RunId),
+				tag.WorkflowRunID(mutableState.GetExecutionInfo().GetRunId()),
 				tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
 				tag.WorkflowScheduleID(activityInfo.ScheduleId),
 				tag.Attempt(activityInfo.Attempt),
@@ -556,7 +556,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 			newExecutionInfo.NamespaceId,
 			commonpb.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowId,
-				RunId:      newExecutionInfo.RunId,
+				RunId:      newExecutionInfo.ExecutionState.RunId,
 			},
 			t.shard,
 			t.shard.GetExecutionManager(),

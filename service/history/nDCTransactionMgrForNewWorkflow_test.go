@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -79,9 +80,9 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Dup() 
 	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
-		WorkflowId:  workflowID,
-		RunId:       runID,
+		NamespaceId:    namespaceID,
+		WorkflowId:     workflowID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: runID},
 	}).AnyTimes()
 
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(runID, nil).Times(1)
@@ -112,9 +113,9 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 	workflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
 	workflowHistorySize := int64(12345)
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
-		WorkflowId:  workflowID,
-		RunId:       runID,
+		NamespaceId:    namespaceID,
+		WorkflowId:     workflowID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: runID},
 	}).AnyTimes()
 	mutableState.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(
 		workflowSnapshot, workflowEventsSeq, nil,
@@ -172,9 +173,9 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
 	targetWorkflowHistorySize := int64(12345)
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
-		WorkflowId:  workflowID,
-		RunId:       targetRunID,
+		NamespaceId:    namespaceID,
+		WorkflowId:     workflowID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: targetRunID},
 	}).AnyTimes()
 	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
@@ -186,9 +187,9 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
-		WorkflowId:  workflowID,
-		RunId:       currentRunID,
+		NamespaceId:    namespaceID,
+		WorkflowId:     workflowID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: currentRunID},
 	}).AnyTimes()
 	currentWorkflow.EXPECT().getVectorClock().Return(currentLastWriteVersion, int64(0), nil)
 
@@ -243,9 +244,9 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
 	targetWorkflowHistorySize := int64(12345)
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
-		WorkflowId:  workflowID,
-		RunId:       targetRunID,
+		NamespaceId:    namespaceID,
+		WorkflowId:     workflowID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: targetRunID},
 	}).AnyTimes()
 	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
@@ -309,9 +310,9 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
 	targetWorkflowHistorySize := int64(12345)
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
-		WorkflowId:  workflowID,
-		RunId:       targetRunID,
+		NamespaceId:    namespaceID,
+		WorkflowId:     workflowID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: targetRunID},
 	}).AnyTimes()
 	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
@@ -371,9 +372,9 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Suppre
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
-		WorkflowId:  workflowID,
-		RunId:       targetRunID,
+		NamespaceId:    namespaceID,
+		WorkflowId:     workflowID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: targetRunID},
 	}).AnyTimes()
 
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)

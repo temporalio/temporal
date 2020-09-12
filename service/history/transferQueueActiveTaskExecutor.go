@@ -249,7 +249,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
+	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.ExecutionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
 	completionEvent, err := mutableState.GetCompletionEvent()
 	if err != nil {
 		return err
@@ -263,7 +263,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 
 	workflowTypeName := executionInfo.WorkflowTypeName
 	workflowCloseTimestamp := wfCloseTime
-	workflowStatus := executionInfo.Status
+	workflowStatus := executionInfo.ExecutionState.Status
 	workflowHistoryLength := mutableState.GetNextEventID() - 1
 
 	startEvent, err := mutableState.GetStartEvent()
@@ -798,7 +798,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	var baseContext workflowExecutionContext
 	var baseMutableState mutableState
 	var baseRelease releaseWorkflowExecutionFunc
-	if resetPoint.GetRunId() == executionInfo.RunId {
+	if resetPoint.GetRunId() == executionInfo.ExecutionState.RunId {
 		baseContext = currentContext
 		baseMutableState = currentMutableState
 		baseRelease = currentRelease
@@ -1261,7 +1261,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 
 	namespaceID := task.GetNamespaceId()
 	workflowID := task.GetWorkflowId()
-	baseRunID := baseMutableState.GetExecutionInfo().RunId
+	baseRunID := baseMutableState.GetExecutionInfo().GetRunId()
 
 	resetRunID := uuid.New()
 	baseRebuildLastEventID := resetPoint.GetFirstWorkflowTaskCompletedId() - 1

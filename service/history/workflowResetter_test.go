@@ -165,7 +165,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		RunId: s.currentRunID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: s.currentRunID},
 	}).AnyTimes()
 	currentMutableState.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 
