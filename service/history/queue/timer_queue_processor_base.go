@@ -291,7 +291,6 @@ func (t *timerQueueProcessorBase) processQueueCollections(levels map[int]struct{
 		var nextPageToken []byte
 		readLevel := activeQueue.State().ReadLevel()
 		maxReadLevel := minTaskKey(activeQueue.State().MaxLevel(), t.updateMaxReadLevel())
-		lookAheadMaxLevel := activeQueue.State().MaxLevel()
 		domainFilter := activeQueue.State().DomainFilter()
 
 		if progress, ok := t.processingQueueReadProgress[level]; ok {
@@ -321,7 +320,7 @@ func (t *timerQueueProcessorBase) processQueueCollections(levels map[int]struct{
 		}
 		cancel()
 
-		timerTaskInfos, lookAheadTask, nextPageToken, err := t.readAndFilterTasks(readLevel, maxReadLevel, nextPageToken, lookAheadMaxLevel)
+		timerTaskInfos, lookAheadTask, nextPageToken, err := t.readAndFilterTasks(readLevel, maxReadLevel, nextPageToken)
 		if err != nil {
 			t.logger.Error("Processor unable to retrieve tasks", tag.Error(err))
 			t.upsertPollTime(level, time.Time{}) // re-enqueue the event
@@ -354,27 +353,18 @@ func (t *timerQueueProcessorBase) processQueueCollections(levels map[int]struct{
 
 		var newReadLevel task.Key
 		if len(nextPageToken) == 0 {
+			newReadLevel = maxReadLevel
 			if lookAheadTask != nil {
 				// lookAheadTask may exist only when nextPageToken is empty
-				// notice that lookAheadTask.VisibilityTimestamp may be large than shard max read level,
+				// notice that lookAheadTask.VisibilityTimestamp may be larger than shard max read level,
 				// which means new tasks can be generated before that timestamp. This issue is solved by
 				// upsertPollTime whenever there are new tasks
 				t.upsertPollTime(level, lookAheadTask.VisibilityTimestamp)
-				newReadLevel = minTaskKey(maxReadLevel, newTimerTaskKey(lookAheadTask.GetVisibilityTimestamp(), 0))
-			} else {
-				// we have no idea when the next poll should happen
-				if taskKeyEquals(maxReadLevel, lookAheadMaxLevel) {
-					// this means processing queue's max level is less than shard max read level, so
-					// no more tasks will be generated for this processing queue, enqueue an event
-					// to process the next queue in the queue collection if exists.
-					t.upsertPollTime(level, time.Time{})
-				}
-				// else it means we can't find any look ahead task in the range from shard max read level
-				// to processing queue max read level, new tasks can be still generated for this processing queue's
-				// and we have no idea when that will come. Rely on notifyNewTask to trigger the next poll even for non-default queue.
-				// another option for non-default queue is that we can setup a backoff timer to check back later
-				newReadLevel = maxReadLevel
+				newReadLevel = minTaskKey(newReadLevel, newTimerTaskKey(lookAheadTask.GetVisibilityTimestamp(), 0))
 			}
+			// else we have no idea when the next poll should happen
+			// rely on notifyNewTask to trigger the next poll even for non-default queue.
+			// another option for non-default queue is that we can setup a backoff timer to check back later
 		} else {
 			// more tasks should be loaded for this processing queue
 			// record the current progress and update the poll time
@@ -423,7 +413,6 @@ func (t *timerQueueProcessorBase) readAndFilterTasks(
 	readLevel task.Key,
 	maxReadLevel task.Key,
 	nextPageToken []byte,
-	lookAheadMaxLevel task.Key,
 ) ([]*persistence.TimerTaskInfo, *persistence.TimerTaskInfo, []byte, error) {
 	timerTasks, nextPageToken, err := t.getTimerTasks(readLevel, maxReadLevel, nextPageToken, t.options.BatchSize())
 	if err != nil {
@@ -442,9 +431,9 @@ func (t *timerQueueProcessorBase) readAndFilterTasks(
 		filteredTasks = append(filteredTasks, timerTask)
 	}
 
-	if len(nextPageToken) == 0 && lookAheadTask == nil && maxReadLevel.Less(lookAheadMaxLevel) {
+	if len(nextPageToken) == 0 && lookAheadTask == nil {
 		// only look ahead within the processing queue boundary
-		lookAheadTask, err = t.readLookAheadTask(maxReadLevel, lookAheadMaxLevel)
+		lookAheadTask, err = t.readLookAheadTask(maxReadLevel, maximumTimerTaskKey)
 		if err != nil {
 			return filteredTasks, nil, nil, nil
 		}

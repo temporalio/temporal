@@ -27,6 +27,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	t "github.com/uber/cadence/common/task"
 	"github.com/uber/cadence/service/history/task"
 )
 
@@ -186,7 +187,9 @@ func (p *pendingTaskSplitPolicy) Evaluate(
 
 	pendingTasksPerDomain := make(map[string]int) // domainID -> # of pending tasks
 	for _, task := range queueImpl.outstandingTasks {
-		pendingTasksPerDomain[task.GetDomainID()]++
+		if task.State() != t.TaskStateAcked {
+			pendingTasksPerDomain[task.GetDomainID()]++
+		}
 	}
 
 	domainToSplit := make(map[string]struct{})

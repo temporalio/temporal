@@ -37,6 +37,10 @@ import (
 	"github.com/uber/cadence/service/history/task"
 )
 
+const (
+	maximumTransferTaskLookAhead = 2 ^ 20
+)
+
 var (
 	loadQueueTaskThrottleRetryDelay = 5 * time.Second
 
@@ -379,6 +383,10 @@ func (t *transferQueueProcessorBase) splitQueue() {
 	splitPolicy := t.initializeSplitPolicy(
 		func(key task.Key, domainID string) task.Key {
 			totalLookAhead := lookAhead * int64(t.options.SplitLookAheadDurationByDomainID(domainID).Seconds())
+			totalLookAhead = common.MinInt64(totalLookAhead, maximumTransferTaskLookAhead)
+			if totalLookAhead < 0 {
+				totalLookAhead = 0
+			}
 			return newTransferTaskKey(key.(transferTaskKey).taskID + totalLookAhead)
 		},
 	)
