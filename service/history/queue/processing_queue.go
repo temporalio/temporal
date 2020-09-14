@@ -120,6 +120,12 @@ func newProcessingQueue(
 		queue.state = copyQueueState(state)
 	}
 
+	if queue.state.readLevel.Less(queue.state.ackLevel) {
+		logger.Fatal("ack level larger than readlevel when creating processing queue", tag.Error(
+			fmt.Errorf("ack level: %v, read level: %v", queue.state.ackLevel, queue.state.readLevel),
+		))
+	}
+
 	return queue
 }
 
@@ -224,6 +230,14 @@ func (q *processingQueueImpl) Merge(
 		q1.state.domainFilter.Merge(q2.state.domainFilter),
 	))
 
+	for _, state := range newQueueStates {
+		if state.ReadLevel().Less(state.AckLevel()) || state.MaxLevel().Less(state.ReadLevel()) {
+			q.logger.Fatal("invalid processing queue merge result", tag.Error(
+				fmt.Errorf("q1: %v, q2: %v, merge result: %v", q1.state, q2.state, newQueueStates),
+			))
+		}
+	}
+
 	return splitProcessingQueue([]*processingQueueImpl{q1, q2}, newQueueStates, q.logger, q.metricsClient)
 }
 
@@ -231,8 +245,16 @@ func (q *processingQueueImpl) AddTasks(
 	tasks map[task.Key]task.Task,
 	newReadLevel task.Key,
 ) {
+	if newReadLevel.Less(q.state.readLevel) {
+		q.logger.Fatal("processing queue read level moved backward", tag.Error(
+			fmt.Errorf("current read level: %v, new read level: %v", q.state.readLevel, newReadLevel),
+		))
+	}
+
 	for key, task := range tasks {
 		if _, loaded := q.outstandingTasks[key]; loaded {
+			// TODO: this means the task has been submitted before, we should mark the task state accordingly and
+			// do not submit this task again in transfer/timer queue processor base
 			q.logger.Debug(fmt.Sprintf("Skipping task: %+v. DomainID: %v, WorkflowID: %v, RunID: %v, Type: %v",
 				key, task.GetDomainID(), task.GetWorkflowID(), task.GetRunID(), task.GetTaskType()))
 			continue
@@ -263,6 +285,14 @@ func (q *processingQueueImpl) UpdateAckLevel() (task.Key, int) {
 	})
 
 	for _, key := range keys {
+		if q.state.readLevel.Less(key) {
+			// this can happen as during merge read level can move backward
+			// besides that for time task key, readLevel is expected to be less than task key
+			// as the taskID for read level is always 0. This means we can potentially buffer
+			// more timer tasks in memory. If this becomes a problem, we can change this logic.
+			break
+		}
+
 		if q.outstandingTasks[key].State() != t.TaskStateAcked {
 			break
 		}
@@ -277,6 +307,12 @@ func (q *processingQueueImpl) UpdateAckLevel() (task.Key, int) {
 
 	if timerKey, ok := q.state.ackLevel.(timerTaskKey); ok {
 		q.state.ackLevel = newTimerTaskKey(timerKey.visibilityTimestamp, 0)
+	}
+
+	if q.state.readLevel.Less(q.state.ackLevel) {
+		q.logger.Fatal("ack level moved beyond read level", tag.Error(
+			fmt.Errorf("processing queue state: %v", q.state),
+		))
 	}
 
 	return q.state.ackLevel, len(q.outstandingTasks)

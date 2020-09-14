@@ -2818,7 +2818,6 @@ func (e *historyEngineImpl) DescribeTransferQueue(
 	ctx context.Context,
 	clusterName string,
 ) (*workflow.DescribeQueueResponse, error) {
-	fmt.Println("described queue: shardID: ", e.shard.GetShardID())
 	return e.describeQueue(e.txProcessor, clusterName)
 }
 

@@ -21,6 +21,7 @@
 package queue
 
 import (
+	"fmt"
 	"math/rand"
 
 	"github.com/uber/cadence/common/log"
@@ -422,6 +423,12 @@ func splitQueueHelper(
 			queueImpl.state.maxLevel,
 			queueImpl.state.domainFilter.copy(),
 		))
+	}
+
+	for _, state := range newQueueStates {
+		if state.ReadLevel().Less(state.AckLevel()) || state.MaxLevel().Less(state.ReadLevel()) {
+			panic(fmt.Sprintf("invalid processing queue split result: %v, state before split: %v, newMaxLevel: %v", state, queueImpl.state, newMaxLevel))
+		}
 	}
 
 	return newQueueStates

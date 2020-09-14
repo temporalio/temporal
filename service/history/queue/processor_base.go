@@ -22,7 +22,6 @@ package queue
 
 import (
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -275,30 +274,40 @@ func (p *processorBase) splitProcessingQueueCollection(
 		return
 	}
 
-	newQueuesMap := make(map[int][]ProcessingQueue)
+	newQueuesMap := make(map[int][][]ProcessingQueue)
 	for _, queueCollection := range p.processingQueueCollections {
+		currentNewQueuesMap := make(map[int][]ProcessingQueue)
 		newQueues := queueCollection.Split(splitPolicy)
 		for _, newQueue := range newQueues {
 			newQueueLevel := newQueue.State().Level()
-			newQueuesMap[newQueueLevel] = append(newQueuesMap[newQueueLevel], newQueue)
+			currentNewQueuesMap[newQueueLevel] = append(currentNewQueuesMap[newQueueLevel], newQueue)
 		}
 
-		if queuesToMerge, ok := newQueuesMap[queueCollection.Level()]; ok {
-			queueCollection.Merge(queuesToMerge)
-			delete(newQueuesMap, queueCollection.Level())
+		for newQueueLevel, queues := range currentNewQueuesMap {
+			newQueuesMap[newQueueLevel] = append(newQueuesMap[newQueueLevel], queues)
 		}
 	}
 
-	for level, newQueues := range newQueuesMap {
-		p.processingQueueCollections = append(p.processingQueueCollections, NewProcessingQueueCollection(
+	for _, queueCollection := range p.processingQueueCollections {
+		if queuesList, ok := newQueuesMap[queueCollection.Level()]; ok {
+			for _, queues := range queuesList {
+				queueCollection.Merge(queues)
+			}
+		}
+		delete(newQueuesMap, queueCollection.Level())
+	}
+
+	for level, newQueuesList := range newQueuesMap {
+		newQueueCollection := NewProcessingQueueCollection(
 			level,
-			newQueues,
-		))
+			[]ProcessingQueue{},
+		)
+		for _, newQueues := range newQueuesList {
+			newQueueCollection.Merge(newQueues)
+		}
+		p.processingQueueCollections = append(p.processingQueueCollections, newQueueCollection)
+		delete(newQueuesMap, level)
 	}
-
-	sort.Slice(p.processingQueueCollections, func(i, j int) bool {
-		return p.processingQueueCollections[i].Level() < p.processingQueueCollections[j].Level()
-	})
 
 	// there can be new queue collections created or new queues added to an existing collection
 	for _, queueCollections := range p.processingQueueCollections {
@@ -471,9 +480,6 @@ func newProcessingQueueCollections(
 			queues,
 		))
 	}
-	sort.Slice(processingQueueCollections, func(i, j int) bool {
-		return processingQueueCollections[i].Level() < processingQueueCollections[j].Level()
-	})
 
 	return processingQueueCollections
 }
