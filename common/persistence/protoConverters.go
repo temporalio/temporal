@@ -106,7 +106,28 @@ func WorkflowExecutionToProto(executionInfo *WorkflowExecutionInfo, startVersion
 		info.CancelRequested = true
 		info.CancelRequestId = executionInfo.CancelRequestId
 	}
+	ApplyWorkflowExecutionWritePolicies(info, startVersion, versionHistories)
 	return info, state, nil
+}
+
+func ApplyWorkflowExecutionWritePolicies(info *persistenceblobs.WorkflowExecutionInfo, startVersion int64, versionHistories *history.VersionHistories) {
+	info.StartVersion = startVersion
+	info.VersionHistories = versionHistories
+	info.EventStoreVersion = EventStoreVersion
+	info.HistorySize = info.ExecutionStats.GetHistorySize()
+
+	if info.ParentNamespaceId == "" {
+		info.ParentNamespaceId = ""
+		info.ParentWorkflowId = ""
+		info.ParentRunId = ""
+		info.InitiatedId = 0
+	} else {
+		info.CompletionEvent = nil
+	}
+
+	if !info.CancelRequested {
+		info.CancelRequestId = ""
+	}
 }
 
 func WorkflowExecutionFromProto(info *persistenceblobs.WorkflowExecutionInfo, state *persistenceblobs.WorkflowExecutionState, nextEventID int64) *WorkflowExecutionInfo {
