@@ -14,7 +14,7 @@ services:
       - "8125:8125"
       - "8126:8126"
   cadence:
-    image: ubercadence/server:master-auto-setup
+    image: ubercadence/server:0.14.0-auto-setup
     ports:
       - "7933:7933"
       - "7934:7934"
