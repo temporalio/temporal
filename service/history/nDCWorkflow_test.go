@@ -38,6 +38,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/persistence"
@@ -91,7 +92,7 @@ func (s *nDCWorkflowSuite) TestGetMethods() {
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
-		RunId:           s.runID,
+		ExecutionState:  &persistenceblobs.WorkflowExecutionState{RunId: s.runID},
 		LastEventTaskId: lastEventTaskID,
 	}).AnyTimes()
 
@@ -202,7 +203,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Error() {
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
-		RunId:           s.runID,
+		ExecutionState:  &persistenceblobs.WorkflowExecutionState{RunId: s.runID},
 		LastEventTaskId: lastEventTaskID,
 	}).AnyTimes()
 
@@ -213,7 +214,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Error() {
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
-		RunId:           incomingRunID,
+		ExecutionState:  &persistenceblobs.WorkflowExecutionState{RunId: incomingRunID},
 		LastEventTaskId: incomingLastEventTaskID,
 	}).AnyTimes()
 
@@ -230,7 +231,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
-		RunId:           s.runID,
+		ExecutionState:  &persistenceblobs.WorkflowExecutionState{RunId: s.runID},
 		LastEventTaskId: lastEventTaskID,
 	}).AnyTimes()
 	nDCWorkflow := newNDCWorkflow(
@@ -259,7 +260,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
-		RunId:           incomingRunID,
+		ExecutionState:  &persistenceblobs.WorkflowExecutionState{RunId: incomingRunID},
 		LastEventTaskId: incomingLastEventTaskID,
 	}).AnyTimes()
 
@@ -309,10 +310,12 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
-		RunId:           s.runID,
 		LastEventTaskId: lastEventTaskID,
-		State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			RunId:           s.runID,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	nDCWorkflow := newNDCWorkflow(
@@ -341,7 +344,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
-		RunId:           incomingRunID,
+		ExecutionState:  &persistenceblobs.WorkflowExecutionState{RunId: incomingRunID},
 		LastEventTaskId: incomingLastEventTaskID,
 	}).AnyTimes()
 
@@ -358,6 +361,6 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	policy, err = nDCWorkflow.suppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(transactionPolicyPassive, policy)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionInfo.State)
-	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, executionInfo.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionInfo.ExecutionState.State)
+	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, executionInfo.ExecutionState.Status)
 }

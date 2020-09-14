@@ -31,6 +31,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+
+	"go.temporal.io/server/api/persistenceblobs/v1"
 )
 
 type (
@@ -58,7 +60,9 @@ func (s *statsComputerSuite) SetupTest() {
 func (s *statsComputerSuite) createRequest() *InternalUpdateWorkflowExecutionRequest {
 	return &InternalUpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: InternalWorkflowMutation{
-			ExecutionInfo: &WorkflowExecutionInfo{},
+			ExecutionInfo: &WorkflowExecutionInfo{
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{},
+			},
 		},
 	}
 }
@@ -79,7 +83,7 @@ func (s *statsComputerSuite) TestStatsWithStartedEvent() {
 
 	ms.UpdateWorkflowMutation.ExecutionInfo.NamespaceId = namespaceID
 	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowId = execution.GetWorkflowId()
-	ms.UpdateWorkflowMutation.ExecutionInfo.RunId = execution.GetRunId()
+	ms.UpdateWorkflowMutation.ExecutionInfo.ExecutionState.RunId = execution.GetRunId()
 	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowTypeName = workflowType.GetName()
 	ms.UpdateWorkflowMutation.ExecutionInfo.TaskQueue = taskQueue.GetName()
 

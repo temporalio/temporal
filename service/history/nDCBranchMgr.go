@@ -216,7 +216,7 @@ func (r *nDCBranchMgrImpl) verifyEventsOrder(
 			outOfOrderDeliveryMessage,
 			executionInfo.NamespaceId,
 			executionInfo.WorkflowId,
-			executionInfo.RunId,
+			executionInfo.ExecutionState.RunId,
 			lastVersionHistoryItem.GetEventID(),
 			lastVersionHistoryItem.GetVersion(),
 			incomingFirstEventID,

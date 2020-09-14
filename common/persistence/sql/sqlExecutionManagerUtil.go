@@ -54,7 +54,7 @@ func applyWorkflowMutationTx(
 	lastWriteVersion := workflowMutation.LastWriteVersion
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
-	runID := executionInfo.RunId
+	runID := executionInfo.ExecutionState.RunId
 
 	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
 	if err != nil {
@@ -194,7 +194,7 @@ func applyWorkflowSnapshotTxAsReset(
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
 	workflowID := executionInfo.WorkflowId
 	namespaceID := executionInfo.NamespaceId
-	runID := executionInfo.RunId
+	runID := executionInfo.ExecutionState.RunId
 	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
 	if err != nil {
 		return err
@@ -369,7 +369,7 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
 	workflowID := executionInfo.WorkflowId
 	namespaceID := executionInfo.NamespaceId
-	runID := executionInfo.RunId
+	runID := executionInfo.ExecutionState.RunId
 	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
 	if err != nil {
 		return err
@@ -1111,7 +1111,7 @@ func buildExecutionRow(
 		return nil, err
 	}
 
-	ridBytes, err := primitives.ParseUUID(executionInfo.RunId)
+	ridBytes, err := primitives.ParseUUID(executionInfo.ExecutionState.RunId)
 	if err != nil {
 		return nil, err
 	}
@@ -1141,8 +1141,8 @@ func (m *sqlExecutionManager) createExecution(
 
 	// validate workflow state & close status
 	if err := p.ValidateCreateWorkflowStateStatus(
-		executionInfo.State,
-		executionInfo.Status); err != nil {
+		executionInfo.ExecutionState.State,
+		executionInfo.ExecutionState.Status); err != nil {
 		return err
 	}
 
@@ -1165,10 +1165,10 @@ func (m *sqlExecutionManager) createExecution(
 		if m.db.IsDupEntryError(err) {
 			return &p.WorkflowExecutionAlreadyStartedError{
 				Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", executionInfo.WorkflowId),
-				StartRequestID:   executionInfo.CreateRequestId,
-				RunID:            executionInfo.RunId,
-				State:            executionInfo.State,
-				Status:           executionInfo.Status,
+				StartRequestID:   executionInfo.ExecutionState.CreateRequestId,
+				RunID:            executionInfo.ExecutionState.RunId,
+				State:            executionInfo.ExecutionState.State,
+				Status:           executionInfo.ExecutionState.Status,
 				LastWriteVersion: row.LastWriteVersion,
 			}
 		}
@@ -1196,8 +1196,8 @@ func updateExecution(
 
 	// validate workflow state & close status
 	if err := p.ValidateUpdateWorkflowStateStatus(
-		executionInfo.State,
-		executionInfo.Status); err != nil {
+		executionInfo.ExecutionState.State,
+		executionInfo.ExecutionState.Status); err != nil {
 		return err
 	}
 

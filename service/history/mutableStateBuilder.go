@@ -230,9 +230,9 @@ func newMutableStateBuilder(
 		WorkflowTaskTimeout:    timestamp.DurationFromSeconds(0),
 		WorkflowTaskAttempt:    1,
 
-		NextEventId:        common.FirstEventID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		NextEventId: common.FirstEventID,
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
 		LastProcessedEvent: common.EmptyEventID,
 	}
 	s.hBuilder = newHistoryBuilder(s, logger)
@@ -293,7 +293,7 @@ func (e *mutableStateBuilder) Load(
 
 	e.currentVersion = common.EmptyVersion
 	e.hasBufferedEventsInDB = len(e.bufferedEvents) > 0
-	e.stateInDB = state.ExecutionInfo.State
+	e.stateInDB = state.ExecutionInfo.ExecutionState.State
 	e.nextEventIDInDB = state.ExecutionInfo.NextEventId
 	e.versionHistories = state.VersionHistories
 	e.checksum = state.Checksum
@@ -797,7 +797,7 @@ func (e *mutableStateBuilder) IsCurrentWorkflowGuaranteed() bool {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
 		return false
 	default:
-		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.State))
+		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.ExecutionState.State))
 	}
 }
 
@@ -890,7 +890,7 @@ func (e *mutableStateBuilder) shouldBufferEvent(
 		// sanity check there is no workflow task on the fly
 		if e.HasInFlightWorkflowTask() {
 			msg := fmt.Sprintf("history mutable state is processing event: %v while there is workflow task pending. "+
-				"namespaceID: %v, workflow ID: %v, run ID: %v.", eventType, e.executionInfo.NamespaceId, e.executionInfo.WorkflowId, e.executionInfo.RunId)
+				"namespaceID: %v, workflow ID: %v, run ID: %v.", eventType, e.executionInfo.NamespaceId, e.executionInfo.WorkflowId, e.executionInfo.ExecutionState.RunId)
 			panic(msg)
 		}
 		return false
@@ -926,7 +926,7 @@ func (e *mutableStateBuilder) GetActivityScheduledEvent(
 	scheduledEvent, err := e.eventsCache.getEvent(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
-		e.executionInfo.RunId,
+		e.executionInfo.ExecutionState.RunId,
 		ai.ScheduledEventBatchId,
 		ai.ScheduleId,
 		currentBranchToken,
@@ -998,7 +998,7 @@ func (e *mutableStateBuilder) GetChildExecutionInitiatedEvent(
 	initiatedEvent, err := e.eventsCache.getEvent(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
-		e.executionInfo.RunId,
+		e.executionInfo.ExecutionState.RunId,
 		ci.InitiatedEventBatchId,
 		ci.InitiatedId,
 		currentBranchToken,
@@ -1072,7 +1072,7 @@ func (e *mutableStateBuilder) GetSignalInfo(
 
 // GetCompletionEvent retrieves the workflow completion event from mutable state
 func (e *mutableStateBuilder) GetCompletionEvent() (*historypb.HistoryEvent, error) {
-	if e.executionInfo.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if e.executionInfo.ExecutionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil, ErrMissingWorkflowCompletionEvent
 	}
 
@@ -1087,7 +1087,7 @@ func (e *mutableStateBuilder) GetCompletionEvent() (*historypb.HistoryEvent, err
 	completionEvent, err := e.eventsCache.getEvent(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
-		e.executionInfo.RunId,
+		e.executionInfo.ExecutionState.RunId,
 		firstEventID,
 		completionEventID,
 		currentBranchToken,
@@ -1113,7 +1113,7 @@ func (e *mutableStateBuilder) GetStartEvent() (*historypb.HistoryEvent, error) {
 	startEvent, err := e.eventsCache.getEvent(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
-		e.executionInfo.RunId,
+		e.executionInfo.ExecutionState.RunId,
 		common.FirstEventID,
 		common.FirstEventID,
 		currentBranchToken,
@@ -1198,7 +1198,7 @@ func (e *mutableStateBuilder) writeEventToCache(
 	e.eventsCache.putEvent(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
-		e.executionInfo.RunId,
+		e.executionInfo.ExecutionState.RunId,
 		event.GetEventId(),
 		event,
 	)
@@ -1530,7 +1530,7 @@ func (e *mutableStateBuilder) GetPreviousStartedEventID() int64 {
 }
 
 func (e *mutableStateBuilder) IsWorkflowExecutionRunning() bool {
-	switch e.executionInfo.State {
+	switch e.executionInfo.ExecutionState.State {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 		return true
 	case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
@@ -1542,13 +1542,13 @@ func (e *mutableStateBuilder) IsWorkflowExecutionRunning() bool {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
 		return false
 	default:
-		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.State))
+		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.ExecutionState.State))
 	}
 }
 
 func (e *mutableStateBuilder) IsCancelRequested() (bool, string) {
 	if e.executionInfo.CancelRequested {
-		return e.executionInfo.CancelRequested, e.executionInfo.CancelRequestID
+		return e.executionInfo.CancelRequested, e.executionInfo.GetExecutionState().CreateRequestId
 	}
 
 	return false, ""
@@ -1674,7 +1674,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		return nil, err
 	}
 
-	if err := e.SetHistoryTree(e.GetExecutionInfo().RunId); err != nil {
+	if err := e.SetHistoryTree(e.GetExecutionInfo().GetRunId()); err != nil {
 		return nil, err
 	}
 
@@ -1757,10 +1757,10 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 ) error {
 
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	e.executionInfo.CreateRequestId = requestID
+	e.executionInfo.GetExecutionState().CreateRequestId = requestID
 	e.executionInfo.NamespaceId = e.namespaceEntry.GetInfo().Id
 	e.executionInfo.WorkflowId = execution.GetWorkflowId()
-	e.executionInfo.RunId = execution.GetRunId()
+	e.executionInfo.ExecutionState.RunId = execution.GetRunId()
 	e.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	e.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	e.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
@@ -1950,7 +1950,7 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 	}
 	info := &workflowpb.ResetPointInfo{
 		BinaryChecksum:               binChecksum,
-		RunId:                        exeInfo.RunId,
+		RunId:                        exeInfo.GetRunId(),
 		FirstWorkflowTaskCompletedId: event.GetEventId(),
 		CreateTime:                   timestamp.TimePtr(e.timeSource.Now()),
 		Resettable:                   resettable,
@@ -2089,7 +2089,7 @@ func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(
 	e.eventsCache.putEvent(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
-		e.executionInfo.RunId,
+		e.executionInfo.ExecutionState.RunId,
 		event.GetEventId(),
 		event,
 	)
@@ -2638,9 +2638,9 @@ func (e *mutableStateBuilder) AddWorkflowExecutionCancelRequestedEvent(
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowState(e.executionInfo.State),
+			tag.WorkflowState(e.executionInfo.ExecutionState.State),
 			tag.Bool(e.executionInfo.CancelRequested),
-			tag.Key(e.executionInfo.CancelRequestID),
+			tag.Key(e.executionInfo.CancelRequestId),
 		)
 		return nil, e.createInternalServerError(opTag)
 	}
@@ -2651,7 +2651,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionCancelRequestedEvent(
 	}
 
 	// Set the CancelRequestID on the active cluster.  This information is not part of the history event.
-	e.executionInfo.CancelRequestID = request.CancelRequest.GetRequestId()
+	e.executionInfo.CancelRequestId = request.CancelRequest.GetRequestId()
 	return event, nil
 }
 
@@ -3360,7 +3360,7 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 
 	event := e.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, attributes)
 	// Write the event to cache only on active cluster
-	e.eventsCache.putEvent(e.executionInfo.NamespaceId, e.executionInfo.WorkflowId, e.executionInfo.RunId,
+	e.eventsCache.putEvent(e.executionInfo.NamespaceId, e.executionInfo.WorkflowId, e.executionInfo.ExecutionState.RunId,
 		event.GetEventId(), event)
 
 	ci, err := e.ReplicateStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event, createRequestID)
@@ -3791,7 +3791,7 @@ func (e *mutableStateBuilder) GetUpdateCondition() int64 {
 func (e *mutableStateBuilder) GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {
 
 	executionInfo := e.executionInfo
-	return executionInfo.State, executionInfo.Status
+	return executionInfo.ExecutionState.State, executionInfo.ExecutionState.Status
 }
 
 func (e *mutableStateBuilder) UpdateWorkflowStateStatus(
@@ -4074,7 +4074,7 @@ func (e *mutableStateBuilder) cleanupTransaction(
 	}
 
 	e.hasBufferedEventsInDB = len(e.bufferedEvents) > 0
-	e.stateInDB = e.executionInfo.State
+	e.stateInDB = e.executionInfo.ExecutionState.State
 	e.nextEventIDInDB = e.GetNextEventID()
 
 	e.insertTransferTasks = nil
@@ -4097,7 +4097,7 @@ func (e *mutableStateBuilder) prepareEventsAndReplicationTasks(
 		workflowEventsSeq = append(workflowEventsSeq, &persistence.WorkflowEvents{
 			NamespaceID: e.executionInfo.NamespaceId,
 			WorkflowID:  e.executionInfo.WorkflowId,
-			RunID:       e.executionInfo.RunId,
+			RunID:       e.executionInfo.ExecutionState.RunId,
 			BranchToken: currentBranchToken,
 			Events:      e.hBuilder.transientHistory,
 		})
@@ -4106,7 +4106,7 @@ func (e *mutableStateBuilder) prepareEventsAndReplicationTasks(
 		workflowEventsSeq = append(workflowEventsSeq, &persistence.WorkflowEvents{
 			NamespaceID: e.executionInfo.NamespaceId,
 			WorkflowID:  e.executionInfo.WorkflowId,
-			RunID:       e.executionInfo.RunId,
+			RunID:       e.executionInfo.ExecutionState.RunId,
 			BranchToken: currentBranchToken,
 			Events:      e.hBuilder.history,
 		})
@@ -4249,7 +4249,7 @@ func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 	}
 
 	// only do check if workflow is finished
-	if e.GetExecutionInfo().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if e.GetExecutionInfo().GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil
 	}
 
@@ -4273,7 +4273,7 @@ func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 			"encounter case where events appears after workflow finish.",
 			tag.WorkflowNamespaceID(executionInfo.NamespaceId),
 			tag.WorkflowID(executionInfo.WorkflowId),
-			tag.WorkflowRunID(executionInfo.RunId),
+			tag.WorkflowRunID(executionInfo.ExecutionState.RunId),
 		)
 		return ErrEventsAterWorkflowFinish
 	}
@@ -4457,7 +4457,7 @@ func (e *mutableStateBuilder) closeTransactionHandleWorkflowReset(
 		e.logInfo("Auto-Reset task is scheduled",
 			tag.WorkflowNamespace(namespaceEntry.GetInfo().Name),
 			tag.WorkflowID(executionInfo.WorkflowId),
-			tag.WorkflowRunID(executionInfo.RunId),
+			tag.WorkflowRunID(executionInfo.ExecutionState.RunId),
 			tag.WorkflowResetBaseRunID(pt.GetRunId()),
 			tag.WorkflowEventID(pt.GetFirstWorkflowTaskCompletedId()),
 			tag.WorkflowBinaryChecksum(pt.GetBinaryChecksum()),
@@ -4496,7 +4496,7 @@ func (e *mutableStateBuilder) checkMutability(
 			mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowState(e.executionInfo.State),
+			tag.WorkflowState(e.executionInfo.ExecutionState.State),
 			actionTag,
 		)
 		return ErrWorkflowFinished
@@ -4562,21 +4562,21 @@ func (_ *mutableStateBuilder) unixNanoToTime(
 
 func (e *mutableStateBuilder) logInfo(msg string, tags ...tag.Tag) {
 	tags = append(tags, tag.WorkflowID(e.executionInfo.WorkflowId))
-	tags = append(tags, tag.WorkflowRunID(e.executionInfo.RunId))
+	tags = append(tags, tag.WorkflowRunID(e.executionInfo.ExecutionState.RunId))
 	tags = append(tags, tag.WorkflowNamespaceID(e.executionInfo.NamespaceId))
 	e.logger.Info(msg, tags...)
 }
 
 func (e *mutableStateBuilder) logWarn(msg string, tags ...tag.Tag) {
 	tags = append(tags, tag.WorkflowID(e.executionInfo.WorkflowId))
-	tags = append(tags, tag.WorkflowRunID(e.executionInfo.RunId))
+	tags = append(tags, tag.WorkflowRunID(e.executionInfo.ExecutionState.RunId))
 	tags = append(tags, tag.WorkflowNamespaceID(e.executionInfo.NamespaceId))
 	e.logger.Warn(msg, tags...)
 }
 
 func (e *mutableStateBuilder) logError(msg string, tags ...tag.Tag) {
 	tags = append(tags, tag.WorkflowID(e.executionInfo.WorkflowId))
-	tags = append(tags, tag.WorkflowRunID(e.executionInfo.RunId))
+	tags = append(tags, tag.WorkflowRunID(e.executionInfo.ExecutionState.RunId))
 	tags = append(tags, tag.WorkflowNamespaceID(e.executionInfo.NamespaceId))
 	e.logger.Error(msg, tags...)
 }
@@ -4584,7 +4584,7 @@ func (e *mutableStateBuilder) logError(msg string, tags ...tag.Tag) {
 func (e *mutableStateBuilder) logDataInconsistency() {
 	namespaceID := e.executionInfo.NamespaceId
 	workflowID := e.executionInfo.WorkflowId
-	runID := e.executionInfo.RunId
+	runID := e.executionInfo.ExecutionState.RunId
 
 	e.logger.Error("encounter cassandra data inconsistency",
 		tag.WorkflowNamespaceID(namespaceID),

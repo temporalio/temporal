@@ -771,7 +771,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		resp.MutableStateUpdateSessionStats,
 	)
 	// emit workflow completion stats if any
-	if currentWorkflow.ExecutionInfo.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if currentWorkflow.ExecutionInfo.ExecutionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		if event, err := c.mutableState.GetCompletionEvent(); err == nil {
 			taskQueue := currentWorkflow.ExecutionInfo.TaskQueue
 			emitWorkflowCompletionStats(c.metricsClient, namespace, taskQueue, event)
@@ -797,7 +797,7 @@ func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
-	if currentWorkflowMutation.ExecutionInfo.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
+	if currentWorkflowMutation.ExecutionInfo.GetExecutionState().Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
 		return nil
 	} else if updateMode == persistence.UpdateWorkflowModeBypassCurrent && newWorkflowSnapshot == nil {
 		// update current workflow as zombie & continue as new without new zombie workflow

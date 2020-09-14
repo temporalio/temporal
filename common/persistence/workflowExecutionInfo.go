@@ -31,11 +31,31 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 )
 
 // SetNextEventID sets the nextEventID
 func (e *WorkflowExecutionInfo) SetNextEventID(id int64) {
 	e.NextEventId = id
+}
+
+// GetRunId gets the runId
+func (e *WorkflowExecutionInfo) GetRunId() string {
+	if e == nil {
+		return ""
+	}
+
+	return e.GetExecutionState().RunId
+}
+
+
+// GetExecutionState gets the new field for ExecutionState
+func (e *WorkflowExecutionInfo) GetExecutionState() *persistenceblobs.WorkflowExecutionState {
+	if e == nil {
+		return nil
+	}
+
+	return e.ExecutionState
 }
 
 // IncreaseNextEventID increase the nextEventID by 1
@@ -54,31 +74,31 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 	status enumspb.WorkflowExecutionStatus,
 ) error {
 
-	switch e.State {
+	switch e.GetExecutionState().State {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_VOID:
 		// no validation
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 		switch state {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return e.createInvalidStateTransitionErr(e.State, state, status)
+				return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return e.createInvalidStateTransitionErr(e.State, state, status)
+				return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED &&
 				status != enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT &&
 				status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
-				return e.createInvalidStateTransitionErr(e.State, state, status)
+				return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return e.createInvalidStateTransitionErr(e.State, state, status)
+				return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 			}
 
 		default:
@@ -87,21 +107,21 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 	case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		switch state {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
-			return e.createInvalidStateTransitionErr(e.State, state, status)
+			return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return e.createInvalidStateTransitionErr(e.State, state, status)
+				return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return e.createInvalidStateTransitionErr(e.State, state, status)
+				return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return e.createInvalidStateTransitionErr(e.State, state, status)
+				return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 			}
 
 		default:
@@ -110,18 +130,18 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		switch state {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
-			return e.createInvalidStateTransitionErr(e.State, state, status)
+			return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-			return e.createInvalidStateTransitionErr(e.State, state, status)
+			return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
-			if status != e.Status {
-				return e.createInvalidStateTransitionErr(e.State, state, status)
+			if status != e.GetExecutionState().Status {
+				return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 
 			}
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
-			return e.createInvalidStateTransitionErr(e.State, state, status)
+			return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
@@ -130,22 +150,22 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 		switch state {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return e.createInvalidStateTransitionErr(e.State, state, status)
+				return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return e.createInvalidStateTransitionErr(e.State, state, status)
+				return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return e.createInvalidStateTransitionErr(e.State, state, status)
+				return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return e.createInvalidStateTransitionErr(e.State, state, status)
+				return e.createInvalidStateTransitionErr(e.GetExecutionState().State, state, status)
 			}
 
 		default:
@@ -155,8 +175,8 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 		return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 	}
 
-	e.State = state
-	e.Status = status
+	e.GetExecutionState().State = state
+	e.GetExecutionState().Status = status
 	return nil
 
 }

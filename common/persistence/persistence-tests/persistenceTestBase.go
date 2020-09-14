@@ -297,23 +297,25 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestId:            uuid.New(),
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowExecution.GetWorkflowId(),
-				RunId:                      workflowExecution.GetRunId(),
 				TaskQueue:                  taskQueue,
 				WorkflowTypeName:           wType,
 				WorkflowRunTimeout:         wTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
-				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				LastFirstEventId:           common.FirstEventID,
-				NextEventId:                nextEventID,
-				LastProcessedEvent:         lastProcessedEventID,
-				WorkflowTaskScheduleId:     workflowTaskScheduleID,
-				WorkflowTaskStartedId:      common.EmptyEventID,
-				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
-				EventBranchToken:           branchToken,
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{
+					RunId:                      workflowExecution.GetRunId(),
+					CreateRequestId:            uuid.New(),
+					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
+				LastFirstEventId:       common.FirstEventID,
+				NextEventId:            nextEventID,
+				LastProcessedEvent:     lastProcessedEventID,
+				WorkflowTaskScheduleId: workflowTaskScheduleID,
+				WorkflowTaskStartedId:  common.EmptyEventID,
+				WorkflowTaskTimeout:    timestamp.DurationFromSeconds(1),
+				EventBranchToken:       branchToken,
 			},
 			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			TransferTasks: []p.Task{
@@ -369,13 +371,15 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestId:        uuid.New(),
-				NamespaceId:            namespaceID,
-				WorkflowId:             workflowExecution.GetWorkflowId(),
-				RunId:                  workflowExecution.GetRunId(),
-				TaskQueue:              taskQueue,
-				State:                  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-				Status:                 enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				NamespaceId:     namespaceID,
+				WorkflowId:      workflowExecution.GetWorkflowId(),
+				TaskQueue:       taskQueue,
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{
+					RunId:           workflowExecution.GetRunId(),
+					CreateRequestId: uuid.New(),
+					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
 				LastFirstEventId:       common.FirstEventID,
 				NextEventId:            nextEventID,
 				LastProcessedEvent:     lastProcessedEventID,
@@ -401,10 +405,8 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestId:            uuid.New(),
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowExecution.GetWorkflowId(),
-				RunId:                      workflowExecution.GetRunId(),
 				FirstExecutionRunId:        workflowExecution.GetRunId(),
 				ParentNamespaceId:          parentNamespaceID,
 				ParentWorkflowId:           parentExecution.GetWorkflowId(),
@@ -414,9 +416,11 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 				WorkflowTypeName:           wType,
 				WorkflowRunTimeout:         wTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
-
-				State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-				Status:                 enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+					RunId:                      workflowExecution.GetRunId(),
+					CreateRequestId:            uuid.New(),
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
 				LastFirstEventId:       common.FirstEventID,
 				NextEventId:            nextEventID,
 				LastProcessedEvent:     lastProcessedEventID,
@@ -507,17 +511,20 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *p.WorkflowExecutionInfo, 
 		},
 		NewWorkflowSnapshot: &p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestId:            uuid.New(),
 				NamespaceId:                updatedInfo.NamespaceId,
 				WorkflowId:                 newExecution.GetWorkflowId(),
-				RunId:                      newExecution.GetRunId(),
 				TaskQueue:                  updatedInfo.TaskQueue,
 				WorkflowTypeName:           updatedInfo.WorkflowTypeName,
 				WorkflowRunTimeout:         updatedInfo.WorkflowRunTimeout,
 				DefaultWorkflowTaskTimeout: updatedInfo.DefaultWorkflowTaskTimeout,
 
-				State:                  updatedInfo.State,
-				Status:                 updatedInfo.Status,
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{
+					RunId:                      newExecution.GetRunId(),
+					CreateRequestId:            uuid.New(),
+					State: updatedInfo.ExecutionState.State,
+					Status:                 updatedInfo.ExecutionState.Status,
+				},
+
 				LastFirstEventId:       common.FirstEventID,
 				NextEventId:            nextEventID,
 				LastProcessedEvent:     common.EmptyEventID,
@@ -533,8 +540,8 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *p.WorkflowExecutionInfo, 
 		RangeID:  s.ShardInfo.GetRangeId(),
 		Encoding: pickRandomEncoding(),
 	}
-	req.UpdateWorkflowMutation.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-	req.UpdateWorkflowMutation.ExecutionInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
+	req.UpdateWorkflowMutation.ExecutionInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	req.UpdateWorkflowMutation.ExecutionInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(req)
 	return err
 }
@@ -913,7 +920,7 @@ func (s *TestBase) ResetWorkflowExecution(condition int64, info *p.WorkflowExecu
 		BaseRunID:          forkRunID,
 		BaseRunNextEventID: forkRunNextEventID,
 
-		CurrentRunID:          currInfo.RunId,
+		CurrentRunID:          currInfo.GetRunId(),
 		CurrentRunNextEventID: condition,
 
 		CurrentWorkflowMutation: nil,
@@ -956,7 +963,7 @@ func (s *TestBase) DeleteWorkflowExecution(info *p.WorkflowExecutionInfo) error 
 	return s.ExecutionManager.DeleteWorkflowExecution(&p.DeleteWorkflowExecutionRequest{
 		NamespaceID: info.NamespaceId,
 		WorkflowID:  info.WorkflowId,
-		RunID:       info.RunId,
+		RunID:       info.GetRunId(),
 	})
 }
 
@@ -965,7 +972,7 @@ func (s *TestBase) DeleteCurrentWorkflowExecution(info *p.WorkflowExecutionInfo)
 	return s.ExecutionManager.DeleteCurrentWorkflowExecution(&p.DeleteCurrentWorkflowExecutionRequest{
 		NamespaceID: info.NamespaceId,
 		WorkflowID:  info.WorkflowId,
-		RunID:       info.RunId,
+		RunID:       info.GetRunId(),
 	})
 }
 

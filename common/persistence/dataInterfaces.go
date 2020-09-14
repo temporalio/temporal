@@ -197,9 +197,9 @@ type (
 
 	// WorkflowExecutionInfo describes a workflow execution
 	WorkflowExecutionInfo struct {
+		ExecutionState                         *persistenceblobs.WorkflowExecutionState
 		NamespaceId                            string
 		WorkflowId                             string
-		RunId                                  string
 		FirstExecutionRunId                    string
 		ParentNamespaceId                      string
 		ParentWorkflowId                       string
@@ -212,15 +212,12 @@ type (
 		WorkflowRunTimeout                     *time.Duration
 		WorkflowExecutionTimeout               *time.Duration
 		DefaultWorkflowTaskTimeout             *time.Duration
-		State                                  enumsspb.WorkflowExecutionState
-		Status                                 enumspb.WorkflowExecutionStatus
 		LastFirstEventId                       int64
 		LastEventTaskId                        int64
 		NextEventId                            int64
 		LastProcessedEvent                     int64
 		StartTime                              *time.Time
 		LastUpdatedTime                        *time.Time
-		CreateRequestId                        string
 		SignalCount                            int64
 		WorkflowTaskVersion                    int64
 		WorkflowTaskScheduleId                 int64
@@ -232,7 +229,7 @@ type (
 		WorkflowTaskScheduledTimestamp         *time.Time
 		WorkflowTaskOriginalScheduledTimestamp *time.Time
 		CancelRequested                        bool
-		CancelRequestID                        string
+		CancelRequestId                        string
 		StickyTaskQueue                        string
 		StickyScheduleToStartTimeout           *time.Duration
 		ClientLibraryVersion                   string

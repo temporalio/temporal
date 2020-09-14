@@ -72,7 +72,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	targetExecutionInfo := targetWorkflow.getMutableState().GetExecutionInfo()
 	namespaceID := targetExecutionInfo.NamespaceId
 	workflowID := targetExecutionInfo.WorkflowId
-	targetRunID := targetExecutionInfo.RunId
+	targetRunID := targetExecutionInfo.ExecutionState.RunId
 
 	// we need to check the current workflow execution
 	currentRunID, err := r.transactionMgr.getCurrentWorkflowRunID(
@@ -172,7 +172,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	if currentWorkflow != nil {
 		// current workflow exists, need to do compare and swap
 		createMode := persistence.CreateWorkflowModeWorkflowIDReuse
-		prevRunID := currentWorkflow.getMutableState().GetExecutionInfo().RunId
+		prevRunID := currentWorkflow.getMutableState().GetExecutionInfo().GetRunId()
 		prevLastWriteVersion, _, err := currentWorkflow.getVectorClock()
 		if err != nil {
 			return err

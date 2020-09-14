@@ -60,7 +60,7 @@ func newMutableStateChecksumPayload(ms mutableState) *checksumproto.MutableState
 	executionInfo := ms.GetExecutionInfo()
 	payload := &checksumproto.MutableStateChecksumPayload{
 		CancelRequested:         executionInfo.CancelRequested,
-		State:                   executionInfo.State,
+		State:                   executionInfo.ExecutionState.State,
 		LastFirstEventId:        executionInfo.LastFirstEventId,
 		NextEventId:             executionInfo.NextEventId,
 		LastProcessedEventId:    executionInfo.LastProcessedEvent,

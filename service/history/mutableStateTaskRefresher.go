@@ -205,7 +205,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowClose(
 
 	executionInfo := mutableState.GetExecutionInfo()
 
-	if executionInfo.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if executionInfo.ExecutionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return taskGenerator.generateWorkflowCloseTasks(
 			now,
 		)
@@ -227,7 +227,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 
 	executionInfo := mutableState.GetExecutionInfo()
 
-	if executionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if executionInfo.ExecutionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return taskGenerator.generateRecordWorkflowStartedTasks(
 			now,
 			startEvent,
@@ -301,7 +301,7 @@ Loop:
 		scheduleEvent, err := r.eventsCache.getEvent(
 			executionInfo.NamespaceId,
 			executionInfo.WorkflowId,
-			executionInfo.RunId,
+			executionInfo.ExecutionState.RunId,
 			activityInfo.ScheduledEventBatchId,
 			activityInfo.ScheduleId,
 			currentBranchToken,
@@ -381,7 +381,7 @@ Loop:
 		scheduleEvent, err := r.eventsCache.getEvent(
 			executionInfo.NamespaceId,
 			executionInfo.WorkflowId,
-			executionInfo.RunId,
+			executionInfo.ExecutionState.RunId,
 			childWorkflowInfo.InitiatedEventBatchId,
 			childWorkflowInfo.InitiatedId,
 			currentBranchToken,
@@ -419,7 +419,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRequestCancelExternalWork
 		initiateEvent, err := r.eventsCache.getEvent(
 			executionInfo.NamespaceId,
 			executionInfo.WorkflowId,
-			executionInfo.RunId,
+			executionInfo.ExecutionState.RunId,
 			requestCancelInfo.GetInitiatedEventBatchId(),
 			requestCancelInfo.GetInitiatedId(),
 			currentBranchToken,
@@ -457,7 +457,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 		initiateEvent, err := r.eventsCache.getEvent(
 			executionInfo.NamespaceId,
 			executionInfo.WorkflowId,
-			executionInfo.RunId,
+			executionInfo.ExecutionState.RunId,
 			signalInfo.GetInitiatedEventBatchId(),
 			signalInfo.GetInitiatedId(),
 			currentBranchToken,

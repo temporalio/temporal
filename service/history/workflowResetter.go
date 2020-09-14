@@ -280,7 +280,7 @@ func (r *workflowResetterImpl) persistToDB(
 	}
 
 	currentMutableState := currentWorkflow.getMutableState()
-	currentRunID := currentMutableState.GetExecutionInfo().RunId
+	currentRunID := currentMutableState.GetExecutionInfo().GetRunId()
 	currentLastWriteVersion, err := currentMutableState.GetLastWriteVersion()
 	if err != nil {
 		return err

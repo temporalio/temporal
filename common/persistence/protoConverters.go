@@ -32,10 +32,10 @@ import (
 
 func WorkflowExecutionToProto(executionInfo *WorkflowExecutionInfo, startVersion int64, versionHistories *history.VersionHistories) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
 	state := &persistenceblobs.WorkflowExecutionState{
-		CreateRequestId: executionInfo.CreateRequestId,
-		State:           executionInfo.State,
-		Status:          executionInfo.Status,
-		RunId:           executionInfo.RunId,
+		CreateRequestId: executionInfo.ExecutionState.CreateRequestId,
+		State:           executionInfo.ExecutionState.State,
+		Status:          executionInfo.ExecutionState.Status,
+		RunId:           executionInfo.ExecutionState.RunId,
 	}
 
 	info := &persistenceblobs.WorkflowExecutionInfo{
@@ -104,16 +104,42 @@ func WorkflowExecutionToProto(executionInfo *WorkflowExecutionInfo, startVersion
 
 	if executionInfo.CancelRequested {
 		info.CancelRequested = true
-		info.CancelRequestId = executionInfo.CancelRequestID
+		info.CancelRequestId = executionInfo.CancelRequestId
 	}
+	ApplyWorkflowExecutionWritePolicies(info, startVersion, versionHistories)
 	return info, state, nil
+}
+
+func ApplyWorkflowExecutionWritePolicies(info *persistenceblobs.WorkflowExecutionInfo, startVersion int64, versionHistories *history.VersionHistories) {
+	info.StartVersion = startVersion
+	info.VersionHistories = versionHistories
+	info.EventStoreVersion = EventStoreVersion
+	info.HistorySize = info.ExecutionStats.GetHistorySize()
+
+	if info.ParentNamespaceId == "" {
+		info.ParentNamespaceId = ""
+		info.ParentWorkflowId = ""
+		info.ParentRunId = ""
+		info.InitiatedId = 0
+	} else {
+		info.CompletionEvent = nil
+	}
+
+	if !info.CancelRequested {
+		info.CancelRequestId = ""
+	}
 }
 
 func WorkflowExecutionFromProto(info *persistenceblobs.WorkflowExecutionInfo, state *persistenceblobs.WorkflowExecutionState, nextEventID int64) *WorkflowExecutionInfo {
 	executionInfo := &WorkflowExecutionInfo{
+		ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			State:  state.GetState(),
+			Status: state.GetStatus(),
+			CreateRequestId:                        state.GetCreateRequestId(),
+			RunId:                                  state.GetRunId(),
+		},
 		NamespaceId:                            info.NamespaceId,
 		WorkflowId:                             info.WorkflowId,
-		RunId:                                  state.RunId,
 		FirstExecutionRunId:                    info.FirstExecutionRunId,
 		NextEventId:                            nextEventID,
 		TaskQueue:                              info.GetTaskQueue(),
@@ -121,13 +147,10 @@ func WorkflowExecutionFromProto(info *persistenceblobs.WorkflowExecutionInfo, st
 		WorkflowExecutionTimeout:               info.GetWorkflowExecutionTimeout(),
 		WorkflowRunTimeout:                     info.GetWorkflowRunTimeout(),
 		DefaultWorkflowTaskTimeout:             info.GetDefaultWorkflowTaskTimeout(),
-		State:                                  state.GetState(),
-		Status:                                 state.GetStatus(),
 		LastFirstEventId:                       info.GetLastFirstEventId(),
 		LastProcessedEvent:                     info.GetLastProcessedEvent(),
 		StartTime:                              info.GetStartTime(),
 		LastUpdatedTime:                        info.GetLastUpdateTime(),
-		CreateRequestId:                        state.GetCreateRequestId(),
 		WorkflowTaskVersion:                    info.GetWorkflowTaskVersion(),
 		WorkflowTaskScheduleId:                 info.GetWorkflowTaskScheduleId(),
 		WorkflowTaskStartedId:                  info.GetWorkflowTaskStartedId(),
@@ -185,7 +208,7 @@ func WorkflowExecutionFromProto(info *persistenceblobs.WorkflowExecutionInfo, st
 
 	if info.GetCancelRequested() {
 		executionInfo.CancelRequested = true
-		executionInfo.CancelRequestID = info.GetCancelRequestId()
+		executionInfo.CancelRequestId = info.GetCancelRequestId()
 	}
 
 	return executionInfo

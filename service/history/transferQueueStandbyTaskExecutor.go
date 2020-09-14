@@ -219,7 +219,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		executionInfo := mutableState.GetExecutionInfo()
 		workflowTypeName := executionInfo.WorkflowTypeName
 		workflowCloseTime := wfCloseTime
-		workflowStatus := executionInfo.Status
+		workflowStatus := executionInfo.ExecutionState.Status
 		workflowHistoryLength := mutableState.GetNextEventID() - 1
 		startEvent, err := mutableState.GetStartEvent()
 		if err != nil {
