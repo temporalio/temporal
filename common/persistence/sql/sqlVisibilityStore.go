@@ -108,11 +108,8 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRe
 	return nil
 }
 
-func (s *sqlVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWorkflowExecutionRequest) error {
-	if p.IsNopUpsertWorkflowRequest(request) {
-		return nil
-	}
-	return p.NewOperationNotSupportErrorForVis()
+func (s *sqlVisibilityStore) UpsertWorkflowExecution(_ *p.InternalUpsertWorkflowExecutionRequest) error {
+	return nil
 }
 
 func (s *sqlVisibilityStore) ListOpenWorkflowExecutions(request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {

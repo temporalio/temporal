@@ -714,7 +714,10 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 				Memo:               nil,
 				SearchAttributes:   nil,
 			},
-			expected: p.NewOperationNotSupportErrorForVis(),
+			// To avoid blocking the task queue processors on non-ElasticSearch visibility stores
+			// we simply treat any attempts to perform Upserts as "no-ops"
+			// Attempts to Scan, Count or List will still fail for non-ES stores.
+			expected: nil,
 		},
 	}
 
