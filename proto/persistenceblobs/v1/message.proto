@@ -1,0 +1,64 @@
+syntax = "proto3";
+option go_package = ".gen/proto";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+import "gogo.proto";
+
+message DomainDetail {
+    DomainInfo info = 1;
+    DomainConfig config = 2;
+    DomainReplicationConfig replication_config = 3;
+    int64 config_version = 4;
+    int64 failover_notification_version = 5;
+    int64 failover_version = 6;
+    google.protobuf.Timestamp failover_end_time = 7 [(gogoproto.stdtime) = true];
+}
+
+message DomainInfo {
+    string id = 1;
+    DomainState state = 2;
+    string name = 3;
+    string description = 4;
+    string owner = 5;
+    map<string, string> data = 6;
+}
+
+message DomainReplicationConfig {
+    string active_cluster_name = 1;
+    repeated string clusters = 2;
+}
+
+message DomainConfig {
+    google.protobuf.Duration retention = 1 [(gogoproto.stdduration) = true];
+    string archival_bucket = 2;
+    BadBinaries bad_binaries = 3;
+    ArchivalState history_archival_state = 4;
+    string history_archival_uri = 5;
+    ArchivalState visibility_archival_state = 6;
+    string visibility_archival_uri = 7;
+}
+
+message BadBinaries {
+    map<string, BadBinaryInfo> binaries = 1;
+}
+
+message BadBinaryInfo {
+    string reason = 1;
+    string operator = 2;
+    google.protobuf.Timestamp create_time = 3 [(gogoproto.stdtime) = true];
+}
+
+enum ArchivalState {
+    ARCHIVAL_STATE_UNSPECIFIED = 0;
+    ARCHIVAL_STATE_DISABLED = 1;
+    ARCHIVAL_STATE_ENABLED = 2;
+}
+
+enum DomainState {
+    DOMAIN_STATE_UNSPECIFIED = 0;
+    DOMAIN_STATE_REGISTERED = 1;
+    DOMAIN_STATE_DEPRECATED = 2;
+    DOMAIN_STATE_DELETED = 3;
+}

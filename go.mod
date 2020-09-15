@@ -75,6 +75,7 @@ require (
 	gonum.org/v1/gonum v0.7.0
 	google.golang.org/api v0.14.0
 	google.golang.org/appengine v1.6.1 // indirect
+	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 	gopkg.in/jcmturner/gokrb5.v7 v7.3.0 // indirect
 	gopkg.in/validator.v2 v2.0.0-20180514200540-135c24b11c19
