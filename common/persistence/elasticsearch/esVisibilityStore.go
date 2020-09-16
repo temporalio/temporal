@@ -120,7 +120,7 @@ func (v *esVisibilityStore) GetName() string {
 
 func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
 	v.checkProducer()
-	msg := getVisibilityMessage(
+	msg := getVisibilityMessageForRunningExecution(
 		request.NamespaceID,
 		request.WorkflowID,
 		request.RunID,
@@ -159,7 +159,7 @@ func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRec
 
 func (v *esVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWorkflowExecutionRequest) error {
 	v.checkProducer()
-	msg := getVisibilityMessage(
+	msg := getVisibilityMessageForRunningExecution(
 		request.NamespaceID,
 		request.WorkflowID,
 		request.RunID,
@@ -894,7 +894,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 	return record
 }
 
-func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string, taskQueue string,
+func getVisibilityMessageForRunningExecution(namespaceID string, wid, rid string, workflowTypeName string, taskQueue string,
 	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding enumspb.EncodingType,
 	searchAttributes map[string]*commonpb.Payload) *indexerspb.Message {
 
@@ -904,6 +904,7 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 		es.StartTime:     {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: startTimeUnixNano}},
 		es.ExecutionTime: {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: executionTimeUnixNano}},
 		es.TaskQueue:     {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: taskQueue}},
+		es.ExecutionStatus: {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: int64(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)}},
 	}
 	if len(memo) != 0 {
 		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
