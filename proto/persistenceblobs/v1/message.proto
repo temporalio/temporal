@@ -3,6 +3,7 @@ option go_package = ".gen/proto";
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
 
 import "gogo.proto";
 
@@ -61,4 +62,794 @@ enum DomainState {
     DOMAIN_STATE_REGISTERED = 1;
     DOMAIN_STATE_DEPRECATED = 2;
     DOMAIN_STATE_DELETED = 3;
+}
+
+message ActivityInfo {
+    int64 version = 1;
+    int64 scheduled_event_batch_id = 2;
+    HistoryEvent scheduled_event = 3;
+    google.protobuf.Timestamp scheduled_time = 4 [(gogoproto.stdtime) = true];
+    int64 started_id = 5;
+    HistoryEvent started_event = 6;
+    google.protobuf.Timestamp started_time = 7 [(gogoproto.stdtime) = true];
+    string activity_id = 8;
+    string request_id = 9;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration schedule_to_start_timeout = 10 [(gogoproto.stdduration) = true];
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration schedule_to_close_timeout = 11 [(gogoproto.stdduration) = true];
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration start_to_close_timeout = 12 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration heartbeat_timeout = 13 [(gogoproto.stdduration) = true];
+    bool cancel_requested = 14;
+    int64 cancel_request_id = 15;
+    int32 timer_task_status = 16;
+    int32 attempt = 17;
+    string task_list = 18;
+    string started_identity = 19;
+    bool has_retry_policy = 20;
+    google.protobuf.Duration retry_initial_interval = 21 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration retry_maximum_interval = 22 [(gogoproto.stdduration) = true];
+    int32 retry_maximum_attempts = 23;
+    google.protobuf.Timestamp retry_expiration_time = 24 [(gogoproto.stdtime) = true];
+    double retry_backoff_coefficient = 25;
+    repeated string retry_non_retryable_error_types = 26;
+    Failure retry_last_failure = 27;
+    string retry_last_worker_identity = 28;
+    string namespace_id = 29;
+    int64 schedule_id = 30;
+    Payloads last_heartbeat_details = 31;
+    google.protobuf.Timestamp last_heartbeat_update_time = 32 [(gogoproto.stdtime) = true];
+}
+
+message HistoryEvent {
+    int64 event_id = 1;
+    google.protobuf.Timestamp event_time = 2 [(gogoproto.stdtime) = true];
+    EventType event_type = 3;
+    int64 version = 4;
+    int64 task_id = 5;
+    oneof attributes {
+        WorkflowExecutionStartedEventAttributes workflow_execution_started_event_attributes = 6;
+        WorkflowExecutionCompletedEventAttributes workflow_execution_completed_event_attributes = 7;
+        WorkflowExecutionFailedEventAttributes workflow_execution_failed_event_attributes = 8;
+        WorkflowExecutionTimedOutEventAttributes workflow_execution_timed_out_event_attributes = 9;
+        WorkflowTaskScheduledEventAttributes workflow_task_scheduled_event_attributes = 10;
+        WorkflowTaskStartedEventAttributes workflow_task_started_event_attributes = 11;
+        WorkflowTaskCompletedEventAttributes workflow_task_completed_event_attributes = 12;
+        WorkflowTaskTimedOutEventAttributes workflow_task_timed_out_event_attributes = 13;
+        WorkflowTaskFailedEventAttributes workflow_task_failed_event_attributes = 14;
+        ActivityTaskScheduledEventAttributes activity_task_scheduled_event_attributes = 15;
+        ActivityTaskStartedEventAttributes activity_task_started_event_attributes = 16;
+        ActivityTaskCompletedEventAttributes activity_task_completed_event_attributes = 17;
+        ActivityTaskFailedEventAttributes activity_task_failed_event_attributes = 18;
+        ActivityTaskTimedOutEventAttributes activity_task_timed_out_event_attributes = 19;
+        TimerStartedEventAttributes timer_started_event_attributes = 20;
+        TimerFiredEventAttributes timer_fired_event_attributes = 21;
+        ActivityTaskCancelRequestedEventAttributes activity_task_cancel_requested_event_attributes = 22;
+        ActivityTaskCanceledEventAttributes activity_task_canceled_event_attributes = 23;
+        TimerCanceledEventAttributes timer_canceled_event_attributes = 24;
+        MarkerRecordedEventAttributes marker_recorded_event_attributes = 25;
+        WorkflowExecutionSignaledEventAttributes workflow_execution_signaled_event_attributes = 26;
+        WorkflowExecutionTerminatedEventAttributes workflow_execution_terminated_event_attributes = 27;
+        WorkflowExecutionCancelRequestedEventAttributes workflow_execution_cancel_requested_event_attributes = 28;
+        WorkflowExecutionCanceledEventAttributes workflow_execution_canceled_event_attributes = 29;
+        RequestCancelExternalWorkflowExecutionInitiatedEventAttributes request_cancel_external_workflow_execution_initiated_event_attributes = 30;
+        RequestCancelExternalWorkflowExecutionFailedEventAttributes request_cancel_external_workflow_execution_failed_event_attributes = 31;
+        ExternalWorkflowExecutionCancelRequestedEventAttributes external_workflow_execution_cancel_requested_event_attributes = 32;
+        WorkflowExecutionContinuedAsNewEventAttributes workflow_execution_continued_as_new_event_attributes = 33;
+        StartChildWorkflowExecutionInitiatedEventAttributes start_child_workflow_execution_initiated_event_attributes = 34;
+        StartChildWorkflowExecutionFailedEventAttributes start_child_workflow_execution_failed_event_attributes = 35;
+        ChildWorkflowExecutionStartedEventAttributes child_workflow_execution_started_event_attributes = 36;
+        ChildWorkflowExecutionCompletedEventAttributes child_workflow_execution_completed_event_attributes = 37;
+        ChildWorkflowExecutionFailedEventAttributes child_workflow_execution_failed_event_attributes = 38;
+        ChildWorkflowExecutionCanceledEventAttributes child_workflow_execution_canceled_event_attributes = 39;
+        ChildWorkflowExecutionTimedOutEventAttributes child_workflow_execution_timed_out_event_attributes = 40;
+        ChildWorkflowExecutionTerminatedEventAttributes child_workflow_execution_terminated_event_attributes = 41;
+        SignalExternalWorkflowExecutionInitiatedEventAttributes signal_external_workflow_execution_initiated_event_attributes = 42;
+        SignalExternalWorkflowExecutionFailedEventAttributes signal_external_workflow_execution_failed_event_attributes = 43;
+        ExternalWorkflowExecutionSignaledEventAttributes external_workflow_execution_signaled_event_attributes = 44;
+        UpsertWorkflowSearchAttributesEventAttributes upsert_workflow_search_attributes_event_attributes = 45;
+    }
+}
+
+// Whenever this list of events is changed do change the function shouldBufferEvent in mutableStateBuilder.go to make sure to do the correct event ordering.
+enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    EVENT_TYPE_WORKFLOW_EXECUTION_STARTED = 1;
+    EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED = 2;
+    EVENT_TYPE_WORKFLOW_EXECUTION_FAILED = 3;
+    EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT = 4;
+    EVENT_TYPE_WORKFLOW_TASK_SCHEDULED = 5;
+    EVENT_TYPE_WORKFLOW_TASK_STARTED = 6;
+    EVENT_TYPE_WORKFLOW_TASK_COMPLETED = 7;
+    EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT = 8;
+    EVENT_TYPE_WORKFLOW_TASK_FAILED = 9;
+    EVENT_TYPE_ACTIVITY_TASK_SCHEDULED = 10;
+    EVENT_TYPE_ACTIVITY_TASK_STARTED = 11;
+    EVENT_TYPE_ACTIVITY_TASK_COMPLETED = 12;
+    EVENT_TYPE_ACTIVITY_TASK_FAILED = 13;
+    EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT = 14;
+    EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED = 15;
+    EVENT_TYPE_ACTIVITY_TASK_CANCELED = 16;
+    EVENT_TYPE_TIMER_STARTED = 17;
+    EVENT_TYPE_TIMER_FIRED = 18;
+    EVENT_TYPE_TIMER_CANCELED = 19;
+    EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED = 20;
+    EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED = 21;
+    EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED = 22;
+    EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED = 23;
+    EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED = 24;
+    EVENT_TYPE_MARKER_RECORDED = 25;
+    EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED = 26;
+    EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED = 27;
+    EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW = 28;
+    EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED = 29;
+    EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED = 30;
+    EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED = 31;
+    EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED = 32;
+    EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED = 33;
+    EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED = 34;
+    EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT = 35;
+    EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED = 36;
+    EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED = 37;
+    EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED = 38;
+    EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED = 39;
+    EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES = 40;
+}
+
+message WorkflowExecutionStartedEventAttributes {
+    WorkflowType workflow_type = 1;
+    string parent_workflow_namespace = 2;
+    WorkflowExecution parent_workflow_execution = 3;
+    int64 parent_initiated_event_id = 4;
+    TaskList task_list = 5;
+    Payloads input = 6;
+    // Total workflow execution timeout including retries and continue as new.
+    google.protobuf.Duration workflow_execution_timeout = 7 [(gogoproto.stdduration) = true];
+    // Timeout of a single workflow run.
+    google.protobuf.Duration workflow_run_timeout = 8 [(gogoproto.stdduration) = true];
+    // Timeout of a single workflow task.
+    google.protobuf.Duration workflow_task_timeout = 9 [(gogoproto.stdduration) = true];
+    string continued_execution_run_id = 10;
+    ContinueAsNewInitiator initiator = 11;
+    Failure continued_failure = 12;
+    Payloads last_completion_result = 13;
+    // This is the runId when the WorkflowExecutionStarted event is written.
+    string original_execution_run_id = 14;
+    string identity = 15;
+    // This is the very first runId along the chain of ContinueAsNew and Reset.
+    string first_execution_run_id = 16;
+    RetryPolicy retry_policy = 17;
+    int32 attempt = 18;
+    // The absolute time at which workflow is timed out.
+    // This time is passed without change to the next run/retry of a workflow.
+    google.protobuf.Timestamp workflow_execution_expiration_time = 19 [(gogoproto.stdtime) = true];
+    string cron_schedule = 20;
+    google.protobuf.Duration first_workflow_task_backoff = 21 [(gogoproto.stdduration) = true];
+    Memo memo = 22;
+    SearchAttributes search_attributes = 23;
+    ResetPoints prev_auto_reset_points = 24;
+    Header header = 25;
+}
+
+message WorkflowExecutionCompletedEventAttributes {
+    Payloads result = 1;
+    int64 workflow_task_completed_event_id = 2;
+}
+
+message WorkflowExecutionFailedEventAttributes {
+    Failure failure = 1;
+    RetryState retry_state = 2;
+    int64 workflow_task_completed_event_id = 3;
+}
+
+message WorkflowExecutionTimedOutEventAttributes {
+    RetryState retry_state = 1;
+}
+
+message WorkflowExecutionContinuedAsNewEventAttributes {
+    string new_execution_run_id = 1;
+    WorkflowType workflow_type = 2;
+    TaskList task_list = 3;
+    Payloads input = 4;
+    // workflow_execution_timeout is omitted as it shouldn'be overridden from within a workflow.
+    // Timeout of a single workflow run.
+    google.protobuf.Duration workflow_run_timeout = 5 [(gogoproto.stdduration) = true];
+    // Timeout of a single workflow task.
+    google.protobuf.Duration workflow_task_timeout = 6 [(gogoproto.stdduration) = true];
+    int64 workflow_task_completed_event_id = 7;
+    google.protobuf.Duration backoff_start_interval = 8 [(gogoproto.stdduration) = true];
+    ContinueAsNewInitiator initiator = 9;
+    Failure failure = 10;
+    Payloads last_completion_result = 11;
+    Header header = 12;
+    Memo memo = 13;
+    SearchAttributes search_attributes = 14;
+}
+
+message WorkflowTaskScheduledEventAttributes {
+    TaskList task_list = 1;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration start_to_close_timeout = 2 [(gogoproto.stdduration) = true];
+    int32 attempt = 3;
+}
+
+message WorkflowTaskStartedEventAttributes {
+    int64 scheduled_event_id = 1;
+    string identity = 2;
+    string request_id = 3;
+}
+
+message WorkflowTaskCompletedEventAttributes {
+    int64 scheduled_event_id = 1;
+    int64 started_event_id = 2;
+    string identity = 3;
+    string binary_checksum = 4;
+}
+
+message WorkflowTaskTimedOutEventAttributes {
+    int64 scheduled_event_id = 1;
+    int64 started_event_id = 2;
+    TimeoutType timeout_type = 3;
+}
+
+message WorkflowTaskFailedEventAttributes {
+    int64 scheduled_event_id = 1;
+    int64 started_event_id = 2;
+    WorkflowTaskFailedCause cause = 3;
+    Failure failure = 4;
+    string identity = 5;
+    // For reset workflow.
+    string base_run_id = 6;
+    string new_run_id = 7;
+    int64 fork_event_version = 8;
+    string binary_checksum = 9;
+}
+
+message ActivityTaskScheduledEventAttributes {
+    string activity_id = 1;
+    ActivityType activity_type = 2;
+    string namespace = 3;
+    TaskList task_list = 4;
+    Header header = 5;
+    Payloads input = 6;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    // Indicates how long the caller is willing to wait for an activity completion.
+    // Limits for how long retries are happening. Either this or start_to_close_timeout_seconds must be specified.
+    google.protobuf.Duration schedule_to_close_timeout = 7 [(gogoproto.stdduration) = true];
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    // Limits time an activity task can stay in a task list before a worker picks it up.
+    // This timeout is always non retryable as all a retry would achieve is to put it back into the same list.
+    // Defaults to schedule_to_close_timeout_seconds or workflow execution timeout if not specified.
+    google.protobuf.Duration schedule_to_start_timeout = 8 [(gogoproto.stdduration) = true];
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    // Maximum time an activity is allowed to execute after a pick up by a worker.
+    // This timeout is always retryable. Either this or schedule_to_close_timeout_seconds must be specified.
+    google.protobuf.Duration start_to_close_timeout = 9 [(gogoproto.stdduration) = true];
+    // Maximum time between successful worker heartbeats.
+    google.protobuf.Duration heartbeat_timeout = 10 [(gogoproto.stdduration) = true];
+    int64 workflow_task_completed_event_id = 11;
+    // Activities are provided by a default retry policy controlled through the service dynamic configuration.
+    // Retries are happening up to schedule_to_close_timeout.
+    // To disable retries set retry_policy.maximum_attempts to 1.
+    RetryPolicy retry_policy = 12;
+}
+
+message ActivityTaskStartedEventAttributes {
+    int64 scheduled_event_id = 1;
+    string identity = 2;
+    string request_id = 3;
+    int32 attempt = 4;
+    Failure last_failure = 5;
+}
+
+message ActivityTaskCompletedEventAttributes {
+    Payloads result = 1;
+    int64 scheduled_event_id = 2;
+    int64 started_event_id = 3;
+    string identity = 4;
+}
+
+message ActivityTaskFailedEventAttributes {
+    Failure failure = 1;
+    int64 scheduled_event_id = 2;
+    int64 started_event_id = 3;
+    string identity = 4;
+    RetryState retry_state = 5;
+}
+
+message ActivityTaskTimedOutEventAttributes {
+    // For retry activity, it may have a failure before timeout. It is stored as `cause` in `failure`.
+    Failure failure = 1;
+    int64 scheduled_event_id = 2;
+    int64 started_event_id = 3;
+    RetryState retry_state = 4;
+}
+
+message ActivityTaskCancelRequestedEventAttributes {
+    int64 scheduled_event_id = 1;
+    int64 workflow_task_completed_event_id = 2;
+}
+
+message ActivityTaskCanceledEventAttributes {
+    Payloads details = 1;
+    int64 latest_cancel_requested_event_id = 2;
+    int64 scheduled_event_id = 3;
+    int64 started_event_id = 4;
+    string identity = 5;
+}
+
+message TimerStartedEventAttributes {
+    string timer_id = 1;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration start_to_fire_timeout = 2 [(gogoproto.stdduration) = true];
+    int64 workflow_task_completed_event_id = 3;
+}
+
+message TimerFiredEventAttributes {
+    string timer_id = 1;
+    int64 started_event_id = 2;
+}
+
+message TimerCanceledEventAttributes {
+    string timer_id = 1;
+    int64 started_event_id = 2;
+    int64 workflow_task_completed_event_id = 3;
+    string identity = 4;
+}
+
+message WorkflowExecutionCancelRequestedEventAttributes {
+    string cause = 1;
+    int64 external_initiated_event_id = 2;
+    WorkflowExecution external_workflow_execution = 3;
+    string identity = 4;
+}
+
+message WorkflowExecutionCanceledEventAttributes {
+    int64 workflow_task_completed_event_id = 1;
+    Payloads details = 2;
+}
+
+message MarkerRecordedEventAttributes {
+    string marker_name = 1;
+    map<string, Payloads> details = 2;
+    int64 workflow_task_completed_event_id = 3;
+    Header header = 4;
+    Failure failure = 5;
+}
+
+message WorkflowExecutionSignaledEventAttributes {
+    string signal_name = 1;
+    Payloads input = 2;
+    string identity = 3;
+}
+
+message WorkflowExecutionTerminatedEventAttributes {
+    string reason = 1;
+    Payloads details = 2;
+    string identity = 3;
+}
+
+message RequestCancelExternalWorkflowExecutionInitiatedEventAttributes {
+    int64 workflow_task_completed_event_id = 1;
+    string namespace = 2;
+    WorkflowExecution workflow_execution = 3;
+    string control = 4;
+    bool child_workflow_only = 5;
+}
+
+message RequestCancelExternalWorkflowExecutionFailedEventAttributes {
+    CancelExternalWorkflowExecutionFailedCause cause = 1;
+    int64 workflow_task_completed_event_id = 2;
+    string namespace = 3;
+    WorkflowExecution workflow_execution = 4;
+    int64 initiated_event_id = 5;
+    string control = 6;
+}
+
+message ExternalWorkflowExecutionCancelRequestedEventAttributes {
+    int64 initiated_event_id = 1;
+    string namespace = 2;
+    WorkflowExecution workflow_execution = 3;
+}
+
+message SignalExternalWorkflowExecutionInitiatedEventAttributes {
+    int64 workflow_task_completed_event_id = 1;
+    string namespace = 2;
+    WorkflowExecution workflow_execution = 3;
+    string signal_name = 4;
+    Payloads input = 5;
+    string control = 6;
+    bool child_workflow_only = 7;
+}
+
+message SignalExternalWorkflowExecutionFailedEventAttributes {
+    SignalExternalWorkflowExecutionFailedCause cause = 1;
+    int64 workflow_task_completed_event_id = 2;
+    string namespace = 3;
+    WorkflowExecution workflow_execution = 4;
+    int64 initiated_event_id = 5;
+    string control = 6;
+}
+
+message ExternalWorkflowExecutionSignaledEventAttributes {
+    int64 initiated_event_id = 1;
+    string namespace = 2;
+    WorkflowExecution workflow_execution = 3;
+    string control = 4;
+}
+
+message UpsertWorkflowSearchAttributesEventAttributes {
+    int64 workflow_task_completed_event_id = 1;
+    SearchAttributes search_attributes = 2;
+}
+
+message StartChildWorkflowExecutionInitiatedEventAttributes {
+    string namespace = 1;
+    string workflow_id = 2;
+    WorkflowType workflow_type = 3;
+    TaskList task_list = 4;
+    Payloads input = 5;
+    // Total workflow execution timeout including retries and continue as new.
+    google.protobuf.Duration workflow_execution_timeout = 6 [(gogoproto.stdduration) = true];
+    // Timeout of a single workflow run.
+    google.protobuf.Duration workflow_run_timeout = 7 [(gogoproto.stdduration) = true];
+    // Timeout of a single workflow task.
+    google.protobuf.Duration workflow_task_timeout = 8 [(gogoproto.stdduration) = true];
+    // Default: PARENT_CLOSE_POLICY_TERMINATE.
+    ParentClosePolicy parent_close_policy = 9;
+    string control = 10;
+    int64 workflow_task_completed_event_id = 11;
+    // Default: WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE.
+    WorkflowIdReusePolicy workflow_id_reuse_policy = 12;
+    RetryPolicy retry_policy = 13;
+    string cron_schedule = 14;
+    Header header = 15;
+    Memo memo = 16;
+    SearchAttributes search_attributes = 17;
+}
+
+message StartChildWorkflowExecutionFailedEventAttributes {
+    string namespace = 1;
+    string workflow_id = 2;
+    WorkflowType workflow_type = 3;
+    StartChildWorkflowExecutionFailedCause cause = 4;
+    string control = 5;
+    int64 initiated_event_id = 6;
+    int64 workflow_task_completed_event_id = 7;
+}
+
+message ChildWorkflowExecutionStartedEventAttributes {
+    string namespace = 1;
+    int64 initiated_event_id = 2;
+    WorkflowExecution workflow_execution = 3;
+    WorkflowType workflow_type = 4;
+    Header header = 5;
+}
+
+message ChildWorkflowExecutionCompletedEventAttributes {
+    Payloads result = 1;
+    string namespace = 2;
+    WorkflowExecution workflow_execution = 3;
+    WorkflowType workflow_type = 4;
+    int64 initiated_event_id = 5;
+    int64 started_event_id = 6;
+}
+
+message ChildWorkflowExecutionFailedEventAttributes {
+    Failure failure = 1;
+    string namespace = 2;
+    WorkflowExecution workflow_execution = 3;
+    WorkflowType workflow_type = 4;
+    int64 initiated_event_id = 5;
+    int64 started_event_id = 6;
+    RetryState retry_state = 7;
+}
+
+message ChildWorkflowExecutionCanceledEventAttributes {
+    Payloads details = 1;
+    string namespace = 2;
+    WorkflowExecution workflow_execution = 3;
+    WorkflowType workflow_type = 4;
+    int64 initiated_event_id = 5;
+    int64 started_event_id = 6;
+}
+
+message ChildWorkflowExecutionTimedOutEventAttributes {
+    string namespace = 1;
+    WorkflowExecution workflow_execution = 2;
+    WorkflowType workflow_type = 3;
+    int64 initiated_event_id = 4;
+    int64 started_event_id = 5;
+    RetryState retry_state = 6;
+}
+
+message ChildWorkflowExecutionTerminatedEventAttributes {
+    string namespace = 1;
+    WorkflowExecution workflow_execution = 2;
+    WorkflowType workflow_type = 3;
+    int64 initiated_event_id = 4;
+    int64 started_event_id = 5;
+}
+
+message WorkflowExecution {
+    string workflow_id = 1;
+    string run_id = 2;
+}
+
+message WorkflowType {
+    string name = 1;
+}
+
+message Payloads {
+    repeated Payload payloads = 1;
+}
+
+message Payload {
+    map<string,bytes> metadata = 1;
+    bytes data = 2;
+}
+
+enum RetryState {
+    RETRY_STATE_UNSPECIFIED = 0;
+    RETRY_STATE_IN_PROGRESS = 1;
+    RETRY_STATE_NON_RETRYABLE_FAILURE = 2;
+    RETRY_STATE_TIMEOUT = 3;
+    RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED = 4;
+    RETRY_STATE_RETRY_POLICY_NOT_SET = 5;
+    RETRY_STATE_INTERNAL_SERVER_ERROR = 6;
+    RETRY_STATE_CANCEL_REQUESTED = 7;
+}
+
+message ApplicationFailureInfo {
+    string type = 1;
+    bool non_retryable = 2;
+    Payloads details = 3;
+}
+
+message TimeoutFailureInfo {
+    TimeoutType timeout_type = 1;
+    Payloads last_heartbeat_details = 2;
+}
+
+message CanceledFailureInfo {
+    Payloads details = 1;
+}
+
+message TerminatedFailureInfo {
+}
+
+message ServerFailureInfo {
+    bool non_retryable = 1;
+}
+
+message ResetWorkflowFailureInfo {
+    Payloads last_heartbeat_details = 1;
+}
+
+message ActivityFailureInfo {
+    int64 scheduled_event_id = 1;
+    int64 started_event_id = 2;
+    string identity = 3;
+    ActivityType activity_type = 4;
+    string activity_id = 5;
+    RetryState retry_state = 6;
+}
+
+message ChildWorkflowExecutionFailureInfo {
+    string namespace = 1;
+    WorkflowExecution workflow_execution = 2;
+    WorkflowType workflow_type = 3;
+    int64 initiated_event_id = 4;
+    int64 started_event_id = 5;
+    RetryState retry_state = 6;
+}
+
+message Failure {
+    string message = 1;
+    string source = 2;
+    string stack_trace = 3;
+    Failure cause = 4;
+    oneof failure_info {
+        ApplicationFailureInfo application_failure_info = 5;
+        TimeoutFailureInfo timeout_failure_info = 6;
+        CanceledFailureInfo canceled_failure_info = 7;
+        TerminatedFailureInfo terminated_failure_info = 8;
+        ServerFailureInfo server_failure_info = 9;
+        ResetWorkflowFailureInfo reset_workflow_failure_info = 10;
+        ActivityFailureInfo activity_failure_info = 11;
+        ChildWorkflowExecutionFailureInfo child_workflow_execution_failure_info = 12;
+    }
+}
+
+message ActivityType {
+    string name = 1;
+}
+
+enum TimeoutType {
+    TIMEOUT_TYPE_UNSPECIFIED = 0;
+    TIMEOUT_TYPE_START_TO_CLOSE = 1;
+    TIMEOUT_TYPE_SCHEDULE_TO_START = 2;
+    TIMEOUT_TYPE_SCHEDULE_TO_CLOSE = 3;
+    TIMEOUT_TYPE_HEARTBEAT = 4;
+}
+
+enum StartChildWorkflowExecutionFailedCause {
+    START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED = 0;
+    START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS = 1;
+}
+
+enum CancelExternalWorkflowExecutionFailedCause {
+    CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED = 0;
+    CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND = 1;
+}
+
+enum SignalExternalWorkflowExecutionFailedCause {
+    SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED = 0;
+    SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND = 1;
+}
+
+message SearchAttributes {
+    map<string, Payload> indexed_fields = 1;
+}
+
+message Memo {
+    map<string, Payload> fields = 1;
+}
+
+message Header {
+    map<string, Payload> fields = 1;
+}
+
+message RetryPolicy {
+    // Interval of the first retry. If retryBackoffCoefficient is 1.0 then it is used for all retries.
+    google.protobuf.Duration initial_interval = 1 [(gogoproto.stdduration) = true];
+    // Coefficient used to calculate the next retry interval.
+    // The next retry interval is previous interval multiplied by the coefficient.
+    // Must be 1 or larger.
+    double backoff_coefficient = 2;
+    // Maximum interval between retries. Exponential backoff leads to interval increase.
+    // This value is the cap of the increase. Default is 100x of the initial interval.
+    google.protobuf.Duration maximum_interval = 3 [(gogoproto.stdduration) = true];
+    // Maximum number of attempts. When exceeded the retries stop even if not expired yet.
+    // 1 disables retries. 0 means unlimited (up to the timeouts)
+    int32 maximum_attempts = 4;
+    // Non-Retryable errors types. Will stop retrying if error type matches this list.
+    repeated string non_retryable_error_types = 5;
+}
+
+enum WorkflowIdReusePolicy {
+    WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED = 0;
+    // Allow start a workflow execution using the same workflow Id, when workflow not running.
+    WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE = 1;
+    // Allow start a workflow execution using the same workflow Id, when workflow not running, and the last execution close state is in
+    // [terminated, cancelled, timed out, failed].
+    WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY = 2;
+    // Do not allow start a workflow execution using the same workflow Id at all.
+    WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE = 3;
+}
+
+enum ParentClosePolicy {
+    PARENT_CLOSE_POLICY_UNSPECIFIED = 0;
+    // Terminate means terminating the child workflow.
+    PARENT_CLOSE_POLICY_TERMINATE = 1;
+    // Abandon means not doing anything on the child workflow.
+    PARENT_CLOSE_POLICY_ABANDON = 2;
+    // Cancel means requesting cancellation on the child workflow.
+    PARENT_CLOSE_POLICY_REQUEST_CANCEL = 3;
+}
+
+message TaskList {
+    string name = 1;
+    // Default: TASK_LIST_KIND_NORMAL.
+    TaskListKind kind = 2;
+}
+
+message TaskListMetadata {
+    google.protobuf.DoubleValue max_tasks_per_second = 1;
+}
+
+message TaskListStatus {
+    int64 backlog_count_hint = 1;
+    int64 read_level = 2;
+    int64 ack_level = 3;
+    double rate_per_second = 4;
+    TaskIdBlock task_id_block = 5;
+}
+
+message TaskIdBlock {
+    int64 start_id = 1;
+    int64 end_id = 2;
+}
+
+message TaskListPartitionMetadata {
+    string key = 1;
+    string owner_host_name = 2;
+}
+
+message PollerInfo {
+    // Unix Nano
+    google.protobuf.Timestamp last_access_time = 1 [(gogoproto.stdtime) = true];
+    string identity = 2;
+    double rate_per_second = 3;
+}
+
+message StickyExecutionAttributes {
+    TaskList worker_task_list = 1;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration schedule_to_start_timeout = 2 [(gogoproto.stdduration) = true];
+}
+
+enum TaskListKind {
+    TASK_LIST_KIND_UNSPECIFIED = 0;
+    TASK_LIST_KIND_NORMAL = 1;
+    TASK_LIST_KIND_STICKY = 2;
+}
+
+enum TaskListType {
+    TASK_LIST_TYPE_UNSPECIFIED = 0;
+    // Workflow type of task list.
+    TASK_LIST_TYPE_WORKFLOW = 1;
+    // Activity type of task list.
+    TASK_LIST_TYPE_ACTIVITY = 2;
+}
+
+enum WorkflowTaskFailedCause {
+    WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED = 0;
+    WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND = 1;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES = 2;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES = 3;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_START_TIMER_ATTRIBUTES = 4;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_CANCEL_TIMER_ATTRIBUTES = 5;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_RECORD_MARKER_ATTRIBUTES = 6;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_COMPLETE_WORKFLOW_EXECUTION_ATTRIBUTES = 7;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_FAIL_WORKFLOW_EXECUTION_ATTRIBUTES = 8;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES = 9;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES = 10;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES = 11;
+    WORKFLOW_TASK_FAILED_CAUSE_START_TIMER_DUPLICATE_ID = 12;
+    WORKFLOW_TASK_FAILED_CAUSE_RESET_STICKY_TASK_LIST = 13;
+    WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE = 14;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES = 15;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES = 16;
+    WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND = 17;
+    WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND = 18;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_INPUT_SIZE = 19;
+    WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW = 20;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY = 21;
+    WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID = 22;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES = 23;
+}
+
+enum ContinueAsNewInitiator {
+    CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED = 0;
+    CONTINUE_AS_NEW_INITIATOR_WORKFLOW = 1;
+    CONTINUE_AS_NEW_INITIATOR_RETRY = 2;
+    CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE = 3;
+}
+
+message ResetPoints {
+    repeated ResetPointInfo points = 1;
+}
+
+message ResetPointInfo {
+    string binary_checksum = 1;
+    string run_id = 2;
+    int64 first_workflow_task_completed_id = 3;
+    google.protobuf.Timestamp create_time = 4 [(gogoproto.stdtime) = true];
+    // (-- api-linter: core::0214::resource-expiry=disabled
+    //     aip.dev/not-precedent: TTL is not defined for ResetPointInfo. --)
+    // The time that the run is deleted due to retention.
+    google.protobuf.Timestamp expire_time = 5 [(gogoproto.stdtime) = true];
+    // false if the reset point has pending childWFs/reqCancels/signalExternals.
+    bool resettable = 6;
 }
