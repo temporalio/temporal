@@ -429,7 +429,6 @@ func (c *domainCache) refreshDomainsLocked() error {
 		return err
 	}
 	domainNotificationVersion := metadata.NotificationVersion
-
 	var token []byte
 	request := &persistence.ListDomainsRequest{PageSize: domainCacheRefreshPageSize}
 	var domains DomainCacheEntries
@@ -478,6 +477,12 @@ UpdateLoop:
 		if err != nil {
 			return err
 		}
+
+		c.metricsClient.Scope(metrics.DomainCacheScope).Tagged(
+			metrics.DomainTag(nextEntry.info.Name),
+			metrics.ActiveClusterTag(nextEntry.replicationConfig.ActiveClusterName),
+		).UpdateGauge(metrics.ActiveClusterGauge, 1)
+
 		c.updateNameToIDCache(newCacheNameToID, nextEntry.info.Name, nextEntry.info.ID)
 
 		if prevEntry != nil {
@@ -524,7 +529,6 @@ func (c *domainCache) updateIDToDomainCache(
 	id string,
 	record *DomainCacheEntry,
 ) (*DomainCacheEntry, *DomainCacheEntry, error) {
-
 	elem, err := cacheByID.PutIfNotExist(id, newDomainCacheEntry(c.clusterMetadata))
 	if err != nil {
 		return nil, nil, err

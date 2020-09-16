@@ -30,6 +30,7 @@ const (
 	instance      = "instance"
 	domain        = "domain"
 	targetCluster = "target_cluster"
+	activeCluster = "active_cluster"
 	taskList      = "tasklist"
 	workflowType  = "workflowType"
 	activityType  = "activityType"
@@ -60,6 +61,10 @@ type (
 	}
 
 	targetClusterTag struct {
+		value string
+	}
+
+	activeClusterTag struct {
 		value string
 	}
 
@@ -160,6 +165,24 @@ func TargetClusterTag(value string) Tag {
 // Key returns the key of the target cluster tag
 func (d targetClusterTag) Key() string {
 	return targetCluster
+}
+
+// Key returns the key of the active cluster tag
+func (ac activeClusterTag) Key() string {
+	return activeCluster
+}
+
+// Value returns the value of the active cluster tag
+func (ac activeClusterTag) Value() string {
+	return ac.value
+}
+
+// ActiveClusterTag returns a new active cluster type tag.
+func ActiveClusterTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return activeClusterTag{value}
 }
 
 // Value returns the value of a target cluster tag
