@@ -85,14 +85,17 @@ func newHistoryV2Persistence(
 	logger log.Logger,
 ) (p.HistoryStore, error) {
 
-	cluster := cassandra.NewCassandraCluster(cfg)
+	cluster, err := cassandra.NewCassandraCluster(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
+	}
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = cfg.Consistency.GetConsistency()
 	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
 	session, err := cluster.CreateSession()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
 	}
 
 	return &cassandraHistoryV2Persistence{cassandraStore: cassandraStore{session: session, logger: logger}}, nil

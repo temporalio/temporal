@@ -42,5 +42,7 @@ type (
 		EnableHostVerification bool `yaml:"enableHostVerification"`
 
 		ServerName string `yaml:"serverName"`
+
+		CaData string `yaml:"caData"` //optional inline base64 encoded ca cert
 	}
 )

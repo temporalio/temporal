@@ -700,7 +700,10 @@ var _ p.ExecutionStore = (*cassandraPersistence)(nil)
 
 // newShardPersistence is used to create an instance of ShardManager implementation
 func newShardPersistence(cfg config.Cassandra, clusterName string, logger log.Logger) (p.ShardStore, error) {
-	cluster := cassandra.NewCassandraCluster(cfg)
+	cluster, err := cassandra.NewCassandraCluster(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
+	}
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = cfg.Consistency.GetConsistency()
 	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
@@ -708,7 +711,7 @@ func newShardPersistence(cfg config.Cassandra, clusterName string, logger log.Lo
 
 	session, err := cluster.CreateSession()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
 	}
 
 	return &cassandraPersistence{
@@ -729,14 +732,17 @@ func NewWorkflowExecutionPersistence(
 
 // newTaskPersistence is used to create an instance of TaskManager implementation
 func newTaskPersistence(cfg config.Cassandra, logger log.Logger) (p.TaskStore, error) {
-	cluster := cassandra.NewCassandraCluster(cfg)
+	cluster, err := cassandra.NewCassandraCluster(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
+	}
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = cfg.Consistency.GetConsistency()
 	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
 	session, err := cluster.CreateSession()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
 	}
 	return &cassandraPersistence{cassandraStore: cassandraStore{session: session, logger: logger}, shardID: -1}, nil
 }

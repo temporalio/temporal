@@ -141,7 +141,11 @@ type (
 
 // newVisibilityPersistence is used to create an instance of VisibilityManager implementation
 func newVisibilityPersistence(cfg config.Cassandra, logger log.Logger) (p.VisibilityStore, error) {
-	cluster := cassandra.NewCassandraCluster(cfg)
+	cluster, err := cassandra.NewCassandraCluster(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
+	}
+
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = cfg.Consistency.GetConsistency()
 	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
@@ -149,7 +153,7 @@ func newVisibilityPersistence(cfg config.Cassandra, logger log.Logger) (p.Visibi
 
 	session, err := cluster.CreateSession()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
 	}
 
 	return &cassandraVisibilityPersistence{
