@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go v1.25.34
 	github.com/benbjohnson/clock v0.0.0-20161215174838-7dc76406b6d3 // indirect
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869
-	github.com/bsm/sarama-cluster v2.1.13+incompatible
+	github.com/bsm/sarama-cluster v2.1.13+incompatible // indirect
 	github.com/cactus/go-statsd-client v3.1.1+incompatible
 	github.com/cch123/elasticsql v0.0.0-20190321073543-a1a440758eb9
 	github.com/davecgh/go-spew v1.1.1
@@ -46,7 +46,6 @@ require (
 	github.com/otiai10/copy v1.1.1
 	github.com/pborman/uuid v0.0.0-20180906182336-adf5a7427709
 	github.com/pierrec/lz4 v0.0.0-20190701081048-057d66e894a4 // indirect
-	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.2.1 // indirect
 	github.com/robfig/cron v1.2.0
 	github.com/sirupsen/logrus v1.4.2
@@ -68,7 +67,6 @@ require (
 	go.uber.org/yarpc v1.42.0
 	go.uber.org/zap v1.12.0
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
-	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20191029155521-f43be2a4598c // indirect
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	golang.org/x/tools v0.0.0-20200127195909-ed30b9180dd3
