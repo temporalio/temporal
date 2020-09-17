@@ -698,6 +698,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 				SearchAttributes: map[string]*commonpb.Payload{
 					definition.TemporalChangeVersion: payload.EncodeBytes([]byte("dummy")),
 				},
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
 			expected: nil,
 		},
@@ -713,6 +714,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 				TaskID:             0,
 				Memo:               nil,
 				SearchAttributes:   nil,
+				Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
 			// To avoid blocking the task queue processors on non-ElasticSearch visibility stores
 			// we simply treat any attempts to perform Upserts as "no-ops"

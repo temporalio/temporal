@@ -128,6 +128,7 @@ func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRe
 		request.TaskQueue,
 		request.StartTimestamp,
 		request.ExecutionTimestamp,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		request.TaskID,
 		request.Memo.Data,
 		request.Memo.Encoding,
@@ -167,6 +168,7 @@ func (v *esVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWor
 		request.TaskQueue,
 		request.StartTimestamp,
 		request.ExecutionTimestamp,
+		request.Status,
 		request.TaskID,
 		request.Memo.Data,
 		request.Memo.Encoding,
@@ -895,15 +897,17 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 }
 
 func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string, taskQueue string,
-	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding enumspb.EncodingType,
+	startTimeUnixNano, executionTimeUnixNano int64, status enumspb.WorkflowExecutionStatus,
+	taskID int64, memo []byte, encoding enumspb.EncodingType,
 	searchAttributes map[string]*commonpb.Payload) *indexerspb.Message {
 
 	msgType := enumsspb.MESSAGE_TYPE_INDEX
 	fields := map[string]*indexerspb.Field{
-		es.WorkflowType:  {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: workflowTypeName}},
-		es.StartTime:     {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: startTimeUnixNano}},
-		es.ExecutionTime: {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: executionTimeUnixNano}},
-		es.TaskQueue:     {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: taskQueue}},
+		es.WorkflowType:    {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: workflowTypeName}},
+		es.StartTime:       {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: startTimeUnixNano}},
+		es.ExecutionTime:   {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: executionTimeUnixNano}},
+		es.TaskQueue:       {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: taskQueue}},
+		es.ExecutionStatus: {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: int64(status)}},
 	}
 	if len(memo) != 0 {
 		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}

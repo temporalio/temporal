@@ -85,6 +85,7 @@ type (
 		ExecutionTimestamp int64
 		WorkflowTimeout    int64 // not persisted, used for cassandra ttl
 		TaskID             int64 // not persisted, used as condition update version for ES
+		Status             enumspb.WorkflowExecutionStatus
 		Memo               *commonpb.Memo
 		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
