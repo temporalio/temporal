@@ -92,10 +92,7 @@ func CreateDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 			User:     c.String(FlagUsername),
 			Password: c.String(FlagPassword),
 			Keyspace: c.String(FlagKeyspace),
-		}
-
-		if c.Bool(FlagEnableTLS) {
-			defaultConfig.TLS = tls
+			TLS:      tls,
 		}
 
 		defaultStore := config.DataStore{
@@ -111,10 +108,7 @@ func CreateDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 			DatabaseName: c.String(FlagKeyspace),
 			ConnectAddr:  addr,
 			PluginName:   engine,
-		}
-
-		if c.Bool(FlagEnableTLS) {
-			defaultConfig.TLS = tls
+			TLS:          tls,
 		}
 
 		defaultStore := config.DataStore{
