@@ -193,7 +193,9 @@ func AdminListNamespaces(c *cli.Context) {
 		ErrorAndExit("Failed to initialize metadata manager", err)
 	}
 
-	req := &persistence.ListNamespacesRequest{}
+	req := &persistence.ListNamespacesRequest{
+		PageSize: c.Int(FlagPageSize),
+	}
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 		req.NextPageToken = paginationToken
 		response, err := metadataManager.ListNamespaces(req)
