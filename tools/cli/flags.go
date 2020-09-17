@@ -592,7 +592,7 @@ func getDBFlags() []cli.Flag {
 		cli.StringFlag{
 			Name:  FlagDBAddress,
 			Value: "127.0.0.1",
-			Usage: "persistence address (right now only cassandra is fully supported)",
+			Usage: "persistence address",
 		},
 		cli.IntFlag{
 			Name:  FlagDBPort,
@@ -601,36 +601,36 @@ func getDBFlags() []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:  FlagUsername,
-			Usage: "cassandra username",
+			Usage: "DB username",
 		},
 		cli.StringFlag{
 			Name:  FlagPassword,
-			Usage: "cassandra password",
+			Usage: "DB password",
 		},
 		cli.StringFlag{
 			Name:  FlagKeyspace,
 			Value: "temporal",
-			Usage: "cassandra keyspace",
+			Usage: "DB keyspace",
 		},
 		cli.BoolFlag{
 			Name:  FlagEnableTLS,
-			Usage: "enable TLS over cassandra connection",
+			Usage: "enable TLS over the DB connection",
 		},
 		cli.StringFlag{
 			Name:  FlagTLSCertPath,
-			Usage: "cassandra tls client cert path (tls must be enabled)",
+			Usage: "DB tls client cert path (tls must be enabled)",
 		},
 		cli.StringFlag{
 			Name:  FlagTLSKeyPath,
-			Usage: "cassandra tls client key path (tls must be enabled)",
+			Usage: "DB tls client key path (tls must be enabled)",
 		},
 		cli.StringFlag{
 			Name:  FlagTLSCaPath,
-			Usage: "cassandra tls client ca path (tls must be enabled)",
+			Usage: "DB tls client ca path (tls must be enabled)",
 		},
 		cli.BoolFlag{
 			Name:  FlagTLSEnableHostVerification,
-			Usage: "cassandra tls verify hostname and server cert (tls must be enabled)",
+			Usage: "DB tls verify hostname and server cert (tls must be enabled)",
 		},
 	}
 }

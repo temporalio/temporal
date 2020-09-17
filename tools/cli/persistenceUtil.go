@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log/loggerimpl"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
@@ -73,6 +74,17 @@ func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 func CreateDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 	engine := getRequiredOption(c, FlagDBEngine)
 
+	var tls *auth.TLS
+	if c.Bool(FlagEnableTLS) {
+		tls = &auth.TLS{
+			Enabled:                true,
+			CertFile:               c.String(FlagTLSCertPath),
+			KeyFile:                c.String(FlagTLSKeyPath),
+			CaFile:                 c.String(FlagTLSCaPath),
+			EnableHostVerification: c.Bool(FlagTLSEnableHostVerification),
+		}
+	}
+
 	if engine == cassandraDBType {
 		defaultConfig := &config.Cassandra{
 			Hosts:    c.String(FlagDBAddress),
@@ -80,20 +92,27 @@ func CreateDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 			User:     c.String(FlagUsername),
 			Password: c.String(FlagPassword),
 			Keyspace: c.String(FlagKeyspace),
-		}
-
-		if c.Bool(FlagEnableTLS) {
-			defaultConfig.TLS = &auth.TLS{
-				Enabled:                true,
-				CertFile:               c.String(FlagTLSCertPath),
-				KeyFile:                c.String(FlagTLSKeyPath),
-				CaFile:                 c.String(FlagTLSCaPath),
-				EnableHostVerification: c.Bool(FlagTLSEnableHostVerification),
-			}
+			TLS:      tls,
 		}
 
 		defaultStore := config.DataStore{
 			Cassandra: defaultConfig,
+		}
+
+		return defaultStore, nil
+	} else if engine == mySQLDBType {
+		addr := fmt.Sprintf("%v:%v", c.String(FlagDBAddress), c.Int(FlagDBPort))
+		defaultConfig := &config.SQL{
+			User:         c.String(FlagUsername),
+			Password:     c.String(FlagPassword),
+			DatabaseName: c.String(FlagKeyspace),
+			ConnectAddr:  addr,
+			PluginName:   engine,
+			TLS:          tls,
+		}
+
+		defaultStore := config.DataStore{
+			SQL: defaultConfig,
 		}
 
 		return defaultStore, nil

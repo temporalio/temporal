@@ -68,7 +68,7 @@ const MaxTaskTimeoutSeconds = 31622400
 
 const (
 	// GetHistoryMaxPageSize is the max page size for get history
-	GetHistoryMaxPageSize = 1000
+	GetHistoryMaxPageSize = 100
 	// ReadDLQMessagesPageSize is the max page size for read DLQ messages
 	ReadDLQMessagesPageSize = 1000
 )
