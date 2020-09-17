@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -85,7 +86,10 @@ var _ p.ClusterMetadataStore = (*cassandraClusterMetadata)(nil)
 
 // newClusterMetadataInstance is used to create an instance of ClusterMetadataStore implementation
 func newClusterMetadataInstance(cfg config.Cassandra, logger log.Logger) (p.ClusterMetadataStore, error) {
-	cluster := cassandra.NewCassandraCluster(cfg)
+	cluster, err := cassandra.NewCassandraCluster(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
+	}
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = cfg.Consistency.GetConsistency()
 	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
@@ -93,7 +97,7 @@ func newClusterMetadataInstance(cfg config.Cassandra, logger log.Logger) (p.Clus
 
 	session, err := cluster.CreateSession()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
 	}
 
 	return &cassandraClusterMetadata{

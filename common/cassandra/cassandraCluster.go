@@ -26,7 +26,12 @@ package cassandra
 
 import (
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
+
+	"fmt"
 	"strings"
+	"errors"
 
 	"github.com/gocql/gocql"
 
@@ -34,7 +39,7 @@ import (
 )
 
 // NewCassandraCluster creates a cassandra cluster from a given configuration
-func NewCassandraCluster(cfg config.Cassandra) *gocql.ClusterConfig {
+func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 	hosts := parseHosts(cfg.Hosts)
 	cluster := gocql.NewCluster(hosts...)
 	cluster.ProtoVersion = 4
@@ -64,6 +69,16 @@ func NewCassandraCluster(cfg config.Cassandra) *gocql.ClusterConfig {
 				ServerName: cfg.TLS.ServerName,
 			},
 		}
+		if cfg.TLS.CaData != "" {
+			cluster.SslOpts.RootCAs = x509.NewCertPool()
+			pem, err := base64.StdEncoding.DecodeString(cfg.TLS.CaData)
+			if err != nil {
+				return nil, fmt.Errorf("caData could not be decoded: %w", err)
+			}
+			if !cluster.SslOpts.RootCAs.AppendCertsFromPEM(pem) {
+				return nil, errors.New("failed to load decoded CA Cert as PEM")
+			}
+		}
 	}
 	if cfg.MaxConns > 0 {
 		cluster.NumConns = cfg.MaxConns
@@ -74,7 +89,7 @@ func NewCassandraCluster(cfg config.Cassandra) *gocql.ClusterConfig {
 
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
 
-	return cluster
+	return cluster, nil
 }
 
 func parseHosts(input string) []string {

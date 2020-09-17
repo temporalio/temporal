@@ -97,7 +97,10 @@ var _ schema.DB = (*cqlClient)(nil)
 
 // NewCassandraCluster return gocql clusterConfig
 func NewCassandraCluster(cfg *config.Cassandra, timeoutSeconds int) (*gocql.ClusterConfig, error) {
-	clusterCfg := cassandra.NewCassandraCluster(*cfg)
+	clusterCfg, err := cassandra.NewCassandraCluster(*cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
+	}
 
 	if len(clusterCfg.Hosts) == 0 {
 		return nil, errNoHosts
