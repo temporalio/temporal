@@ -228,9 +228,9 @@ func (v *esVisibilityStore) ListOpenWorkflowExecutionsByType(
 		return nil, err
 	}
 
-	matchQuery := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.WorkflowType, request.WorkflowTypeName)).
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.WorkflowType, request.WorkflowTypeName)).
 		Must(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
-	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, matchQuery, true)
+	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByType failed. Error: %v", err))
 	}
@@ -251,9 +251,9 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByType(
 		return nil, err
 	}
 
-	matchQuery := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.WorkflowType, request.WorkflowTypeName)).
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.WorkflowType, request.WorkflowTypeName)).
 		MustNot(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
-	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, matchQuery, false)
+	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByType failed. Error: %v", err))
 	}
@@ -297,9 +297,9 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 		return nil, err
 	}
 
-	matchQuery := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.WorkflowID, request.WorkflowID)).
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.WorkflowID, request.WorkflowID)).
 		MustNot(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
-	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, matchQuery, false)
+	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID failed. Error: %v", err))
 	}
@@ -746,15 +746,17 @@ func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsReq
 		Gte(earliestTimeStr).
 		Lte(latestTimeStr)
 
-	if boolQuery == nil {
-		boolQuery = elastic.NewBoolQuery()
+	query := elastic.NewBoolQuery()
+	if boolQuery != nil {
+		*query = *boolQuery
 	}
-	boolQuery = boolQuery.Must(matchNamespaceQuery).Filter(rangeQuery)
+
+	query = query.Must(matchNamespaceQuery).Filter(rangeQuery)
 
 	ctx := context.Background()
 	params := &es.SearchParameters{
 		Index:    v.index,
-		Query:    boolQuery,
+		Query:    query,
 		From:     token.From,
 		PageSize: request.PageSize,
 	}
