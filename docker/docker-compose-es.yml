@@ -26,7 +26,7 @@ services:
       - discovery.type=single-node
       - ES_JAVA_OPTS=-Xms100m -Xmx100m
   temporal:
-    image: temporalio/server:${SERVER_TAG:-0.29.0}
+    image: temporalio/server:${SERVER_TAG:-0.30.0}
     ports:
       - "7233:7233"
     volumes:
@@ -43,7 +43,7 @@ services:
       - kafka
       - elasticsearch
   temporal-admin-tools:
-    image: temporalio/admin-tools:${SERVER_TAG:-0.29.0}
+    image: temporalio/admin-tools:${SERVER_TAG:-0.30.0}
     stdin_open: true
     tty: true
     environment:

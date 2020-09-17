@@ -38,12 +38,12 @@ import (
 	strings "strings"
 	time "time"
 
+	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
 	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	types "github.com/gogo/protobuf/types"
 	v12 "go.temporal.io/api/common/v1"
-	_ "go.temporal.io/api/dependencies/gogoproto"
 	v14 "go.temporal.io/api/enums/v1"
 	v11 "go.temporal.io/api/failure/v1"
 	v1 "go.temporal.io/api/history/v1"
