@@ -101,8 +101,6 @@ message ActivityInfo {
     string retry_last_worker_identity = 28;
     string namespace_id = 29;
     int64 schedule_id = 30;
-    Payloads last_heartbeat_details = 31;
-    google.protobuf.Timestamp last_heartbeat_update_time = 32 [(gogoproto.stdtime) = true];
 }
 
 message HistoryEvent {
@@ -852,4 +850,155 @@ message ResetPointInfo {
     google.protobuf.Timestamp expire_time = 5 [(gogoproto.stdtime) = true];
     // false if the reset point has pending childWFs/reqCancels/signalExternals.
     bool resettable = 6;
+}
+
+message ChildExecutionInfo {
+    int64 version = 1;
+    int64 initiated_event_batch_id = 2;
+    int64 started_id = 3;
+    HistoryEvent initiated_event = 4;
+    string started_workflow_id = 5;
+    string started_run_id = 6;
+    HistoryEvent started_event = 7;
+    string create_request_id = 8;
+    string namespace = 9;
+    string workflow_type_name = 10;
+    ParentClosePolicy parent_close_policy = 11;
+    int64 initiated_id = 12;
+}
+
+message WorkflowExecutionState {
+    string create_request_id = 1;
+    string run_id = 2;
+    WorkflowExecutionState state = 3;
+    WorkflowExecutionStatus status = 4;
+}
+
+message WorkflowExecutionInfo {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string parent_namespace_id = 3;
+    string parent_workflow_id = 4;
+    string parent_run_id = 5;
+    int64 initiated_id = 6;
+    int64 completion_event_batch_id = 7;
+    HistoryEvent completion_event = 8;
+    string task_list = 9;
+    string workflow_type_name = 10;
+    google.protobuf.Duration workflow_execution_timeout = 11 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration workflow_run_timeout = 12 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration default_workflow_task_timeout = 13 [(gogoproto.stdduration) = true];
+    int64 start_version = 14;
+    ReplicationData replication_data = 16;
+    int64 last_event_task_id = 17;
+    int64 last_first_event_id = 18;
+    int64 last_processed_event = 19;
+    google.protobuf.Timestamp start_time = 20 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_update_time = 21 [(gogoproto.stdtime) = true];
+    int64 workflow_task_version = 22;
+    int64 workflow_task_schedule_id = 23;
+    int64 workflow_task_started_id = 24;
+    google.protobuf.Duration workflow_task_timeout = 25 [(gogoproto.stdduration) = true];
+    int32 workflow_task_attempt = 26;
+    google.protobuf.Timestamp workflow_task_started_time = 27 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp workflow_task_scheduled_time = 28 [(gogoproto.stdtime) = true];
+    bool cancel_requested = 29;
+    google.protobuf.Timestamp workflow_task_original_scheduled_time = 30 [(gogoproto.stdtime) = true];
+    string workflow_task_request_id = 31;
+    string cancel_request_id = 32;
+    string sticky_task_list = 33;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration sticky_schedule_to_start_timeout = 34 [(gogoproto.stdduration) = true];
+    int32 retry_attempt = 35;
+    google.protobuf.Duration retry_initial_interval = 36 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration retry_maximum_interval = 37 [(gogoproto.stdduration) = true];
+    int32 retry_maximum_attempts = 38;
+    double retry_backoff_coefficient = 39;
+    google.protobuf.Timestamp retry_expiration_time = 40 [(gogoproto.stdtime) = true];
+    repeated string retry_non_retryable_error_types = 41;
+    bool has_retry_policy = 42;
+    string cron_schedule = 43;
+    int32 event_store_version = 44;
+    bytes event_branch_token = 45;
+    int64 signal_count = 46;
+    int64 history_size = 47;
+    string client_library_version = 48;
+    string client_feature_version = 49;
+    string client_impl = 50;
+    ResetPoints auto_reset_points = 51;
+    map<string, Payload> search_attributes = 52;
+    map<string, Payload> memo = 53;
+    VersionHistories version_histories = 54;
+    string first_execution_run_id = 55;
+}
+
+// (-- api-linter: core::0216::synonyms=disabled
+//     aip.dev/not-precedent: There is WorkflowExecutionState already in another package. --)
+enum WorkflowExecutionStatus {
+    WORKFLOW_EXECUTION_STATUS_UNSPECIFIED = 0;
+    // Value 1 is hardcoded in SQL persistence.
+    WORKFLOW_EXECUTION_STATUS_RUNNING = 1;
+    WORKFLOW_EXECUTION_STATUS_COMPLETED = 2;
+    WORKFLOW_EXECUTION_STATUS_FAILED = 3;
+    WORKFLOW_EXECUTION_STATUS_CANCELED = 4;
+    WORKFLOW_EXECUTION_STATUS_TERMINATED = 5;
+    WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW = 6;
+    WORKFLOW_EXECUTION_STATUS_TIMED_OUT = 7;
+}
+
+// ReplicationData represents mutable state information for global namespaces.
+// This information is used by replication protocol when applying events from remote clusters
+// only used in cassandra
+message ReplicationData {
+    int64 last_write_event_id = 1;
+    map<string, ReplicationInfo> last_replication_info = 2;
+}
+
+message ReplicationInfo {
+    int64 version = 1;
+    int64 last_event_id = 2;
+}
+
+// VersionHistory contains the version history of a branch.
+message VersionHistory {
+    bytes branch_token = 1;
+    repeated VersionHistoryItem items = 2;
+}
+
+// VersionHistories contains all version histories from all branches.
+message VersionHistories {
+    int32 current_version_history_index = 1;
+    repeated VersionHistory histories = 2;
+}
+
+// VersionHistoryItem contains signal eventId and the corresponding version.
+message VersionHistoryItem {
+    int64 event_id = 1;
+    int64 version = 2;
+}
+
+message HistoryTreeInfo {
+    HistoryBranch branch_info = 1;
+    // For fork operation to prevent race condition of leaking event data when forking branches fail. Also can be used for clean up leaked data.
+    google.protobuf.Timestamp fork_time = 2 [(gogoproto.stdtime) = true];
+    // For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
+    string info = 3;
+}
+
+// For history persistence to serialize/deserialize branch details.
+message HistoryBranch {
+    string tree_id = 1;
+    string branch_id = 2;
+    repeated HistoryBranchRange ancestors = 3;
+}
+
+// HistoryBranchRange represents a piece of range for a branch.
+message HistoryBranchRange {
+    // BranchId of original branch forked from.
+    string branch_id = 1;
+    // Beginning node for the range, inclusive.
+    int64 begin_node_id = 2;
+    // Ending node for the range, exclusive.
+    int64 end_node_id = 3;
 }
