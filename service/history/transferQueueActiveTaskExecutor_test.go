@@ -2109,6 +2109,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttribu
 		StartTimestamp:   timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
 		WorkflowTimeout:  int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 		TaskID:           task.GetTaskId(),
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		TaskQueue:        task.TaskQueue,
 	}
 }
