@@ -460,6 +460,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 		executionTimestamp.UnixNano(),
 		workflowTimeout,
 		transferTask.GetTaskId(),
+		executionInfo.GetExecutionState().GetStatus(),
 		executionInfo.TaskQueue,
 		visibilityMemo,
 		searchAttr,

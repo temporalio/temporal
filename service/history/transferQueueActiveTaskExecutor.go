@@ -678,6 +678,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 	executionInfo := mutableState.GetExecutionInfo()
 	runTimeout := executionInfo.WorkflowRunTimeout
 	wfTypeName := executionInfo.WorkflowTypeName
+
 	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {
 		return err
@@ -715,6 +716,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 		executionTimestamp.UnixNano(),
 		runTimeout,
 		task.GetTaskId(),
+		executionInfo.GetExecutionState().GetStatus(),
 		executionInfo.TaskQueue,
 		visibilityMemo,
 		searchAttr,

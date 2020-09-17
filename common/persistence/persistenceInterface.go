@@ -503,6 +503,7 @@ type (
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
+		Status             enumspb.WorkflowExecutionStatus
 		WorkflowTimeout    int64
 		TaskID             int64
 		Memo               *serialization.DataBlob
