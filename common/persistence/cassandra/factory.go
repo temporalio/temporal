@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/gocql/gocql"
@@ -136,14 +137,18 @@ func (f *Factory) executionStoreFactory() (*executionStoreFactory, error) {
 
 // newExecutionStoreFactory is used to create an instance of ExecutionStoreFactory implementation
 func newExecutionStoreFactory(cfg config.Cassandra, logger log.Logger) (*executionStoreFactory, error) {
-	cluster := cassandra.NewCassandraCluster(cfg)
+	cluster, err := cassandra.NewCassandraCluster(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
+	}
+
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = cfg.Consistency.GetConsistency()
 	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
 	session, err := cluster.CreateSession()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
 	}
 	return &executionStoreFactory{session: session, logger: logger}, nil
 }

@@ -126,16 +126,19 @@ func (s *TestCluster) TearDownTestDatabase() {
 
 // CreateSession from PersistenceTestCluster interface
 func (s *TestCluster) CreateSession() {
-	s.cluster = cassandra.NewCassandraCluster(config.Cassandra{
+	var err error
+	s.cluster, err = cassandra.NewCassandraCluster(config.Cassandra{
 		Hosts:    s.cfg.Hosts,
 		Port:     s.cfg.Port,
 		User:     s.cfg.User,
 		Password: s.cfg.Password,
 	})
+	if err != nil {
+		s.logger.Fatal("CreateSession", tag.Error(err))
+	}
 	s.cluster.Consistency = gocql.Consistency(1)
 	s.cluster.Keyspace = "system"
 	s.cluster.Timeout = 40 * time.Second
-	var err error
 	s.session, err = s.cluster.CreateSession()
 	if err != nil {
 		s.logger.Fatal("CreateSession", tag.Error(err))

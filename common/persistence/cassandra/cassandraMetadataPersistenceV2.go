@@ -100,7 +100,10 @@ type (
 
 // newMetadataPersistenceV2 is used to create an instance of the Namespace MetadataStore implementation
 func newMetadataPersistenceV2(cfg config.Cassandra, currentClusterName string, logger log.Logger) (p.MetadataStore, error) {
-	cluster := cassandra.NewCassandraCluster(cfg)
+	cluster, err := cassandra.NewCassandraCluster(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
+	}
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = cfg.Consistency.GetConsistency()
 	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
@@ -108,7 +111,7 @@ func newMetadataPersistenceV2(cfg config.Cassandra, currentClusterName string, l
 
 	session, err := cluster.CreateSession()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
 	}
 
 	return &cassandraMetadataPersistenceV2{

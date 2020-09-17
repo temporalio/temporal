@@ -78,7 +78,11 @@ func newQueue(
 	logger log.Logger,
 	queueType persistence.QueueType,
 ) (persistence.Queue, error) {
-	cluster := cassandra.NewCassandraCluster(cfg)
+	cluster, err := cassandra.NewCassandraCluster(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
+	}
+
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = cfg.Consistency.GetConsistency()
 	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
@@ -86,7 +90,7 @@ func newQueue(
 
 	session, err := cluster.CreateSession()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
 	}
 
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
@@ -99,7 +103,7 @@ func newQueue(
 		queueType:      queueType,
 	}
 	if err := queue.createQueueMetadataEntryIfNotExist(); err != nil {
-		return nil, fmt.Errorf("failed to check and create queue metadata entry: %v", err)
+		return nil, fmt.Errorf("check and create queue metadata entry: %w", err)
 	}
 
 	return queue, nil
