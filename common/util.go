@@ -213,19 +213,12 @@ func IsPersistenceTransientError(err error) bool {
 	return false
 }
 
-// IsKafkaTransientError check if the error is a transient kafka error
-func IsKafkaTransientError(err error) bool {
-	return true
-}
-
 // IsServiceTransientError checks if the error is a transient error.
 func IsServiceTransientError(err error) bool {
 	switch err.(type) {
 	case *workflow.InternalServiceError:
 		return true
 	case *workflow.ServiceBusyError:
-		return true
-	case *workflow.LimitExceededError:
 		return true
 	case *h.ShardOwnershipLostError:
 		return true
