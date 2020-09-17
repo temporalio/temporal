@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package invariants
+package invariant
 
 import (
 	"errors"
@@ -34,7 +34,7 @@ import (
 	c2 "github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/reconciliation/common"
+	"github.com/uber/cadence/common/reconciliation/entity"
 )
 
 type OpenCurrentExecutionSuite struct {
@@ -52,26 +52,26 @@ func (s *OpenCurrentExecutionSuite) SetupTest() {
 
 func (s *OpenCurrentExecutionSuite) TestCheck() {
 	testCases := []struct {
-		execution       *common.ConcreteExecution
+		execution       *entity.ConcreteExecution
 		getCurrentResp  *persistence.GetCurrentExecutionResponse
 		getCurrentErr   error
 		getConcreteResp *persistence.GetWorkflowExecutionResponse
 		getConcreteErr  error
-		expectedResult  common.CheckResult
+		expectedResult  CheckResult
 	}{
 		{
 			execution: getClosedConcreteExecution(),
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeHealthy,
-				InvariantType:   common.OpenCurrentExecutionInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeHealthy,
+				InvariantName:   OpenCurrentExecution,
 			},
 		},
 		{
 			execution:      getOpenConcreteExecution(),
 			getConcreteErr: errors.New("got error checking if concrete is open"),
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeFailed,
-				InvariantType:   common.OpenCurrentExecutionInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeFailed,
+				InvariantName:   OpenCurrentExecution,
 				Info:            "failed to check if concrete execution is still open",
 				InfoDetails:     "got error checking if concrete is open",
 			},
@@ -86,9 +86,9 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 				},
 			},
 			getConcreteErr: nil,
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeHealthy,
-				InvariantType:   common.OpenCurrentExecutionInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeHealthy,
+				InvariantName:   OpenCurrentExecution,
 			},
 		},
 		{
@@ -102,9 +102,9 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			},
 			getConcreteErr: nil,
 			getCurrentErr:  &shared.EntityNotExistsError{},
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeCorrupted,
-				InvariantType:   common.OpenCurrentExecutionInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeCorrupted,
+				InvariantName:   OpenCurrentExecution,
 				Info:            "execution is open without having current execution",
 				InfoDetails:     "EntityNotExistsError{Message: }",
 			},
@@ -120,9 +120,9 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			},
 			getConcreteErr: nil,
 			getCurrentErr:  errors.New("error getting current execution"),
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeFailed,
-				InvariantType:   common.OpenCurrentExecutionInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeFailed,
+				InvariantName:   OpenCurrentExecution,
 				Info:            "failed to check if current execution exists",
 				InfoDetails:     "error getting current execution",
 			},
@@ -141,9 +141,9 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			getCurrentResp: &persistence.GetCurrentExecutionResponse{
 				RunID: "not-equal",
 			},
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeCorrupted,
-				InvariantType:   common.OpenCurrentExecutionInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeCorrupted,
+				InvariantName:   OpenCurrentExecution,
 				Info:            "execution is open but current points at a different execution",
 				InfoDetails:     "current points at not-equal",
 			},
@@ -162,9 +162,9 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			getCurrentResp: &persistence.GetCurrentExecutionResponse{
 				RunID: runID,
 			},
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeHealthy,
-				InvariantType:   common.OpenCurrentExecutionInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeHealthy,
+				InvariantName:   OpenCurrentExecution,
 			},
 		},
 	}

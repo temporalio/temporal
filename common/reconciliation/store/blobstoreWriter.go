@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package common
+package store
 
 import (
 	"bytes"
@@ -97,7 +97,7 @@ func getBlobstoreWriteFn(
 				return nil, err
 			}
 			buffer.Write(data)
-			buffer.Write(BlobstoreSeparatorToken)
+			buffer.Write(SeparatorToken)
 		}
 		req := &blobstore.PutRequest{
 			Key: key,
@@ -106,7 +106,7 @@ func getBlobstoreWriteFn(
 			},
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), BlobstoreTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 		defer cancel()
 		if _, err := client.Put(ctx, req); err != nil {
 			return nil, err

@@ -37,6 +37,7 @@ type Retryer interface {
 	ReadHistoryBranch(*ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
 	DeleteWorkflowExecution(*DeleteWorkflowExecutionRequest) error
 	DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
+	GetShardID() int
 }
 
 type (
@@ -182,4 +183,9 @@ func (pr *persistenceRetryer) DeleteCurrentWorkflowExecution(
 		return pr.execManager.DeleteCurrentWorkflowExecution(req)
 	}
 	return backoff.Retry(op, pr.policy, common.IsPersistenceTransientError)
+}
+
+// GetShardID return shard id
+func (pr *persistenceRetryer) GetShardID() int {
+	return pr.execManager.GetShardID()
 }

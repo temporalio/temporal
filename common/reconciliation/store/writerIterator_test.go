@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package common
+package store
 
 import (
 	"fmt"
@@ -28,21 +28,22 @@ import (
 	"os"
 	"testing"
 
-	"github.com/uber/cadence/common"
-
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore/filestore"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/pagination"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/reconciliation/entity"
+	"github.com/uber/cadence/common/reconciliation/iterator"
 	"github.com/uber/cadence/common/service/config"
 )
 
 var (
-	testBranchToken   = []byte{1, 2, 3}
+	validBranchToken  = []byte{89, 11, 0, 10, 0, 0, 0, 12, 116, 101, 115, 116, 45, 116, 114, 101, 101, 45, 105, 100, 11, 0, 20, 0, 0, 0, 14, 116, 101, 115, 116, 45, 98, 114, 97, 110, 99, 104, 45, 105, 100, 0}
 	executionPageSize = 10
 	testShardID       = 1
 )
@@ -62,7 +63,8 @@ func (s *WriterIteratorSuite) SetupTest() {
 
 func (s *WriterIteratorSuite) TestWriterIterator() {
 	pr := persistence.NewPersistenceRetryer(getMockExecutionManager(10, 10), nil, common.CreatePersistenceRetryPolicy())
-	pItr := NewPersistenceIterator(pr, executionPageSize, testShardID, ConcreteExecutionType)
+	pItr := iterator.ConcreteExecution(pr, executionPageSize)
+
 	uuid := "uuid"
 	extension := Extension("test")
 	outputDir, err := ioutil.TempDir("", "TestWriterIterator")
@@ -94,7 +96,7 @@ func (s *WriterIteratorSuite) TestWriterIterator() {
 	s.Equal(0, flushedKeys.MinPage)
 	s.Equal(9, flushedKeys.MaxPage)
 	s.Equal(Extension("test"), flushedKeys.Extension)
-	blobstoreItr := NewBlobstoreIterator(blobstore, *flushedKeys, ConcreteExecutionType)
+	blobstoreItr := NewBlobstoreIterator(blobstore, *flushedKeys, &entity.ConcreteExecution{})
 	i := 0
 	s.True(blobstoreItr.HasNext())
 	for blobstoreItr.HasNext() {
@@ -123,6 +125,7 @@ func getMockExecutionManager(pages int, countPerPage int) persistence.ExecutionM
 			resp.PageToken = nil
 		}
 		execManager.On("ListConcreteExecutions", req).Return(resp, nil)
+		execManager.On("GetShardID").Return(testShardID)
 	}
 	return execManager
 }

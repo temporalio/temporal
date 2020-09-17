@@ -36,9 +36,10 @@ import (
 
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
-	c "github.com/uber/cadence/common/reconciliation/common"
+	"github.com/uber/cadence/common/reconciliation/store"
 	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/worker/scanner/executions/shard"
 )
 
 type activitiesSuite struct {
@@ -83,7 +84,7 @@ func (s *activitiesSuite) TestScannerConfigActivity() {
 			},
 			params: ScannerConfigActivityParams{
 				Overwrites: ScannerWorkflowConfigOverwrites{},
-				ScanType:   c.ConcreteExecutionType,
+				ScanType:   shard.ConcreteExecutionType,
 			},
 			resolved: ResolvedScannerWorkflowConfig{
 				Enabled:                 true,
@@ -118,7 +119,7 @@ func (s *activitiesSuite) TestScannerConfigActivity() {
 						InvariantCollectionHistory:      true,
 					},
 				},
-				ScanType: c.ConcreteExecutionType,
+				ScanType: shard.ConcreteExecutionType,
 			},
 			resolved: ResolvedScannerWorkflowConfig{
 				Enabled:                 false,
@@ -137,7 +138,7 @@ func (s *activitiesSuite) TestScannerConfigActivity() {
 	for _, tc := range testCases {
 		env := s.NewTestActivityEnvironment()
 		env.SetWorkerOptions(worker.Options{
-			BackgroundActivityContext: context.WithValue(context.Background(), ScanTypeScannerContextKeyMap[c.ConcreteExecutionType], ScannerContext{
+			BackgroundActivityContext: context.WithValue(context.Background(), ScanTypeScannerContextKeyMap[shard.ConcreteExecutionType], ScannerContext{
 				ScannerWorkflowDynamicConfig: tc.scannerWorkflowDynamicConfig,
 			}),
 		})
@@ -156,7 +157,7 @@ func (s *activitiesSuite) TestFixerCorruptedKeysActivity() {
 		},
 	}, nil)
 	queryResult := &ShardCorruptKeysQueryResult{
-		Result: map[int]c.Keys{
+		Result: map[int]store.Keys{
 			1: {
 				UUID: "first",
 			},
@@ -179,7 +180,7 @@ func (s *activitiesSuite) TestFixerCorruptedKeysActivity() {
 	}, nil)
 	env := s.NewTestActivityEnvironment()
 	env.SetWorkerOptions(worker.Options{
-		BackgroundActivityContext: context.WithValue(context.Background(), ScanTypeFixerContextKeyMap[c.ConcreteExecutionType], FixerContext{
+		BackgroundActivityContext: context.WithValue(context.Background(), ScanTypeFixerContextKeyMap[shard.ConcreteExecutionType], FixerContext{
 			Resource: s.mockResource,
 		}),
 	})
@@ -195,19 +196,19 @@ func (s *activitiesSuite) TestFixerCorruptedKeysActivity() {
 	}, fixerResult.ShardQueryPaginationToken)
 	s.Contains(fixerResult.CorruptedKeys, CorruptedKeysEntry{
 		ShardID: 1,
-		CorruptedKeys: c.Keys{
+		CorruptedKeys: store.Keys{
 			UUID: "first",
 		},
 	})
 	s.Contains(fixerResult.CorruptedKeys, CorruptedKeysEntry{
 		ShardID: 2,
-		CorruptedKeys: c.Keys{
+		CorruptedKeys: store.Keys{
 			UUID: "second",
 		},
 	})
 	s.Contains(fixerResult.CorruptedKeys, CorruptedKeysEntry{
 		ShardID: 3,
-		CorruptedKeys: c.Keys{
+		CorruptedKeys: store.Keys{
 			UUID: "third",
 		},
 	})

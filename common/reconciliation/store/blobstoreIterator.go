@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package common
+package store
 
 import (
 	"bytes"
@@ -29,6 +29,7 @@ import (
 
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/pagination"
+	"github.com/uber/cadence/common/reconciliation/entity"
 )
 
 type (
@@ -37,19 +38,14 @@ type (
 	}
 )
 
-var scanTypeExecFnMap = map[ScanType]func(data []byte) (*ScanOutputEntity, error){
-	ConcreteExecutionType: deserializeConcreteExecution,
-	CurrentExecutionType:  deserializeCurrentExecution,
-}
-
 // NewBlobstoreIterator constructs a new iterator backed by blobstore.
 func NewBlobstoreIterator(
 	client blobstore.Client,
 	keys Keys,
-	scanType ScanType,
+	entity entity.Entity,
 ) ScanOutputIterator {
 	return &blobstoreIterator{
-		itr: pagination.NewIterator(keys.MinPage, getBlobstoreFetchPageFn(client, keys, scanTypeExecFnMap[scanType])),
+		itr: pagination.NewIterator(keys.MinPage, getBlobstoreFetchPageFn(client, keys, entity)),
 	}
 }
 
@@ -70,12 +66,12 @@ func (i *blobstoreIterator) HasNext() bool {
 func getBlobstoreFetchPageFn(
 	client blobstore.Client,
 	keys Keys,
-	execDeserializeFunc func(data []byte) (*ScanOutputEntity, error),
+	entity entity.Entity,
 ) pagination.FetchFn {
 	return func(token pagination.PageToken) (pagination.Page, error) {
 		index := token.(int)
 		key := pageNumberToKey(keys.UUID, keys.Extension, index)
-		ctx, cancel := context.WithTimeout(context.Background(), BlobstoreTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 		defer cancel()
 		req := &blobstore.GetRequest{
 			Key: key,
@@ -84,13 +80,13 @@ func getBlobstoreFetchPageFn(
 		if err != nil {
 			return pagination.Page{}, err
 		}
-		parts := bytes.Split(resp.Blob.Body, BlobstoreSeparatorToken)
+		parts := bytes.Split(resp.Blob.Body, SeparatorToken)
 		var executions []pagination.Entity
 		for _, p := range parts {
 			if len(p) == 0 {
 				continue
 			}
-			soe, err := execDeserializeFunc(p)
+			soe, err := deserialize(p, entity)
 			if err != nil {
 				return pagination.Page{}, err
 			}
@@ -108,27 +104,16 @@ func getBlobstoreFetchPageFn(
 	}
 }
 
-func deserializeConcreteExecution(data []byte) (*ScanOutputEntity, error) {
+func deserialize(data []byte, blob entity.Entity) (*ScanOutputEntity, error) {
 	soe := &ScanOutputEntity{
-		Execution: &ConcreteExecution{},
+		Execution: blob.Clone(),
 	}
-	if err := json.Unmarshal(data, &soe); err != nil {
-		return nil, err
-	}
-	if err := ValidateConcreteExecution(soe.Execution.(*ConcreteExecution)); err != nil {
-		return nil, err
-	}
-	return soe, nil
-}
 
-func deserializeCurrentExecution(data []byte) (*ScanOutputEntity, error) {
-	soe := &ScanOutputEntity{
-		Execution: &CurrentExecution{},
-	}
-	if err := json.Unmarshal(data, &soe); err != nil {
+	if err := json.Unmarshal(data, soe); err != nil {
 		return nil, err
 	}
-	if err := ValidateCurrentExecution(soe.Execution.(*CurrentExecution)); err != nil {
+
+	if err := soe.Execution.(entity.Entity).Validate(); err != nil {
 		return nil, err
 	}
 	return soe, nil

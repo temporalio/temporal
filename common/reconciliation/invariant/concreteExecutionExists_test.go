@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package invariants
+package invariant
 
 import (
 	"errors"
@@ -36,7 +36,7 @@ import (
 	c "github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/reconciliation/common"
+	"github.com/uber/cadence/common/reconciliation/entity"
 )
 
 type ConcreteExecutionExistsSuite struct {
@@ -56,12 +56,12 @@ func (s *ConcreteExecutionExistsSuite) TestCheck() {
 	existsError := shared.EntityNotExistsError{}
 	unknownError := shared.BadRequestError{}
 	testCases := []struct {
-		execution       *common.CurrentExecution
+		execution       *entity.CurrentExecution
 		getConcreteResp *persistence.IsWorkflowExecutionExistsResponse
 		getConcreteErr  error
 		getCurrentResp  *persistence.GetCurrentExecutionResponse
 		getCurrentErr   error
-		expectedResult  common.CheckResult
+		expectedResult  CheckResult
 	}{
 		{
 			execution:       getClosedCurrentExecution(),
@@ -69,9 +69,9 @@ func (s *ConcreteExecutionExistsSuite) TestCheck() {
 			getCurrentResp: &persistence.GetCurrentExecutionResponse{
 				RunID: getClosedCurrentExecution().CurrentRunID,
 			},
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeHealthy,
-				InvariantType:   common.ConcreteExecutionExistsInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeHealthy,
+				InvariantName:   ConcreteExecutionExists,
 			},
 		},
 		{
@@ -80,9 +80,9 @@ func (s *ConcreteExecutionExistsSuite) TestCheck() {
 			getCurrentResp: &persistence.GetCurrentExecutionResponse{
 				RunID: getOpenCurrentExecution().CurrentRunID,
 			},
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeFailed,
-				InvariantType:   common.ConcreteExecutionExistsInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeFailed,
+				InvariantName:   ConcreteExecutionExists,
 				Info:            "failed to check if concrete execution exists",
 				InfoDetails:     "error getting concrete execution",
 			},
@@ -93,9 +93,9 @@ func (s *ConcreteExecutionExistsSuite) TestCheck() {
 			getCurrentResp: &persistence.GetCurrentExecutionResponse{
 				RunID: getOpenCurrentExecution().CurrentRunID,
 			},
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeCorrupted,
-				InvariantType:   common.ConcreteExecutionExistsInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeCorrupted,
+				InvariantName:   ConcreteExecutionExists,
 				Info:            "execution is open without having concrete execution",
 				InfoDetails: fmt.Sprintf("concrete execution not found. WorkflowId: %v, RunId: %v",
 					workflowID, currentRunID),
@@ -108,9 +108,9 @@ func (s *ConcreteExecutionExistsSuite) TestCheck() {
 			getCurrentResp: &persistence.GetCurrentExecutionResponse{
 				RunID: getOpenCurrentExecution().CurrentRunID,
 			},
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeHealthy,
-				InvariantType:   common.ConcreteExecutionExistsInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeHealthy,
+				InvariantName:   ConcreteExecutionExists,
 			},
 		},
 		{
@@ -120,9 +120,9 @@ func (s *ConcreteExecutionExistsSuite) TestCheck() {
 			getCurrentResp: &persistence.GetCurrentExecutionResponse{
 				RunID: uuid.New(),
 			},
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeHealthy,
-				InvariantType:   common.ConcreteExecutionExistsInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeHealthy,
+				InvariantName:   ConcreteExecutionExists,
 			},
 		},
 		{
@@ -131,9 +131,9 @@ func (s *ConcreteExecutionExistsSuite) TestCheck() {
 			getConcreteResp: &persistence.IsWorkflowExecutionExistsResponse{Exists: true},
 			getCurrentResp:  nil,
 			getCurrentErr:   &existsError,
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeHealthy,
-				InvariantType:   common.ConcreteExecutionExistsInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeHealthy,
+				InvariantName:   ConcreteExecutionExists,
 			},
 		},
 		{
@@ -142,9 +142,9 @@ func (s *ConcreteExecutionExistsSuite) TestCheck() {
 			getConcreteResp: &persistence.IsWorkflowExecutionExistsResponse{Exists: false},
 			getCurrentResp:  nil,
 			getCurrentErr:   &unknownError,
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeFailed,
-				InvariantType:   common.ConcreteExecutionExistsInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeFailed,
+				InvariantName:   ConcreteExecutionExists,
 				Info:            "failed to get current execution.",
 				InfoDetails:     unknownError.Error(),
 			},

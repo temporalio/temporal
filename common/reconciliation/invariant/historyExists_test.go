@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package invariants
+package invariant
 
 import (
 	"errors"
@@ -34,7 +34,6 @@ import (
 	c2 "github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/reconciliation/common"
 )
 
 type HistoryExistsSuite struct {
@@ -56,15 +55,15 @@ func (s *HistoryExistsSuite) TestCheck() {
 		getExecResp               *persistence.GetWorkflowExecutionResponse
 		getHistoryErr             error
 		getHistoryResp            *persistence.ReadHistoryBranchResponse
-		expectedResult            common.CheckResult
+		expectedResult            CheckResult
 		expectedResourcePopulated bool
 	}{
 		{
 			getExecErr:     errors.New("got error checking workflow exists"),
 			getHistoryResp: &persistence.ReadHistoryBranchResponse{},
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeFailed,
-				InvariantType:   common.HistoryExistsInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeFailed,
+				InvariantName:   HistoryExists,
 				Info:            "failed to check if concrete execution still exists",
 				InfoDetails:     "got error checking workflow exists",
 			},
@@ -73,9 +72,9 @@ func (s *HistoryExistsSuite) TestCheck() {
 		{
 			getExecErr:     &shared.EntityNotExistsError{},
 			getHistoryResp: &persistence.ReadHistoryBranchResponse{},
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeHealthy,
-				InvariantType:   common.HistoryExistsInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeHealthy,
+				InvariantName:   HistoryExists,
 				Info:            "determined execution was healthy because concrete execution no longer exists",
 			},
 			expectedResourcePopulated: false,
@@ -84,9 +83,9 @@ func (s *HistoryExistsSuite) TestCheck() {
 			getExecResp:    &persistence.GetWorkflowExecutionResponse{},
 			getHistoryResp: nil,
 			getHistoryErr:  &shared.EntityNotExistsError{Message: "got entity not exists error"},
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeCorrupted,
-				InvariantType:   common.HistoryExistsInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeCorrupted,
+				InvariantName:   HistoryExists,
 				Info:            "concrete execution exists but history does not exist",
 				InfoDetails:     "EntityNotExistsError{Message: got entity not exists error}",
 			},
@@ -96,9 +95,9 @@ func (s *HistoryExistsSuite) TestCheck() {
 			getExecResp:    &persistence.GetWorkflowExecutionResponse{},
 			getHistoryResp: nil,
 			getHistoryErr:  errors.New("error fetching history"),
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeFailed,
-				InvariantType:   common.HistoryExistsInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeFailed,
+				InvariantName:   HistoryExists,
 				Info:            "failed to verify if history exists",
 				InfoDetails:     "error fetching history",
 			},
@@ -107,9 +106,9 @@ func (s *HistoryExistsSuite) TestCheck() {
 		{
 			getExecResp:    &persistence.GetWorkflowExecutionResponse{},
 			getHistoryResp: nil,
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeCorrupted,
-				InvariantType:   common.HistoryExistsInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeCorrupted,
+				InvariantName:   HistoryExists,
 				Info:            "concrete execution exists but got empty history",
 			},
 			expectedResourcePopulated: false,
@@ -121,9 +120,9 @@ func (s *HistoryExistsSuite) TestCheck() {
 					{},
 				},
 			},
-			expectedResult: common.CheckResult{
-				CheckResultType: common.CheckResultTypeHealthy,
-				InvariantType:   common.HistoryExistsInvariantType,
+			expectedResult: CheckResult{
+				CheckResultType: CheckResultTypeHealthy,
+				InvariantName:   HistoryExists,
 			},
 			expectedResourcePopulated: true,
 		},

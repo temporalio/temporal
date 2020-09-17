@@ -34,7 +34,8 @@ import (
 	c "github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/reconciliation/common"
+	"github.com/uber/cadence/common/reconciliation/invariant"
+	"github.com/uber/cadence/common/reconciliation/store"
 	"github.com/uber/cadence/service/worker/scanner/executions/shard"
 )
 
@@ -56,16 +57,16 @@ const (
 	ErrSerialization = "encountered serialization error"
 )
 
-var scanTypePrefixMap = map[common.ScanType]string{
-	common.ConcreteExecutionType: "", // leave it empty for now to be backwards compatible
-	common.CurrentExecutionType:  "current_executions_",
+var scanTypePrefixMap = map[shard.ScanType]string{
+	shard.ConcreteExecutionType: "", // leave it empty for now to be backwards compatible
+	shard.CurrentExecutionType:  "current_executions_",
 }
 
 type (
 	// ScannerConfigActivityParams is the parameter for ScannerConfigActivity
 	ScannerConfigActivityParams struct {
 		Overwrites ScannerWorkflowConfigOverwrites
-		ScanType   common.ScanType
+		ScanType   shard.ScanType
 	}
 
 	// ScanShardActivityParams is the parameter for ScanShardActivity
@@ -74,7 +75,7 @@ type (
 		ExecutionsPageSize      int
 		BlobstoreFlushThreshold int
 		InvariantCollections    InvariantCollections
-		ScanType                common.ScanType
+		ScanType                shard.ScanType
 	}
 
 	// ScannerEmitMetricsActivityParams is the parameter for ScannerEmitMetricsActivity
@@ -83,7 +84,7 @@ type (
 		ShardControlFlowFailureCount int
 		AggregateReportResult        AggregateScanReportResult
 		ShardDistributionStats       ShardDistributionStats
-		ScanType                     common.ScanType
+		ScanType                     shard.ScanType
 	}
 
 	// ShardDistributionStats contains stats on the distribution of executions in shards.
@@ -103,14 +104,14 @@ type (
 		ScannerWorkflowWorkflowID string
 		ScannerWorkflowRunID      string
 		StartingShardID           *int
-		ScanType                  common.ScanType
+		ScanType                  shard.ScanType
 	}
 
 	// FixShardActivityParams is the parameter for FixShardActivity
 	FixShardActivityParams struct {
 		CorruptedKeysEntries        []CorruptedKeysEntry
 		ResolvedFixerWorkflowConfig ResolvedFixerWorkflowConfig
-		ScanType                    common.ScanType
+		ScanType                    shard.ScanType
 	}
 
 	// FixerCorruptedKeysActivityResult is the result of FixerCorruptedKeysActivity
@@ -124,19 +125,19 @@ type (
 	// CorruptedKeysEntry is a pair of shardID and corrupted keys
 	CorruptedKeysEntry struct {
 		ShardID       int
-		CorruptedKeys common.Keys
+		CorruptedKeys store.Keys
 	}
 
 	// ScanShardHeartbeatDetails is the heartbeat details for scan shard
 	ScanShardHeartbeatDetails struct {
 		LastShardIndexHandled int
-		Reports               []common.ShardScanReport
+		Reports               []shard.ScanReport
 	}
 
 	// FixShardHeartbeatDetails is the heartbeat details for the fix shard
 	FixShardHeartbeatDetails struct {
 		LastShardIndexHandled int
-		Reports               []common.ShardFixReport
+		Reports               []shard.FixReport
 	}
 )
 
@@ -173,7 +174,7 @@ func ScannerEmitMetricsActivity(
 func ScanShardActivity(
 	activityCtx context.Context,
 	params ScanShardActivityParams,
-) ([]common.ShardScanReport, error) {
+) ([]shard.ScanReport, error) {
 	heartbeatDetails := ScanShardHeartbeatDetails{
 		LastShardIndexHandled: -1,
 		Reports:               nil,
@@ -202,7 +203,7 @@ func scanShard(
 	params ScanShardActivityParams,
 	shardID int,
 	heartbeatDetails ScanShardHeartbeatDetails,
-) (*common.ShardScanReport, error) {
+) (*shard.ScanReport, error) {
 	ctx := activityCtx.Value(ScanTypeScannerContextKeyMap[params.ScanType]).(ScannerContext)
 	resources := ctx.Resource
 	scope := ctx.Scope.Tagged(metrics.ActivityTypeTag(scanTypePrefixMap[params.ScanType] + ScannerScanShardActivityName))
@@ -213,12 +214,12 @@ func scanShard(
 		scope.IncCounter(metrics.CadenceFailures)
 		return nil, err
 	}
-	var collections []common.InvariantCollection
+	var collections []invariant.Collection
 	if params.InvariantCollections.InvariantCollectionHistory {
-		collections = append(collections, common.InvariantCollectionHistory)
+		collections = append(collections, invariant.CollectionHistory)
 	}
 	if params.InvariantCollections.InvariantCollectionMutableState {
-		collections = append(collections, common.InvariantCollectionMutableState)
+		collections = append(collections, invariant.CollectionMutableState)
 	}
 	pr := persistence.NewPersistenceRetryer(execManager, resources.GetHistoryManager(), c.CreatePersistenceRetryPolicy())
 	scanner := shard.NewScanner(
@@ -351,7 +352,7 @@ func FixerCorruptedKeysActivity(
 func FixShardActivity(
 	activityCtx context.Context,
 	params FixShardActivityParams,
-) ([]common.ShardFixReport, error) {
+) ([]shard.FixReport, error) {
 	heartbeatDetails := FixShardHeartbeatDetails{
 		LastShardIndexHandled: -1,
 		Reports:               nil,
@@ -380,9 +381,9 @@ func fixShard(
 	activityCtx context.Context,
 	params FixShardActivityParams,
 	shardID int,
-	corruptedKeys common.Keys,
+	corruptedKeys store.Keys,
 	heartbeatDetails FixShardHeartbeatDetails,
-) (*common.ShardFixReport, error) {
+) (*shard.FixReport, error) {
 	ctx := activityCtx.Value(ScanTypeFixerContextKeyMap[params.ScanType]).(FixerContext)
 	resources := ctx.Resource
 	scope := ctx.Scope.Tagged(metrics.ActivityTypeTag(FixerFixShardActivityName))
@@ -393,12 +394,12 @@ func fixShard(
 		scope.IncCounter(metrics.CadenceFailures)
 		return nil, err
 	}
-	var collections []common.InvariantCollection
+	var collections []invariant.Collection
 	if params.ResolvedFixerWorkflowConfig.InvariantCollections.InvariantCollectionHistory {
-		collections = append(collections, common.InvariantCollectionHistory)
+		collections = append(collections, invariant.CollectionHistory)
 	}
 	if params.ResolvedFixerWorkflowConfig.InvariantCollections.InvariantCollectionMutableState {
-		collections = append(collections, common.InvariantCollectionMutableState)
+		collections = append(collections, invariant.CollectionMutableState)
 	}
 	pr := persistence.NewPersistenceRetryer(execManager, resources.GetHistoryManager(), c.CreatePersistenceRetryPolicy())
 	fixer := shard.NewFixer(
