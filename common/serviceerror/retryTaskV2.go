@@ -63,7 +63,7 @@ func (e *RetryTaskV2) Error() string {
 	return e.Message
 }
 
-func (e *RetryTaskV2) status() *status.Status {
+func (e *RetryTaskV2) Status() *status.Status {
 	if e.st != nil {
 		return e.st
 	}

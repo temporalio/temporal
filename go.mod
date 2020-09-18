@@ -59,8 +59,8 @@ require (
 	github.com/urfave/cli v1.22.4
 	github.com/valyala/fastjson v1.5.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/api v0.30.0
-	go.temporal.io/sdk v0.30.0
+	go.temporal.io/api v0.30.1-0.20200918052202-8384052088d2
+	go.temporal.io/sdk v0.30.1-0.20200918044120-e84b5141dc53
 	go.uber.org/atomic v1.6.0
 	go.uber.org/multierr v1.5.0
 	go.uber.org/zap v1.15.0
@@ -68,7 +68,7 @@ require (
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e
 	golang.org/x/tools v0.0.0-20200609164405-eb789aa7ce50 // indirect
 	google.golang.org/api v0.26.0
-	google.golang.org/grpc v1.31.1
+	google.golang.org/grpc v1.32.0
 	google.golang.org/grpc/examples v0.0.0-20200625174016-7a808837ae92
 	gopkg.in/validator.v2 v2.0.0-20200605151824-2b28d334fa05
 	gopkg.in/yaml.v2 v2.3.0

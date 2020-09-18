@@ -23,49 +23,26 @@
 package serviceerror
 
 import (
-	"fmt"
+	"errors"
+	"testing"
 
-	"github.com/gogo/status"
-	"google.golang.org/grpc/codes"
-
-	"go.temporal.io/server/api/errordetails/v1"
+	"github.com/stretchr/testify/assert"
+	"go.temporal.io/api/serviceerror"
 )
 
-type (
-	// TaskAlreadyStarted represents task already started error.
-	TaskAlreadyStarted struct {
-		Message string
-		st      *status.Status
-	}
-)
-
-// NewTaskAlreadyStarted returns new TaskAlreadyStarted error.
-func NewTaskAlreadyStarted(taskType string) *TaskAlreadyStarted {
-	return &TaskAlreadyStarted{
-		Message: fmt.Sprintf("%s task already started.", taskType),
-	}
-}
-
-// Error returns string message.
-func (e *TaskAlreadyStarted) Error() string {
-	return e.Message
-}
-
-func (e *TaskAlreadyStarted) Status() *status.Status {
-	if e.st != nil {
-		return e.st
+func TestFromToStatus(t *testing.T) {
+	err := &ShardOwnershipLost{
+		Message:     "mess",
+		OwnerHost:   "owner",
+		CurrentHost: "current",
 	}
 
-	st := status.New(codes.AlreadyExists, e.Message)
-	st, _ = st.WithDetails(
-		&errordetails.TaskAlreadyStartedFailure{},
-	)
-	return st
-}
-
-func newTaskAlreadyStarted(st *status.Status) *TaskAlreadyStarted {
-	return &TaskAlreadyStarted{
-		Message: st.Message(),
-		st:      st,
+	st := serviceerror.ToStatus(err)
+	err1 := FromStatus(st)
+	var solErr *ShardOwnershipLost
+	if !errors.As(err1, &solErr) {
+		assert.Fail(t, "Returned error is not of type *ShardOwnershipLost")
 	}
+	assert.Equal(t, err.Message, solErr.Message)
+	assert.Equal(t, err.OwnerHost, solErr.OwnerHost)
 }

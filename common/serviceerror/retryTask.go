@@ -57,7 +57,7 @@ func (e *RetryTask) Error() string {
 	return e.Message
 }
 
-func (e *RetryTask) status() *status.Status {
+func (e *RetryTask) Status() *status.Status {
 	if e.st != nil {
 		return e.st
 	}
