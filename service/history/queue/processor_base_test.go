@@ -21,6 +21,7 @@
 package queue
 
 import (
+	"sort"
 	"testing"
 	"time"
 
@@ -155,6 +156,9 @@ func (s *processorBaseSuite) TestSplitQueue() {
 	)
 
 	processingQueueCollections := processorBase.processingQueueCollections
+	sort.Slice(processingQueueCollections, func(i, j int) bool {
+		return processingQueueCollections[i].Level() < processingQueueCollections[j].Level()
+	})
 	s.Len(processingQueueCollections, 3)
 	s.Len(processingQueueCollections[0].Queues(), 2)
 	s.Len(processingQueueCollections[1].Queues(), 1)

@@ -79,7 +79,7 @@ func (s *weightedRoundRobinTaskSchedulerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockProcessor = NewMockProcessor(s.controller)
 
-	s.queueSize = 10
+	s.queueSize = 1000
 	s.scheduler = s.newTestWeightedRoundRobinTaskScheduler(
 		&WeightedRoundRobinTaskSchedulerOptions{
 			Weights:         testSchedulerWeights,
