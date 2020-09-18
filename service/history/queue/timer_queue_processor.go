@@ -463,7 +463,7 @@ func newTimerQueueActiveProcessor(
 		return taskAllocator.VerifyActiveTask(timer.DomainID, timer)
 	}
 
-	maxReadLevel := func() task.Key {
+	updateMaxReadLevel := func() task.Key {
 		return newTimerTaskKey(shard.UpdateTimerMaxReadLevel(clusterName), 0)
 	}
 
@@ -471,32 +471,26 @@ func newTimerQueueActiveProcessor(
 		return shard.UpdateTimerClusterAckLevel(clusterName, ackLevel.(timerTaskKey).visibilityTimestamp)
 	}
 
-	timerQueueShutdown := func() error {
-		return nil
+	updateProcessingQueueStates := func(states []ProcessingQueueState) error {
+		pStates := convertToPersistenceTimerProcessingQueueStates(states)
+		return shard.UpdateTimerProcessingQueueStates(clusterName, pStates)
 	}
 
-	// TODO: once persistency layer is implemented for multi-cursor queue,
-	// initialize queue states with data loaded from DB.
-	ackLevel := newTimerTaskKey(shard.GetTimerClusterAckLevel(clusterName), 0)
-	processingQueueStates := []ProcessingQueueState{
-		NewProcessingQueueState(
-			defaultProcessingQueueLevel,
-			ackLevel,
-			maximumTimerTaskKey,
-			NewDomainFilter(nil, true),
-		),
+	queueShutdown := func() error {
+		return nil
 	}
 
 	return newTimerQueueProcessorBase(
 		clusterName,
 		shard,
-		processingQueueStates,
+		loadTimerProcessingQueueStates(clusterName, shard, options, logger),
 		taskProcessor,
 		NewLocalTimerGate(shard.GetTimeSource()),
 		options,
-		maxReadLevel,
+		updateMaxReadLevel,
 		updateClusterAckLevel,
-		timerQueueShutdown,
+		updateProcessingQueueStates,
+		queueShutdown,
 		taskFilter,
 		taskExecutor,
 		logger,
@@ -526,7 +520,7 @@ func newTimerQueueStandbyProcessor(
 		return taskAllocator.VerifyStandbyTask(clusterName, timer.DomainID, timer)
 	}
 
-	maxReadLevel := func() task.Key {
+	updateMaxReadLevel := func() task.Key {
 		return newTimerTaskKey(shard.UpdateTimerMaxReadLevel(clusterName), 0)
 	}
 
@@ -534,20 +528,13 @@ func newTimerQueueStandbyProcessor(
 		return shard.UpdateTimerClusterAckLevel(clusterName, ackLevel.(timerTaskKey).visibilityTimestamp)
 	}
 
-	timerQueueShutdown := func() error {
-		return nil
+	updateProcessingQueueStates := func(states []ProcessingQueueState) error {
+		pStates := convertToPersistenceTimerProcessingQueueStates(states)
+		return shard.UpdateTimerProcessingQueueStates(clusterName, pStates)
 	}
 
-	// TODO: once persistency layer is implemented for multi-cursor queue,
-	// initialize queue states with data loaded from DB.
-	ackLevel := newTimerTaskKey(shard.GetTimerClusterAckLevel(clusterName), 0)
-	processingQueueStates := []ProcessingQueueState{
-		NewProcessingQueueState(
-			defaultProcessingQueueLevel,
-			ackLevel,
-			maximumTimerTaskKey,
-			NewDomainFilter(nil, true),
-		),
+	queueShutdown := func() error {
+		return nil
 	}
 
 	remoteTimerGate := NewRemoteTimerGate()
@@ -556,13 +543,14 @@ func newTimerQueueStandbyProcessor(
 	return newTimerQueueProcessorBase(
 		clusterName,
 		shard,
-		processingQueueStates,
+		loadTimerProcessingQueueStates(clusterName, shard, options, logger),
 		taskProcessor,
 		remoteTimerGate,
 		options,
-		maxReadLevel,
+		updateMaxReadLevel,
 		updateClusterAckLevel,
-		timerQueueShutdown,
+		updateProcessingQueueStates,
+		queueShutdown,
 		taskFilter,
 		taskExecutor,
 		logger,
@@ -602,7 +590,7 @@ func newTimerQueueFailoverProcessor(
 	}
 
 	maxReadLevelTaskKey := newTimerTaskKey(maxLevel, 0)
-	maxReadLevel := func() task.Key {
+	updateMaxReadLevel := func() task.Key {
 		return maxReadLevelTaskKey // this is a const
 	}
 
@@ -619,12 +607,10 @@ func newTimerQueueFailoverProcessor(
 		)
 	}
 
-	timerQueueShutdown := func() error {
+	queueShutdown := func() error {
 		return shard.DeleteTimerFailoverLevel(failoverUUID)
 	}
 
-	// TODO: once persistency layer is implemented for multi-cursor queue,
-	// initialize queue states with data loaded from DB.
 	processingQueueStates := []ProcessingQueueState{
 		NewProcessingQueueState(
 			defaultProcessingQueueLevel,
@@ -641,12 +627,42 @@ func newTimerQueueFailoverProcessor(
 		taskProcessor,
 		NewLocalTimerGate(shard.GetTimeSource()),
 		options,
-		maxReadLevel,
+		updateMaxReadLevel,
 		updateClusterAckLevel,
-		timerQueueShutdown,
+		nil,
+		queueShutdown,
 		taskFilter,
 		taskExecutor,
 		logger,
 		shard.GetMetricsClient(),
 	)
+}
+
+func loadTimerProcessingQueueStates(
+	clusterName string,
+	shard shard.Context,
+	options *queueProcessorOptions,
+	logger log.Logger,
+) []ProcessingQueueState {
+	ackLevel := shard.GetTimerClusterAckLevel(clusterName)
+	if options.EnableLoadQueueStates() {
+		pStates := shard.GetTimerProcessingQueueStates(clusterName)
+		if validateProcessingQueueStates(pStates, ackLevel) {
+			return convertFromPersistenceTimerProcessingQueueStates(pStates)
+		}
+
+		logger.Error("Incompatible processing queue states and ackLevel",
+			tag.Value(pStates),
+			tag.ShardTimerAcks(ackLevel),
+		)
+	}
+
+	return []ProcessingQueueState{
+		NewProcessingQueueState(
+			defaultProcessingQueueLevel,
+			newTimerTaskKey(ackLevel, 0),
+			maximumTimerTaskKey,
+			NewDomainFilter(nil, true),
+		),
+	}
 }

@@ -139,6 +139,7 @@ func (s *transferQueueProcessorBaseSuite) TestProcessQueueCollections_NoNextPage
 		updateMaxReadLevel,
 		nil,
 		nil,
+		nil,
 	)
 
 	processorBase.processQueueCollections(map[int]struct{}{0: {}})
@@ -201,6 +202,7 @@ func (s *transferQueueProcessorBaseSuite) TestProcessQueueCollections_NoNextPage
 	processorBase := s.newTestTransferQueueProcessorBase(
 		processingQueueStates,
 		updateMaxReadLevel,
+		nil,
 		nil,
 		nil,
 	)
@@ -271,6 +273,7 @@ func (s *transferQueueProcessorBaseSuite) TestProcessQueueCollections_WithNextPa
 		updateMaxReadLevel,
 		nil,
 		nil,
+		nil,
 	)
 
 	processorBase.processQueueCollections(map[int]struct{}{0: {}})
@@ -309,6 +312,7 @@ func (s *transferQueueProcessorBaseSuite) TestReadTasks_NoNextPage() {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 
 	tasks, more, err := processorBase.readTasks(readLevel, maxReadLevel)
@@ -337,6 +341,7 @@ func (s *transferQueueProcessorBaseSuite) TestReadTasks_WithNextPage() {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 
 	tasks, more, err := processorBase.readTasks(readLevel, maxReadLevel)
@@ -348,7 +353,8 @@ func (s *transferQueueProcessorBaseSuite) TestReadTasks_WithNextPage() {
 func (s *transferQueueProcessorBaseSuite) newTestTransferQueueProcessorBase(
 	processingQueueStates []ProcessingQueueState,
 	maxReadLevel updateMaxReadLevelFn,
-	updateTransferAckLevel updateClusterAckLevelFn,
+	updateClusterAckLevel updateClusterAckLevelFn,
+	updateProcessingQueueStates updateProcessingQueueStatesFn,
 	transferQueueShutdown queueShutdownFn,
 ) *transferQueueProcessorBase {
 	return newTransferQueueProcessorBase(
@@ -357,7 +363,8 @@ func (s *transferQueueProcessorBaseSuite) newTestTransferQueueProcessorBase(
 		s.mockTaskProcessor,
 		newTransferQueueProcessorOptions(s.mockShard.GetConfig(), true, false),
 		maxReadLevel,
-		updateTransferAckLevel,
+		updateClusterAckLevel,
+		updateProcessingQueueStates,
 		transferQueueShutdown,
 		nil,
 		nil,

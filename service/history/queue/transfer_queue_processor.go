@@ -481,39 +481,33 @@ func newTransferQueueActiveProcessor(
 		return taskAllocator.VerifyActiveTask(task.DomainID, task)
 	}
 
-	maxReadLevel := func() task.Key {
+	updateMaxReadLevel := func() task.Key {
 		return newTransferTaskKey(shard.GetTransferMaxReadLevel())
 	}
 
-	updateTransferAckLevel := func(ackLevel task.Key) error {
+	updateClusterAckLevel := func(ackLevel task.Key) error {
 		taskID := ackLevel.(transferTaskKey).taskID
 		return shard.UpdateTransferClusterAckLevel(currentClusterName, taskID)
 	}
 
-	transferQueueShutdown := func() error {
-		return nil
+	updateProcessingQueueStates := func(states []ProcessingQueueState) error {
+		pStates := convertToPersistenceTransferProcessingQueueStates(states)
+		return shard.UpdateTransferProcessingQueueStates(currentClusterName, pStates)
 	}
 
-	// TODO: once persistency layer is implemented for multi-cursor queue,
-	// initialize queue states with data loaded from DB.
-	ackLevel := newTransferTaskKey(shard.GetTransferClusterAckLevel(currentClusterName))
-	processingQueueStates := []ProcessingQueueState{
-		NewProcessingQueueState(
-			defaultProcessingQueueLevel,
-			ackLevel,
-			maximumTransferTaskKey,
-			NewDomainFilter(nil, true),
-		),
+	queueShutdown := func() error {
+		return nil
 	}
 
 	return newTransferQueueProcessorBase(
 		shard,
-		processingQueueStates,
+		loadTransferProcessingQueueStates(currentClusterName, shard, options, logger),
 		taskProcessor,
 		options,
-		maxReadLevel,
-		updateTransferAckLevel,
-		transferQueueShutdown,
+		updateMaxReadLevel,
+		updateClusterAckLevel,
+		updateProcessingQueueStates,
+		queueShutdown,
 		taskFilter,
 		taskExecutor,
 		logger,
@@ -543,39 +537,33 @@ func newTransferQueueStandbyProcessor(
 		return taskAllocator.VerifyStandbyTask(clusterName, task.DomainID, task)
 	}
 
-	maxReadLevel := func() task.Key {
+	updateMaxReadLevel := func() task.Key {
 		return newTransferTaskKey(shard.GetTransferMaxReadLevel())
 	}
 
-	updateTransferAckLevel := func(ackLevel task.Key) error {
+	updateClusterAckLevel := func(ackLevel task.Key) error {
 		taskID := ackLevel.(transferTaskKey).taskID
 		return shard.UpdateTransferClusterAckLevel(clusterName, taskID)
 	}
 
-	transferQueueShutdown := func() error {
-		return nil
+	updateProcessingQueueStates := func(states []ProcessingQueueState) error {
+		pStates := convertToPersistenceTransferProcessingQueueStates(states)
+		return shard.UpdateTransferProcessingQueueStates(clusterName, pStates)
 	}
 
-	// TODO: once persistency layer is implemented for multi-cursor queue,
-	// initialize queue states with data loaded from DB.
-	ackLevel := newTransferTaskKey(shard.GetTransferClusterAckLevel(clusterName))
-	processingQueueStates := []ProcessingQueueState{
-		NewProcessingQueueState(
-			defaultProcessingQueueLevel,
-			ackLevel,
-			maximumTransferTaskKey,
-			NewDomainFilter(nil, true),
-		),
+	queueShutdown := func() error {
+		return nil
 	}
 
 	return newTransferQueueProcessorBase(
 		shard,
-		processingQueueStates,
+		loadTransferProcessingQueueStates(clusterName, shard, options, logger),
 		taskProcessor,
 		options,
-		maxReadLevel,
-		updateTransferAckLevel,
-		transferQueueShutdown,
+		updateMaxReadLevel,
+		updateClusterAckLevel,
+		updateProcessingQueueStates,
+		queueShutdown,
 		taskFilter,
 		taskExecutor,
 		logger,
@@ -614,11 +602,11 @@ func newTransferQueueFailoverProcessor(
 	}
 
 	maxReadLevelTaskKey := newTransferTaskKey(maxLevel)
-	maxReadLevel := func() task.Key {
+	updateMaxReadLevel := func() task.Key {
 		return maxReadLevelTaskKey // this is a const
 	}
 
-	updateTransferAckLevel := func(ackLevel task.Key) error {
+	updateClusterAckLevel := func(ackLevel task.Key) error {
 		taskID := ackLevel.(transferTaskKey).taskID
 		return shard.UpdateTransferFailoverLevel(
 			failoverUUID,
@@ -632,12 +620,10 @@ func newTransferQueueFailoverProcessor(
 		)
 	}
 
-	transferQueueShutdown := func() error {
+	queueShutdown := func() error {
 		return shard.DeleteTransferFailoverLevel(failoverUUID)
 	}
 
-	// TODO: once persistency layer is implemented for multi-cursor queue,
-	// initialize queue states with data loaded from DB.
 	processingQueueStates := []ProcessingQueueState{
 		NewProcessingQueueState(
 			defaultProcessingQueueLevel,
@@ -647,17 +633,49 @@ func newTransferQueueFailoverProcessor(
 		),
 	}
 
-	return updateTransferAckLevel, newTransferQueueProcessorBase(
+	return updateClusterAckLevel, newTransferQueueProcessorBase(
 		shard,
 		processingQueueStates,
 		taskProcessor,
 		options,
-		maxReadLevel,
-		updateTransferAckLevel,
-		transferQueueShutdown,
+		updateMaxReadLevel,
+		updateClusterAckLevel,
+		nil,
+		queueShutdown,
 		taskFilter,
 		taskExecutor,
 		logger,
 		shard.GetMetricsClient(),
 	)
+}
+
+func loadTransferProcessingQueueStates(
+	clusterName string,
+	shard shard.Context,
+	options *queueProcessorOptions,
+	logger log.Logger,
+) []ProcessingQueueState {
+	ackLevel := shard.GetTransferClusterAckLevel(clusterName)
+	if options.EnableLoadQueueStates() {
+		pStates := shard.GetTransferProcessingQueueStates(clusterName)
+		if validateProcessingQueueStates(pStates, ackLevel) {
+			return convertFromPersistenceTransferProcessingQueueStates(pStates)
+		}
+
+		logger.Error("Incompatible processing queue states and ackLevel",
+			tag.Value(pStates),
+			tag.ShardTransferAcks(ackLevel),
+		)
+	}
+
+	// LoadQueueStates is disabled or sanity check failed
+	// fallback to use ackLevel
+	return []ProcessingQueueState{
+		NewProcessingQueueState(
+			defaultProcessingQueueLevel,
+			newTransferTaskKey(ackLevel),
+			maximumTransferTaskKey,
+			NewDomainFilter(nil, true),
+		),
+	}
 }

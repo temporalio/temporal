@@ -30,11 +30,13 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
+	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
@@ -145,6 +147,7 @@ func (s *processorBaseSuite) TestSplitQueue() {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 
 	nextPollTime := make(map[int]time.Time)
@@ -200,6 +203,7 @@ func (s *processorBaseSuite) TestUpdateAckLevel_Transfer_ProcessedFinished() {
 		processingQueueStates,
 		nil,
 		nil,
+		nil,
 		queueShutdownFn,
 	)
 
@@ -241,6 +245,7 @@ func (s *processorBaseSuite) TestUpdateAckLevel_Tranfer_ProcessNotFinished() {
 		nil,
 		updateTransferAckLevelFn,
 		nil,
+		nil,
 	)
 
 	processFinished, err := processorBase.updateAckLevel()
@@ -249,7 +254,7 @@ func (s *processorBaseSuite) TestUpdateAckLevel_Tranfer_ProcessNotFinished() {
 	s.Equal(int64(2), updateAckLevel)
 }
 
-func (s *processorBaseSuite) TestUpdateAckLevel_Timer() {
+func (s *processorBaseSuite) TestUpdateAckLevel_Timer_UpdateAckLevel() {
 	now := time.Now()
 	processingQueueStates := []ProcessingQueueState{
 		NewProcessingQueueState(
@@ -277,27 +282,67 @@ func (s *processorBaseSuite) TestUpdateAckLevel_Timer() {
 		return nil
 	}
 
-	timerQueueProcessBase := s.newTestProcessorBase(processingQueueStates, nil, updateTransferAckLevelFn, nil)
+	timerQueueProcessBase := s.newTestProcessorBase(processingQueueStates, nil, updateTransferAckLevelFn, nil, nil)
+	timerQueueProcessBase.options.EnablePersistQueueStates = dynamicconfig.GetBoolPropertyFn(true)
 	processFinished, err := timerQueueProcessBase.updateAckLevel()
 	s.NoError(err)
 	s.False(processFinished)
 	s.Equal(now.Add(-5*time.Second), updateAckLevel)
 }
 
+func (s *processorBaseSuite) TestUpdateAckLevel_Timer_UpdateQueueStates() {
+	now := time.Now()
+	processingQueueStates := []ProcessingQueueState{
+		NewProcessingQueueState(
+			2,
+			newTimerTaskKey(now.Add(-5*time.Second), 0),
+			newTimerTaskKey(now, 0),
+			NewDomainFilter(map[string]struct{}{"testDomain1": {}}, false),
+		),
+		NewProcessingQueueState(
+			1,
+			newTimerTaskKey(now.Add(-3*time.Second), 0),
+			newTimerTaskKey(now.Add(5*time.Second), 0),
+			NewDomainFilter(map[string]struct{}{"testDomain1": {}}, false),
+		),
+		NewProcessingQueueState(
+			0,
+			newTimerTaskKey(now.Add(-1*time.Second), 0),
+			newTimerTaskKey(now.Add(100*time.Second), 0),
+			NewDomainFilter(map[string]struct{}{"testDomain1": {}, "testDomain2": {}}, true),
+		),
+	}
+
+	var pState []*h.ProcessingQueueState
+	updateProcessingQueueStates := func(states []ProcessingQueueState) error {
+		pState = convertToPersistenceTimerProcessingQueueStates(states)
+		return nil
+	}
+
+	timerQueueProcessBase := s.newTestProcessorBase(processingQueueStates, nil, nil, updateProcessingQueueStates, nil)
+	timerQueueProcessBase.options.EnablePersistQueueStates = dynamicconfig.GetBoolPropertyFn(true)
+	processFinished, err := timerQueueProcessBase.updateAckLevel()
+	s.NoError(err)
+	s.False(processFinished)
+	s.Equal(len(processingQueueStates), len(pState))
+}
+
 func (s *processorBaseSuite) newTestProcessorBase(
 	processingQueueStates []ProcessingQueueState,
-	maxReadLevel updateMaxReadLevelFn,
-	updateTransferAckLevel updateClusterAckLevelFn,
-	transferQueueShutdown queueShutdownFn,
+	updateMaxReadLevel updateMaxReadLevelFn,
+	updateClusterAckLevel updateClusterAckLevelFn,
+	updateProcessingQueueStates updateProcessingQueueStatesFn,
+	queueShutdown queueShutdownFn,
 ) *processorBase {
 	return newProcessorBase(
 		s.mockShard,
 		processingQueueStates,
 		s.mockTaskProcessor,
 		newTransferQueueProcessorOptions(s.mockShard.GetConfig(), true, false),
-		maxReadLevel,
-		updateTransferAckLevel,
-		transferQueueShutdown,
+		updateMaxReadLevel,
+		updateClusterAckLevel,
+		updateProcessingQueueStates,
+		queueShutdown,
 		s.logger,
 		s.metricsClient,
 	)

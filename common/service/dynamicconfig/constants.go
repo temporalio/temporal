@@ -181,6 +181,8 @@ var keys = map[Key]string{
 	QueueProcessorSplitLookAheadDurationByDomainID:        "history.queueProcessorSplitLookAheadDurationByDomainID",
 	QueueProcessorPollBackoffInterval:                     "history.queueProcessorPollBackoffInterval",
 	QueueProcessorPollBackoffIntervalJitterCoefficient:    "history.queueProcessorPollBackoffIntervalJitterCoefficient",
+	QueueProcessorEnablePersistQueueStates:                "history.queueProcessorEnablePersistQueueStates",
+	QueueProcessorEnableLoadQueueStates:                   "history.queueProcessorEnableLoadQueueStates",
 	TimerTaskBatchSize:                                    "history.timerTaskBatchSize",
 	TimerTaskWorkerCount:                                  "history.timerTaskWorkerCount",
 	TimerTaskMaxRetryCount:                                "history.timerTaskMaxRetryCount",
@@ -596,6 +598,10 @@ const (
 	QueueProcessorPollBackoffInterval
 	// QueueProcessorPollBackoffIntervalJitterCoefficient backoff interval jitter coefficient
 	QueueProcessorPollBackoffIntervalJitterCoefficient
+	// QueueProcessorEnablePersistQueueStates indicates whether processing queue states should be persisted
+	QueueProcessorEnablePersistQueueStates
+	// QueueProcessorEnableLoadQueueStates indicates whether processing queue states should be loaded
+	QueueProcessorEnableLoadQueueStates
 	// TimerTaskBatchSize is batch size for timer processor to process tasks
 	TimerTaskBatchSize
 	// TimerTaskWorkerCount is number of task workers for timer processor

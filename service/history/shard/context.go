@@ -23,11 +23,13 @@ package shard
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -80,6 +82,8 @@ type (
 		UpdateTransferAckLevel(ackLevel int64) error
 		GetTransferClusterAckLevel(cluster string) int64
 		UpdateTransferClusterAckLevel(cluster string, ackLevel int64) error
+		GetTransferProcessingQueueStates(cluster string) []*history.ProcessingQueueState
+		UpdateTransferProcessingQueueStates(cluster string, states []*history.ProcessingQueueState) error
 
 		GetReplicatorAckLevel() int64
 		UpdateReplicatorAckLevel(ackLevel int64) error
@@ -93,6 +97,8 @@ type (
 		UpdateTimerAckLevel(ackLevel time.Time) error
 		GetTimerClusterAckLevel(cluster string) time.Time
 		UpdateTimerClusterAckLevel(cluster string, ackLevel time.Time) error
+		GetTimerProcessingQueueStates(cluster string) []*history.ProcessingQueueState
+		UpdateTimerProcessingQueueStates(cluster string, states []*history.ProcessingQueueState) error
 
 		UpdateTransferFailoverLevel(failoverID string, level persistence.TransferFailoverLevel) error
 		DeleteTransferFailoverLevel(failoverID string) error
@@ -132,13 +138,15 @@ type (
 		engine           engine.Engine
 
 		sync.RWMutex
-		lastUpdated               time.Time
-		shardInfo                 *persistence.ShardInfo
-		transferSequenceNumber    int64
-		maxTransferSequenceNumber int64
-		transferMaxReadLevel      int64
-		timerMaxReadLevelMap      map[string]time.Time // cluster -> timerMaxReadLevel
-		pendingFailoverMarkers    []*replicator.FailoverMarkerAttributes
+		lastUpdated                   time.Time
+		shardInfo                     *persistence.ShardInfo
+		transferSequenceNumber        int64
+		maxTransferSequenceNumber     int64
+		transferMaxReadLevel          int64
+		timerMaxReadLevelMap          map[string]time.Time           // cluster -> timerMaxReadLevel
+		transferProcessingQueueStates *history.ProcessingQueueStates // deserialized shardInfo.TransferProcessingQueueStates
+		timerProcessingQueueStates    *history.ProcessingQueueStates // deserialized shardInfo.TimerProcessingQueueStates
+		pendingFailoverMarkers        []*replicator.FailoverMarkerAttributes
 
 		// exist only in memory
 		remoteClusterCurrentTime map[string]time.Time
@@ -252,6 +260,69 @@ func (s *contextImpl) UpdateTransferClusterAckLevel(cluster string, ackLevel int
 	return s.updateShardInfoLocked()
 }
 
+func (s *contextImpl) GetTransferProcessingQueueStates(cluster string) []*history.ProcessingQueueState {
+	s.RLock()
+	defer s.RUnlock()
+
+	// if we can find corresponding processing queue states
+	if states, ok := s.transferProcessingQueueStates.StatesByCluster[cluster]; ok {
+		return states
+	}
+
+	// check if we can find corresponding ack level
+	var ackLevel int64
+	var ok bool
+	if ackLevel, ok = s.shardInfo.ClusterTransferAckLevel[cluster]; !ok {
+		// otherwise, default to existing ack level, which belongs to local cluster
+		// this can happen if you add more cluster
+		ackLevel = s.shardInfo.TransferAckLevel
+	}
+
+	// otherwise, create default queue state based on existing ack level,
+	// which belongs to local cluster. this can happen if you add more cluster
+	return []*history.ProcessingQueueState{
+		{
+			Level:    common.Int32Ptr(0),
+			AckLevel: common.Int64Ptr(ackLevel),
+			MaxLevel: common.Int64Ptr(math.MaxInt64),
+			DomainFilter: &history.DomainFilter{
+				ReverseMatch: common.BoolPtr(true),
+			},
+		},
+	}
+}
+
+func (s *contextImpl) UpdateTransferProcessingQueueStates(cluster string, states []*history.ProcessingQueueState) error {
+	s.Lock()
+	defer s.Unlock()
+
+	if len(states) == 0 {
+		return errors.New("Empty transfer processing queue states")
+	}
+
+	if s.transferProcessingQueueStates.StatesByCluster == nil {
+		s.transferProcessingQueueStates.StatesByCluster = make(map[string][]*history.ProcessingQueueState)
+	}
+	s.transferProcessingQueueStates.StatesByCluster[cluster] = states
+	serializer := s.GetPayloadSerializer()
+	data, err := serializer.SerializeProcessingQueueStates(s.transferProcessingQueueStates, common.EncodingTypeThriftRW)
+	if err != nil {
+		s.logger.Error("Failed to serialize transfer processing queue states", tag.Error(err))
+		return err
+	}
+	s.shardInfo.TransferProcessingQueueStates = data
+
+	// for backward compatibility
+	ackLevel := states[0].GetAckLevel()
+	for _, state := range states {
+		ackLevel = common.MinInt64(ackLevel, state.GetAckLevel())
+	}
+	s.shardInfo.ClusterTransferAckLevel[cluster] = ackLevel
+
+	s.shardInfo.StolenSinceRenew = 0
+	return s.updateShardInfoLocked()
+}
+
 func (s *contextImpl) GetReplicatorAckLevel() int64 {
 	s.RLock()
 	defer s.RUnlock()
@@ -358,6 +429,69 @@ func (s *contextImpl) UpdateTimerClusterAckLevel(cluster string, ackLevel time.T
 	defer s.Unlock()
 
 	s.shardInfo.ClusterTimerAckLevel[cluster] = ackLevel
+	s.shardInfo.StolenSinceRenew = 0
+	return s.updateShardInfoLocked()
+}
+
+func (s *contextImpl) GetTimerProcessingQueueStates(cluster string) []*history.ProcessingQueueState {
+	s.RLock()
+	defer s.RUnlock()
+
+	// if we can find corresponding processing queue states
+	if states, ok := s.timerProcessingQueueStates.StatesByCluster[cluster]; ok {
+		return states
+	}
+
+	// check if we can find corresponding ack level
+	var ackLevel time.Time
+	var ok bool
+	if ackLevel, ok = s.shardInfo.ClusterTimerAckLevel[cluster]; !ok {
+		// otherwise, default to existing ack level, which belongs to local cluster
+		// this can happen if you add more cluster
+		ackLevel = s.shardInfo.TimerAckLevel
+	}
+
+	// otherwise, create default queue state based on existing ack level,
+	// which belongs to local cluster. this can happen if you add more cluster
+	return []*history.ProcessingQueueState{
+		{
+			Level:    common.Int32Ptr(0),
+			AckLevel: common.Int64Ptr(ackLevel.UnixNano()),
+			MaxLevel: common.Int64Ptr(math.MaxInt64),
+			DomainFilter: &history.DomainFilter{
+				ReverseMatch: common.BoolPtr(true),
+			},
+		},
+	}
+}
+
+func (s *contextImpl) UpdateTimerProcessingQueueStates(cluster string, states []*history.ProcessingQueueState) error {
+	s.Lock()
+	defer s.Unlock()
+
+	if len(states) == 0 {
+		return errors.New("Empty transfer processing queue states")
+	}
+
+	if s.timerProcessingQueueStates.StatesByCluster == nil {
+		s.timerProcessingQueueStates.StatesByCluster = make(map[string][]*history.ProcessingQueueState)
+	}
+	s.timerProcessingQueueStates.StatesByCluster[cluster] = states
+	serializer := s.GetPayloadSerializer()
+	data, err := serializer.SerializeProcessingQueueStates(s.timerProcessingQueueStates, common.EncodingTypeThriftRW)
+	if err != nil {
+		s.logger.Error("Failed to serialize timer processing queue states", tag.Error(err))
+		return err
+	}
+	s.shardInfo.TimerProcessingQueueStates = data
+
+	// for backward compatibility
+	ackLevel := states[0].GetAckLevel()
+	for _, state := range states {
+		ackLevel = common.MinInt64(ackLevel, state.GetAckLevel())
+	}
+	s.shardInfo.ClusterTimerAckLevel[cluster] = time.Unix(0, ackLevel)
+
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
 }
@@ -1460,6 +1594,26 @@ func acquireShard(
 		timerMaxReadLevelMap[clusterName] = timerMaxReadLevelMap[clusterName].Truncate(time.Millisecond)
 	}
 
+	serializer := shardItem.GetPayloadSerializer()
+	transferProcessingQueueStates, err := serializer.DeserializeProcessingQueueStates(shardInfo.TransferProcessingQueueStates)
+	if err != nil {
+		return nil, err
+	}
+	if transferProcessingQueueStates == nil {
+		transferProcessingQueueStates = &history.ProcessingQueueStates{
+			StatesByCluster: make(map[string][]*history.ProcessingQueueState),
+		}
+	}
+	timerProcessingQueueStates, err := serializer.DeserializeProcessingQueueStates(shardInfo.TimerProcessingQueueStates)
+	if err != nil {
+		return nil, err
+	}
+	if timerProcessingQueueStates == nil {
+		timerProcessingQueueStates = &history.ProcessingQueueStates{
+			StatesByCluster: make(map[string][]*history.ProcessingQueueState),
+		}
+	}
+
 	executionMgr, err := shardItem.GetExecutionManager(shardItem.shardID)
 	if err != nil {
 		return nil, err
@@ -1475,6 +1629,8 @@ func acquireShard(
 		config:                         shardItem.config,
 		remoteClusterCurrentTime:       remoteClusterCurrentTime,
 		timerMaxReadLevelMap:           timerMaxReadLevelMap, // use ack to init read level
+		transferProcessingQueueStates:  transferProcessingQueueStates,
+		timerProcessingQueueStates:     timerProcessingQueueStates,
 		pendingFailoverMarkers:         []*replicator.FailoverMarkerAttributes{},
 		logger:                         shardItem.logger,
 		throttledLogger:                shardItem.throttledLogger,
@@ -1526,22 +1682,24 @@ func copyShardInfo(shardInfo *persistence.ShardInfo) *persistence.ShardInfo {
 		replicationDLQAckLevel[k] = v
 	}
 	shardInfoCopy := &persistence.ShardInfo{
-		ShardID:                   shardInfo.ShardID,
-		Owner:                     shardInfo.Owner,
-		RangeID:                   shardInfo.RangeID,
-		StolenSinceRenew:          shardInfo.StolenSinceRenew,
-		ReplicationAckLevel:       shardInfo.ReplicationAckLevel,
-		TransferAckLevel:          shardInfo.TransferAckLevel,
-		TimerAckLevel:             shardInfo.TimerAckLevel,
-		TransferFailoverLevels:    transferFailoverLevels,
-		TimerFailoverLevels:       timerFailoverLevels,
-		ClusterTransferAckLevel:   clusterTransferAckLevel,
-		ClusterTimerAckLevel:      clusterTimerAckLevel,
-		DomainNotificationVersion: shardInfo.DomainNotificationVersion,
-		ClusterReplicationLevel:   clusterReplicationLevel,
-		ReplicationDLQAckLevel:    replicationDLQAckLevel,
-		PendingFailoverMarkers:    shardInfo.PendingFailoverMarkers,
-		UpdatedAt:                 shardInfo.UpdatedAt,
+		ShardID:                       shardInfo.ShardID,
+		Owner:                         shardInfo.Owner,
+		RangeID:                       shardInfo.RangeID,
+		StolenSinceRenew:              shardInfo.StolenSinceRenew,
+		ReplicationAckLevel:           shardInfo.ReplicationAckLevel,
+		TransferAckLevel:              shardInfo.TransferAckLevel,
+		TimerAckLevel:                 shardInfo.TimerAckLevel,
+		TransferFailoverLevels:        transferFailoverLevels,
+		TimerFailoverLevels:           timerFailoverLevels,
+		ClusterTransferAckLevel:       clusterTransferAckLevel,
+		ClusterTimerAckLevel:          clusterTimerAckLevel,
+		TransferProcessingQueueStates: shardInfo.TransferProcessingQueueStates,
+		TimerProcessingQueueStates:    shardInfo.TimerProcessingQueueStates,
+		DomainNotificationVersion:     shardInfo.DomainNotificationVersion,
+		ClusterReplicationLevel:       clusterReplicationLevel,
+		ReplicationDLQAckLevel:        replicationDLQAckLevel,
+		PendingFailoverMarkers:        shardInfo.PendingFailoverMarkers,
+		UpdatedAt:                     shardInfo.UpdatedAt,
 	}
 
 	return shardInfoCopy
