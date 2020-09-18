@@ -55,7 +55,7 @@ func (e *ShardOwnershipLost) Error() string {
 	return e.Message
 }
 
-func (e *ShardOwnershipLost) status() *status.Status {
+func (e *ShardOwnershipLost) Status() *status.Status {
 	if e.st != nil {
 		return e.st
 	}

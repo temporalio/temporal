@@ -53,7 +53,7 @@ func (e *CurrentBranchChanged) Error() string {
 	return e.Message
 }
 
-func (e *CurrentBranchChanged) status() *status.Status {
+func (e *CurrentBranchChanged) Status() *status.Status {
 	if e.st != nil {
 		return e.st
 	}
