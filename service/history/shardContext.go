@@ -502,7 +502,6 @@ Create_Loop:
 					} else {
 						// Shard is stolen, trigger shutdown of history engine
 						s.closeShard()
-						break Create_Loop
 					}
 				}
 			default:

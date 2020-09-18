@@ -111,6 +111,7 @@ func (v *visibilityManagerImpl) UpsertWorkflowExecution(request *UpsertWorkflowE
 		StartTimestamp:     request.StartTimestamp,
 		ExecutionTimestamp: request.ExecutionTimestamp,
 		TaskID:             request.TaskID,
+		Status:             request.Status,
 		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
 		TaskQueue:          request.TaskQueue,
 		SearchAttributes:   request.SearchAttributes,

@@ -1182,6 +1182,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 		WorkflowTimeout:  int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 		TaskID:           taskID,
 		TaskQueue:        taskQueueName,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}).Return(nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, *now)

@@ -90,8 +90,8 @@ var (
 	}
 	errTestESSearch = errors.New("ES error")
 
-	filterOpen              = "must_not:map[exists:map[field:ExecutionStatus]]"
-	filterClose             = "map[exists:map[field:ExecutionStatus]]"
+	filterOpen              = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%d]]]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+	filterClose             = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%d]]]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	filterByType            = fmt.Sprintf("map[match:map[WorkflowType:map[query:%s]]]", testWorkflowType)
 	filterByWID             = fmt.Sprintf("map[match:map[WorkflowId:map[query:%s]]]", testWorkflowID)
 	filterByRunID           = fmt.Sprintf("map[match:map[RunId:map[query:%s]]]", testRunID)
@@ -349,7 +349,6 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
 func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 	s.mockESClient.On("Search", mock.Anything, mock.MatchedBy(func(input *es.SearchParameters) bool {
 		source, _ := input.Query.Source()
-		s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByExecutionStatus))
 		return true
 	})).Return(testSearchResult, nil).Once()
@@ -437,16 +436,15 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	token := &esVisibilityPageToken{From: from}
 
 	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
-	existExecutionStatusQuery := elastic.NewExistsQuery(es.ExecutionStatus)
+	runningQuery := elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 	tieBreakerSorter := elastic.NewFieldSort(es.RunID).Desc()
 
 	earliestTime := strconv.FormatInt(request.EarliestStartTime-oneMilliSecondInNano, 10)
 	latestTime := strconv.FormatInt(request.LatestStartTime+oneMilliSecondInNano, 10)
 
 	// test for open
-	isOpen := true
 	rangeQuery := elastic.NewRangeQuery(es.StartTime).Gte(earliestTime).Lte(latestTime)
-	boolQuery := elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery).MustNot(existExecutionStatusQuery)
+	boolQuery := elastic.NewBoolQuery().Must(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
 	params := &es.SearchParameters{
 		Index:    testIndex,
 		Query:    boolQuery,
@@ -455,13 +453,13 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 		Sorter:   []elastic.Sorter{elastic.NewFieldSort(es.StartTime).Desc(), tieBreakerSorter},
 	}
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()
-	_, err := s.visibilityStore.getSearchResult(request, token, nil, isOpen)
+	_, err := s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
 	s.NoError(err)
 
 	// test request latestTime overflow
 	request.LatestStartTime = math.MaxInt64
 	rangeQuery1 := elastic.NewRangeQuery(es.StartTime).Gte(earliestTime).Lte(strconv.FormatInt(request.LatestStartTime, 10))
-	boolQuery1 := elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery1).MustNot(existExecutionStatusQuery)
+	boolQuery1 := elastic.NewBoolQuery().Must(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery1)
 	param1 := &es.SearchParameters{
 		Index:    testIndex,
 		Query:    boolQuery1,
@@ -470,26 +468,25 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 		Sorter:   []elastic.Sorter{elastic.NewFieldSort(es.StartTime).Desc(), tieBreakerSorter},
 	}
 	s.mockESClient.On("Search", mock.Anything, param1).Return(nil, nil).Once()
-	_, err = s.visibilityStore.getSearchResult(request, token, nil, isOpen)
+	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
 	s.NoError(err)
 	request.LatestStartTime = testLatestTime // revert
 
 	// test for closed
-	isOpen = false
 	rangeQuery = elastic.NewRangeQuery(es.CloseTime).Gte(earliestTime).Lte(latestTime)
-	boolQuery = elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery).Must(existExecutionStatusQuery)
+	boolQuery = elastic.NewBoolQuery().MustNot(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
 	params.Query = boolQuery
 	params.Sorter = []elastic.Sorter{elastic.NewFieldSort(es.CloseTime).Desc(), tieBreakerSorter}
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()
-	_, err = s.visibilityStore.getSearchResult(request, token, nil, isOpen)
+	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), false)
 	s.NoError(err)
 
-	// test for additional matchQuery
-	matchQuery := elastic.NewMatchQuery(es.ExecutionStatus, int32(0))
-	boolQuery = elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery).Must(matchQuery).Must(existExecutionStatusQuery)
+	// test for additional boolQuery
+	matchQuery := elastic.NewMatchQuery(es.ExecutionStatus, int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	boolQuery = elastic.NewBoolQuery().Must(matchQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
 	params.Query = boolQuery
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()
-	_, err = s.visibilityStore.getSearchResult(request, token, matchQuery, isOpen)
+	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(matchQuery), false)
 	s.NoError(err)
 
 	// test for search after
@@ -501,7 +498,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	params.From = 0
 	params.SearchAfter = []interface{}{token.SortValue, token.TieBreaker}
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()
-	_, err = s.visibilityStore.getSearchResult(request, token, matchQuery, isOpen)
+	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(matchQuery), false)
 	s.NoError(err)
 }
 
@@ -676,7 +673,7 @@ func (s *ESVisibilitySuite) TestShouldSearchAfter() {
 	s.True(shouldSearchAfter(token))
 }
 
-//nolint
+// nolint
 func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	request := &p.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceID,
