@@ -1103,6 +1103,7 @@ func (e *historyEngineImpl) toMutableStateJSON(msb mutableState) (string, error)
 	ms := msb.CopyToPersistence()
 
 	jsonBytes, err := json.Marshal(ms)
+
 	if err != nil {
 		return "", err
 	}

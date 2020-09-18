@@ -203,18 +203,17 @@ type (
 
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
 	InternalWorkflowMutableState struct {
-		ExecutionInfo    *WorkflowExecutionInfo
-		VersionHistories *history.VersionHistories
-		ActivityInfos    map[int64]*persistenceblobs.ActivityInfo
-
+		ActivityInfos       map[int64]*persistenceblobs.ActivityInfo
 		TimerInfos          map[string]*persistenceblobs.TimerInfo
 		ChildExecutionInfos map[int64]*persistenceblobs.ChildExecutionInfo
 		RequestCancelInfos  map[int64]*persistenceblobs.RequestCancelInfo
 		SignalInfos         map[int64]*persistenceblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
-		BufferedEvents      []*serialization.DataBlob
+		ExecutionInfo       *WorkflowExecutionInfo
 
-		Checksum checksum.Checksum
+		BufferedEvents   []*serialization.DataBlob
+		VersionHistories *history.VersionHistories
+		Checksum         checksum.Checksum
 	}
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
