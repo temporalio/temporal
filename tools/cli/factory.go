@@ -32,6 +32,7 @@ import (
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/rpc"
 )
 
@@ -82,6 +83,7 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
 		HostPort:  hostPort,
 		Namespace: namespace,
+		Logger:    log.NewZapAdapter(b.logger),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			DisableHealthCheck: true,
 		},
