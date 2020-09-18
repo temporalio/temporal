@@ -99,7 +99,7 @@ message ActivityInfo {
     repeated string retry_non_retryable_error_types = 26;
     Failure retry_last_failure = 27;
     string retry_last_worker_identity = 28;
-    string namespace_id = 29;
+    string domain_id = 29;
     int64 schedule_id = 30;
 }
 
@@ -200,7 +200,7 @@ enum EventType {
 
 message WorkflowExecutionStartedEventAttributes {
     WorkflowType workflow_type = 1;
-    string parent_workflow_namespace = 2;
+    string parent_workflow_domain = 2;
     WorkflowExecution parent_workflow_execution = 3;
     int64 parent_initiated_event_id = 4;
     TaskList task_list = 5;
@@ -311,7 +311,7 @@ message WorkflowTaskFailedEventAttributes {
 message ActivityTaskScheduledEventAttributes {
     string activity_id = 1;
     ActivityType activity_type = 2;
-    string namespace = 3;
+    string domain = 3;
     TaskList task_list = 4;
     Header header = 5;
     Payloads input = 6;
@@ -438,7 +438,7 @@ message WorkflowExecutionTerminatedEventAttributes {
 
 message RequestCancelExternalWorkflowExecutionInitiatedEventAttributes {
     int64 workflow_task_completed_event_id = 1;
-    string namespace = 2;
+    string domain = 2;
     WorkflowExecution workflow_execution = 3;
     string control = 4;
     bool child_workflow_only = 5;
@@ -447,7 +447,7 @@ message RequestCancelExternalWorkflowExecutionInitiatedEventAttributes {
 message RequestCancelExternalWorkflowExecutionFailedEventAttributes {
     CancelExternalWorkflowExecutionFailedCause cause = 1;
     int64 workflow_task_completed_event_id = 2;
-    string namespace = 3;
+    string domain = 3;
     WorkflowExecution workflow_execution = 4;
     int64 initiated_event_id = 5;
     string control = 6;
@@ -455,13 +455,13 @@ message RequestCancelExternalWorkflowExecutionFailedEventAttributes {
 
 message ExternalWorkflowExecutionCancelRequestedEventAttributes {
     int64 initiated_event_id = 1;
-    string namespace = 2;
+    string domain = 2;
     WorkflowExecution workflow_execution = 3;
 }
 
 message SignalExternalWorkflowExecutionInitiatedEventAttributes {
     int64 workflow_task_completed_event_id = 1;
-    string namespace = 2;
+    string domain = 2;
     WorkflowExecution workflow_execution = 3;
     string signal_name = 4;
     Payloads input = 5;
@@ -472,7 +472,7 @@ message SignalExternalWorkflowExecutionInitiatedEventAttributes {
 message SignalExternalWorkflowExecutionFailedEventAttributes {
     SignalExternalWorkflowExecutionFailedCause cause = 1;
     int64 workflow_task_completed_event_id = 2;
-    string namespace = 3;
+    string domain = 3;
     WorkflowExecution workflow_execution = 4;
     int64 initiated_event_id = 5;
     string control = 6;
@@ -480,7 +480,7 @@ message SignalExternalWorkflowExecutionFailedEventAttributes {
 
 message ExternalWorkflowExecutionSignaledEventAttributes {
     int64 initiated_event_id = 1;
-    string namespace = 2;
+    string domain = 2;
     WorkflowExecution workflow_execution = 3;
     string control = 4;
 }
@@ -491,7 +491,7 @@ message UpsertWorkflowSearchAttributesEventAttributes {
 }
 
 message StartChildWorkflowExecutionInitiatedEventAttributes {
-    string namespace = 1;
+    string domain = 1;
     string workflow_id = 2;
     WorkflowType workflow_type = 3;
     TaskList task_list = 4;
@@ -516,7 +516,7 @@ message StartChildWorkflowExecutionInitiatedEventAttributes {
 }
 
 message StartChildWorkflowExecutionFailedEventAttributes {
-    string namespace = 1;
+    string domain = 1;
     string workflow_id = 2;
     WorkflowType workflow_type = 3;
     StartChildWorkflowExecutionFailedCause cause = 4;
@@ -526,7 +526,7 @@ message StartChildWorkflowExecutionFailedEventAttributes {
 }
 
 message ChildWorkflowExecutionStartedEventAttributes {
-    string namespace = 1;
+    string domain = 1;
     int64 initiated_event_id = 2;
     WorkflowExecution workflow_execution = 3;
     WorkflowType workflow_type = 4;
@@ -535,7 +535,7 @@ message ChildWorkflowExecutionStartedEventAttributes {
 
 message ChildWorkflowExecutionCompletedEventAttributes {
     Payloads result = 1;
-    string namespace = 2;
+    string domain = 2;
     WorkflowExecution workflow_execution = 3;
     WorkflowType workflow_type = 4;
     int64 initiated_event_id = 5;
@@ -544,7 +544,7 @@ message ChildWorkflowExecutionCompletedEventAttributes {
 
 message ChildWorkflowExecutionFailedEventAttributes {
     Failure failure = 1;
-    string namespace = 2;
+    string domain = 2;
     WorkflowExecution workflow_execution = 3;
     WorkflowType workflow_type = 4;
     int64 initiated_event_id = 5;
@@ -554,7 +554,7 @@ message ChildWorkflowExecutionFailedEventAttributes {
 
 message ChildWorkflowExecutionCanceledEventAttributes {
     Payloads details = 1;
-    string namespace = 2;
+    string domain = 2;
     WorkflowExecution workflow_execution = 3;
     WorkflowType workflow_type = 4;
     int64 initiated_event_id = 5;
@@ -562,7 +562,7 @@ message ChildWorkflowExecutionCanceledEventAttributes {
 }
 
 message ChildWorkflowExecutionTimedOutEventAttributes {
-    string namespace = 1;
+    string domain = 1;
     WorkflowExecution workflow_execution = 2;
     WorkflowType workflow_type = 3;
     int64 initiated_event_id = 4;
@@ -571,7 +571,7 @@ message ChildWorkflowExecutionTimedOutEventAttributes {
 }
 
 message ChildWorkflowExecutionTerminatedEventAttributes {
-    string namespace = 1;
+    string domain = 1;
     WorkflowExecution workflow_execution = 2;
     WorkflowType workflow_type = 3;
     int64 initiated_event_id = 4;
@@ -643,7 +643,7 @@ message ActivityFailureInfo {
 }
 
 message ChildWorkflowExecutionFailureInfo {
-    string namespace = 1;
+    string domain = 1;
     WorkflowExecution workflow_execution = 2;
     WorkflowType workflow_type = 3;
     int64 initiated_event_id = 4;
@@ -861,7 +861,7 @@ message ChildExecutionInfo {
     string started_run_id = 6;
     HistoryEvent started_event = 7;
     string create_request_id = 8;
-    string namespace = 9;
+    string domain = 9;
     string workflow_type_name = 10;
     ParentClosePolicy parent_close_policy = 11;
     int64 initiated_id = 12;
@@ -875,9 +875,9 @@ message WorkflowExecutionState {
 }
 
 message WorkflowExecutionInfo {
-    string namespace_id = 1;
+    string domain_id = 1;
     string workflow_id = 2;
-    string parent_namespace_id = 3;
+    string parent_domain_id = 3;
     string parent_workflow_id = 4;
     string parent_run_id = 5;
     int64 initiated_id = 6;
@@ -947,7 +947,7 @@ enum WorkflowExecutionStatus {
     WORKFLOW_EXECUTION_STATUS_TIMED_OUT = 7;
 }
 
-// ReplicationData represents mutable state information for global namespaces.
+// ReplicationData represents mutable state information for global domains.
 // This information is used by replication protocol when applying events from remote clusters
 // only used in cassandra
 message ReplicationData {
@@ -1001,4 +1001,264 @@ message HistoryBranchRange {
     int64 begin_node_id = 2;
     // Ending node for the range, exclusive.
     int64 end_node_id = 3;
+}
+
+message ReplicationTask {
+    ReplicationTaskType task_type = 1;
+    int64 source_task_id = 2;
+    oneof attributes {
+        DomainTaskAttributes domain_task_attributes = 3;
+        // TODO: deprecate once NDC migration is done.
+        HistoryTaskAttributes history_task_attributes = 4;
+        SyncShardStatusTaskAttributes sync_shard_status_task_attributes = 5;
+        SyncActivityTaskAttributes sync_activity_task_attributes = 6;
+        // TODO: deprecate once kafka deprecation is done.
+        HistoryMetadataTaskAttributes history_metadata_task_attributes = 7;
+        HistoryTaskV2Attributes history_task_v2_attributes = 8;
+    }
+}
+
+enum ReplicationTaskType {
+    REPLICATION_TASK_TYPE_UNSPECIFIED = 0;
+    REPLICATION_TASK_TYPE_DOMAIN_TASK = 1;
+    REPLICATION_TASK_TYPE_HISTORY_TASK = 2;
+    REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK = 3;
+    REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK = 4;
+    REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK = 5;
+    REPLICATION_TASK_TYPE_HISTORY_V2_TASK = 6;
+}
+
+message DomainTaskAttributes {
+    DomainOperation domain_operation = 1;
+    string id = 2;
+    DomainInfo info = 3;
+    DomainConfig config = 4;
+    DomainReplicationConfig replication_config = 5;
+    int64 config_version = 6;
+    int64 failover_version = 7;
+}
+
+enum DomainOperation {
+    DOMAIN_OPERATION_UNSPECIFIED = 0;
+    DOMAIN_OPERATION_CREATE = 1;
+    DOMAIN_OPERATION_UPDATE = 2;
+}
+
+message HistoryTaskAttributes {
+    repeated string target_clusters = 1;
+    string domain_id = 2;
+    string workflow_id = 3;
+    string run_id = 4;
+    int64 first_event_id = 5;
+    int64 next_event_id = 6;
+    int64 version = 7;
+    History history = 9;
+    History new_run_history = 10;
+    int32 new_run_event_store_version = 12;
+}
+
+message History {
+    repeated HistoryEvent events = 1;
+}
+
+message SyncShardStatusTaskAttributes {
+    string source_cluster = 1;
+    int64 shard_id = 2;
+    google.protobuf.Timestamp status_time = 3 [(gogoproto.stdtime) = true];
+}
+
+message SyncActivityTaskAttributes {
+    string domain_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    int64 version = 4;
+    int64 scheduled_id = 5;
+    google.protobuf.Timestamp scheduled_time = 6 [(gogoproto.stdtime) = true];
+    int64 started_id = 7;
+    google.protobuf.Timestamp started_time = 8 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_heartbeat_time = 9 [(gogoproto.stdtime) = true];
+    Payloads details = 10;
+    int32 attempt = 11;
+    Failure last_failure = 12;
+    string last_worker_identity = 13;
+    VersionHistory version_history = 14;
+}
+
+message HistoryMetadataTaskAttributes {
+    repeated string target_clusters = 1;
+    string domain_id = 2;
+    string workflow_id = 3;
+    string run_id = 4;
+    int64 first_event_id = 5;
+    int64 next_event_id = 6;
+    int64 version = 7;
+}
+
+message HistoryTaskV2Attributes {
+    int64 task_id = 1;
+    string domain_id = 2;
+    string workflow_id = 3;
+    string run_id = 4;
+    repeated VersionHistoryItem version_history_items = 5;
+    DataBlob events = 6;
+    // New run events does not need version history since there is no prior events.
+    DataBlob new_run_events = 7;
+}
+
+message DataBlob {
+    EncodingType encoding_type = 1;
+    bytes data = 2;
+}
+
+enum EncodingType {
+    ENCODING_TYPE_UNSPECIFIED = 0;
+    ENCODING_TYPE_PROTO3 = 1;
+    ENCODING_TYPE_JSON = 2;
+}
+
+message QueueMetadataInfo {
+    map<string, int64> clusterAckLevels = 1;
+}
+
+message ReplicationTaskInfo {
+    string domain_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    TaskType task_type = 4;
+    int64 version = 5;
+    int64 first_event_id = 6;
+    int64 next_event_id = 7;
+    int64 scheduled_id = 8;
+    int32 event_store_version = 9;
+    int32 new_run_event_store_version = 10;
+    bytes branch_token = 11;
+    bytes new_run_branch_token = 13;
+    int64 task_id = 15;
+}
+
+enum TaskType {
+    TASK_TYPE_UNSPECIFIED = 0;
+    TASK_TYPE_REPLICATION_HISTORY = 1;
+    TASK_TYPE_REPLICATION_SYNC_ACTIVITY = 2;
+    TASK_TYPE_TRANSFER_WORKFLOW_TASK = 3;
+    TASK_TYPE_TRANSFER_ACTIVITY_TASK = 4;
+    TASK_TYPE_TRANSFER_CLOSE_EXECUTION = 5;
+    TASK_TYPE_TRANSFER_CANCEL_EXECUTION = 6;
+    TASK_TYPE_TRANSFER_START_CHILD_EXECUTION = 7;
+    TASK_TYPE_TRANSFER_SIGNAL_EXECUTION = 8;
+    TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED = 9;
+    TASK_TYPE_TRANSFER_RESET_WORKFLOW = 10;
+    TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES = 11;
+    TASK_TYPE_WORKFLOW_TASK_TIMEOUT = 12;
+    TASK_TYPE_ACTIVITY_TIMEOUT = 13;
+    TASK_TYPE_USER_TIMER = 14;
+    TASK_TYPE_WORKFLOW_RUN_TIMEOUT = 15;
+    TASK_TYPE_DELETE_HISTORY_EVENT = 16;
+    TASK_TYPE_ACTIVITY_RETRY_TIMER = 17;
+    TASK_TYPE_WORKFLOW_BACKOFF_TIMER = 18;
+}
+
+message RequestCancelInfo {
+    int64 version = 1;
+    int64 initiated_event_batch_id = 2;
+    string cancel_request_id = 3;
+    int64 initiated_id = 4;
+}
+
+message ShardInfo {
+    int32 shard_id = 1;
+    int64 range_id = 2;
+    string owner = 3;
+    int64 replication_ack_level = 4;
+    int64 transfer_ack_level = 5;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "since" is needed here. --)
+    int32 stolen_since_renew = 6;
+    google.protobuf.Timestamp update_time = 7 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp timer_ack_level_time = 8 [(gogoproto.stdtime) = true];
+    int64 domain_notification_version = 9;
+    map<string, int64> cluster_transfer_ack_level = 10;
+    map<string, google.protobuf.Timestamp> cluster_timer_ack_level = 11 [(gogoproto.stdtime) = true];
+    map<string, int64> cluster_replication_level = 12;
+    map<string, int64> replication_dlq_ack_level = 13;
+}
+
+message SignalInfo {
+    int64 version = 1;
+    int64 initiated_event_batch_id = 2;
+    string request_id = 3;
+    string name = 4;
+    Payloads input = 5;
+    string control = 6;
+    int64 initiated_id = 7;
+}
+
+message TaskListInfo {
+    string domain_id = 1;
+    string name = 2;
+    TaskListType task_type = 3;
+    TaskListKind kind = 4;
+    int64 ack_level = 5;
+    google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_update_time = 7 [(gogoproto.stdtime) = true];
+}
+
+message TaskInfo {
+    string domain_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    int64 schedule_id = 4;
+    google.protobuf.Timestamp create_time = 5 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
+}
+
+message AllocatedTaskInfo {
+    TaskInfo data = 1;
+    int64 task_id = 2;
+}
+
+message TimerInfo {
+    int64 version = 1;
+    int64 started_id = 2;
+    google.protobuf.Timestamp expiry_time = 3 [(gogoproto.stdtime) = true];
+    int64 task_status = 4;
+    // timerId serves the purpose of indicating whether a timer task is generated for this timer info.
+    string timer_id = 5;
+}
+
+message TimerTaskInfo {
+    string domain_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    TaskType task_type = 4;
+    TimeoutType timeout_type = 5;
+    WorkflowBackoffType workflow_backoff_type = 6;
+    int64 version = 7;
+    int32 schedule_attempt = 8;
+    int64 event_id = 9;
+    int64 task_id = 10;
+    google.protobuf.Timestamp visibility_time = 11 [(gogoproto.stdtime) = true];
+}
+
+message TransferTaskInfo {
+    string domain_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    TaskType task_type = 4;
+    string target_domain_id = 5;
+    string target_workflow_id = 6;
+    string target_run_id = 7;
+    string task_list = 8;
+    bool target_child_workflow_only = 9;
+    int64 schedule_id = 10;
+    int64 version = 11;
+    int64 task_id = 12;
+    google.protobuf.Timestamp visibility_time = 13 [(gogoproto.stdtime) = true];
+    bool record_visibility = 14;
+}
+
+enum WorkflowBackoffType {
+    WORKFLOW_BACKOFF_TYPE_UNSPECIFIED = 0;
+    WORKFLOW_BACKOFF_TYPE_RETRY = 1;
+    WORKFLOW_BACKOFF_TYPE_CRON = 2;
 }
