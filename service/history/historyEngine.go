@@ -75,6 +75,7 @@ const (
 	defaultQueryFirstDecisionTaskWaitTime     = time.Second
 	queryFirstDecisionTaskCheckInterval       = 200 * time.Millisecond
 	replicationTimeout                        = 30 * time.Second
+	contextLockTimeout                        = 500 * time.Millisecond
 
 	// TerminateIfRunningReason reason for terminateIfRunning
 	TerminateIfRunningReason = "TerminateIfRunning Policy"
@@ -151,6 +152,8 @@ var (
 	ErrConsistentQueryNotEnabled = &workflow.BadRequestError{Message: "cluster or domain does not enable strongly consistent query but strongly consistent query was requested"}
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
 	ErrConsistentQueryBufferExceeded = &workflow.InternalServiceError{Message: "consistent query buffer is full, cannot accept new consistent queries"}
+	// ErrConcurrentStartRequest is error indicating there is an outstanding start workflow request. The incoming request fails to acquires the lock before the outstanding request finishes.
+	ErrConcurrentStartRequest = &workflow.ServiceBusyError{Message: "an outstanding start workflow request is in-progress. Failed to acquire the resource."}
 
 	// FailedWorkflowCloseState is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
@@ -645,13 +648,21 @@ func (e *historyEngineImpl) startWorkflowHelper(
 
 	workflowID := request.GetWorkflowId()
 	domainID := domainEntry.GetInfo().ID
+
 	// grab the current context as a lock, nothing more
+	// use a smaller context timeout to get the lock
+	childCtx, childCancel := e.newChildContext(ctx)
+	defer childCancel()
+
 	_, currentRelease, err := e.executionCache.GetOrCreateCurrentWorkflowExecution(
-		ctx,
+		childCtx,
 		domainID,
 		workflowID,
 	)
 	if err != nil {
+		if err == context.DeadlineExceeded {
+			return nil, ErrConcurrentStartRequest
+		}
 		return nil, err
 	}
 	defer func() { currentRelease(retError) }()
@@ -3439,4 +3450,19 @@ func (e *historyEngineImpl) loadWorkflow(
 	}
 
 	return nil, &workflow.InternalServiceError{Message: "unable to locate current workflow execution"}
+}
+
+func (e *historyEngineImpl) newChildContext(
+	parentCtx context.Context,
+) (context.Context, context.CancelFunc) {
+
+	ctxTimeout := contextLockTimeout
+	if deadline, ok := parentCtx.Deadline(); ok {
+		now := e.shard.GetTimeSource().Now()
+		parentTimeout := deadline.Sub(now)
+		if parentTimeout > 0 && parentTimeout < contextLockTimeout {
+			ctxTimeout = parentTimeout
+		}
+	}
+	return context.WithTimeout(context.Background(), ctxTimeout)
 }

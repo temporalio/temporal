@@ -1455,6 +1455,21 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	s.NotNil(err)
 }
 
+func (s *engine2Suite) TestNewChildContext() {
+	ctx := context.Background()
+	childCtx, childCancel := s.historyEngine.newChildContext(ctx)
+	defer childCancel()
+	_, ok := childCtx.Deadline()
+	s.True(ok)
+
+	ctx, cancel := context.WithTimeout(ctx, time.Hour)
+	defer cancel()
+	childCtx, childCancel = s.historyEngine.newChildContext(ctx)
+	deadline, ok := childCtx.Deadline()
+	s.True(ok)
+	s.True(deadline.Sub(time.Now()) < 10*time.Minute)
+}
+
 func (s *engine2Suite) getBuilder(domainID string, we workflow.WorkflowExecution) execution.MutableState {
 	context, release, err := s.historyEngine.executionCache.GetOrCreateWorkflowExecutionForBackground(domainID, we)
 	if err != nil {
