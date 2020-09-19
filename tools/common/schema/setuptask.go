@@ -24,7 +24,11 @@
 
 package schema
 
-import "log"
+import (
+	"log"
+
+	"golang.org/x/mod/semver"
+)
 
 // SetupTask represents a task
 // that sets up cassandra schema on
@@ -77,15 +81,24 @@ func (task *SetupTask) Run() error {
 	}
 
 	if !config.DisableVersioning {
-		log.Printf("Setting initial schema version to %v\n", config.InitialVersion)
-		err := task.db.UpdateSchemaVersion(config.InitialVersion, config.InitialVersion)
+		currVer, err := task.db.ReadSchemaVersion()
 		if err != nil {
-			return err
+			currVer = "0.0"
 		}
-		log.Printf("Updating schema update log\n")
-		err = task.db.WriteSchemaUpdateLog("0", config.InitialVersion, "", "initial version")
-		if err != nil {
-			return err
+
+		if semver.Compare("v"+currVer, "v"+config.InitialVersion) > 0 {
+			log.Printf("Current database schema version %v is greater than initial schema version %v. Skip version upgrade\n", currVer, config.InitialVersion)
+		} else {
+			log.Printf("Setting initial schema version to %v\n", config.InitialVersion)
+			err := task.db.UpdateSchemaVersion(config.InitialVersion, config.InitialVersion)
+			if err != nil {
+				return err
+			}
+			log.Printf("Updating schema update log\n")
+			err = task.db.WriteSchemaUpdateLog("0", config.InitialVersion, "", "initial version")
+			if err != nil {
+				return err
+			}
 		}
 	}
 
