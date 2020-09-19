@@ -25,6 +25,7 @@
 package cli
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -251,15 +252,13 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	rid := c.String(FlagRunID)
 
 	resp := describeMutableState(c)
-	// TODO: this won't work for some cases because json.Unmarshal can't be used for proto object
-	// Proper refactoring is required here: resp.GetDatabaseMutableState() should return proto object.
 	msStr := resp.GetDatabaseMutableState()
-	ms := persistence.WorkflowMutableState{}
+	ms := map[string]interface{}{}
 	err := json.Unmarshal([]byte(msStr), &ms)
 	if err != nil {
 		ErrorAndExit("json.Unmarshal err", err)
 	}
-	namespaceID := ms.ExecutionInfo.NamespaceId
+	namespaceID := ms["ExecutionInfo"].(map[string]interface{})["NamespaceId"].(string)
 	skipError := c.Bool(FlagSkipErrorMode)
 	session := connectToCassandra(c)
 	shardID := resp.GetShardId()
@@ -268,13 +267,27 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		ErrorAndExit("strconv.Atoi(shardID) err", err)
 	}
 
-	branchTokens := [][]byte{ms.ExecutionInfo.EventBranchToken}
-	if ms.VersionHistories != nil {
+	var branchTokens [][]byte
+	if vhs, ok := ms["VersionHistories"]; ok && vhs != nil {
 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
 		branchTokens = [][]byte{}
-		for _, versionHistory := range ms.VersionHistories.ToProto().Histories {
-			branchTokens = append(branchTokens, versionHistory.BranchToken)
+		for i, history := range ms["VersionHistories"].(map[string]interface{})["Histories"].([]interface{}) {
+			versionHistory := history.(map[string]interface{})
+			branchToken := versionHistory["BranchToken"].(string)
+			branchTokenBytes, err := base64.StdEncoding.DecodeString(branchToken)
+			if err != nil {
+				ErrorAndExit(fmt.Sprintf("unable to decode BranchToken for history item %d", i), err)
+			}
+
+			branchTokens = append(branchTokens, branchTokenBytes)
 		}
+	} else {
+		eventBranchToken := ms["ExecutionInfo"].(map[string]interface{})["EventBranchToken"].(string)
+		eventBranchTokenBytes, err := base64.StdEncoding.DecodeString(eventBranchToken)
+		if err != nil {
+			ErrorAndExit("unable to decode EventBranchToken", err)
+		}
+		branchTokens = append(branchTokens, eventBranchTokenBytes)
 	}
 
 	for _, branchToken := range branchTokens {
