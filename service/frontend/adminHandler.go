@@ -226,8 +226,10 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 	return &adminservice.DescribeWorkflowExecutionResponse{
 		ShardId:              shardIDForOutput,
 		HistoryAddr:          historyAddr,
-		DatabaseMutableState: resp2.DatabaseMutableState,
-		CacheMutableState:    resp2.CacheMutableState,
+		DatabaseMutableState: resp2.GetDatabaseMutableState(),
+		CacheMutableState:    resp2.GetCacheMutableState(),
+		TreeId:               resp2.GetTreeId(),
+		BranchId:             resp2.GetBranchId(),
 	}, err
 }
 

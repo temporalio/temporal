@@ -39,7 +39,6 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/codec"
@@ -122,44 +121,77 @@ func AdminShowWorkflow(c *cli.Context) {
 
 // AdminDescribeWorkflow describe a new workflow execution for admin
 func AdminDescribeWorkflow(c *cli.Context) {
+	identJSON := func(s string) string {
+		if s == "" {
+			return "<empty>"
+		}
+
+		var data interface{}
+		err := json.Unmarshal([]byte(s), &data)
+		if err != nil {
+			return s
+		}
+
+		b, err := json.MarshalIndent(data, "", "  ")
+		if err != nil {
+			return s
+		}
+		return string(b)
+	}
 
 	resp := describeMutableState(c)
-	prettyPrintJSONObject(resp)
+	fmt.Printf("Cache Mutable State:\n%s\n", identJSON(resp.GetCacheMutableState()))
+	fmt.Printf("Database Mutable State:\n%s\n", identJSON(resp.GetDatabaseMutableState()))
 
-	if resp != nil {
-		msStr := resp.GetDatabaseMutableState()
-		ms := persistence.WorkflowMutableState{}
-		// TODO: this won't work for some cases because json.Unmarshal can't be used for proto object
-		// Proper refactoring is required here: resp.GetDatabaseMutableState() should return proto object.
-		err := json.Unmarshal([]byte(msStr), &ms)
-		if err != nil {
-			ErrorAndExit("json.Unmarshal err", err)
-		}
-		currentBranchToken := ms.ExecutionInfo.EventBranchToken
-		if ms.VersionHistories != nil {
-			// if VersionHistories is set, then all branch infos are stored in VersionHistories
-			currentVersionHistory, err := ms.VersionHistories.GetCurrentVersionHistory()
-			if err != nil {
-				ErrorAndExit("ms.VersionHistories.GetCurrentVersionHistory err", err)
-			}
-			currentBranchToken = currentVersionHistory.GetBranchToken()
-		}
-
-		branchInfo := persistenceblobs.HistoryBranch{}
-		err = branchInfo.Unmarshal(currentBranchToken)
-		if err != nil {
-			ErrorAndExit("failed to unmarshal current branch token from proto", err)
-		}
-		prettyPrintJSONObject(branchInfo)
-		if ms.ExecutionInfo.AutoResetPoints != nil {
-			fmt.Println("auto-reset-points:")
-			for _, p := range ms.ExecutionInfo.AutoResetPoints.Points {
-				createT := timestamp.TimeValue(p.GetCreateTime())
-				expireT := timestamp.TimeValue(p.GetExpireTime())
-				fmt.Println(p.GetBinaryChecksum(), p.GetRunId(), p.GetFirstWorkflowTaskCompletedId(), p.GetResettable(), createT, expireT)
-			}
-		}
+	output := struct {
+		TreeID      string
+		BranchID    string
+		ShardID     string
+		HistoryAddr string
+	}{
+		resp.GetTreeId(),
+		resp.GetBranchId(),
+		resp.GetShardId(),
+		resp.GetHistoryAddr(),
 	}
+	prettyPrintJSONObject(output)
+
+	// This commented out block should be restored when MutableState is passed as proto object.
+
+	// if resp != nil {
+	// 	msStr := resp.GetDatabaseMutableState()
+	// 	ms := persistence.WorkflowMutableState{}
+	// 	// TODO: this won't work for some cases because json.Unmarshal can't be used for proto object
+	// 	// Proper refactoring is required here: resp.GetDatabaseMutableState() should return proto object.
+	// 	err := json.Unmarshal([]byte(msStr), &ms)
+	// 	if err != nil {
+	// 		ErrorAndExit("json.Unmarshal err", err)
+	// 	}
+	// 	currentBranchToken := ms.ExecutionInfo.EventBranchToken
+	// 	if ms.VersionHistories != nil {
+	// 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
+	// 		currentVersionHistory, err := ms.VersionHistories.GetCurrentVersionHistory()
+	// 		if err != nil {
+	// 			ErrorAndExit("ms.VersionHistories.GetCurrentVersionHistory err", err)
+	// 		}
+	// 		currentBranchToken = currentVersionHistory.GetBranchToken()
+	// 	}
+	//
+	// 	branchInfo := persistenceblobs.HistoryBranch{}
+	// 	err = branchInfo.Unmarshal(currentBranchToken)
+	// 	if err != nil {
+	// 		ErrorAndExit("failed to unmarshal current branch token from proto", err)
+	// 	}
+	// 	prettyPrintJSONObject(branchInfo)
+	// 	if ms.ExecutionInfo.AutoResetPoints != nil {
+	// 		fmt.Println("auto-reset-points:")
+	// 		for _, p := range ms.ExecutionInfo.AutoResetPoints.Points {
+	// 			createT := timestamp.TimeValue(p.GetCreateTime())
+	// 			expireT := timestamp.TimeValue(p.GetExpireTime())
+	// 			fmt.Println(p.GetBinaryChecksum(), p.GetRunId(), p.GetFirstWorkflowTaskCompletedId(), p.GetResettable(), createT, expireT)
+	// 		}
+	// 	}
+	// }
 }
 
 func describeMutableState(c *cli.Context) *adminservice.DescribeWorkflowExecutionResponse {
@@ -219,6 +251,8 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	rid := c.String(FlagRunID)
 
 	resp := describeMutableState(c)
+	// TODO: this won't work for some cases because json.Unmarshal can't be used for proto object
+	// Proper refactoring is required here: resp.GetDatabaseMutableState() should return proto object.
 	msStr := resp.GetDatabaseMutableState()
 	ms := persistence.WorkflowMutableState{}
 	err := json.Unmarshal([]byte(msStr), &ms)

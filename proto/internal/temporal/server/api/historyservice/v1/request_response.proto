@@ -373,6 +373,8 @@ message DescribeMutableStateRequest {
 message DescribeMutableStateResponse {
     string cache_mutable_state = 1;
     string database_mutable_state = 2;
+    string tree_id = 3;
+    string branch_id = 4;
 }
 
 //At least one of the parameters needs to be provided

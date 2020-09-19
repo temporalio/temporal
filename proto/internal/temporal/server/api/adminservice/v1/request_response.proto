@@ -48,6 +48,8 @@ message DescribeWorkflowExecutionResponse {
     string history_addr = 2;
     string cache_mutable_state = 3;
     string database_mutable_state = 4;
+    string tree_id = 5;
+    string branch_id = 6;
 }
 
 //At least one of the parameters needs to be provided

@@ -32,8 +32,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -48,6 +51,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client/history"
@@ -1081,33 +1085,165 @@ func (e *historyEngineImpl) DescribeMutableState(
 
 	if cacheHit && cacheCtx.(*workflowExecutionContextImpl).mutableState != nil {
 		msb := cacheCtx.(*workflowExecutionContextImpl).mutableState
-		response.CacheMutableState, err = e.toMutableStateJSON(msb)
-		if err != nil {
-			return nil, err
-		}
+		wms := msb.CopyToPersistence()
+		response.CacheMutableState = e.workflowMutableStateToJSON(wms)
 	}
 
 	msb, err := dbCtx.loadWorkflowExecution()
 	if err != nil {
-		return nil, err
+		response.DatabaseMutableState = err.Error()
+		return response, nil
 	}
-	response.DatabaseMutableState, err = e.toMutableStateJSON(msb)
+	wms := msb.CopyToPersistence()
+	response.DatabaseMutableState = e.workflowMutableStateToJSON(wms)
+
+	currentBranchToken := wms.ExecutionInfo.EventBranchToken
+	if wms.VersionHistories != nil {
+		// if VersionHistories is set, then all branch infos are stored in VersionHistories
+		currentVersionHistory, err := wms.VersionHistories.GetCurrentVersionHistory()
+		if err != nil {
+			response.TreeId = err.Error()
+			return response, nil
+		}
+		currentBranchToken = currentVersionHistory.GetBranchToken()
+	}
+	branchInfo := persistenceblobs.HistoryBranch{}
+	err = branchInfo.Unmarshal(currentBranchToken)
 	if err != nil {
-		return nil, err
+		response.TreeId = err.Error()
+		return response, nil
 	}
+
+	response.TreeId = branchInfo.TreeId
+	response.BranchId = branchInfo.BranchId
 
 	return response, nil
 }
 
-func (e *historyEngineImpl) toMutableStateJSON(msb mutableState) (string, error) {
-	ms := msb.CopyToPersistence()
+func (e *historyEngineImpl) workflowMutableStateToJSON(wms *persistence.WorkflowMutableState) string {
+	// TODO: call @alexshtin before you dig!
+	// This is a _temporarry_ workaround to make JSON serialization work.
+	// This code will be removed soon and MutableState will be serialized to proto.
 
-	jsonBytes, err := json.Marshal(ms)
+	jsonMarshal := func(v interface{}) string {
+		if pb, ok := v.(proto.Message); ok {
+			m := jsonpb.Marshaler{}
+			var buf bytes.Buffer
+			err := m.Marshal(&buf, pb)
+			if err != nil {
+				return fmt.Sprintf(`{"error": "%s"}`, err.Error())
+			}
+			return string(buf.Bytes())
+		}
 
-	if err != nil {
-		return "", err
+		b, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Sprintf(`{"error": "%s"}`, err.Error())
+		}
+		return string(b)
 	}
-	return string(jsonBytes), nil
+
+	var i int
+	var sb strings.Builder
+	sb.WriteString("{")
+
+	// ActivityInfos
+	sb.WriteString(`"ActivityInfos":`)
+	sb.WriteString("{")
+	i = 1
+	for key, item := range wms.ActivityInfos {
+		sb.WriteString(fmt.Sprintf(`"%d":%s`, key, jsonMarshal(item)))
+		if i != len(wms.ActivityInfos) {
+			sb.WriteString(",")
+		}
+		i++
+	}
+	sb.WriteString("},")
+
+	// TimerInfos
+	sb.WriteString(`"TimerInfos":`)
+	sb.WriteString("{")
+	i = 1
+	for key, item := range wms.TimerInfos {
+		sb.WriteString(fmt.Sprintf(`"%s":%s`, key, jsonMarshal(item)))
+		if i != len(wms.TimerInfos) {
+			sb.WriteString(",")
+		}
+		i++
+	}
+	sb.WriteString("},")
+
+	// ChildExecutionInfos
+	sb.WriteString(`"ChildExecutionInfos":`)
+	sb.WriteString("{")
+	i = 1
+	for key, item := range wms.ChildExecutionInfos {
+		sb.WriteString(fmt.Sprintf(`"%d":%s`, key, jsonMarshal(item)))
+		if i != len(wms.ChildExecutionInfos) {
+			sb.WriteString(",")
+		}
+		i++
+	}
+	sb.WriteString("},")
+
+	// RequestCancelInfos
+	sb.WriteString(`"RequestCancelInfos":`)
+	sb.WriteString("{")
+	i = 1
+	for key, item := range wms.RequestCancelInfos {
+		sb.WriteString(fmt.Sprintf(`"%d":%s`, key, jsonMarshal(item)))
+		if i != len(wms.RequestCancelInfos) {
+			sb.WriteString(",")
+		}
+		i++
+	}
+	sb.WriteString("},")
+
+	// SignalInfos
+	sb.WriteString(`"SignalInfos":`)
+	sb.WriteString("{")
+	i = 1
+	for key, item := range wms.SignalInfos {
+		sb.WriteString(fmt.Sprintf(`"%d":%s`, key, jsonMarshal(item)))
+		if i != len(wms.SignalInfos) {
+			sb.WriteString(",")
+		}
+		i++
+	}
+	sb.WriteString("},")
+
+	// SignalRequestedIDs
+	sb.WriteString(fmt.Sprintf(`"SignalRequestedIds":%s,`, jsonMarshal(wms.SignalRequestedIDs)))
+
+	// ExecutionInfo
+	sb.WriteString(fmt.Sprintf(`"ExecutionInfo":%s,`, jsonMarshal(wms.ExecutionInfo)))
+
+	// ExecutionStats
+	sb.WriteString(fmt.Sprintf(`"ExecutionStats":%s,`, jsonMarshal(wms.ExecutionStats)))
+
+	// BufferedEvents
+	sb.WriteString(`"BufferedEvents":`)
+	sb.WriteString("[")
+	i = 1
+	for _, item := range wms.BufferedEvents {
+		sb.WriteString(jsonMarshal(item))
+		if i != len(wms.BufferedEvents) {
+			sb.WriteString(",")
+		}
+		i++
+	}
+	sb.WriteString("],")
+
+	// VersionHistories
+	sb.WriteString(fmt.Sprintf(`"VersionHistories":%s,`, jsonMarshal(wms.VersionHistories)))
+
+	// Checksum
+	sb.WriteString(fmt.Sprintf(`"Checksum":%s`, jsonMarshal(wms.Checksum)))
+
+	// Close root object
+	sb.WriteString("}")
+
+	return sb.String()
 }
 
 // ResetStickyTaskQueue reset the volatile information in mutable state of a given workflow.
