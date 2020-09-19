@@ -252,6 +252,8 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	rid := c.String(FlagRunID)
 
 	resp := describeMutableState(c)
+	// TODO: this is temporary solution for JSON version of WorkflowMutableState.
+	// Proper refactoring is required here: resp.GetDatabaseMutableState() should return proto object.
 	msStr := resp.GetDatabaseMutableState()
 	ms := map[string]interface{}{}
 	err := json.Unmarshal([]byte(msStr), &ms)
