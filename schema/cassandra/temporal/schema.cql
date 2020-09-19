@@ -7,7 +7,7 @@ CREATE TYPE serialized_event_batch (
 CREATE TABLE executions (
   shard_id                       int,
   type                           int, -- enum RowType { Shard, Execution, TransferTask, TimerTask, ReplicationTask}
-  namespace_id                      uuid,
+  namespace_id                   uuid,
   workflow_id                    text,
   run_id                         uuid,
   current_run_id                 uuid,
@@ -26,7 +26,7 @@ CREATE TABLE executions (
   timer                          blob,
   timer_encoding                 text,
   next_event_id                  bigint,  -- This is needed to make conditional updates on session history
-  range_id                       bigint, -- Increasing sequence identifier for transfer queue, checkpointed into shard info
+  range_id                       bigint,  -- Increasing sequence identifier for transfer queue, checkpointed into shard info
   activity_map                   map<bigint, blob>,
   activity_map_encoding          text,
   timer_map                      map<text, blob>,

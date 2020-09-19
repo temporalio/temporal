@@ -29,7 +29,6 @@ package history
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -48,6 +47,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client/history"
@@ -1081,32 +1081,39 @@ func (e *historyEngineImpl) DescribeMutableState(
 
 	if cacheHit && cacheCtx.(*workflowExecutionContextImpl).mutableState != nil {
 		msb := cacheCtx.(*workflowExecutionContextImpl).mutableState
-		response.CacheMutableState, err = e.toMutableStateJSON(msb)
-		if err != nil {
-			return nil, err
-		}
+		wms := msb.CopyToPersistence()
+		response.CacheMutableState = workflowMutableStateToJSON(wms)
 	}
 
 	msb, err := dbCtx.loadWorkflowExecution()
 	if err != nil {
-		return nil, err
+		response.DatabaseMutableState = err.Error()
+		return response, nil
 	}
-	response.DatabaseMutableState, err = e.toMutableStateJSON(msb)
+	wms := msb.CopyToPersistence()
+	response.DatabaseMutableState = workflowMutableStateToJSON(wms)
+
+	currentBranchToken := wms.ExecutionInfo.EventBranchToken
+	if wms.VersionHistories != nil {
+		// if VersionHistories is set, then all branch infos are stored in VersionHistories
+		currentVersionHistory, err := wms.VersionHistories.GetCurrentVersionHistory()
+		if err != nil {
+			response.TreeId = err.Error()
+			return response, nil
+		}
+		currentBranchToken = currentVersionHistory.GetBranchToken()
+	}
+	branchInfo := persistenceblobs.HistoryBranch{}
+	err = branchInfo.Unmarshal(currentBranchToken)
 	if err != nil {
-		return nil, err
+		response.TreeId = err.Error()
+		return response, nil
 	}
+
+	response.TreeId = branchInfo.TreeId
+	response.BranchId = branchInfo.BranchId
 
 	return response, nil
-}
-
-func (e *historyEngineImpl) toMutableStateJSON(msb mutableState) (string, error) {
-	ms := msb.CopyToPersistence()
-
-	jsonBytes, err := json.Marshal(ms)
-	if err != nil {
-		return "", err
-	}
-	return string(jsonBytes), nil
 }
 
 // ResetStickyTaskQueue reset the volatile information in mutable state of a given workflow.
