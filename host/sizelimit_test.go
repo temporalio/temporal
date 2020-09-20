@@ -45,7 +45,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -197,8 +196,11 @@ SignalLoop:
 			break SignalLoop
 		}
 	}
-	s.EqualError(signalErr, common.FailureReasonSizeExceedsLimit)
-	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
+	// Signalling workflow should result in force terminating the workflow execution and returns with ResourceExhausted
+	// error.  ResourceExhaused is retried by the client and eventually results in NotFound error returned back to the
+	// caller as workflow execution is no longer running.
+	s.EqualError(signalErr, "workflow execution already completed")
+	s.IsType(&serviceerror.NotFound{}, signalErr)
 
 	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,

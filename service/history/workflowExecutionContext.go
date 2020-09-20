@@ -592,8 +592,9 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionAsActive(
 	}
 
 	if forceTerminate {
-		// Returning an error which should be not be retried in most of the cases
-		// Caller can explicitly check for this error if they need to special case on force termination of workflow
+		// Returns ResourceExhausted error back to caller after workflow execution is forced terminated
+		// Retrying the operation will give appropriate semantics operation should expect in the case of workflow
+		// execution being closed.
 		return ErrSizeExceedsLimit
 	}
 
