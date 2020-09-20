@@ -138,24 +138,6 @@ func (c *metricClient) DescribeWorkflowExecution(
 	return resp, err
 }
 
-func (c *metricClient) GetWorkflowExecutionRawHistory(
-	ctx context.Context,
-	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientGetWorkflowExecutionRawHistoryScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientGetWorkflowExecutionRawHistoryScope, metrics.ClientLatency)
-	resp, err := c.client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientGetWorkflowExecutionRawHistoryScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
 func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,

@@ -259,7 +259,6 @@ message WorkflowExecutionInfo {
     google.protobuf.Duration workflow_run_timeout = 12 [(gogoproto.stdduration) = true];
     google.protobuf.Duration default_workflow_task_timeout = 13 [(gogoproto.stdduration) = true];
     int64 start_version = 14;
-    ReplicationData replication_data = 16;
     int64 last_event_task_id = 17;
     int64 last_first_event_id = 18;
     int64 last_processed_event = 19;
@@ -357,14 +356,6 @@ message NamespaceConfig {
     string history_archival_uri = 5;
     temporal.api.enums.v1.ArchivalState visibility_archival_state = 6;
     string visibility_archival_uri = 7;
-}
-
-// ReplicationData represents mutable state information for global namespaces.
-// This information is used by replication protocol when applying events from remote clusters
-// only used in cassandra
-message ReplicationData {
-    int64 last_write_event_id = 1;
-    map<string, temporal.server.api.replication.v1.ReplicationInfo> last_replication_info = 2;
 }
 
 message ReplicationVersions {

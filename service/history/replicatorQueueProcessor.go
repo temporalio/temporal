@@ -392,19 +392,6 @@ func PaginateHistory(
 	return historyEvents, historyBatches, tokenOut, historySize, nil
 }
 
-// TODO deprecate when 3+DC is released
-func convertLastReplicationInfo(info map[string]*replicationspb.ReplicationInfo) map[string]*replicationspb.ReplicationInfo {
-	replicationInfoMap := make(map[string]*replicationspb.ReplicationInfo)
-	for k, v := range info {
-		replicationInfoMap[k] = &replicationspb.ReplicationInfo{
-			Version:     v.Version,
-			LastEventId: v.LastEventId,
-		}
-	}
-
-	return replicationInfoMap
-}
-
 // TODO: when kafka deprecation is finished, delete all logic above
 //  and move logic below to dedicated replicationTaskAckMgr
 

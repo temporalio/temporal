@@ -48,7 +48,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/cluster"
@@ -141,10 +140,10 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 				NextEventId:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionState: &persistenceblobs.WorkflowExecutionState{
-					RunId:                      runID,
-					CreateRequestId:            uuid.New(),
-					State:  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					RunId:           runID,
+					CreateRequestId: uuid.New(),
+					State:           enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+					Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
 			},
 			ExecutionStats: &persistenceblobs.ExecutionStats{},
@@ -212,8 +211,8 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 				LastFirstEventId:           common.FirstEventID,
 				NextEventId:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
-				ExecutionState:                     &persistenceblobs.WorkflowExecutionState{
-					CreateRequestId:            uuid.New(),
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{
+					CreateRequestId: uuid.New(),
 				},
 			},
 			ExecutionStats: &persistenceblobs.ExecutionStats{},
@@ -334,10 +333,10 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 				NextEventId:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionState: &persistenceblobs.WorkflowExecutionState{
-					RunId:                      workflowExecutionZombie1.GetRunId(),
-					CreateRequestId:            uuid.New(),
-					State: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
-					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					RunId:           workflowExecutionZombie1.GetRunId(),
+					CreateRequestId: uuid.New(),
+					State:           enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+					Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
 			},
 			ExecutionStats: &persistenceblobs.ExecutionStats{},
@@ -421,9 +420,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 				LastFirstEventId:           common.FirstEventID,
 				NextEventId:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
-				ExecutionState:                     &persistenceblobs.WorkflowExecutionState{
-					RunId:                      workflowExecution.GetRunId(),
-					CreateRequestId:            uuid.New(),
+				ExecutionState: &persistenceblobs.WorkflowExecutionState{
+					RunId:           workflowExecution.GetRunId(),
+					CreateRequestId: uuid.New(),
 				},
 			},
 			ExecutionStats: &persistenceblobs.ExecutionStats{},
@@ -597,10 +596,10 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 				NextEventId:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionState: &persistenceblobs.WorkflowExecutionState{
-					RunId:                      workflowExecution.GetRunId(),
-					CreateRequestId:            uuid.New(),
-					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					RunId:           workflowExecution.GetRunId(),
+					CreateRequestId: uuid.New(),
+					State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
 			},
 			ExecutionStats: &persistenceblobs.ExecutionStats{},
@@ -725,10 +724,10 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				ExecutionState: &persistenceblobs.WorkflowExecutionState{
-					RunId:                      workflowExecution.GetRunId(),
-					CreateRequestId:            uuid.New(),
-					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					RunId:           workflowExecution.GetRunId(),
+					CreateRequestId: uuid.New(),
+					State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
 				LastFirstEventId:   common.FirstEventID,
 				NextEventId:        nextEventID,
@@ -801,10 +800,10 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				ExecutionState: &persistenceblobs.WorkflowExecutionState{
-					RunId:                      newExecution.GetRunId(),
-					CreateRequestId:            uuid.New(),
-					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					RunId:           newExecution.GetRunId(),
+					CreateRequestId: uuid.New(),
+					State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
 				LastFirstEventId:   common.FirstEventID,
 				NextEventId:        nextEventID,
@@ -909,10 +908,10 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 				WorkflowRunTimeout:         timestamp.DurationFromSeconds(20),
 				DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(13),
 				ExecutionState: &persistenceblobs.WorkflowExecutionState{
-					RunId:                      workflowExecution.GetRunId(),
-					CreateRequestId:            uuid.New(),
-					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					RunId:           workflowExecution.GetRunId(),
+					CreateRequestId: uuid.New(),
+					State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
 				LastFirstEventId:       common.FirstEventID,
 				NextEventId:            int64(3),
@@ -984,10 +983,10 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				WorkflowRunTimeout:         timestamp.DurationFromSeconds(int64(rand.Int31())),
 				DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(int64(rand.Int31())),
 				ExecutionState: &persistenceblobs.WorkflowExecutionState{
-					RunId:                      uuid.New(),
-					CreateRequestId:            uuid.New(),
-					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					RunId:           uuid.New(),
+					CreateRequestId: uuid.New(),
+					State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
 				LastFirstEventId:            common.FirstEventID,
 				NextEventId:                 rand.Int63(),
@@ -3130,11 +3129,4 @@ func timeComparatorGo(t1, t2 time.Time, timeTolerance time.Duration) bool {
 		return true
 	}
 	return false
-}
-
-func copyReplicationInfo(sourceInfo *replicationspb.ReplicationInfo) *replicationspb.ReplicationInfo {
-	return &replicationspb.ReplicationInfo{
-		Version:     sourceInfo.Version,
-		LastEventId: sourceInfo.LastEventId,
-	}
 }

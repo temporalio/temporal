@@ -87,7 +87,6 @@ message GetMutableStateResponse {
     google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11 [(gogoproto.stdduration) = true];
     int32 event_store_version = 12;
     bytes current_branch_token = 13;
-    map<string, temporal.server.api.replication.v1.ReplicationInfo> replication_info = 14;
     temporal.server.api.enums.v1.WorkflowExecutionState workflow_state = 15;
     temporal.api.enums.v1.WorkflowExecutionStatus workflow_status = 16;
     temporal.server.api.history.v1.VersionHistories version_histories = 17;
@@ -116,7 +115,6 @@ message PollMutableStateResponse {
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11 [(gogoproto.stdduration) = true];
     bytes current_branch_token = 12;
-    map<string, temporal.server.api.replication.v1.ReplicationInfo> replication_info = 13;
     temporal.server.api.history.v1.VersionHistories version_histories = 14;
     temporal.server.api.enums.v1.WorkflowExecutionState workflow_state = 15;
     temporal.api.enums.v1.WorkflowExecutionStatus workflow_status = 16;

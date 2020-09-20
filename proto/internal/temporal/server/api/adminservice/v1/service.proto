@@ -44,11 +44,6 @@ service AdminService {
 
     // Returns the raw history of specified workflow execution.  It fails with 'NotFound' if specified workflow
     // execution in unknown to the service.
-    rpc GetWorkflowExecutionRawHistory (GetWorkflowExecutionRawHistoryRequest) returns (GetWorkflowExecutionRawHistoryResponse) {
-    }
-
-    // Returns the raw history of specified workflow execution.  It fails with 'NotFound' if specified workflow
-    // execution in unknown to the service.
     // StartEventId defines the beginning of the event to fetch. The first event is inclusive.
     // EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
     rpc GetWorkflowExecutionRawHistoryV2 (GetWorkflowExecutionRawHistoryV2Request) returns (GetWorkflowExecutionRawHistoryV2Response) {

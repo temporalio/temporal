@@ -663,13 +663,13 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	// this function poll events from history side
 	pageSize := 1
 	getHistory := func(namespace string, execution *commonpb.WorkflowExecution, firstEventID int64, nextEventID int64,
-		token []byte) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
+		token []byte) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 
-		return s.adminClient.GetWorkflowExecutionRawHistory(NewContext(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
+		return s.adminClient.GetWorkflowExecutionRawHistoryV2(NewContext(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace:       namespace,
 			Execution:       execution,
-			FirstEventId:    firstEventID,
-			NextEventId:     nextEventID,
+			StartEventId:    firstEventID,
+			EndEventId:      nextEventID,
 			MaximumPageSize: int32(pageSize),
 			NextPageToken:   token,
 		})
@@ -876,13 +876,13 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	}
 
 	getHistory := func(namespace string, execution *commonpb.WorkflowExecution, firstEventID int64, nextEventID int64,
-		token []byte) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
+		token []byte) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 
-		return s.adminClient.GetWorkflowExecutionRawHistory(NewContext(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
+		return s.adminClient.GetWorkflowExecutionRawHistoryV2(NewContext(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace:       namespace,
 			Execution:       execution,
-			FirstEventId:    firstEventID,
-			NextEventId:     nextEventID,
+			StartEventId:    firstEventID,
+			EndEventId:      nextEventID,
 			MaximumPageSize: 1,
 			NextPageToken:   token,
 		})
