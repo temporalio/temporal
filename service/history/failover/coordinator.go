@@ -265,13 +265,13 @@ func (c *coordinatorImpl) handleFailoverMarkers(
 		); err != nil {
 			c.logger.Error("Coordinator failed to update domain after receiving all failover markers",
 				tag.WorkflowDomainID(domainID))
-			c.metrics.IncCounter(metrics.DomainFailoverScope, metrics.CadenceFailures)
+			c.metrics.IncCounter(metrics.FailoverMarkerScope, metrics.GracefulFailoverFailure)
 			return
 		}
 		delete(c.recorder, domainID)
 		now := c.timeSource.Now()
 		c.metrics.Scope(
-			metrics.HistoryFailoverMarkerScope,
+			metrics.FailoverMarkerScope,
 		).RecordTimer(
 			metrics.GracefulFailoverLatency,
 			now.Sub(time.Unix(0, marker.GetCreationTime())),
@@ -310,6 +310,7 @@ func (c *coordinatorImpl) notifyRemoteCoordinator(
 				FailoverMarkerTokens: tokens,
 			},
 		); err != nil {
+			c.metrics.IncCounter(metrics.FailoverMarkerScope, metrics.FailoverMarkerNotificationFailure)
 			c.logger.Error("Failed to notify failover markers", tag.Error(err))
 		}
 

@@ -1006,8 +1006,8 @@ const (
 	ReplicationTaskCleanupScope
 	// ReplicationDLQStatsScope is scope used by all metrics emitted related to replication DLQ
 	ReplicationDLQStatsScope
-	// HistoryFailoverMarkerScope is scope used by all metrics emitted related to failover marker
-	HistoryFailoverMarkerScope
+	// FailoverMarkerScope is scope used by all metrics emitted related to failover marker
+	FailoverMarkerScope
 
 	NumHistoryScopes
 )
@@ -1531,7 +1531,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ReplicationTaskFetcherScope:                            {operation: "ReplicationTaskFetcher"},
 		ReplicationTaskCleanupScope:                            {operation: "ReplicationTaskCleanup"},
 		ReplicationDLQStatsScope:                               {operation: "ReplicationDLQStats"},
-		HistoryFailoverMarkerScope:                             {operation: "FailoverMarker"},
+		FailoverMarkerScope:                                    {operation: "FailoverMarker"},
 	},
 	// Matching Scope Names
 	Matching: {
@@ -1667,8 +1667,6 @@ const (
 	HistoryArchiverRunningBlobIntegrityCheckCount
 	HistoryArchiverBlobIntegrityCheckFailedCount
 	HistoryArchiverDuplicateArchivalsCount
-
-	HistoryFailoverMarkerInsertFailure
 
 	VisibilityArchiverArchiveNonRetryableErrorCount
 	VisibilityArchiverArchiveTransientErrorCount
@@ -1904,7 +1902,11 @@ const (
 	MutableStateChecksumMismatch
 	MutableStateChecksumInvalidated
 	GracefulFailoverLatency
+	GracefulFailoverFailure
 	FailoverMarkerReplicationLatency
+	FailoverMarkerInsertFailure
+	FailoverMarkerNotificationFailure
+	FailoverMarkerUpdateShardFailure
 
 	NumHistoryMetrics
 )
@@ -2098,7 +2100,6 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryArchiverRunningBlobIntegrityCheckCount:             {metricName: "history_archiver_running_blob_integrity_check", metricType: Counter},
 		HistoryArchiverBlobIntegrityCheckFailedCount:              {metricName: "history_archiver_blob_integrity_check_failed", metricType: Counter},
 		HistoryArchiverDuplicateArchivalsCount:                    {metricName: "history_archiver_duplicate_archivals", metricType: Counter},
-		HistoryFailoverMarkerInsertFailure:                        {metricName: "history_failover_marker_insert_failures", metricType: Counter},
 		VisibilityArchiverArchiveNonRetryableErrorCount:           {metricName: "visibility_archiver_archive_non_retryable_error", metricType: Counter},
 		VisibilityArchiverArchiveTransientErrorCount:              {metricName: "visibility_archiver_archive_transient_error", metricType: Counter},
 		VisibilityArchiveSuccessCount:                             {metricName: "visibility_archiver_archive_success", metricType: Counter},
@@ -2368,7 +2369,11 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		MutableStateChecksumMismatch:                      {metricName: "mutable_state_checksum_mismatch", metricType: Counter},
 		MutableStateChecksumInvalidated:                   {metricName: "mutable_state_checksum_invalidated", metricType: Counter},
 		GracefulFailoverLatency:                           {metricName: "graceful_failover_latency", metricType: Timer},
+		GracefulFailoverFailure:                           {metricName: "graceful_failover_failures", metricType: Counter},
 		FailoverMarkerReplicationLatency:                  {metricName: "failover_marker_replication_latency", metricType: Timer},
+		FailoverMarkerInsertFailure:                       {metricName: "failover_marker_insert_failures", metricType: Counter},
+		FailoverMarkerNotificationFailure:                 {metricName: "failover_marker_notification_failures", metricType: Counter},
+		FailoverMarkerUpdateShardFailure:                  {metricName: "failover_marker_update_shard_failures", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessPerTaskListCounter:            {metricName: "poll_success_per_tl", metricRollupName: "poll_success"},

@@ -525,7 +525,7 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 					failoverMarkerTasks,
 				); err != nil {
 					e.logger.Error("Failed to insert failover marker to replication queue.", tag.Error(err))
-					e.metricsClient.IncCounter(metrics.HistoryFailoverMarkerScope, metrics.HistoryFailoverMarkerInsertFailure)
+					e.metricsClient.IncCounter(metrics.FailoverMarkerScope, metrics.FailoverMarkerInsertFailure)
 					// fail this failover callback and it retries on next domain cache refresh
 					return
 				}

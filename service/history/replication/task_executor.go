@@ -110,7 +110,7 @@ func (e *taskExecutorImpl) execute(
 		scope = metrics.HistoryReplicationV2TaskScope
 		err = e.handleHistoryReplicationTaskV2(replicationTask, forceApply)
 	case r.ReplicationTaskTypeFailoverMarker:
-		scope = metrics.HistoryFailoverMarkerScope
+		scope = metrics.FailoverMarkerScope
 		err = e.handleFailoverReplicationTask(replicationTask)
 	default:
 		e.logger.Error("Unknown task type.")
@@ -358,7 +358,7 @@ func (e *taskExecutorImpl) handleFailoverReplicationTask(
 	failoverAttributes := task.GetFailoverMarkerAttributes()
 	now := e.shard.GetTimeSource().Now()
 	e.metricsClient.Scope(
-		metrics.HistoryFailoverMarkerScope,
+		metrics.FailoverMarkerScope,
 	).RecordTimer(
 		metrics.FailoverMarkerReplicationLatency,
 		now.Sub(time.Unix(0, failoverAttributes.GetCreationTime())),

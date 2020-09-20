@@ -454,6 +454,7 @@ func (d *HandlerImpl) UpdateDomain(
 		}
 		endTime := time.Now().UTC().Add(time.Duration(updateRequest.GetFailoverTimeoutInSeconds()) * time.Second).UnixNano()
 		gracefulFailoverEndTime = &endTime
+		previousFailoverVersion = failoverVersion
 	}
 
 	configurationChanged = historyArchivalConfigChanged || visibilityArchivalConfigChanged || domainInfoChanged || domainConfigChanged || deleteBinaryChanged || replicationConfigChanged
@@ -494,8 +495,8 @@ func (d *HandlerImpl) UpdateDomain(
 			if !updateRequest.IsSetFailoverTimeoutInSeconds() {
 				// force failover cleanup graceful failover state
 				gracefulFailoverEndTime = nil
+				previousFailoverVersion = common.InitialPreviousFailoverVersion
 			}
-			previousFailoverVersion = failoverVersion
 			failoverVersion = d.clusterMetadata.GetNextFailoverVersion(
 				replicationConfig.ActiveClusterName,
 				failoverVersion,

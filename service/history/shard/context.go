@@ -1460,7 +1460,7 @@ func (s *contextImpl) AddingPendingFailoverMarker(
 
 	s.pendingFailoverMarkers = append(s.pendingFailoverMarkers, marker)
 	if err := s.updateFailoverMarkersInShardInfoLocked(); err != nil {
-		s.logger.Error("Failed to add failover marker.", tag.Error(err))
+		s.logger.Error("Failed to add failover marker.", tag.Error(err), tag.WorkflowDomainName(domainEntry.GetInfo().Name))
 		return err
 	}
 	return s.forceUpdateShardInfoLocked()
