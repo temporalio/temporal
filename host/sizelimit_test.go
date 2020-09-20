@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -44,6 +45,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -153,19 +155,55 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	}
 
 	for i := int32(0); i < activityCount-1; i++ {
-		_, err := poller.PollAndProcessWorkflowTask(false, false)
-		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+		dwResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: id,
+				RunId:      we.RunId,
+			},
+		})
 		s.NoError(err)
 
-		err = poller.PollAndProcessActivityTask(false)
-		s.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
-		s.NoError(err)
+		// Poll workflow task only if it is running
+		if dwResp.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			_, err := poller.PollAndProcessWorkflowTask(false, false)
+			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+			s.NoError(err)
+
+			err = poller.PollAndProcessActivityTask(false)
+			s.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
+			s.NoError(err)
+		}
 	}
 
-	// process this workflow task will trigger history exceed limit error
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	s.NoError(err)
+	var signalErr error
+	// Send signals until workflow is force terminated
+SignalLoop:
+	for i := 0; i < 10; i++ {
+		// Send another signal without RunID
+		signalName := "another signal"
+		signalInput := payloads.EncodeString("another signal input")
+		_, signalErr = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+			Namespace: s.namespace,
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: id,
+			},
+			SignalName: signalName,
+			Input:      signalInput,
+			Identity:   identity,
+		})
+
+		if signalErr != nil {
+			break SignalLoop
+		}
+	}
+	s.EqualError(signalErr, common.FailureReasonSizeExceedsLimit)
+	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
+
+	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      we.GetRunId(),
+	})
 
 	// verify last event is terminated event
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -178,9 +216,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	s.NoError(err)
 	history := historyResponse.History
 	lastEvent := history.Events[len(history.Events)-1]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, lastEvent.GetEventType())
-	failedEventAttributes := lastEvent.GetWorkflowExecutionFailedEventAttributes()
-	s.True(failedEventAttributes.GetFailure().GetServerFailureInfo().GetNonRetryable())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
 
 	// verify visibility is correctly processed from open to close
 	isCloseCorrect := false

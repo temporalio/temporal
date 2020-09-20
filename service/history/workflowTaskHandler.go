@@ -124,15 +124,9 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 	commands []*commandpb.Command,
 ) error {
 
-	// overall workflow size / count check
-	failWorkflow, err := handler.sizeLimitChecker.failWorkflowSizeExceedsLimit()
-	if err != nil || failWorkflow {
-		return err
-	}
-
 	for _, command := range commands {
 
-		err = handler.handleCommand(command)
+		err := handler.handleCommand(command)
 		if err != nil || handler.stopProcessing {
 			return err
 		}
