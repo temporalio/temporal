@@ -87,22 +87,6 @@ message RemoveTaskRequest {
 message RemoveTaskResponse {
 }
 
-message GetWorkflowExecutionRawHistoryRequest {
-    string namespace = 1;
-    temporal.api.common.v1.WorkflowExecution execution = 2;
-    int64 first_event_id = 3;
-    int64 next_event_id = 4;
-    int32 maximum_page_size = 5;
-    bytes next_page_token = 6;
-}
-
-message GetWorkflowExecutionRawHistoryResponse {
-    bytes next_page_token = 1;
-    repeated temporal.api.common.v1.DataBlob history_batches = 2;
-    map<string, temporal.server.api.replication.v1.ReplicationInfo> replication_info = 3;
-    int32 event_store_version = 4;
-}
-
 /**
   * StartEventId defines the beginning of the event to fetch. The first event is exclusive.
   * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.

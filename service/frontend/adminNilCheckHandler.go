@@ -90,15 +90,6 @@ func (adh *AdminNilCheckHandler) RemoveTask(ctx context.Context, request *admins
 	return resp, err
 }
 
-// GetWorkflowExecutionRawHistory ...
-func (adh *AdminNilCheckHandler) GetWorkflowExecutionRawHistory(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryRequest) (_ *adminservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
-	resp, err := adh.parentHandler.GetWorkflowExecutionRawHistory(ctx, request)
-	if resp == nil && err == nil {
-		resp = &adminservice.GetWorkflowExecutionRawHistoryResponse{}
-	}
-	return resp, err
-}
-
 // GetWorkflowExecutionRawHistoryV2 ...
 func (adh *AdminNilCheckHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryV2Request) (_ *adminservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
 	resp, err := adh.parentHandler.GetWorkflowExecutionRawHistoryV2(ctx, request)

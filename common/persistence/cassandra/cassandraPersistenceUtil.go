@@ -36,7 +36,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/checksum"
 	p "go.temporal.io/server/common/persistence"
@@ -1544,34 +1543,6 @@ func createHistoryEventBatchBlob(
 	}
 
 	return eventBatch
-}
-
-func createReplicationInfo(
-	result map[string]interface{},
-) *replicationspb.ReplicationInfo {
-
-	info := &replicationspb.ReplicationInfo{}
-	for k, v := range result {
-		switch k {
-		case "version":
-			info.Version = v.(int64)
-		case "last_event_id":
-			info.LastEventId = v.(int64)
-		}
-	}
-
-	return info
-}
-
-func createReplicationInfoMap(
-	info *replicationspb.ReplicationInfo,
-) map[string]interface{} {
-
-	rInfoMap := make(map[string]interface{})
-	rInfoMap["version"] = info.Version
-	rInfoMap["last_event_id"] = info.LastEventId
-
-	return rInfoMap
 }
 
 func isTimeoutError(err error) bool {

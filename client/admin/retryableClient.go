@@ -130,22 +130,6 @@ func (c *retryableClient) DescribeWorkflowExecution(
 	return resp, err
 }
 
-func (c *retryableClient) GetWorkflowExecutionRawHistory(
-	ctx context.Context,
-	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
-
-	var resp *adminservice.GetWorkflowExecutionRawHistoryResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) GetWorkflowExecutionRawHistoryV2(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,

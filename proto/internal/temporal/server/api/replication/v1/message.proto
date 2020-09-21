@@ -38,11 +38,6 @@ import "temporal/api/replication/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
 
-message ReplicationInfo {
-    int64 version = 1;
-    int64 last_event_id = 2;
-}
-
 message ReplicationTask {
     temporal.server.api.enums.v1.ReplicationTaskType task_type = 1;
     int64 source_task_id = 2;
@@ -110,9 +105,13 @@ message HistoryTaskAttributes {
     int64 first_event_id = 5;
     int64 next_event_id = 6;
     int64 version = 7;
+    reserved 8;
     temporal.api.history.v1.History history = 9;
     temporal.api.history.v1.History new_run_history = 10;
+    reserved 11;
     int32 new_run_event_store_version = 12;
+    reserved 13;
+    reserved 14;
 }
 
 message HistoryMetadataTaskAttributes {
