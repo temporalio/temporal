@@ -138,6 +138,7 @@ type (
 		logger            log.Logger
 		metricsClient     metrics.Client
 		timeSource        clock.TimeSource
+		config            *Config
 
 		mutex           locks.Mutex
 		mutableState    mutableState
@@ -168,6 +169,7 @@ func newWorkflowExecutionContext(
 		logger:            logger,
 		metricsClient:     shard.GetMetricsClient(),
 		timeSource:        shard.GetTimeSource(),
+		config:            shard.GetConfig(),
 		mutex:             locks.NewMutex(),
 		stats: &persistenceblobs.ExecutionStats{
 			HistorySize: 0,
@@ -572,14 +574,31 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionAsActive(
 	now time.Time,
 ) error {
 
-	return c.updateWorkflowExecutionWithNew(
+	// We only perform this check on active cluster for the namespace
+	forceTerminate, err := c.enforceSizeCheck()
+	if err != nil {
+		return err
+	}
+
+	if err := c.updateWorkflowExecutionWithNew(
 		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		nil,
 		nil,
 		transactionPolicyActive,
 		nil,
-	)
+	); err != nil {
+		return err
+	}
+
+	if forceTerminate {
+		// Returns ResourceExhausted error back to caller after workflow execution is forced terminated
+		// Retrying the operation will give appropriate semantics operation should expect in the case of workflow
+		// execution being closed.
+		return ErrSizeExceedsLimit
+	}
+
+	return nil
 }
 
 func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNewAsActive(
@@ -1145,4 +1164,63 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	)
 
 	return err
+}
+
+// Returns true if execution is forced terminated
+func (c *workflowExecutionContextImpl) enforceSizeCheck() (bool, error) {
+	historySizeLimitWarn := c.config.HistorySizeLimitWarn(c.getNamespace())
+	historySizeLimitError := c.config.HistorySizeLimitError(c.getNamespace())
+	historyCountLimitWarn := c.config.HistoryCountLimitWarn(c.getNamespace())
+	historyCountLimitError := c.config.HistoryCountLimitError(c.getNamespace())
+
+	historySize := int(c.stats.HistorySize)
+	historyCount := int(c.mutableState.GetNextEventID() - 1)
+
+	// Hard terminate workflow if still running and breached size or count limit
+	if (historySize > historySizeLimitError || historyCount > historyCountLimitError) &&
+		c.mutableState.IsWorkflowExecutionRunning() {
+		c.logger.Error("history size exceeds error limit.",
+			tag.WorkflowNamespaceID(c.namespaceID),
+			tag.WorkflowID(c.workflowExecution.GetWorkflowId()),
+			tag.WorkflowRunID(c.workflowExecution.GetRunId()),
+			tag.WorkflowHistorySize(historySize),
+			tag.WorkflowEventCount(historyCount))
+
+		// Discard pending changes in mutableState so we can apply terminate state transition
+		c.clear()
+
+		// Reload mutable state
+		mutableState, err := c.loadWorkflowExecution()
+		if err != nil {
+			return false, err
+		}
+
+		// Terminate workflow is written as a separate batch and might result in more than one event as we close the
+		// outstanding workflow task before terminating the workflow
+		eventBatchFirstEventID := mutableState.GetNextEventID()
+		if err := terminateWorkflow(
+			mutableState,
+			eventBatchFirstEventID,
+			common.FailureReasonSizeExceedsLimit,
+			nil,
+			identityHistoryService,
+		); err != nil {
+			return false, err
+		}
+
+		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
+		return true, nil
+	}
+
+	if historySize > historySizeLimitWarn || historyCount > historyCountLimitWarn {
+		executionInfo := c.mutableState.GetExecutionInfo()
+		c.logger.Warn("history size exceeds warn limit.",
+			tag.WorkflowNamespaceID(executionInfo.NamespaceId),
+			tag.WorkflowID(executionInfo.WorkflowId),
+			tag.WorkflowRunID(executionInfo.ExecutionState.RunId),
+			tag.WorkflowHistorySize(historySize),
+			tag.WorkflowEventCount(historyCount))
+	}
+
+	return false, nil
 }

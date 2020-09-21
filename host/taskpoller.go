@@ -152,6 +152,10 @@ Loop:
 			Identity:  p.Identity,
 		})
 
+		if common.IsServiceNonRetryableError(err1) {
+			return false, nil, err1
+		}
+
 		if err1 == history.ErrDuplicate {
 			p.Logger.Info("Duplicate Workflow task: Polling again")
 			continue Loop
