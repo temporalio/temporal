@@ -164,43 +164,6 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 	return true, nil
 }
 
-func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
-	historyCount := int(c.mutableState.GetNextEventID()) - 1
-	historySize := int(c.executionStats.HistorySize)
-
-	if historySize > c.historySizeLimitError || historyCount > c.historyCountLimitError {
-		executionInfo := c.mutableState.GetExecutionInfo()
-		c.logger.Error("history size exceeds error limit.",
-			tag.WorkflowNamespaceID(executionInfo.NamespaceId),
-			tag.WorkflowID(executionInfo.WorkflowId),
-			tag.WorkflowRunID(executionInfo.ExecutionState.RunId),
-			tag.WorkflowHistorySize(historySize),
-			tag.WorkflowEventCount(historyCount))
-
-		attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
-			Failure: failure.NewServerFailure(common.FailureReasonSizeExceedsLimit, true),
-		}
-
-		if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes); err != nil {
-			return false, err
-		}
-		return true, nil
-	}
-
-	if historySize > c.historySizeLimitWarn || historyCount > c.historyCountLimitWarn {
-		executionInfo := c.mutableState.GetExecutionInfo()
-		c.logger.Warn("history size exceeds warn limit.",
-			tag.WorkflowNamespaceID(executionInfo.NamespaceId),
-			tag.WorkflowID(executionInfo.WorkflowId),
-			tag.WorkflowRunID(executionInfo.ExecutionState.RunId),
-			tag.WorkflowHistorySize(historySize),
-			tag.WorkflowEventCount(historyCount))
-		return false, nil
-	}
-
-	return false, nil
-}
-
 func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	namespaceID string,
 	targetNamespaceID string,
