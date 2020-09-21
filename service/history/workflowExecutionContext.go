@@ -1189,7 +1189,7 @@ func (c *workflowExecutionContextImpl) enforceSizeCheck() (bool, error) {
 		// Discard pending changes in mutableState so we can apply terminate state transition
 		c.clear()
 
-		// Reload muutable state
+		// Reload mutable state
 		mutableState, err := c.loadWorkflowExecution()
 		if err != nil {
 			return false, err
@@ -1208,7 +1208,7 @@ func (c *workflowExecutionContextImpl) enforceSizeCheck() (bool, error) {
 			return false, err
 		}
 
-		// Return true to caller to indicate workflow is forced terminated
+		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
 		return true, nil
 	}
 

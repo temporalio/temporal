@@ -197,7 +197,7 @@ SignalLoop:
 		}
 	}
 	// Signalling workflow should result in force terminating the workflow execution and returns with ResourceExhausted
-	// error.  ResourceExhaused is retried by the client and eventually results in NotFound error returned back to the
+	// error.  ResourceExhausted is retried by the client and eventually results in NotFound error returned back to the
 	// caller as workflow execution is no longer running.
 	s.EqualError(signalErr, "workflow execution already completed")
 	s.IsType(&serviceerror.NotFound{}, signalErr)
