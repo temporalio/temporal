@@ -1,7 +1,7 @@
 build:
   roots:
-    - proto/internal
-    - proto/api
+    - internal
+    - api
 lint:
   ignore:
     - temporal/api # from `api` root: do not lint public api
