@@ -12,15 +12,11 @@
 /*.iml
 *.cov
 *.html
-test
-test.log
-test_xdc
-test_xdc.log
-test_eventsV2
-test_eventsV2.log
-test_eventsV2_xdc
-test_eventsV2_xdc.log
+/test.log
 
 # Executables produced by temporal repo
 /temporal*
-/tctl
+/tctl*
+
+# Buf proto image
+/proto/image.bin

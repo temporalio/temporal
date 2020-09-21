@@ -12,10 +12,10 @@ all: update-tools clean proto bins check test
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto install-proto-submodule buf api-linter protoc fix-proto-path proto-mock goimports-proto copyright-proto
+proto: clean-proto install-proto-submodule buf-lint api-linter protoc fix-proto-path proto-mock goimports-proto copyright-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule buf api-linter protoc fix-proto-path update-go-api proto-mock goimports-proto copyright-proto gomodtidy
+update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-proto-path update-go-api proto-mock goimports-proto copyright-proto gomodtidy
 
 # Build all docker images.
 docker-images:
@@ -230,16 +230,20 @@ errcheck:
 	@errcheck ./... || true
 
 api-linter:
-	@printf $(COLOR) "Running api-linter..."
+	@printf $(COLOR) "Run api-linter..."
 	@api-linter --set-exit-status --output-format=summary $(PROTO_IMPORTS) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES)
 
-buf:
-	@printf $(COLOR) "Running buf linter..."
-	@buf check lint
+buf-lint:
+	@printf $(COLOR) "Run buf linter..."
+	@(cd $(PROTO_ROOT) && buf check lint)
+
+buf-build:
+	@printf $(COLOR) "Build image.bin with buf..."
+	@(cd $(PROTO_ROOT) && buf image build -o image.bin)
 
 buf-breaking:
-	@printf $(COLOR) "Running buf breaking changes check against master branch..."
-	@buf check breaking --against-input '.git#branch=master'
+	@printf $(COLOR) "Run buf breaking changes check against image.bin..."
+	@(cd $(PROTO_ROOT) && buf check breaking --against-input image.bin)
 
 check: copyright goimports-check lint vet staticcheck errcheck
 
