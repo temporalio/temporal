@@ -11,3 +11,6 @@ lint:
   except:
     - PACKAGE_SAME_JAVA_MULTIPLE_FILES
     - PACKAGE_SAME_JAVA_PACKAGE
+breaking:
+  use:
+    - WIRE
