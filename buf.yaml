@@ -1,7 +1,7 @@
 build:
   roots:
-    - internal
-    - api
+    - proto/internal
+    - proto/api
 lint:
   ignore:
     - temporal/api # from `api` root: do not lint public api
@@ -11,3 +11,6 @@ lint:
   except:
     - PACKAGE_SAME_JAVA_MULTIPLE_FILES
     - PACKAGE_SAME_JAVA_PACKAGE
+breaking:
+  use:
+    - WIRE

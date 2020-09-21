@@ -235,7 +235,11 @@ api-linter:
 
 buf:
 	@printf $(COLOR) "Running buf linter..."
-	@(cd $(PROTO_ROOT) && buf check lint)
+	@buf check lint
+
+buf-breaking:
+	@printf $(COLOR) "Running buf breaking changes check against master branch..."
+	@buf check breaking --against-input '.git#branch=master'
 
 check: copyright goimports-check lint vet staticcheck errcheck
 
