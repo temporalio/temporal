@@ -195,7 +195,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	request *UpdateWorkflowExecutionRequest,
 ) (*UpdateWorkflowExecutionResponse, error) {
 
-	serializedWorkflowMutation, err := m.SerializeWorkflowMutation(&request.UpdateWorkflowMutation, request.Encoding)
+	serializedWorkflowMutation, err := m.SerializeWorkflowMutation(&request.UpdateWorkflowMutation)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +297,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	}
 	var serializedCurrentWorkflowMutation *InternalWorkflowMutation
 	if request.CurrentWorkflowMutation != nil {
-		serializedCurrentWorkflowMutation, err = m.SerializeWorkflowMutation(request.CurrentWorkflowMutation, request.Encoding)
+		serializedCurrentWorkflowMutation, err = m.SerializeWorkflowMutation(request.CurrentWorkflowMutation)
 		if err != nil {
 			return err
 		}
@@ -342,7 +342,7 @@ func (m *executionManagerImpl) ResetWorkflowExecution(
 	}
 	var serializedUpdateWorkflowSnapshot *InternalWorkflowMutation
 	if request.CurrentWorkflowMutation != nil {
-		serializedUpdateWorkflowSnapshot, err = m.SerializeWorkflowMutation(request.CurrentWorkflowMutation, request.Encoding)
+		serializedUpdateWorkflowSnapshot, err = m.SerializeWorkflowMutation(request.CurrentWorkflowMutation)
 		if err != nil {
 			return err
 		}
@@ -389,7 +389,6 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 
 func (m *executionManagerImpl) SerializeWorkflowMutation(
 	input *WorkflowMutation,
-	encoding enumspb.EncodingType,
 ) (*InternalWorkflowMutation, error) {
 
 	serializedExecutionInfo, err := m.SerializeExecutionInfo(
@@ -402,7 +401,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 
 	var serializedNewBufferedEvents *serialization.DataBlob
 	if len(input.NewBufferedEvents) > 0 {
-		serializedNewBufferedEvents, err = m.serializer.SerializeBatchEvents(input.NewBufferedEvents, encoding)
+		serializedNewBufferedEvents, err = m.serializer.SerializeBatchEvents(input.NewBufferedEvents, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return nil, err
 		}
@@ -492,13 +491,12 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 
 func (m *executionManagerImpl) SerializeVersionHistories(
 	versionHistories *VersionHistories,
-	encoding enumspb.EncodingType,
 ) (*serialization.DataBlob, error) {
 
 	if versionHistories == nil {
 		return nil, nil
 	}
-	return m.serializer.SerializeVersionHistories(versionHistories.ToProto(), encoding)
+	return m.serializer.SerializeVersionHistories(versionHistories.ToProto(), enumspb.ENCODING_TYPE_PROTO3)
 }
 
 func (m *executionManagerImpl) DeserializeVersionHistories(
