@@ -42,7 +42,6 @@ import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
-import "temporal/server/api/replication/v1/message.proto";
 
 // ExecutionStats is not persisted and is used internally and as part of mutableState
 message ExecutionStats {
