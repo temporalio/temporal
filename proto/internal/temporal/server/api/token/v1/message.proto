@@ -25,7 +25,6 @@ package temporal.server.api.token.v1;
 option go_package = "go.temporal.io/server/api/token/v1;token";
 
 import "temporal/server/api/history/v1/message.proto";
-import "temporal/server/api/replication/v1/message.proto";
 
 message HistoryContinuation {
     string run_id = 1;
