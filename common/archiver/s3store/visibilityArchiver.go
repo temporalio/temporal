@@ -33,7 +33,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"go.temporal.io/api/serviceerror"
 
-	archiverproto "go.temporal.io/server/api/archiver/v1"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -101,7 +101,7 @@ func newVisibilityArchiver(
 func (v *visibilityArchiver) Archive(
 	ctx context.Context,
 	URI archiver.URI,
-	request *archiverproto.ArchiveVisibilityRequest,
+	request *archiverspb.ArchiveVisibilityRequest,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
 	scope := v.container.MetricsClient.Scope(metrics.VisibilityArchiverScope, metrics.NamespaceTag(request.Namespace))
@@ -152,7 +152,7 @@ func (v *visibilityArchiver) Archive(
 	scope.IncCounter(metrics.VisibilityArchiveSuccessCount)
 	return nil
 }
-func createIndexesToArchive(request *archiverproto.ArchiveVisibilityRequest) []indexToArchive {
+func createIndexesToArchive(request *archiverspb.ArchiveVisibilityRequest) []indexToArchive {
 	return []indexToArchive{
 		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyCloseTimeout, timestamp.TimeValue(request.CloseTime).UnixNano()},
 		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyStartTimeout, timestamp.TimeValue(request.StartTime).UnixNano()},

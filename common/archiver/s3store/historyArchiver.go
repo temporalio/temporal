@@ -42,7 +42,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"go.temporal.io/api/serviceerror"
 
-	archiverproto "go.temporal.io/server/api/archiver/v1"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
@@ -316,7 +316,7 @@ func (h *historyArchiver) Get(
 			}
 		}
 
-		historyBlob := archiverproto.HistoryBlob{}
+		historyBlob := archiverspb.HistoryBlob{}
 		err = encoder.Decode(encodedRecord, &historyBlob)
 		if err != nil {
 			return nil, &serviceerror.Internal{Message: err.Error()}
@@ -352,7 +352,7 @@ func (h *historyArchiver) ValidateURI(URI archiver.URI) error {
 	return bucketExists(context.TODO(), h.s3cli, URI)
 }
 
-func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIterator) (*archiverproto.HistoryBlob, error) {
+func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIterator) (*archiverspb.HistoryBlob, error) {
 	historyBlob, err := historyIterator.Next()
 	op := func() error {
 		historyBlob, err = historyIterator.Next()

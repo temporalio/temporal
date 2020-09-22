@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/checksum"
@@ -396,7 +396,7 @@ func createExecution(
 	batch *gocql.Batch,
 	shardID int,
 	executionInfo *p.WorkflowExecutionInfo,
-	versionHistories *history.VersionHistories,
+	versionHistories *historyspb.VersionHistories,
 	checksum checksum.Checksum,
 	cqlNowTimestampMillis int64,
 	startVersion int64,
@@ -479,7 +479,7 @@ func updateExecution(
 	batch *gocql.Batch,
 	shardID int,
 	executionInfo *p.WorkflowExecutionInfo,
-	versionHistories *history.VersionHistories,
+	versionHistories *historyspb.VersionHistories,
 	cqlNowTimestampMillis int64,
 	condition int64,
 	checksum checksum.Checksum,

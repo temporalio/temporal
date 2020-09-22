@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
-	archiverproto "go.temporal.io/server/api/archiver/v1"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/service/config"
@@ -92,7 +92,7 @@ func NewVisibilityArchiver(
 func (v *visibilityArchiver) Archive(
 	ctx context.Context,
 	URI archiver.URI,
-	request *archiverproto.ArchiveVisibilityRequest,
+	request *archiverspb.ArchiveVisibilityRequest,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
@@ -307,7 +307,7 @@ func sortAndFilterFiles(filenames []string, token *queryVisibilityToken) ([]stri
 	return filteredFilenames, nil
 }
 
-func matchQuery(record *archiverproto.ArchiveVisibilityRequest, query *parsedQuery) bool {
+func matchQuery(record *archiverspb.ArchiveVisibilityRequest, query *parsedQuery) bool {
 	if record.CloseTime.UnixNano() < query.earliestCloseTime || record.CloseTime.UnixNano() > query.latestCloseTime {
 		return false
 	}
@@ -326,7 +326,7 @@ func matchQuery(record *archiverproto.ArchiveVisibilityRequest, query *parsedQue
 	return true
 }
 
-func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *workflowpb.WorkflowExecutionInfo {
+func convertToExecutionInfo(record *archiverspb.ArchiveVisibilityRequest) *workflowpb.WorkflowExecutionInfo {
 	return &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),

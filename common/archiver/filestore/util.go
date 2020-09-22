@@ -39,7 +39,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	historypb "go.temporal.io/api/history/v1"
 
-	archiverproto "go.temporal.io/server/api/archiver/v1"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -158,8 +158,8 @@ func encodeHistories(histories []*historypb.History) ([]byte, error) {
 	return encoder.EncodeHistories(histories)
 }
 
-func decodeVisibilityRecord(data []byte) (*archiverproto.ArchiveVisibilityRequest, error) {
-	record := &archiverproto.ArchiveVisibilityRequest{}
+func decodeVisibilityRecord(data []byte) (*archiverspb.ArchiveVisibilityRequest, error) {
+	record := &archiverspb.ArchiveVisibilityRequest{}
 	encoder := codec.NewJSONPBEncoder()
 	err := encoder.Decode(data, record)
 	if err != nil {
