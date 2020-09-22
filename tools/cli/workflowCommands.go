@@ -159,7 +159,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 	}
 
 	if outputFileName != "" {
-		serializer := codec.NewJSONPBEncoder()
+		serializer := codec.NewJSONPBIndentEncoder(" ")
 		data, err := serializer.Encode(history)
 		if err != nil {
 			ErrorAndExit("Failed to serialize history data.", err)
