@@ -304,10 +304,10 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 				WorkflowRunTimeout:         wTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				ExecutionState: &persistenceblobs.WorkflowExecutionState{
-					RunId:                      workflowExecution.GetRunId(),
-					CreateRequestId:            uuid.New(),
-					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					RunId:           workflowExecution.GetRunId(),
+					CreateRequestId: uuid.New(),
+					State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
 				LastFirstEventId:       common.FirstEventID,
 				NextEventId:            nextEventID,
@@ -371,14 +371,14 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				NamespaceId:     namespaceID,
-				WorkflowId:      workflowExecution.GetWorkflowId(),
-				TaskQueue:       taskQueue,
+				NamespaceId: namespaceID,
+				WorkflowId:  workflowExecution.GetWorkflowId(),
+				TaskQueue:   taskQueue,
 				ExecutionState: &persistenceblobs.WorkflowExecutionState{
 					RunId:           workflowExecution.GetRunId(),
 					CreateRequestId: uuid.New(),
-					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
 				LastFirstEventId:       common.FirstEventID,
 				NextEventId:            nextEventID,
@@ -417,9 +417,9 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 				WorkflowRunTimeout:         wTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				ExecutionState: &persistenceblobs.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-					RunId:                      workflowExecution.GetRunId(),
-					CreateRequestId:            uuid.New(),
-					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					RunId:           workflowExecution.GetRunId(),
+					CreateRequestId: uuid.New(),
+					Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
 				LastFirstEventId:       common.FirstEventID,
 				NextEventId:            nextEventID,
@@ -519,10 +519,10 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *p.WorkflowExecutionInfo, 
 				DefaultWorkflowTaskTimeout: updatedInfo.DefaultWorkflowTaskTimeout,
 
 				ExecutionState: &persistenceblobs.WorkflowExecutionState{
-					RunId:                      newExecution.GetRunId(),
-					CreateRequestId:            uuid.New(),
-					State: updatedInfo.ExecutionState.State,
-					Status:                 updatedInfo.ExecutionState.Status,
+					RunId:           newExecution.GetRunId(),
+					CreateRequestId: uuid.New(),
+					State:           updatedInfo.ExecutionState.State,
+					Status:          updatedInfo.ExecutionState.Status,
 				},
 
 				LastFirstEventId:       common.FirstEventID,
@@ -537,8 +537,7 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *p.WorkflowExecutionInfo, 
 			TransferTasks:  nil,
 			TimerTasks:     nil,
 		},
-		RangeID:  s.ShardInfo.GetRangeId(),
-		Encoding: pickRandomEncoding(),
+		RangeID: s.ShardInfo.GetRangeId(),
 	}
 	req.UpdateWorkflowMutation.ExecutionInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	req.UpdateWorkflowMutation.ExecutionInfo.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
@@ -574,7 +573,6 @@ func (s *TestBase) UpdateWorkflowExecutionAndFinish(updatedInfo *p.WorkflowExecu
 			UpsertTimerInfos:    nil,
 			DeleteTimerInfos:    nil,
 		},
-		Encoding: pickRandomEncoding(),
 	})
 	return err
 }
@@ -736,7 +734,6 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 			Condition: condition,
 			Checksum:  testWorkflowChecksum,
 		},
-		Encoding: pickRandomEncoding(),
 	})
 	return err
 }
@@ -752,8 +749,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithTransferTasks(
 			Condition:           condition,
 			UpsertActivityInfos: upsertActivityInfo,
 		},
-		RangeID:  s.ShardInfo.GetRangeId(),
-		Encoding: pickRandomEncoding(),
+		RangeID: s.ShardInfo.GetRangeId(),
 	})
 	return err
 }
@@ -769,8 +765,7 @@ func (s *TestBase) UpdateWorkflowExecutionForChildExecutionsInitiated(
 			Condition:                 condition,
 			UpsertChildExecutionInfos: childInfos,
 		},
-		RangeID:  s.ShardInfo.GetRangeId(),
-		Encoding: pickRandomEncoding(),
+		RangeID: s.ShardInfo.GetRangeId(),
 	})
 	return err
 }
@@ -787,8 +782,7 @@ func (s *TestBase) UpdateWorkflowExecutionForRequestCancel(
 			Condition:                condition,
 			UpsertRequestCancelInfos: upsertRequestCancelInfo,
 		},
-		RangeID:  s.ShardInfo.GetRangeId(),
-		Encoding: pickRandomEncoding(),
+		RangeID: s.ShardInfo.GetRangeId(),
 	})
 	return err
 }
@@ -805,8 +799,7 @@ func (s *TestBase) UpdateWorkflowExecutionForSignal(
 			Condition:         condition,
 			UpsertSignalInfos: upsertSignalInfos,
 		},
-		RangeID:  s.ShardInfo.GetRangeId(),
-		Encoding: pickRandomEncoding(),
+		RangeID: s.ShardInfo.GetRangeId(),
 	})
 	return err
 }
@@ -823,8 +816,7 @@ func (s *TestBase) UpdateWorkflowExecutionForBufferEvents(
 			Condition:           condition,
 			ClearBufferedEvents: clearBufferedEvents,
 		},
-		RangeID:  s.ShardInfo.GetRangeId(),
-		Encoding: pickRandomEncoding(),
+		RangeID: s.ShardInfo.GetRangeId(),
 	})
 	return err
 }
@@ -873,7 +865,6 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 			UpsertSignalInfos:         sInfos,
 			UpsertSignalRequestedIDs:  srIDs,
 		},
-		Encoding: pickRandomEncoding(),
 	})
 	return err
 }
@@ -902,7 +893,6 @@ func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWr
 			SignalRequestedIDs:  ids,
 			Checksum:            testWorkflowChecksum,
 		},
-		Encoding: pickRandomEncoding(),
 	})
 }
 
@@ -940,7 +930,6 @@ func (s *TestBase) ResetWorkflowExecution(condition int64, info *p.WorkflowExecu
 			ReplicationTasks: replTasks,
 			TimerTasks:       timerTasks,
 		},
-		Encoding: pickRandomEncoding(),
 	}
 
 	if updateCurr {
@@ -1536,8 +1525,4 @@ func GenerateRandomDBName(n int) string {
 	prefix.WriteRune('_')
 	prefix.WriteString(randString(n))
 	return prefix.String()
-}
-
-func pickRandomEncoding() enumspb.EncodingType {
-	return enumspb.ENCODING_TYPE_PROTO3
 }

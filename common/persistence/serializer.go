@@ -25,7 +25,6 @@
 package persistence
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
@@ -37,7 +36,6 @@ import (
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/persistence/serialization"
 )
 
@@ -112,11 +110,9 @@ func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([
 	events := &historypb.History{}
 	var err error
 	switch data.Encoding {
-	case enumspb.ENCODING_TYPE_JSON:
-		err = codec.NewJSONPBEncoder().Decode(data.Data, events)
 	case enumspb.ENCODING_TYPE_PROTO3:
 		// Client API currently specifies encodingType on requests which span multiple of these objects
-		err = proto.Unmarshal(data.Data, events)
+		err = events.Unmarshal(data.Data)
 	default:
 		return nil, NewDeserializationError("DeserializeBatchEvents invalid encoding")
 	}
@@ -144,11 +140,9 @@ func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*histor
 	event := &historypb.HistoryEvent{}
 	var err error
 	switch data.Encoding {
-	case enumspb.ENCODING_TYPE_JSON:
-		err = codec.NewJSONPBEncoder().Decode(data.Data, event)
 	case enumspb.ENCODING_TYPE_PROTO3:
 		// Client API currently specifies encodingType on requests which span multiple of these objects
-		err = proto.Unmarshal(data.Data, event)
+		err = event.Unmarshal(data.Data)
 	default:
 		return nil, NewDeserializationError("DeserializeEvent invalid encoding")
 	}
@@ -178,12 +172,10 @@ func (t *serializerImpl) DeserializeResetPoints(data *serialization.DataBlob) (*
 	memo := &workflowpb.ResetPoints{}
 	var err error
 	switch data.Encoding {
-	case enumspb.ENCODING_TYPE_JSON:
-		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
 	case enumspb.ENCODING_TYPE_PROTO3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
-		err = proto.Unmarshal(data.Data, memo)
+		err = memo.Unmarshal(data.Data)
 	default:
 		return nil, NewDeserializationError("DeserializeResetPoints invalid encoding")
 	}
@@ -213,12 +205,10 @@ func (t *serializerImpl) DeserializeBadBinaries(data *serialization.DataBlob) (*
 	memo := &namespacepb.BadBinaries{}
 	var err error
 	switch data.Encoding {
-	case enumspb.ENCODING_TYPE_JSON:
-		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
 	case enumspb.ENCODING_TYPE_PROTO3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
-		err = proto.Unmarshal(data.Data, memo)
+		err = memo.Unmarshal(data.Data)
 	default:
 		return nil, NewDeserializationError("DeserializeBadBinaries invalid encoding")
 	}
@@ -250,12 +240,10 @@ func (t *serializerImpl) DeserializeVisibilityMemo(data *serialization.DataBlob)
 	memo := &commonpb.Memo{}
 	var err error
 	switch data.Encoding {
-	case enumspb.ENCODING_TYPE_JSON:
-		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
 	case enumspb.ENCODING_TYPE_PROTO3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
-		err = proto.Unmarshal(data.Data, memo)
+		err = memo.Unmarshal(data.Data)
 	default:
 		return nil, NewDeserializationError("DeserializeVisibilityMemo invalid encoding")
 	}
@@ -285,12 +273,10 @@ func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlo
 	memo := &historyspb.VersionHistories{}
 	var err error
 	switch data.Encoding {
-	case enumspb.ENCODING_TYPE_JSON:
-		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
 	case enumspb.ENCODING_TYPE_PROTO3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
-		err = proto.Unmarshal(data.Data, memo)
+		err = memo.Unmarshal(data.Data)
 	default:
 		return nil, NewDeserializationError("DeserializeVersionHistories invalid encoding")
 	}
@@ -320,12 +306,10 @@ func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *serialization
 	event := &persistenceblobs.ImmutableClusterMetadata{}
 	var err error
 	switch data.Encoding {
-	case enumspb.ENCODING_TYPE_JSON:
-		err = codec.NewJSONPBEncoder().Decode(data.Data, event)
 	case enumspb.ENCODING_TYPE_PROTO3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
-		err = proto.Unmarshal(data.Data, event)
+		err = event.Unmarshal(data.Data)
 	default:
 		return nil, NewDeserializationError("DeserializeImmutableClusterMetadata invalid encoding")
 	}
@@ -337,7 +321,7 @@ func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *serialization
 	return event, err
 }
 
-func (t *serializerImpl) serializeProto(p proto.Marshaler, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) serialize(p proto.Marshaler, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
 	if p == nil {
 		return nil, nil
 	}
@@ -349,12 +333,6 @@ func (t *serializerImpl) serializeProto(p proto.Marshaler, encodingType enumspb.
 	case enumspb.ENCODING_TYPE_PROTO3:
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		data, err = p.Marshal()
-	case enumspb.ENCODING_TYPE_JSON:
-		pb, ok := p.(proto.Message)
-		if !ok {
-			return nil, NewSerializationError("could not cast proto.Marshal interface to proto.Message")
-		}
-		data, err = codec.NewJSONPBEncoder().Encode(pb)
 	default:
 		return nil, NewUnknownEncodingTypeError(encodingType)
 	}
@@ -366,37 +344,6 @@ func (t *serializerImpl) serializeProto(p proto.Marshaler, encodingType enumspb.
 	// Shouldn't happen, but keeping
 	if data == nil {
 		return nil, nil
-	}
-
-	return &serialization.DataBlob{
-		Data:     data,
-		Encoding: encodingType,
-	}, nil
-}
-
-func (t *serializerImpl) serialize(input interface{}, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
-	if input == nil {
-		return nil, nil
-	}
-
-	// This should not pass proto struct down to JSON section.
-	if p, ok := input.(proto.Marshaler); ok {
-		return t.serializeProto(p, encodingType)
-	}
-
-	var data []byte
-	var err error
-
-	switch encodingType {
-	case enumspb.ENCODING_TYPE_JSON:
-		// input should never be a proto struct.
-		data, err = json.Marshal(input)
-	default:
-		return nil, NewUnknownEncodingTypeError(encodingType)
-	}
-
-	if err != nil {
-		return nil, NewSerializationError(err.Error())
 	}
 
 	return &serialization.DataBlob{
