@@ -1639,6 +1639,10 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		SearchAttributes:         attributes.SearchAttributes,
 	}
 
+	if attributes.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
+		attributes.Initiator = enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW
+	}
+
 	req := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:              e.namespaceEntry.GetInfo().Id,
 		StartRequest:             createRequest,

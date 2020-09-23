@@ -878,7 +878,7 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(workflowTaskCom
 		WorkflowTaskTimeout:          request.WorkflowTaskTimeout,
 		WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 		BackoffStartInterval:         request.GetBackoffStartInterval(),
-		Initiator:                    request.Initiator,
+		Initiator:                    enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 		Failure:                      request.GetFailure(),
 		LastCompletionResult:         request.LastCompletionResult,
 		Memo:                         request.Memo,
