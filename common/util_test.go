@@ -1,11 +1,15 @@
 package common
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -200,4 +204,18 @@ func Test_FromConfigToRetryPolicy(t *testing.T) {
 	assert.Equal(t, 100.0, defaultSettings.MaximumIntervalCoefficient)
 	assert.Equal(t, 4.0, defaultSettings.BackoffCoefficient)
 	assert.Equal(t, int32(5), defaultSettings.MaximumAttempts)
+}
+
+func TestIsContextTimeoutError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	time.Sleep(10 * time.Millisecond)
+	require.True(t, IsDeadlineExceeded(ctx.Err()))
+	require.True(t, IsDeadlineExceeded(serviceerror.NewDeadlineExceeded("something")))
+
+	require.False(t, IsDeadlineExceeded(errors.New("some random error")))
+
+	ctx, cancel = context.WithCancel(context.Background())
+	cancel()
+	require.False(t, IsDeadlineExceeded(ctx.Err()))
 }
