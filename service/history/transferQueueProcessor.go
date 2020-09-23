@@ -93,6 +93,7 @@ func newTransferQueueProcessor(
 
 	logger = logger.WithTags(tag.ComponentTransferQueue)
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	config := shard.GetConfig()
 	taskAllocator := newTaskAllocator(shard)
 	standbyTaskProcessors := make(map[string]*transferQueueStandbyProcessorImpl)
 	for clusterName, info := range shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
@@ -108,7 +109,7 @@ func newTransferQueueProcessor(
 					return historyService.ReplicateEventsV2(ctx, request)
 				},
 				shard.GetService().GetPayloadSerializer(),
-				nil,
+				config.StandbyTaskReReplicationContextTimeout,
 				logger,
 			)
 			standbyTaskProcessors[clusterName] = newTransferQueueStandbyProcessor(
@@ -130,7 +131,7 @@ func newTransferQueueProcessor(
 		currentClusterName:       currentClusterName,
 		shard:                    shard,
 		taskAllocator:            taskAllocator,
-		config:                   shard.GetConfig(),
+		config:                   config,
 		metricsClient:            historyService.metricsClient,
 		historyService:           historyService,
 		visibilityMgr:            visibilityMgr,

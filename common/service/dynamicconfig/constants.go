@@ -254,6 +254,7 @@ var keys = map[Key]string{
 	MutableStateChecksumVerifyProbability:                  "history.mutableStateChecksumVerifyProbability",
 	MutableStateChecksumInvalidateBefore:                   "history.mutableStateChecksumInvalidateBefore",
 	ReplicationEventsFromCurrentCluster:                    "history.ReplicationEventsFromCurrentCluster",
+	StandbyTaskReReplicationContextTimeout:                 "history.standbyTaskReReplicationContextTimeout",
 	EnableDropStuckTaskByNamespaceID:                       "history.DropStuckTaskByNamespace",
 	SkipReapplicationByNamespaceId:                         "history.SkipReapplicationByNamespaceId",
 	DefaultActivityRetryPolicy:                             "history.defaultActivityRetryPolicy",
@@ -778,6 +779,9 @@ const (
 
 	// ReplicationEventsFromCurrentCluster is a feature flag to allow cross DC replicate events that generated from the current cluster
 	ReplicationEventsFromCurrentCluster
+
+	// StandbyTaskReReplicationContextTimeout is the context timeout for standby task re-replication
+	StandbyTaskReReplicationContextTimeout
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest
