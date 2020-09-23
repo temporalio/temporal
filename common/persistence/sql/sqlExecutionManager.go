@@ -569,27 +569,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 		state := executionInfo.GetExecutionState().State
 		status := executionInfo.ExecutionState.Status
 
-		if request.CurrentWorkflowCAS != nil {
-			prevRunID := primitives.MustParseUUID(request.CurrentWorkflowCAS.PrevRunID)
-			prevLastWriteVersion := request.CurrentWorkflowCAS.PrevLastWriteVersion
-			prevState := request.CurrentWorkflowCAS.PrevState
-
-			if err := assertAndUpdateCurrentExecution(tx,
-				m.shardID,
-				namespaceID,
-				workflowID,
-				runID,
-				prevRunID,
-				prevLastWriteVersion,
-				prevState,
-				createRequestID,
-				state,
-				status,
-				startVersion,
-				lastWriteVersion); err != nil {
-				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
-			}
-		} else if currentWorkflow != nil {
+		if currentWorkflow != nil {
 			prevRunID := primitives.MustParseUUID(currentWorkflow.ExecutionInfo.ExecutionState.RunId)
 
 			if err := assertRunIDAndUpdateCurrentExecution(tx,
