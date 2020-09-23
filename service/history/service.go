@@ -249,8 +249,9 @@ type Config struct {
 	MutableStateChecksumVerifyProbability dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateChecksumInvalidateBefore  dynamicconfig.FloatPropertyFn
 
-	//Crocess DC Replication configuration
-	ReplicationEventsFromCurrentCluster dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// Crocess DC Replication configuration
+	ReplicationEventsFromCurrentCluster    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	StandbyTaskReReplicationContextTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
 
 	EnableDropStuckTaskByNamespaceID dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
 	SkipReapplicationByNamespaceId   dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
@@ -409,7 +410,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		MutableStateChecksumVerifyProbability: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MutableStateChecksumVerifyProbability, 0),
 		MutableStateChecksumInvalidateBefore:  dc.GetFloat64Property(dynamicconfig.MutableStateChecksumInvalidateBefore, 0),
 
-		ReplicationEventsFromCurrentCluster: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.ReplicationEventsFromCurrentCluster, false),
+		ReplicationEventsFromCurrentCluster:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.ReplicationEventsFromCurrentCluster, false),
+		StandbyTaskReReplicationContextTimeout: dc.GetDurationPropertyFilteredByNamespaceID(dynamicconfig.StandbyTaskReReplicationContextTimeout, 3*time.Minute),
 
 		EnableDropStuckTaskByNamespaceID: dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.EnableDropStuckTaskByNamespaceID, false),
 		SkipReapplicationByNamespaceId:   dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.SkipReapplicationByNamespaceId, false),

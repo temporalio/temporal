@@ -296,7 +296,7 @@ func NewEngineWithShardContext(
 			return historyEngImpl.ReplicateEventsV2(ctx, request)
 		},
 		shard.GetService().GetPayloadSerializer(),
-		nil,
+		shard.GetConfig().StandbyTaskReReplicationContextTimeout,
 		shard.GetLogger(),
 	)
 	replicationTaskExecutor := newReplicationTaskExecutor(
