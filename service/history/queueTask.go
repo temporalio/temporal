@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
@@ -286,6 +287,9 @@ func (t *queueTaskBase) HandleErr(
 func (t *queueTaskBase) RetryErr(
 	err error,
 ) bool {
+	if common.IsDeadlineExceeded(err) {
+		return false
+	}
 	return true
 }
 

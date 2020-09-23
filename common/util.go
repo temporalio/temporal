@@ -26,6 +26,7 @@ package common
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -224,6 +225,7 @@ func IsServiceNonRetryableError(err error) bool {
 		*serviceerror.InvalidArgument,
 		*serviceerror.NamespaceNotActive,
 		*serviceerror.WorkflowExecutionAlreadyStarted,
+		*serviceerror.DeadlineExceeded,
 		*serviceerror.CancellationAlreadyRequested:
 		return true
 	}
@@ -231,17 +233,18 @@ func IsServiceNonRetryableError(err error) bool {
 	return false
 }
 
+// IsDeadlineExceeded checks if the error is context timeout error
+func IsDeadlineExceeded(err error) bool {
+	var deadlineExceededSvcErr *serviceerror.DeadlineExceeded
+	return errors.As(err, &deadlineExceededSvcErr) || errors.Is(err, context.DeadlineExceeded)
+}
+
 // IsWhitelistServiceTransientError checks if the error is a transient error.
 func IsWhitelistServiceTransientError(err error) bool {
-	if err == context.DeadlineExceeded {
-		return true
-	}
-
 	switch err.(type) {
 	case *serviceerror.Internal,
 		*serviceerror.ResourceExhausted,
 		*serviceerrors.ShardOwnershipLost,
-		*serviceerror.DeadlineExceeded,
 		*serviceerror.Unavailable:
 		return true
 	}
