@@ -884,8 +884,11 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(workflowTaskCom
 		Memo:                         request.Memo,
 		SearchAttributes:             request.SearchAttributes,
 	}
-	historyEvent.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: attributes}
 
+	if len(request.CronSchedule) != 0 {
+		attributes.Initiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
+	}
+	historyEvent.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: attributes}
 	return historyEvent
 }
 
