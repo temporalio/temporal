@@ -477,10 +477,11 @@ func CreateHistoryStartWorkflowRequest(
 	now time.Time,
 ) *historyservice.StartWorkflowExecutionRequest {
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:         namespaceID,
-		StartRequest:        startRequest,
-		Attempt:             1,
-		ParentExecutionInfo: parentExecutionInfo,
+		NamespaceId:            namespaceID,
+		StartRequest:           startRequest,
+		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
+		Attempt:                1,
+		ParentExecutionInfo:    parentExecutionInfo,
 	}
 
 	if timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()) > 0 {
