@@ -35,7 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 
-	archiverproto "go.temporal.io/server/api/archiver/v1"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/log"
@@ -247,7 +247,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		return
 	}
 
-	err = visibilityArchiver.Archive(ctx, URI, &archiverproto.ArchiveVisibilityRequest{
+	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.ArchiveVisibilityRequest{
 		NamespaceId:        request.ArchiveRequest.NamespaceID,
 		Namespace:          request.ArchiveRequest.Namespace,
 		WorkflowId:         request.ArchiveRequest.WorkflowID,

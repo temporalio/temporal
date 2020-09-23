@@ -37,7 +37,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.uber.org/zap"
 
-	archiverproto "go.temporal.io/server/api/archiver/v1"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector/mocks"
 	"go.temporal.io/server/common/convert"
@@ -58,7 +58,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 		Logger:        loggerimpl.NewLogger(zapLogger),
 		MetricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
 	}
-	s.expectedVisibilityRecords = []*archiverproto.ArchiveVisibilityRequest{
+	s.expectedVisibilityRecords = []*archiverspb.ArchiveVisibilityRequest{
 		{
 			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
@@ -80,7 +80,7 @@ type visibilityArchiverSuite struct {
 	*require.Assertions
 	suite.Suite
 	container                 *archiver.VisibilityBootstrapContainer
-	expectedVisibilityRecords []*archiverproto.ArchiveVisibilityRequest
+	expectedVisibilityRecords []*archiverspb.ArchiveVisibilityRequest
 }
 
 func (s *visibilityArchiverSuite) TestValidateVisibilityURI() {
@@ -136,7 +136,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidVisibilityURI() {
 
 	visibilityArchiver := newVisibilityArchiver(s.container, storageWrapper)
 	s.NoError(err)
-	request := &archiverproto.ArchiveVisibilityRequest{
+	request := &archiverspb.ArchiveVisibilityRequest{
 		NamespaceId: testNamespaceID,
 		Namespace:   testNamespace,
 		WorkflowId:  testWorkflowID,
@@ -181,7 +181,7 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 	visibilityArchiver := newVisibilityArchiver(s.container, storageWrapper)
 	s.NoError(err)
 
-	request := &archiverproto.ArchiveVisibilityRequest{
+	request := &archiverspb.ArchiveVisibilityRequest{
 		Namespace:        testNamespace,
 		NamespaceId:      testNamespaceID,
 		WorkflowId:       testWorkflowID,
