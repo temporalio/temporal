@@ -169,9 +169,8 @@ func constructTimeBasedSearchKey(path, namespaceID, primaryIndexKey, primaryInde
 	return fmt.Sprintf("%s/%s", constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), t.Format(timeFormat))
 }
 
-func constructTimestampIndex(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, timestamp int64, runID string) string {
-	t := time.Unix(0, timestamp).UTC()
-	return fmt.Sprintf("%s/%s/%s", constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), t.Format(time.RFC3339), runID)
+func constructTimestampIndex(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, secondaryIndexValue time.Time, runID string) string {
+	return fmt.Sprintf("%s/%s/%s", constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), secondaryIndexValue.Format(time.RFC3339), runID)
 }
 
 func constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexType string) string {
