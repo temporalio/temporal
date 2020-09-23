@@ -32,7 +32,6 @@ services:
     volumes:
       - ${DYNAMIC_CONFIG_DIR:-../config/dynamicconfig}:/etc/temporal/config/dynamicconfig
     environment:
-      - "AUTO_SETUP=true"
       - "CASSANDRA_SEEDS=cassandra"
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development_es.yaml"
       - "ENABLE_ES=true"

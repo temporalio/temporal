@@ -14,7 +14,6 @@ services:
     volumes:
       - ${DYNAMIC_CONFIG_DIR:-../config/dynamicconfig}:/etc/temporal/config/dynamicconfig
     environment:
-      - "AUTO_SETUP=true"
       - "DB=postgres"
       - "DB_PORT=5432"
       - "POSTGRES_USER=temporal"
