@@ -7,13 +7,12 @@ services:
     environment:
       - "MYSQL_ROOT_PASSWORD=root"
   temporal:
-    image: temporalio/server:${SERVER_TAG:-0.31.0}
+    image: temporalio/auto-setup:${SERVER_TAG:-0.31.0}
     ports:
       - "7233:7233"
     volumes:
       - ${DYNAMIC_CONFIG_DIR:-../config/dynamicconfig}:/etc/temporal/config/dynamicconfig
     environment:
-      - "AUTO_SETUP=true"
       - "DB=mysql"
       - "MYSQL_USER=root"
       - "MYSQL_PWD=root"

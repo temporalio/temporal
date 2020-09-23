@@ -164,7 +164,7 @@ auto_setup() {
     fi
 }
 
-if [ "$AUTO_SETUP" = "true" ]; then
+if [ "$1" = "autosetup" ]; then
 	auto_setup
 fi
 

@@ -79,7 +79,7 @@ CMD /start.sh
 
 # All-in-one Temporal server
 FROM temporal-server AS temporal-auto-setup
-ENV AUTO_SETUP="true"
+CMD /start.sh autosetup
 
 # Temporal CLI
 FROM alpine AS temporal-tctl
