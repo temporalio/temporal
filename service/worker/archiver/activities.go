@@ -30,7 +30,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
-	archiverproto "go.temporal.io/server/api/archiver/v1"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/convert"
@@ -149,7 +149,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		logger.Error(carchiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason("failed to get visibility archiver"), tag.Error(err))
 		return errArchiveVisibilityNonRetryable
 	}
-	err = visibilityArchiver.Archive(ctx, URI, &archiverproto.ArchiveVisibilityRequest{
+	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.ArchiveVisibilityRequest{
 		NamespaceId:        request.NamespaceID,
 		Namespace:          request.Namespace,
 		WorkflowId:         request.WorkflowID,

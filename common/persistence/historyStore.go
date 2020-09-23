@@ -197,7 +197,7 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 	}
 
 	// nodeID will be the first eventID
-	blob, err := m.historySerializer.SerializeBatchEvents(request.Events, request.Encoding)
+	blob, err := m.historySerializer.SerializeBatchEvents(request.Events, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return nil, err
 	}

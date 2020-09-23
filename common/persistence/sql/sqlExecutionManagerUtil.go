@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
@@ -1085,7 +1085,7 @@ func updateCurrentExecution(
 
 func buildExecutionRow(
 	executionInfo *p.WorkflowExecutionInfo,
-	versionHistories *history.VersionHistories,
+	versionHistories *historyspb.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
 	shardID int,
@@ -1133,7 +1133,7 @@ func buildExecutionRow(
 func (m *sqlExecutionManager) createExecution(
 	tx sqlplugin.Tx,
 	executionInfo *p.WorkflowExecutionInfo,
-	versionHistories *history.VersionHistories,
+	versionHistories *historyspb.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
 	shardID int,
@@ -1188,7 +1188,7 @@ func (m *sqlExecutionManager) createExecution(
 func updateExecution(
 	tx sqlplugin.Tx,
 	executionInfo *p.WorkflowExecutionInfo,
-	versionHistories *history.VersionHistories,
+	versionHistories *historyspb.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
 	shardID int,

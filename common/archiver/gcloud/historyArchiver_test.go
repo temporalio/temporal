@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/zap"
 
-	archiverproto "go.temporal.io/server/api/archiver/v1"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
@@ -264,8 +264,8 @@ func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 			},
 		},
 	}
-	historyBlob := &archiverproto.HistoryBlob{
-		Header: &archiverproto.HistoryBlobHeader{
+	historyBlob := &archiverspb.HistoryBlob{
+		Header: &archiverspb.HistoryBlobHeader{
 			IsLast: true,
 		},
 		Body: historyBatches,
@@ -355,8 +355,8 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 			},
 		},
 	}
-	historyBlob := &archiverproto.HistoryBlob{
-		Header: &archiverproto.HistoryBlobHeader{
+	historyBlob := &archiverspb.HistoryBlob{
+		Header: &archiverspb.HistoryBlobHeader{
 			IsLast: true,
 		},
 		Body: historyBatches,
