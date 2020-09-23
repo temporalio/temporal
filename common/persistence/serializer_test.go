@@ -175,13 +175,9 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			_, ok := err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
-			dJSON, err := serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_JSON)
+			dProto, err := serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
-			s.NotNil(dJSON)
-
-			dThrift, err := serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(dThrift)
+			s.NotNil(dProto)
 
 			// serialize batch events
 
@@ -193,10 +189,6 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.NotNil(err)
 			_, ok = err.(*UnknownEncodingTypeError)
 			s.True(ok)
-
-			dsJSON, err := serializer.SerializeBatchEvents(history0.Events, enumspb.ENCODING_TYPE_JSON)
-			s.Nil(err)
-			s.NotNil(dsJSON)
 
 			dsProto, err := serializer.SerializeBatchEvents(history0.Events, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
@@ -213,13 +205,9 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.Nil(nilMemo)
 
-			mJSON, err := serializer.SerializeVisibilityMemo(memo0, enumspb.ENCODING_TYPE_JSON)
+			mProto, err := serializer.SerializeVisibilityMemo(memo0, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
-			s.NotNil(mJSON)
-
-			mThrift, err := serializer.SerializeVisibilityMemo(memo0, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(mThrift)
+			s.NotNil(mProto)
 
 			// serialize version histories
 
@@ -227,13 +215,9 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.Nil(nilHistories)
 
-			historiesJSON, err := serializer.SerializeVersionHistories(histories, enumspb.ENCODING_TYPE_JSON)
+			historiesProto, err := serializer.SerializeVersionHistories(histories, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
-			s.NotNil(historiesJSON)
-
-			historiesThrift, err := serializer.SerializeVersionHistories(histories, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(historiesThrift)
+			s.NotNil(historiesProto)
 
 			// deserialize event
 
@@ -241,11 +225,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.Nil(dNilEvent)
 
-			event1, err := serializer.DeserializeEvent(dJSON)
-			s.Nil(err)
-			s.True(reflect.DeepEqual(event0, event1))
-
-			event2, err := serializer.DeserializeEvent(dThrift)
+			event2, err := serializer.DeserializeEvent(dProto)
 			s.Nil(err)
 			s.True(reflect.DeepEqual(event0, event2))
 
@@ -255,12 +235,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.Nil(dNilEvents)
 
-			events, err := serializer.DeserializeBatchEvents(dsJSON)
-			history1 := &historypb.History{Events: events}
-			s.Nil(err)
-			s.True(reflect.DeepEqual(history0, history1))
-
-			events, err = serializer.DeserializeBatchEvents(dsProto)
+			events, err := serializer.DeserializeBatchEvents(dsProto)
 			history2 := &historypb.History{Events: events}
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history2))
@@ -271,11 +246,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.Equal(&commonpb.Memo{}, dNilMemo)
 
-			memo1, err := serializer.DeserializeVisibilityMemo(mJSON)
-			s.Nil(err)
-			s.True(reflect.DeepEqual(memo0, memo1))
-
-			memo2, err := serializer.DeserializeVisibilityMemo(mThrift)
+			memo2, err := serializer.DeserializeVisibilityMemo(mProto)
 			s.Nil(err)
 			s.True(reflect.DeepEqual(memo0, memo2))
 
@@ -290,13 +261,9 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			_, ok = err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
-			resetPointsJSON, err := serializer.SerializeResetPoints(resetPoints0, enumspb.ENCODING_TYPE_JSON)
+			resetPointsProto, err := serializer.SerializeResetPoints(resetPoints0, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
-			s.NotNil(resetPointsJSON)
-
-			resetPointsThrift, err := serializer.SerializeResetPoints(resetPoints0, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(resetPointsThrift)
+			s.NotNil(resetPointsProto)
 
 			// deserialize reset points
 
@@ -308,11 +275,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.Equal(&workflowpb.ResetPoints{}, dNilResetPoints2)
 
-			resetPoints1, err := serializer.DeserializeResetPoints(resetPointsJSON)
-			s.Nil(err)
-			s.True(reflect.DeepEqual(resetPoints1, resetPoints0))
-
-			resetPoints2, err := serializer.DeserializeResetPoints(resetPointsThrift)
+			resetPoints2, err := serializer.DeserializeResetPoints(resetPointsProto)
 			s.Nil(err)
 			s.True(reflect.DeepEqual(resetPoints2, resetPoints0))
 
@@ -327,13 +290,9 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			_, ok = err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
-			badBinariesJSON, err := serializer.SerializeBadBinaries(badBinaries0, enumspb.ENCODING_TYPE_JSON)
+			badBinariesProto, err := serializer.SerializeBadBinaries(badBinaries0, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
-			s.NotNil(badBinariesJSON)
-
-			badBinariesThrift, err := serializer.SerializeBadBinaries(badBinaries0, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(badBinariesThrift)
+			s.NotNil(badBinariesProto)
 
 			// deserialize bad binaries
 
@@ -345,11 +304,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.Equal(&namespacepb.BadBinaries{}, dNilBadBinaries2)
 
-			badBinaries1, err := serializer.DeserializeBadBinaries(badBinariesJSON)
-			s.Nil(err)
-			s.True(reflect.DeepEqual(badBinaries1, badBinaries0))
-
-			badBinaries2, err := serializer.DeserializeBadBinaries(badBinariesThrift)
+			badBinaries2, err := serializer.DeserializeBadBinaries(badBinariesProto)
 			s.Nil(err)
 			s.True(reflect.DeepEqual(badBinaries2, badBinaries0))
 
@@ -363,13 +318,9 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.Equal(&historyspb.VersionHistories{}, dNilHistories2)
 
-			dHistoriesJSON, err := serializer.DeserializeVersionHistories(historiesJSON)
+			dHistoriesProto, err := serializer.DeserializeVersionHistories(historiesProto)
 			s.Nil(err)
-			s.True(reflect.DeepEqual(dHistoriesJSON, histories))
-
-			dHistoriesThrift, err := serializer.DeserializeVersionHistories(historiesThrift)
-			s.Nil(err)
-			s.True(reflect.DeepEqual(dHistoriesThrift, histories))
+			s.True(reflect.DeepEqual(dHistoriesProto, histories))
 		}()
 	}
 
