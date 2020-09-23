@@ -82,17 +82,16 @@ var (
 	_ EngineFactory                       = (*Handler)(nil)
 	_ historyservice.HistoryServiceServer = (*Handler)(nil)
 
-	errNamespaceNotSet              = serviceerror.NewInvalidArgument("Namespace not set on request.")
-	errContinueAsNewInitiatorNotSet = serviceerror.NewInvalidArgument("ContinueAsNewInitiator not set on request.")
-	errWorkflowExecutionNotSet      = serviceerror.NewInvalidArgument("WorkflowExecution not set on request.")
-	errTaskQueueNotSet              = serviceerror.NewInvalidArgument("Task queue not set.")
-	errWorkflowIDNotSet             = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
-	errRunIDNotValid                = serviceerror.NewInvalidArgument("RunId is not valid UUID.")
-	errSourceClusterNotSet          = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
-	errShardIDNotSet                = serviceerror.NewInvalidArgument("ShardId not set on request.")
-	errTimestampNotSet              = serviceerror.NewInvalidArgument("Timestamp not set on request.")
-	errInvalidTaskType              = serviceerror.NewInvalidArgument("Invalid task type")
-	errDeserializeTaskToken         = serviceerror.NewInvalidArgument("Error to deserialize task token. Error: %v.")
+	errNamespaceNotSet         = serviceerror.NewInvalidArgument("Namespace not set on request.")
+	errWorkflowExecutionNotSet = serviceerror.NewInvalidArgument("WorkflowExecution not set on request.")
+	errTaskQueueNotSet         = serviceerror.NewInvalidArgument("Task queue not set.")
+	errWorkflowIDNotSet        = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
+	errRunIDNotValid           = serviceerror.NewInvalidArgument("RunId is not valid UUID.")
+	errSourceClusterNotSet     = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
+	errShardIDNotSet           = serviceerror.NewInvalidArgument("ShardId not set on request.")
+	errTimestampNotSet         = serviceerror.NewInvalidArgument("Timestamp not set on request.")
+	errInvalidTaskType         = serviceerror.NewInvalidArgument("Invalid task type")
+	errDeserializeTaskToken    = serviceerror.NewInvalidArgument("Error to deserialize task token. Error: %v.")
 
 	errHistoryHostThrottle = serviceerror.NewResourceExhausted("History host RPS exceeded.")
 	errShuttingDown        = serviceerror.NewInternal("Shutting down")
@@ -649,9 +648,6 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
 		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-	if request.GetContinueAsNewInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
-		return nil, h.error(errContinueAsNewInitiatorNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {

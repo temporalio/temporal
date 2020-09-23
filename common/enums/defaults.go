@@ -57,3 +57,9 @@ func SetDefaultQueryRejectCondition(f *enumspb.QueryRejectCondition) {
 		*f = enumspb.QUERY_REJECT_CONDITION_NONE
 	}
 }
+
+func SetDefaultContinueAsNewInitiator(f *enumspb.ContinueAsNewInitiator) {
+	if *f == enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
+		*f = enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW
+	}
+}

@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -1638,6 +1639,8 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		Memo:                     attributes.Memo,
 		SearchAttributes:         attributes.SearchAttributes,
 	}
+
+	enums.SetDefaultContinueAsNewInitiator(&attributes.Initiator)
 
 	req := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:              e.namespaceEntry.GetInfo().Id,
