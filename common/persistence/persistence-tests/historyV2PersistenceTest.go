@@ -37,7 +37,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -811,7 +810,6 @@ func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*historypb.Hi
 			BranchToken:   branch,
 			Events:        events,
 			TransactionID: txnID,
-			Encoding:      enumspb.ENCODING_TYPE_PROTO3,
 			ShardID:       convert.IntPtr(int(s.ShardInfo.GetShardId())),
 		})
 		return err
