@@ -477,11 +477,12 @@ func CreateHistoryStartWorkflowRequest(
 	now time.Time,
 ) *historyservice.StartWorkflowExecutionRequest {
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:            namespaceID,
-		StartRequest:           startRequest,
-		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
-		Attempt:                1,
-		ParentExecutionInfo:    parentExecutionInfo,
+		NamespaceId:              namespaceID,
+		StartRequest:             startRequest,
+		ContinueAsNewInitiator:   enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
+		Attempt:                  1,
+		ParentExecutionInfo:      parentExecutionInfo,
+		FirstWorkflowTaskBackoff: backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now),
 	}
 
 	if timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()) > 0 {
@@ -489,7 +490,10 @@ func CreateHistoryStartWorkflowRequest(
 		histRequest.WorkflowExecutionExpirationTime = timestamp.TimePtr(deadline.Round(time.Millisecond))
 	}
 
-	histRequest.FirstWorkflowTaskBackoff = backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now)
+	if len(startRequest.CronSchedule) != 0 {
+		histRequest.ContinueAsNewInitiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
+	}
+
 	return histRequest
 }
 
