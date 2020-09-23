@@ -32,7 +32,6 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -528,15 +527,6 @@ Create_Loop:
 	return nil, ErrMaxAttemptsExceeded
 }
 
-func (s *shardContextImpl) getDefaultEncoding(namespaceEntry *cache.NamespaceCacheEntry) enumspb.EncodingType {
-	encodingStr := s.config.EventEncodingType(namespaceEntry.GetInfo().Name)
-	encoding, ok := enumspb.EncodingType_value[encodingStr]
-	if !ok {
-		encoding = int32(enumspb.ENCODING_TYPE_UNSPECIFIED)
-	}
-	return enumspb.EncodingType(encoding)
-}
-
 func (s *shardContextImpl) UpdateWorkflowExecution(
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
@@ -549,7 +539,6 @@ func (s *shardContextImpl) UpdateWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	request.Encoding = s.getDefaultEncoding(namespaceEntry)
 
 	s.Lock()
 	defer s.Unlock()
@@ -635,7 +624,6 @@ func (s *shardContextImpl) ResetWorkflowExecution(request *persistence.ResetWork
 	if err != nil {
 		return err
 	}
-	request.Encoding = s.getDefaultEncoding(namespaceEntry)
 
 	s.Lock()
 	defer s.Unlock()
@@ -724,7 +712,6 @@ func (s *shardContextImpl) ConflictResolveWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	request.Encoding = s.getDefaultEncoding(namespaceEntry)
 
 	s.Lock()
 	defer s.Unlock()
@@ -815,11 +802,6 @@ Reset_Loop:
 func (s *shardContextImpl) AppendHistoryV2Events(
 	request *persistence.AppendHistoryNodesRequest, namespaceID string, execution commonpb.WorkflowExecution) (int, error) {
 
-	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
-	if err != nil {
-		return 0, err
-	}
-
 	// NOTE: do not use generateNextTransferTaskIDLocked since
 	// generateNextTransferTaskIDLocked is not guarded by lock
 	transactionID, err := s.GenerateTransferTaskID()
@@ -827,7 +809,6 @@ func (s *shardContextImpl) AppendHistoryV2Events(
 		return 0, err
 	}
 
-	request.Encoding = s.getDefaultEncoding(namespaceEntry)
 	request.ShardID = convert.IntPtr(s.shardID)
 	request.TransactionID = transactionID
 
