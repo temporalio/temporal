@@ -41,7 +41,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.uber.org/zap"
 
-	archiverproto "go.temporal.io/server/api/archiver/v1"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/convert"
@@ -62,7 +62,7 @@ type visibilityArchiverSuite struct {
 	container          *archiver.VisibilityBootstrapContainer
 	testArchivalURI    archiver.URI
 	testQueryDirectory string
-	visibilityRecords  []*archiverproto.ArchiveVisibilityRequest
+	visibilityRecords  []*archiverspb.ArchiveVisibilityRequest
 
 	controller *gomock.Controller
 }
@@ -128,7 +128,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	URI, err := archiver.NewURI("wrongscheme://")
 	s.NoError(err)
-	request := &archiverproto.ArchiveVisibilityRequest{
+	request := &archiverspb.ArchiveVisibilityRequest{
 		Namespace:        testNamespace,
 		NamespaceId:      testNamespaceID,
 		WorkflowId:       testWorkflowID,
@@ -146,7 +146,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 
 func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidRequest() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
-	err := visibilityArchiver.Archive(context.Background(), s.testArchivalURI, &archiverproto.ArchiveVisibilityRequest{})
+	err := visibilityArchiver.Archive(context.Background(), s.testArchivalURI, &archiverspb.ArchiveVisibilityRequest{})
 	s.Error(err)
 }
 
@@ -156,7 +156,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 	err := visibilityArchiver.Archive(
 		context.Background(),
 		s.testArchivalURI,
-		&archiverproto.ArchiveVisibilityRequest{},
+		&archiverspb.ArchiveVisibilityRequest{},
 		archiver.GetNonRetryableErrorOption(nonRetryableErr),
 	)
 	s.Equal(nonRetryableErr, err)
@@ -169,7 +169,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	closeTimestamp := timestamp.TimeNowPtrUtc()
-	request := &archiverproto.ArchiveVisibilityRequest{
+	request := &archiverspb.ArchiveVisibilityRequest{
 		NamespaceId:      testNamespaceID,
 		Namespace:        testNamespace,
 		WorkflowId:       testWorkflowID,
@@ -201,7 +201,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	data, err := readFile(filepath)
 	s.NoError(err)
 
-	archivedRecord := &archiverproto.ArchiveVisibilityRequest{}
+	archivedRecord := &archiverspb.ArchiveVisibilityRequest{}
 	encoder := codec.NewJSONPBEncoder()
 	err = encoder.Decode(data, archivedRecord)
 	s.NoError(err)
@@ -211,7 +211,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 func (s *visibilityArchiverSuite) TestMatchQuery() {
 	testCases := []struct {
 		query       *parsedQuery
-		record      *archiverproto.ArchiveVisibilityRequest
+		record      *archiverspb.ArchiveVisibilityRequest
 		shouldMatch bool
 	}{
 		{
@@ -219,7 +219,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				earliestCloseTime: int64(1000),
 				latestCloseTime:   int64(12345),
 			},
-			record: &archiverproto.ArchiveVisibilityRequest{
+			record: &archiverspb.ArchiveVisibilityRequest{
 				CloseTime: timestamp.UnixOrZeroTimePtr(1999),
 			},
 			shouldMatch: true,
@@ -229,7 +229,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				earliestCloseTime: int64(1000),
 				latestCloseTime:   int64(12345),
 			},
-			record: &archiverproto.ArchiveVisibilityRequest{
+			record: &archiverspb.ArchiveVisibilityRequest{
 				CloseTime: timestamp.UnixOrZeroTimePtr(999),
 			},
 			shouldMatch: false,
@@ -240,7 +240,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				latestCloseTime:   int64(12345),
 				workflowID:        convert.StringPtr("random workflowID"),
 			},
-			record: &archiverproto.ArchiveVisibilityRequest{
+			record: &archiverspb.ArchiveVisibilityRequest{
 				CloseTime: timestamp.UnixOrZeroTimePtr(2000),
 			},
 			shouldMatch: false,
@@ -252,7 +252,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				workflowID:        convert.StringPtr("random workflowID"),
 				runID:             convert.StringPtr("random runID"),
 			},
-			record: &archiverproto.ArchiveVisibilityRequest{
+			record: &archiverspb.ArchiveVisibilityRequest{
 				CloseTime:        timestamp.UnixOrZeroTimePtr(12345),
 				WorkflowId:       "random workflowID",
 				RunId:            "random runID",
@@ -266,7 +266,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				latestCloseTime:   int64(12345),
 				workflowTypeName:  convert.StringPtr("some random type name"),
 			},
-			record: &archiverproto.ArchiveVisibilityRequest{
+			record: &archiverspb.ArchiveVisibilityRequest{
 				CloseTime: timestamp.UnixOrZeroTimePtr(12345),
 			},
 			shouldMatch: false,
@@ -278,7 +278,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				workflowTypeName:  convert.StringPtr("some random type name"),
 				status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
 			},
-			record: &archiverproto.ArchiveVisibilityRequest{
+			record: &archiverspb.ArchiveVisibilityRequest{
 				CloseTime:        timestamp.UnixOrZeroTimePtr(12345),
 				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 				WorkflowTypeName: "some random type name",
@@ -478,7 +478,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	URI, err := archiver.NewURI("file://" + dir)
 	s.NoError(err)
 	for _, record := range s.visibilityRecords {
-		err := visibilityArchiver.Archive(context.Background(), URI, (*archiverproto.ArchiveVisibilityRequest)(record))
+		err := visibilityArchiver.Archive(context.Background(), URI, (*archiverspb.ArchiveVisibilityRequest)(record))
 		s.NoError(err)
 	}
 
@@ -511,7 +511,7 @@ func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchive
 }
 
 func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
-	s.visibilityRecords = []*archiverproto.ArchiveVisibilityRequest{
+	s.visibilityRecords = []*archiverspb.ArchiveVisibilityRequest{
 		{
 			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
@@ -578,7 +578,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 	}
 }
 
-func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(record *archiverproto.ArchiveVisibilityRequest) {
+func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(record *archiverspb.ArchiveVisibilityRequest) {
 	data, err := encode(record)
 	s.Require().NoError(err)
 	filename := constructVisibilityFilename(record.CloseTime, record.GetRunId())

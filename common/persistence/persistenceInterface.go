@@ -31,7 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -212,7 +212,7 @@ type (
 		ExecutionInfo       *WorkflowExecutionInfo
 
 		BufferedEvents   []*serialization.DataBlob
-		VersionHistories *history.VersionHistories
+		VersionHistories *historyspb.VersionHistories
 		Checksum         checksum.Checksum
 	}
 
@@ -269,7 +269,7 @@ type (
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
 	InternalWorkflowMutation struct {
 		ExecutionInfo    *WorkflowExecutionInfo
-		VersionHistories *history.VersionHistories
+		VersionHistories *historyspb.VersionHistories
 		StartVersion     int64
 		LastWriteVersion int64
 
@@ -300,7 +300,7 @@ type (
 	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
 	InternalWorkflowSnapshot struct {
 		ExecutionInfo    *WorkflowExecutionInfo
-		VersionHistories *history.VersionHistories
+		VersionHistories *historyspb.VersionHistories
 		StartVersion     int64
 		LastWriteVersion int64
 

@@ -27,7 +27,7 @@ package history
 import (
 	"fmt"
 
-	checksumproto "go.temporal.io/server/api/checksum/v1"
+	checksumspb "go.temporal.io/server/api/checksum/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/checksum"
 )
@@ -56,9 +56,9 @@ func verifyMutableStateChecksum(
 	return checksum.Verify(payload, csum)
 }
 
-func newMutableStateChecksumPayload(ms mutableState) *checksumproto.MutableStateChecksumPayload {
+func newMutableStateChecksumPayload(ms mutableState) *checksumspb.MutableStateChecksumPayload {
 	executionInfo := ms.GetExecutionInfo()
-	payload := &checksumproto.MutableStateChecksumPayload{
+	payload := &checksumspb.MutableStateChecksumPayload{
 		CancelRequested:         executionInfo.CancelRequested,
 		State:                   executionInfo.ExecutionState.State,
 		LastFirstEventId:        executionInfo.LastFirstEventId,

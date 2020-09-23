@@ -33,7 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -81,7 +81,7 @@ func (s *protoConverterSuite) TestConvertWorkflowExecution_Success() {
 	lastProcessedEventID := int64(17)
 	startVersion := int64(333)
 	stats := &persistenceblobs.ExecutionStats{HistorySize: 127}
-	vh := &history.VersionHistories{
+	vh := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 18,
 		Histories:                  nil,
 	}
@@ -95,10 +95,10 @@ func (s *protoConverterSuite) TestConvertWorkflowExecution_Success() {
 		LastFirstEventId:           common.FirstEventID,
 		LastProcessedEvent:         lastProcessedEventID,
 		ExecutionState: &persistenceblobs.WorkflowExecutionState{
-			RunId:                      runID,
-			CreateRequestId:            uuid.New(),
-			State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			RunId:           runID,
+			CreateRequestId: uuid.New(),
+			State:           enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
 		ExecutionStats: stats,
 	}
@@ -138,7 +138,7 @@ func (s *protoConverterSuite) TestConvertWorkflowExecution_HistorySizeMigration(
 	lastProcessedEventID := int64(17)
 	startVersion := int64(333)
 	stats := &persistenceblobs.ExecutionStats{HistorySize: 127}
-	vh := &history.VersionHistories{
+	vh := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 18,
 		Histories:                  nil,
 	}
@@ -152,10 +152,10 @@ func (s *protoConverterSuite) TestConvertWorkflowExecution_HistorySizeMigration(
 		LastFirstEventId:           common.FirstEventID,
 		LastProcessedEvent:         lastProcessedEventID,
 		ExecutionState: &persistenceblobs.WorkflowExecutionState{
-			RunId:                      runID,
-			CreateRequestId:            uuid.New(),
-			State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			RunId:           runID,
+			CreateRequestId: uuid.New(),
+			State:           enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
 		ExecutionStats: stats,
 	}

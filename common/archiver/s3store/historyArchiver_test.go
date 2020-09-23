@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/zap"
 
-	archiverproto "go.temporal.io/server/api/archiver/v1"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/s3store/mocks"
@@ -84,8 +84,8 @@ type historyArchiverSuite struct {
 	container          *archiver.HistoryBootstrapContainer
 	logger             log.Logger
 	testArchivalURI    archiver.URI
-	historyBatchesV1   []*archiverproto.HistoryBlob
-	historyBatchesV100 []*archiverproto.HistoryBlob
+	historyBatchesV1   []*archiverspb.HistoryBlob
+	historyBatchesV100 []*archiverspb.HistoryBlob
 }
 
 func TestHistoryArchiverSuite(t *testing.T) {
@@ -351,8 +351,8 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 			},
 		},
 	}
-	historyBlob := &archiverproto.HistoryBlob{
-		Header: &archiverproto.HistoryBlobHeader{
+	historyBlob := &archiverspb.HistoryBlob{
+		Header: &archiverspb.HistoryBlobHeader{
 			IsLast: true,
 		},
 		Body: historyBatches,
@@ -429,8 +429,8 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			},
 		},
 	}
-	historyBlob := &archiverproto.HistoryBlob{
-		Header: &archiverproto.HistoryBlobHeader{
+	historyBlob := &archiverspb.HistoryBlob{
+		Header: &archiverspb.HistoryBlobHeader{
 			IsLast: true,
 		},
 		Body: historyBatches,
@@ -647,9 +647,9 @@ func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.H
 func (s *historyArchiverSuite) setupHistoryDirectory() {
 	now := time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)
 
-	s.historyBatchesV1 = []*archiverproto.HistoryBlob{
+	s.historyBatchesV1 = []*archiverspb.HistoryBlob{
 		{
-			Header: &archiverproto.HistoryBlobHeader{
+			Header: &archiverspb.HistoryBlobHeader{
 				IsLast: true,
 			},
 			Body: []*historypb.History{
@@ -666,9 +666,9 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 		},
 	}
 
-	s.historyBatchesV100 = []*archiverproto.HistoryBlob{
+	s.historyBatchesV100 = []*archiverspb.HistoryBlob{
 		{
-			Header: &archiverproto.HistoryBlobHeader{
+			Header: &archiverspb.HistoryBlobHeader{
 				IsLast: false,
 			},
 			Body: []*historypb.History{
@@ -689,7 +689,7 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			},
 		},
 		{
-			Header: &archiverproto.HistoryBlobHeader{
+			Header: &archiverspb.HistoryBlobHeader{
 				IsLast: true,
 			},
 			Body: []*historypb.History{
@@ -710,7 +710,7 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 	s.writeHistoryBatchesForGetTest(s.historyBatchesV100, testCloseFailoverVersion)
 }
 
-func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*archiverproto.HistoryBlob, version int64) {
+func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*archiverspb.HistoryBlob, version int64) {
 	for i, batch := range historyBatches {
 		encoder := codec.NewJSONPBEncoder()
 		data, err := encoder.Encode(batch)

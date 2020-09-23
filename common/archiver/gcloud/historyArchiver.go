@@ -33,7 +33,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
-	archiverproto "go.temporal.io/server/api/archiver/v1"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
@@ -306,7 +306,7 @@ func (h *historyArchiver) validateURI(URI archiver.URI) (err error) {
 	return
 }
 
-func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIterator) (*archiverproto.HistoryBlob, error) {
+func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIterator) (*archiverspb.HistoryBlob, error) {
 	historyBlob, err := historyIterator.Next()
 	op := func() error {
 		historyBlob, err = historyIterator.Next()

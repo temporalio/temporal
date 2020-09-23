@@ -38,7 +38,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
-	archiverproto "go.temporal.io/server/api/archiver/v1"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/codec"
@@ -133,8 +133,8 @@ func serializeToken(token interface{}) ([]byte, error) {
 	return json.Marshal(token)
 }
 
-func decodeVisibilityRecord(data []byte) (*archiverproto.ArchiveVisibilityRequest, error) {
-	record := &archiverproto.ArchiveVisibilityRequest{}
+func decodeVisibilityRecord(data []byte) (*archiverspb.ArchiveVisibilityRequest, error) {
+	record := &archiverspb.ArchiveVisibilityRequest{}
 	encoder := codec.NewJSONPBEncoder()
 	err := encoder.Decode(data, record)
 	if err != nil {
@@ -155,7 +155,7 @@ func deserializeQueryVisibilityToken(bytes []byte) (*queryVisibilityToken, error
 	return token, err
 }
 
-func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *workflowpb.WorkflowExecutionInfo {
+func convertToExecutionInfo(record *archiverspb.ArchiveVisibilityRequest) *workflowpb.WorkflowExecutionInfo {
 	return &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
