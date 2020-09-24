@@ -737,10 +737,9 @@ func (s *integrationSuite) TestActivityTimeouts() {
 					StartToCloseTimeout:    timestamp.DurationPtr(5 * time.Second), // ActivityID C is expected to timeout using StartToClose
 					HeartbeatTimeout:       timestamp.DurationPtr(0 * time.Second),
 					RetryPolicy: &commonpb.RetryPolicy{
-						InitialInterval:    timestamp.DurationPtr(1 * time.Second),
-						MaximumInterval:    timestamp.DurationPtr(1 * time.Second),
-						BackoffCoefficient: 1,
-					}},
+						MaximumAttempts: 1, // Disable retry and let it timeout.
+					},
+				},
 				}}, {
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -752,6 +751,9 @@ func (s *integrationSuite) TestActivityTimeouts() {
 					ScheduleToStartTimeout: timestamp.DurationPtr(20 * time.Second),
 					StartToCloseTimeout:    timestamp.DurationPtr(15 * time.Second),
 					HeartbeatTimeout:       timestamp.DurationPtr(3 * time.Second), // ActivityID D is expected to timeout using Heartbeat
+					RetryPolicy: &commonpb.RetryPolicy{
+						MaximumAttempts: 1, // Disable retry and let it timeout.
+					},
 				}}},
 			}, nil
 		} else if previousStartedEventID > 0 {
@@ -778,28 +780,28 @@ func (s *integrationSuite) TestActivityTimeouts() {
 							activityATimedout = true
 						} else {
 							failWorkflow = true
-							failReason = "ActivityID A is expected to timeout with ScheduleToStart"
+							failReason = "ActivityID A is expected to timeout with ScheduleToStart but it was " + scheduledEvent.GetActivityTaskScheduledEventAttributes().GetActivityId()
 						}
 					case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
 						if scheduledEvent.GetActivityTaskScheduledEventAttributes().GetActivityId() == "B" {
 							activityBTimedout = true
 						} else {
 							failWorkflow = true
-							failReason = "ActivityID B is expected to timeout with ScheduleToClose"
+							failReason = "ActivityID B is expected to timeout with ScheduleToClose but it was " + scheduledEvent.GetActivityTaskScheduledEventAttributes().GetActivityId()
 						}
 					case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 						if scheduledEvent.GetActivityTaskScheduledEventAttributes().GetActivityId() == "C" {
 							activityCTimedout = true
 						} else {
 							failWorkflow = true
-							failReason = "ActivityID C is expected to timeout with StartToClose"
+							failReason = "ActivityID C is expected to timeout with StartToClose but it was " + scheduledEvent.GetActivityTaskScheduledEventAttributes().GetActivityId()
 						}
 					case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 						if scheduledEvent.GetActivityTaskScheduledEventAttributes().GetActivityId() == "D" {
 							activityDTimedout = true
 						} else {
 							failWorkflow = true
-							failReason = "ActivityID D is expected to timeout with Heartbeat"
+							failReason = "ActivityID D is expected to timeout with Heartbeat but it was " + scheduledEvent.GetActivityTaskScheduledEventAttributes().GetActivityId()
 						}
 					}
 				}
@@ -807,9 +809,8 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		}
 
 		if failWorkflow {
-			s.Logger.Error("Failing workflow")
+			s.Logger.Error("Failing workflow: " + failReason)
 			workflowFailed = true
-			workflowComplete = true
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
