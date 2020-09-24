@@ -165,18 +165,36 @@ func doCreateKeyspace(cfg CQLClientConfig, name string) error {
 	return client.createKeyspace(name)
 }
 
-func doDropKeyspace(cfg CQLClientConfig, name string) {
+// dropKeyspace drops a cassandra Keyspace
+func dropKeyspace(cli *cli.Context) error {
+	config, err := newCQLClientConfig(cli)
+	if err != nil {
+		return handleErr(schema.NewConfigError(err.Error()))
+	}
+	keyspace := cli.String(schema.CLIOptKeyspace)
+	if keyspace == "" {
+		return handleErr(schema.NewConfigError("missing " + flag(schema.CLIOptKeyspace) + " argument "))
+	}
+	err = doDropKeyspace(*config, keyspace)
+	if err != nil {
+		// doDropKeyspace handles own error
+		return err
+	}
+	return nil
+}
+
+func doDropKeyspace(cfg CQLClientConfig, name string) error {
 	cfg.Keyspace = systemKeyspace
 	client, err := newCQLClient(&cfg)
 	if err != nil {
-		logErr(fmt.Errorf("error creating client: %v", err))
-		return
+		return handleErr(fmt.Errorf("error creating client: %w", err))
 	}
+	defer client.Close()
 	err = client.dropKeyspace(name)
 	if err != nil {
-		logErr(fmt.Errorf("error dropping keyspace %v: %v", name, err))
+		return handleErr(fmt.Errorf("error dropping keyspace %v: %w", name, err))
 	}
-	client.Close()
+	return nil
 }
 
 func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
@@ -233,8 +251,4 @@ func flag(opt string) string {
 func handleErr(err error) error {
 	log.Println(err)
 	return err
-}
-
-func logErr(err error) {
-	log.Println(err)
 }

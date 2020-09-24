@@ -204,6 +204,20 @@ func buildCLIOptions() *cli.App {
 				cliHandler(c, createKeyspace)
 			},
 		},
+		{
+			Name:    "drop-Keyspace",
+			Aliases: []string{"drop"},
+			Usage:   "drops a Keyspace",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  schema.CLIFlagKeyspace,
+					Usage: "name of the Keyspace",
+				},
+			},
+			Action: func(c *cli.Context) {
+				cliHandler(c, dropKeyspace)
+			},
+		},
 	}
 
 	return app
