@@ -36,6 +36,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -194,8 +195,8 @@ func StartBatchJob(c *cli.Context) {
 			"Reason": reason,
 		},
 		SearchAttributes: map[string]interface{}{
-			"CustomNamespace": namespace,
-			"Operator":        operator,
+			definition.CustomNamespace: namespace,
+			definition.Operator:        operator,
 		},
 	}
 
