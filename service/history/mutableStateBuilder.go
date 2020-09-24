@@ -2144,8 +2144,6 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		HasRetryPolicy:          attributes.RetryPolicy != nil,
 		Attempt:                 1,
 	}
-	retryTime := timestamp.TimeValue(ai.ScheduledTime).Add(timestamp.DurationValue(scheduleToCloseTimeout))
-	ai.RetryExpirationTime = &retryTime
 	if ai.HasRetryPolicy {
 		ai.RetryInitialInterval = attributes.RetryPolicy.GetInitialInterval()
 		ai.RetryBackoffCoefficient = attributes.RetryPolicy.GetBackoffCoefficient()
