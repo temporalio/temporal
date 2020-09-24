@@ -27,6 +27,7 @@ package frontend
 import (
 	"context"
 	"errors"
+	"go.temporal.io/server/common/convert"
 	"strconv"
 	"time"
 
@@ -204,7 +205,7 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 	namespaceID, err := adh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, request.Execution.WorkflowId, adh.numberOfHistoryShards)
-	shardIDstr := string(shardID)
+	shardIDstr := convert.IntToString(shardID)
 	shardIDForOutput := strconv.Itoa(shardID)
 
 	historyHost, err := adh.GetMembershipMonitor().Lookup(common.HistoryServiceName, shardIDstr)
