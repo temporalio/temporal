@@ -26,6 +26,7 @@ package convert
 
 import (
 	"math"
+	"strconv"
 	"time"
 )
 
@@ -73,4 +74,16 @@ func Int32Ceil(v float64) int32 {
 // Int64Ceil return the int64 ceil of a float64
 func Int64Ceil(v float64) int64 {
 	return int64(math.Ceil(v))
+}
+
+func IntToString(v int) string {
+	return Int64ToString(int64(v))
+}
+
+func Uint64ToString(v uint64) string {
+	return strconv.FormatUint(v, 10)
+}
+
+func Int64ToString(v int64) string {
+	return strconv.FormatInt(v, 10)
 }
