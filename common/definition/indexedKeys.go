@@ -39,8 +39,8 @@ const (
 	CloseTime       = "CloseTime"
 	ExecutionStatus = "ExecutionStatus"
 	HistoryLength   = "HistoryLength"
-	Encoding        = "Encoding"
 	KafkaKey        = "KafkaKey"
+	Encoding        = "Encoding"
 	BinaryChecksums = "BinaryChecksums"
 	TaskQueue       = "TaskQueue"
 
