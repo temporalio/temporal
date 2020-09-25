@@ -355,7 +355,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 		currentWorkflow.getContext(),
 		currentWorkflow.getMutableState(),
 		currentWorkflowPolicy.ptr(),
-		nil,
 	)
 }
 
@@ -379,7 +378,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsCurrent(
 		targetWorkflow.getMutableState(),
 		newContext,
 		newMutableState,
-		nil,
 		nil,
 		nil,
 		nil,
@@ -451,7 +449,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		targetWorkflow.getMutableState(),
 		newContext,
 		newMutableState,
-		nil,
 		nil,
 		nil,
 		nil,

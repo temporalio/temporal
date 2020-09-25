@@ -230,26 +230,22 @@ func terminateWorkflow(
 }
 
 func getWorkflowExecutionTimeout(namespace string, requestedTimeout time.Duration, serviceConfig *Config) time.Duration {
-	executionTimeoutSeconds := requestedTimeout
-	if executionTimeoutSeconds == 0 {
-		executionTimeoutSeconds = timestamp.RoundUp(serviceConfig.DefaultWorkflowExecutionTimeout(namespace))
-	}
-	maxWorkflowExecutionTimeout := timestamp.RoundUp(serviceConfig.MaxWorkflowExecutionTimeout(namespace))
-	executionTimeoutSeconds = timestamp.MinDuration(executionTimeoutSeconds, maxWorkflowExecutionTimeout)
-
-	return executionTimeoutSeconds
+	return common.GetWorkflowExecutionTimeout(
+		namespace,
+		requestedTimeout,
+		serviceConfig.DefaultWorkflowExecutionTimeout,
+		serviceConfig.MaxWorkflowExecutionTimeout,
+	)
 }
 
 func getWorkflowRunTimeout(namespace string, requestedTimeout, executionTimeout time.Duration, serviceConfig *Config) time.Duration {
-	runTimeoutSeconds := requestedTimeout
-	if runTimeoutSeconds == 0 {
-		runTimeoutSeconds = timestamp.RoundUp(serviceConfig.DefaultWorkflowRunTimeout(namespace))
-	}
-	maxWorkflowRunTimeout := timestamp.RoundUp(serviceConfig.MaxWorkflowRunTimeout(namespace))
-	runTimeoutSeconds = timestamp.MinDuration(runTimeoutSeconds, maxWorkflowRunTimeout)
-	runTimeoutSeconds = timestamp.MinDuration(runTimeoutSeconds, executionTimeout)
-
-	return runTimeoutSeconds
+	return common.GetWorkflowRunTimeout(
+		namespace,
+		requestedTimeout,
+		executionTimeout,
+		serviceConfig.DefaultWorkflowRunTimeout,
+		serviceConfig.MaxWorkflowRunTimeout,
+	)
 }
 
 // FindAutoResetPoint returns the auto reset point

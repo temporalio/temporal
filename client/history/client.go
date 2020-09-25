@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -993,7 +994,7 @@ func (c *clientImpl) getClientForWorkflowID(namespaceID, workflowID string) (his
 }
 
 func (c *clientImpl) getClientForShardID(shardID int) (historyservice.HistoryServiceClient, error) {
-	client, err := c.clients.GetClientForKey(string(shardID))
+	client, err := c.clients.GetClientForKey(convert.IntToString(shardID))
 	if err != nil {
 		return nil, err
 	}

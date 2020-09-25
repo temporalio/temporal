@@ -241,10 +241,6 @@ type (
 
 		// current workflow
 		CurrentWorkflowMutation *InternalWorkflowMutation
-
-		// TODO deprecate this once nDC migration is completed
-		//  basically should use CurrentWorkflowMutation instead
-		CurrentWorkflowCAS *CurrentWorkflowCAS
 	}
 
 	// InternalResetWorkflowExecutionRequest is used to reset workflow execution state for Persistence Interface

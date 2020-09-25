@@ -30,6 +30,8 @@ import (
 	"math/rand"
 	"strings"
 
+	"go.temporal.io/server/common/convert"
+
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/examples/helloworld/helloworld"
@@ -122,7 +124,7 @@ func dialHello(s suite.Suite, hostport string, clientFactory *TestFactory, serve
 	s.NoError(err)
 	client := helloworld.NewGreeterClient(clientConn)
 
-	request := &helloworld.HelloRequest{Name: string(rand.Uint64())}
+	request := &helloworld.HelloRequest{Name: convert.Uint64ToString(rand.Uint64())}
 	reply, err := client.SayHello(context.Background(), request)
 
 	if err == nil {
