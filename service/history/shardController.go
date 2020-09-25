@@ -30,6 +30,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/convert"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -236,7 +238,7 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShar
 	if c.isShuttingDown() || atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
 		return nil, fmt.Errorf("shardController for host '%v' shutting down", c.GetHostInfo().Identity())
 	}
-	info, err := c.GetHistoryServiceResolver().Lookup(string(shardID))
+	info, err := c.GetHistoryServiceResolver().Lookup(convert.IntToString(shardID))
 	if err != nil {
 		return nil, err
 	}
@@ -336,7 +338,7 @@ func (c *shardController) acquireShards() {
 				if c.isShuttingDown() {
 					return
 				}
-				info, err := c.GetHistoryServiceResolver().Lookup(string(shardID))
+				info, err := c.GetHistoryServiceResolver().Lookup(convert.IntToString(shardID))
 				if err != nil {
 					c.logger.Error("Error looking up host for shardID", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
 				} else {

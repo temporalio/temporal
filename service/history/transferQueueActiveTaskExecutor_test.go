@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/convert"
+
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
@@ -919,7 +921,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		commands = append(commands, &commandpb.Command{
 			CommandType: dt,
 			Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-				WorkflowId: "child workflow" + string(i),
+				WorkflowId: "child workflow" + convert.IntToString(i),
 				WorkflowType: &commonpb.WorkflowType{
 					Name: "child workflow type",
 				},
@@ -937,7 +939,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 	for i := 0; i < 10; i++ {
 		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
-			WorkflowId: "child workflow" + string(i),
+			WorkflowId: "child workflow" + convert.IntToString(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
 			},
@@ -1010,7 +1012,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		commands = append(commands, &commandpb.Command{
 			CommandType: dt,
 			Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-				WorkflowId: "child workflow" + string(i),
+				WorkflowId: "child workflow" + convert.IntToString(i),
 				WorkflowType: &commonpb.WorkflowType{
 					Name: "child workflow type",
 				},
@@ -1028,7 +1030,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 	for i := 0; i < 10; i++ {
 		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
-			WorkflowId: "child workflow" + string(i),
+			WorkflowId: "child workflow" + convert.IntToString(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
 			},
