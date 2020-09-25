@@ -67,8 +67,7 @@ func constructVisibilityFilenamePrefix(namespaceID, tag string) string {
 	return fmt.Sprintf("%s/%s", namespaceID, tag)
 }
 
-func constructTimeBasedSearchKey(namespaceID, tag string, timestamp int64, precision string) string {
-	t := time.Unix(0, timestamp).UTC()
+func constructTimeBasedSearchKey(namespaceID, tag string, t time.Time, precision string) string {
 	var timeFormat = ""
 	switch precision {
 	case PrecisionSecond:
