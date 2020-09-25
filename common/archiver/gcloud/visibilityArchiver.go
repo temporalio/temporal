@@ -191,10 +191,10 @@ func (v *visibilityArchiver) query(ctx context.Context, URI archiver.URI, reques
 	}
 
 	var prefix = constructVisibilityFilenamePrefix(request.namespaceID, indexKeyCloseTimeout)
-	if request.parsedQuery.closeTime != 0 {
+	if !request.parsedQuery.closeTime.IsZero() {
 		prefix = constructTimeBasedSearchKey(request.namespaceID, indexKeyCloseTimeout, request.parsedQuery.closeTime, *request.parsedQuery.searchPrecision)
 	}
-	if request.parsedQuery.startTime != 0 {
+	if !request.parsedQuery.startTime.IsZero() {
 		prefix = constructTimeBasedSearchKey(request.namespaceID, indexKeyStartTimeout, request.parsedQuery.startTime, *request.parsedQuery.searchPrecision)
 	}
 
