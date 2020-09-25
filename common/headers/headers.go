@@ -40,13 +40,13 @@ var (
 	versionHeaders = metadata.New(map[string]string{
 		ClientNameHeaderName:              ClientNameServer,
 		ClientVersionHeaderName:           ServerVersion,
-		SupportedServerVersionsHeaderName: ">=0.31.0 <2.0.0",
+		SupportedServerVersionsHeaderName: SupportedServerVersions,
 	})
 
 	cliVersionHeaders = metadata.New(map[string]string{
 		ClientNameHeaderName:              ClientNameCLI,
 		ClientVersionHeaderName:           CLIVersion,
-		SupportedServerVersionsHeaderName: ">=0.31.0 <2.0.0",
+		SupportedServerVersionsHeaderName: SupportedServerVersions,
 	})
 )
 
