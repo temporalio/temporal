@@ -218,9 +218,9 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 						ActivityType:           &commonpb.ActivityType{Name: activityName},
 						TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
 						Input:                  nil,
-						ScheduleToCloseTimeout: timestamp.DurationPtr(4 * time.Second),
-						ScheduleToStartTimeout: timestamp.DurationPtr(4 * time.Second),
-						StartToCloseTimeout:    timestamp.DurationPtr(4 * time.Second),
+						ScheduleToCloseTimeout: timestamp.DurationPtr(8 * time.Second),
+						ScheduleToStartTimeout: timestamp.DurationPtr(8 * time.Second),
+						StartToCloseTimeout:    timestamp.DurationPtr(8 * time.Second),
 						HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
 						RetryPolicy: &commonpb.RetryPolicy{
 							InitialInterval:    timestamp.DurationPtr(1 * time.Second),
