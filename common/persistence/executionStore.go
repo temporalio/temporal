@@ -27,7 +27,6 @@ package persistence
 import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -295,16 +294,13 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	if err != nil {
 		return err
 	}
-
-	if request.CurrentWorkflowMutation == nil {
-		return serviceerror.NewInternal("ConflictResolveWorkflowExecution: current workflow mutation not set on request")
-	}
 	var serializedCurrentWorkflowMutation *InternalWorkflowMutation
-	serializedCurrentWorkflowMutation, err = m.SerializeWorkflowMutation(request.CurrentWorkflowMutation)
-	if err != nil {
-		return err
+	if request.CurrentWorkflowMutation != nil {
+		serializedCurrentWorkflowMutation, err = m.SerializeWorkflowMutation(request.CurrentWorkflowMutation)
+		if err != nil {
+			return err
+		}
 	}
-
 	var serializedNewWorkflowMutation *InternalWorkflowSnapshot
 	if request.NewWorkflowSnapshot != nil {
 		serializedNewWorkflowMutation, err = m.SerializeWorkflowSnapshot(request.NewWorkflowSnapshot)
