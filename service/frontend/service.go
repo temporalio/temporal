@@ -108,6 +108,19 @@ type Config struct {
 
 	EnableRPCReplication         dynamicconfig.BoolPropertyFn
 	EnableCleanupReplicationTask dynamicconfig.BoolPropertyFn
+
+	// The execution timeout a workflow execution defaults to if not specified
+	DefaultWorkflowExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	// The run timeout a workflow run defaults to if not specified
+	DefaultWorkflowRunTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+
+	// The execution timeout a workflow execution defaults to if not specified
+	MaxWorkflowExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	// The run timeout a workflow run defaults to if not specified
+	MaxWorkflowRunTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+
+	// DefaultWorkflowTaskTimeout the default workflow task timeout
+	DefaultWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -149,6 +162,11 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		EnableRPCReplication:                   dc.GetBoolProperty(dynamicconfig.FrontendEnableRPCReplication, false),
 		EnableCleanupReplicationTask:           dc.GetBoolProperty(dynamicconfig.FrontendEnableCleanupReplicationTask, true),
 		DefaultWorkflowRetryPolicy:             dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
+		DefaultWorkflowExecutionTimeout:        dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowExecutionTimeout, common.DefaultWorkflowExecutionTimeout),
+		DefaultWorkflowRunTimeout:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowRunTimeout, common.DefaultWorkflowRunTimeout),
+		MaxWorkflowExecutionTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxWorkflowExecutionTimeout, common.DefaultWorkflowExecutionTimeout),
+		MaxWorkflowRunTimeout:                  dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxWorkflowRunTimeout, common.DefaultWorkflowRunTimeout),
+		DefaultWorkflowTaskTimeout:             dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 	}
 }
 
