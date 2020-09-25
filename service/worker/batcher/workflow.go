@@ -109,7 +109,7 @@ type (
 		Query string
 		// Reason for the operation
 		Reason string
-		// Supporting: reset,terminate
+		// Supporting: signal,cancel,terminate
 		BatchType string
 
 		// Below are all optional
@@ -195,9 +195,7 @@ func validateParams(params BatchParams) error {
 			return fmt.Errorf("must provide signal name")
 		}
 		return nil
-	case BatchTypeCancel:
-		fallthrough
-	case BatchTypeTerminate:
+	case BatchTypeCancel, BatchTypeTerminate:
 		return nil
 	default:
 		return fmt.Errorf("not supported batch type: %v", params.BatchType)
