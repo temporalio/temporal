@@ -3770,6 +3770,12 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 		wh.config.MaxWorkflowRunTimeout,
 	)
 
+	request.WorkflowTaskTimeout = common.GetWorkflowTaskTimeout(
+		request.GetNamespace(),
+		request.GetWorkflowTaskTimeout(),
+		wh.config.DefaultWorkflowTaskTimeout,
+	)
+
 	return nil
 }
 
@@ -3801,6 +3807,12 @@ func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 		request.GetWorkflowExecutionTimeout(),
 		wh.config.DefaultWorkflowRunTimeout,
 		wh.config.MaxWorkflowRunTimeout,
+	)
+
+	request.WorkflowTaskTimeout = common.GetWorkflowTaskTimeout(
+		request.GetNamespace(),
+		request.GetWorkflowTaskTimeout(),
+		wh.config.DefaultWorkflowTaskTimeout,
 	)
 
 	return nil

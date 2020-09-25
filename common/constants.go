@@ -117,6 +117,10 @@ const (
 	// this value is not explicitly set by the user on a Start Workflow request
 	// Intention is 10 years
 	DefaultWorkflowRunTimeout = 24 * 365 * 10 * time.Hour
+
+	// DefaultWorkflowTaskTimeout sets the Default Workflow Task timeout for a Workflow
+	// when the value is not explicitly set by the user. Intention is 10 seconds.
+	DefaultWorkflowTaskTimeout = 10 * time.Second
 )
 
 const (

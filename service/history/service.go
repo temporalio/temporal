@@ -273,7 +273,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		VisibilityOpenMaxQPS:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryVisibilityOpenMaxQPS, 300),
 		VisibilityClosedMaxQPS:               dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryVisibilityClosedMaxQPS, 300),
 		MaxAutoResetPoints:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, defaultHistoryMaxAutoResetPoints),
-		DefaultWorkflowTaskTimeout:           dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, time.Second*10),
+		DefaultWorkflowTaskTimeout:           dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		MaxWorkflowTaskTimeout:               dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxWorkflowTaskTimeout, time.Second*60),
 		AdvancedVisibilityWritingMode:        dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, common.GetDefaultAdvancedVisibilityWritingMode(isAdvancedVisConfigExist)),
 		EmitShardDiffLog:                     dc.GetBoolProperty(dynamicconfig.EmitShardDiffLog, false),

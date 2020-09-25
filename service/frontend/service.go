@@ -118,6 +118,9 @@ type Config struct {
 	MaxWorkflowExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// The run timeout a workflow run defaults to if not specified
 	MaxWorkflowRunTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+
+	// DefaultWorkflowTaskTimeout the default workflow task timeout
+	DefaultWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -163,6 +166,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		DefaultWorkflowRunTimeout:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowRunTimeout, common.DefaultWorkflowRunTimeout),
 		MaxWorkflowExecutionTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxWorkflowExecutionTimeout, common.DefaultWorkflowExecutionTimeout),
 		MaxWorkflowRunTimeout:                  dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxWorkflowRunTimeout, common.DefaultWorkflowRunTimeout),
+		DefaultWorkflowTaskTimeout:             dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 	}
 }
 

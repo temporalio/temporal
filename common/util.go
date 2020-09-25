@@ -707,3 +707,16 @@ func GetWorkflowRunTimeout(
 		timestamp.DurationPtr(getMaxAllowedTimeoutFunc(namespace)),
 	)
 }
+
+// GetWorkflowTaskTimeout gets the default allowed execution timeout or truncates the requested value to the maximum allowed timeout
+func GetWorkflowTaskTimeout(
+	namespace string,
+	requestedTimeout *time.Duration,
+	getDefaultTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter) *time.Duration {
+
+	if timestamp.DurationValue(requestedTimeout) == 0 {
+		return timestamp.DurationPtr(getDefaultTimeoutFunc(namespace))
+	}
+
+	return requestedTimeout
+}
