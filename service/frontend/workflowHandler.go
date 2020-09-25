@@ -2911,9 +2911,6 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 // Things cleared are:
 // 1. StickyTaskQueue
 // 2. StickyScheduleToStartTimeout
-// 3. ClientLibraryVersion
-// 4. SupportedServerVersions
-// 5. ClientName
 func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *workflowservice.ResetStickyTaskQueueRequest) (_ *workflowservice.ResetStickyTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 

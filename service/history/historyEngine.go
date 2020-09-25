@@ -1112,9 +1112,6 @@ func (e *historyEngineImpl) DescribeMutableState(
 // Volatile information are the information related to client, such as:
 // 1. StickyTaskQueue
 // 2. StickyScheduleToStartTimeout
-// 3. ClientLibraryVersion
-// 4. SupportedServerVersions
-// 5. ClientName
 func (e *historyEngineImpl) ResetStickyTaskQueue(
 	ctx context.Context,
 	resetRequest *historyservice.ResetStickyTaskQueueRequest,
