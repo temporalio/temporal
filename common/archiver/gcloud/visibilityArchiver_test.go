@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
@@ -232,9 +233,11 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
 	defer mockCtrl.Finish()
 
 	mockParser := NewMockQueryParser(mockCtrl)
+	startTime, _ := time.Parse(time.RFC3339, "2019-10-04T11:00:00+00:00")
+	closeTime := startTime.Add(time.Hour)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		closeTime: int64(101),
-		startTime: int64(1),
+		closeTime: closeTime,
+		startTime: startTime,
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -264,8 +267,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 
 	mockParser := NewMockQueryParser(mockCtrl)
 	dayPrecision := string("Day")
+	closeTime, _ := time.Parse(time.RFC3339, "2019-10-04T11:00:00+00:00")
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		closeTime:       int64(101),
+		closeTime:       closeTime,
 		searchPrecision: &dayPrecision,
 		workflowType:    convert.StringPtr("MobileOnlyWorkflow::processMobileOnly"),
 		workflowID:      convert.StringPtr(testWorkflowID),
@@ -307,8 +311,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 
 	mockParser := NewMockQueryParser(mockCtrl)
 	dayPrecision := "Day"
+	closeTime, _ := time.Parse(time.RFC3339, "2019-10-04T11:00:00+00:00")
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		closeTime:       int64(101),
+		closeTime:       closeTime,
 		searchPrecision: &dayPrecision,
 		workflowType:    convert.StringPtr("MobileOnlyWorkflow::processMobileOnly"),
 		workflowID:      convert.StringPtr(testWorkflowID),
