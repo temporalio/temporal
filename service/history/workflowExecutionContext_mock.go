@@ -272,17 +272,17 @@ func (mr *MockworkflowExecutionContextMockRecorder) createWorkflowExecution(newW
 }
 
 // conflictResolveWorkflowExecution mocks base method.
-func (m *MockworkflowExecutionContext) conflictResolveWorkflowExecution(now time.Time, conflictResolveMode persistence.ConflictResolveWorkflowMode, resetMutableState mutableState, newContext workflowExecutionContext, newMutableState mutableState, currentContext workflowExecutionContext, currentMutableState mutableState, currentTransactionPolicy *transactionPolicy, workflowCAS *persistence.CurrentWorkflowCAS) error {
+func (m *MockworkflowExecutionContext) conflictResolveWorkflowExecution(now time.Time, conflictResolveMode persistence.ConflictResolveWorkflowMode, resetMutableState mutableState, newContext workflowExecutionContext, newMutableState mutableState, currentContext workflowExecutionContext, currentMutableState mutableState, currentTransactionPolicy *transactionPolicy) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "conflictResolveWorkflowExecution", now, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy, workflowCAS)
+	ret := m.ctrl.Call(m, "conflictResolveWorkflowExecution", now, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // conflictResolveWorkflowExecution indicates an expected call of conflictResolveWorkflowExecution.
-func (mr *MockworkflowExecutionContextMockRecorder) conflictResolveWorkflowExecution(now, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy, workflowCAS interface{}) *gomock.Call {
+func (mr *MockworkflowExecutionContextMockRecorder) conflictResolveWorkflowExecution(now, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "conflictResolveWorkflowExecution", reflect.TypeOf((*MockworkflowExecutionContext)(nil).conflictResolveWorkflowExecution), now, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy, workflowCAS)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "conflictResolveWorkflowExecution", reflect.TypeOf((*MockworkflowExecutionContext)(nil).conflictResolveWorkflowExecution), now, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy)
 }
 
 // updateWorkflowExecutionAsActive mocks base method.
