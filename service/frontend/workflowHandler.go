@@ -37,7 +37,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	versionpb "go.temporal.io/api/version/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -134,7 +133,7 @@ func NewWorkflowHandler(
 				return float64(config.MaxNamespaceRPSPerInstance(namespace))
 			},
 		),
-		versionChecker: headers.NewVersionChecker(),
+		versionChecker: headers.NewDefaultVersionChecker(),
 		namespaceHandler: namespace.NewHandler(
 			config.MinRetentionDays(),
 			config.MaxBadBinaries,
@@ -2891,11 +2890,6 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 		}
 	}
 
-	headers := headers.GetValues(ctx, headers.ClientImplHeaderName, headers.ClientFeatureVersionHeaderName)
-	request.WorkerVersionInfo = &versionpb.WorkerVersionInfo{
-		Implementation: headers[0],
-		FeatureVersion: headers[1],
-	}
 	matchingRequest := &matchingservice.RespondQueryTaskCompletedRequest{
 		NamespaceId: queryTaskToken.GetNamespaceId(),
 		TaskQueue: &taskqueuepb.TaskQueue{
@@ -2918,8 +2912,8 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 // 1. StickyTaskQueue
 // 2. StickyScheduleToStartTimeout
 // 3. ClientLibraryVersion
-// 4. ClientFeatureVersion
-// 5. ClientImpl
+// 4. SupportedServerVersions
+// 5. ClientName
 func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *workflowservice.ResetStickyTaskQueueRequest) (_ *workflowservice.ResetStickyTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
@@ -3152,10 +3146,8 @@ func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservic
 	}
 
 	return &workflowservice.GetClusterInfoResponse{
-		SupportedSdkVersions: &versionpb.SupportedSDKVersions{
-			GoSdk:   headers.SupportedGoSDKVersion,
-			JavaSdk: headers.SupportedJavaSDKVersion,
-		},
+		SupportedClients: headers.SupportedClients,
+		ServerVersion:    headers.ServerVersion,
 	}, nil
 }
 

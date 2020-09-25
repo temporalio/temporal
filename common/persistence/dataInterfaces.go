@@ -232,9 +232,6 @@ type (
 		CancelRequestId                        string
 		StickyTaskQueue                        string
 		StickyScheduleToStartTimeout           *time.Duration
-		ClientLibraryVersion                   string
-		ClientFeatureVersion                   string
-		ClientImpl                             string
 		AutoResetPoints                        *workflowpb.ResetPoints
 		Memo                                   map[string]*commonpb.Payload
 		SearchAttributes                       map[string]*commonpb.Payload

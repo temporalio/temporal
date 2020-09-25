@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -86,7 +85,6 @@ type (
 		config               *Config
 		lockableQueryTaskMap lockableQueryTaskMap
 		namespaceCache       cache.NamespaceCache
-		versionChecker       headers.VersionChecker
 		keyResolver          membership.ServiceResolver
 	}
 )
@@ -131,7 +129,6 @@ func NewEngine(taskManager persistence.TaskManager,
 		config:               config,
 		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
 		namespaceCache:       namespaceCache,
-		versionChecker:       headers.NewVersionChecker(),
 		keyResolver:          resolver,
 	}
 }

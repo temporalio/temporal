@@ -1259,8 +1259,8 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 // 1. StickyTaskQueue
 // 2. StickyScheduleToStartTimeout
 // 3. ClientLibraryVersion
-// 4. ClientFeatureVersion
-// 5. ClientImpl
+// 4. SupportedServerVersions
+// 5. ClientName
 func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyservice.ResetStickyTaskQueueRequest) (_ *historyservice.ResetStickyTaskQueueResponse, retError error) {
 
 	defer log.CapturePanic(h.GetLogger(), &retError)

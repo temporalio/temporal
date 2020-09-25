@@ -35,7 +35,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	versionpb "go.temporal.io/api/version/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
@@ -490,11 +489,9 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 	}
 
 	return &adminservice.DescribeClusterResponse{
-		SupportedClientVersions: &versionpb.SupportedSDKVersions{
-			GoSdk:   headers.SupportedGoSDKVersion,
-			JavaSdk: headers.SupportedJavaSDKVersion,
-		},
-		MembershipInfo: membershipInfo,
+		SupportedClients: headers.SupportedClients,
+		ServerVersion:    headers.ServerVersion,
+		MembershipInfo:   membershipInfo,
 	}, nil
 }
 

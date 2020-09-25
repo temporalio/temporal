@@ -151,9 +151,6 @@ type HistoryServiceClient interface {
 	// Things cleared are:
 	// 1. StickyTaskQueue
 	// 2. StickyScheduleToStartTimeout
-	// 3. ClientLibraryVersion
-	// 4. ClientFeatureVersion
-	// 5. ClientImpl
 	ResetStickyTaskQueue(ctx context.Context, in *ResetStickyTaskQueueRequest, opts ...grpc.CallOption) (*ResetStickyTaskQueueResponse, error)
 	// RecordWorkflowTaskStarted is called by the Matchingservice before it hands a workflow task to the application worker in response to
 	// a PollWorkflowTaskQueue call. It records in the history the event that the workflow task has started. It will return 'TaskAlreadyStartedError',
@@ -616,9 +613,6 @@ type HistoryServiceServer interface {
 	// Things cleared are:
 	// 1. StickyTaskQueue
 	// 2. StickyScheduleToStartTimeout
-	// 3. ClientLibraryVersion
-	// 4. ClientFeatureVersion
-	// 5. ClientImpl
 	ResetStickyTaskQueue(context.Context, *ResetStickyTaskQueueRequest) (*ResetStickyTaskQueueResponse, error)
 	// RecordWorkflowTaskStarted is called by the Matchingservice before it hands a workflow task to the application worker in response to
 	// a PollWorkflowTaskQueue call. It records in the history the event that the workflow task has started. It will return 'TaskAlreadyStartedError',

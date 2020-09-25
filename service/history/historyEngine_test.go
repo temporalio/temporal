@@ -63,7 +63,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/failure"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/mocks"
@@ -270,7 +269,6 @@ func (s *engineSuite) SetupTest() {
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
-		versionChecker:       headers.NewVersionChecker(),
 		eventsReapplier:      s.mockEventsReapplier,
 		workflowResetter:     s.mockWorkflowResetter,
 	}
@@ -4273,7 +4271,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 		id1: result1,
 		id2: result2,
 	}
-	_, err = s.mockHistoryEngine.RespondWorkflowTaskCompleted(s.constructCallContext(headers.SupportedGoSDKVersion), &historyservice.RespondWorkflowTaskCompletedRequest{
+	_, err = s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken:    taskToken,
@@ -4348,10 +4346,6 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
 	s.True(executionBuilder.HasPendingWorkflowTask())
-}
-
-func (s *engineSuite) constructCallContext(featureVersion string) context.Context {
-	return headers.SetVersionsForTests(context.Background(), headers.SupportedGoSDKVersion, headers.GoSDK, featureVersion)
 }
 
 func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
@@ -5318,9 +5312,6 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		WorkflowTaskScheduledTimestamp:         sourceInfo.WorkflowTaskScheduledTimestamp,
 		CancelRequested:                        sourceInfo.CancelRequested,
 		CronSchedule:                           sourceInfo.CronSchedule,
-		ClientLibraryVersion:                   sourceInfo.ClientLibraryVersion,
-		ClientFeatureVersion:                   sourceInfo.ClientFeatureVersion,
-		ClientImpl:                             sourceInfo.ClientImpl,
 		AutoResetPoints:                        sourceInfo.AutoResetPoints,
 		Memo:                                   sourceInfo.Memo,
 		SearchAttributes:                       sourceInfo.SearchAttributes,

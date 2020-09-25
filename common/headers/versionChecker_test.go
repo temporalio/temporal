@@ -26,8 +26,6 @@ package headers
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -51,6 +49,8 @@ func (s *VersionCheckerSuite) SetupTest() {
 }
 
 func (s *VersionCheckerSuite) TestClientSupported() {
+	serverVersion := "22.8.78"
+
 	testCases := []struct {
 		callContext              context.Context
 		enableClientVersionCheck bool
@@ -66,115 +66,75 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 			expectErr:                false,
 		},
 		{
-			callContext:              s.constructCallContext("0.0.0", "unknown-client", BaseFeaturesFeatureVersion),
+			callContext:              s.constructCallContext("", "unknown-client", ""),
 			enableClientVersionCheck: true,
 			expectErr:                false,
 		},
 		{
-			callContext:              s.constructCallContext("malformed-version", GoSDK, BaseFeaturesFeatureVersion),
-			enableClientVersionCheck: true,
-			expectErr:                true,
-		},
-		{
-			callContext:              s.constructCallContext(s.getHigherVersion(SupportedGoSDKVersion), GoSDK, BaseFeaturesFeatureVersion),
-			enableClientVersionCheck: true,
-			expectErr:                true,
-		},
-		{
-			callContext:              s.constructCallContext(s.getHigherVersion(SupportedJavaSDKVersion), JavaSDK, BaseFeaturesFeatureVersion),
-			enableClientVersionCheck: true,
-			expectErr:                true,
-		},
-		{
-			callContext:              s.constructCallContext(s.getHigherVersion(SupportedCLIVersion), CLI, BaseFeaturesFeatureVersion),
-			enableClientVersionCheck: true,
-			expectErr:                true,
-		},
-		{
-			callContext:              s.constructCallContext(SupportedGoSDKVersion, GoSDK, BaseFeaturesFeatureVersion),
+			callContext:              s.constructCallContext("0.0.0", "", ""),
 			enableClientVersionCheck: true,
 			expectErr:                false,
 		},
 		{
-			callContext:              s.constructCallContext(SupportedJavaSDKVersion, JavaSDK, BaseFeaturesFeatureVersion),
+			callContext:              s.constructCallContext("0.0.0", "unknown-client", ""),
 			enableClientVersionCheck: true,
 			expectErr:                false,
 		},
 		{
-			callContext:              s.constructCallContext(SupportedCLIVersion, CLI, BaseFeaturesFeatureVersion),
+			callContext:              s.constructCallContext("malformed-version", ClientNameGoSDK, ""),
+			enableClientVersionCheck: true,
+			expectErr:                true,
+		},
+		{
+			callContext:              s.constructCallContext("3.0.1", ClientNameGoSDK, ""),
+			enableClientVersionCheck: true,
+			expectErr:                true,
+		},
+		{
+			callContext:              s.constructCallContext("2.4.5", ClientNameGoSDK, ""),
+			enableClientVersionCheck: true,
+			expectErr:                false,
+		},
+		{
+			callContext:              s.constructCallContext("2.4.5", ClientNameGoSDK, "<23.1.0"),
+			enableClientVersionCheck: true,
+			expectErr:                false,
+		},
+		{
+			callContext:              s.constructCallContext("2.4.5", ClientNameGoSDK, ">23.1.0"),
+			enableClientVersionCheck: true,
+			expectErr:                true,
+		},
+		{
+			callContext:              s.constructCallContext("2.4.5", ClientNameGoSDK, "<1.0.0 >=3.5.6 || >22.0.0"),
+			enableClientVersionCheck: true,
+			expectErr:                false,
+		},
+		{
+			callContext:              s.constructCallContext("", ClientNameGoSDK, "<1.0.0 >=3.5.6 || >22.0.0"),
 			enableClientVersionCheck: true,
 			expectErr:                false,
 		},
 	}
 
 	for caseIndex, tc := range testCases {
-		versionChecker := NewVersionChecker()
+		versionChecker := NewVersionChecker(map[string]string{
+			ClientNameGoSDK: "<3.0.0",
+		}, serverVersion)
 		err := versionChecker.ClientSupported(tc.callContext, tc.enableClientVersionCheck)
 		if tc.expectErr {
 			s.Errorf(err, "Case #%d", caseIndex)
-			s.IsType(&serviceerror.ClientVersionNotSupported{}, err)
+			switch err.(type) {
+			case *serviceerror.InvalidArgument, *serviceerror.ClientVersionNotSupported, *serviceerror.ServerVersionNotSupported:
+			default:
+				s.Fail("error has wrong type: %T", err)
+			}
 		} else {
 			s.NoErrorf(err, "Case #%d", caseIndex)
 		}
 	}
 }
 
-func (s *VersionCheckerSuite) TestSupportsBaseFeatures() {
-	testCases := []struct {
-		clientFeatureVersion string
-		expectErr            bool
-	}{
-		{
-			expectErr: true,
-		},
-		{
-			clientFeatureVersion: BaseFeaturesFeatureVersion,
-			expectErr:            false,
-		},
-		{
-			clientFeatureVersion: "0.0.0",
-			expectErr:            true,
-		},
-		{
-			clientFeatureVersion: "0.9.0",
-			expectErr:            true,
-		},
-		{
-			clientFeatureVersion: "malformed-feature-version",
-			expectErr:            true,
-		},
-		{
-			clientFeatureVersion: BaseFeaturesFeatureVersion,
-			expectErr:            false,
-		},
-		{
-			clientFeatureVersion: "1.0.0",
-			expectErr:            false,
-		},
-		{
-			clientFeatureVersion: "2.0.0",
-			expectErr:            false,
-		},
-	}
-
-	for caseIndex, tc := range testCases {
-		vc := NewVersionChecker()
-		if tc.expectErr {
-			err := vc.SupportsBaseFeatures(tc.clientFeatureVersion)
-			s.Errorf(err, "Case #%d", caseIndex)
-			s.IsType(&serviceerror.FeatureVersionNotSupported{}, err)
-		} else {
-			s.NoErrorf(vc.SupportsBaseFeatures(tc.clientFeatureVersion), "Case #%d", caseIndex)
-		}
-	}
-}
-
-func (s *VersionCheckerSuite) getHigherVersion(version string) string {
-	split := strings.Split(version, ".")
-	s.Len(split, 3)
-	return fmt.Sprintf("%v.%v.%v", split[0], split[1], split[2][0]-'0'+1)
-}
-
-func (s *VersionCheckerSuite) constructCallContext(clientVersion, clientImpl, featureVersion string) context.Context {
-	return SetVersionsForTests(context.Background(), clientVersion, clientImpl, featureVersion)
+func (s *VersionCheckerSuite) constructCallContext(clientVersion, clientName, supportedServerVersions string) context.Context {
+	return SetVersionsForTests(context.Background(), clientVersion, clientName, supportedServerVersions)
 }

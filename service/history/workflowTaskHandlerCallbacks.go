@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -79,7 +78,6 @@ type (
 		logger               log.Logger
 		throttledLogger      log.Logger
 		commandAttrValidator *commandAttrValidator
-		versionChecker       headers.VersionChecker
 	}
 )
 
@@ -103,7 +101,6 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 			historyEngine.config,
 			historyEngine.logger,
 		),
-		versionChecker: headers.NewVersionChecker(),
 	}
 }
 
@@ -293,11 +290,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		RunId:      token.GetRunId(),
 	}
 
-	clientHeaders := headers.GetValues(ctx, headers.ClientVersionHeaderName, headers.ClientFeatureVersionHeaderName, headers.ClientImplHeaderName)
-	clientLibVersion := clientHeaders[0]
-	clientFeatureVersion := clientHeaders[1]
-	clientImpl := clientHeaders[2]
-
 	weContext, release, err := handler.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, workflowExecution)
 	if err != nil {
 		return nil, err
@@ -390,9 +382,6 @@ Update_History_Loop:
 			executionInfo.StickyTaskQueue = request.StickyAttributes.WorkerTaskQueue.GetName()
 			executionInfo.StickyScheduleToStartTimeout = request.StickyAttributes.GetScheduleToStartTimeout()
 		}
-		executionInfo.ClientLibraryVersion = clientLibVersion
-		executionInfo.ClientFeatureVersion = clientFeatureVersion
-		executionInfo.ClientImpl = clientImpl
 
 		binChecksum := request.GetBinaryChecksum()
 		if _, ok := namespaceEntry.GetConfig().GetBadBinaries().GetBinaries()[binChecksum]; ok {

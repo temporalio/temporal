@@ -58,7 +58,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
@@ -154,7 +153,6 @@ type (
 		eventsReapplier           nDCEventsReapplier
 		matchingClient            matching.Client
 		rawMatchingClient         matching.Client
-		versionChecker            headers.VersionChecker
 		replicationDLQHandler     replicationDLQHandler
 	}
 )
@@ -256,7 +254,6 @@ func NewEngineWithShardContext(
 		matchingClient:     matching,
 		rawMatchingClient:  rawMatchingClient,
 		queueTaskProcessor: queueTaskProcessor,
-		versionChecker:     headers.NewVersionChecker(),
 	}
 
 	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
@@ -657,9 +654,6 @@ func (e *historyEngineImpl) PollMutableState(
 		LastFirstEventId:                      response.LastFirstEventId,
 		TaskQueue:                             response.TaskQueue,
 		StickyTaskQueue:                       response.StickyTaskQueue,
-		ClientLibraryVersion:                  response.ClientLibraryVersion,
-		ClientFeatureVersion:                  response.ClientFeatureVersion,
-		ClientImpl:                            response.ClientImpl,
 		StickyTaskQueueScheduleToStartTimeout: response.StickyTaskQueueScheduleToStartTimeout,
 		CurrentBranchToken:                    response.CurrentBranchToken,
 		VersionHistories:                      response.VersionHistories,
@@ -1039,9 +1033,6 @@ func (e *historyEngineImpl) getMutableState(
 			Name: executionInfo.StickyTaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
 		},
-		ClientLibraryVersion:                  executionInfo.ClientLibraryVersion,
-		ClientFeatureVersion:                  executionInfo.ClientFeatureVersion,
-		ClientImpl:                            executionInfo.ClientImpl,
 		StickyTaskQueueScheduleToStartTimeout: executionInfo.StickyScheduleToStartTimeout,
 		CurrentBranchToken:                    currentBranchToken,
 		WorkflowState:                         workflowState,
@@ -1122,8 +1113,8 @@ func (e *historyEngineImpl) DescribeMutableState(
 // 1. StickyTaskQueue
 // 2. StickyScheduleToStartTimeout
 // 3. ClientLibraryVersion
-// 4. ClientFeatureVersion
-// 5. ClientImpl
+// 4. SupportedServerVersions
+// 5. ClientName
 func (e *historyEngineImpl) ResetStickyTaskQueue(
 	ctx context.Context,
 	resetRequest *historyservice.ResetStickyTaskQueueRequest,

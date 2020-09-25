@@ -79,9 +79,9 @@ message GetMutableStateResponse {
     int64 last_first_event_id = 5;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 6;
     temporal.api.taskqueue.v1.TaskQueue sticky_task_queue = 7;
-    string client_library_version = 8;
-    string client_feature_version = 9;
-    string client_impl = 10;
+    reserved 8;
+    reserved 9;
+    reserved 10;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11 [(gogoproto.stdduration) = true];
@@ -109,9 +109,9 @@ message PollMutableStateResponse {
     int64 last_first_event_id = 5;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 6;
     temporal.api.taskqueue.v1.TaskQueue sticky_task_queue = 7;
-    string client_library_version = 8;
-    string client_feature_version = 9;
-    string client_impl = 10;
+    reserved 8;
+    reserved 9;
+    reserved 10;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11 [(gogoproto.stdduration) = true];
