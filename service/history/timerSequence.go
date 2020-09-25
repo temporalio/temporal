@@ -99,10 +99,9 @@ func (t *timerSequenceImpl) isExpired(
 	referenceTime time.Time,
 	timerSequenceID timerSequenceID,
 ) bool {
-
-	// Cassandra timestamp resolution is in millisecond
-	// here we do the check in terms of second resolution.
-	return timerSequenceID.timestamp.Unix() <= referenceTime.Unix()
+	// TODO: Cassandra timestamp resolution is in millisecond.
+	// Verify if it can create any problem here.
+	return timerSequenceID.timestamp.UnixNano() <= referenceTime.UnixNano()
 }
 
 func (t *timerSequenceImpl) createNextUserTimer() (bool, error) {
