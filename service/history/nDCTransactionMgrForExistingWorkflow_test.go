@@ -198,7 +198,6 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		currentContext,
 		currentMutableState,
 		currentWorkflowPolicy.ptr(),
-		(*persistence.CurrentWorkflowCAS)(nil),
 	).Return(nil).Times(1)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
@@ -272,7 +271,6 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		currentContext,
 		currentMutableState,
 		currentWorkflowPolicy.ptr(),
-		(*persistence.CurrentWorkflowCAS)(nil),
 	).Return(nil).Times(1)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
@@ -469,7 +467,6 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		(workflowExecutionContext)(nil),
 		(mutableState)(nil),
 		(*transactionPolicy)(nil),
-		(*persistence.CurrentWorkflowCAS)(nil),
 	).Return(nil).Times(1)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
@@ -541,7 +538,6 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		currentContext,
 		currentMutableState,
 		currentWorkflowPolicy.ptr(),
-		(*persistence.CurrentWorkflowCAS)(nil),
 	).Return(nil).Times(1)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
@@ -614,7 +610,6 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		(workflowExecutionContext)(nil),
 		(mutableState)(nil),
 		(*transactionPolicy)(nil),
-		(*persistence.CurrentWorkflowCAS)(nil),
 	).Return(nil).Times(1)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
@@ -687,7 +682,6 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		(workflowExecutionContext)(nil),
 		(mutableState)(nil),
 		(*transactionPolicy)(nil),
-		(*persistence.CurrentWorkflowCAS)(nil),
 	).Return(nil).Times(1)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
