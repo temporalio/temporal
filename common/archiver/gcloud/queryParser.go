@@ -29,7 +29,6 @@ package gcloud
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/xwb1989/sqlparser"
@@ -48,8 +47,8 @@ type (
 	parsedQuery struct {
 		workflowID      *string
 		workflowType    *string
-		startTime       int64
-		closeTime       int64
+		startTime       time.Time
+		closeTime       time.Time
 		searchPrecision *string
 		runID           *string
 		emptyResult     bool
@@ -96,7 +95,7 @@ func (p *queryParser) Parse(query string) (*parsedQuery, error) {
 		return nil, err
 	}
 
-	if (parsedQuery.closeTime == 0 && parsedQuery.startTime == 0) || (parsedQuery.closeTime != 0 && parsedQuery.startTime != 0) {
+	if (parsedQuery.closeTime.IsZero() && parsedQuery.startTime.IsZero()) || (!parsedQuery.closeTime.IsZero() && !parsedQuery.startTime.IsZero()) {
 		return nil, errors.New("Requires a StartTime or CloseTime")
 	}
 
@@ -176,24 +175,24 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.runID = convert.StringPtr(val)
 	case CloseTime:
-		timestamp, err := convertToTimestamp(valStr)
+		closeTime, err := convertToTime(valStr)
 		if err != nil {
 			return err
 		}
 		if op != "=" {
 			return fmt.Errorf("only operation = is support for %s", CloseTime)
 		}
-		parsedQuery.closeTime = timestamp
+		parsedQuery.closeTime = closeTime
 
 	case StartTime:
-		timestamp, err := convertToTimestamp(valStr)
+		startTime, err := convertToTime(valStr)
 		if err != nil {
 			return err
 		}
 		if op != "=" {
 			return fmt.Errorf("only operation = is support for %s", CloseTime)
 		}
-		parsedQuery.startTime = timestamp
+		parsedQuery.startTime = startTime
 	case WorkflowType:
 		val, err := extractStringValue(valStr)
 		if err != nil {
@@ -249,20 +248,16 @@ func (p *queryParser) convertCloseTime(timestamp int64, op string, parsedQuery *
 	return nil
 }
 
-func convertToTimestamp(timeStr string) (int64, error) {
-	timestamp, err := strconv.ParseInt(timeStr, 10, 64)
-	if err == nil {
-		return timestamp, nil
-	}
+func convertToTime(timeStr string) (time.Time, error) {
 	timestampStr, err := extractStringValue(timeStr)
 	if err != nil {
-		return 0, err
+		return time.Time{}, err
 	}
 	parsedTime, err := time.Parse(defaultDateTimeFormat, timestampStr)
 	if err != nil {
-		return 0, err
+		return time.Time{}, err
 	}
-	return parsedTime.UnixNano(), nil
+	return parsedTime, nil
 }
 
 func extractStringValue(s string) (string, error) {
