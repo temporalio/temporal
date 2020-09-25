@@ -42,6 +42,7 @@ const (
 	Memo            = "Memo"
 	Encoding        = "Encoding"
 	TaskQueue       = "TaskQueue"
+	CustomNamespace = "CustomNamespace"
 
 	KafkaKey = "KafkaKey"
 )
