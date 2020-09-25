@@ -30,6 +30,10 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 )
 
+const (
+	failureSourceServer = "Server"
+)
+
 func NewServerFailure(message string, nonRetryable bool) *failurepb.Failure {
 	f := &failurepb.Failure{
 		Message: message,
@@ -52,8 +56,10 @@ func NewResetWorkflowFailure(message string, lastHeartbeatDetails *commonpb.Payl
 	return f
 }
 
-func NewTimeoutFailure(timeoutType enumspb.TimeoutType) *failurepb.Failure {
+func NewTimeoutFailure(message string, timeoutType enumspb.TimeoutType) *failurepb.Failure {
 	f := &failurepb.Failure{
+		Message: message,
+		Source:  failureSourceServer,
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
 			TimeoutType: timeoutType,
 		}},
