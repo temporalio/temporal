@@ -47,3 +47,10 @@ You can only upgrade to a new version after the initial setup done above.
 ./temporal-cassandra-tool -ep 127.0.0.1 -k temporal_visibility update-schema -d ./schema/cassandra/visibility/versioned -v x.x    -- actually executes the upgrade to version x.x
 ```
 
+### To uninstall temporal from cassandra cluster
+It is possible to uninstall temporal from a cassandra cluster by dropping the keyspaces installed. This is a destructive operation and cannot be reversed. BACKUP FIRST OR DATA WILL BE LOST.
+
+```
+./temporal-cassandra-tool --endpoint $CASSANDRA_ENDPOINT drop -k $KEYSPACE_TO_REMOVE
+./temporal-cassandra-tool --endpoint $CASSANDRA_ENDPOINT drop -k $VISIBILITY_KEYSPACE_TO_REMOVE
+```
