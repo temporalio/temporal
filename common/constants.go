@@ -108,6 +108,18 @@ const (
 )
 
 const (
+	// DefaultWorkflowExecutionTimeout is the Default Workflow Execution timeout applied to a Workflow when
+	// this value is not explicitly set by the user on a Start Workflow request
+	// Intention is 10 years
+	DefaultWorkflowExecutionTimeout = 24 * 365 * 10 * time.Hour
+
+	// DefaultWorkflowRunTimeout is the Default Workflow Run timeout applied to a Workflow when
+	// this value is not explicitly set by the user on a Start Workflow request
+	// Intention is 10 years
+	DefaultWorkflowRunTimeout = 24 * 365 * 10 * time.Hour
+)
+
+const (
 	// DefaultTransactionSizeLimit is the largest allowed transaction size to persistence
 	DefaultTransactionSizeLimit = 14 * 1024 * 1024
 )
