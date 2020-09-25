@@ -136,7 +136,8 @@ func (s *utilSuite) TestConstructVisibilityFilenamePrefix() {
 }
 
 func (s *utilSuite) TestConstructTimeBasedSearchKey() {
-	s.Equal("namespaceID/startTimeout_1970-01-01T", constructTimeBasedSearchKey("namespaceID", indexKeyStartTimeout, 1580819141, "Day"))
+	t, _ := time.Parse(time.RFC3339, "2019-10-04T11:00:00+00:00")
+	s.Equal("namespaceID/startTimeout_2019-10-04T", constructTimeBasedSearchKey("namespaceID", indexKeyStartTimeout, t, "Day"))
 }
 
 func (s *utilSuite) TestConstructVisibilityFilename() {

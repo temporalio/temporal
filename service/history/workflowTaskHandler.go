@@ -264,20 +264,25 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 	)
 	switch err := err.(type) {
 	case nil:
-		if ai.StartedId == common.EmptyEventID {
-			// We haven't started the activity yet, we can cancel the activity right away and
-			// schedule a workflow task to ensure the workflow makes progress.
-			_, err = handler.mutableState.AddActivityTaskCanceledEvent(
-				ai.ScheduleId,
-				ai.StartedId,
-				actCancelReqEvent.GetEventId(),
-				payloads.EncodeString(activityCancellationMsgActivityNotStarted),
-				handler.identity,
-			)
-			if err != nil {
-				return err
+		if ai != nil {
+			// If ai is nil, the activity has already been canceled/completed/timedout. The cancel request
+			// will be recorded in the history, but no further action will be taken.
+
+			if ai.StartedId == common.EmptyEventID {
+				// We haven't started the activity yet, we can cancel the activity right away and
+				// schedule a workflow task to ensure the workflow makes progress.
+				_, err = handler.mutableState.AddActivityTaskCanceledEvent(
+					ai.ScheduleId,
+					ai.StartedId,
+					actCancelReqEvent.GetEventId(),
+					payloads.EncodeString(activityCancellationMsgActivityNotStarted),
+					handler.identity,
+				)
+				if err != nil {
+					return err
+				}
+				handler.activityNotStartedCancelled = true
 			}
-			handler.activityNotStartedCancelled = true
 		}
 		return nil
 	case *serviceerror.InvalidArgument:
