@@ -15,9 +15,9 @@ export BUILD_TS_UNIX=$(date '+%s') # second since epoch
 export BASE_PACKAGE=go.temporal.io/server/common/metrics
 
 if [ "$MODE" = "LDFLAG" ]; then
-  LD_FLAGS="-X ${BASE_PACKAGE}.Revision=${GIT_REVISION} \
-  -X ${BASE_PACKAGE}.Branch=${GIT_BRANCH}               \
-  -X ${BASE_PACKAGE}.Version=${GIT_VERSION}             \
+  LD_FLAGS="-X ${BASE_PACKAGE}.GitRevision=${GIT_REVISION} \
+  -X ${BASE_PACKAGE}.GitBranch=${GIT_BRANCH}               \
+  -X ${BASE_PACKAGE}.GitVersion=${GIT_VERSION}             \
   -X ${BASE_PACKAGE}.BuildDate=${BUILD_DATE}            \
   -X ${BASE_PACKAGE}.BuildTimeUnix=${BUILD_TS_UNIX}"
 
