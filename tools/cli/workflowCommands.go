@@ -30,12 +30,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/convert"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"reflect"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -141,10 +141,10 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 			}
 
 			var columns []string
-			columns = append(columns, strconv.FormatInt(e.GetEventId(), 10))
+			columns = append(columns, convert.Int64ToString(e.GetEventId()))
 
 			if printRawTime {
-				columns = append(columns, strconv.FormatInt(timestamp.TimeValue(e.GetEventTime()).UnixNano(), 10))
+				columns = append(columns, convert.Int64ToString(timestamp.TimeValue(e.GetEventTime()).UnixNano()))
 			} else if printDateTime {
 				columns = append(columns, formatTime(timestamp.TimeValue(e.GetEventTime()), false))
 			}
@@ -878,7 +878,7 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 			row = append(row, pt.GetBinaryChecksum())
 			row = append(row, timestamp.TimeValue(pt.GetCreateTime()).String())
 			row = append(row, pt.GetRunId())
-			row = append(row, strconv.FormatInt(pt.GetFirstWorkflowTaskCompletedId(), 10))
+			row = append(row, convert.Int64ToString(pt.GetFirstWorkflowTaskCompletedId()))
 			table.Append(row)
 		}
 	}

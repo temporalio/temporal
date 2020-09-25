@@ -26,14 +26,13 @@ package cli
 
 import (
 	"fmt"
-	"os"
-	"strconv"
-
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/convert"
+	"os"
 
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -92,11 +91,11 @@ func printTaskQueueStatus(taskQueueStatus *taskqueuepb.TaskQueueStatus) {
 	table.SetHeader([]string{"Read Level", "Ack Level", "Backlog", "Lease Start TaskId", "Lease End TaskId"})
 	table.SetHeaderLine(false)
 	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue)
-	table.Append([]string{strconv.FormatInt(taskQueueStatus.GetReadLevel(), 10),
-		strconv.FormatInt(taskQueueStatus.GetAckLevel(), 10),
-		strconv.FormatInt(taskQueueStatus.GetBacklogCountHint(), 10),
-		strconv.FormatInt(taskIDBlock.GetStartId(), 10),
-		strconv.FormatInt(taskIDBlock.GetEndId(), 10)})
+	table.Append([]string{convert.Int64ToString(taskQueueStatus.GetReadLevel()),
+		convert.Int64ToString(taskQueueStatus.GetAckLevel()),
+		convert.Int64ToString(taskQueueStatus.GetBacklogCountHint()),
+		convert.Int64ToString(taskIDBlock.GetStartId()),
+		convert.Int64ToString(taskIDBlock.GetEndId())})
 	table.Render()
 }
 

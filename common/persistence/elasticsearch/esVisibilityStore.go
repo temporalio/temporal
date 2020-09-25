@@ -30,6 +30,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/convert"
 	"io"
 	"math"
 	"regexp"
@@ -740,8 +741,8 @@ func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsReq
 	if request.EarliestStartTime < math.MinInt64+oneMilliSecondInNano { // prevent earliestTime overflow
 		request.EarliestStartTime = math.MinInt64 + oneMilliSecondInNano
 	}
-	earliestTimeStr := strconv.FormatInt(request.EarliestStartTime-oneMilliSecondInNano, 10)
-	latestTimeStr := strconv.FormatInt(request.LatestStartTime+oneMilliSecondInNano, 10)
+	earliestTimeStr := convert.Int64ToString(request.EarliestStartTime-oneMilliSecondInNano)
+	latestTimeStr := convert.Int64ToString(request.LatestStartTime+oneMilliSecondInNano)
 	rangeQuery = rangeQuery.
 		Gte(earliestTimeStr).
 		Lte(latestTimeStr)

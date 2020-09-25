@@ -25,7 +25,7 @@
 package history
 
 import (
-	"strconv"
+	"go.temporal.io/server/common/convert"
 	"testing"
 	"time"
 

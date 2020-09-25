@@ -29,6 +29,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/convert"
 	"math/rand"
 	"strconv"
 	"time"
@@ -846,7 +847,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 				for i := 0; i < 6; i++ {
 					s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
 					_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
-						TaskToken: taskToken, Details: payloads.EncodeString(string(i))})
+						TaskToken: taskToken, Details: payloads.EncodeString(convert.IntToString(i))})
 					s.NoError(err)
 					time.Sleep(1 * time.Second)
 				}

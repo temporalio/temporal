@@ -28,9 +28,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/convert"
 	"io"
 	"math"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -439,8 +439,8 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	runningQuery := elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 	tieBreakerSorter := elastic.NewFieldSort(es.RunID).Desc()
 
-	earliestTime := strconv.FormatInt(request.EarliestStartTime-oneMilliSecondInNano, 10)
-	latestTime := strconv.FormatInt(request.LatestStartTime+oneMilliSecondInNano, 10)
+	earliestTime := convert.Int64ToString(request.EarliestStartTime-oneMilliSecondInNano)
+	latestTime := convert.Int64ToString(request.LatestStartTime+oneMilliSecondInNano)
 
 	// test for open
 	rangeQuery := elastic.NewRangeQuery(es.StartTime).Gte(earliestTime).Lte(latestTime)
@@ -458,7 +458,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 
 	// test request latestTime overflow
 	request.LatestStartTime = math.MaxInt64
-	rangeQuery1 := elastic.NewRangeQuery(es.StartTime).Gte(earliestTime).Lte(strconv.FormatInt(request.LatestStartTime, 10))
+	rangeQuery1 := elastic.NewRangeQuery(es.StartTime).Gte(earliestTime).Lte(convert.Int64ToString(request.LatestStartTime))
 	boolQuery1 := elastic.NewBoolQuery().Must(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery1)
 	param1 := &es.SearchParameters{
 		Index:    testIndex,
