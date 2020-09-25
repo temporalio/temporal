@@ -26,9 +26,10 @@ package history
 
 import (
 	"context"
-	"go.temporal.io/server/common/convert"
 	"sync"
 	"sync/atomic"
+
+	"go.temporal.io/server/common/convert"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"

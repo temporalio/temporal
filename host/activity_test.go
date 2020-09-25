@@ -29,10 +29,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/convert"
 	"math/rand"
 	"strconv"
 	"time"
+
+	"go.temporal.io/server/common/convert"
 
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"

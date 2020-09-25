@@ -28,11 +28,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/convert"
 	"io"
 	"math"
 	"strings"
 	"testing"
+
+	"go.temporal.io/server/common/convert"
 
 	"github.com/olivere/elastic"
 	"github.com/stretchr/testify/mock"
@@ -439,8 +440,8 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	runningQuery := elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 	tieBreakerSorter := elastic.NewFieldSort(es.RunID).Desc()
 
-	earliestTime := convert.Int64ToString(request.EarliestStartTime-oneMilliSecondInNano)
-	latestTime := convert.Int64ToString(request.LatestStartTime+oneMilliSecondInNano)
+	earliestTime := convert.Int64ToString(request.EarliestStartTime - oneMilliSecondInNano)
+	latestTime := convert.Int64ToString(request.LatestStartTime + oneMilliSecondInNano)
 
 	// test for open
 	rangeQuery := elastic.NewRangeQuery(es.StartTime).Gte(earliestTime).Lte(latestTime)

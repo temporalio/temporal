@@ -25,9 +25,10 @@
 package history
 
 import (
-	"go.temporal.io/server/common/convert"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/common/convert"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"

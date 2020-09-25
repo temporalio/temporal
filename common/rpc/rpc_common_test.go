@@ -27,9 +27,10 @@ package rpc
 import (
 	"context"
 	"crypto/tls"
-	"go.temporal.io/server/common/convert"
 	"math/rand"
 	"strings"
+
+	"go.temporal.io/server/common/convert"
 
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"

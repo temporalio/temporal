@@ -26,13 +26,14 @@ package cli
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/convert"
-	"os"
 
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"

@@ -26,10 +26,11 @@ package history
 
 import (
 	"fmt"
-	"go.temporal.io/server/common/convert"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/server/common/convert"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"

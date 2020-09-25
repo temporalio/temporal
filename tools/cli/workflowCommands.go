@@ -30,7 +30,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/convert"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -39,6 +38,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"go.temporal.io/server/common/convert"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
