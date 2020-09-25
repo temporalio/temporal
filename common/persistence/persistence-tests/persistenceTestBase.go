@@ -876,11 +876,6 @@ func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWr
 	requestCancelInfos []*persistenceblobs.RequestCancelInfo, signalInfos []*persistenceblobs.SignalInfo, ids []string) error {
 	return s.ExecutionManager.ConflictResolveWorkflowExecution(&p.ConflictResolveWorkflowExecutionRequest{
 		RangeID: s.ShardInfo.GetRangeId(),
-		CurrentWorkflowCAS: &p.CurrentWorkflowCAS{
-			PrevRunID:            prevRunID,
-			PrevLastWriteVersion: prevLastWriteVersion,
-			PrevState:            prevState,
-		},
 		ResetWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo:       info,
 			ExecutionStats:      stats,

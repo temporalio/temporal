@@ -27,7 +27,6 @@ package persistence
 import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -310,10 +309,6 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		}
 	}
 
-	if request.CurrentWorkflowMutation != nil && request.CurrentWorkflowCAS != nil {
-		return serviceerror.NewInternal("ConflictResolveWorkflowExecution: current workflow & current workflow CAS both set")
-	}
-
 	newRequest := &InternalConflictResolveWorkflowExecutionRequest{
 		RangeID: request.RangeID,
 
@@ -324,10 +319,6 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		NewWorkflowSnapshot: serializedNewWorkflowMutation,
 
 		CurrentWorkflowMutation: serializedCurrentWorkflowMutation,
-
-		// TODO deprecate this once nDC migration is completed
-		//  basically should use CurrentWorkflowMutation instead
-		CurrentWorkflowCAS: request.CurrentWorkflowCAS,
 	}
 	return m.persistence.ConflictResolveWorkflowExecution(newRequest)
 }
