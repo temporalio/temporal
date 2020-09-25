@@ -3755,25 +3755,31 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 		return wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
-	request.WorkflowExecutionTimeout = common.GetWorkflowExecutionTimeout(
-		request.GetNamespace(),
-		request.GetWorkflowExecutionTimeout(),
-		wh.config.DefaultWorkflowExecutionTimeout,
-		wh.config.MaxWorkflowExecutionTimeout,
+	request.WorkflowExecutionTimeout = timestamp.DurationPtr(
+		common.GetWorkflowExecutionTimeout(
+			request.GetNamespace(),
+			timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
+			wh.config.DefaultWorkflowExecutionTimeout,
+			wh.config.MaxWorkflowExecutionTimeout,
+		),
 	)
 
-	request.WorkflowRunTimeout = common.GetWorkflowRunTimeout(
-		request.GetNamespace(),
-		request.GetWorkflowRunTimeout(),
-		request.GetWorkflowExecutionTimeout(),
-		wh.config.DefaultWorkflowRunTimeout,
-		wh.config.MaxWorkflowRunTimeout,
+	request.WorkflowRunTimeout = timestamp.DurationPtr(
+		common.GetWorkflowRunTimeout(
+			request.GetNamespace(),
+			timestamp.DurationValue(request.GetWorkflowRunTimeout()),
+			timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
+			wh.config.DefaultWorkflowRunTimeout,
+			wh.config.MaxWorkflowRunTimeout,
+		),
 	)
 
-	request.WorkflowTaskTimeout = common.GetWorkflowTaskTimeout(
-		request.GetNamespace(),
-		request.GetWorkflowTaskTimeout(),
-		wh.config.DefaultWorkflowTaskTimeout,
+	request.WorkflowTaskTimeout = timestamp.DurationPtr(
+		common.GetWorkflowTaskTimeout(
+			request.GetNamespace(),
+			timestamp.DurationValue(request.GetWorkflowTaskTimeout()),
+			wh.config.DefaultWorkflowTaskTimeout,
+		),
 	)
 
 	return nil
@@ -3794,25 +3800,31 @@ func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 		return wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
-	request.WorkflowExecutionTimeout = common.GetWorkflowExecutionTimeout(
-		request.GetNamespace(),
-		request.GetWorkflowExecutionTimeout(),
-		wh.config.DefaultWorkflowExecutionTimeout,
-		wh.config.MaxWorkflowExecutionTimeout,
+	request.WorkflowExecutionTimeout = timestamp.DurationPtr(
+		common.GetWorkflowExecutionTimeout(
+			request.GetNamespace(),
+			timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
+			wh.config.DefaultWorkflowExecutionTimeout,
+			wh.config.MaxWorkflowExecutionTimeout,
+		),
 	)
 
-	request.WorkflowRunTimeout = common.GetWorkflowRunTimeout(
-		request.GetNamespace(),
-		request.GetWorkflowRunTimeout(),
-		request.GetWorkflowExecutionTimeout(),
-		wh.config.DefaultWorkflowRunTimeout,
-		wh.config.MaxWorkflowRunTimeout,
+	request.WorkflowRunTimeout = timestamp.DurationPtr(
+		common.GetWorkflowRunTimeout(
+			request.GetNamespace(),
+			timestamp.DurationValue(request.GetWorkflowRunTimeout()),
+			timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
+			wh.config.DefaultWorkflowRunTimeout,
+			wh.config.MaxWorkflowRunTimeout,
+		),
 	)
 
-	request.WorkflowTaskTimeout = common.GetWorkflowTaskTimeout(
-		request.GetNamespace(),
-		request.GetWorkflowTaskTimeout(),
-		wh.config.DefaultWorkflowTaskTimeout,
+	request.WorkflowTaskTimeout = timestamp.DurationPtr(
+		common.GetWorkflowTaskTimeout(
+			request.GetNamespace(),
+			timestamp.DurationValue(request.GetWorkflowTaskTimeout()),
+			wh.config.DefaultWorkflowTaskTimeout,
+		),
 	)
 
 	return nil

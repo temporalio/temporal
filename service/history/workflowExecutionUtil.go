@@ -230,19 +230,19 @@ func terminateWorkflow(
 }
 
 func getWorkflowExecutionTimeout(namespace string, requestedTimeout time.Duration, serviceConfig *Config) time.Duration {
-	return *common.GetWorkflowExecutionTimeout(
+	return common.GetWorkflowExecutionTimeout(
 		namespace,
-		&requestedTimeout,
+		requestedTimeout,
 		serviceConfig.DefaultWorkflowExecutionTimeout,
 		serviceConfig.MaxWorkflowExecutionTimeout,
 	)
 }
 
 func getWorkflowRunTimeout(namespace string, requestedTimeout, executionTimeout time.Duration, serviceConfig *Config) time.Duration {
-	return *common.GetWorkflowRunTimeout(
+	return common.GetWorkflowRunTimeout(
 		namespace,
-		&requestedTimeout,
-		&executionTimeout,
+		requestedTimeout,
+		executionTimeout,
 		serviceConfig.DefaultWorkflowRunTimeout,
 		serviceConfig.MaxWorkflowRunTimeout,
 	)
