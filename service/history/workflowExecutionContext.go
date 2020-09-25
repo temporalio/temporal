@@ -99,7 +99,6 @@ type (
 			currentContext workflowExecutionContext,
 			currentMutableState mutableState,
 			currentTransactionPolicy *transactionPolicy,
-			workflowCAS *persistence.CurrentWorkflowCAS,
 		) error
 		updateWorkflowExecutionAsActive(
 			now time.Time,
@@ -414,7 +413,6 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 	currentContext workflowExecutionContext,
 	currentMutableState mutableState,
 	currentTransactionPolicy *transactionPolicy,
-	workflowCAS *persistence.CurrentWorkflowCAS,
 ) (retError error) {
 
 	defer func() {
@@ -523,7 +521,6 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 
 		CurrentWorkflowMutation: currentWorkflow,
 
-		CurrentWorkflowCAS: workflowCAS,
 		// Encoding, this is set by shard context
 	}); err != nil {
 		return err

@@ -1560,31 +1560,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 			return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err))
 		}
 
-		if request.CurrentWorkflowCAS != nil {
-			prevRunID = request.CurrentWorkflowCAS.PrevRunID
-			prevLastWriteVersion := request.CurrentWorkflowCAS.PrevLastWriteVersion
-			prevState := request.CurrentWorkflowCAS.PrevState
-
-			batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
-				runID,
-				executionStateDatablob.Data,
-				executionStateDatablob.Encoding.String(),
-				replicationVersions.Data,
-				replicationVersions.Encoding.String(),
-				lastWriteVersion,
-				state,
-				shardID,
-				rowTypeExecution,
-				namespaceID,
-				workflowID,
-				permanentRunID,
-				defaultVisibilityTimestamp,
-				rowTypeExecutionTaskID,
-				prevRunID,
-				prevLastWriteVersion,
-				prevState,
-			)
-		} else if currentWorkflow != nil {
+		if currentWorkflow != nil {
 			prevRunID = currentWorkflow.ExecutionInfo.ExecutionState.RunId
 
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,

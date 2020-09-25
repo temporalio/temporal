@@ -583,18 +583,6 @@ type (
 
 		// current workflow
 		CurrentWorkflowMutation *WorkflowMutation
-
-		// TODO deprecate this once nDC migration is completed
-		//  basically should use CurrentWorkflowMutation instead
-		CurrentWorkflowCAS *CurrentWorkflowCAS
-	}
-
-	// CurrentWorkflowCAS represent a compare and swap on current record
-	// TODO deprecate this once nDC migration is completed
-	CurrentWorkflowCAS struct {
-		PrevRunID            string
-		PrevLastWriteVersion int64
-		PrevState            enumsspb.WorkflowExecutionState
 	}
 
 	// ResetWorkflowExecutionRequest is used to reset workflow execution state for current run and create new run
