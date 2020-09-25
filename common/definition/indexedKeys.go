@@ -39,8 +39,8 @@ const (
 	CloseTime       = "CloseTime"
 	ExecutionStatus = "ExecutionStatus"
 	HistoryLength   = "HistoryLength"
-	Encoding        = "Encoding"
 	KafkaKey        = "KafkaKey"
+	Encoding        = "Encoding"
 	BinaryChecksums = "BinaryChecksums"
 	TaskQueue       = "TaskQueue"
 
@@ -51,6 +51,8 @@ const (
 	CustomBoolField       = "CustomBoolField"
 	CustomDatetimeField   = "CustomDatetimeField"
 	TemporalChangeVersion = "TemporalChangeVersion"
+	CustomNamespace       = "CustomNamespace"
+	Operator              = "Operator"
 )
 
 // valid non-indexed fields on ES
@@ -74,6 +76,8 @@ func createDefaultIndexedKeys() map[string]interface{} {
 		CustomDatetimeField:   enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		CustomNamespace:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		Operator:              enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 	for k, v := range systemIndexedKeys {
 		defaultIndexedKeys[k] = v
@@ -98,6 +102,8 @@ var systemIndexedKeys = map[string]interface{}{
 	ExecutionStatus: enumspb.INDEXED_VALUE_TYPE_INT,
 	HistoryLength:   enumspb.INDEXED_VALUE_TYPE_INT,
 	TaskQueue:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	KafkaKey:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	Encoding:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 }
 
 // IsSystemIndexedKey return true is key is system added

@@ -43,6 +43,9 @@
         "KafkaKey": {
           "type": "keyword"
         },
+        "Encoding": {
+          "type": "keyword"
+        },
         "Attr": {
           "properties": {
             "TemporalChangeVersion":  { "type": "keyword" },
