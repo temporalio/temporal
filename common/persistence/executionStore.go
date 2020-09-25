@@ -295,23 +295,22 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	var serializedCurrentWorkflowMutation *InternalWorkflowMutation
-	if request.CurrentWorkflowMutation != nil {
-		serializedCurrentWorkflowMutation, err = m.SerializeWorkflowMutation(request.CurrentWorkflowMutation)
-		if err != nil {
-			return err
-		}
+
+	if request.CurrentWorkflowMutation == nil {
+		return serviceerror.NewInternal("ConflictResolveWorkflowExecution: current workflow mutation not set on request")
 	}
+	var serializedCurrentWorkflowMutation *InternalWorkflowMutation
+	serializedCurrentWorkflowMutation, err = m.SerializeWorkflowMutation(request.CurrentWorkflowMutation)
+	if err != nil {
+		return err
+	}
+
 	var serializedNewWorkflowMutation *InternalWorkflowSnapshot
 	if request.NewWorkflowSnapshot != nil {
 		serializedNewWorkflowMutation, err = m.SerializeWorkflowSnapshot(request.NewWorkflowSnapshot)
 		if err != nil {
 			return err
 		}
-	}
-
-	if request.CurrentWorkflowMutation != nil {
-		return serviceerror.NewInternal("ConflictResolveWorkflowExecution: current workflow & current workflow CAS both set")
 	}
 
 	newRequest := &InternalConflictResolveWorkflowExecutionRequest{
