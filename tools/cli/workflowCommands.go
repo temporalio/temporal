@@ -971,13 +971,20 @@ func convertFailure(failure *failurepb.Failure) *clispb.Failure {
 		return nil
 	}
 
-	return &clispb.Failure{
+	fType := reflect.TypeOf(failure.GetFailureInfo()).Elem().Name()
+	if failure.GetTimeoutFailureInfo() != nil {
+		fType = fmt.Sprintf("%s: %s", fType, failure.GetTimeoutFailureInfo().GetTimeoutType().String())
+	}
+
+	f := &clispb.Failure{
 		Message:     failure.GetMessage(),
 		Source:      failure.GetSource(),
 		StackTrace:  failure.GetStackTrace(),
 		Cause:       convertFailure(failure.GetCause()),
-		FailureType: reflect.TypeOf(failure.GetFailureInfo()).Elem().Name(),
+		FailureType: fType,
 	}
+
+	return f
 }
 
 func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *tablewriter.Table {
