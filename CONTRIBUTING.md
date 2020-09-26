@@ -48,6 +48,10 @@ Tests require runtime dependencies. You can run them with `docker-compose`. Open
 $ cd docker/dependencies
 $ docker-compose up
 ```
+Before testing on MacOS, make sure you increase the file handle limit:
+```
+$ ulimit -n 8192
+```
 
 Run unit tests:
 ```bash
