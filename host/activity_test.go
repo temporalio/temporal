@@ -33,6 +33,8 @@ import (
 	"strconv"
 	"time"
 
+	"go.temporal.io/server/common/convert"
+
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
@@ -218,9 +220,9 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 						ActivityType:           &commonpb.ActivityType{Name: activityName},
 						TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
 						Input:                  nil,
-						ScheduleToCloseTimeout: timestamp.DurationPtr(4 * time.Second),
-						ScheduleToStartTimeout: timestamp.DurationPtr(4 * time.Second),
-						StartToCloseTimeout:    timestamp.DurationPtr(4 * time.Second),
+						ScheduleToCloseTimeout: timestamp.DurationPtr(8 * time.Second),
+						ScheduleToStartTimeout: timestamp.DurationPtr(8 * time.Second),
+						StartToCloseTimeout:    timestamp.DurationPtr(8 * time.Second),
 						HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
 						RetryPolicy: &commonpb.RetryPolicy{
 							InitialInterval:    timestamp.DurationPtr(1 * time.Second),
@@ -846,7 +848,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 				for i := 0; i < 6; i++ {
 					s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
 					_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
-						TaskToken: taskToken, Details: payloads.EncodeString(string(i))})
+						TaskToken: taskToken, Details: payloads.EncodeString(convert.IntToString(i))})
 					s.NoError(err)
 					time.Sleep(1 * time.Second)
 				}

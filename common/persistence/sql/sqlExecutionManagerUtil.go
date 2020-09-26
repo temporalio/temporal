@@ -968,53 +968,6 @@ func assertRunIDAndUpdateCurrentExecution(
 	return updateCurrentExecution(tx, shardID, namespaceID, workflowID, newRunID, createRequestID, state, status, startVersion, lastWriteVersion)
 }
 
-func assertAndUpdateCurrentExecution(
-	tx sqlplugin.Tx,
-	shardID int,
-	namespaceID primitives.UUID,
-	workflowID string,
-	newRunID primitives.UUID,
-	previousRunID primitives.UUID,
-	previousLastWriteVersion int64,
-	previousState enumsspb.WorkflowExecutionState,
-	createRequestID string,
-	state enumsspb.WorkflowExecutionState,
-	status enumspb.WorkflowExecutionStatus,
-	startVersion int64,
-	lastWriteVersion int64,
-) error {
-
-	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
-		if !bytes.Equal(currentRow.RunID, previousRunID) {
-			return &p.ConditionFailedError{Msg: fmt.Sprintf(
-				"assertAndUpdateCurrentExecution failed. Current run ID was %v, expected %v",
-				currentRow.RunID,
-				previousRunID,
-			)}
-		}
-		if currentRow.LastWriteVersion != previousLastWriteVersion {
-			return &p.ConditionFailedError{Msg: fmt.Sprintf(
-				"assertAndUpdateCurrentExecution failed. Current last write version was %v, expected %v",
-				currentRow.LastWriteVersion,
-				previousLastWriteVersion,
-			)}
-		}
-		if currentRow.State != previousState {
-			return &p.ConditionFailedError{Msg: fmt.Sprintf(
-				"assertAndUpdateCurrentExecution failed. Current state %v, expected %v",
-				currentRow.State,
-				previousState,
-			)}
-		}
-		return nil
-	}
-	if err := assertCurrentExecution(tx, shardID, namespaceID, workflowID, assertFn); err != nil {
-		return err
-	}
-
-	return updateCurrentExecution(tx, shardID, namespaceID, workflowID, newRunID, createRequestID, state, status, startVersion, lastWriteVersion)
-}
-
 func assertCurrentExecution(
 	tx sqlplugin.Tx,
 	shardID int,

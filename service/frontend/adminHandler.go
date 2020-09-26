@@ -27,8 +27,9 @@ package frontend
 import (
 	"context"
 	"errors"
-	"strconv"
 	"time"
+
+	"go.temporal.io/server/common/convert"
 
 	"github.com/olivere/elastic"
 	"github.com/pborman/uuid"
@@ -203,8 +204,7 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 	namespaceID, err := adh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, request.Execution.WorkflowId, adh.numberOfHistoryShards)
-	shardIDstr := string(shardID)
-	shardIDForOutput := strconv.Itoa(shardID)
+	shardIDstr := convert.IntToString(shardID)
 
 	historyHost, err := adh.GetMembershipMonitor().Lookup(common.HistoryServiceName, shardIDstr)
 	if err != nil {
@@ -221,7 +221,7 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 		return &adminservice.DescribeWorkflowExecutionResponse{}, err
 	}
 	return &adminservice.DescribeWorkflowExecutionResponse{
-		ShardId:              shardIDForOutput,
+		ShardId:              shardIDstr,
 		HistoryAddr:          historyAddr,
 		DatabaseMutableState: resp2.GetDatabaseMutableState(),
 		CacheMutableState:    resp2.GetCacheMutableState(),

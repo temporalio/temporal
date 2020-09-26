@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/service/dynamicconfig"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -667,4 +668,55 @@ func GetPayloadsMapSize(data map[string]*commonpb.Payloads) int {
 	}
 
 	return size
+}
+
+// GetWorkflowExecutionTimeout gets the default allowed execution timeout or truncates the requested value to the maximum allowed timeout
+func GetWorkflowExecutionTimeout(
+	namespace string,
+	requestedTimeout time.Duration,
+	getDefaultTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter,
+	getMaxAllowedTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter) time.Duration {
+
+	if requestedTimeout == 0 {
+		requestedTimeout = getDefaultTimeoutFunc(namespace)
+	}
+
+	return timestamp.MinDuration(
+		requestedTimeout,
+		getMaxAllowedTimeoutFunc(namespace),
+	)
+}
+
+// GetWorkflowRunTimeout gets the default allowed run timeout or truncates the requested value to the maximum allowed timeout
+func GetWorkflowRunTimeout(
+	namespace string,
+	requestedTimeout time.Duration,
+	executionTimeout time.Duration,
+	getDefaultTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter,
+	getMaxAllowedTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter) time.Duration {
+
+	if requestedTimeout == 0 {
+		requestedTimeout = getDefaultTimeoutFunc(namespace)
+	}
+
+	return timestamp.MinDuration(
+		timestamp.MinDuration(
+			requestedTimeout,
+			executionTimeout,
+		),
+		getMaxAllowedTimeoutFunc(namespace),
+	)
+}
+
+// GetWorkflowTaskTimeout gets the default allowed execution timeout or truncates the requested value to the maximum allowed timeout
+func GetWorkflowTaskTimeout(
+	namespace string,
+	requestedTimeout time.Duration,
+	getDefaultTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter) time.Duration {
+
+	if requestedTimeout == 0 {
+		return getDefaultTimeoutFunc(namespace)
+	}
+
+	return requestedTimeout
 }

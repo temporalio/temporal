@@ -29,6 +29,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"go.temporal.io/server/common/convert"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -1730,7 +1732,7 @@ func (h *Handler) convertError(err error) error {
 	switch err.(type) {
 	case *persistence.ShardOwnershipLostError:
 		shardID := err.(*persistence.ShardOwnershipLostError).ShardID
-		info, err := h.GetHistoryServiceResolver().Lookup(string(shardID))
+		info, err := h.GetHistoryServiceResolver().Lookup(convert.IntToString(shardID))
 		if err == nil {
 			return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), info.GetAddress())
 		}
