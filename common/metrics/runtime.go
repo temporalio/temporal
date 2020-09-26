@@ -32,21 +32,22 @@ import (
 
 	"github.com/uber-go/tally"
 
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 )
 
 var (
-	// Revision is the VCS revision associated with this build. Overridden using ldflags
+	// GitRevision is the VCS revision associated with this build. Overridden using ldflags
 	// at compile time. Example:
-	// $ go build -ldflags "-X go.temporal.io/server/common/metrics.Revision=abcdef" ...
+	// $ go build -ldflags "-X go.temporal.io/server/common/metrics.GitRevision=abcdef" ...
 	// Adapted from: https://www.atatus.com/blog/golang-auto-build-versioning/
-	Revision = "unknown"
+	GitRevision = "unknown"
 
-	// Branch is the VCS branch associated with this build.
-	Branch = "unknown"
+	// GitBranch is the git branch associated with this build.
+	GitBranch = "unknown"
 
-	// Version is the version associated with this build.
-	Version = "unknown"
+	// GitVersion is the git version (tag) associated with this build.
+	GitVersion = "unknown"
 
 	// BuildDate is the date this build was created.
 	BuildDate = "unknown"
@@ -103,10 +104,11 @@ func NewRuntimeMetricsReporter(
 	}
 	rReporter.buildInfoScope = scope.Tagged(
 		map[string]string{
-			revisionTag:     Revision,
-			branchTag:       Branch,
+			gitRevisionTag:  GitRevision,
+			gitBranchTag:    GitBranch,
 			buildDateTag:    BuildDate,
-			buildVersionTag: Version,
+			buildVersionTag: headers.ServerVersion,
+			gitVersionTag:   GitVersion,
 			goVersionTag:    goVersion,
 		},
 	)

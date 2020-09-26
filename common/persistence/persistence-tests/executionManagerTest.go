@@ -1112,9 +1112,6 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Nil(info0.WorkflowTaskOriginalScheduledTimestamp)
 	s.Empty(info0.StickyTaskQueue)
 	s.EqualValues(int64(0), timestamp.DurationValue(info0.StickyScheduleToStartTimeout))
-	s.Empty(info0.ClientLibraryVersion)
-	s.Empty(info0.ClientFeatureVersion)
-	s.Empty(info0.ClientImpl)
 	s.Equal(int64(0), info0.SignalCount)
 	s.True(reflect.DeepEqual(info0.AutoResetPoints, &workflowpb.ResetPoints{}))
 	s.True(len(info0.SearchAttributes) == 0)
@@ -1135,9 +1132,6 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.WorkflowTaskOriginalScheduledTimestamp = timestamp.UnixOrZeroTimePtr(655)
 	updatedInfo.StickyTaskQueue = "random sticky taskqueue"
 	updatedInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(876)
-	updatedInfo.ClientLibraryVersion = "random client library version"
-	updatedInfo.ClientFeatureVersion = "random client feature version"
-	updatedInfo.ClientImpl = "random client impl"
 	updatedInfo.SignalCount = 9
 	updatedInfo.RetryInitialInterval = timestamp.DurationFromSeconds(math.MaxInt32)
 	updatedInfo.RetryBackoffCoefficient = 4.45
@@ -1184,9 +1178,6 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(655), info1.WorkflowTaskOriginalScheduledTimestamp.UnixNano())
 	s.Equal(updatedInfo.StickyTaskQueue, info1.StickyTaskQueue)
 	s.EqualValues(timestamp.DurationValue(updatedInfo.StickyScheduleToStartTimeout), timestamp.DurationValue(info1.StickyScheduleToStartTimeout))
-	s.Equal(updatedInfo.ClientLibraryVersion, info1.ClientLibraryVersion)
-	s.Equal(updatedInfo.ClientFeatureVersion, info1.ClientFeatureVersion)
-	s.Equal(updatedInfo.ClientImpl, info1.ClientImpl)
 	s.Equal(updatedInfo.SignalCount, info1.SignalCount)
 	s.EqualValues(updatedStats.HistorySize, state1.ExecutionStats.HistorySize)
 	s.EqualValues(updatedInfo.RetryInitialInterval, info1.RetryInitialInterval)

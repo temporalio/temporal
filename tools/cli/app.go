@@ -26,12 +26,8 @@ package cli
 
 import (
 	"github.com/urfave/cli"
-)
 
-const (
-	// Version is the controlled version string. It should be updated every time
-	// before we release a new version.
-	Version = "0.31.0"
+	"go.temporal.io/server/common/headers"
 )
 
 // SetFactory is used to set the ClientFactory global
@@ -44,7 +40,7 @@ func NewCliApp() *cli.App {
 	app := cli.NewApp()
 	app.Name = "tctl"
 	app.Usage = "A command-line tool for Temporal users"
-	app.Version = Version
+	app.Version = headers.CLIVersion
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:   FlagAddressWithAlias,

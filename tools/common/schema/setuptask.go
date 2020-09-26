@@ -27,7 +27,7 @@ package schema
 import (
 	"log"
 
-	"golang.org/x/mod/semver"
+	"github.com/blang/semver/v4"
 )
 
 // SetupTask represents a task
@@ -86,7 +86,17 @@ func (task *SetupTask) Run() error {
 			currVer = "0.0"
 		}
 
-		if semver.Compare("v"+currVer, "v"+config.InitialVersion) > 0 {
+		currVerParsed, err := semver.ParseTolerant(currVer)
+		if err != nil {
+			log.Fatalf("Unable to parse current version %s: %v\n", currVer, err)
+		}
+
+		initialVersionParsed, err := semver.ParseTolerant(config.InitialVersion)
+		if err != nil {
+			log.Fatalf("Unable to parse initial version %s: %v\n", config.InitialVersion, err)
+		}
+
+		if currVerParsed.GT(initialVersionParsed) {
 			log.Printf("Current database schema version %v is greater than initial schema version %v. Skip version upgrade\n", currVer, config.InitialVersion)
 		} else {
 			log.Printf("Setting initial schema version to %v\n", config.InitialVersion)

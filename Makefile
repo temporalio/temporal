@@ -254,14 +254,14 @@ clean-test-results:
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
 	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(UNIT_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
-	@grep -qzwv "^--- FAIL" test.log
+	@! grep -q "^--- FAIL" test.log
 
 integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
 	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(INTEG_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
 	@go test -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) | tee -a test.log
-	@grep -qzwv "^--- FAIL" test.log
+	@! grep -q "^--- FAIL" test.log
 
 test: unit-test integration-test
 

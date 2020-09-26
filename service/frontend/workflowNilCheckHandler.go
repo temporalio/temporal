@@ -417,9 +417,6 @@ func (wh *WorkflowNilCheckHandler) RespondQueryTaskCompleted(ctx context.Context
 // Things cleared are:
 // 1. StickyTaskQueue
 // 2. StickyScheduleToStartTimeout
-// 3. ClientLibraryVersion
-// 4. ClientFeatureVersion
-// 5. ClientImpl
 func (wh *WorkflowNilCheckHandler) ResetStickyTaskQueue(ctx context.Context, request *workflowservice.ResetStickyTaskQueueRequest) (_ *workflowservice.ResetStickyTaskQueueResponse, retError error) {
 	resp, err := wh.parentHandler.ResetStickyTaskQueue(ctx, request)
 	if resp == nil && err == nil {

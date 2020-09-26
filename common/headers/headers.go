@@ -31,29 +31,22 @@ import (
 )
 
 const (
-	// ClientVersionHeaderName refers to the name of the gRPC metadata header that contains the client version.
-	ClientVersionHeaderName = "temporal-client-version"
-
-	// ClientFeatureVersionHeaderName refers to the name of the gRPC metadata header that contains the client feature set version.
-	// The feature set version is sent from client represents the feature set of the client supports.
-	// This can be used for client capability check, on Temporal server, for backward compatibility.
-	ClientFeatureVersionHeaderName = "temporal-client-feature-version"
-
-	// ClientImplHeaderName refers to the name of the gRPC metadata header that contains the client implementation.
-	ClientImplHeaderName = "temporal-client-name"
+	ClientNameHeaderName              = "client-name"
+	ClientVersionHeaderName           = "client-version"
+	SupportedServerVersionsHeaderName = "supported-server-versions"
 )
 
 var (
 	versionHeaders = metadata.New(map[string]string{
-		ClientVersionHeaderName:        SupportedGoSDKVersion,
-		ClientFeatureVersionHeaderName: BaseFeaturesFeatureVersion,
-		ClientImplHeaderName:           GoSDK,
+		ClientNameHeaderName:              ClientNameServer,
+		ClientVersionHeaderName:           ServerVersion,
+		SupportedServerVersionsHeaderName: SupportedServerVersions,
 	})
 
 	cliVersionHeaders = metadata.New(map[string]string{
-		ClientVersionHeaderName:        SupportedCLIVersion,
-		ClientFeatureVersionHeaderName: BaseFeaturesFeatureVersion,
-		ClientImplHeaderName:           CLI,
+		ClientNameHeaderName:              ClientNameCLI,
+		ClientVersionHeaderName:           CLIVersion,
+		SupportedServerVersionsHeaderName: SupportedServerVersions,
 	})
 )
 
@@ -78,7 +71,7 @@ func PropagateVersions(ctx context.Context) context.Context {
 	if mdIncoming, ok := metadata.FromIncomingContext(ctx); ok {
 		var headersToAppend []string
 		mdOutgoing, mdOutgoingExist := metadata.FromOutgoingContext(ctx)
-		for _, headerName := range []string{ClientVersionHeaderName, ClientFeatureVersionHeaderName, ClientImplHeaderName} {
+		for _, headerName := range []string{ClientNameHeaderName, ClientVersionHeaderName, SupportedServerVersionsHeaderName} {
 			if incomingValue := mdIncoming.Get(headerName); len(incomingValue) > 0 {
 				if mdOutgoingExist {
 					if outgoingValue := mdOutgoing.Get(headerName); len(outgoingValue) > 0 {
@@ -111,11 +104,11 @@ func SetCLIVersions(ctx context.Context) context.Context {
 
 // SetVersionsForTests sets headers as they would be received from the client.
 // Must be used in tests only.
-func SetVersionsForTests(ctx context.Context, clientVersion, clientImpl, clientFeatureVersion string) context.Context {
+func SetVersionsForTests(ctx context.Context, clientVersion, clientName, supportedServerVersions string) context.Context {
 	return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-		ClientVersionHeaderName:        clientVersion,
-		ClientFeatureVersionHeaderName: clientFeatureVersion,
-		ClientImplHeaderName:           clientImpl,
+		ClientNameHeaderName:              clientName,
+		ClientVersionHeaderName:           clientVersion,
+		SupportedServerVersionsHeaderName: supportedServerVersions,
 	}))
 }
 

@@ -1260,9 +1260,6 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 // Volatile information are the information related to client, such as:
 // 1. StickyTaskQueue
 // 2. StickyScheduleToStartTimeout
-// 3. ClientLibraryVersion
-// 4. ClientFeatureVersion
-// 5. ClientImpl
 func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyservice.ResetStickyTaskQueueRequest) (_ *historyservice.ResetStickyTaskQueueResponse, retError error) {
 
 	defer log.CapturePanic(h.GetLogger(), &retError)

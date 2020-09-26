@@ -51,9 +51,9 @@ func (s *HeadersSuite) SetupTest() {
 func (s *HeadersSuite) TestPropagateHeaders_CreateNewOutgoingContext() {
 	ctx := context.Background()
 	ctx = metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-		ClientVersionHeaderName:        "22.08.78",
-		ClientFeatureVersionHeaderName: "21.04.16",
-		ClientImplHeaderName:           "28.08.14",
+		ClientVersionHeaderName:           "22.08.78",
+		SupportedServerVersionsHeaderName: ">21.04.16",
+		ClientNameHeaderName:              "28.08.14",
 	}))
 
 	ctx = PropagateVersions(ctx)
@@ -62,16 +62,16 @@ func (s *HeadersSuite) TestPropagateHeaders_CreateNewOutgoingContext() {
 	s.True(ok)
 
 	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
-	s.Equal("21.04.16", md.Get(ClientFeatureVersionHeaderName)[0])
-	s.Equal("28.08.14", md.Get(ClientImplHeaderName)[0])
+	s.Equal(">21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
+	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
 }
 
 func (s *HeadersSuite) TestPropagateHeaders_UpdateExistingEmptyOutgoingContext() {
 	ctx := context.Background()
 	ctx = metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-		ClientVersionHeaderName:        "22.08.78",
-		ClientFeatureVersionHeaderName: "21.04.16",
-		ClientImplHeaderName:           "28.08.14",
+		ClientVersionHeaderName:           "22.08.78",
+		SupportedServerVersionsHeaderName: "<21.04.16",
+		ClientNameHeaderName:              "28.08.14",
 	}))
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.MD{})
@@ -82,21 +82,21 @@ func (s *HeadersSuite) TestPropagateHeaders_UpdateExistingEmptyOutgoingContext()
 	s.True(ok)
 
 	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
-	s.Equal("21.04.16", md.Get(ClientFeatureVersionHeaderName)[0])
-	s.Equal("28.08.14", md.Get(ClientImplHeaderName)[0])
+	s.Equal("<21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
+	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
 }
 
 func (s *HeadersSuite) TestPropagateHeaders_UpdateExistingNonEmptyOutgoingContext() {
 	ctx := context.Background()
 	ctx = metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-		ClientVersionHeaderName:        "07.08.78", // Must be ignored
-		ClientFeatureVersionHeaderName: "07.04.16", // Must be ignored
+		ClientVersionHeaderName:           "07.08.78",  // Must be ignored
+		SupportedServerVersionsHeaderName: "<07.04.16", // Must be ignored
 	}))
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
-		ClientVersionHeaderName:        "22.08.78",
-		ClientFeatureVersionHeaderName: "21.04.16",
-		ClientImplHeaderName:           "28.08.14",
+		ClientVersionHeaderName:           "22.08.78",
+		SupportedServerVersionsHeaderName: "<21.04.16",
+		ClientNameHeaderName:              "28.08.14",
 	}))
 
 	ctx = PropagateVersions(ctx)
@@ -105,17 +105,17 @@ func (s *HeadersSuite) TestPropagateHeaders_UpdateExistingNonEmptyOutgoingContex
 	s.True(ok)
 
 	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
-	s.Equal("21.04.16", md.Get(ClientFeatureVersionHeaderName)[0])
-	s.Equal("28.08.14", md.Get(ClientImplHeaderName)[0])
+	s.Equal("<21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
+	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
 }
 
 func (s *HeadersSuite) TestPropagateHeaders_EmptyIncomingContext() {
 	ctx := context.Background()
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
-		ClientVersionHeaderName:        "22.08.78",
-		ClientFeatureVersionHeaderName: "21.04.16",
-		ClientImplHeaderName:           "28.08.14",
+		ClientVersionHeaderName:           "22.08.78",
+		SupportedServerVersionsHeaderName: "<21.04.16",
+		ClientNameHeaderName:              "28.08.14",
 	}))
 
 	ctx = PropagateVersions(ctx)
@@ -124,6 +124,6 @@ func (s *HeadersSuite) TestPropagateHeaders_EmptyIncomingContext() {
 	s.True(ok)
 
 	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
-	s.Equal("21.04.16", md.Get(ClientFeatureVersionHeaderName)[0])
-	s.Equal("28.08.14", md.Get(ClientImplHeaderName)[0])
+	s.Equal("<21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
+	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
 }

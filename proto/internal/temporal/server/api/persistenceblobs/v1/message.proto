@@ -295,9 +295,9 @@ message WorkflowExecutionInfo {
     bytes event_branch_token = 45;
     int64 signal_count = 46;
     int64 history_size = 47 [deprecated = true];
-    string client_library_version = 48;
-    string client_feature_version = 49;
-    string client_impl = 50;
+    reserved 48;
+    reserved 49;
+    reserved 50;
     temporal.api.workflow.v1.ResetPoints auto_reset_points = 51;
     map<string, temporal.api.common.v1.Payload> search_attributes = 52;
     map<string, temporal.api.common.v1.Payload> memo = 53;

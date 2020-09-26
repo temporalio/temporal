@@ -10,6 +10,7 @@ require (
 	github.com/benbjohnson/clock v1.0.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bitly/go-hostpool v0.1.0 // indirect
+	github.com/blang/semver/v4 v4.0.0
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
 	github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c
 	github.com/cch123/elasticsql v1.0.1
@@ -25,7 +26,6 @@ require (
 	github.com/golang/mock v1.4.4
 	github.com/golang/protobuf v1.4.2
 	github.com/google/uuid v1.1.1
-	github.com/hashicorp/go-version v1.2.0
 	github.com/iancoleman/strcase v0.0.0-20191112232945-16388991a334
 	github.com/jcmturner/gokrb5/v8 v8.3.0 // indirect
 	github.com/jmoiron/sqlx v1.2.0
@@ -59,12 +59,11 @@ require (
 	github.com/urfave/cli v1.22.4
 	github.com/valyala/fastjson v1.5.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/api v0.31.0
-	go.temporal.io/sdk v0.31.0
+	go.temporal.io/api v0.31.1-0.20200925034343-222d8b5059fc
+	go.temporal.io/sdk v0.31.1-0.20200925035348-c60e5bcbd57b
 	go.uber.org/atomic v1.6.0
 	go.uber.org/multierr v1.5.0
 	go.uber.org/zap v1.15.0
-	golang.org/x/mod v0.3.0
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e
 	golang.org/x/tools v0.0.0-20200609164405-eb789aa7ce50 // indirect

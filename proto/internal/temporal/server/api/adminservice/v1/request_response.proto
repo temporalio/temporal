@@ -29,7 +29,6 @@ import "dependencies/gogoproto/gogo.proto";
 
 import "temporal/api/enums/v1/common.proto";
 import "temporal/api/common/v1/message.proto";
-import "temporal/api/version/v1/message.proto";
 
 import "temporal/server/api/cluster/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
@@ -161,8 +160,9 @@ message DescribeClusterRequest {
 }
 
 message DescribeClusterResponse {
-    temporal.api.version.v1.SupportedSDKVersions supported_client_versions = 1;
-    temporal.server.api.cluster.v1.MembershipInfo membership_info = 2;
+    map<string,string> supported_clients = 1;
+    string server_version = 2;
+    temporal.server.api.cluster.v1.MembershipInfo membership_info = 3;
 }
 
 message GetDLQMessagesRequest {
