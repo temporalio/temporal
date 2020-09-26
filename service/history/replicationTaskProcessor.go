@@ -376,7 +376,6 @@ func (p *ReplicationTaskProcessorImpl) processSingleTask(replicationTask *replic
 
 func (p *ReplicationTaskProcessorImpl) processTaskOnce(replicationTask *replicationspb.ReplicationTask) error {
 	scope, err := p.replicationTaskExecutor.execute(
-		p.sourceCluster,
 		replicationTask,
 		false)
 

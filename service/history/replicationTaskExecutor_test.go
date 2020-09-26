@@ -126,6 +126,7 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 
 	s.replicationTaskHandler = newReplicationTaskExecutor(
 		s.currentCluster,
+		s.mockShard,
 		s.mockNamespaceCache,
 		s.nDCHistoryResender,
 		s.mockEngine,
@@ -148,7 +149,7 @@ func (s *replicationTaskExecutorSuite) TestFilterTask() {
 			nil,
 			&persistenceblobs.NamespaceReplicationConfig{
 				Clusters: []string{
-					"test",
+					"active",
 				}},
 			0,
 			s.clusterMetadata,
@@ -206,7 +207,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 	}
 
 	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil).Times(1)
-	_, err := s.replicationTaskHandler.execute(s.currentCluster, task, true)
+	_, err := s.replicationTaskHandler.execute(task, true)
 	s.NoError(err)
 }
 
@@ -233,6 +234,6 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 	}
 
 	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil).Times(1)
-	_, err := s.replicationTaskHandler.execute(s.currentCluster, task, true)
+	_, err := s.replicationTaskHandler.execute(task, true)
 	s.NoError(err)
 }

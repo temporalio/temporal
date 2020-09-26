@@ -289,27 +289,31 @@ func NewEngineWithShardContext(
 	)
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
 
-	nDCHistoryResender := xdc.NewNDCHistoryResender(
-		shard.GetNamespaceCache(),
-		shard.GetService().GetClientBean().GetRemoteAdminClient(currentClusterName),
-		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-			return historyEngImpl.ReplicateEventsV2(ctx, request)
-		},
-		shard.GetService().GetPayloadSerializer(),
-		shard.GetConfig().StandbyTaskReReplicationContextTimeout,
-		shard.GetLogger(),
-	)
-	replicationTaskExecutor := newReplicationTaskExecutor(
-		currentClusterName,
-		shard.GetNamespaceCache(),
-		nDCHistoryResender,
-		historyEngImpl,
-		shard.GetMetricsClient(),
-		shard.GetLogger(),
-	)
-
 	var replicationTaskProcessors []ReplicationTaskProcessor
+	replicationTaskExecutors := make(map[string]replicationTaskExecutor)
 	for _, replicationTaskFetcher := range replicationTaskFetchers.GetFetchers() {
+		sourceCluster := replicationTaskFetcher.GetSourceCluster()
+		nDCHistoryResender := xdc.NewNDCHistoryResender(
+			shard.GetNamespaceCache(),
+			shard.GetService().GetClientBean().GetRemoteAdminClient(currentClusterName),
+			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+				return historyEngImpl.ReplicateEventsV2(ctx, request)
+			},
+			shard.GetService().GetPayloadSerializer(),
+			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
+			shard.GetLogger(),
+		)
+		replicationTaskExecutor := newReplicationTaskExecutor(
+			sourceCluster,
+			shard,
+			shard.GetNamespaceCache(),
+			nDCHistoryResender,
+			historyEngImpl,
+			shard.GetMetricsClient(),
+			shard.GetLogger(),
+		)
+		replicationTaskExecutors[sourceCluster] = replicationTaskExecutor
+
 		replicationTaskProcessor := NewReplicationTaskProcessor(
 			shard,
 			historyEngImpl,
@@ -321,7 +325,7 @@ func NewEngineWithShardContext(
 		replicationTaskProcessors = append(replicationTaskProcessors, replicationTaskProcessor)
 	}
 	historyEngImpl.replicationTaskProcessors = replicationTaskProcessors
-	replicationMessageHandler := newReplicationDLQHandler(shard, replicationTaskExecutor)
+	replicationMessageHandler := newReplicationDLQHandler(shard, replicationTaskExecutors)
 	historyEngImpl.replicationDLQHandler = replicationMessageHandler
 
 	shard.SetEngine(historyEngImpl)

@@ -44,11 +44,13 @@ import (
 
 type (
 	replicationTaskExecutor interface {
-		execute(sourceCluster string, replicationTask *replicationspb.ReplicationTask, forceApply bool) (int, error)
+		execute(replicationTask *replicationspb.ReplicationTask, forceApply bool) (int, error)
 	}
 
 	replicationTaskExecutorImpl struct {
 		currentCluster     string
+		sourceCluster      string
+		shard              ShardContext
 		namespaceCache     cache.NamespaceCache
 		nDCHistoryResender xdc.NDCHistoryResender
 		historyEngine      Engine
@@ -61,7 +63,8 @@ type (
 // newReplicationTaskExecutor creates an replication task executor
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
 func newReplicationTaskExecutor(
-	currentCluster string,
+	sourceCluster string,
+	shard ShardContext,
 	namespaceCache cache.NamespaceCache,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	historyEngine Engine,
@@ -69,7 +72,9 @@ func newReplicationTaskExecutor(
 	logger log.Logger,
 ) replicationTaskExecutor {
 	return &replicationTaskExecutorImpl{
-		currentCluster:     currentCluster,
+		currentCluster:     shard.GetClusterMetadata().GetCurrentClusterName(),
+		sourceCluster:      sourceCluster,
+		shard:              shard,
 		namespaceCache:     namespaceCache,
 		nDCHistoryResender: nDCHistoryResender,
 		historyEngine:      historyEngine,
@@ -79,7 +84,6 @@ func newReplicationTaskExecutor(
 }
 
 func (e *replicationTaskExecutorImpl) execute(
-	sourceCluster string,
 	replicationTask *replicationspb.ReplicationTask,
 	forceApply bool,
 ) (int, error) {

@@ -29,11 +29,17 @@ package history
 import (
 	"context"
 
+	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+)
+
+var (
+	errInvalidCluster = &serviceerror.InvalidArgument{Message: "Invalid target cluster name."}
 )
 
 type (
@@ -60,24 +66,26 @@ type (
 	}
 
 	replicationDLQHandlerImpl struct {
-		replicationTaskExecutor replicationTaskExecutor
-		shard                   ShardContext
-		logger                  log.Logger
+		taskExecutors map[string]replicationTaskExecutor
+		shard         ShardContext
+		logger        log.Logger
 	}
 )
 
 func newReplicationDLQHandler(
 	shard ShardContext,
-	replicationTaskExecutor replicationTaskExecutor,
+	taskExecutors map[string]replicationTaskExecutor,
 ) replicationDLQHandler {
 
+	if taskExecutors == nil {
+		panic("Failed to initialize replication DLQ handler due to nil task executors")
+	}
 	return &replicationDLQHandlerImpl{
-		shard:                   shard,
-		replicationTaskExecutor: replicationTaskExecutor,
-		logger:                  shard.GetLogger(),
+		shard:         shard,
+		taskExecutors: taskExecutors,
+		logger:        shard.GetLogger(),
 	}
 }
-
 func (r *replicationDLQHandlerImpl) getMessages(
 	ctx context.Context,
 	sourceCluster string,
@@ -180,6 +188,10 @@ func (r *replicationDLQHandlerImpl) mergeMessages(
 	pageToken []byte,
 ) ([]byte, error) {
 
+	if _, ok := r.taskExecutors[sourceCluster]; !ok {
+		return nil, errInvalidCluster
+	}
+
 	tasks, ackLevel, token, err := r.readMessagesWithAckLevel(
 		ctx,
 		sourceCluster,
@@ -189,8 +201,7 @@ func (r *replicationDLQHandlerImpl) mergeMessages(
 	)
 
 	for _, task := range tasks {
-		if _, err := r.replicationTaskExecutor.execute(
-			sourceCluster,
+		if _, err := r.taskExecutors[sourceCluster].execute(
 			task,
 			true,
 		); err != nil {
