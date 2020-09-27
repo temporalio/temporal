@@ -404,3 +404,12 @@ go-generate:
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
+
+goreleaser:
+	@curl -sfL https://install.goreleaser.com/github.com/goreleaser/goreleaser.sh | sh
+
+release-snapshot:
+	@BUILD_DATE=$(shell date '+%F-%T') BUILD_TS_UNIX=$(shell date '+%s') GIT_BRANCH=$(shell git rev-parse --abbrev-ref HEAD) ./bin/goreleaser --snapshot --rm-dist
+
+release:
+	@BUILD_DATE=$(shell date '+%F-%T') BUILD_TS_UNIX=$(shell date '+%s') GIT_BRANCH=$(shell git rev-parse --abbrev-ref HEAD) ./bin/goreleaser

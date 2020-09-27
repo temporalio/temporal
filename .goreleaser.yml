@@ -1,0 +1,64 @@
+env:
+  - GO111MODULE=on
+before:
+  hooks:
+    - go mod download
+builds:
+  - id: "temporal-server"
+    dir: cmd/server
+    binary: temporal-server
+    ldflags:
+      - -X go.temporal.io/server/common/metrics.GitRevision={{.ShortCommit}}
+      - -X go.temporal.io/server/common/metrics.GitBranch={{.Env.GIT_BRANCH}}
+      - -X go.temporal.io/server/common/metrics.GitVersion={{.Tag}}
+      - -X go.temporal.io/server/common/metrics.BuildDate={{.Env.BUILD_DATE}}
+      - -X go.temporal.io/server/common/metrics.BuildTimeUnix={{.Env.BUILD_TS_UNIX}}
+      - -X go.temporal.io/server/cmd/server/temporal.GitVersion={{.Tag}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+  - id: "tctl"
+    dir: cmd/tools/cli
+    binary: tctl
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+  - id: "temporal-cassandra-tool"
+    dir: cmd/tools/cassandra
+    binary: temporal-cassandra-tool
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+  - id: "temporal-sql-tool"
+    dir: cmd/tools/sql
+    binary: temporal-sql-tool
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+snapshot:
+  name_template: "{{ .Tag }}-next"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'

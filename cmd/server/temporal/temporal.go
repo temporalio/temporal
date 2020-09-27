@@ -42,6 +42,8 @@ import (
 	"go.temporal.io/server/tools/sql"
 )
 
+var GitVersion = "0.0.1"
+
 // validServices is the list of all valid temporal services
 var validServices = []string{primitives.FrontendService, primitives.HistoryService, primitives.MatchingService, primitives.WorkerService}
 
@@ -166,7 +168,7 @@ func BuildCLI() *cli.App {
 	app := cli.NewApp()
 	app.Name = "temporal"
 	app.Usage = "Temporal server"
-	app.Version = "0.0.1"
+	app.Version = GitVersion
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{

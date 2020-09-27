@@ -20,3 +20,7 @@
 
 # Buf proto image
 /proto/image.bin
+
+#Goreleaser
+/dist
+/bin
