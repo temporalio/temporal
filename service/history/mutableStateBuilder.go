@@ -956,9 +956,9 @@ func (e *mutableStateBuilder) GetActivityInfo(
 // GetActivityInfo gives details about an activity that is currently in progress.
 func (e *mutableStateBuilder) GetActivityInfoWithTimerHeartbeat(
 	scheduleEventID int64,
-) (ai *persistenceblobs.ActivityInfo, timerVis time.Time, ok bool) {
-	ai, ok = e.pendingActivityInfoIDs[scheduleEventID]
-	timerVis, ok = e.pendingActivityTimerHeartbeats[scheduleEventID]
+) (*persistenceblobs.ActivityInfo, time.Time, bool) {
+	ai, ok := e.pendingActivityInfoIDs[scheduleEventID]
+	timerVis, ok := e.pendingActivityTimerHeartbeats[scheduleEventID]
 	return ai, timerVis, ok
 }
 
