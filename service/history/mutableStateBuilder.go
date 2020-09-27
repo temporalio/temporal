@@ -279,6 +279,9 @@ func (e *mutableStateBuilder) Load(
 	e.pendingActivityInfoIDs = state.ActivityInfos
 	for _, activityInfo := range state.ActivityInfos {
 		e.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduleId
+		if activityInfo.HeartbeatTimeout == nil || *activityInfo.HeartbeatTimeout > 0 {
+			e.pendingActivityTimerHeartbeats[activityInfo.ScheduleId] = getLastHeartbeatTimeStamp(activityInfo)
+		}
 	}
 	e.pendingTimerInfoIDs = state.TimerInfos
 	for _, timerInfo := range state.TimerInfos {
@@ -953,9 +956,17 @@ func (e *mutableStateBuilder) GetActivityInfo(
 // GetActivityInfo gives details about an activity that is currently in progress.
 func (e *mutableStateBuilder) GetActivityInfoWithTimerHeartbeat(
 	scheduleEventID int64,
-) (*persistenceblobs.ActivityInfo, time.Time, bool) {
-	ai, ok := e.pendingActivityInfoIDs[scheduleEventID]
-	timerVis, ok := e.pendingActivityTimerHeartbeats[scheduleEventID]
+) (ai *persistenceblobs.ActivityInfo, timerVis time.Time, ok bool) {
+	ai, ok = e.pendingActivityInfoIDs[scheduleEventID]
+	if ok {
+		// If the history shard is just starting up,
+		//
+		timerVis, ok = e.pendingActivityTimerHeartbeats[scheduleEventID]
+		if !ok {
+			timerVis = getLastHeartbeatTimeStamp(ai)
+			ok = true
+		}
+	}
 
 	return ai, timerVis, ok
 }
