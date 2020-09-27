@@ -959,6 +959,7 @@ func (e *mutableStateBuilder) GetActivityInfoWithTimerHeartbeat(
 ) (*persistenceblobs.ActivityInfo, time.Time, bool) {
 	ai, ok := e.pendingActivityInfoIDs[scheduleEventID]
 	timerVis, ok := e.pendingActivityTimerHeartbeats[scheduleEventID]
+
 	return ai, timerVis, ok
 }
 
