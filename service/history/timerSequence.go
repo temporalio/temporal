@@ -338,16 +338,6 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 		return nil
 	}
 
-	return &timerSequenceID{
-		eventID:      activityInfo.ScheduleId,
-		timestamp:    getLastHeartbeatTimeStamp(activityInfo).Add(timestamp.DurationValue(activityInfo.HeartbeatTimeout)),
-		timerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
-		timerCreated: (activityInfo.TimerTaskStatus & timerTaskStatusCreatedHeartbeat) > 0,
-		attempt:      activityInfo.Attempt,
-	}
-}
-
-func getLastHeartbeatTimeStamp(activityInfo *persistenceblobs.ActivityInfo) time.Time {
 	var lastHeartbeat time.Time
 	if activityInfo.StartedTime != nil {
 		lastHeartbeat = timestamp.TimeValue(activityInfo.StartedTime)
@@ -357,7 +347,13 @@ func getLastHeartbeatTimeStamp(activityInfo *persistenceblobs.ActivityInfo) time
 		lastHeartbeat = timestamp.TimeValue(activityInfo.LastHeartbeatUpdateTime)
 	}
 
-	return lastHeartbeat
+	return &timerSequenceID{
+		eventID:      activityInfo.ScheduleId,
+		timestamp:    lastHeartbeat,
+		timerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		timerCreated: (activityInfo.TimerTaskStatus & timerTaskStatusCreatedHeartbeat) > 0,
+		attempt:      activityInfo.Attempt,
+	}
 }
 
 func timerTypeToTimerMask(

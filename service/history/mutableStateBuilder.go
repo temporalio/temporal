@@ -958,16 +958,7 @@ func (e *mutableStateBuilder) GetActivityInfoWithTimerHeartbeat(
 	scheduleEventID int64,
 ) (ai *persistenceblobs.ActivityInfo, timerVis time.Time, ok bool) {
 	ai, ok = e.pendingActivityInfoIDs[scheduleEventID]
-	if ok {
-		// If the history shard is just starting up,
-		//
-		timerVis, ok = e.pendingActivityTimerHeartbeats[scheduleEventID]
-		if !ok {
-			timerVis = getLastHeartbeatTimeStamp(ai)
-			ok = true
-		}
-	}
-
+	timerVis, ok = e.pendingActivityTimerHeartbeats[scheduleEventID]
 	return ai, timerVis, ok
 }
 
