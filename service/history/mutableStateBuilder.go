@@ -280,7 +280,7 @@ func (e *mutableStateBuilder) Load(
 	for _, activityInfo := range state.ActivityInfos {
 		e.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduleId
 		if (activityInfo.TimerTaskStatus & timerTaskStatusCreatedHeartbeat) > 0 {
-			e.pendingActivityTimerHeartbeats[activityInfo.ScheduleId] = getLastHeartbeatTimeStamp(activityInfo)
+			e.pendingActivityTimerHeartbeats[activityInfo.ScheduleId] = time.Time{}
 		}
 	}
 	e.pendingTimerInfoIDs = state.TimerInfos
