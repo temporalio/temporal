@@ -18,6 +18,10 @@ This doc is for contributors to Temporal server (hopefully that's you!)
 * [docker](https://docs.docker.com/engine/install/)
 * [docker-compose](https://docs.docker.com/compose/install/)
 
+### Developing on Windows
+
+For developing on Windows, install [Windows Subsystem for Linux 2 (WSL2)](https://aka.ms/wsl) and [Ubuntu](https://docs.microsoft.com/en-us/windows/wsl/install-win10#step-6---install-your-linux-distribution-of-choice). After that, follow the guidance for installing prerequisites, building, and testing on Ubuntu.
+
 ## Checking out the code
 
 Temporal uses go modules, there is no dependency on `$GOPATH` variable. Clone the repo into the preffered location:
@@ -49,7 +53,7 @@ $ cd docker/dependencies
 $ docker-compose up
 ```
 Before testing on MacOS, make sure you increase the file handle limit:
-```
+```bash
 $ ulimit -n 8192
 ```
 
