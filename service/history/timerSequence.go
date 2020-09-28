@@ -347,9 +347,11 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 		lastHeartbeat = timestamp.TimeValue(activityInfo.LastHeartbeatUpdateTime)
 	}
 
+	heartbeatTimeout := lastHeartbeat.Add(timestamp.DurationValue(activityInfo.HeartbeatTimeout))
+
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,
-		timestamp:    lastHeartbeat.Add(timestamp.DurationValue(activityInfo.HeartbeatTimeout)),
+		timestamp:    heartbeatTimeout,
 		timerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		timerCreated: (activityInfo.TimerTaskStatus & timerTaskStatusCreatedHeartbeat) > 0,
 		attempt:      activityInfo.Attempt,
