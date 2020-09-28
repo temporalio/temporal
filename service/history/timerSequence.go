@@ -338,6 +338,7 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 		return nil
 	}
 
+	// use the latest time as last heartbeat time
 	var lastHeartbeat time.Time
 	if activityInfo.StartedTime != nil {
 		lastHeartbeat = timestamp.TimeValue(activityInfo.StartedTime)
