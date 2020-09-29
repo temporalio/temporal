@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -62,17 +61,6 @@ func Timestamp(timestamp time.Time) Tag {
 // Timestamp returns tag for Timestamp
 func TimestampPtr(t *time.Time) Tag {
 	return newTimeTag("timestamp", timestamp.TimeValue(t))
-}
-
-// Timestamp returns tag for Timestamp
-func TimestampProto(timestamp *types.Timestamp) Tag {
-	t, _ := types.TimestampFromProto(timestamp)
-	return newTimeTag("timestamp", t)
-}
-
-// TimestampInt returns tag for Timestamp
-func TimestampInt(timestamp int64) Tag {
-	return newInt64("timestamp", timestamp)
 }
 
 ///////////////////  Workflow tags defined here: ( wf is short for workflow) ///////////////////
