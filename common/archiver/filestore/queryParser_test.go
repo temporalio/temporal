@@ -26,6 +26,7 @@ package filestore
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -260,32 +261,32 @@ func (s *queryParserSuite) TestParseCloseTime() {
 			query:     "CloseTime <= 1000",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: 0,
-				latestCloseTime:   1000,
+				earliestCloseTime: time.Unix(0, 0),
+				latestCloseTime:   time.Unix(0, 1000),
 			},
 		},
 		{
 			query:     "CloseTime < 2000 and CloseTime <= 1000 and CloseTime > 300",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: 301,
-				latestCloseTime:   1000,
+				earliestCloseTime: time.Unix(0, 301),
+				latestCloseTime:   time.Unix(0, 1000),
 			},
 		},
 		{
 			query:     "CloseTime = 2000 and (CloseTime > 1000 and CloseTime <= 9999)",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: 2000,
-				latestCloseTime:   2000,
+				earliestCloseTime: time.Unix(0, 2000),
+				latestCloseTime:   time.Unix(0, 2000),
 			},
 		},
 		{
 			query:     "CloseTime <= \"2019-01-01T11:11:11Z\" and CloseTime >= 1000000",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: 1000000,
-				latestCloseTime:   1546341071000000000,
+				earliestCloseTime: time.Unix(0, 1000000),
+				latestCloseTime:   time.Unix(0, 1546341071000000000),
 			},
 		},
 		{
@@ -327,8 +328,8 @@ func (s *queryParserSuite) TestParse() {
 			query:     "CloseTime <= \"2019-01-01T11:11:11Z\" and WorkflowId = 'random workflowID'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: 0,
-				latestCloseTime:   1546341071000000000,
+				earliestCloseTime: time.Unix(0, 0),
+				latestCloseTime:   time.Unix(0, 1546341071000000000),
 				workflowID:        convert.StringPtr("random workflowID"),
 			},
 		},
@@ -336,8 +337,8 @@ func (s *queryParserSuite) TestParse() {
 			query:     "CloseTime > 1999 and CloseTime < 10000 and RunId = 'random runID' and ExecutionStatus = 'Failed'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: 2000,
-				latestCloseTime:   9999,
+				earliestCloseTime: time.Unix(0, 2000),
+				latestCloseTime:   time.Unix(0, 9999),
 				runID:             convert.StringPtr("random runID"),
 				status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
