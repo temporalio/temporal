@@ -42,7 +42,7 @@ const (
 	CLIVersion    = "1.0.0"
 
 	// SupportedServerVersions is used by CLI and inter role communication.
-	SupportedServerVersions = ">=0.31.0 <2.0.0"
+	SupportedServerVersions = ">=1.0.0 <2.0.0"
 )
 
 var (
