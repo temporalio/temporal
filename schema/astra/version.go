@@ -22,30 +22,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package auth
+package cassandra
 
-type (
-	// TLS describe TLS configuration (for Kafka, Cassandra, SQL)
-	TLS struct {
-		Enabled bool `yaml:"enabled"`
+// NOTE: whenever there is a new data base schema update, plz update the following versions
 
-		// CertPath and KeyPath are optional depending on server
-		// config, but both fields must be omitted to avoid using a
-		// client certificate
-		CertFile string `yaml:"certFile"`
-		KeyFile  string `yaml:"keyFile"`
+// Version is the Cassandra database release version
+const Version = "1.0"
 
-		CaFile string `yaml:"caFile"` //optional depending on server config
-		// If you want to verify the hostname and server cert (like a wildcard for cass cluster) then you should turn this on
-		// This option is basically the inverse of InSecureSkipVerify
-		// See InSecureSkipVerify in http://golang.org/pkg/crypto/tls/ for more info
-		EnableHostVerification bool `yaml:"enableHostVerification"`
-
-		ServerName string `yaml:"serverName"`
-
-		// optional inline base64 encoded versions of the above files
-		CertData string `yaml:"certData"`
-		KeyData  string `yaml:"keyData"`
-		CaData   string `yaml:"caData"`
-	}
-)
+// VisibilityVersion is the Cassandra visibility database release version
+const VisibilityVersion = "1.0"

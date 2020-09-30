@@ -28,10 +28,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"time"
 
+	"errors"
 	"fmt"
 	"strings"
-	"errors"
 
 	"github.com/gocql/gocql"
 
@@ -69,6 +70,26 @@ func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 				ServerName: cfg.TLS.ServerName,
 			},
 		}
+
+		if cfg.TLS.CertData != "" {
+			certBytes, err := base64.StdEncoding.DecodeString(cfg.TLS.CertData)
+			if err != nil {
+				return nil, fmt.Errorf("certData could not be decoded: %w", err)
+			}
+
+			keyBytes, err := base64.StdEncoding.DecodeString(cfg.TLS.KeyData)
+			if err != nil {
+				return nil, fmt.Errorf("certKey could not be decoded: %w", err)
+			}
+
+			clientCert, err := tls.X509KeyPair(certBytes, keyBytes)
+			if err != nil {
+				return nil, fmt.Errorf("unable to generate key pair: %w", err)
+			}
+
+			cluster.SslOpts.Certificates = []tls.Certificate{clientCert}
+		}
+
 		if cfg.TLS.CaData != "" {
 			cluster.SslOpts.RootCAs = x509.NewCertPool()
 			pem, err := base64.StdEncoding.DecodeString(cfg.TLS.CaData)
@@ -85,6 +106,8 @@ func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 	}
 	if cfg.ConnectTimeout > 0 {
 		cluster.ConnectTimeout = cfg.ConnectTimeout
+	} else {
+		cluster.ConnectTimeout = time.Minute
 	}
 
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
