@@ -261,31 +261,31 @@ func (s *queryParserSuite) TestParseCloseTime() {
 			query:     "CloseTime <= 1000",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: time.Time{}.UTC(),
-				latestCloseTime:   time.Unix(0, 1000).UTC(),
+				earliestCloseTime: time.Time{},
+				latestCloseTime:   time.Unix(0, 1000),
 			},
 		},
 		{
 			query:     "CloseTime < 2000 and CloseTime <= 1000 and CloseTime > 300",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: time.Unix(0, 301).UTC(),
-				latestCloseTime:   time.Unix(0, 1000).UTC(),
+				earliestCloseTime: time.Unix(0, 301),
+				latestCloseTime:   time.Unix(0, 1000),
 			},
 		},
 		{
 			query:     "CloseTime = 2000 and (CloseTime > 1000 and CloseTime <= 9999)",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: time.Unix(0, 2000).UTC(),
-				latestCloseTime:   time.Unix(0, 2000).UTC(),
+				earliestCloseTime: time.Unix(0, 2000),
+				latestCloseTime:   time.Unix(0, 2000),
 			},
 		},
 		{
 			query:     "CloseTime <= \"2019-01-01T11:11:11Z\" and CloseTime >= 1000000",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: time.Unix(0, 1000000).UTC(),
+				earliestCloseTime: time.Unix(0, 1000000),
 				latestCloseTime:   time.Date(2019, 01, 01, 11, 11, 11, 0, time.UTC),
 			},
 		},
@@ -312,8 +312,8 @@ func (s *queryParserSuite) TestParseCloseTime() {
 		s.NoError(err, "case %d", i)
 		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult, "case %d", i)
 		if !tc.parsedQuery.emptyResult {
-			s.Equal(tc.parsedQuery.earliestCloseTime, parsedQuery.earliestCloseTime, "case %d", i)
-			s.Equal(tc.parsedQuery.latestCloseTime, parsedQuery.latestCloseTime, "case %d", i)
+			s.True(tc.parsedQuery.earliestCloseTime.Equal(parsedQuery.earliestCloseTime), "case %d", i)
+			s.True(tc.parsedQuery.latestCloseTime.Equal(parsedQuery.latestCloseTime), "case %d", i)
 		}
 	}
 }
@@ -328,7 +328,7 @@ func (s *queryParserSuite) TestParse() {
 			query:     "CloseTime <= \"2019-01-01T11:11:11Z\" and WorkflowId = 'random workflowID'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: time.Time{}.UTC(),
+				earliestCloseTime: time.Time{},
 				latestCloseTime:   time.Date(2019, 01, 01, 11, 11, 11, 0, time.UTC),
 				workflowID:        convert.StringPtr("random workflowID"),
 			},
