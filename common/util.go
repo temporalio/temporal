@@ -344,6 +344,14 @@ func MaxInt64(a, b int64) int64 {
 	return b
 }
 
+// MinTime returns the smaller of two given time.Time
+func MaxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
+}
+
 // MinInt32 return smaller one of two inputs int32
 func MinInt32(a, b int32) int32 {
 	if a < b {

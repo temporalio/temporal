@@ -223,9 +223,9 @@ func (p *queryParser) convertCloseTime(timestamp time.Time, op string, parsedQue
 	case "<=":
 		parsedQuery.latestCloseTime = common.MinTime(parsedQuery.latestCloseTime, timestamp)
 	case ">":
-		parsedQuery.earliestCloseTime = common.MinTime(parsedQuery.earliestCloseTime, timestamp.Add(1*time.Nanosecond))
+		parsedQuery.earliestCloseTime = common.MaxTime(parsedQuery.earliestCloseTime, timestamp.Add(1*time.Nanosecond))
 	case ">=":
-		parsedQuery.earliestCloseTime = common.MinTime(parsedQuery.earliestCloseTime, timestamp)
+		parsedQuery.earliestCloseTime = common.MaxTime(parsedQuery.earliestCloseTime, timestamp)
 	default:
 		return fmt.Errorf("operator %s is not supported for close time", op)
 	}

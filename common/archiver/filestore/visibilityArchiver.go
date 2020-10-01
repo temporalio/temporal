@@ -284,7 +284,8 @@ func sortAndFilterFiles(filenames []string, token *queryVisibilityToken) ([]stri
 		if parsedFilenames[i].closeTime == parsedFilenames[j].closeTime {
 			return parsedFilenames[i].hashedRunID > parsedFilenames[j].hashedRunID
 		}
-		return parsedFilenames[i].closeTime.After(parsedFilenames[j].closeTime)
+		//return parsedFilenames[i].closeTime.After(parsedFilenames[j].closeTime)
+		return parsedFilenames[i].closeTime.UnixNano() > parsedFilenames[j].closeTime.UnixNano()
 	})
 
 	startIdx := 0
@@ -294,7 +295,8 @@ func sortAndFilterFiles(filenames []string, token *queryVisibilityToken) ([]stri
 			if parsedFilenames[i].closeTime == token.LastCloseTime {
 				return parsedFilenames[i].hashedRunID < LastHashedRunID
 			}
-			return parsedFilenames[i].closeTime.Before(token.LastCloseTime)
+			//return parsedFilenames[i].closeTime.Before(token.LastCloseTime)
+			return parsedFilenames[i].closeTime.UnixNano() < token.LastCloseTime.UnixNano()
 		})
 	}
 

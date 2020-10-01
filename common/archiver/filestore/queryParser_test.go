@@ -261,32 +261,32 @@ func (s *queryParserSuite) TestParseCloseTime() {
 			query:     "CloseTime <= 1000",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: time.Unix(0, 0),
-				latestCloseTime:   time.Unix(0, 1000),
+				earliestCloseTime: time.Time{}.UTC(),
+				latestCloseTime:   time.Unix(0, 1000).UTC(),
 			},
 		},
 		{
 			query:     "CloseTime < 2000 and CloseTime <= 1000 and CloseTime > 300",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: time.Unix(0, 301),
-				latestCloseTime:   time.Unix(0, 1000),
+				earliestCloseTime: time.Unix(0, 301).UTC(),
+				latestCloseTime:   time.Unix(0, 1000).UTC(),
 			},
 		},
 		{
 			query:     "CloseTime = 2000 and (CloseTime > 1000 and CloseTime <= 9999)",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: time.Unix(0, 2000),
-				latestCloseTime:   time.Unix(0, 2000),
+				earliestCloseTime: time.Unix(0, 2000).UTC(),
+				latestCloseTime:   time.Unix(0, 2000).UTC(),
 			},
 		},
 		{
 			query:     "CloseTime <= \"2019-01-01T11:11:11Z\" and CloseTime >= 1000000",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: time.Unix(0, 1000000),
-				latestCloseTime:   time.Unix(0, 1546341071000000000),
+				earliestCloseTime: time.Unix(0, 1000000).UTC(),
+				latestCloseTime:   time.Date(2019, 01, 01, 11, 11, 11, 0, time.UTC),
 			},
 		},
 		{
@@ -303,17 +303,17 @@ func (s *queryParserSuite) TestParseCloseTime() {
 		},
 	}
 
-	for _, tc := range testCases {
+	for i, tc := range testCases {
 		parsedQuery, err := s.parser.Parse(tc.query)
 		if tc.expectErr {
 			s.Error(err)
 			continue
 		}
-		s.NoError(err)
-		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult)
+		s.NoError(err, "case %d", i)
+		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult, "case %d", i)
 		if !tc.parsedQuery.emptyResult {
-			s.Equal(tc.parsedQuery.earliestCloseTime, parsedQuery.earliestCloseTime)
-			s.Equal(tc.parsedQuery.latestCloseTime, parsedQuery.latestCloseTime)
+			s.Equal(tc.parsedQuery.earliestCloseTime, parsedQuery.earliestCloseTime, "case %d", i)
+			s.Equal(tc.parsedQuery.latestCloseTime, parsedQuery.latestCloseTime, "case %d", i)
 		}
 	}
 }
@@ -328,8 +328,8 @@ func (s *queryParserSuite) TestParse() {
 			query:     "CloseTime <= \"2019-01-01T11:11:11Z\" and WorkflowId = 'random workflowID'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: time.Unix(0, 0),
-				latestCloseTime:   time.Unix(0, 1546341071000000000),
+				earliestCloseTime: time.Time{}.UTC(),
+				latestCloseTime:   time.Date(2019, 01, 01, 11, 11, 11, 0, time.UTC),
 				workflowID:        convert.StringPtr("random workflowID"),
 			},
 		},
@@ -337,8 +337,8 @@ func (s *queryParserSuite) TestParse() {
 			query:     "CloseTime > 1999 and CloseTime < 10000 and RunId = 'random runID' and ExecutionStatus = 'Failed'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				earliestCloseTime: time.Unix(0, 2000),
-				latestCloseTime:   time.Unix(0, 9999),
+				earliestCloseTime: time.Unix(0, 2000).UTC(),
+				latestCloseTime:   time.Unix(0, 9999).UTC(),
 				runID:             convert.StringPtr("random runID"),
 				status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
@@ -352,16 +352,16 @@ func (s *queryParserSuite) TestParse() {
 		},
 	}
 
-	for _, tc := range testCases {
+	for i, tc := range testCases {
 		parsedQuery, err := s.parser.Parse(tc.query)
 		if tc.expectErr {
 			s.Error(err)
 			continue
 		}
-		s.NoError(err)
-		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult)
+		s.NoError(err, "case %d", i)
+		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult, "case %d", i)
 		if !tc.parsedQuery.emptyResult {
-			s.Equal(tc.parsedQuery, parsedQuery)
+			s.Equal(tc.parsedQuery, parsedQuery, "case %d", i)
 		}
 	}
 }
