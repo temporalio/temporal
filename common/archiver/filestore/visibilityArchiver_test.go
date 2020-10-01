@@ -298,28 +298,28 @@ func (s *visibilityArchiverSuite) TestSortAndFilterFiles() {
 		token          *queryVisibilityToken
 		expectedResult []string
 	}{
-		// {
-		// 	filenames:      []string{"9_12345.vis", "5_0.vis", "9_54321.vis", "1000_654.vis", "1000_78.vis"},
-		// 	expectedResult: []string{"1000_78.vis", "1000_654.vis", "9_54321.vis", "9_12345.vis", "5_0.vis"},
-		// },
-		// {
-		// 	filenames: []string{"9_12345.vis", "5_0.vis", "9_54321.vis", "1000_654.vis", "1000_78.vis"},
-		// 	token: &queryVisibilityToken{
-		// 		LastCloseTime: time.Unix(0, 3),
-		// 	},
-		// 	expectedResult: []string{},
-		// },
-		// {
-		// 	filenames: []string{"9_12345.vis", "5_0.vis", "9_54321.vis", "1000_654.vis", "1000_78.vis"},
-		// 	token: &queryVisibilityToken{
-		// 		LastCloseTime: time.Unix(0, 999),
-		// 	},
-		// 	expectedResult: []string{"9_54321.vis", "9_12345.vis", "5_0.vis"},
-		// },
+		{
+			filenames:      []string{"9_12345.vis", "5_0.vis", "9_54321.vis", "1000_654.vis", "1000_78.vis"},
+			expectedResult: []string{"1000_78.vis", "1000_654.vis", "9_54321.vis", "9_12345.vis", "5_0.vis"},
+		},
 		{
 			filenames: []string{"9_12345.vis", "5_0.vis", "9_54321.vis", "1000_654.vis", "1000_78.vis"},
 			token: &queryVisibilityToken{
-				LastCloseTime: time.Unix(0, 5),
+				LastCloseTime: time.Unix(0, 3),
+			},
+			expectedResult: []string{},
+		},
+		{
+			filenames: []string{"9_12345.vis", "5_0.vis", "9_54321.vis", "1000_654.vis", "1000_78.vis"},
+			token: &queryVisibilityToken{
+				LastCloseTime: time.Unix(0, 999),
+			},
+			expectedResult: []string{"9_54321.vis", "9_12345.vis", "5_0.vis"},
+		},
+		{
+			filenames: []string{"9_12345.vis", "5_0.vis", "9_54321.vis", "1000_654.vis", "1000_78.vis"},
+			token: &queryVisibilityToken{
+				LastCloseTime: time.Unix(0, 5).UTC(),
 			},
 			expectedResult: []string{"5_0.vis"},
 		},

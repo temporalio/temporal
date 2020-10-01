@@ -281,22 +281,20 @@ func sortAndFilterFiles(filenames []string, token *queryVisibilityToken) ([]stri
 	}
 
 	sort.Slice(parsedFilenames, func(i, j int) bool {
-		if parsedFilenames[i].closeTime == parsedFilenames[j].closeTime {
+		if parsedFilenames[i].closeTime.Equal(parsedFilenames[j].closeTime) {
 			return parsedFilenames[i].hashedRunID > parsedFilenames[j].hashedRunID
 		}
-		//return parsedFilenames[i].closeTime.After(parsedFilenames[j].closeTime)
-		return parsedFilenames[i].closeTime.UnixNano() > parsedFilenames[j].closeTime.UnixNano()
+		return parsedFilenames[i].closeTime.After(parsedFilenames[j].closeTime)
 	})
 
 	startIdx := 0
 	if token != nil {
 		LastHashedRunID := hash(token.LastRunID)
 		startIdx = sort.Search(len(parsedFilenames), func(i int) bool {
-			if parsedFilenames[i].closeTime == token.LastCloseTime {
+			if parsedFilenames[i].closeTime.Equal(token.LastCloseTime) {
 				return parsedFilenames[i].hashedRunID < LastHashedRunID
 			}
-			//return parsedFilenames[i].closeTime.Before(token.LastCloseTime)
-			return parsedFilenames[i].closeTime.UnixNano() < token.LastCloseTime.UnixNano()
+			return parsedFilenames[i].closeTime.Before(token.LastCloseTime)
 		})
 	}
 
