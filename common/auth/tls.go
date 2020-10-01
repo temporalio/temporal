@@ -44,6 +44,8 @@ type (
 		ServerName string `yaml:"serverName"`
 
 		// optional inline base64 encoded versions of the above files
+		// CertData and KeyData must be supplied as base64 encoded values
+		// (e.g. it is not supported to specify 'CertFile' and 'KeyData' or vice-versa)
 		CertData string `yaml:"certData"`
 		KeyData  string `yaml:"keyData"`
 		CaData   string `yaml:"caData"`
