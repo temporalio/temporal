@@ -280,14 +280,15 @@ func (fc *fileBasedClient) getValueWithFilters(key Key, filters map[Filter]inter
 	return defaultValue, nil
 }
 
-// match will return true if the constraints matches the filters exactly
+// match will return true if the constraints matches the filters or any subsets
 func match(v *constrainedValue, filters map[Filter]interface{}) bool {
-	if len(v.Constraints) != len(filters) {
+	if len(v.Constraints) > len(filters) {
 		return false
 	}
 
-	for filter, filterValue := range filters {
-		if v.Constraints[filter.String()] != filterValue {
+	for constrain, constrainedValue := range v.Constraints {
+		constrainKey := parseFilter(constrain)
+		if filters[constrainKey] == nil || filters[constrainKey] != constrainedValue {
 			return false
 		}
 	}

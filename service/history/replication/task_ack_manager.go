@@ -298,11 +298,12 @@ func (t *taskAckManagerImpl) getEventsBlob(
 
 	var eventBatchBlobs []*persistence.DataBlob
 	var pageToken []byte
+	batchSize := t.shard.GetConfig().ReplicationTaskProcessorReadHistoryBatchSize()
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
-		PageSize:      t.shard.GetConfig().ReplicationTaskProcessorReadHistoryBatchSize(),
+		PageSize:      batchSize,
 		NextPageToken: pageToken,
 		ShardID:       common.IntPtr(t.shard.GetShardID()),
 	}

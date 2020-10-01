@@ -1119,7 +1119,16 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory__Success__RawHist
 }
 
 func (s *workflowHandlerSuite) getWorkflowExecutionHistory(nextEventID int64, transientDecision *gen.TransientDecisionInfo, historyEvents []*shared.HistoryEvent) {
-	wh := s.getWorkflowHandler(NewConfig(dc.NewCollection(dc.NewNopClient(), s.mockResource.GetLogger()), numHistoryShards, false, true))
+	wh := s.getWorkflowHandler(
+		NewConfig(
+			dc.NewCollection(
+				dc.NewNopClient(),
+				s.mockResource.GetLogger()),
+			numHistoryShards,
+			false,
+			true,
+		),
+	)
 	ctx := context.Background()
 	s.mockDomainCache.EXPECT().GetDomainID(gomock.Any()).Return(s.testDomainID, nil).AnyTimes()
 	s.mockVersionChecker.EXPECT().SupportsRawHistoryQuery(gomock.Any(), gomock.Any()).Return(nil).Times(1)
@@ -1352,7 +1361,15 @@ func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
-	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.mockResource.GetLogger()), numHistoryShards, false, false)
+	return NewConfig(
+		dc.NewCollection(
+			dc.NewNopClient(),
+			s.mockResource.GetLogger(),
+		),
+		numHistoryShards,
+		false,
+		false,
+	)
 }
 
 func updateRequest(

@@ -140,10 +140,14 @@ func New(params *BootstrapParams) Service {
 		messagingClient:       params.MessagingClient,
 		blobstoreClient:       params.BlobstoreClient,
 		dispatcherProvider:    params.DispatcherProvider,
-		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
-		archivalMetadata:      params.ArchivalMetadata,
-		archiverProvider:      params.ArchiverProvider,
-		serializer:            persistence.NewPayloadSerializer(),
+		dynamicCollection: dynamicconfig.NewCollection(
+			params.DynamicConfig,
+			params.Logger,
+			dynamicconfig.ClusterNameFilter(params.ClusterMetadata.GetCurrentClusterName()),
+		),
+		archivalMetadata: params.ArchivalMetadata,
+		archiverProvider: params.ArchiverProvider,
+		serializer:       persistence.NewPayloadSerializer(),
 	}
 
 	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.GetLogger(), params.InstanceID)

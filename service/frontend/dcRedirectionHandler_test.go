@@ -92,7 +92,15 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(s.currentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
 
-	s.config = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), s.mockResource.GetLogger()), 0, false, false)
+	s.config = NewConfig(
+		dynamicconfig.NewCollection(
+			dynamicconfig.NewNopClient(),
+			s.mockResource.GetLogger(),
+		),
+		0,
+		false,
+		false,
+	)
 	frontendHandler := NewWorkflowHandler(s.mockResource, s.config, nil, client.NewVersionChecker())
 
 	s.mockFrontendHandler = NewMockHandler(s.controller)
