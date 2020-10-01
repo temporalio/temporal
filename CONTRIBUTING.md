@@ -47,11 +47,12 @@ Please check the top of our [Makefile](Makefile) for other useful build targets.
 
 ## Testing
 
-Tests require runtime dependencies. You can run them with `docker-compose`. Open new terminal window and run:
+Tests require runtime dependencies. They can be run with `start-dependencies` target (uses `docker-compose` internally). Open new terminal window and run:
 ```bash
-$ cd docker/dependencies
-$ docker-compose up
+$ make start-dependencies
 ```
+`make stop-dependencies` will bring `docker-compose` down.
+
 Before testing on MacOS, make sure you increase the file handle limit:
 ```bash
 $ ulimit -n 8192
