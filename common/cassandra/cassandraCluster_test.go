@@ -94,7 +94,7 @@ func TestNewCassandraCluster(t *testing.T) {
 					KeyData:  "",
 				},
 			},
-			err: fmt.Errorf("unable to generate key pair: %w", errors.New("tls: failed to find any PEM data in key input")),
+			err: fmt.Errorf("unable to generate x509 key pair: %w", errors.New("tls: failed to find any PEM data in key input")),
 		},
 	}
 
