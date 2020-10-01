@@ -316,7 +316,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		closeTime:       &time.Time{},
+		closeTime:       timestamp.TimePtr(time.Unix(0, 0).UTC()),
 		searchPrecision: convert.StringPtr(PrecisionDay),
 		workflowID:      convert.StringPtr(testWorkflowID),
 	}, nil).AnyTimes()
