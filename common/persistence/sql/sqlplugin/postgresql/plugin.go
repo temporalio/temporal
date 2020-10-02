@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package postgres
+package postgresql
 
 import (
 	"errors"
@@ -43,7 +43,7 @@ const (
 	PluginName = "postgres"
 )
 
-var errTLSNotImplemented = errors.New("tls for postgres has not been implemented")
+var errTLSNotImplemented = errors.New("tls for postgresql has not been implemented")
 
 type plugin struct{}
 
@@ -106,7 +106,7 @@ func (d *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
 	}
 
 	dbName := cfg.DatabaseName
-	//NOTE: postgres doesn't allow to connect with empty dbName, the admin dbName is "postgres"
+	//NOTE: postgresql doesn't allow to connect with empty dbName, the admin dbName is "postgres"
 	if dbName == "" {
 		dbName = "postgres"
 	}
@@ -130,7 +130,7 @@ func (d *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
 	return db, nil
 }
 
-// TODO: implement postgres specific support for TLS
+// TODO: implement postgresql specific support for TLS
 func registerTLSConfig(cfg *config.SQL) error {
 	if cfg.TLS == nil || !cfg.TLS.Enabled {
 		return nil

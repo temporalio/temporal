@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -849,6 +850,7 @@ func (c *clientImpl) GetReplicationMessages(
 	var wg sync.WaitGroup
 	wg.Add(len(requestsByClient))
 	respChan := make(chan *historyservice.GetReplicationMessagesResponse, len(requestsByClient))
+	errChan := make(chan error, 1)
 	for client, req := range requestsByClient {
 		go func(client historyservice.HistoryServiceClient, request *historyservice.GetReplicationMessagesRequest) {
 			defer wg.Done()
@@ -858,6 +860,13 @@ func (c *clientImpl) GetReplicationMessages(
 			resp, err := client.GetReplicationMessages(ctx, request, opts...)
 			if err != nil {
 				c.logger.Warn("Failed to get replication tasks from client", tag.Error(err))
+				// Returns service busy error to notify replication
+				if _, ok := err.(*serviceerror.ResourceExhausted); ok {
+					select {
+					case errChan <- err:
+					default:
+					}
+				}
 				return
 			}
 			respChan <- resp
@@ -866,6 +875,7 @@ func (c *clientImpl) GetReplicationMessages(
 
 	wg.Wait()
 	close(respChan)
+	close(errChan)
 
 	response := &historyservice.GetReplicationMessagesResponse{ShardMessages: make(map[int32]*replicationspb.ReplicationMessages)}
 	for resp := range respChan {
@@ -873,8 +883,11 @@ func (c *clientImpl) GetReplicationMessages(
 			response.ShardMessages[shardID] = tasks
 		}
 	}
-
-	return response, nil
+	var err error
+	if len(errChan) > 0 {
+		err = <-errChan
+	}
+	return response, err
 }
 
 func (c *clientImpl) GetDLQReplicationMessages(

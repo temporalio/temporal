@@ -28,8 +28,8 @@ import (
 	"os"
 
 	"go.temporal.io/server/cmd/server/temporal"
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"    // needed to load mysql plugin
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgres" // needed to load postgres plugin
+	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
+	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
 )
 
 // main entry point for the temporal server
