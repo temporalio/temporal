@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package postgres
+package postgresql
 
 import (
 	"github.com/jmoiron/sqlx"
@@ -52,7 +52,7 @@ func (pdb *db) IsDupEntryError(err error) bool {
 }
 
 // newDB returns an instance of DB, which is a logical
-// connection to the underlying postgres database
+// connection to the underlying postgresql database
 func newDB(xdb *sqlx.DB, tx *sqlx.Tx) *db {
 	mdb := &db{db: xdb, tx: tx}
 	mdb.conn = xdb

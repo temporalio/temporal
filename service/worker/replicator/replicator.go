@@ -28,6 +28,8 @@ import (
 	"context"
 	"fmt"
 
+	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
@@ -44,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/task"
 	"go.temporal.io/server/common/xdc"
 )
@@ -165,19 +168,32 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 	adminClient := admin.NewRetryableClient(
 		r.clientBean.GetRemoteAdminClient(clusterName),
 		common.CreateAdminServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
+		isRetryableError,
+	)
+	// Create retry policy for service busy error
+	adminRetryClient := admin.NewRetryableClient(
+		adminClient,
+		common.CreateReplicationServiceBusyRetryPolicy(),
+		common.IsResourceExhausted,
 	)
 	historyClient := history.NewRetryableClient(
 		r.historyClient,
 		common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
+		isRetryableError,
 	)
+	// Create retry policy for service busy error
+	historyRetryClient := history.NewRetryableClient(
+		historyClient,
+		common.CreateReplicationServiceBusyRetryPolicy(),
+		common.IsResourceExhausted,
+	)
+
 	logger := r.logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName), tag.KafkaConsumerName(consumerName))
 	nDCHistoryReplicator := xdc.NewNDCHistoryResender(
 		r.namespaceCache,
-		adminClient,
+		adminRetryClient,
 		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-			_, err := historyClient.ReplicateEventsV2(ctx, request)
+			_, err := historyRetryClient.ReplicateEventsV2(ctx, request)
 			return err
 		},
 		r.historySerializer,
@@ -194,7 +210,7 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 		r.metricsClient,
 		r.namespaceReplicationTaskExecutor,
 		nDCHistoryReplicator,
-		r.historyClient,
+		historyRetryClient,
 		r.namespaceCache,
 		task.NewSequentialTaskProcessor(
 			r.config.ReplicatorTaskConcurrency(),
@@ -221,4 +237,15 @@ func (r *Replicator) Stop() {
 
 func getConsumerName(currentCluster, remoteCluster string) string {
 	return fmt.Sprintf("%v_consumer_for_%v", currentCluster, remoteCluster)
+}
+
+func isRetryableError(err error) bool {
+	switch err.(type) {
+	case *serviceerror.Internal,
+		*serviceerrors.ShardOwnershipLost,
+		*serviceerror.DeadlineExceeded,
+		*serviceerror.Unavailable:
+		return true
+	}
+	return false
 }

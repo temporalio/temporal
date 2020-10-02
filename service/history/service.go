@@ -227,15 +227,19 @@ type Config struct {
 	MaxWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 	// The following is used by the new RPC replication stack
-	ReplicationTaskFetcherParallelism                dynamicconfig.IntPropertyFn
-	ReplicationTaskFetcherAggregationInterval        dynamicconfig.DurationPropertyFn
-	ReplicationTaskFetcherTimerJitterCoefficient     dynamicconfig.FloatPropertyFn
-	ReplicationTaskFetcherErrorRetryWait             dynamicconfig.DurationPropertyFn
-	ReplicationTaskProcessorErrorRetryWait           dynamicconfig.DurationPropertyFnWithShardIDFilter
-	ReplicationTaskProcessorErrorRetryMaxAttempts    dynamicconfig.IntPropertyFnWithShardIDFilter
-	ReplicationTaskProcessorNoTaskRetryWait          dynamicconfig.DurationPropertyFnWithShardIDFilter
-	ReplicationTaskProcessorCleanupInterval          dynamicconfig.DurationPropertyFnWithShardIDFilter
-	ReplicationTaskProcessorCleanupJitterCoefficient dynamicconfig.FloatPropertyFnWithShardIDFilter
+	ReplicationTaskFetcherParallelism                  dynamicconfig.IntPropertyFn
+	ReplicationTaskFetcherAggregationInterval          dynamicconfig.DurationPropertyFn
+	ReplicationTaskFetcherTimerJitterCoefficient       dynamicconfig.FloatPropertyFn
+	ReplicationTaskFetcherErrorRetryWait               dynamicconfig.DurationPropertyFn
+	ReplicationTaskProcessorErrorRetryWait             dynamicconfig.DurationPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorErrorRetryMaxAttempts      dynamicconfig.IntPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorNoTaskRetryWait            dynamicconfig.DurationPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorCleanupInterval            dynamicconfig.DurationPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorCleanupJitterCoefficient   dynamicconfig.FloatPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorStartWait                  dynamicconfig.DurationPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorStartWaitJitterCoefficient dynamicconfig.FloatPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorHostQPS                    dynamicconfig.FloatPropertyFn
+	ReplicationTaskProcessorShardQPS                   dynamicconfig.FloatPropertyFn
 
 	EnableKafkaReplication       dynamicconfig.BoolPropertyFn
 	EnableRPCReplication         dynamicconfig.BoolPropertyFn
@@ -349,6 +353,10 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ReplicatorProcessorMaxRedispatchQueueSize:              dc.GetIntProperty(dynamicconfig.ReplicatorProcessorMaxRedispatchQueueSize, 10000),
 		ReplicatorProcessorEnablePriorityTaskProcessor:         dc.GetBoolProperty(dynamicconfig.ReplicatorProcessorEnablePriorityTaskProcessor, false),
 		ReplicatorProcessorFetchTasksBatchSize:                 dc.GetIntProperty(dynamicconfig.ReplicatorTaskBatchSize, 25),
+		ReplicationTaskProcessorStartWait:                      dc.GetDurationPropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorStartWait, 5*time.Second),
+		ReplicationTaskProcessorStartWaitJitterCoefficient:     dc.GetFloat64PropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorStartWaitJitterCoefficient, 0.9),
+		ReplicationTaskProcessorHostQPS:                        dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorHostQPS, 1500),
+		ReplicationTaskProcessorShardQPS:                       dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorShardQPS, 5),
 
 		ExecutionMgrNumConns:            dc.GetIntProperty(dynamicconfig.ExecutionMgrNumConns, 50),
 		HistoryMgrNumConns:              dc.GetIntProperty(dynamicconfig.HistoryMgrNumConns, 50),

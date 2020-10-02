@@ -40,6 +40,8 @@ const (
 	defaultMaximumInterval    = 10 * time.Second
 	defaultExpirationInterval = time.Minute
 	defaultMaximumAttempts    = noMaximumAttempts
+
+	defaultFirstPhaseMaximumAttempts = 3
 )
 
 type (
@@ -67,6 +69,14 @@ type (
 		maximumInterval    time.Duration
 		expirationInterval time.Duration
 		maximumAttempts    int
+	}
+
+	// TwoPhaseRetryPolicy implements a policy that first use one policy to get next delay,
+	// and once expired use the second policy for the following retry.
+	// It can achieve fast retries in first phase then slowly retires in second phase.
+	TwoPhaseRetryPolicy struct {
+		firstPolicy  RetryPolicy
+		secondPolicy RetryPolicy
 	}
 
 	systemClock struct{}
@@ -175,6 +185,15 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 	nextInterval = nextInterval*0.8 + float64(rand.Intn(jitterPortion))
 
 	return time.Duration(nextInterval)
+}
+
+// ComputeNextDelay returns the next delay interval.
+func (tp *TwoPhaseRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, numAttempts int) time.Duration {
+	nextInterval := tp.firstPolicy.ComputeNextDelay(elapsedTime, numAttempts)
+	if nextInterval == done {
+		nextInterval = tp.secondPolicy.ComputeNextDelay(elapsedTime, numAttempts-defaultFirstPhaseMaximumAttempts)
+	}
+	return nextInterval
 }
 
 // Now returns the current time using the system clock

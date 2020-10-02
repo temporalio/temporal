@@ -77,7 +77,7 @@ services:
     networks:
       - temporal-dependencies-network
   temporal-web:
-    image: temporalio/web:latest
+    image: temporalio/web:1.0.0
     container_name: temporal-web
     environment:
       - "TEMPORAL_GRPC_ENDPOINT=localhost:7233"

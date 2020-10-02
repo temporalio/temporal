@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package postgres
+package postgresql
 
 import "time"
 
@@ -31,7 +31,7 @@ var localOffset = getLocalOffset()
 
 type (
 	// DataConverter defines the API for conversions to/from
-	// go types to postgres datatypes
+	// go types to postgresql datatypes
 	// TODO https://github.com/uber/cadence/issues/2892
 	// There are some reasons:
 	//r application layer is not consistent with timezone: for example,
@@ -55,7 +55,7 @@ func (c *converter) ToPostgresDateTime(t time.Time) time.Time {
 	return t
 }
 
-// FromPostgresDateTime converts postgres datetime and returns go time
+// FromPostgresDateTime converts postgresql datetime and returns go time
 func (c *converter) FromPostgresDateTime(t time.Time) time.Time {
 	return t.Add(-localOffset)
 }

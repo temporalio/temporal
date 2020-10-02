@@ -382,7 +382,21 @@ install-schema-cdc: temporal-cassandra-tool
 	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_other setup-schema -v 0.0
 	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_other update-schema -d ./schema/cassandra/visibility/versioned
 
-##### Start #####
+##### Run server #####
+start-dependencies:
+ifeq ($(GOOS),darwin)
+	docker-compose -f docker/dependencies/docker-compose.yml -f docker/dependencies/docker-compose.mac.yml up
+else
+	docker-compose -f docker/dependencies/docker-compose.yml up
+endif
+
+stop-dependencies:
+ifeq ($(GOOS),darwin)
+	docker-compose -f docker/dependencies/docker-compose.yml -f docker/dependencies/docker-compose.mac.yml down
+else
+	docker-compose -f docker/dependencies/docker-compose.yml down
+endif
+
 start: temporal-server
 	./temporal-server start
 

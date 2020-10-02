@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package postgres
+package postgresql
 
 import (
 	"testing"
@@ -36,7 +36,7 @@ import (
 const (
 	testUser      = "temporal"
 	testPassword  = "temporal"
-	testSchemaDir = "schema/postgres"
+	testSchemaDir = "schema/postgresql"
 )
 
 func getTestClusterOption() *pt.TestBaseOptions {

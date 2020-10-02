@@ -43,6 +43,12 @@ type (
 
 		ServerName string `yaml:"serverName"`
 
-		CaData string `yaml:"caData"` //optional inline base64 encoded ca cert
+		// optional inline base64 encoded versions of the above files
+		// Either BOTH CertData and KeyData must be supplied as base64 encoded values,
+		// or NEITHER of them should be supplied as base64 encoded values.
+		// (e.g. it is not supported to specify 'CertFile' and 'KeyData' or vice-versa)
+		CertData string `yaml:"certData"`
+		KeyData  string `yaml:"keyData"`
+		CaData   string `yaml:"caData"`
 	}
 )

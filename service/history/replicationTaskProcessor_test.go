@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -122,9 +123,12 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.requestChan = make(chan *request, 10)
 
 	s.replicationTaskFetcher = NewMockReplicationTaskFetcher(s.controller)
-
+	rateLimiter := quotas.NewDynamicRateLimiter(func() float64 {
+		return 100
+	})
 	s.replicationTaskFetcher.EXPECT().GetSourceCluster().Return("standby").AnyTimes()
 	s.replicationTaskFetcher.EXPECT().GetRequestChan().Return(s.requestChan).AnyTimes()
+	s.replicationTaskFetcher.EXPECT().GetRateLimiter().Return(rateLimiter).AnyTimes()
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return("active").AnyTimes()
 
 	s.replicationTaskProcessor = NewReplicationTaskProcessor(

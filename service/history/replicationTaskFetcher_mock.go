@@ -29,9 +29,9 @@
 package history
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
+	quotas "go.temporal.io/server/common/quotas"
+	reflect "reflect"
 )
 
 // MockReplicationTaskFetcher is a mock of ReplicationTaskFetcher interface.
@@ -107,6 +107,20 @@ func (m *MockReplicationTaskFetcher) GetRequestChan() chan<- *request {
 func (mr *MockReplicationTaskFetcherMockRecorder) GetRequestChan() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRequestChan", reflect.TypeOf((*MockReplicationTaskFetcher)(nil).GetRequestChan))
+}
+
+// GetRateLimiter mocks base method.
+func (m *MockReplicationTaskFetcher) GetRateLimiter() *quotas.DynamicRateLimiter {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRateLimiter")
+	ret0, _ := ret[0].(*quotas.DynamicRateLimiter)
+	return ret0
+}
+
+// GetRateLimiter indicates an expected call of GetRateLimiter.
+func (mr *MockReplicationTaskFetcherMockRecorder) GetRateLimiter() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRateLimiter", reflect.TypeOf((*MockReplicationTaskFetcher)(nil).GetRateLimiter))
 }
 
 // MockReplicationTaskFetchers is a mock of ReplicationTaskFetchers interface.

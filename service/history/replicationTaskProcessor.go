@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -76,6 +77,8 @@ type (
 		metricsClient           metrics.Client
 		logger                  log.Logger
 		replicationTaskExecutor replicationTaskExecutor
+		hostRateLimiter         *quotas.DynamicRateLimiter
+		shardRateLimiter        *quotas.DynamicRateLimiter
 
 		taskRetryPolicy backoff.RetryPolicy
 		dlqRetryPolicy  backoff.RetryPolicy
@@ -132,13 +135,16 @@ func NewReplicationTaskProcessor(
 		metricsClient:           metricsClient,
 		logger:                  shard.GetLogger(),
 		replicationTaskExecutor: replicationTaskExecutor,
-		taskRetryPolicy:         taskRetryPolicy,
-		noTaskRetrier:           noTaskRetrier,
-		requestChan:             replicationTaskFetcher.GetRequestChan(),
-		syncShardChan:           make(chan *replicationspb.SyncShardStatus),
-		done:                    make(chan struct{}),
-		lastProcessedMessageID:  emptyMessageID,
-		lastRetrievedMessageID:  emptyMessageID,
+		hostRateLimiter:         replicationTaskFetcher.GetRateLimiter(),
+		shardRateLimiter: quotas.NewDynamicRateLimiter(func() float64 {
+			return config.ReplicationTaskProcessorShardQPS()
+		}), taskRetryPolicy: taskRetryPolicy,
+		noTaskRetrier:          noTaskRetrier,
+		requestChan:            replicationTaskFetcher.GetRequestChan(),
+		syncShardChan:          make(chan *replicationspb.SyncShardStatus),
+		done:                   make(chan struct{}),
+		lastProcessedMessageID: emptyMessageID,
+		lastRetrievedMessageID: emptyMessageID,
 	}
 }
 
@@ -196,6 +202,7 @@ Loop:
 				tag.Counter(len(response.GetReplicationTasks())),
 			)
 
+			p.taskProcessingStartWait()
 			p.processResponse(response)
 		case <-p.done:
 			return
@@ -283,8 +290,11 @@ func (p *ReplicationTaskProcessorImpl) processResponse(response *replicationspb.
 	p.syncShardChan <- response.GetSyncShardStatus()
 	scope := p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope, metrics.TargetClusterTag(p.sourceCluster))
 	batchRequestStartTime := time.Now()
-
+	ctx := context.Background()
 	for _, replicationTask := range response.ReplicationTasks {
+		// TODO: move to MultiStageRateLimiter
+		_ = p.hostRateLimiter.Wait(ctx)
+		_ = p.shardRateLimiter.Wait(ctx)
 		err := p.processSingleTask(replicationTask)
 		if err != nil {
 			// Processor is shutdown. Exit without updating the checkpoint.
@@ -357,9 +367,21 @@ func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
 }
 
 func (p *ReplicationTaskProcessorImpl) processSingleTask(replicationTask *replicationspb.ReplicationTask) error {
-	err := backoff.Retry(func() error {
-		return p.processTaskOnce(replicationTask)
-	}, p.taskRetryPolicy, isTransientRetryableError)
+	retryTransientError := func() error {
+		return backoff.Retry(
+			func() error {
+				return p.processTaskOnce(replicationTask)
+			},
+			p.taskRetryPolicy,
+			isTransientRetryableError)
+	}
+
+	// Handle service busy error
+	err := backoff.Retry(
+		retryTransientError,
+		common.CreateReplicationServiceBusyRetryPolicy(),
+		common.IsResourceExhausted,
+	)
 
 	if err != nil {
 		p.logger.Error(
@@ -479,6 +501,8 @@ func isTransientRetryableError(err error) bool {
 	switch err.(type) {
 	case *serviceerror.InvalidArgument:
 		return false
+	case *serviceerror.ResourceExhausted:
+		return false
 	default:
 		return true
 	}
@@ -521,4 +545,12 @@ func (p *ReplicationTaskProcessorImpl) updateFailureMetric(scope int, err error)
 	case *serviceerror.DeadlineExceeded:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
 	}
+}
+
+func (p *ReplicationTaskProcessorImpl) taskProcessingStartWait() {
+	shardID := p.shard.GetShardID()
+	time.Sleep(backoff.JitDuration(
+		p.config.ReplicationTaskProcessorStartWait(shardID),
+		p.config.ReplicationTaskProcessorStartWaitJitterCoefficient(shardID),
+	))
 }
