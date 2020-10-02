@@ -103,7 +103,14 @@ and then run the server:
 $ make start
 ```
 
-When you are done, press `Ctrl+C` to stop the server. Also, don't forget to stop dependencies (with `Ctrl+C`) and clean up all resources:
+Now you can create default namespace with `tctl`:
+```bash
+$ make tctl
+$ ./tctl --ns default namespace register
+```
+and run samples from [Go](https://github.com/temporalio/samples-go) and [Java](https://github.com/temporalio/samples-java) samples repos. Also you can access web UI at `localhost:8088`.
+
+When you are done, press `Ctrl+C` to stop the server. Don't forget to stop dependencies (with `Ctrl+C`) and clean up resources:
 ```bash
 $ make stop-dependencies
 ```
