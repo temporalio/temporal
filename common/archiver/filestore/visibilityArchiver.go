@@ -32,6 +32,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -40,6 +41,7 @@ import (
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -56,7 +58,7 @@ type (
 	}
 
 	queryVisibilityToken struct {
-		LastCloseTime int64
+		LastCloseTime time.Time
 		LastRunID     string
 	}
 
@@ -215,7 +217,7 @@ func (v *visibilityArchiver) query(
 			return nil, serviceerror.NewInternal(err.Error())
 		}
 
-		if record.CloseTime.UnixNano() < request.parsedQuery.earliestCloseTime {
+		if record.CloseTime.Before(request.parsedQuery.earliestCloseTime) {
 			break
 		}
 
@@ -224,7 +226,7 @@ func (v *visibilityArchiver) query(
 			if len(response.Executions) == request.pageSize {
 				if idx != len(files) {
 					newToken := &queryVisibilityToken{
-						LastCloseTime: record.CloseTime.UnixNano(),
+						LastCloseTime: timestamp.TimeValue(record.CloseTime),
 						LastRunID:     record.GetRunId(),
 					}
 					encodedToken, err := serializeToken(newToken)
@@ -251,7 +253,7 @@ func (v *visibilityArchiver) ValidateURI(URI archiver.URI) error {
 
 type parsedVisFilename struct {
 	name        string
-	closeTime   int64
+	closeTime   time.Time
 	hashedRunID string
 }
 
@@ -273,26 +275,26 @@ func sortAndFilterFiles(filenames []string, token *queryVisibilityToken) ([]stri
 		}
 		parsedFilenames = append(parsedFilenames, &parsedVisFilename{
 			name:        name,
-			closeTime:   closeTime,
+			closeTime:   timestamp.UnixOrZeroTime(closeTime),
 			hashedRunID: pieces[1],
 		})
 	}
 
 	sort.Slice(parsedFilenames, func(i, j int) bool {
-		if parsedFilenames[i].closeTime == parsedFilenames[j].closeTime {
+		if parsedFilenames[i].closeTime.Equal(parsedFilenames[j].closeTime) {
 			return parsedFilenames[i].hashedRunID > parsedFilenames[j].hashedRunID
 		}
-		return parsedFilenames[i].closeTime > parsedFilenames[j].closeTime
+		return parsedFilenames[i].closeTime.After(parsedFilenames[j].closeTime)
 	})
 
 	startIdx := 0
 	if token != nil {
 		LastHashedRunID := hash(token.LastRunID)
 		startIdx = sort.Search(len(parsedFilenames), func(i int) bool {
-			if parsedFilenames[i].closeTime == token.LastCloseTime {
+			if parsedFilenames[i].closeTime.Equal(token.LastCloseTime) {
 				return parsedFilenames[i].hashedRunID < LastHashedRunID
 			}
-			return parsedFilenames[i].closeTime < token.LastCloseTime
+			return parsedFilenames[i].closeTime.Before(token.LastCloseTime)
 		})
 	}
 
@@ -308,7 +310,7 @@ func sortAndFilterFiles(filenames []string, token *queryVisibilityToken) ([]stri
 }
 
 func matchQuery(record *archiverspb.ArchiveVisibilityRequest, query *parsedQuery) bool {
-	if record.CloseTime.UnixNano() < query.earliestCloseTime || record.CloseTime.UnixNano() > query.latestCloseTime {
+	if record.CloseTime.Before(query.earliestCloseTime) || record.CloseTime.After(query.latestCloseTime) {
 		return false
 	}
 	if query.workflowID != nil && record.GetWorkflowId() != *query.workflowID {

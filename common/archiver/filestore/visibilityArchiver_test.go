@@ -216,8 +216,8 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 	}{
 		{
 			query: &parsedQuery{
-				earliestCloseTime: int64(1000),
-				latestCloseTime:   int64(12345),
+				earliestCloseTime: time.Unix(0, 1000),
+				latestCloseTime:   time.Unix(0, 12345),
 			},
 			record: &archiverspb.ArchiveVisibilityRequest{
 				CloseTime: timestamp.UnixOrZeroTimePtr(1999),
@@ -226,8 +226,8 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 		},
 		{
 			query: &parsedQuery{
-				earliestCloseTime: int64(1000),
-				latestCloseTime:   int64(12345),
+				earliestCloseTime: time.Unix(0, 1000),
+				latestCloseTime:   time.Unix(0, 12345),
 			},
 			record: &archiverspb.ArchiveVisibilityRequest{
 				CloseTime: timestamp.UnixOrZeroTimePtr(999),
@@ -236,8 +236,8 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 		},
 		{
 			query: &parsedQuery{
-				earliestCloseTime: int64(1000),
-				latestCloseTime:   int64(12345),
+				earliestCloseTime: time.Unix(0, 1000),
+				latestCloseTime:   time.Unix(0, 12345),
 				workflowID:        convert.StringPtr("random workflowID"),
 			},
 			record: &archiverspb.ArchiveVisibilityRequest{
@@ -247,8 +247,8 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 		},
 		{
 			query: &parsedQuery{
-				earliestCloseTime: int64(1000),
-				latestCloseTime:   int64(12345),
+				earliestCloseTime: time.Unix(0, 1000),
+				latestCloseTime:   time.Unix(0, 12345),
 				workflowID:        convert.StringPtr("random workflowID"),
 				runID:             convert.StringPtr("random runID"),
 			},
@@ -262,8 +262,8 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 		},
 		{
 			query: &parsedQuery{
-				earliestCloseTime: int64(1000),
-				latestCloseTime:   int64(12345),
+				earliestCloseTime: time.Unix(0, 1000),
+				latestCloseTime:   time.Unix(0, 12345),
 				workflowTypeName:  convert.StringPtr("some random type name"),
 			},
 			record: &archiverspb.ArchiveVisibilityRequest{
@@ -273,8 +273,8 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 		},
 		{
 			query: &parsedQuery{
-				earliestCloseTime: int64(1000),
-				latestCloseTime:   int64(12345),
+				earliestCloseTime: time.Unix(0, 1000),
+				latestCloseTime:   time.Unix(0, 12345),
 				workflowTypeName:  convert.StringPtr("some random type name"),
 				status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
 			},
@@ -305,30 +305,30 @@ func (s *visibilityArchiverSuite) TestSortAndFilterFiles() {
 		{
 			filenames: []string{"9_12345.vis", "5_0.vis", "9_54321.vis", "1000_654.vis", "1000_78.vis"},
 			token: &queryVisibilityToken{
-				LastCloseTime: 3,
+				LastCloseTime: time.Unix(0, 3),
 			},
 			expectedResult: []string{},
 		},
 		{
 			filenames: []string{"9_12345.vis", "5_0.vis", "9_54321.vis", "1000_654.vis", "1000_78.vis"},
 			token: &queryVisibilityToken{
-				LastCloseTime: 999,
+				LastCloseTime: time.Unix(0, 999),
 			},
 			expectedResult: []string{"9_54321.vis", "9_12345.vis", "5_0.vis"},
 		},
 		{
 			filenames: []string{"9_12345.vis", "5_0.vis", "9_54321.vis", "1000_654.vis", "1000_78.vis"},
 			token: &queryVisibilityToken{
-				LastCloseTime: 5,
+				LastCloseTime: time.Unix(0, 5).UTC(),
 			},
 			expectedResult: []string{"5_0.vis"},
 		},
 	}
 
-	for _, tc := range testCases {
+	for i, tc := range testCases {
 		result, err := sortAndFilterFiles(tc.filenames, tc.token)
-		s.NoError(err)
-		s.Equal(tc.expectedResult, result)
+		s.NoError(err, "case %d", i)
+		s.Equal(tc.expectedResult, result, "case %d", i)
 	}
 }
 
@@ -370,8 +370,8 @@ func (s *visibilityArchiverSuite) TestQuery_Success_DirectoryNotExist() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		earliestCloseTime: int64(1),
-		latestCloseTime:   int64(101),
+		earliestCloseTime: time.Unix(0, 1),
+		latestCloseTime:   time.Unix(0, 101),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -390,8 +390,8 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		earliestCloseTime: int64(1),
-		latestCloseTime:   int64(101),
+		earliestCloseTime: time.Unix(0, 1),
+		latestCloseTime:   time.Unix(0, 101),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -409,8 +409,8 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		earliestCloseTime: int64(1),
-		latestCloseTime:   int64(10001),
+		earliestCloseTime: time.Unix(0, 1),
+		latestCloseTime:   time.Unix(0, 10001),
 		workflowID:        convert.StringPtr(testWorkflowID),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
@@ -433,8 +433,8 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		earliestCloseTime: int64(1),
-		latestCloseTime:   int64(10001),
+		earliestCloseTime: time.Unix(0, 1),
+		latestCloseTime:   time.Unix(0, 10001),
 		status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
@@ -470,8 +470,8 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		earliestCloseTime: int64(10),
-		latestCloseTime:   int64(10001),
+		earliestCloseTime: time.Unix(0, 10),
+		latestCloseTime:   time.Unix(0, 10001),
 		status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser

@@ -207,18 +207,6 @@ func RoundUp(d time.Duration) time.Duration {
 	return res + time.Second
 }
 
-func UnixOrEmptyTime(nanos int64) time.Time {
-	if nanos <= 0 {
-		return time.Time{}
-	}
-
-	return UnixOrZeroTime(nanos)
-}
-
-func UnixOrEmptyTimePtr(nanos int64) *time.Time {
-	return TimePtr(UnixOrEmptyTime(nanos))
-}
-
 func UnixOrZeroTime(nanos int64) time.Time {
 	if nanos <= 0 {
 		nanos = 0

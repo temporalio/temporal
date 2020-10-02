@@ -36,7 +36,7 @@ type testStruct struct {
 	Namespace  string
 	WorkflowID string
 	RunID      string
-	StartTime  int64
+	StartTime  time.Time
 }
 
 func TestGobEncoder(t *testing.T) {
@@ -45,7 +45,7 @@ func TestGobEncoder(t *testing.T) {
 	namespace := "test-namespace"
 	wid := uuid.New()
 	rid := uuid.New()
-	startTime := time.Now().UTC().UnixNano()
+	startTime := time.Now().UTC()
 
 	// test encode and decode 1 object
 	msg := &testStruct{
