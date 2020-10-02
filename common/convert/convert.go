@@ -27,7 +27,6 @@ package convert
 import (
 	"math"
 	"strconv"
-	"time"
 )
 
 // IntPtr makes a copy and returns the pointer to an int.
@@ -57,12 +56,6 @@ func BoolPtr(v bool) *bool {
 
 // StringPtr makes a copy and returns the pointer to a string.
 func StringPtr(v string) *string {
-	return &v
-}
-
-// TimeNowNanosPtr returns an int64 ptr to current time in unix nanos
-func TimeNowNanosPtr() *int64 {
-	v := time.Now().UnixNano()
 	return &v
 }
 

@@ -89,11 +89,11 @@ $ docker-compose down
 
 ## Runing server locally
 
-First start runtime dependencies using `docker-compose`. Open new terminal window and run:
+First start runtime dependencies. They can be run with `start-dependencies` target (uses `docker-compose` internally). Open new terminal window and run:
 ```bash
-$ cd docker/dependencies
-$ docker-compose up
+$ make start-dependencies
 ```
+
 then create database schema:
 ```bash
 $ make install-schema
@@ -103,9 +103,16 @@ and then run the server:
 $ make start
 ```
 
-When you are done, press `Ctrl+C` to stop ther server. Also, don't forget to stop `docker-compose` (with `Ctrl+C`) and clean up all dependencies:
+Now you can create default namespace with `tctl`:
 ```bash
-$ docker-compose down
+$ make tctl
+$ ./tctl --ns default namespace register
+```
+and run samples from [Go](https://github.com/temporalio/samples-go) and [Java](https://github.com/temporalio/samples-java) samples repos. Also you can access web UI at `localhost:8088`.
+
+When you are done, press `Ctrl+C` to stop the server. Don't forget to stop dependencies (with `Ctrl+C`) and clean up resources:
+```bash
+$ make stop-dependencies
 ```
 
 ## Licence headers

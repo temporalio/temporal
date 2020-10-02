@@ -233,7 +233,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 	return nil
 }
 
-func (p *queryParser) convertCloseTime(timestamp int64, op string, parsedQuery *parsedQuery) error {
+func (p *queryParser) convertCloseTime(timestamp time.Time, op string, parsedQuery *parsedQuery) error {
 	switch op {
 	case "=":
 		if err := p.convertCloseTime(timestamp, ">=", parsedQuery); err != nil {

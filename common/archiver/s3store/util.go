@@ -149,8 +149,7 @@ func constructHistoryKeyPrefix(path, namespaceID, workflowID, runID string) stri
 	return strings.TrimLeft(strings.Join([]string{path, namespaceID, "history", workflowID, runID}, "/"), "/")
 }
 
-func constructTimeBasedSearchKey(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, timestamp int64, precision string) string {
-	t := time.Unix(0, timestamp).UTC()
+func constructTimeBasedSearchKey(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, t time.Time, precision string) string {
 	var timeFormat = ""
 	switch precision {
 	case PrecisionSecond:

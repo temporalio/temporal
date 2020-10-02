@@ -82,6 +82,14 @@ const (
 	retryKafkaOperationMaxInterval        = 10 * time.Second
 	retryKafkaOperationExpirationInterval = 30 * time.Second
 
+	retryTaskProcessingInitialInterval = 50 * time.Millisecond
+	retryTaskProcessingMaxInterval     = 100 * time.Millisecond
+	retryTaskProcessingMaxAttempts     = 3
+
+	replicationServiceBusyInitialInterval    = 2 * time.Second
+	replicationServiceBusyMaxInterval        = 10 * time.Second
+	replicationServiceBusyExpirationInterval = 30 * time.Second
+
 	defaultInitialInterval            = time.Second
 	defaultMaximumIntervalCoefficient = 100.0
 	defaultBackoffCoefficient         = 2.0
@@ -197,6 +205,24 @@ func CreateKafkaOperationRetryPolicy() backoff.RetryPolicy {
 	return policy
 }
 
+// CreateTaskProcessingRetryPolicy creates a retry policy for task processing
+func CreateTaskProcessingRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(retryTaskProcessingInitialInterval)
+	policy.SetMaximumInterval(retryTaskProcessingMaxInterval)
+	policy.SetMaximumAttempts(retryTaskProcessingMaxAttempts)
+
+	return policy
+}
+
+// CreateReplicationServiceBusyRetryPolicy creates a retry policy to handle replication service busy
+func CreateReplicationServiceBusyRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(replicationServiceBusyInitialInterval)
+	policy.SetMaximumInterval(replicationServiceBusyMaxInterval)
+	policy.SetExpirationInterval(replicationServiceBusyExpirationInterval)
+
+	return policy
+}
+
 // IsPersistenceTransientError checks if the error is a transient persistence error
 func IsPersistenceTransientError(err error) bool {
 	switch err.(type) {
@@ -249,6 +275,15 @@ func IsWhitelistServiceTransientError(err error) bool {
 		return true
 	}
 
+	return false
+}
+
+// IsResourceExhausted checks if the error is a service busy error.
+func IsResourceExhausted(err error) bool {
+	switch err.(type) {
+	case *serviceerror.ResourceExhausted:
+		return true
+	}
 	return false
 }
 
@@ -328,9 +363,25 @@ func MinInt64(a, b int64) int64 {
 	return b
 }
 
+// MinTime returns the smaller of two given time.Time
+func MinTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
+}
+
 // MaxInt64 returns the greater of two given int64
 func MaxInt64(a, b int64) int64 {
 	if a > b {
+		return a
+	}
+	return b
+}
+
+// MinTime returns the smaller of two given time.Time
+func MaxTime(a, b time.Time) time.Time {
+	if a.After(b) {
 		return a
 	}
 	return b
