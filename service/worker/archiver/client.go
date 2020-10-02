@@ -74,15 +74,15 @@ type (
 		HistoryURI           string
 
 		// visibility archival
-		WorkflowTypeName   string
-		StartTimestamp     int64
-		ExecutionTimestamp int64
-		CloseTimestamp     int64
-		Status             enumspb.WorkflowExecutionStatus
-		HistoryLength      int64
-		Memo               *commonpb.Memo
-		SearchAttributes   map[string]*commonpb.Payload
-		VisibilityURI      string
+		WorkflowTypeName string
+		StartTime        time.Time
+		ExecutionTime    time.Time
+		CloseTime        time.Time
+		Status           enumspb.WorkflowExecutionStatus
+		HistoryLength    int64
+		Memo             *commonpb.Memo
+		SearchAttributes map[string]*commonpb.Payload
+		VisibilityURI    string
 
 		// archival targets: history and/or visibility
 		Targets []ArchivalTarget
@@ -253,9 +253,9 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		WorkflowId:         request.ArchiveRequest.WorkflowID,
 		RunId:              request.ArchiveRequest.RunID,
 		WorkflowTypeName:   request.ArchiveRequest.WorkflowTypeName,
-		StartTime:          timestamp.UnixOrZeroTimePtr(request.ArchiveRequest.StartTimestamp),
-		ExecutionTime:      timestamp.UnixOrZeroTimePtr(request.ArchiveRequest.ExecutionTimestamp),
-		CloseTime:          timestamp.UnixOrZeroTimePtr(request.ArchiveRequest.CloseTimestamp),
+		StartTime:          timestamp.TimePtr(request.ArchiveRequest.StartTime),
+		ExecutionTime:      timestamp.TimePtr(request.ArchiveRequest.ExecutionTime),
+		CloseTime:          timestamp.TimePtr(request.ArchiveRequest.CloseTime),
 		Status:             request.ArchiveRequest.Status,
 		HistoryLength:      request.ArchiveRequest.HistoryLength,
 		Memo:               request.ArchiveRequest.Memo,
