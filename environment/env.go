@@ -187,8 +187,8 @@ func GetMySQLPort() int {
 	return p
 }
 
-// GetPostgresAddress return the cassandra address
-func GetPostgresAddress() string {
+// GetPostgreSQLAddress return the cassandra address
+func GetPostgreSQLAddress() string {
 	addr := os.Getenv(PostgresSeeds)
 	if addr == "" {
 		addr = Localhost
@@ -196,8 +196,8 @@ func GetPostgresAddress() string {
 	return addr
 }
 
-// GetPostgresPort return the Postgres port
-func GetPostgresPort() int {
+// GetPostgreSQLPort return the Postgres port
+func GetPostgreSQLPort() int {
 	port := os.Getenv(PostgresPort)
 	if port == "" {
 		return PostgresDefaultPort

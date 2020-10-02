@@ -44,8 +44,8 @@ type (
 		visibility
 		queue
 
-		matchingTask
-		matchingTaskQueue
+		MatchingTask
+		MatchingTaskQueue
 
 		historyShard
 		historyEvent
