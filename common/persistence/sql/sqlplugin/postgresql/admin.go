@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package postgres
+package postgresql
 
 import (
 	"fmt"
@@ -59,7 +59,7 @@ const (
 		`old_version VARCHAR(64), ` +
 		`PRIMARY KEY (version_partition, year, month, update_time));`
 
-	// NOTE we have to use %v because somehow postgres doesn't work with ? here
+	// NOTE we have to use %v because somehow postgresql doesn't work with ? here
 	// It's a small bug in sqlx library
 	// TODO https://github.com/uber/cadence/issues/2893
 	createDatabaseQuery = "CREATE database %v"
