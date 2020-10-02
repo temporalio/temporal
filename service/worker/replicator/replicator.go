@@ -242,7 +242,6 @@ func getConsumerName(currentCluster, remoteCluster string) string {
 func isRetryableError(err error) bool {
 	switch err.(type) {
 	case *serviceerror.Internal,
-		*serviceerror.ResourceExhausted,
 		*serviceerrors.ShardOwnershipLost,
 		*serviceerror.DeadlineExceeded,
 		*serviceerror.Unavailable:
