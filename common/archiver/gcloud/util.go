@@ -142,8 +142,7 @@ func decodeVisibilityRecord(data []byte) (*archiverspb.ArchiveVisibilityRequest,
 	return record, nil
 }
 
-func constructVisibilityFilename(namespace, workflowTypeName, workflowID, runID, tag string, timestamp int64) string {
-	t := time.Unix(0, timestamp).UTC()
+func constructVisibilityFilename(namespace, workflowTypeName, workflowID, runID, tag string, t time.Time) string {
 	prefix := constructVisibilityFilenamePrefix(namespace, tag)
 	return fmt.Sprintf("%s_%s_%s_%s_%s.visibility", prefix, t.Format(time.RFC3339), hash(workflowTypeName), hash(workflowID), hash(runID))
 }

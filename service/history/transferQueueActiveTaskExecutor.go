@@ -262,7 +262,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	initiatedID := executionInfo.InitiatedId
 
 	workflowTypeName := executionInfo.WorkflowTypeName
-	workflowCloseTimestamp := wfCloseTime
+	workflowCloseTime := wfCloseTime
 	workflowStatus := executionInfo.ExecutionState.Status
 	workflowHistoryLength := mutableState.GetNextEventID() - 1
 
@@ -270,8 +270,8 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	workflowStartTimestamp := timestamp.TimeValue(startEvent.GetEventTime())
-	workflowExecutionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
+	workflowStartTime := timestamp.TimeValue(startEvent.GetEventTime())
+	workflowExecutionTime := getWorkflowExecutionTimestamp(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := executionInfo.SearchAttributes
 	namespace := mutableState.GetNamespaceEntry().GetInfo().Name
@@ -285,9 +285,9 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		task.GetWorkflowId(),
 		task.GetRunId(),
 		workflowTypeName,
-		workflowStartTimestamp.UnixNano(),
-		workflowExecutionTimestamp.UnixNano(),
-		workflowCloseTimestamp.UnixNano(),
+		workflowStartTime,
+		workflowExecutionTime,
+		workflowCloseTime,
 		workflowStatus,
 		workflowHistoryLength,
 		task.GetTaskId(),

@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -49,8 +50,8 @@ type (
 	queryParser struct{}
 
 	parsedQuery struct {
-		earliestCloseTime int64
-		latestCloseTime   int64
+		earliestCloseTime time.Time
+		latestCloseTime   time.Time
 		workflowID        *string
 		runID             *string
 		workflowTypeName  *string
@@ -87,8 +88,8 @@ func (p *queryParser) Parse(query string) (*parsedQuery, error) {
 	}
 	whereExpr := stmt.(*sqlparser.Select).Where.Expr
 	parsedQuery := &parsedQuery{
-		earliestCloseTime: 0,
-		latestCloseTime:   time.Now().UnixNano(),
+		earliestCloseTime: time.Time{},
+		latestCloseTime:   time.Now().UTC(),
 	}
 	if err := p.convertWhereExpr(whereExpr, parsedQuery); err != nil {
 		return nil, err
@@ -196,7 +197,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.status = &status
 	case CloseTime:
-		timestamp, err := convertToTimestamp(valStr)
+		timestamp, err := convertToTime(valStr)
 		if err != nil {
 			return err
 		}
@@ -208,7 +209,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 	return nil
 }
 
-func (p *queryParser) convertCloseTime(timestamp int64, op string, parsedQuery *parsedQuery) error {
+func (p *queryParser) convertCloseTime(timestamp time.Time, op string, parsedQuery *parsedQuery) error {
 	switch op {
 	case "=":
 		if err := p.convertCloseTime(timestamp, ">=", parsedQuery); err != nil {
@@ -218,33 +219,33 @@ func (p *queryParser) convertCloseTime(timestamp int64, op string, parsedQuery *
 			return err
 		}
 	case "<":
-		parsedQuery.latestCloseTime = common.MinInt64(parsedQuery.latestCloseTime, timestamp-1)
+		parsedQuery.latestCloseTime = common.MinTime(parsedQuery.latestCloseTime, timestamp.Add(-1*time.Nanosecond))
 	case "<=":
-		parsedQuery.latestCloseTime = common.MinInt64(parsedQuery.latestCloseTime, timestamp)
+		parsedQuery.latestCloseTime = common.MinTime(parsedQuery.latestCloseTime, timestamp)
 	case ">":
-		parsedQuery.earliestCloseTime = common.MaxInt64(parsedQuery.earliestCloseTime, timestamp+1)
+		parsedQuery.earliestCloseTime = common.MaxTime(parsedQuery.earliestCloseTime, timestamp.Add(1*time.Nanosecond))
 	case ">=":
-		parsedQuery.earliestCloseTime = common.MaxInt64(parsedQuery.earliestCloseTime, timestamp)
+		parsedQuery.earliestCloseTime = common.MaxTime(parsedQuery.earliestCloseTime, timestamp)
 	default:
 		return fmt.Errorf("operator %s is not supported for close time", op)
 	}
 	return nil
 }
 
-func convertToTimestamp(timeStr string) (int64, error) {
-	timestamp, err := strconv.ParseInt(timeStr, 10, 64)
+func convertToTime(timeStr string) (time.Time, error) {
+	ts, err := strconv.ParseInt(timeStr, 10, 64)
 	if err == nil {
-		return timestamp, nil
+		return timestamp.UnixOrZeroTime(ts), nil
 	}
 	timestampStr, err := extractStringValue(timeStr)
 	if err != nil {
-		return 0, err
+		return time.Time{}, err
 	}
 	parsedTime, err := time.Parse(defaultDateTimeFormat, timestampStr)
 	if err != nil {
-		return 0, err
+		return time.Time{}, err
 	}
-	return parsedTime.UnixNano(), nil
+	return parsedTime, nil
 }
 
 func convertStatusStr(statusStr string) (enumspb.WorkflowExecutionStatus, error) {

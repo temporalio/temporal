@@ -26,11 +26,13 @@ package s3store
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type queryParserSuite struct {
@@ -198,14 +200,14 @@ func (s *queryParserSuite) TestParseCloseTime() {
 			query:     commonQueryPart + "CloseTime = 1000",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				closeTime: convert.Int64Ptr(1000),
+				closeTime: timestamp.TimePtr(time.Unix(0, 1000).UTC()),
 			},
 		},
 		{
 			query:     commonQueryPart + "CloseTime = \"2019-01-01T11:11:11Z\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				closeTime: convert.Int64Ptr(1546341071000000000),
+				closeTime: timestamp.TimePtr(time.Date(2019, 1, 1, 11, 11, 11, 0, time.UTC)),
 			},
 		},
 		{
@@ -242,14 +244,14 @@ func (s *queryParserSuite) TestParseStartTime() {
 			query:     commonQueryPart + "StartTime = 1000",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				startTime: convert.Int64Ptr(1000),
+				startTime: timestamp.TimePtr(time.Unix(0, 1000)),
 			},
 		},
 		{
 			query:     commonQueryPart + "StartTime = \"2019-01-01T11:11:11Z\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				startTime: convert.Int64Ptr(1546341071000000000),
+				startTime: timestamp.TimePtr(time.Date(2019, 1, 1, 11, 11, 11, 0, time.UTC)),
 			},
 		},
 		{

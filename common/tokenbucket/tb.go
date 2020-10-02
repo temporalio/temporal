@@ -59,8 +59,8 @@ type (
 	tokenBucketImpl struct {
 		sync.Mutex
 		tokens       int
-		fillRate     int   // amount of tokens to add every interval
-		fillInterval int64 // time between refills
+		fillRate     int           // amount of tokens to add every interval
+		fillInterval time.Duration // time between refills
 		// Because we divide the per-second quota equally
 		// every 100 millis, there could be a remainder when
 		// the desired rate is not a multiple 10 (1second/100Millis)
@@ -68,8 +68,8 @@ type (
 		// and distribute this evenly during every fillInterval
 		overflowRps            int
 		overflowTokens         int
-		nextRefillTime         int64
-		nextOverflowRefillTime int64
+		nextRefillTime         time.Time
+		nextOverflowRefillTime time.Time
 		timeSource             clock.TimeSource
 	}
 
@@ -83,8 +83,8 @@ type (
 		sync.Mutex
 		tokens         []int
 		fillRate       int
-		fillInterval   int64
-		nextRefillTime int64
+		fillInterval   time.Duration
+		nextRefillTime time.Time
 		// Because we divide the per-second quota equally
 		// every 100 millis, there could be a remainder when
 		// the desired rate is not a multiple 10 (1second/100Millis)
@@ -92,14 +92,14 @@ type (
 		// and distribute this evenly during every fillInterval
 		overflowRps            int
 		overflowTokens         int
-		nextOverflowRefillTime int64
+		nextOverflowRefillTime time.Time
 		timeSource             clock.TimeSource
 	}
 )
 
 const (
 	millisPerSecond = 1000
-	backoffInterval = int64(10 * time.Millisecond)
+	backoffInterval = 10 * time.Millisecond
 )
 
 // New creates and returns a
@@ -138,10 +138,10 @@ func newTokenBucket(rps int, timeSource clock.TimeSource) *tokenBucketImpl {
 }
 
 func (tb *tokenBucketImpl) TryConsume(count int) (bool, time.Duration) {
-	now := tb.timeSource.Now().UnixNano()
+	now := tb.timeSource.Now()
 	tb.Lock()
 	tb.refill(now)
-	nextRefillTime := time.Duration(tb.nextRefillTime - now)
+	nextRefillTime := tb.nextRefillTime.Sub(now)
 	if tb.tokens < count {
 		tb.Unlock()
 		return false, nextRefillTime
@@ -153,8 +153,8 @@ func (tb *tokenBucketImpl) TryConsume(count int) (bool, time.Duration) {
 
 func (tb *tokenBucketImpl) Consume(count int, timeout time.Duration) bool {
 
-	var remTime = int64(timeout)
-	var expiryTime = time.Now().UnixNano() + int64(timeout)
+	var remTime = timeout
+	var expiryTime = time.Now().Add(timeout)
 
 	for {
 
@@ -163,30 +163,30 @@ func (tb *tokenBucketImpl) Consume(count int, timeout time.Duration) bool {
 		}
 
 		if remTime < backoffInterval {
-			time.Sleep(time.Duration(remTime))
+			time.Sleep(remTime)
 		} else {
-			time.Sleep(time.Duration(backoffInterval))
+			time.Sleep(backoffInterval)
 		}
 
-		now := time.Now().UnixNano()
-		if now >= expiryTime {
+		now := time.Now()
+		if !now.Before(expiryTime) {
 			return false
 		}
 
-		remTime = expiryTime - now
+		remTime = expiryTime.Sub(now)
 	}
 }
 
 func (tb *tokenBucketImpl) reset(rps int) {
 	tb.Lock()
-	tb.fillInterval = int64(time.Millisecond * 100)
+	tb.fillInterval = 100 * time.Millisecond
 	tb.fillRate = (rps * 100) / millisPerSecond
 	tb.overflowRps = rps - (10 * tb.fillRate)
-	tb.nextOverflowRefillTime = 0
+	tb.nextOverflowRefillTime = time.Time{}
 	tb.Unlock()
 }
 
-func (tb *tokenBucketImpl) refill(now int64) {
+func (tb *tokenBucketImpl) refill(now time.Time) {
 	tb.refillOverFlow(now)
 	if tb.isRefillDue(now) {
 		tb.tokens = tb.fillRate
@@ -194,26 +194,26 @@ func (tb *tokenBucketImpl) refill(now int64) {
 			tb.tokens++
 			tb.overflowTokens--
 		}
-		tb.nextRefillTime = now + tb.fillInterval
+		tb.nextRefillTime = now.Add(tb.fillInterval)
 	}
 }
 
-func (tb *tokenBucketImpl) refillOverFlow(now int64) {
+func (tb *tokenBucketImpl) refillOverFlow(now time.Time) {
 	if tb.overflowRps < 1 {
 		return
 	}
 	if tb.isOverflowRefillDue(now) {
 		tb.overflowTokens = tb.overflowRps
-		tb.nextOverflowRefillTime = now + int64(time.Second)
+		tb.nextOverflowRefillTime = now.Add(time.Second)
 	}
 }
 
-func (tb *tokenBucketImpl) isRefillDue(now int64) bool {
-	return now >= tb.nextRefillTime
+func (tb *tokenBucketImpl) isRefillDue(now time.Time) bool {
+	return !now.Before(tb.nextRefillTime)
 }
 
-func (tb *tokenBucketImpl) isOverflowRefillDue(now int64) bool {
-	return now >= tb.nextOverflowRefillTime
+func (tb *tokenBucketImpl) isOverflowRefillDue(now time.Time) bool {
+	return !now.Before(tb.nextOverflowRefillTime)
 }
 
 // NewDynamicTokenBucket creates and returns a token bucket
@@ -269,10 +269,10 @@ func NewPriorityTokenBucket(numOfPriority, rps int, timeSource clock.TimeSource)
 	tb := new(priorityTokenBucketImpl)
 	tb.tokens = make([]int, numOfPriority)
 	tb.timeSource = timeSource
-	tb.fillInterval = int64(time.Millisecond * 100)
+	tb.fillInterval = time.Millisecond * 100
 	tb.fillRate = (rps * 100) / millisPerSecond
 	tb.overflowRps = rps - (10 * tb.fillRate)
-	tb.refill(time.Now().UnixNano())
+	tb.refill(time.Now())
 	return tb
 }
 
@@ -282,22 +282,22 @@ func NewFullPriorityTokenBucket(numOfPriority, rps int, timeSource clock.TimeSou
 	tb := new(priorityTokenBucketImpl)
 	tb.tokens = make([]int, numOfPriority)
 	tb.timeSource = timeSource
-	tb.fillInterval = int64(time.Millisecond * 100)
+	tb.fillInterval = time.Millisecond * 100
 	tb.fillRate = (rps * 100) / millisPerSecond
 	tb.overflowRps = rps - (10 * tb.fillRate)
-	tb.refill(time.Now().UnixNano())
+	tb.refill(time.Now())
 	for i := 1; i < numOfPriority; i++ {
-		tb.nextRefillTime = int64(0)
-		tb.refill(time.Now().UnixNano())
+		tb.nextRefillTime = time.Time{}
+		tb.refill(time.Now())
 	}
 	return tb
 }
 
 func (tb *priorityTokenBucketImpl) GetToken(priority, count int) (bool, time.Duration) {
-	now := tb.timeSource.Now().UnixNano()
+	now := tb.timeSource.Now()
 	tb.Lock()
 	tb.refill(now)
-	nextRefillTime := time.Duration(tb.nextRefillTime - now)
+	nextRefillTime := tb.nextRefillTime.Sub(now)
 	if tb.tokens[priority] < count {
 		tb.Unlock()
 		return false, nextRefillTime
@@ -307,7 +307,7 @@ func (tb *priorityTokenBucketImpl) GetToken(priority, count int) (bool, time.Dur
 	return true, nextRefillTime
 }
 
-func (tb *priorityTokenBucketImpl) refill(now int64) {
+func (tb *priorityTokenBucketImpl) refill(now time.Time) {
 	tb.refillOverFlow(now)
 	if tb.isRefillDue(now) {
 		more := tb.fillRate
@@ -324,24 +324,24 @@ func (tb *priorityTokenBucketImpl) refill(now int64) {
 			tb.tokens[0]++
 			tb.overflowTokens--
 		}
-		tb.nextRefillTime = now + tb.fillInterval
+		tb.nextRefillTime = now.Add(tb.fillInterval)
 	}
 }
 
-func (tb *priorityTokenBucketImpl) refillOverFlow(now int64) {
+func (tb *priorityTokenBucketImpl) refillOverFlow(now time.Time) {
 	if tb.overflowRps < 1 {
 		return
 	}
 	if tb.isOverflowRefillDue(now) {
 		tb.overflowTokens = tb.overflowRps
-		tb.nextOverflowRefillTime = now + int64(time.Second)
+		tb.nextOverflowRefillTime = now.Add(time.Second)
 	}
 }
 
-func (tb *priorityTokenBucketImpl) isRefillDue(now int64) bool {
-	return now >= tb.nextRefillTime
+func (tb *priorityTokenBucketImpl) isRefillDue(now time.Time) bool {
+	return !now.Before(tb.nextRefillTime)
 }
 
-func (tb *priorityTokenBucketImpl) isOverflowRefillDue(now int64) bool {
-	return now >= tb.nextOverflowRefillTime
+func (tb *priorityTokenBucketImpl) isOverflowRefillDue(now time.Time) bool {
+	return !now.Before(tb.nextOverflowRefillTime)
 }

@@ -35,6 +35,7 @@ import (
 	"github.com/xwb1989/sqlparser"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -48,8 +49,8 @@ type (
 	parsedQuery struct {
 		workflowTypeName *string
 		workflowID       *string
-		startTime        *int64
-		closeTime        *int64
+		startTime        *time.Time
+		closeTime        *time.Time
 		searchPrecision  *string
 	}
 )
@@ -176,7 +177,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.workflowID = convert.StringPtr(val)
 	case CloseTime:
-		timestamp, err := convertToTimestamp(valStr)
+		timestamp, err := convertToTime(valStr)
 		if err != nil {
 			return err
 		}
@@ -185,7 +186,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.closeTime = &timestamp
 	case StartTime:
-		timestamp, err := convertToTimestamp(valStr)
+		timestamp, err := convertToTime(valStr)
 		if err != nil {
 			return err
 		}
@@ -221,20 +222,20 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 	return nil
 }
 
-func convertToTimestamp(timeStr string) (int64, error) {
-	timestamp, err := strconv.ParseInt(timeStr, 10, 64)
+func convertToTime(timeStr string) (time.Time, error) {
+	ts, err := strconv.ParseInt(timeStr, 10, 64)
 	if err == nil {
-		return timestamp, nil
+		return timestamp.UnixOrZeroTime(ts), nil
 	}
 	timestampStr, err := extractStringValue(timeStr)
 	if err != nil {
-		return 0, err
+		return time.Time{}, err
 	}
 	parsedTime, err := time.Parse(defaultDateTimeFormat, timestampStr)
 	if err != nil {
-		return 0, err
+		return time.Time{}, err
 	}
-	return parsedTime.UnixNano(), nil
+	return parsedTime, nil
 }
 
 func extractStringValue(s string) (string, error) {
