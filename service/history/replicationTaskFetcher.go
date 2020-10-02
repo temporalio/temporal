@@ -299,9 +299,7 @@ func (f *ReplicationTaskFetcherImpl) getMessages(
 	}
 	response, err := f.remotePeer.GetReplicationMessages(ctx, request)
 	if err != nil {
-		if _, ok := err.(*serviceerror.ResourceExhausted); !ok {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	return response.GetShardMessages(), err
