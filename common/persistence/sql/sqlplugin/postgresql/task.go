@@ -153,7 +153,10 @@ func (pdb *db) SelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlpl
 			return nil, serviceerror.NewInternal("shardID range not supported for specific selection")
 		}
 		return pdb.selectFromTaskQueues(filter)
-	case filter.RangeHashLessThanEqualTo != 0:
+	case filter.RangeHashLessThanEqualTo != 0 && filter.PageSize != nil:
+		if filter.RangeHashLessThanEqualTo < filter.RangeHashGreaterThanEqualTo {
+			return nil, serviceerror.NewInternal("range of hashes bound is invalid")
+		}
 		return pdb.rangeSelectFromTaskQueues(filter)
 	case filter.TaskQueueIDGreaterThan != nil && filter.PageSize != nil:
 		return pdb.rangeSelectFromTaskQueues(filter)

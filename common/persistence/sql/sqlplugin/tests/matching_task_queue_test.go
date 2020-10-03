@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/shuffle"
 )
@@ -28,6 +29,9 @@ type (
 		store sqlplugin.MatchingTaskQueue
 	}
 )
+
+// TODO SelectFromTaskQueues with RangeHashGreaterThanEqualTo / RangeHashLessThanEqualTo / TaskQueueIDGreaterThan looks weird
+//  need to go over the logic in matching engine
 
 func newMatchingTaskQueueSuite(
 	t *testing.T,
@@ -208,6 +212,88 @@ func (s *matchingTaskQueueSuite) TestUpdateSelect() {
 	rows, err := s.store.SelectFromTaskQueues(filter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.TaskQueuesRow{taskQueue}, rows)
+}
+
+func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Success() {
+	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
+	rangeID := int64(1)
+
+	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
+	result, err := s.store.InsertIntoTaskQueues(&taskQueue)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(1, int(rowsAffected))
+
+	filter := &sqlplugin.TaskQueuesFilter{
+		RangeHash:   testMatchingTaskQueueRangeHash,
+		TaskQueueID: queueID,
+		RangeID:     convert.Int64Ptr(rangeID),
+	}
+	result, err = s.store.DeleteFromTaskQueues(filter)
+	s.NoError(err)
+	rowsAffected, err = result.RowsAffected()
+	s.Equal(1, int(rowsAffected))
+
+	filter = &sqlplugin.TaskQueuesFilter{
+		RangeHash:   testMatchingTaskQueueRangeHash,
+		TaskQueueID: queueID,
+	}
+	rows, err := s.store.SelectFromTaskQueues(filter)
+	s.Error(err) // TODO persistence layer should do proper error translation
+	s.Nil(rows)
+}
+
+func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Fail() {
+	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
+	rangeID := int64(1)
+
+	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
+	result, err := s.store.InsertIntoTaskQueues(&taskQueue)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(1, int(rowsAffected))
+
+	filter := &sqlplugin.TaskQueuesFilter{
+		RangeHash:   testMatchingTaskQueueRangeHash,
+		TaskQueueID: queueID,
+		RangeID:     convert.Int64Ptr(rangeID + 1),
+	}
+	result, err = s.store.DeleteFromTaskQueues(filter)
+	s.NoError(err)
+	rowsAffected, err = result.RowsAffected()
+	s.Equal(0, int(rowsAffected))
+
+	filter = &sqlplugin.TaskQueuesFilter{
+		RangeHash:   testMatchingTaskQueueRangeHash,
+		TaskQueueID: queueID,
+	}
+	rows, err := s.store.SelectFromTaskQueues(filter)
+	s.NoError(err)
+	s.Equal([]sqlplugin.TaskQueuesRow{taskQueue}, rows)
+}
+
+func (s *matchingTaskQueueSuite) TestInsertLock() {
+	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
+	rangeID := int64(2)
+
+	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
+	result, err := s.store.InsertIntoTaskQueues(&taskQueue)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(1, int(rowsAffected))
+
+	filter := &sqlplugin.TaskQueuesFilter{
+		RangeHash:   testMatchingTaskQueueRangeHash,
+		TaskQueueID: queueID,
+	}
+	// NOTE: lock without transaction is equivalent to select
+	//  this test only test the select functionality
+	rangeIDInDB, err := s.store.LockTaskQueues(filter)
+	s.NoError(err)
+	s.Equal(rangeID, rangeIDInDB)
 }
 
 func (s *matchingTaskQueueSuite) newRandomTasksQueueRow(
