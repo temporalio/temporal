@@ -48,6 +48,23 @@ func TestMySQLMatchingTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestMySQLMatchingTaskQueueSuite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(cfg)
+	SetupMySQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(cfg)
+	}()
+
+	s := newMatchingTaskQueueSuite(t, store)
+	suite.Run(t, s)
+}
+
 // NewMySQLConfig returns a new MySQL config for test
 func NewMySQLConfig() *config.SQL {
 	return &config.SQL{
