@@ -148,7 +148,10 @@ func (mdb *db) SelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlpl
 			return nil, serviceerror.NewInternal("range of hashes not supported for specific selection")
 		}
 		return mdb.selectFromTaskQueues(filter)
-	case filter.RangeHashLessThanEqualTo != 0:
+	case filter.RangeHashLessThanEqualTo != 0 && filter.PageSize != nil:
+		if filter.RangeHashLessThanEqualTo < filter.RangeHashGreaterThanEqualTo {
+			return nil, serviceerror.NewInternal("range of hashes bound is invalid")
+		}
 		return mdb.rangeSelectFromTaskQueues(filter)
 	case filter.TaskQueueIDGreaterThan != nil && filter.PageSize != nil:
 		return mdb.rangeSelectFromTaskQueues(filter)

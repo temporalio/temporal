@@ -17,8 +17,7 @@ const (
 )
 
 var (
-	testMatchingTaskTaskQueueID = []byte("random matching task queue")
-	testMatchingTaskTaskData    = []byte("random matching task data")
+	testMatchingTaskTaskData = []byte("random matching task data")
 )
 
 type (
@@ -95,9 +94,8 @@ func (s *matchingTaskSuite) TestInsert_Single_Fail_Duplicate() {
 	s.Equal(1, int(rowsAffected))
 
 	task = s.newRandomTasksRow(queueID, taskID)
-	result, err = s.store.InsertIntoTasks([]sqlplugin.TasksRow{task})
+	_, err = s.store.InsertIntoTasks([]sqlplugin.TasksRow{task})
 	s.Error(err) // TODO persistence layer should do proper error translation
-	s.Nil(result)
 }
 
 func (s *matchingTaskSuite) TestInsert_Multiple_Fail_Duplicate() {
@@ -116,9 +114,8 @@ func (s *matchingTaskSuite) TestInsert_Multiple_Fail_Duplicate() {
 	task2 = s.newRandomTasksRow(queueID, taskID)
 	taskID++
 	task3 := s.newRandomTasksRow(queueID, taskID)
-	result, err = s.store.InsertIntoTasks([]sqlplugin.TasksRow{task2, task3})
+	_, err = s.store.InsertIntoTasks([]sqlplugin.TasksRow{task2, task3})
 	s.Error(err) // TODO persistence layer should do proper error translation
-	s.Nil(result)
 }
 
 func (s *matchingTaskSuite) TestInsertSelect_Single() {
