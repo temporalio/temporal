@@ -14,12 +14,8 @@ func String(str string) string {
 }
 
 func Bytes(slice []byte) []byte {
-	length := len(slice)
-	result := make([]byte, 0, length)
-
-	for i := 0; i < length; i++ {
-		result = append(result, slice[i])
-	}
+	result := make([]byte, len(slice))
+	copy(result, slice)
 
 LoopSwap:
 	for i := 0; i < length; i++ {
