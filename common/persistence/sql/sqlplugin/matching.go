@@ -27,8 +27,8 @@ import (
 )
 
 type (
-	// matchingTask is the SQL persistence interface for matching tasks
-	matchingTask interface {
+	// MatchingTask is the SQL persistence interface for matching tasks
+	MatchingTask interface {
 		InsertIntoTasks(rows []TasksRow) (sql.Result, error)
 		// SelectFromTasks retrieves one or more rows from the tasks table
 		// Required filter params - {namespaceID, taskqueueName, taskType, minTaskID, maxTaskID, pageSize}
@@ -43,8 +43,8 @@ type (
 		DeleteFromTasks(filter *TasksFilter) (sql.Result, error)
 	}
 
-	// matchingTaskQueue is the SQL persistence interface for matching task queues
-	matchingTaskQueue interface {
+	// MatchingTaskQueue is the SQL persistence interface for matching task queues
+	MatchingTaskQueue interface {
 		InsertIntoTaskQueues(row *TaskQueuesRow) (sql.Result, error)
 		ReplaceIntoTaskQueues(row *TaskQueuesRow) (sql.Result, error)
 		UpdateTaskQueues(row *TaskQueuesRow) (sql.Result, error)
