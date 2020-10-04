@@ -48,7 +48,6 @@ func (e *WorkflowExecutionInfo) GetRunId() string {
 	return e.GetExecutionState().RunId
 }
 
-
 // GetExecutionState gets the new field for ExecutionState
 func (e *WorkflowExecutionInfo) GetExecutionState() *persistenceblobs.WorkflowExecutionState {
 	if e == nil {

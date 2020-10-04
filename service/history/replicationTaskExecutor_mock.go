@@ -29,9 +29,10 @@
 package history
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	repication "go.temporal.io/server/api/replication/v1"
-	reflect "reflect"
 )
 
 // MockreplicationTaskExecutor is a mock of replicationTaskExecutor interface.
