@@ -219,7 +219,7 @@ goimports-check:
 
 goimports:
 	@printf $(COLOR) "Run goimports..."
-	@goimports -w $(ALL_SRC)
+	@goimports -local "go.temporal.io" -w $(ALL_SRC)
 
 staticcheck:
 	@printf $(COLOR) "Run staticcheck..."

@@ -304,7 +304,7 @@ func (s *matchingTaskQueueSuite) newRandomTasksQueueRow(
 		RangeHash:    testMatchingTaskQueueRangeHash,
 		TaskQueueID:  queueID,
 		RangeID:      rangeID,
-		Data:         testMatchingTaskTaskQueueData,
+		Data:         shuffle.Bytes(testMatchingTaskTaskQueueData),
 		DataEncoding: testMatchingTaskQueueEncoding,
 	}
 }

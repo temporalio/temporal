@@ -47,7 +47,7 @@ type (
 		MatchingTask
 		MatchingTaskQueue
 
-		historyShard
+		HistoryShard
 		historyEvent
 		historyExecution
 		historyExecutionBuffer

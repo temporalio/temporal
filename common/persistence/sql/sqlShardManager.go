@@ -127,7 +127,7 @@ func lockShard(tx sqlplugin.Tx, shardID int, oldRangeID int64) error {
 		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID: %v. Error: %v", shardID, err))
 	}
 
-	if int64(rangeID) != oldRangeID {
+	if rangeID != oldRangeID {
 		return &persistence.ShardOwnershipLostError{
 			ShardID: shardID,
 			Msg:     fmt.Sprintf("Failed to update shard. Previous range ID: %v; new range ID: %v", oldRangeID, rangeID),
@@ -147,7 +147,7 @@ func readLockShard(tx sqlplugin.Tx, shardID int, oldRangeID int64) error {
 		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID: %v. Error: %v", shardID, err))
 	}
 
-	if int64(rangeID) != oldRangeID {
+	if rangeID != oldRangeID {
 		return &persistence.ShardOwnershipLostError{
 			ShardID: shardID,
 			Msg:     fmt.Sprintf("Failed to lock shard. Previous range ID: %v; new range ID: %v", oldRangeID, rangeID),
