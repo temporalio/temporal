@@ -40,7 +40,7 @@ type (
 	// tableCRUD defines the API for interacting with the database tables
 	tableCRUD interface {
 		clusterMetadata
-		namespace
+		Namespace
 		visibility
 		queue
 
