@@ -29,8 +29,9 @@
 package history
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockReplicationTaskProcessor is a mock of ReplicationTaskProcessor interface.

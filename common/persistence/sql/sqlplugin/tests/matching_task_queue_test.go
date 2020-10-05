@@ -71,7 +71,7 @@ func (s *matchingTaskQueueSuite) TestInsert_Success() {
 	s.Equal(1, int(rowsAffected))
 }
 
-func (s *matchingTaskQueueSuite) TestInsert_Fail() {
+func (s *matchingTaskQueueSuite) TestInsert_Fail_Duplicate() {
 	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
 	rangeID := int64(1)
 
@@ -107,7 +107,7 @@ func (s *matchingTaskQueueSuite) TestInsertSelect() {
 	s.Equal([]sqlplugin.TaskQueuesRow{taskQueue}, rows)
 }
 
-func (s *matchingTaskQueueSuite) TestReplace_Exists() {
+func (s *matchingTaskQueueSuite) TestInsertReplace_Exists() {
 	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
 	rangeID := int64(1)
 
@@ -159,7 +159,7 @@ func (s *matchingTaskQueueSuite) TestReplaceSelect() {
 	s.Equal([]sqlplugin.TaskQueuesRow{taskQueue}, rows)
 }
 
-func (s *matchingTaskQueueSuite) TestUpdate_Success() {
+func (s *matchingTaskQueueSuite) TestInsertUpdate_Success() {
 	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
 	rangeID := int64(1)
 
@@ -183,11 +183,13 @@ func (s *matchingTaskQueueSuite) TestUpdate_Fail() {
 	rangeID := int64(1)
 
 	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
-	_, err := s.store.UpdateTaskQueues(&taskQueue)
+	result, err := s.store.UpdateTaskQueues(&taskQueue)
 	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.Equal(0, int(rowsAffected))
 }
 
-func (s *matchingTaskQueueSuite) TestUpdateSelect() {
+func (s *matchingTaskQueueSuite) TestInsertUpdateSelect() {
 	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
 	rangeID := int64(1)
 
@@ -242,6 +244,21 @@ func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Success() {
 	rows, err := s.store.SelectFromTaskQueues(filter)
 	s.Error(err) // TODO persistence layer should do proper error translation
 	s.Nil(rows)
+}
+
+func (s *matchingTaskQueueSuite) TestDelete() {
+	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
+	rangeID := int64(1)
+
+	filter := &sqlplugin.TaskQueuesFilter{
+		RangeHash:   testMatchingTaskQueueRangeHash,
+		TaskQueueID: queueID,
+		RangeID:     convert.Int64Ptr(rangeID),
+	}
+	result, err := s.store.DeleteFromTaskQueues(filter)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.Equal(0, int(rowsAffected))
 }
 
 func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Fail() {

@@ -312,7 +312,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		WorkflowId:      s.workflowID,
 		LastEventTaskId: lastEventTaskID,
 		ExecutionState: &persistenceblobs.WorkflowExecutionState{
-			RunId:           s.runID,
+			RunId:  s.runID,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},

@@ -38,8 +38,8 @@ type (
 		PruneClusterMembership(filter *PruneClusterMembershipFilter) (sql.Result, error)
 	}
 
-	// namespace is the SQL persistence interface for namespaces
-	namespace interface {
+	// Namespace is the SQL persistence interface for namespaces
+	Namespace interface {
 		InsertIntoNamespace(rows *NamespaceRow) (sql.Result, error)
 		UpdateNamespace(row *NamespaceRow) (sql.Result, error)
 		// SelectFromNamespace returns namespaces that match filter criteria. Either ID or
@@ -49,7 +49,7 @@ type (
 		// DeleteNamespace deletes a single row. One of ID or Name MUST be specified
 		DeleteFromNamespace(filter *NamespaceFilter) (sql.Result, error)
 
-		LockNamespaceMetadata() error
+		LockNamespaceMetadata() (*NamespaceMetadataRow, error)
 		UpdateNamespaceMetadata(row *NamespaceMetadataRow) (sql.Result, error)
 		SelectFromNamespaceMetadata() (*NamespaceMetadataRow, error)
 	}

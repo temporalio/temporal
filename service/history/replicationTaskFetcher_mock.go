@@ -29,9 +29,10 @@
 package history
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	quotas "go.temporal.io/server/common/quotas"
-	reflect "reflect"
 )
 
 // MockReplicationTaskFetcher is a mock of ReplicationTaskFetcher interface.
