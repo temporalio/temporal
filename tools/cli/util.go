@@ -171,6 +171,10 @@ func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string 
 				str += string(typedV)
 			case *commonpb.Payload:
 				str += payload.ToString(typedV)
+			case *commonpb.Payloads:
+				for _, value := range typedV.GetPayloads() {
+					str += payload.ToString(value)
+				}
 			default:
 				str += val.String()
 			}
@@ -471,6 +475,9 @@ func getEventAttributes(e *historypb.HistoryEvent) interface{} {
 
 	case enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED:
 		data = e.GetExternalWorkflowExecutionSignaledEventAttributes()
+
+	case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+		data = e.GetUpsertWorkflowSearchAttributesEventAttributes()
 
 	default:
 		data = e
