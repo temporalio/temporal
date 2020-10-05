@@ -177,7 +177,7 @@ type (
 
 	// BufferedEventsRow represents a row in buffered_events table
 	BufferedEventsRow struct {
-		ShardID      int
+		ShardID      int32
 		NamespaceID  primitives.UUID
 		WorkflowID   string
 		RunID        primitives.UUID
@@ -188,7 +188,7 @@ type (
 	// BufferedEventsFilter contains the column names within buffered_events table that
 	// can be used to filter results through a WHERE clause
 	BufferedEventsFilter struct {
-		ShardID     int
+		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
@@ -360,7 +360,7 @@ type (
 
 	// ActivityInfoMapsRow represents a row in activity_info_maps table
 	ActivityInfoMapsRow struct {
-		ShardID      int64
+		ShardID      int32
 		NamespaceID  primitives.UUID
 		WorkflowID   string
 		RunID        primitives.UUID
@@ -372,7 +372,7 @@ type (
 	// ActivityInfoMapsFilter contains the column names within activity_info_maps table that
 	// can be used to filter results through a WHERE clause
 	ActivityInfoMapsFilter struct {
-		ShardID     int64
+		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
@@ -381,7 +381,7 @@ type (
 
 	// TimerInfoMapsRow represents a row in timer_info_maps table
 	TimerInfoMapsRow struct {
-		ShardID      int64
+		ShardID      int32
 		NamespaceID  primitives.UUID
 		WorkflowID   string
 		RunID        primitives.UUID
@@ -393,7 +393,7 @@ type (
 	// TimerInfoMapsFilter contains the column names within timer_info_maps table that
 	// can be used to filter results through a WHERE clause
 	TimerInfoMapsFilter struct {
-		ShardID     int64
+		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
@@ -402,7 +402,7 @@ type (
 
 	// ChildExecutionInfoMapsRow represents a row in child_execution_info_maps table
 	ChildExecutionInfoMapsRow struct {
-		ShardID      int64
+		ShardID      int32
 		NamespaceID  primitives.UUID
 		WorkflowID   string
 		RunID        primitives.UUID
@@ -414,7 +414,7 @@ type (
 	// ChildExecutionInfoMapsFilter contains the column names within child_execution_info_maps table that
 	// can be used to filter results through a WHERE clause
 	ChildExecutionInfoMapsFilter struct {
-		ShardID     int64
+		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID

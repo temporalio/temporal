@@ -54,12 +54,6 @@ func (s *historyShardSuite) TearDownTest() {
 
 }
 
-//InsertIntoShards(rows *ShardsRow) (sql.Result, error)
-//UpdateShards(row *ShardsRow) (sql.Result, error)
-//SelectFromShards(filter *ShardsFilter) (*ShardsRow, error)
-//ReadLockShards(filter *ShardsFilter) (int, error)
-//WriteLockShards(filter *ShardsFilter) (int, error)
-
 func (s *historyShardSuite) TestInsert_Success() {
 	shardID := int64(rand.Int31())
 	rangeID := int64(1)

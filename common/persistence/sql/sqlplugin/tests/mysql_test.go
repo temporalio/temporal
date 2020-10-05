@@ -99,6 +99,74 @@ func TestMySQLHistoryShardSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestMySQLHistoryExecutionBufferSuite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(cfg)
+	SetupMySQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(cfg)
+	}()
+
+	s := newHistoryExecutionBufferSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestMySQLHistoryExecutionActivitySuite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(cfg)
+	SetupMySQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(cfg)
+	}()
+
+	s := newHistoryExecutionActivitySuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestMySQLHistoryExecutionChildWorkflowSuite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(cfg)
+	SetupMySQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(cfg)
+	}()
+
+	s := newHistoryExecutionChildWorkflowSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestMySQLHistoryExecutionTimerSuite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(cfg)
+	SetupMySQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(cfg)
+	}()
+
+	s := newHistoryExecutionTimerSuite(t, store)
+	suite.Run(t, s)
+}
+
 // NewMySQLConfig returns a new MySQL config for test
 func NewMySQLConfig() *config.SQL {
 	return &config.SQL{
