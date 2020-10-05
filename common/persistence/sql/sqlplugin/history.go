@@ -25,13 +25,13 @@ package sqlplugin
 import "database/sql"
 
 type (
-	// historyShard is the SQL persistence interface for history shards
-	historyShard interface {
+	// HistoryShard is the SQL persistence interface for history shards
+	HistoryShard interface {
 		InsertIntoShards(rows *ShardsRow) (sql.Result, error)
 		UpdateShards(row *ShardsRow) (sql.Result, error)
 		SelectFromShards(filter *ShardsFilter) (*ShardsRow, error)
-		ReadLockShards(filter *ShardsFilter) (int, error)
-		WriteLockShards(filter *ShardsFilter) (int, error)
+		ReadLockShards(filter *ShardsFilter) (int64, error)
+		WriteLockShards(filter *ShardsFilter) (int64, error)
 	}
 
 	// historyEvent is the SQL persistence interface for history nodes and history trees

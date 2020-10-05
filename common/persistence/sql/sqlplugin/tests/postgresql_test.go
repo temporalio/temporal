@@ -82,6 +82,23 @@ func TestPostgreSQLMatchingTaskQueueSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestPostgreSQLHistoryShardSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newHistoryShardSuite(t, store)
+	suite.Run(t, s)
+}
+
 // NewPostgreSQLConfig returns a new MySQL config for test
 func NewPostgreSQLConfig() *config.SQL {
 	return &config.SQL{
