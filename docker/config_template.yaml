@@ -129,7 +129,7 @@ services:
         metrics:
             prometheus:
                 timerType: {{ default .Env.PROMETHEUS_TIMER_TYPE "histogram" }}
-                listenAddress: {{ .Env.PROMETHEUS_ENDPOINT }}
+                listenAddress: {{ .Env.PROMETHEUS_FRONTEND_ENDPOINT }}
         {{- end }}
 
     matching:
@@ -146,7 +146,7 @@ services:
         metrics:
             prometheus:
                 timerType: {{ default .Env.PROMETHEUS_TIMER_TYPE "histogram" }}
-                listenAddress: {{ .Env.PROMETHEUS_ENDPOINT }}
+                listenAddress: {{ .Env.PROMETHEUS_MATCHING_ENDPOINT }}
         {{- end }}
 
     history:
@@ -163,7 +163,7 @@ services:
         metrics:
             prometheus:
                 timerType: {{ default .Env.PROMETHEUS_TIMER_TYPE "histogram" }}
-                listenAddress: {{ .Env.PROMETHEUS_ENDPOINT }}
+                listenAddress: {{ .Env.PROMETHEUS_HISTORY_ENDPOINT }}
         {{- end }}
 
     worker:
@@ -180,7 +180,7 @@ services:
         metrics:
             prometheus:
                 timerType: {{ default .Env.PROMETHEUS_TIMER_TYPE "histogram" }}
-                listenAddress: {{ .Env.PROMETHEUS_ENDPOINT }}
+                listenAddress: {{ .Env.PROMETHEUS_WORKER_ENDPOINT }}
         {{- end }}
 
 clusterMetadata:
