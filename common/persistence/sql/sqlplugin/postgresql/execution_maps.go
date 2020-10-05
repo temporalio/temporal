@@ -168,7 +168,7 @@ func (pdb *db) SelectFromActivityInfoMaps(filter *sqlplugin.ActivityInfoMapsFilt
 	var rows []sqlplugin.ActivityInfoMapsRow
 	err := pdb.conn.Select(&rows, getActivityInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
-		rows[i].ShardID = int64(filter.ShardID)
+		rows[i].ShardID = filter.ShardID
 		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
@@ -208,7 +208,7 @@ func (pdb *db) SelectFromTimerInfoMaps(filter *sqlplugin.TimerInfoMapsFilter) ([
 	var rows []sqlplugin.TimerInfoMapsRow
 	err := pdb.conn.Select(&rows, getTimerInfoMapSQLQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
-		rows[i].ShardID = int64(filter.ShardID)
+		rows[i].ShardID = filter.ShardID
 		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
@@ -248,7 +248,7 @@ func (pdb *db) SelectFromChildExecutionInfoMaps(filter *sqlplugin.ChildExecution
 	var rows []sqlplugin.ChildExecutionInfoMapsRow
 	err := pdb.conn.Select(&rows, getChildExecutionInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
-		rows[i].ShardID = int64(filter.ShardID)
+		rows[i].ShardID = filter.ShardID
 		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
