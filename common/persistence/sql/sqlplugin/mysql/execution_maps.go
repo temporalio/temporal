@@ -222,7 +222,7 @@ func (mdb *db) SelectFromTimerInfoMaps(filter *sqlplugin.TimerInfoMapsFilter) ([
 	var rows []sqlplugin.TimerInfoMapsRow
 	err := mdb.conn.Select(&rows, getTimerInfoMapSQLQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
-		rows[i].ShardID = int64(filter.ShardID)
+		rows[i].ShardID = filter.ShardID
 		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
@@ -270,7 +270,7 @@ func (mdb *db) SelectFromChildExecutionInfoMaps(filter *sqlplugin.ChildExecution
 	var rows []sqlplugin.ChildExecutionInfoMapsRow
 	err := mdb.conn.Select(&rows, getChildExecutionInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
-		rows[i].ShardID = int64(filter.ShardID)
+		rows[i].ShardID = filter.ShardID
 		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID

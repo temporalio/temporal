@@ -47,16 +47,16 @@ type (
 		MatchingTask
 		MatchingTaskQueue
 
-		historyShard
+		HistoryShard
 		historyEvent
 		historyExecution
-		historyExecutionBuffer
-		historyExecutionActivity
-		historyExecutionChildWorkflow
-		historyExecutionTimer
-		historyExecutionRequestCancel
-		historyExecutionSignal
-		historyExecutionSignalRequest
+		HistoryExecutionBuffer
+		HistoryExecutionActivity
+		HistoryExecutionChildWorkflow
+		HistoryExecutionTimer
+		HistoryExecutionRequestCancel
+		HistoryExecutionSignal
+		HistoryExecutionSignalRequest
 		historyTransferTask
 		historyTimerTask
 		historyReplicationTask
