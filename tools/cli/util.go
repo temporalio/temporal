@@ -171,6 +171,10 @@ func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string 
 				str += string(typedV)
 			case *commonpb.Payload:
 				str += payload.ToString(typedV)
+			case *commonpb.Payloads:
+				for _, value := range typedV.GetPayloads() {
+					str += payload.ToString(value)
+				}
 			default:
 				str += val.String()
 			}
