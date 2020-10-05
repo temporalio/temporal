@@ -279,7 +279,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		WorkflowRunTimeout:         timestamp.DurationFromSeconds(200),
 		DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(100),
 		ExecutionState: &persistenceblobs.WorkflowExecutionState{
-			RunId:                      we.GetRunId(),
+			RunId:  we.GetRunId(),
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
@@ -731,7 +731,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		WorkflowRunTimeout:         timestamp.DurationFromSeconds(200),
 		DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(100),
 		ExecutionState: &persistenceblobs.WorkflowExecutionState{
-			RunId:                      we.GetRunId(),
+			RunId:  we.GetRunId(),
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},

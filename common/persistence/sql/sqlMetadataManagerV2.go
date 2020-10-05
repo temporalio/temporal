@@ -69,20 +69,15 @@ func updateMetadata(tx sqlplugin.Tx, oldNotificationVersion int64) error {
 	return nil
 }
 
-func lockMetadata(tx sqlplugin.Tx) error {
-	err := tx.LockNamespaceMetadata()
+func lockMetadata(tx sqlplugin.Tx) (*sqlplugin.NamespaceMetadataRow, error) {
+	row, err := tx.LockNamespaceMetadata()
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock namespace metadata. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to lock namespace metadata. Error: %v", err))
 	}
-	return nil
+	return row, nil
 }
 
 func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
-	metadata, err := m.GetMetadata()
-	if err != nil {
-		return nil, err
-	}
-
 	idBytes, err := primitives.ParseUUID(request.ID)
 	if err != nil {
 		return nil, err
@@ -90,24 +85,25 @@ func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCrea
 
 	var resp *persistence.CreateNamespaceResponse
 	err = m.txExecute("CreateNamespace", func(tx sqlplugin.Tx) error {
-		if _, err1 := tx.InsertIntoNamespace(&sqlplugin.NamespaceRow{
+		metadata, err := lockMetadata(tx)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.InsertIntoNamespace(&sqlplugin.NamespaceRow{
 			Name:                request.Name,
 			ID:                  idBytes,
 			Data:                request.Namespace.Data,
 			DataEncoding:        request.Namespace.Encoding.String(),
 			IsGlobal:            request.IsGlobal,
 			NotificationVersion: metadata.NotificationVersion,
-		}); err1 != nil {
-			if m.db.IsDupEntryError(err1) {
+		}); err != nil {
+			if m.db.IsDupEntryError(err) {
 				return serviceerror.NewNamespaceAlreadyExists(fmt.Sprintf("name: %v", request.Name))
 			}
-			return err1
+			return err
 		}
-		if err1 := lockMetadata(tx); err1 != nil {
-			return err1
-		}
-		if err1 := updateMetadata(tx, metadata.NotificationVersion); err1 != nil {
-			return err1
+		if err := updateMetadata(tx, metadata.NotificationVersion); err != nil {
+			return err
 		}
 		resp = &persistence.CreateNamespaceResponse{ID: request.ID}
 		return nil
@@ -171,6 +167,17 @@ func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpda
 	}
 
 	return m.txExecute("UpdateNamespace", func(tx sqlplugin.Tx) error {
+		metadata, err := lockMetadata(tx)
+		if err != nil {
+			return err
+		}
+		if metadata.NotificationVersion != request.NotificationVersion {
+			return fmt.Errorf(
+				"conditional update error: expect: %v, actual: %v",
+				request.NotificationVersion,
+				metadata.NotificationVersion,
+			)
+		}
 		result, err := tx.UpdateNamespace(&sqlplugin.NamespaceRow{
 			Name:                request.Name,
 			ID:                  idBytes,
@@ -188,10 +195,7 @@ func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpda
 		if noRowsAffected != 1 {
 			return fmt.Errorf("%v rows updated instead of one", noRowsAffected)
 		}
-		if err := lockMetadata(tx); err != nil {
-			return err
-		}
-		return updateMetadata(tx, request.NotificationVersion)
+		return updateMetadata(tx, metadata.NotificationVersion)
 	})
 }
 

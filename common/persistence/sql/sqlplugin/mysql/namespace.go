@@ -28,6 +28,8 @@ import (
 	"database/sql"
 	"errors"
 
+	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -76,6 +78,9 @@ func (mdb *db) UpdateNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) 
 func (mdb *db) SelectFromNamespace(filter *sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
 	switch {
 	case filter.ID != nil || filter.Name != nil:
+		if filter.ID != nil && filter.Name != nil {
+			return nil, serviceerror.NewInternal("only ID or name filter can be specified for selection")
+		}
 		return mdb.selectFromNamespace(filter)
 	case filter.PageSize != nil && *filter.PageSize > 0:
 		return mdb.selectAllFromNamespace(filter)
@@ -125,10 +130,13 @@ func (mdb *db) DeleteFromNamespace(filter *sqlplugin.NamespaceFilter) (sql.Resul
 }
 
 // LockNamespaceMetadata acquires a write lock on a single row in namespace_metadata table
-func (mdb *db) LockNamespaceMetadata() error {
+func (mdb *db) LockNamespaceMetadata() (*sqlplugin.NamespaceMetadataRow, error) {
 	var row sqlplugin.NamespaceMetadataRow
 	err := mdb.conn.Get(&row.NotificationVersion, lockNamespaceMetadataQuery)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 }
 
 // SelectFromNamespaceMetadata reads a single row in namespace_metadata table
