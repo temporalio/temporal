@@ -92,8 +92,9 @@ func (s *historyExecutionTimerSuite) TestReplaceSelect_Single() {
 	namespaceID := primitives.NewUUID()
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
+	timerID := shuffle.String(testHistoryExecutionTimerID)
 
-	timer := s.newRandomExecutionTimerRow(shardID, namespaceID, workflowID, runID, shuffle.String(testHistoryExecutionTimerID))
+	timer := s.newRandomExecutionTimerRow(shardID, namespaceID, workflowID, runID, timerID)
 	result, err := s.store.ReplaceIntoTimerInfoMaps([]sqlplugin.TimerInfoMapsRow{timer})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
@@ -105,6 +106,7 @@ func (s *historyExecutionTimerSuite) TestReplaceSelect_Single() {
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		TimerID:     convert.StringPtr(timerID),
 	}
 	rows, err := s.store.SelectFromTimerInfoMaps(filter)
 	s.NoError(err)
@@ -141,6 +143,7 @@ func (s *historyExecutionTimerSuite) TestReplaceSelect_Multiple() {
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		TimerID:     nil,
 	}
 	rows, err := s.store.SelectFromTimerInfoMaps(filter)
 	s.NoError(err)
@@ -260,6 +263,7 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_Multiple() {
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		TimerID:     nil,
 	}
 	result, err = s.store.DeleteFromTimerInfoMaps(filter)
 	s.NoError(err)

@@ -143,8 +143,8 @@ type (
 
 	// HistoryExecutionSignalRequest is the SQL persistence interface for history nodes and history execution signal request
 	HistoryExecutionSignalRequest interface {
-		InsertIntoSignalsRequestedSets(rows []SignalsRequestedSetsRow) (sql.Result, error)
-		// SelectFromSignalInfoMaps returns one or more rows form singals_requested_sets table
+		ReplaceIntoSignalsRequestedSets(rows []SignalsRequestedSetsRow) (sql.Result, error)
+		// SelectFromSignalInfoMaps returns one or more rows form signals_requested_sets table
 		// Required filter params - {shardID, namespaceID, workflowID, runID}
 		SelectFromSignalsRequestedSets(filter *SignalsRequestedSetsFilter) ([]SignalsRequestedSetsRow, error)
 		// DeleteFromSignalsRequestedSets deletes one or more rows from signals_requested_sets

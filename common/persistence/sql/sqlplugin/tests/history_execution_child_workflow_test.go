@@ -91,8 +91,9 @@ func (s *historyExecutionChildWorkflowSuite) TestReplaceSelect_Single() {
 	namespaceID := primitives.NewUUID()
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
+	initiatedID := rand.Int63()
 
-	childWorkflow := s.newRandomExecutionChildWorkflowRow(shardID, namespaceID, workflowID, runID, rand.Int63())
+	childWorkflow := s.newRandomExecutionChildWorkflowRow(shardID, namespaceID, workflowID, runID, initiatedID)
 	result, err := s.store.ReplaceIntoChildExecutionInfoMaps([]sqlplugin.ChildExecutionInfoMapsRow{childWorkflow})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
@@ -104,6 +105,7 @@ func (s *historyExecutionChildWorkflowSuite) TestReplaceSelect_Single() {
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		InitiatedID: convert.Int64Ptr(initiatedID),
 	}
 	rows, err := s.store.SelectFromChildExecutionInfoMaps(filter)
 	s.NoError(err)
@@ -140,6 +142,7 @@ func (s *historyExecutionChildWorkflowSuite) TestReplaceSelect_Multiple() {
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		InitiatedID: nil,
 	}
 	rows, err := s.store.SelectFromChildExecutionInfoMaps(filter)
 	s.NoError(err)
@@ -259,6 +262,7 @@ func (s *historyExecutionChildWorkflowSuite) TestReplaceDeleteSelect_Multiple() 
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		InitiatedID: nil,
 	}
 	result, err = s.store.DeleteFromChildExecutionInfoMaps(filter)
 	s.NoError(err)
