@@ -169,7 +169,7 @@ update-go-api:
 
 goimports-proto:
 	@printf $(COLOR) "Run goimports..."
-	@goimports -local "go.temporal.io" -w $(PROTO_OUT)
+	@goimports -w $(PROTO_OUT)
 
 copyright-proto:
 	@printf $(COLOR) "Update license headers..."
