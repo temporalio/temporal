@@ -472,6 +472,9 @@ func getEventAttributes(e *historypb.HistoryEvent) interface{} {
 	case enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED:
 		data = e.GetExternalWorkflowExecutionSignaledEventAttributes()
 
+	case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+		data = e.GetUpsertWorkflowSearchAttributesEventAttributes()
+
 	default:
 		data = e
 	}
