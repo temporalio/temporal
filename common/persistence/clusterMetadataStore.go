@@ -140,23 +140,23 @@ func (m *clusterMetadataManagerImpl) PruneClusterMembership(request *PruneCluste
 	return m.persistence.PruneClusterMembership(request)
 }
 
-func (m *clusterMetadataManagerImpl) GetMutableClusterMetadata() (*GetMutableClusterMetadataResponse, error) {
-	resp, err := m.persistence.GetMutableClusterMetadata()
+func (m *clusterMetadataManagerImpl) GetClusterMetadata() (*GetClusterMetadataResponse, error) {
+	resp, err := m.persistence.GetClusterMetadata()
 	if err != nil {
 		return nil, err
 	}
 
-	mcm, err := m.serializer.DeserializeMutableClusterMetadata(resp.MutableClusterMetadata)
+	mcm, err := m.serializer.DeserializeClusterMetadata(resp.ClusterMetadata)
 	if err != nil {
 		return nil, err
 	}
-	return &GetMutableClusterMetadataResponse{MutableClusterMetadata: *mcm}, nil
+	return &GetClusterMetadataResponse{ClusterMetadata: *mcm}, nil
 }
 
-func (m *clusterMetadataManagerImpl) UpdateMutableClusterMetadata(request *UpdateMutableClusterMetadataRequest) error {
-	mcm, err := m.serializer.SerializeMutableClusterMetadata(&request.MutableClusterMetadata, clusterMetadataEncoding)
+func (m *clusterMetadataManagerImpl) UpdateClusterMetadata(request *UpdateClusterMetadataRequest) error {
+	mcm, err := m.serializer.SerializeClusterMetadata(&request.ClusterMetadata, clusterMetadataEncoding)
 	if err != nil {
 		return err
 	}
-	return m.persistence.UpdateMutableClusterMetadata(&InternalUpdateMutableClusterMetadataRequest{MutableClusterMetadata: mcm})
+	return m.persistence.UpdateClusterMetadata(&InternalUpdateClusterMetadataRequest{ClusterMetadata: mcm})
 }

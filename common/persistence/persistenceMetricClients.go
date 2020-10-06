@@ -1413,29 +1413,29 @@ func (c *clusterMetadataPersistenceClient) GetImmutableClusterMetadata() (*GetIm
 	return result, err
 }
 
-func (c *clusterMetadataPersistenceClient) GetMutableClusterMetadata() (*GetMutableClusterMetadataResponse, error) {
-	c.metricClient.IncCounter(metrics.PersistenceGetMutableClusterMetadataScope, metrics.PersistenceRequests)
+func (c *clusterMetadataPersistenceClient) GetClusterMetadata() (*GetClusterMetadataResponse, error) {
+	c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceRequests)
 
-	sw := c.metricClient.StartTimer(metrics.PersistenceGetMutableClusterMetadataScope, metrics.PersistenceLatency)
-	result, err := c.persistence.GetMutableClusterMetadata()
+	sw := c.metricClient.StartTimer(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceLatency)
+	result, err := c.persistence.GetClusterMetadata()
 	sw.Stop()
 
 	if err != nil {
-		c.metricClient.IncCounter(metrics.PersistenceGetMutableClusterMetadataScope, metrics.PersistenceFailures)
+		c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceFailures)
 	}
 
 	return result, err
 }
 
-func (c *clusterMetadataPersistenceClient) UpdateMutableClusterMetadata(request *UpdateMutableClusterMetadataRequest) error {
-	c.metricClient.IncCounter(metrics.PersistenceUpdateMutableClusterMetadataScope, metrics.PersistenceRequests)
+func (c *clusterMetadataPersistenceClient) UpdateClusterMetadata(request *UpdateClusterMetadataRequest) error {
+	c.metricClient.IncCounter(metrics.PersistenceUpdateClusterMetadataScope, metrics.PersistenceRequests)
 
-	sw := c.metricClient.StartTimer(metrics.PersistenceUpdateMutableClusterMetadataScope, metrics.PersistenceLatency)
-	err := c.persistence.UpdateMutableClusterMetadata(request)
+	sw := c.metricClient.StartTimer(metrics.PersistenceUpdateClusterMetadataScope, metrics.PersistenceLatency)
+	err := c.persistence.UpdateClusterMetadata(request)
 	sw.Stop()
 
 	if err != nil {
-		c.metricClient.IncCounter(metrics.PersistenceUpdateMutableClusterMetadataScope, metrics.PersistenceFailures)
+		c.metricClient.IncCounter(metrics.PersistenceUpdateClusterMetadataScope, metrics.PersistenceFailures)
 	}
 
 	return err

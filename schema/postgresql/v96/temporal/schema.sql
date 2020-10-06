@@ -238,8 +238,8 @@ CREATE TABLE cluster_metadata (
   metadata_partition        INTEGER NOT NULL,
   immutable_data            BYTEA NOT NULL,
   immutable_data_encoding   VARCHAR(16) NOT NULL,
-  mutable_data              BYTEA,
-  mutable_data_encoding     VARCHAR(16),
+  data                      BYTEA,
+  data_encoding             VARCHAR(16),
   PRIMARY KEY(metadata_partition)
 );
 

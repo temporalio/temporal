@@ -72,8 +72,8 @@ type (
 		DeserializeImmutableClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.ImmutableClusterMetadata, error)
 
 		// serialize/deserialize mutable cluster metadata
-		SerializeMutableClusterMetadata(icm *persistenceblobs.MutableClusterMetadata, encodingType enumspb.EncodingType) (*serialization.DataBlob, error)
-		DeserializeMutableClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.MutableClusterMetadata, error)
+		SerializeClusterMetadata(icm *persistenceblobs.ClusterMetadata, encodingType enumspb.EncodingType) (*serialization.DataBlob, error)
+		DeserializeClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.ClusterMetadata, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -325,14 +325,14 @@ func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *serialization
 	return event, err
 }
 
-func (t *serializerImpl) SerializeMutableClusterMetadata(icm *persistenceblobs.MutableClusterMetadata, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeClusterMetadata(icm *persistenceblobs.ClusterMetadata, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
 	if icm == nil {
-		icm = &persistenceblobs.MutableClusterMetadata{}
+		icm = &persistenceblobs.ClusterMetadata{}
 	}
 	return t.serialize(icm, encodingType)
 }
 
-func (t *serializerImpl) DeserializeMutableClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.MutableClusterMetadata, error) {
+func (t *serializerImpl) DeserializeClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.ClusterMetadata, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -340,7 +340,7 @@ func (t *serializerImpl) DeserializeMutableClusterMetadata(data *serialization.D
 		return nil, nil
 	}
 
-	event := &persistenceblobs.MutableClusterMetadata{}
+	event := &persistenceblobs.ClusterMetadata{}
 	var err error
 	switch data.Encoding {
 	case enumspb.ENCODING_TYPE_PROTO3:
@@ -348,7 +348,7 @@ func (t *serializerImpl) DeserializeMutableClusterMetadata(data *serialization.D
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = event.Unmarshal(data.Data)
 	default:
-		return nil, NewDeserializationError("DeserializeMutableClusterMetadata invalid encoding")
+		return nil, NewDeserializationError("DeserializeClusterMetadata invalid encoding")
 	}
 
 	if err != nil {

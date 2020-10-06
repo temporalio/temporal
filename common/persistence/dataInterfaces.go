@@ -1187,13 +1187,13 @@ type (
 		persistenceblobs.ImmutableClusterMetadata
 	}
 
-	// GetMutableClusterMetadataResponse is the response to GetMutableClusterMetadata
-	GetMutableClusterMetadataResponse struct {
-		persistenceblobs.MutableClusterMetadata
+	// GetClusterMetadataResponse is the response to GetClusterMetadata
+	GetClusterMetadataResponse struct {
+		persistenceblobs.ClusterMetadata
 	}
 
-	UpdateMutableClusterMetadataRequest struct {
-		persistenceblobs.MutableClusterMetadata
+	UpdateClusterMetadataRequest struct {
+		persistenceblobs.ClusterMetadata
 	}
 
 	// GetClusterMembersRequest is the response to GetClusterMembers
@@ -1375,8 +1375,8 @@ type (
 		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
-		GetMutableClusterMetadata() (*GetMutableClusterMetadataResponse, error)
-		UpdateMutableClusterMetadata(request *UpdateMutableClusterMetadataRequest) error
+		GetClusterMetadata() (*GetClusterMetadataResponse, error)
+		UpdateClusterMetadata(request *UpdateClusterMetadataRequest) error
 	}
 )
 

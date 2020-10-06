@@ -71,8 +71,8 @@ type (
 		// Initialize immutable metadata for the cluster. Takes no action if already initialized.
 		InitializeImmutableClusterMetadata(request *InternalInitializeImmutableClusterMetadataRequest) (*InternalInitializeImmutableClusterMetadataResponse, error)
 		GetImmutableClusterMetadata() (*InternalGetImmutableClusterMetadataResponse, error)
-		GetMutableClusterMetadata() (*InternalGetMutableClusterMetadataResponse, error)
-		UpdateMutableClusterMetadata(request *InternalUpdateMutableClusterMetadataRequest) error
+		GetClusterMetadata() (*InternalGetClusterMetadataResponse, error)
+		UpdateClusterMetadata(request *InternalUpdateClusterMetadataRequest) error
 		// Membership APIs
 		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
@@ -558,14 +558,14 @@ type (
 		ImmutableClusterMetadata *serialization.DataBlob
 	}
 
-	InternalGetMutableClusterMetadataResponse struct {
+	InternalGetClusterMetadataResponse struct {
 		// Serialized MutableCusterMetadata.
-		MutableClusterMetadata *serialization.DataBlob
+		ClusterMetadata *serialization.DataBlob
 	}
 
-	InternalUpdateMutableClusterMetadataRequest struct {
+	InternalUpdateClusterMetadataRequest struct {
 		// Serialized MutableCusterMetadata.
-		MutableClusterMetadata *serialization.DataBlob
+		ClusterMetadata *serialization.DataBlob
 	}
 
 	// InternalUpsertClusterMembershipRequest is the request to UpsertClusterMembership

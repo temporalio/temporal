@@ -1,8 +1,8 @@
 {
   "CurrVersion": "1.1",
   "MinCompatibleVersion": "1.0",
-  "Description": "schema for mutable cluster metadata",
+  "Description": "schema update for cluster metadata",
   "SchemaUpdateCqlFiles": [
-    "mutable_cluster_metadata.sql"
+    "cluster_metadata.sql"
   ]
 }

@@ -58,11 +58,11 @@ WHERE metadata_partition = ?`
 
 	immutableEncodingFieldName = immutablePayloadFieldName + `_encoding`
 
-	templateGetMutableClusterMetadata = `SELECT mutable_data, mutable_data_encoding FROM 
+	templateGetClusterMetadata = `SELECT data, data_encoding FROM 
 cluster_metadata 
 WHERE metadata_partition = ?`
 
-	templateUpsertMutableClusterMetadata = `UPDATE cluster_metadata SET mutable_data = ?, mutable_data_encoding = ? WHERE metadata_partition = ?`
+	templateUpsertClusterMetadata = `UPDATE cluster_metadata SET data = ?, data_encoding = ? WHERE metadata_partition = ?`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
 	templateUpsertActiveClusterMembership = `INSERT INTO 
@@ -186,26 +186,26 @@ func (m *cassandraClusterMetadata) GetImmutableClusterMetadata() (*p.InternalGet
 	}, nil
 }
 
-func (m *cassandraClusterMetadata) GetMutableClusterMetadata() (*p.InternalGetMutableClusterMetadataResponse, error) {
-	query := m.session.Query(templateGetMutableClusterMetadata, constMetadataPartition)
+func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMetadataResponse, error) {
+	query := m.session.Query(templateGetClusterMetadata, constMetadataPartition)
 	var mutableMetadata []byte
 	var encoding string
 	err := query.Scan(&mutableMetadata, &encoding)
 	if err != nil {
-		return nil, convertCommonErrors("GetMutableClusterMetadata", err)
+		return nil, convertCommonErrors("GetClusterMetadata", err)
 	}
 
-	return &p.InternalGetMutableClusterMetadataResponse{
-		MutableClusterMetadata: p.NewDataBlob(mutableMetadata, encoding),
+	return &p.InternalGetClusterMetadataResponse{
+		ClusterMetadata: p.NewDataBlob(mutableMetadata, encoding),
 	}, nil
 }
 
-func (m *cassandraClusterMetadata) UpdateMutableClusterMetadata(request *p.InternalUpdateMutableClusterMetadataRequest) error {
-	query := m.session.Query(templateUpsertMutableClusterMetadata, request.MutableClusterMetadata.Data, request.MutableClusterMetadata.Encoding.String(), constMembershipPartition)
+func (m *cassandraClusterMetadata) UpdateClusterMetadata(request *p.InternalUpdateClusterMetadataRequest) error {
+	query := m.session.Query(templateUpsertClusterMetadata, request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), constMembershipPartition)
 	err := query.Exec()
 
 	if err != nil {
-		return convertCommonErrors("UpdateMutableClusterMetadata", err)
+		return convertCommonErrors("UpdateClusterMetadata", err)
 	}
 
 	return nil

@@ -42,7 +42,7 @@ const (
 cluster_metadata (metadata_partition, immutable_data, immutable_data_encoding)
 VALUES(?, ?, ?)`
 
-	updateMutableClusterMetadataQry = `UPDATE cluster_metadata SET mutable_data = ?, mutable_data_encoding = ? WHERE metadata_partition = ?`
+	updateClusterMetadataQry = `UPDATE cluster_metadata SET data = ?, data_encoding = ? WHERE metadata_partition = ?`
 
 	getImmutableClusterMetadataQry = `SELECT immutable_data, immutable_data_encoding FROM 
 cluster_metadata WHERE metadata_partition = ?`
@@ -83,8 +83,8 @@ func (mdb *db) InsertIfNotExistsIntoClusterMetadata(row *sqlplugin.ClusterMetada
 		row.ImmutableDataEncoding)
 }
 
-func (mdb *db) UpdateMutableClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Result, error) {
-	return mdb.conn.Exec(updateMutableClusterMetadataQry,
+func (mdb *db) UpdateClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Result, error) {
+	return mdb.conn.Exec(updateClusterMetadataQry,
 		row.MutableData,
 		row.MutableDataEncoding,
 		constMetadataPartition)

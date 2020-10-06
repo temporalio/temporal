@@ -93,26 +93,26 @@ func (s *sqlClusterMetadataManager) GetImmutableClusterMetadata() (*p.InternalGe
 	}, nil
 }
 
-func (s *sqlClusterMetadataManager) GetMutableClusterMetadata() (*p.InternalGetMutableClusterMetadataResponse, error) {
+func (s *sqlClusterMetadataManager) GetClusterMetadata() (*p.InternalGetClusterMetadataResponse, error) {
 	row, err := s.db.GetClusterMetadata()
 
 	if err != nil {
-		return nil, convertCommonErrors("GetMutableClusterMetadata", err)
+		return nil, convertCommonErrors("GetClusterMetadata", err)
 	}
 
-	return &p.InternalGetMutableClusterMetadataResponse{
-		MutableClusterMetadata: p.NewDataBlob(row.MutableData, row.MutableDataEncoding),
+	return &p.InternalGetClusterMetadataResponse{
+		ClusterMetadata: p.NewDataBlob(row.MutableData, row.MutableDataEncoding),
 	}, nil
 }
 
-func (s *sqlClusterMetadataManager) UpdateMutableClusterMetadata(request *p.InternalUpdateMutableClusterMetadataRequest) error {
-	_, err := s.db.UpdateMutableClusterMetadata(&sqlplugin.ClusterMetadataRow{
-		MutableData:         request.MutableClusterMetadata.Data,
-		MutableDataEncoding: request.MutableClusterMetadata.Encoding.String(),
+func (s *sqlClusterMetadataManager) UpdateClusterMetadata(request *p.InternalUpdateClusterMetadataRequest) error {
+	_, err := s.db.UpdateClusterMetadata(&sqlplugin.ClusterMetadataRow{
+		MutableData:         request.ClusterMetadata.Data,
+		MutableDataEncoding: request.ClusterMetadata.Encoding.String(),
 	})
 
 	if err != nil {
-		return convertCommonErrors("UpdateMutableClusterMetadata", err)
+		return convertCommonErrors("UpdateClusterMetadata", err)
 	}
 
 	return nil

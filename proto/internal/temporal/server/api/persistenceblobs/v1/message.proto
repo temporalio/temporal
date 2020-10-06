@@ -69,7 +69,7 @@ message Alert {
 }
 
 // ClusterMetadata contains mutable cluster configuration and metadata.
-message MutableClusterMetadata {
+message ClusterMetadata {
     ReleaseInfo current = 1;
     ReleaseInfo recommended = 2;
     string instructions = 3;

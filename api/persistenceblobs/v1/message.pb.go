@@ -282,24 +282,24 @@ func (m *Alert) GetSeverity() int32 {
 }
 
 // ClusterMetadata contains mutable cluster configuration and metadata.
-type MutableClusterMetadata struct {
+type ClusterMetadata struct {
 	Current      *ReleaseInfo `protobuf:"bytes,1,opt,name=current,proto3" json:"current,omitempty"`
 	Recommended  *ReleaseInfo `protobuf:"bytes,2,opt,name=recommended,proto3" json:"recommended,omitempty"`
 	Instructions string       `protobuf:"bytes,3,opt,name=instructions,proto3" json:"instructions,omitempty"`
 	Alerts       []*Alert     `protobuf:"bytes,4,rep,name=alerts,proto3" json:"alerts,omitempty"`
 }
 
-func (m *MutableClusterMetadata) Reset()      { *m = MutableClusterMetadata{} }
-func (*MutableClusterMetadata) ProtoMessage() {}
-func (*MutableClusterMetadata) Descriptor() ([]byte, []int) {
+func (m *ClusterMetadata) Reset()      { *m = ClusterMetadata{} }
+func (*ClusterMetadata) ProtoMessage() {}
+func (*ClusterMetadata) Descriptor() ([]byte, []int) {
 	return fileDescriptor_ef806e155800e59a, []int{4}
 }
-func (m *MutableClusterMetadata) XXX_Unmarshal(b []byte) error {
+func (m *ClusterMetadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *MutableClusterMetadata) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ClusterMetadata) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_MutableClusterMetadata.Marshal(b, m, deterministic)
+		return xxx_messageInfo_ClusterMetadata.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -309,40 +309,40 @@ func (m *MutableClusterMetadata) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return b[:n], nil
 	}
 }
-func (m *MutableClusterMetadata) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MutableClusterMetadata.Merge(m, src)
+func (m *ClusterMetadata) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ClusterMetadata.Merge(m, src)
 }
-func (m *MutableClusterMetadata) XXX_Size() int {
+func (m *ClusterMetadata) XXX_Size() int {
 	return m.Size()
 }
-func (m *MutableClusterMetadata) XXX_DiscardUnknown() {
-	xxx_messageInfo_MutableClusterMetadata.DiscardUnknown(m)
+func (m *ClusterMetadata) XXX_DiscardUnknown() {
+	xxx_messageInfo_ClusterMetadata.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_MutableClusterMetadata proto.InternalMessageInfo
+var xxx_messageInfo_ClusterMetadata proto.InternalMessageInfo
 
-func (m *MutableClusterMetadata) GetCurrent() *ReleaseInfo {
+func (m *ClusterMetadata) GetCurrent() *ReleaseInfo {
 	if m != nil {
 		return m.Current
 	}
 	return nil
 }
 
-func (m *MutableClusterMetadata) GetRecommended() *ReleaseInfo {
+func (m *ClusterMetadata) GetRecommended() *ReleaseInfo {
 	if m != nil {
 		return m.Recommended
 	}
 	return nil
 }
 
-func (m *MutableClusterMetadata) GetInstructions() string {
+func (m *ClusterMetadata) GetInstructions() string {
 	if m != nil {
 		return m.Instructions
 	}
 	return ""
 }
 
-func (m *MutableClusterMetadata) GetAlerts() []*Alert {
+func (m *ClusterMetadata) GetAlerts() []*Alert {
 	if m != nil {
 		return m.Alerts
 	}
@@ -2914,7 +2914,7 @@ func init() {
 	proto.RegisterType((*ImmutableClusterMetadata)(nil), "temporal.server.api.persistenceblobs.v1.ImmutableClusterMetadata")
 	proto.RegisterType((*ReleaseInfo)(nil), "temporal.server.api.persistenceblobs.v1.ReleaseInfo")
 	proto.RegisterType((*Alert)(nil), "temporal.server.api.persistenceblobs.v1.Alert")
-	proto.RegisterType((*MutableClusterMetadata)(nil), "temporal.server.api.persistenceblobs.v1.MutableClusterMetadata")
+	proto.RegisterType((*ClusterMetadata)(nil), "temporal.server.api.persistenceblobs.v1.ClusterMetadata")
 	proto.RegisterType((*ActivityInfo)(nil), "temporal.server.api.persistenceblobs.v1.ActivityInfo")
 	proto.RegisterType((*ShardInfo)(nil), "temporal.server.api.persistenceblobs.v1.ShardInfo")
 	proto.RegisterMapType((map[string]int64)(nil), "temporal.server.api.persistenceblobs.v1.ShardInfo.ClusterReplicationLevelEntry")
@@ -3325,14 +3325,14 @@ func (this *Alert) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *MutableClusterMetadata) Equal(that interface{}) bool {
+func (this *ClusterMetadata) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*MutableClusterMetadata)
+	that1, ok := that.(*ClusterMetadata)
 	if !ok {
-		that2, ok := that.(MutableClusterMetadata)
+		that2, ok := that.(ClusterMetadata)
 		if ok {
 			that1 = &that2
 		} else {
@@ -4767,12 +4767,12 @@ func (this *Alert) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *MutableClusterMetadata) GoString() string {
+func (this *ClusterMetadata) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 8)
-	s = append(s, "&persistenceblobs.MutableClusterMetadata{")
+	s = append(s, "&persistenceblobs.ClusterMetadata{")
 	if this.Current != nil {
 		s = append(s, "Current: "+fmt.Sprintf("%#v", this.Current)+",\n")
 	}
@@ -5496,7 +5496,7 @@ func (m *Alert) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *MutableClusterMetadata) Marshal() (dAtA []byte, err error) {
+func (m *ClusterMetadata) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -5506,12 +5506,12 @@ func (m *MutableClusterMetadata) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *MutableClusterMetadata) MarshalTo(dAtA []byte) (int, error) {
+func (m *ClusterMetadata) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *MutableClusterMetadata) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *ClusterMetadata) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7968,7 +7968,7 @@ func (m *Alert) Size() (n int) {
 	return n
 }
 
-func (m *MutableClusterMetadata) Size() (n int) {
+func (m *ClusterMetadata) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -9085,7 +9085,7 @@ func (this *Alert) String() string {
 	}, "")
 	return s
 }
-func (this *MutableClusterMetadata) String() string {
+func (this *ClusterMetadata) String() string {
 	if this == nil {
 		return "nil"
 	}
@@ -9094,7 +9094,7 @@ func (this *MutableClusterMetadata) String() string {
 		repeatedStringForAlerts += strings.Replace(f.String(), "Alert", "Alert", 1) + ","
 	}
 	repeatedStringForAlerts += "}"
-	s := strings.Join([]string{`&MutableClusterMetadata{`,
+	s := strings.Join([]string{`&ClusterMetadata{`,
 		`Current:` + strings.Replace(this.Current.String(), "ReleaseInfo", "ReleaseInfo", 1) + `,`,
 		`Recommended:` + strings.Replace(this.Recommended.String(), "ReleaseInfo", "ReleaseInfo", 1) + `,`,
 		`Instructions:` + fmt.Sprintf("%v", this.Instructions) + `,`,
@@ -10075,7 +10075,7 @@ func (m *Alert) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *MutableClusterMetadata) Unmarshal(dAtA []byte) error {
+func (m *ClusterMetadata) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -10098,10 +10098,10 @@ func (m *MutableClusterMetadata) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: MutableClusterMetadata: wiretype end group for non-group")
+			return fmt.Errorf("proto: ClusterMetadata: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: MutableClusterMetadata: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: ClusterMetadata: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
