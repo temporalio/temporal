@@ -40,23 +40,23 @@ type (
 	// tableCRUD defines the API for interacting with the database tables
 	tableCRUD interface {
 		clusterMetadata
-		namespace
+		Namespace
 		visibility
 		queue
 
 		MatchingTask
 		MatchingTaskQueue
 
-		historyShard
+		HistoryShard
 		historyEvent
 		historyExecution
-		historyExecutionBuffer
-		historyExecutionActivity
-		historyExecutionChildWorkflow
-		historyExecutionTimer
-		historyExecutionRequestCancel
-		historyExecutionSignal
-		historyExecutionSignalRequest
+		HistoryExecutionBuffer
+		HistoryExecutionActivity
+		HistoryExecutionChildWorkflow
+		HistoryExecutionTimer
+		HistoryExecutionRequestCancel
+		HistoryExecutionSignal
+		HistoryExecutionSignalRequest
 		historyTransferTask
 		historyTimerTask
 		historyReplicationTask

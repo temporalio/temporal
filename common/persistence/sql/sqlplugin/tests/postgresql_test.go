@@ -31,6 +31,23 @@ const (
 	testPostgreSQLSchema = "../../../../../schema/postgresql/temporal/schema.sql"
 )
 
+func TestPostgreSQLNamespaceSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create PostgreSQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newNamespaceSuite(t, store)
+	suite.Run(t, s)
+}
+
 func TestPostgreSQLMatchingTaskSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
@@ -62,6 +79,91 @@ func TestPostgreSQLMatchingTaskQueueSuite(t *testing.T) {
 	}()
 
 	s := newMatchingTaskQueueSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestPostgreSQLHistoryShardSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newHistoryShardSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestPostgreSQLHistoryExecutionBufferSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newHistoryExecutionBufferSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestPostgreSQLHistoryExecutionActivitySuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newHistoryExecutionActivitySuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestPostgreSQLHistoryExecutionChildWorkflowSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newHistoryExecutionChildWorkflowSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestPostgreSQLHistoryExecutionTimerSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newHistoryExecutionTimerSuite(t, store)
 	suite.Run(t, s)
 }
 

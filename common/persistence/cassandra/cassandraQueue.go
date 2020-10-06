@@ -329,7 +329,7 @@ func (q *cassandraQueue) insertInitialQueueMetadataRecord(
 	version := 0
 	clusterAckLevels := map[string]int64{}
 	query := q.session.Query(templateInsertQueueMetadataQuery, queueType, clusterAckLevels, version)
-	_, err := query.ScanCAS()
+	_, err := query.ScanCAS(nil, nil, nil)
 	if err != nil {
 		return fmt.Errorf("failed to insert initial queue metadata record: %v, Type: %v", err, queueType)
 	}
