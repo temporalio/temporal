@@ -36,7 +36,6 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	l "go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/service/config"
@@ -135,7 +134,7 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) *grpc.ClientConn {
 		// TODO: should be GetFrontendClientConfig(), but it's currently not working
 		tlsClientConfig, err = provider.GetFrontendServerConfig()
 		if err != nil {
-			log.Fatalf("Failed to create tls config for grpc connection", tag.Error(err))
+			log.Fatalf("Failed to create tls config for grpc connection, err=%v", err)
 		}
 	}
 	connection, err := rpc.Dial(hostPort, tlsClientConfig)
