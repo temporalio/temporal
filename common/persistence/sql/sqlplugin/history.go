@@ -44,31 +44,6 @@ type (
 		DeleteFromHistoryTree(filter *HistoryTreeFilter) (sql.Result, error)
 	}
 
-	// HistoryExecution is the SQL persistence interface for history nodes and history executions
-	HistoryExecution interface {
-		InsertIntoExecutions(row *ExecutionsRow) (sql.Result, error)
-		UpdateExecutions(row *ExecutionsRow) (sql.Result, error)
-		SelectFromExecutions(filter *ExecutionsFilter) (*ExecutionsRow, error)
-		DeleteFromExecutions(filter *ExecutionsFilter) (sql.Result, error)
-		ReadLockExecutions(filter *ExecutionsFilter) (int, error)
-		WriteLockExecutions(filter *ExecutionsFilter) (int, error)
-
-		LockCurrentExecutionsJoinExecutions(filter *CurrentExecutionsFilter) ([]CurrentExecutionsRow, error)
-
-		InsertIntoCurrentExecutions(row *CurrentExecutionsRow) (sql.Result, error)
-		UpdateCurrentExecutions(row *CurrentExecutionsRow) (sql.Result, error)
-		// SelectFromCurrentExecutions returns one or more rows from current_executions table
-		// Required params - {shardID, namespaceID, workflowID}
-		SelectFromCurrentExecutions(filter *CurrentExecutionsFilter) (*CurrentExecutionsRow, error)
-		// DeleteFromCurrentExecutions deletes a single row that matches the filter criteria
-		// If a row exist, that row will be deleted and this method will return success
-		// If there is no row matching the filter criteria, this method will still return success
-		// Callers can check the output of Result.RowsAffected() to see if a row was deleted or not
-		// Required params - {shardID, namespaceID, workflowID, runID}
-		DeleteFromCurrentExecutions(filter *CurrentExecutionsFilter) (sql.Result, error)
-		LockCurrentExecutions(filter *CurrentExecutionsFilter) (*CurrentExecutionsRow, error)
-	}
-
 	// HistoryExecutionBuffer is the SQL persistence interface for history nodes and history execution buffer events
 	HistoryExecutionBuffer interface {
 		InsertIntoBufferedEvents(rows []BufferedEventsRow) (sql.Result, error)

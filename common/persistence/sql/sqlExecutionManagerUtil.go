@@ -512,8 +512,9 @@ func lockCurrentExecutionIfExists(
 	workflowID string,
 ) (*sqlplugin.CurrentExecutionsRow, error) {
 
-	rows, err := tx.LockCurrentExecutionsJoinExecutions(&sqlplugin.CurrentExecutionsFilter{
-		ShardID: shardID, NamespaceID: namespaceID, WorkflowID: workflowID})
+	rows, err := tx.LockCurrentExecutionsJoinExecutions(sqlplugin.CurrentExecutionsFilter{
+		ShardID: shardID, NamespaceID: namespaceID, WorkflowID: workflowID,
+	})
 	if err != nil {
 		if err != sql.ErrNoRows {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("lockCurrentExecutionIfExists failed. Failed to get current_executions row for (shard,namespace,workflow) = (%v, %v, %v). Error: %v", shardID, namespaceID, workflowID, err))
@@ -624,7 +625,7 @@ func lockNextEventID(
 	runID primitives.UUID,
 ) (*int64, error) {
 
-	nextEventID, err := tx.WriteLockExecutions(&sqlplugin.ExecutionsFilter{
+	nextEventID, err := tx.WriteLockExecutions(sqlplugin.ExecutionsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -922,7 +923,7 @@ func assertNotCurrentExecution(
 	workflowID string,
 	runID primitives.UUID,
 ) error {
-	currentRow, err := tx.LockCurrentExecutions(&sqlplugin.CurrentExecutionsFilter{
+	currentRow, err := tx.LockCurrentExecutions(sqlplugin.CurrentExecutionsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -976,7 +977,7 @@ func assertCurrentExecution(
 	assertFn func(currentRow *sqlplugin.CurrentExecutionsRow) error,
 ) error {
 
-	currentRow, err := tx.LockCurrentExecutions(&sqlplugin.CurrentExecutionsFilter{
+	currentRow, err := tx.LockCurrentExecutions(sqlplugin.CurrentExecutionsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,

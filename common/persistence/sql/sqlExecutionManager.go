@@ -216,8 +216,9 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.Execution.RunId)
 	wfID := request.Execution.WorkflowId
-	executionsRow, err := m.db.SelectFromExecutions(&sqlplugin.ExecutionsFilter{
-		ShardID: m.shardID, NamespaceID: namespaceID, WorkflowID: wfID, RunID: runID})
+	executionsRow, err := m.db.SelectFromExecutions(sqlplugin.ExecutionsFilter{
+		ShardID: m.shardID, NamespaceID: namespaceID, WorkflowID: wfID, RunID: runID,
+	})
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -629,7 +630,7 @@ func (m *sqlExecutionManager) DeleteWorkflowExecution(
 
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.RunID)
-	_, err := m.db.DeleteFromExecutions(&sqlplugin.ExecutionsFilter{
+	_, err := m.db.DeleteFromExecutions(sqlplugin.ExecutionsFilter{
 		ShardID:     m.shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  request.WorkflowID,
@@ -648,7 +649,7 @@ func (m *sqlExecutionManager) DeleteCurrentWorkflowExecution(
 
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.RunID)
-	_, err := m.db.DeleteFromCurrentExecutions(&sqlplugin.CurrentExecutionsFilter{
+	_, err := m.db.DeleteFromCurrentExecutions(sqlplugin.CurrentExecutionsFilter{
 		ShardID:     m.shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  request.WorkflowID,
@@ -661,7 +662,7 @@ func (m *sqlExecutionManager) GetCurrentExecution(
 	request *p.GetCurrentExecutionRequest,
 ) (*p.GetCurrentExecutionResponse, error) {
 
-	row, err := m.db.SelectFromCurrentExecutions(&sqlplugin.CurrentExecutionsFilter{
+	row, err := m.db.SelectFromCurrentExecutions(sqlplugin.CurrentExecutionsFilter{
 		ShardID:     m.shardID,
 		NamespaceID: primitives.MustParseUUID(request.NamespaceID),
 		WorkflowID:  request.WorkflowID,

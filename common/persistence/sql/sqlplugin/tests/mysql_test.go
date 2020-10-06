@@ -122,6 +122,40 @@ func TestMySQLHistoryShardSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestMySQLHistoryCurrentExecutionSuite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(cfg)
+	SetupMySQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(cfg)
+	}()
+
+	s := newHistoryCurrentExecutionSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestMySQLHistoryExecutionSuite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(cfg)
+	SetupMySQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(cfg)
+	}()
+
+	s := newHistoryExecutionSuite(t, store)
+	suite.Run(t, s)
+}
+
 func TestMySQLHistoryTransferTaskSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(cfg)
