@@ -70,6 +70,7 @@ var keys = map[Key]string{
 	DisallowQuery:                       "system.disallowQuery",
 	EnableBatcher:                       "worker.enableBatcher",
 	EnableParentClosePolicyWorker:       "system.enableParentClosePolicyWorker",
+	EnableFailoverManager:               "system.enableFailoverManager",
 	EnableStickyQuery:                   "system.enableStickyQuery",
 	EnablePriorityTaskProcessor:         "system.enablePriorityTaskProcessor",
 	EnableAuthorization:                 "system.enableAuthorization",
@@ -848,6 +849,8 @@ const (
 	EnableParentClosePolicyWorker
 	// EnableStickyQuery indicates if sticky query should be enabled per domain
 	EnableStickyQuery
+	// EnableFailoverManager indicates if failover manager is enabled
+	EnableFailoverManager
 
 	//ReplicationTaskFetcherParallelism determines how many go routines we spin up for fetching tasks
 	ReplicationTaskFetcherParallelism

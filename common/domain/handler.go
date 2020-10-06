@@ -426,7 +426,7 @@ func (d *HandlerImpl) UpdateDomain(
 		return nil, err
 	}
 
-	//Update replication config
+	// Update replication config
 	replicationConfig, replicationConfigChanged, activeClusterChanged, err := d.updateReplicationConfig(
 		replicationConfig,
 		updateRequest.ReplicationConfiguration,
