@@ -25,6 +25,9 @@
 package cli
 
 import (
+	"crypto/tls"
+	"log"
+
 	"github.com/urfave/cli"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -32,8 +35,11 @@ import (
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/common/log"
+	l "go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/service/config"
 )
 
 // ClientFactory is used to construct rpc clients
@@ -61,14 +67,14 @@ func NewClientFactory() ClientFactory {
 
 // FrontendClient builds a frontend client
 func (b *clientFactory) FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient {
-	connection := b.createGRPCConnection(c.GlobalString(FlagAddress))
+	connection := b.createGRPCConnection(c)
 
 	return workflowservice.NewWorkflowServiceClient(connection)
 }
 
 // AdminClient builds an admin client (based on server side thrift interface)
 func (b *clientFactory) AdminClient(c *cli.Context) adminservice.AdminServiceClient {
-	connection := b.createGRPCConnection(c.GlobalString(FlagAddress))
+	connection := b.createGRPCConnection(c)
 
 	return adminservice.NewAdminServiceClient(connection)
 }
@@ -83,7 +89,7 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
 		HostPort:  hostPort,
 		Namespace: namespace,
-		Logger:    log.NewZapAdapter(b.logger),
+		Logger:    l.NewZapAdapter(b.logger),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			DisableHealthCheck: true,
 		},
@@ -95,16 +101,47 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 	return sdkClient
 }
 
-func (b *clientFactory) createGRPCConnection(hostPort string) *grpc.ClientConn {
+func (b *clientFactory) createGRPCConnection(c *cli.Context) *grpc.ClientConn {
+	hostPort := c.GlobalString(FlagAddress)
 	if hostPort == "" {
 		hostPort = localHostPort
 	}
 
-	connection, err := rpc.Dial(hostPort, nil)
+	var tlsClientConfig *tls.Config
+
+	certPath := c.GlobalString(FlagTLSCertPath)
+	keyPath := c.GlobalString(FlagTLSKeyPath)
+	caPath := c.GlobalString(FlagTLSCaPath)
+
+	if caPath != "" {
+		tlsConfig := config.RootTLS{
+			Frontend: config.GroupTLS{
+				Server: config.ServerTLS{
+					CertFile:          certPath,
+					KeyFile:           keyPath,
+					ClientCAFiles:     []string{caPath},
+					RequireClientAuth: false,
+				},
+				Client: config.ClientTLS{
+					RootCAFiles: []string{caPath},
+					ServerName:  "localhost",
+				},
+			},
+		}
+		provider, err := encryption.NewLocalStoreTlsProvider(&tlsConfig)
+		if err != nil {
+			log.Fatalf("error initializing TLS provider: %v", err)
+		}
+		// TODO: should be GetFrontendClientConfig(), but it's currently not working
+		tlsClientConfig, err = provider.GetFrontendServerConfig()
+		if err != nil {
+			log.Fatalf("Failed to create tls config for grpc connection", tag.Error(err))
+		}
+	}
+	connection, err := rpc.Dial(hostPort, tlsClientConfig)
 	if err != nil {
 		b.logger.Fatal("Failed to create connection", zap.Error(err))
 		return nil
 	}
-
 	return connection
 }
