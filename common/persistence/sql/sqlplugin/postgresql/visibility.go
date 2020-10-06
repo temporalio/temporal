@@ -115,7 +115,7 @@ var errCloseParams = errors.New("missing one of {closeTime, historyLength} param
 // InsertIntoVisibility inserts a row into visibility table. If an row already exist,
 // its left as such and no update will be made
 func (pdb *db) InsertIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, error) {
-	row.StartTime = pdb.converter.ToPostgresDateTime(row.StartTime)
+	row.StartTime = pdb.converter.ToPostgreSQLDateTime(row.StartTime)
 	return pdb.conn.Exec(templateCreateWorkflowExecutionStarted,
 		row.NamespaceID,
 		row.WorkflowID,
@@ -132,8 +132,8 @@ func (pdb *db) InsertIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, e
 func (pdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, error) {
 	switch {
 	case row.CloseTime != nil && row.HistoryLength != nil:
-		row.StartTime = pdb.converter.ToPostgresDateTime(row.StartTime)
-		closeTime := pdb.converter.ToPostgresDateTime(*row.CloseTime)
+		row.StartTime = pdb.converter.ToPostgreSQLDateTime(row.StartTime)
+		closeTime := pdb.converter.ToPostgreSQLDateTime(*row.CloseTime)
 		return pdb.conn.Exec(templateCreateWorkflowExecutionClosed,
 			row.NamespaceID,
 			row.WorkflowID,
@@ -161,10 +161,10 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 	var err error
 	var rows []sqlplugin.VisibilityRow
 	if filter.MinStartTime != nil {
-		*filter.MinStartTime = pdb.converter.ToPostgresDateTime(*filter.MinStartTime)
+		*filter.MinStartTime = pdb.converter.ToPostgreSQLDateTime(*filter.MinStartTime)
 	}
 	if filter.MaxStartTime != nil {
-		*filter.MaxStartTime = pdb.converter.ToPostgresDateTime(*filter.MaxStartTime)
+		*filter.MaxStartTime = pdb.converter.ToPostgreSQLDateTime(*filter.MaxStartTime)
 	}
 	// If filter.Status == 0 (UNSPECIFIED) then only closed workflows will be returned (all excluding 1 (RUNNING)).
 	switch {
@@ -183,8 +183,8 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			qry,
 			*filter.WorkflowID,
 			filter.NamespaceID,
-			pdb.converter.ToPostgresDateTime(*filter.MinStartTime),
-			pdb.converter.ToPostgresDateTime(*filter.MaxStartTime),
+			pdb.converter.ToPostgreSQLDateTime(*filter.MinStartTime),
+			pdb.converter.ToPostgreSQLDateTime(*filter.MaxStartTime),
 			*filter.RunID,
 			*filter.MaxStartTime,
 			*filter.MaxStartTime,
@@ -198,8 +198,8 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			qry,
 			*filter.WorkflowTypeName,
 			filter.NamespaceID,
-			pdb.converter.ToPostgresDateTime(*filter.MinStartTime),
-			pdb.converter.ToPostgresDateTime(*filter.MaxStartTime),
+			pdb.converter.ToPostgreSQLDateTime(*filter.MinStartTime),
+			pdb.converter.ToPostgreSQLDateTime(*filter.MaxStartTime),
 			*filter.RunID,
 			*filter.MaxStartTime,
 			*filter.MaxStartTime,
@@ -209,19 +209,19 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			templateGetClosedWorkflowExecutionsByStatus,
 			filter.Status,
 			filter.NamespaceID,
-			pdb.converter.ToPostgresDateTime(*filter.MinStartTime),
-			pdb.converter.ToPostgresDateTime(*filter.MaxStartTime),
+			pdb.converter.ToPostgreSQLDateTime(*filter.MinStartTime),
+			pdb.converter.ToPostgreSQLDateTime(*filter.MaxStartTime),
 			*filter.RunID,
-			pdb.converter.ToPostgresDateTime(*filter.MaxStartTime),
-			pdb.converter.ToPostgresDateTime(*filter.MaxStartTime),
+			pdb.converter.ToPostgreSQLDateTime(*filter.MaxStartTime),
+			pdb.converter.ToPostgreSQLDateTime(*filter.MaxStartTime),
 			*filter.PageSize)
 	case filter.MinStartTime != nil:
 		qry := templateGetOpenWorkflowExecutions
 		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutions
 		}
-		minSt := pdb.converter.ToPostgresDateTime(*filter.MinStartTime)
-		maxSt := pdb.converter.ToPostgresDateTime(*filter.MaxStartTime)
+		minSt := pdb.converter.ToPostgreSQLDateTime(*filter.MinStartTime)
+		maxSt := pdb.converter.ToPostgreSQLDateTime(*filter.MaxStartTime)
 		err = pdb.conn.Select(&rows,
 			qry,
 			filter.NamespaceID,
@@ -238,10 +238,10 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 		return nil, err
 	}
 	for i := range rows {
-		rows[i].StartTime = pdb.converter.FromPostgresDateTime(rows[i].StartTime)
-		rows[i].ExecutionTime = pdb.converter.FromPostgresDateTime(rows[i].ExecutionTime)
+		rows[i].StartTime = pdb.converter.FromPostgreSQLDateTime(rows[i].StartTime)
+		rows[i].ExecutionTime = pdb.converter.FromPostgreSQLDateTime(rows[i].ExecutionTime)
 		if rows[i].CloseTime != nil {
-			closeTime := pdb.converter.FromPostgresDateTime(*rows[i].CloseTime)
+			closeTime := pdb.converter.FromPostgreSQLDateTime(*rows[i].CloseTime)
 			rows[i].CloseTime = &closeTime
 		}
 		rows[i].RunID = strings.TrimSpace(rows[i].RunID)

@@ -26,41 +26,42 @@ package postgresql
 
 import "time"
 
-var localZone, _ = time.Now().UTC().Zone()
-var localOffset = getLocalOffset()
+var (
+	minPostgreSQLDateTime = getMinPostgreSQLDateTime()
+)
 
 type (
 	// DataConverter defines the API for conversions to/from
-	// go types to postgresql datatypes
-	// TODO https://github.com/uber/cadence/issues/2892
-	// There are some reasons:
-	//r application layer is not consistent with timezone: for example,
-	// in some case we write timestamp with local timezone but when the time.Time
-	// is converted from "JSON"(from paging token), the timezone is missing
+	// go types to mysql datatypes
 	DataConverter interface {
-		ToPostgresDateTime(t time.Time) time.Time
-		FromPostgresDateTime(t time.Time) time.Time
+		ToPostgreSQLDateTime(t time.Time) time.Time
+		FromPostgreSQLDateTime(t time.Time) time.Time
 	}
 	converter struct{}
 )
 
-// ToPostgresDateTime converts to time to Postgres datetime
-func (c *converter) ToPostgresDateTime(t time.Time) time.Time {
-	zn, _ := t.Zone()
-	if zn != localZone {
-		nano := t.UnixNano()
-		t := time.Unix(0, nano).UTC()
-		return t
+// ToPostgreSQLDateTime converts to time to PostgreSQL datetime
+func (c *converter) ToPostgreSQLDateTime(t time.Time) time.Time {
+	if t.IsZero() {
+		return minPostgreSQLDateTime
 	}
-	return t
+	return t.UTC()
 }
 
-// FromPostgresDateTime converts postgresql datetime and returns go time
-func (c *converter) FromPostgresDateTime(t time.Time) time.Time {
-	return t.Add(-localOffset)
+// FromPostgreSQLDateTime converts postgresql datetime and returns go time
+func (c *converter) FromPostgreSQLDateTime(t time.Time) time.Time {
+	// NOTE: PostgreSQL will preserve the location of time in a
+	//  weird way, here need to call UTC to remove the time location
+	if t.Equal(minPostgreSQLDateTime) {
+		return time.Time{}.UTC()
+	}
+	return t.UTC()
 }
 
-func getLocalOffset() time.Duration {
-	_, offsetSecs := time.Now().UTC().Zone()
-	return time.Duration(offsetSecs) * time.Second
+func getMinPostgreSQLDateTime() time.Time {
+	t, err := time.Parse(time.RFC3339, "1000-01-01T00:00:00Z")
+	if err != nil {
+		return time.Unix(0, 0).UTC()
+	}
+	return t.UTC()
 }

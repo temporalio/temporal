@@ -49,7 +49,7 @@ type (
 
 		HistoryShard
 		historyEvent
-		historyExecution
+		HistoryExecution
 		HistoryExecutionBuffer
 		HistoryExecutionActivity
 		HistoryExecutionChildWorkflow
@@ -57,9 +57,9 @@ type (
 		HistoryExecutionRequestCancel
 		HistoryExecutionSignal
 		HistoryExecutionSignalRequest
-		historyTransferTask
-		historyTimerTask
-		historyReplicationTask
+		HistoryTransferTask
+		HistoryTimerTask
+		HistoryReplicationTask
 	}
 
 	// adminCRUD defines admin operations for CLI and test suites

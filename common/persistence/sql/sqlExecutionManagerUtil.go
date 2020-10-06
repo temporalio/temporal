@@ -669,7 +669,7 @@ func createTransferTasks(
 			TaskId:            task.GetTaskID(),
 		}
 
-		transferTasksRows[i].ShardID = shardID
+		transferTasksRows[i].ShardID = int32(shardID)
 		transferTasksRows[i].TaskID = task.GetTaskID()
 
 		switch task.GetType() {
@@ -807,7 +807,7 @@ func createReplicationTasks(
 		if err != nil {
 			return err
 		}
-		replicationTasksRows[i].ShardID = shardID
+		replicationTasksRows[i].ShardID = int32(shardID)
 		replicationTasksRows[i].TaskID = task.GetTaskID()
 		replicationTasksRows[i].Data = blob.Data
 		replicationTasksRows[i].DataEncoding = blob.Encoding.String()
@@ -891,7 +891,7 @@ func createTimerTasks(
 				return err
 			}
 
-			timerTasksRows[i].ShardID = shardID
+			timerTasksRows[i].ShardID = int32(shardID)
 			timerTasksRows[i].VisibilityTimestamp = *goVisTs
 			timerTasksRows[i].TaskID = task.GetTaskID()
 			timerTasksRows[i].Data = blob.Data
