@@ -45,15 +45,15 @@ func (c *converter) ToMySQLDateTime(t time.Time) time.Time {
 	if t.IsZero() {
 		return minMySQLDateTime
 	}
-	return t
+	return t.UTC()
 }
 
 // FromMySQLDateTime converts mysql datetime and returns go time
 func (c *converter) FromMySQLDateTime(t time.Time) time.Time {
 	if t.Equal(minMySQLDateTime) {
-		return time.Time{}
+		return time.Time{}.UTC()
 	}
-	return t
+	return t.UTC()
 }
 
 func getMinMySQLDateTime() time.Time {
@@ -61,5 +61,5 @@ func getMinMySQLDateTime() time.Time {
 	if err != nil {
 		return time.Unix(0, 0).UTC()
 	}
-	return t
+	return t.UTC()
 }
