@@ -192,7 +192,7 @@ func (m *cassandraClusterMetadata) GetMutableClusterMetadata() (*p.InternalGetMu
 	var encoding string
 	err := query.Scan(&mutableMetadata, &encoding)
 	if err != nil {
-		return nil, convertCommonErrors("GetImmutableClusterMetadata", err)
+		return nil, convertCommonErrors("GetMutableClusterMetadata", err)
 	}
 
 	return &p.InternalGetMutableClusterMetadataResponse{
