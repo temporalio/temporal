@@ -1,0 +1,12 @@
+# Include this file to run Prometheus as one more dependency:
+# docker-compose -f docker-compose.yml -f docker-compose.linux.yml -f docker-compose.prometheus.yml up
+version: "3.5"
+
+services:
+  prometheus:
+    image: prom/prometheus
+    container_name: temporal-prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - temporal-dependencies-network

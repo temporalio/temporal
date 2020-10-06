@@ -1,7 +1,9 @@
-# Runs all Temporal service dependencies.
-# Useful for integration testing.
-
+# Runs all required Temporal service dependencies.
+# Use to run service locally or run integration tests.
+# Include platform specific file also:
+# docker-compose -f docker-compose.yml -f docker-compose.linux.yml up
 version: "3.5"
+
 services:
   mysql:
     image: mysql:5.7
