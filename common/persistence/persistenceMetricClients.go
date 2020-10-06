@@ -1413,6 +1413,34 @@ func (c *clusterMetadataPersistenceClient) GetImmutableClusterMetadata() (*GetIm
 	return result, err
 }
 
+func (c *clusterMetadataPersistenceClient) GetMutableClusterMetadata() (*GetMutableClusterMetadataResponse, error) {
+	c.metricClient.IncCounter(metrics.PersistenceGetMutableClusterMetadataScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistenceGetMutableClusterMetadataScope, metrics.PersistenceLatency)
+	result, err := c.persistence.GetMutableClusterMetadata()
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistenceGetMutableClusterMetadataScope, metrics.PersistenceFailures)
+	}
+
+	return result, err
+}
+
+func (c *clusterMetadataPersistenceClient) UpdateMutableClusterMetadata(request *UpdateMutableClusterMetadataRequest) error {
+	c.metricClient.IncCounter(metrics.PersistenceUpdateMutableClusterMetadataScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistenceUpdateMutableClusterMetadataScope, metrics.PersistenceLatency)
+	err := c.persistence.UpdateMutableClusterMetadata(request)
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistenceUpdateMutableClusterMetadataScope, metrics.PersistenceFailures)
+	}
+
+	return err
+}
+
 func (c *clusterMetadataPersistenceClient) GetName() string {
 	return c.persistence.GetName()
 }

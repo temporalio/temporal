@@ -38,6 +38,8 @@ type (
 	ClusterMetadataRow struct {
 		ImmutableData         []byte
 		ImmutableDataEncoding string
+		MutableData           []byte
+		MutableDataEncoding   string
 	}
 
 	// ClusterMembershipRow represents a row in the cluster_membership table

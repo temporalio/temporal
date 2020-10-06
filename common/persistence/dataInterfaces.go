@@ -1187,6 +1187,15 @@ type (
 		persistenceblobs.ImmutableClusterMetadata
 	}
 
+	// GetMutableClusterMetadataResponse is the response to GetMutableClusterMetadata
+	GetMutableClusterMetadataResponse struct {
+		persistenceblobs.MutableClusterMetadata
+	}
+
+	UpdateMutableClusterMetadataRequest struct {
+		persistenceblobs.MutableClusterMetadata
+	}
+
 	// GetClusterMembersRequest is the response to GetClusterMembers
 	GetClusterMembersRequest struct {
 		LastHeartbeatWithin time.Duration
@@ -1366,6 +1375,8 @@ type (
 		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
+		GetMutableClusterMetadata() (*GetMutableClusterMetadataResponse, error)
+		UpdateMutableClusterMetadata(request *UpdateMutableClusterMetadataRequest) error
 	}
 )
 

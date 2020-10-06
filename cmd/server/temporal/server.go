@@ -25,6 +25,7 @@
 package temporal
 
 import (
+	"github.com/pborman/uuid"
 	"log"
 	"time"
 
@@ -306,6 +307,7 @@ func immutableClusterMetadataInitialization(
 			ImmutableClusterMetadata: persistenceblobs.ImmutableClusterMetadata{
 				HistoryShardCount: int32(persistenceConfig.NumHistoryShards),
 				ClusterName:       clusterMetadata.CurrentClusterName,
+				ClusterId:         uuid.New(),
 			}})
 
 	if err != nil {

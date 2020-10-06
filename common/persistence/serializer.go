@@ -70,6 +70,10 @@ type (
 		// serialize/deserialize immutable cluster metadata
 		SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType enumspb.EncodingType) (*serialization.DataBlob, error)
 		DeserializeImmutableClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.ImmutableClusterMetadata, error)
+
+		// serialize/deserialize mutable cluster metadata
+		SerializeMutableClusterMetadata(icm *persistenceblobs.MutableClusterMetadata, encodingType enumspb.EncodingType) (*serialization.DataBlob, error)
+		DeserializeMutableClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.MutableClusterMetadata, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -312,6 +316,39 @@ func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *serialization
 		err = event.Unmarshal(data.Data)
 	default:
 		return nil, NewDeserializationError("DeserializeImmutableClusterMetadata invalid encoding")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return event, err
+}
+
+func (t *serializerImpl) SerializeMutableClusterMetadata(icm *persistenceblobs.MutableClusterMetadata, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
+	if icm == nil {
+		icm = &persistenceblobs.MutableClusterMetadata{}
+	}
+	return t.serialize(icm, encodingType)
+}
+
+func (t *serializerImpl) DeserializeMutableClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.MutableClusterMetadata, error) {
+	if data == nil {
+		return nil, nil
+	}
+	if len(data.Data) == 0 {
+		return nil, nil
+	}
+
+	event := &persistenceblobs.MutableClusterMetadata{}
+	var err error
+	switch data.Encoding {
+	case enumspb.ENCODING_TYPE_PROTO3:
+		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
+		// Client API currently specifies encodingType on requests which span multiple of these objects
+		err = event.Unmarshal(data.Data)
+	default:
+		return nil, NewDeserializationError("DeserializeMutableClusterMetadata invalid encoding")
 	}
 
 	if err != nil {

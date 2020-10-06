@@ -139,3 +139,24 @@ func (m *clusterMetadataManagerImpl) UpsertClusterMembership(request *UpsertClus
 func (m *clusterMetadataManagerImpl) PruneClusterMembership(request *PruneClusterMembershipRequest) error {
 	return m.persistence.PruneClusterMembership(request)
 }
+
+func (m *clusterMetadataManagerImpl) GetMutableClusterMetadata() (*GetMutableClusterMetadataResponse, error) {
+	resp, err := m.persistence.GetMutableClusterMetadata()
+	if err != nil {
+		return nil, err
+	}
+
+	mcm, err := m.serializer.DeserializeMutableClusterMetadata(resp.MutableClusterMetadata)
+	if err != nil {
+		return nil, err
+	}
+	return &GetMutableClusterMetadataResponse{MutableClusterMetadata: *mcm}, nil
+}
+
+func (m *clusterMetadataManagerImpl) UpdateMutableClusterMetadata(request *UpdateMutableClusterMetadataRequest) error {
+	mcm, err := m.serializer.SerializeMutableClusterMetadata(&request.MutableClusterMetadata, clusterMetadataEncoding)
+	if err != nil {
+		return err
+	}
+	return m.persistence.UpdateMutableClusterMetadata(&InternalUpdateMutableClusterMetadataRequest{MutableClusterMetadata: mcm})
+}

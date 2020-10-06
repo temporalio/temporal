@@ -937,6 +937,20 @@ func (c *clusterMetadataRateLimitedPersistenceClient) PruneClusterMembership(req
 	return c.persistence.PruneClusterMembership(request)
 }
 
+func (c *clusterMetadataRateLimitedPersistenceClient) GetMutableClusterMetadata() (*GetMutableClusterMetadataResponse, error) {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return c.persistence.GetMutableClusterMetadata()
+}
+
+func (c *clusterMetadataRateLimitedPersistenceClient) UpdateMutableClusterMetadata(request *UpdateMutableClusterMetadataRequest) error {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+	return c.persistence.UpdateMutableClusterMetadata(request)
+}
+
 func (c *metadataRateLimitedPersistenceClient) InitializeSystemNamespaces(currentClusterName string) error {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded

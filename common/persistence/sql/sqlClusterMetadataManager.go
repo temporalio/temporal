@@ -93,6 +93,31 @@ func (s *sqlClusterMetadataManager) GetImmutableClusterMetadata() (*p.InternalGe
 	}, nil
 }
 
+func (s *sqlClusterMetadataManager) GetMutableClusterMetadata() (*p.InternalGetMutableClusterMetadataResponse, error) {
+	row, err := s.db.GetClusterMetadata()
+
+	if err != nil {
+		return nil, convertCommonErrors("GetMutableClusterMetadata", err)
+	}
+
+	return &p.InternalGetMutableClusterMetadataResponse{
+		MutableClusterMetadata: p.NewDataBlob(row.MutableData, row.MutableDataEncoding),
+	}, nil
+}
+
+func (s *sqlClusterMetadataManager) UpdateMutableClusterMetadata(request *p.InternalUpdateMutableClusterMetadataRequest) error {
+	_, err := s.db.UpdateMutableClusterMetadata(&sqlplugin.ClusterMetadataRow{
+		MutableData:         request.MutableClusterMetadata.Data,
+		MutableDataEncoding: request.MutableClusterMetadata.Encoding.String(),
+	})
+
+	if err != nil {
+		return convertCommonErrors("UpdateMutableClusterMetadata", err)
+	}
+
+	return nil
+}
+
 func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
 	var lastSeenHostId []byte
 	if len(request.NextPageToken) == 16 {

@@ -58,6 +58,12 @@ WHERE metadata_partition = ?`
 
 	immutableEncodingFieldName = immutablePayloadFieldName + `_encoding`
 
+	templateGetMutableClusterMetadata = `SELECT mutable_data, mutable_data_encoding FROM 
+cluster_metadata 
+WHERE metadata_partition = ?`
+
+	templateUpsertMutableClusterMetadata = `UPDATE cluster_metadata SET mutable_data = ?, mutable_data_encoding = ? WHERE metadata_partition = ?`
+
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
 	templateUpsertActiveClusterMembership = `INSERT INTO 
 cluster_membership (membership_partition, host_id, rpc_address, rpc_port, role, session_start, last_heartbeat) 
@@ -178,6 +184,31 @@ func (m *cassandraClusterMetadata) GetImmutableClusterMetadata() (*p.InternalGet
 	return &p.InternalGetImmutableClusterMetadataResponse{
 		ImmutableClusterMetadata: p.NewDataBlob(immutableMetadata, encoding),
 	}, nil
+}
+
+func (m *cassandraClusterMetadata) GetMutableClusterMetadata() (*p.InternalGetMutableClusterMetadataResponse, error) {
+	query := m.session.Query(templateGetMutableClusterMetadata, constMetadataPartition)
+	var mutableMetadata []byte
+	var encoding string
+	err := query.Scan(&mutableMetadata, &encoding)
+	if err != nil {
+		return nil, convertCommonErrors("GetImmutableClusterMetadata", err)
+	}
+
+	return &p.InternalGetMutableClusterMetadataResponse{
+		MutableClusterMetadata: p.NewDataBlob(mutableMetadata, encoding),
+	}, nil
+}
+
+func (m *cassandraClusterMetadata) UpdateMutableClusterMetadata(request *p.InternalUpdateMutableClusterMetadataRequest) error {
+	query := m.session.Query(templateUpsertMutableClusterMetadata, request.MutableClusterMetadata.Data, request.MutableClusterMetadata.Encoding.String(), constMembershipPartition)
+	err := query.Exec()
+
+	if err != nil {
+		return convertCommonErrors("UpdateMutableClusterMetadata", err)
+	}
+
+	return nil
 }
 
 func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {

@@ -280,6 +280,10 @@ const (
 	PersistenceInitImmutableClusterMetadataScope
 	// PersistenceGetImmutableClusterMetadataScope tracks GetImmutableClusterMetadata calls made by service to persistence layer
 	PersistenceGetImmutableClusterMetadataScope
+	// PersistenceGetMutableClusterMetadataScope tracks GetMutableClusterMetadata calls made by service to persistence layer
+	PersistenceGetMutableClusterMetadataScope
+	// PersistenceUpdateMutableClusterMetadataScope tracks UpdateMutableClusterMetadata calls made by service to persistence layer
+	PersistenceUpdateMutableClusterMetadataScope
 	// PersistenceUpsertClusterMembershipScope tracks UpsertClusterMembership calls made by service to persistence layer
 	PersistenceUpsertClusterMembershipScope
 	// PersistencePruneClusterMembershipScope tracks PruneClusterMembership calls made by service to persistence layer
@@ -1146,6 +1150,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceNamespaceReplicationQueueScope:                {operation: "NamespaceReplicationQueue"},
 		PersistenceInitImmutableClusterMetadataScope:             {operation: "InitializeImmutableClusterMetadata"},
 		PersistenceGetImmutableClusterMetadataScope:              {operation: "GetImmutableClusterMetadata"},
+		PersistenceGetMutableClusterMetadataScope:                {operation: "GetMutableClusterMetadata"},
+		PersistenceUpdateMutableClusterMetadataScope:             {operation: "UpdateMutableClusterMetadata"},
 		PersistencePruneClusterMembershipScope:                   {operation: "PruneClusterMembership"},
 		PersistenceGetClusterMembersScope:                        {operation: "GetClusterMembership"},
 		PersistenceUpsertClusterMembershipScope:                  {operation: "UpsertClusterMembership"},
