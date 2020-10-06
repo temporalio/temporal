@@ -288,7 +288,7 @@ func (pdb *db) SelectFromRequestCancelInfoMaps(filter *sqlplugin.RequestCancelIn
 	var rows []sqlplugin.RequestCancelInfoMapsRow
 	err := pdb.conn.Select(&rows, getRequestCancelInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
-		rows[i].ShardID = int64(filter.ShardID)
+		rows[i].ShardID = filter.ShardID
 		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
@@ -328,7 +328,7 @@ func (pdb *db) SelectFromSignalInfoMaps(filter *sqlplugin.SignalInfoMapsFilter) 
 	var rows []sqlplugin.SignalInfoMapsRow
 	err := pdb.conn.Select(&rows, getSignalInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
-		rows[i].ShardID = int64(filter.ShardID)
+		rows[i].ShardID = filter.ShardID
 		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
@@ -345,7 +345,7 @@ func (pdb *db) DeleteFromSignalInfoMaps(filter *sqlplugin.SignalInfoMapsFilter) 
 }
 
 // InsertIntoSignalsRequestedSets inserts one or more rows into signals_requested_sets table
-func (pdb *db) InsertIntoSignalsRequestedSets(rows []sqlplugin.SignalsRequestedSetsRow) (sql.Result, error) {
+func (pdb *db) ReplaceIntoSignalsRequestedSets(rows []sqlplugin.SignalsRequestedSetsRow) (sql.Result, error) {
 	return pdb.conn.NamedExec(createSignalsRequestedSetQuery, rows)
 }
 
@@ -354,7 +354,7 @@ func (pdb *db) SelectFromSignalsRequestedSets(filter *sqlplugin.SignalsRequested
 	var rows []sqlplugin.SignalsRequestedSetsRow
 	err := pdb.conn.Select(&rows, getSignalsRequestedSetQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
-		rows[i].ShardID = int64(filter.ShardID)
+		rows[i].ShardID = filter.ShardID
 		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID

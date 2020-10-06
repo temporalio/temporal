@@ -360,7 +360,7 @@ func updateRequestCancelInfos(
 				return err
 			}
 			rows[i] = sqlplugin.RequestCancelInfoMapsRow{
-				ShardID:      int64(shardID),
+				ShardID:      int32(shardID),
 				NamespaceID:  namespaceID,
 				WorkflowID:   workflowID,
 				RunID:        runID,
@@ -378,7 +378,7 @@ func updateRequestCancelInfos(
 		return nil
 	}
 	result, err := tx.DeleteFromRequestCancelInfoMaps(&sqlplugin.RequestCancelInfoMapsFilter{
-		ShardID:     int64(shardID),
+		ShardID:     int32(shardID),
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
@@ -406,7 +406,7 @@ func getRequestCancelInfoMap(
 ) (map[int64]*persistenceblobs.RequestCancelInfo, error) {
 
 	rows, err := db.SelectFromRequestCancelInfoMaps(&sqlplugin.RequestCancelInfoMapsFilter{
-		ShardID:     int64(shardID),
+		ShardID:     int32(shardID),
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
@@ -441,7 +441,7 @@ func deleteRequestCancelInfoMap(
 ) error {
 
 	if _, err := tx.DeleteFromRequestCancelInfoMaps(&sqlplugin.RequestCancelInfoMapsFilter{
-		ShardID:     int64(shardID),
+		ShardID:     int32(shardID),
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
@@ -469,7 +469,7 @@ func updateSignalInfos(
 				return err
 			}
 			rows[i] = sqlplugin.SignalInfoMapsRow{
-				ShardID:      int64(shardID),
+				ShardID:      int32(shardID),
 				NamespaceID:  namespaceID,
 				WorkflowID:   workflowID,
 				RunID:        runID,
@@ -487,7 +487,7 @@ func updateSignalInfos(
 		return nil
 	}
 	result, err := tx.DeleteFromSignalInfoMaps(&sqlplugin.SignalInfoMapsFilter{
-		ShardID:     int64(shardID),
+		ShardID:     int32(shardID),
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
@@ -515,7 +515,7 @@ func getSignalInfoMap(
 ) (map[int64]*persistenceblobs.SignalInfo, error) {
 
 	rows, err := db.SelectFromSignalInfoMaps(&sqlplugin.SignalInfoMapsFilter{
-		ShardID:     int64(shardID),
+		ShardID:     int32(shardID),
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
@@ -545,7 +545,7 @@ func deleteSignalInfoMap(
 ) error {
 
 	if _, err := tx.DeleteFromSignalInfoMaps(&sqlplugin.SignalInfoMapsFilter{
-		ShardID:     int64(shardID),
+		ShardID:     int32(shardID),
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,

@@ -1,3 +1,25 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package tests
 
 import (
@@ -91,8 +113,9 @@ func (s *historyExecutionActivitySuite) TestReplaceSelect_Single() {
 	namespaceID := primitives.NewUUID()
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
+	scheduleID := rand.Int63()
 
-	activity := s.newRandomExecutionActivityRow(shardID, namespaceID, workflowID, runID, rand.Int63())
+	activity := s.newRandomExecutionActivityRow(shardID, namespaceID, workflowID, runID, scheduleID)
 	result, err := s.store.ReplaceIntoActivityInfoMaps([]sqlplugin.ActivityInfoMapsRow{activity})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
@@ -104,6 +127,7 @@ func (s *historyExecutionActivitySuite) TestReplaceSelect_Single() {
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		ScheduleID:  convert.Int64Ptr(scheduleID),
 	}
 	rows, err := s.store.SelectFromActivityInfoMaps(filter)
 	s.NoError(err)
@@ -140,6 +164,7 @@ func (s *historyExecutionActivitySuite) TestReplaceSelect_Multiple() {
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		ScheduleID:  nil,
 	}
 	rows, err := s.store.SelectFromActivityInfoMaps(filter)
 	s.NoError(err)
@@ -259,6 +284,7 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Multiple() {
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		ScheduleID:  nil,
 	}
 	result, err = s.store.DeleteFromActivityInfoMaps(filter)
 	s.NoError(err)

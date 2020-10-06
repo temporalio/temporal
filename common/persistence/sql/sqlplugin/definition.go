@@ -423,7 +423,7 @@ type (
 
 	// RequestCancelInfoMapsRow represents a row in request_cancel_info_maps table
 	RequestCancelInfoMapsRow struct {
-		ShardID      int64
+		ShardID      int32
 		NamespaceID  primitives.UUID
 		WorkflowID   string
 		RunID        primitives.UUID
@@ -435,7 +435,7 @@ type (
 	// RequestCancelInfoMapsFilter contains the column names within request_cancel_info_maps table that
 	// can be used to filter results through a WHERE clause
 	RequestCancelInfoMapsFilter struct {
-		ShardID     int64
+		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
@@ -444,7 +444,7 @@ type (
 
 	// SignalInfoMapsRow represents a row in signal_info_maps table
 	SignalInfoMapsRow struct {
-		ShardID      int64
+		ShardID      int32
 		NamespaceID  primitives.UUID
 		WorkflowID   string
 		RunID        primitives.UUID
@@ -456,7 +456,7 @@ type (
 	// SignalInfoMapsFilter contains the column names within signal_info_maps table that
 	// can be used to filter results through a WHERE clause
 	SignalInfoMapsFilter struct {
-		ShardID     int64
+		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
@@ -465,7 +465,7 @@ type (
 
 	// SignalsRequestedSetsRow represents a row in signals_requested_sets table
 	SignalsRequestedSetsRow struct {
-		ShardID     int64
+		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
@@ -475,7 +475,7 @@ type (
 	// SignalsRequestedSetsFilter contains the column names within signals_requested_sets table that
 	// can be used to filter results through a WHERE clause
 	SignalsRequestedSetsFilter struct {
-		ShardID     int64
+		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
