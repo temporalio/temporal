@@ -65,7 +65,7 @@ func (m *executionManagerImpl) GetName() string {
 	return m.persistence.GetName()
 }
 
-func (m *executionManagerImpl) GetShardID() int {
+func (m *executionManagerImpl) GetShardID() int32 {
 	return m.persistence.GetShardID()
 }
 

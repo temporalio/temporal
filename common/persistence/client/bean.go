@@ -58,8 +58,8 @@ type (
 		GetHistoryManager() persistence.HistoryManager
 		SetHistoryManager(persistence.HistoryManager)
 
-		GetExecutionManager(int) (persistence.ExecutionManager, error)
-		SetExecutionManager(int, persistence.ExecutionManager)
+		GetExecutionManager(int32) (persistence.ExecutionManager, error)
+		SetExecutionManager(int32, persistence.ExecutionManager)
 	}
 
 	// BeanImpl stores persistence managers
@@ -74,7 +74,7 @@ type (
 		executionManagerFactory   persistence.ExecutionManagerFactory
 
 		sync.RWMutex
-		shardIDToExecutionManager map[int]persistence.ExecutionManager
+		shardIDToExecutionManager map[int32]persistence.ExecutionManager
 	}
 )
 
@@ -152,7 +152,7 @@ func NewBean(
 		historyManager:            historyManager,
 		executionManagerFactory:   executionManagerFactory,
 
-		shardIDToExecutionManager: make(map[int]persistence.ExecutionManager),
+		shardIDToExecutionManager: make(map[int32]persistence.ExecutionManager),
 	}
 }
 
@@ -297,7 +297,7 @@ func (s *BeanImpl) SetHistoryManager(
 
 // GetExecutionManager get ExecutionManager
 func (s *BeanImpl) GetExecutionManager(
-	shardID int,
+	shardID int32,
 ) (persistence.ExecutionManager, error) {
 
 	s.RLock()
@@ -327,7 +327,7 @@ func (s *BeanImpl) GetExecutionManager(
 
 // SetExecutionManager set ExecutionManager
 func (s *BeanImpl) SetExecutionManager(
-	shardID int,
+	shardID int32,
 	executionManager persistence.ExecutionManager,
 ) {
 

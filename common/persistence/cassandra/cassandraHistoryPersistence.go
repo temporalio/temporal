@@ -168,13 +168,13 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 
 	query := h.session.Query(v2templateReadData, treeID, branchID, request.MinNodeID, request.MaxNodeID)
 
-	iter := query.PageSize(int(request.PageSize)).PageState(request.NextPageToken).Iter()
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
 		return nil, serviceerror.NewInternal("ReadHistoryBranch operation failed.  Not able to create query iterator.")
 	}
 	pagingToken := iter.PageState()
 
-	history := make([]*serialization.DataBlob, 0, int(request.PageSize))
+	history := make([]*serialization.DataBlob, 0, request.PageSize)
 
 	for {
 		var data []byte

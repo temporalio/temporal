@@ -72,7 +72,7 @@ type (
 
 		// static infos
 
-		numShards       int
+		numShards       int32
 		serviceName     string
 		hostName        string
 		hostInfo        *membership.HostInfo
@@ -582,7 +582,7 @@ func (h *Impl) GetHistoryManager() persistence.HistoryManager {
 
 // GetExecutionManager return execution manager for given shard ID
 func (h *Impl) GetExecutionManager(
-	shardID int,
+	shardID int32,
 ) (persistence.ExecutionManager, error) {
 
 	return h.persistenceBean.GetExecutionManager(shardID)

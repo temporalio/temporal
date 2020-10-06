@@ -27,7 +27,6 @@ package cli
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -35,30 +34,24 @@ import (
 	"io/ioutil"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
-	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
-	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"gopkg.in/yaml.v2"
 
-	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	indexerspb "go.temporal.io/server/api/indexer/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/cassandra"
 )
 
 type (
@@ -486,157 +479,6 @@ type ClustersConfig struct {
 	TLS      auth.TLS
 }
 
-func doRereplicate(
-	ctx context.Context,
-	shardID int,
-	namespaceID string,
-	wid string,
-	rid string,
-	minID int64,
-	maxID int64,
-	startVersion int64,
-	targets []string,
-	producer messaging.Producer,
-	session *gocql.Session,
-	adminClient adminservice.AdminServiceClient,
-) {
-
-	if minID <= 0 {
-		minID = 1
-	}
-	if maxID == 0 {
-		maxID = maxRereplicateEventID
-	}
-
-	exeM, _ := cassandra.NewWorkflowExecutionPersistence(shardID, session, loggerimpl.NewNopLogger())
-	exeMgr := persistence.NewExecutionManagerImpl(exeM, loggerimpl.NewNopLogger())
-
-	for {
-		fmt.Printf("Start rereplicate for wid: %v, rid:%v \n", wid, rid)
-		resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
-			NamespaceID: namespaceID,
-			Execution: commonpb.WorkflowExecution{
-				WorkflowId: wid,
-				RunId:      rid,
-			},
-		})
-		if err != nil {
-			ErrorAndExit("GetWorkflowExecution error", err)
-		}
-
-		versionHistories := resp.State.VersionHistories
-		if versionHistories != nil {
-			if startVersion == common.EmptyVersion {
-				ErrorAndExit("Use input file to resend NDC workflow is not support", nil)
-			}
-			if _, err := adminClient.ResendReplicationTasks(
-				ctx,
-				&adminservice.ResendReplicationTasksRequest{
-					NamespaceId:   namespaceID,
-					WorkflowId:    wid,
-					RunId:         rid,
-					RemoteCluster: targets[0],
-					StartVersion:  startVersion,
-				},
-			); err != nil {
-				ErrorAndExit("Failed to resend ndc workflow", err)
-			}
-			return
-		}
-	}
-}
-
-// AdminRereplicate parses will re-publish replication tasks to topic
-func AdminRereplicate(c *cli.Context) {
-	numberOfShards := c.Int(FlagNumberOfShards)
-	if numberOfShards <= 0 {
-		ErrorAndExit("numberOfShards is must be > 0", nil)
-		return
-	}
-	target := getRequiredOption(c, FlagTargetCluster)
-	targets := []string{target}
-
-	session := connectToCassandra(c)
-	adminClient := cFactory.AdminClient(c)
-	var startVersion int64
-	var producer messaging.Producer
-	if c.IsSet(FlagStartEventVersion) {
-		startVersion = c.Int64(FlagStartEventVersion)
-	} else {
-		startVersion = common.EmptyVersion
-		producer = newKafkaProducer(c)
-	}
-
-	contextTimeout := defaultResendContextTimeout
-	if c.GlobalIsSet(FlagContextTimeout) {
-		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
-	defer cancel()
-
-	if c.IsSet(FlagInputFile) {
-		inFile := c.String(FlagInputFile)
-		// This code is executed from the CLI. All user input is from a CLI user.
-		// parse namespaceID,workflowID,runID,minEventID,maxEventID
-		// #nosec
-		file, err := os.Open(inFile)
-		if err != nil {
-			ErrorAndExit("Open failed", err)
-		}
-		defer file.Close()
-
-		scanner := bufio.NewScanner(file)
-		idx := 0
-		for scanner.Scan() {
-			idx++
-			line := strings.TrimSpace(scanner.Text())
-			if len(line) == 0 {
-				fmt.Printf("line %v is empty, skipped\n", idx)
-				continue
-			}
-			cols := strings.Split(line, ",")
-			if len(cols) < 3 {
-				ErrorAndExit("Split failed", fmt.Errorf("line %v has less than 3 cols separated by comma, only %v ", idx, len(cols)))
-			}
-			fmt.Printf("Start processing line %v ...\n", idx)
-			namespaceID := strings.TrimSpace(cols[0])
-			wid := strings.TrimSpace(cols[1])
-			rid := strings.TrimSpace(cols[2])
-			var minID, maxID int64
-			if len(cols) >= 4 {
-				i, err := strconv.Atoi(strings.TrimSpace(cols[3]))
-				if err != nil {
-					ErrorAndExit(fmt.Sprintf("Atoi failed at lne %v", idx), err)
-				}
-				minID = int64(i)
-			}
-			if len(cols) >= 5 {
-				i, err := strconv.Atoi(strings.TrimSpace(cols[4]))
-				if err != nil {
-					ErrorAndExit(fmt.Sprintf("Atoi failed at lne %v", idx), err)
-				}
-				maxID = int64(i)
-			}
-
-			shardID := common.WorkflowIDToHistoryShard(namespaceID, wid, numberOfShards)
-			doRereplicate(ctx, shardID, namespaceID, wid, rid, minID, maxID, startVersion, targets, producer, session, adminClient)
-			fmt.Printf("Done processing line %v ...\n", idx)
-		}
-		if err := scanner.Err(); err != nil {
-			ErrorAndExit("scanner failed", err)
-		}
-	} else {
-		namespaceID := getRequiredOption(c, FlagNamespaceID)
-		wid := getRequiredOption(c, FlagWorkflowID)
-		rid := getRequiredOption(c, FlagRunID)
-		minID := c.Int64(FlagMinEventID)
-		maxID := c.Int64(FlagMaxEventID)
-		shardID := common.WorkflowIDToHistoryShard(namespaceID, wid, numberOfShards)
-
-		doRereplicate(ctx, shardID, namespaceID, wid, rid, minID, maxID, startVersion, targets, producer, session, adminClient)
-	}
-}
-
 func newKafkaProducer(c *cli.Context) messaging.Producer {
 	hostFile := getRequiredOption(c, FlagHostFile)
 	destCluster := getRequiredOption(c, FlagCluster)
@@ -791,7 +633,7 @@ func AdminMergeDLQ(c *cli.Context) {
 // AdminListDLQ outputs a list of a tasks for given Shard and Task Type
 func AdminListDLQ(c *cli.Context) {
 	cluster := getRequiredOption(c, FlagCluster)
-	sid := getRequiredIntOption(c, FlagShardID)
+	sid := int32(getRequiredIntOption(c, FlagShardID))
 
 	pFactory := CreatePersistenceFactory(c)
 	executionManager, err := pFactory.NewExecutionManager(sid)

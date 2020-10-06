@@ -417,7 +417,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 		ForkBranchToken: forkBranchToken,
 		ForkNodeID:      forkNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, resetRunID),
-		ShardID:         convert.IntPtr(shardID),
+		ShardID:         convert.Int32Ptr(shardID),
 	})
 	if err != nil {
 		return nil, err
@@ -594,7 +594,7 @@ func (r *workflowResetterImpl) getPaginationFn(
 			nextEventID,
 			paginationToken,
 			nDCDefaultPageSize,
-			convert.IntPtr(r.shard.GetShardID()),
+			convert.Int32Ptr(r.shard.GetShardID()),
 		)
 		if err != nil {
 			return nil, nil, err

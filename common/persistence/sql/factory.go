@@ -111,7 +111,7 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 }
 
 // NewExecutionStore returns an ExecutionStore for a given shardID
-func (f *Factory) NewExecutionStore(shardID int) (p.ExecutionStore, error) {
+func (f *Factory) NewExecutionStore(shardID int32) (p.ExecutionStore, error) {
 	conn, err := f.dbConn.get()
 	if err != nil {
 		return nil, err

@@ -53,7 +53,7 @@ type (
 		// NewMetadataManager returns a new metadata manager
 		NewMetadataManager() (p.MetadataManager, error)
 		// NewExecutionManager returns a new execution manager for a given shardID
-		NewExecutionManager(shardID int) (p.ExecutionManager, error)
+		NewExecutionManager(shardID int32) (p.ExecutionManager, error)
 		// NewVisibilityManager returns a new visibility manager
 		NewVisibilityManager() (p.VisibilityManager, error)
 		// NewNamespaceReplicationQueue returns a new queue for namespace replication
@@ -75,7 +75,7 @@ type (
 		// NewMetadataStore returns a new metadata store
 		NewMetadataStore() (p.MetadataStore, error)
 		// NewExecutionStore returns an execution store for given shardID
-		NewExecutionStore(shardID int) (p.ExecutionStore, error)
+		NewExecutionStore(shardID int32) (p.ExecutionStore, error)
 		// NewVisibilityStore returns a new visibility store
 		NewVisibilityStore() (p.VisibilityStore, error)
 		NewQueue(queueType p.QueueType) (p.Queue, error)
@@ -245,7 +245,7 @@ func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, err
 }
 
 // NewExecutionManager returns a new execution manager for a given shardID
-func (f *factoryImpl) NewExecutionManager(shardID int) (p.ExecutionManager, error) {
+func (f *factoryImpl) NewExecutionManager(shardID int32) (p.ExecutionManager, error) {
 	ds := f.datastores[storeTypeExecution]
 	store, err := ds.factory.NewExecutionStore(shardID)
 	if err != nil {

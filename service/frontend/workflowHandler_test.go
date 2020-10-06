@@ -1064,7 +1064,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		MaxEventID:    nextEventID,
 		PageSize:      0,
 		NextPageToken: []byte{},
-		ShardID:       convert.IntPtr(shardID),
+		ShardID:       convert.Int32Ptr(shardID),
 	}
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents: []*historypb.HistoryEvent{

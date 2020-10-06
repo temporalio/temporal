@@ -215,7 +215,7 @@ func (s *TestBase) Setup() {
 	s.fatalOnError("NewShardManager", err)
 
 	s.ExecutionMgrFactory = factory
-	s.ExecutionManager, err = factory.NewExecutionManager(int(shardID))
+	s.ExecutionManager, err = factory.NewExecutionManager(shardID)
 	s.fatalOnError("NewExecutionManager", err)
 
 	visibilityFactory := factory
@@ -354,7 +354,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 				TaskID:      s.GetNextSequenceNumber(),
 				NamespaceID: namespaceID,
 				TaskQueue:   taskQueue,
-				ScheduleID:  int64(workflowTaskScheduleID),
+				ScheduleID:  workflowTaskScheduleID,
 			})
 	}
 
@@ -364,7 +364,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 				TaskID:      s.GetNextSequenceNumber(),
 				NamespaceID: namespaceID,
 				TaskQueue:   taskQueue,
-				ScheduleID:  int64(activityScheduleID),
+				ScheduleID:  activityScheduleID,
 			})
 	}
 
@@ -494,7 +494,7 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *p.WorkflowExecutionInfo, 
 		TaskID:      s.GetNextSequenceNumber(),
 		NamespaceID: updatedInfo.NamespaceId,
 		TaskQueue:   updatedInfo.TaskQueue,
-		ScheduleID:  int64(workflowTaskScheduleID),
+		ScheduleID:  workflowTaskScheduleID,
 	}
 
 	req := &p.UpdateWorkflowExecutionRequest{
@@ -697,7 +697,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 			TaskID:      s.GetNextSequenceNumber(),
 			NamespaceID: updatedInfo.NamespaceId,
 			TaskQueue:   updatedInfo.TaskQueue,
-			ScheduleID:  int64(workflowTaskScheduleID)})
+			ScheduleID:  workflowTaskScheduleID})
 	}
 
 	for _, activityScheduleID := range activityScheduleIDs {
@@ -705,7 +705,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 			TaskID:      s.GetNextSequenceNumber(),
 			NamespaceID: updatedInfo.NamespaceId,
 			TaskQueue:   updatedInfo.TaskQueue,
-			ScheduleID:  int64(activityScheduleID)})
+			ScheduleID:  activityScheduleID})
 	}
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		RangeID: rangeID,

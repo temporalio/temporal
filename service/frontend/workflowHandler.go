@@ -3194,7 +3194,7 @@ func (wh *WorkflowHandler) getRawHistory(
 		MaxEventID:    nextEventID,
 		PageSize:      int(pageSize),
 		NextPageToken: nextPageToken,
-		ShardID:       convert.IntPtr(shardID),
+		ShardID:       convert.Int32Ptr(shardID),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -3262,7 +3262,7 @@ func (wh *WorkflowHandler) getHistory(
 		MaxEventID:    nextEventID,
 		PageSize:      int(pageSize),
 		NextPageToken: nextPageToken,
-		ShardID:       convert.IntPtr(shardID),
+		ShardID:       convert.Int32Ptr(shardID),
 	})
 	if err != nil {
 		return nil, nil, err

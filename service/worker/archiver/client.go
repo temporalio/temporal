@@ -67,7 +67,7 @@ type (
 		RunID       string
 
 		// history archival
-		ShardID              int
+		ShardID              int32
 		BranchToken          []byte
 		NextEventID          int64
 		CloseFailoverVersion int64

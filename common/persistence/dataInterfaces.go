@@ -146,7 +146,7 @@ type (
 
 	// ShardOwnershipLostError is returned when conditional update fails due to RangeID for the shard
 	ShardOwnershipLostError struct {
-		ShardID int
+		ShardID int32
 		Msg     string
 	}
 
@@ -1023,7 +1023,7 @@ type (
 		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
 		TransactionID int64
 		// The shard to get history node data
-		ShardID *int
+		ShardID *int32
 	}
 
 	// AppendHistoryNodesResponse is a response to AppendHistoryNodesRequest
@@ -1046,7 +1046,7 @@ type (
 		// Token to continue reading next page of history append transactions.  Pass in empty slice for first page
 		NextPageToken []byte
 		// The shard to get history branch data
-		ShardID *int
+		ShardID *int32
 	}
 
 	// ReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
@@ -1102,7 +1102,7 @@ type (
 		// the info for clean up data in background
 		Info string
 		// The shard to get history branch data
-		ShardID *int
+		ShardID *int32
 	}
 
 	// ForkHistoryBranchResponse is the response to ForkHistoryBranchRequest
@@ -1126,7 +1126,7 @@ type (
 		// branch to be deleted
 		BranchToken []byte
 		// The shard to delete history branch data
-		ShardID *int
+		ShardID *int32
 	}
 
 	// GetHistoryTreeRequest is used to retrieve branch info of a history tree
@@ -1134,7 +1134,7 @@ type (
 		// A UUID of a tree
 		TreeID string
 		// Get data from this shard
-		ShardID *int
+		ShardID *int32
 		// optional: can provide treeID via branchToken if treeID is empty
 		BranchToken []byte
 	}
@@ -1248,7 +1248,7 @@ type (
 	ExecutionManager interface {
 		Closeable
 		GetName() string
-		GetShardID() int
+		GetShardID() int32
 
 		CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
@@ -1288,7 +1288,7 @@ type (
 	// ExecutionManagerFactory creates an instance of ExecutionManager for a given shard
 	ExecutionManagerFactory interface {
 		Closeable
-		NewExecutionManager(shardID int) (ExecutionManager, error)
+		NewExecutionManager(shardID int32) (ExecutionManager, error)
 	}
 
 	// TaskManager is used to manage tasks

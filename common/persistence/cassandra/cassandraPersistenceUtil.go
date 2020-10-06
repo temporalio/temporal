@@ -45,7 +45,7 @@ import (
 
 func applyWorkflowMutationBatch(
 	batch *gocql.Batch,
-	shardID int,
+	shardID int32,
 	workflowMutation *p.InternalWorkflowMutation,
 ) error {
 
@@ -168,7 +168,7 @@ func applyWorkflowMutationBatch(
 
 func applyWorkflowSnapshotBatchAsReset(
 	batch *gocql.Batch,
-	shardID int,
+	shardID int32,
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
 
@@ -283,7 +283,7 @@ func applyWorkflowSnapshotBatchAsReset(
 
 func applyWorkflowSnapshotBatchAsNew(
 	batch *gocql.Batch,
-	shardID int,
+	shardID int32,
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
 
@@ -394,7 +394,7 @@ func applyWorkflowSnapshotBatchAsNew(
 
 func createExecution(
 	batch *gocql.Batch,
-	shardID int,
+	shardID int32,
 	executionInfo *p.WorkflowExecutionInfo,
 	versionHistories *historyspb.VersionHistories,
 	checksum checksum.Checksum,
@@ -477,7 +477,7 @@ func createExecution(
 
 func updateExecution(
 	batch *gocql.Batch,
-	shardID int,
+	shardID int32,
 	executionInfo *p.WorkflowExecutionInfo,
 	versionHistories *historyspb.VersionHistories,
 	cqlNowTimestampMillis int64,
@@ -563,7 +563,7 @@ func updateExecution(
 
 func applyTasks(
 	batch *gocql.Batch,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -607,7 +607,7 @@ func applyTasks(
 func createTransferTasks(
 	batch *gocql.Batch,
 	transferTasks []p.Task,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -705,7 +705,7 @@ func createTransferTasks(
 func createReplicationTasks(
 	batch *gocql.Batch,
 	replicationTasks []p.Task,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -774,7 +774,7 @@ func createReplicationTasks(
 func createTimerTasks(
 	batch *gocql.Batch,
 	timerTasks []p.Task,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -859,7 +859,7 @@ func createTimerTasks(
 func createOrUpdateCurrentExecution(
 	batch *gocql.Batch,
 	createMode p.CreateWorkflowMode,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -960,7 +960,7 @@ func updateActivityInfos(
 	batch *gocql.Batch,
 	activityInfos []*persistenceblobs.ActivityInfo,
 	deleteInfos []int64,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -1001,7 +1001,7 @@ func updateActivityInfos(
 
 func deleteBufferedEvents(
 	batch *gocql.Batch,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -1021,7 +1021,7 @@ func deleteBufferedEvents(
 func resetActivityInfos(
 	batch *gocql.Batch,
 	activityInfos []*persistenceblobs.ActivityInfo,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -1049,7 +1049,7 @@ func updateTimerInfos(
 	batch *gocql.Batch,
 	timerInfos []*persistenceblobs.TimerInfo,
 	deleteInfos []string,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -1091,7 +1091,7 @@ func updateTimerInfos(
 func resetTimerInfos(
 	batch *gocql.Batch,
 	timerInfos []*persistenceblobs.TimerInfo,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -1120,7 +1120,7 @@ func updateChildExecutionInfos(
 	batch *gocql.Batch,
 	childExecutionInfos []*persistenceblobs.ChildExecutionInfo,
 	deleteInfo *int64,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -1163,7 +1163,7 @@ func updateChildExecutionInfos(
 func resetChildExecutionInfos(
 	batch *gocql.Batch,
 	childExecutionInfos []*persistenceblobs.ChildExecutionInfo,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -1190,7 +1190,7 @@ func updateRequestCancelInfos(
 	batch *gocql.Batch,
 	requestCancelInfos []*persistenceblobs.RequestCancelInfo,
 	deleteInfo *int64,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -1234,7 +1234,7 @@ func updateRequestCancelInfos(
 func resetRequestCancelInfos(
 	batch *gocql.Batch,
 	requestCancelInfos []*persistenceblobs.RequestCancelInfo,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -1264,7 +1264,7 @@ func updateSignalInfos(
 	batch *gocql.Batch,
 	signalInfos []*persistenceblobs.SignalInfo,
 	deleteInfo *int64,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -1308,7 +1308,7 @@ func updateSignalInfos(
 func resetSignalInfos(
 	batch *gocql.Batch,
 	signalInfos []*persistenceblobs.SignalInfo,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -1337,7 +1337,7 @@ func updateSignalsRequested(
 	batch *gocql.Batch,
 	signalReqIDs []string,
 	deleteSignalReqID string,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -1372,7 +1372,7 @@ func updateSignalsRequested(
 func resetSignalRequested(
 	batch *gocql.Batch,
 	signalRequested []string,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -1393,7 +1393,7 @@ func updateBufferedEvents(
 	batch *gocql.Batch,
 	newBufferedEvents *serialization.DataBlob,
 	clearBufferedEvents bool,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,

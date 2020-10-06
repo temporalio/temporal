@@ -702,7 +702,7 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 
 // RemoveTask returns information about the internal states of a history host
 func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
-	executionMgr, err := h.GetExecutionManager(int(request.GetShardId()))
+	executionMgr, err := h.GetExecutionManager(request.GetShardId())
 	if err != nil {
 		return nil, err
 	}
@@ -731,7 +731,7 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 // CloseShard closes a shard hosted by this instance
 func (h *Handler) CloseShard(_ context.Context, request *historyservice.CloseShardRequest) (_ *historyservice.CloseShardResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-	h.controller.removeEngineForShard(int(request.GetShardId()), nil)
+	h.controller.removeEngineForShard(request.GetShardId(), nil)
 	return &historyservice.CloseShardResponse{}, nil
 }
 
@@ -1366,7 +1366,7 @@ func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.S
 	}
 
 	// shard ID is already provided in the request
-	engine, err := h.controller.getEngineForShard(int(request.GetShardId()))
+	engine, err := h.controller.getEngineForShard(int32(request.GetShardId()))
 	if err != nil {
 		return nil, h.error(err, scope, "", "")
 	}
@@ -1448,7 +1448,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 		go func(token *replicationspb.ReplicationToken) {
 			defer wg.Done()
 
-			engine, err := h.controller.getEngineForShard(int(token.GetShardId()))
+			engine, err := h.controller.getEngineForShard(token.GetShardId())
 			if err != nil {
 				h.GetLogger().Warn("History engine not found for shard", tag.Error(err))
 				return
@@ -1613,7 +1613,7 @@ func (h *Handler) GetDLQMessages(ctx context.Context, request *historyservice.Ge
 		return nil, errShuttingDown
 	}
 
-	engine, err := h.controller.getEngineForShard(int(request.GetShardId()))
+	engine, err := h.controller.getEngineForShard(request.GetShardId())
 	if err != nil {
 		err = h.error(err, scope, "", "")
 		return nil, err
@@ -1642,7 +1642,7 @@ func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.
 		return nil, errShuttingDown
 	}
 
-	engine, err := h.controller.getEngineForShard(int(request.GetShardId()))
+	engine, err := h.controller.getEngineForShard(request.GetShardId())
 	if err != nil {
 		err = h.error(err, scope, "", "")
 		return nil, err
@@ -1670,7 +1670,7 @@ func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	engine, err := h.controller.getEngineForShard(int(request.GetShardId()))
+	engine, err := h.controller.getEngineForShard(request.GetShardId())
 	if err != nil {
 		err = h.error(err, scope, "", "")
 		return nil, err
@@ -1732,7 +1732,7 @@ func (h *Handler) convertError(err error) error {
 	switch err.(type) {
 	case *persistence.ShardOwnershipLostError:
 		shardID := err.(*persistence.ShardOwnershipLostError).ShardID
-		info, err := h.GetHistoryServiceResolver().Lookup(convert.IntToString(shardID))
+		info, err := h.GetHistoryServiceResolver().Lookup(convert.Int32ToString(shardID))
 		if err == nil {
 			return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), info.GetAddress())
 		}

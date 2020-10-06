@@ -262,7 +262,7 @@ func (s *Scavenger) startTaskProcessor(
 						// This is a required argument but it is not needed for Cassandra.
 						// Since this scanner is only for Cassandra,
 						// we can fill any number here to let to code go through
-						ShardID: convert.IntPtr(1),
+						ShardID: convert.Int32Ptr(1),
 					})
 					if err != nil {
 						respCh <- err

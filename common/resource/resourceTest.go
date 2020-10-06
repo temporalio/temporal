@@ -408,7 +408,7 @@ func (s *Test) GetHistoryManager() persistence.HistoryManager {
 
 // GetExecutionManager for testing
 func (s *Test) GetExecutionManager(
-	shardID int,
+	shardID int32,
 ) (persistence.ExecutionManager, error) {
 
 	return s.ExecutionMgr, nil

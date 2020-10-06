@@ -193,7 +193,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 		return &p.InternalReadHistoryBranchResponse{}, nil
 	}
 
-	history := make([]*serialization.DataBlob, 0, int(request.PageSize))
+	history := make([]*serialization.DataBlob, 0, request.PageSize)
 
 	for _, row := range rows {
 		eventBlob := p.NewDataBlob(row.Data, row.DataEncoding)
@@ -398,7 +398,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 
 	rsp, err := m.GetHistoryTree(&p.GetHistoryTreeRequest{
 		TreeID:  treeID,
-		ShardID: convert.IntPtr(request.ShardID),
+		ShardID: convert.Int32Ptr(request.ShardID),
 	})
 	if err != nil {
 		return err

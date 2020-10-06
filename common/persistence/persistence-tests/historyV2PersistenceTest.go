@@ -222,7 +222,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 		MaxEventID:    10,
 		PageSize:      4,
 		NextPageToken: nil,
-		ShardID:       convert.IntPtr(int(s.ShardInfo.GetShardId())),
+		ShardID:       convert.Int32Ptr(s.ShardInfo.GetShardId()),
 	}
 	// first page
 	resp, err := s.HistoryV2Mgr.ReadHistoryBranch(req)
@@ -284,7 +284,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 		MaxEventID:    21,
 		PageSize:      3,
 		NextPageToken: nil,
-		ShardID:       convert.IntPtr(int(s.ShardInfo.GetShardId())),
+		ShardID:       convert.Int32Ptr(s.ShardInfo.GetShardId()),
 	}
 
 	// first page
@@ -635,7 +635,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 	wg.Wait()
 	branches = s.descTree(treeID)
-	s.Equal(int(concurrency*3-2), len(branches))
+	s.Equal(concurrency*3-2, len(branches))
 	actualForkOnLevel1 := int32(0)
 	masterCnt := 0
 	for _, b := range branches {
@@ -714,7 +714,7 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 		var err error
 		err = s.HistoryV2Mgr.DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 			BranchToken: branch,
-			ShardID:     convert.IntPtr(int(s.ShardInfo.GetShardId())),
+			ShardID:     convert.Int32Ptr(s.ShardInfo.GetShardId()),
 		})
 		return err
 	}
@@ -726,7 +726,7 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*persistenceblobs.HistoryBranch {
 	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
 		BranchToken: br,
-		ShardID:     convert.IntPtr(int(s.ShardInfo.GetShardId())),
+		ShardID:     convert.Int32Ptr(s.ShardInfo.GetShardId()),
 	})
 	s.Nil(err)
 	return resp.Branches
@@ -735,7 +735,7 @@ func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*persistenceblo
 func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistenceblobs.HistoryBranch {
 	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
 		TreeID:  treeID,
-		ShardID: convert.IntPtr(int(s.ShardInfo.GetShardId())),
+		ShardID: convert.Int32Ptr(s.ShardInfo.GetShardId()),
 	})
 	s.Nil(err)
 	return resp.Branches
@@ -761,7 +761,7 @@ func (s *HistoryV2PersistenceSuite) readWithError(branch []byte, minID, maxID in
 			MaxEventID:    maxID,
 			PageSize:      randPageSize,
 			NextPageToken: token,
-			ShardID:       convert.IntPtr(int(s.ShardInfo.GetShardId())),
+			ShardID:       convert.Int32Ptr(s.ShardInfo.GetShardId()),
 		})
 		if err != nil {
 			return nil, err
@@ -810,7 +810,7 @@ func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*historypb.Hi
 			BranchToken:   branch,
 			Events:        events,
 			TransactionID: txnID,
-			ShardID:       convert.IntPtr(int(s.ShardInfo.GetShardId())),
+			ShardID:       convert.Int32Ptr(s.ShardInfo.GetShardId()),
 		})
 		return err
 	}
@@ -835,7 +835,7 @@ func (s *HistoryV2PersistenceSuite) fork(forkBranch []byte, forkNodeID int64) ([
 			ForkBranchToken: forkBranch,
 			ForkNodeID:      forkNodeID,
 			Info:            testForkRunID,
-			ShardID:         convert.IntPtr(int(s.ShardInfo.GetShardId())),
+			ShardID:         convert.Int32Ptr(s.ShardInfo.GetShardId()),
 		})
 		if resp != nil {
 			bi = resp.NewBranchToken

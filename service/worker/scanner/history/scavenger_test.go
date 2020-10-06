@@ -352,25 +352,25 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken1,
-		ShardID:     convert.IntPtr(1),
+		ShardID:     convert.Int32Ptr(1),
 	}).Return(nil).Once()
 	branchToken2, err := p.NewHistoryBranchTokenByBranchID(treeID2, branchID2)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken2,
-		ShardID:     convert.IntPtr(1),
+		ShardID:     convert.Int32Ptr(1),
 	}).Return(nil).Once()
 	branchToken3, err := p.NewHistoryBranchTokenByBranchID(treeID3, branchID3)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
-		ShardID:     convert.IntPtr(1),
+		ShardID:     convert.Int32Ptr(1),
 	}).Return(nil).Once()
 	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
-		ShardID:     convert.IntPtr(1),
+		ShardID:     convert.Int32Ptr(1),
 	}).Return(nil).Once()
 
 	hbd, err := scvgr.Run(context.Background())
@@ -462,14 +462,14 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
-		ShardID:     convert.IntPtr(1),
+		ShardID:     convert.Int32Ptr(1),
 	}).Return(nil).Once()
 
 	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
-		ShardID:     convert.IntPtr(1),
+		ShardID:     convert.Int32Ptr(1),
 	}).Return(fmt.Errorf("failed to delete history")).Once()
 
 	hbd, err := scvgr.Run(context.Background())

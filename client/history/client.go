@@ -49,7 +49,7 @@ const (
 )
 
 type clientImpl struct {
-	numberOfShards  int
+	numberOfShards  int32
 	tokenSerializer common.TaskTokenSerializer
 	timeout         time.Duration
 	clients         common.ClientCache
@@ -58,7 +58,7 @@ type clientImpl struct {
 
 // NewClient creates a new history service gRPC client
 func NewClient(
-	numberOfShards int,
+	numberOfShards int32,
 	timeout time.Duration,
 	clients common.ClientCache,
 	logger log.Logger,
@@ -153,7 +153,7 @@ func (c *clientImpl) DescribeHistoryHost(
 	var client historyservice.HistoryServiceClient
 
 	if request.GetShardId() != 0 {
-		client, err = c.getClientForShardID(int(request.GetShardId()))
+		client, err = c.getClientForShardID(request.GetShardId())
 	} else if request.GetWorkflowExecution() != nil {
 		client, err = c.getClientForWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
 	} else {
@@ -189,7 +189,7 @@ func (c *clientImpl) RemoveTask(
 	var err error
 	var client historyservice.HistoryServiceClient
 	if request.GetShardId() != 0 {
-		client, err = c.getClientForShardID(int(request.GetShardId()))
+		client, err = c.getClientForShardID(request.GetShardId())
 		if err != nil {
 			return nil, err
 		}
@@ -218,7 +218,7 @@ func (c *clientImpl) CloseShard(
 	var err error
 	var client historyservice.HistoryServiceClient
 	if request.ShardId != 0 {
-		client, err = c.getClientForShardID(int(request.GetShardId()))
+		client, err = c.getClientForShardID(request.GetShardId())
 		if err != nil {
 			return nil, err
 		}
@@ -752,7 +752,7 @@ func (c *clientImpl) SyncShardStatus(
 	opts ...grpc.CallOption) (*historyservice.SyncShardStatusResponse, error) {
 
 	// we do not have a workflow ID here, instead, we have something even better
-	client, err := c.getClientForShardID(int(request.GetShardId()))
+	client, err := c.getClientForShardID(int32(request.GetShardId()))
 	if err != nil {
 		return nil, err
 	}
@@ -832,7 +832,7 @@ func (c *clientImpl) GetReplicationMessages(
 	requestsByClient := make(map[historyservice.HistoryServiceClient]*historyservice.GetReplicationMessagesRequest)
 
 	for _, token := range request.Tokens {
-		client, err := c.getClientForShardID(int(token.GetShardId()))
+		client, err := c.getClientForShardID(token.GetShardId())
 		if err != nil {
 			return nil, err
 		}
@@ -943,7 +943,7 @@ func (c *clientImpl) GetDLQMessages(
 	opts ...grpc.CallOption,
 ) (*historyservice.GetDLQMessagesResponse, error) {
 
-	client, err := c.getClientForShardID(int(request.GetShardId()))
+	client, err := c.getClientForShardID(request.GetShardId())
 	if err != nil {
 		return nil, err
 	}
@@ -956,7 +956,7 @@ func (c *clientImpl) PurgeDLQMessages(
 	opts ...grpc.CallOption,
 ) (*historyservice.PurgeDLQMessagesResponse, error) {
 
-	client, err := c.getClientForShardID(int(request.GetShardId()))
+	client, err := c.getClientForShardID(request.GetShardId())
 	if err != nil {
 		return nil, err
 	}
@@ -969,7 +969,7 @@ func (c *clientImpl) MergeDLQMessages(
 	opts ...grpc.CallOption,
 ) (*historyservice.MergeDLQMessagesResponse, error) {
 
-	client, err := c.getClientForShardID(int(request.GetShardId()))
+	client, err := c.getClientForShardID(request.GetShardId())
 	if err != nil {
 		return nil, err
 	}
@@ -1006,8 +1006,8 @@ func (c *clientImpl) getClientForWorkflowID(namespaceID, workflowID string) (his
 	return c.getClientForShardID(key)
 }
 
-func (c *clientImpl) getClientForShardID(shardID int) (historyservice.HistoryServiceClient, error) {
-	client, err := c.clients.GetClientForKey(convert.IntToString(shardID))
+func (c *clientImpl) getClientForShardID(shardID int32) (historyservice.HistoryServiceClient, error) {
+	client, err := c.clients.GetClientForKey(convert.Int32ToString(shardID))
 	if err != nil {
 		return nil, err
 	}

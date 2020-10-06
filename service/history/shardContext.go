@@ -52,7 +52,7 @@ import (
 type (
 	// ShardContext represents a history engine shard
 	ShardContext interface {
-		GetShardID() int
+		GetShardID() int32
 		GetService() resource.Resource
 		GetExecutionManager() persistence.ExecutionManager
 		GetHistoryManager() persistence.HistoryManager
@@ -120,11 +120,11 @@ type (
 		resource.Resource
 
 		shardItem        *historyShardsItem
-		shardID          int
+		shardID          int32
 		rangeID          int64
 		executionManager persistence.ExecutionManager
 		eventsCache      eventsCache
-		closeCallback    func(int, *historyShardsItem)
+		closeCallback    func(int32, *historyShardsItem)
 		closed           int32
 		config           *Config
 		logger           log.Logger
@@ -158,7 +158,7 @@ const (
 	historySizeLogThreshold  = 10 * 1024 * 1024
 )
 
-func (s *shardContextImpl) GetShardID() int {
+func (s *shardContextImpl) GetShardID() int32 {
 	return s.shardID
 }
 
@@ -286,7 +286,7 @@ func (s *shardContextImpl) UpdateReplicatorDLQAckLevel(
 	s.GetMetricsClient().Scope(
 		metrics.ReplicationDLQStatsScope,
 		metrics.TargetClusterTag(sourceCluster),
-		metrics.InstanceTag(strconv.Itoa(s.shardID)),
+		metrics.InstanceTag(strconv.Itoa(int(s.shardID))),
 	).UpdateGauge(
 		metrics.ReplicationDLQAckLevelGauge,
 		float64(ackLevel),
@@ -809,7 +809,7 @@ func (s *shardContextImpl) AppendHistoryV2Events(
 		return 0, err
 	}
 
-	request.ShardID = convert.IntPtr(s.shardID)
+	request.ShardID = convert.Int32Ptr(s.shardID)
 	request.TransactionID = transactionID
 
 	size := 0
@@ -1154,7 +1154,7 @@ func (s *shardContextImpl) GetLastUpdatedTime() time.Time {
 
 func acquireShard(
 	shardItem *historyShardsItem,
-	closeCallback func(int, *historyShardsItem),
+	closeCallback func(int32, *historyShardsItem),
 ) (ShardContext, error) {
 
 	var shardInfo *persistence.ShardInfoWithFailover

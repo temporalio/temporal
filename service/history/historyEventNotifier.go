@@ -67,7 +67,7 @@ type (
 		// this channel will never close
 		eventsChan chan *historyEventNotification
 		// function which calculate the shard ID from given namespaceID and workflowID pair
-		workflowIDToShardID func(string, string) int
+		workflowIDToShardID func(string, string) int32
 
 		// concurrent map with key workflowIdentifier, value map[string]chan *historyEventNotification.
 		// the reason for the second map being non thread safe:
@@ -108,7 +108,7 @@ func newHistoryEventNotification(
 func newHistoryEventNotifier(
 	timeSource clock.TimeSource,
 	metrics metrics.Client,
-	workflowIDToShardID func(string, string) int,
+	workflowIDToShardID func(string, string) int32,
 ) *historyEventNotifierImpl {
 
 	hashFn := func(key interface{}) uint32 {

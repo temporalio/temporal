@@ -484,7 +484,7 @@ func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
 	firstEventID := int64(133)
 	nextEventID := int64(134)
 	pageSize := 1
-	shardID := 1
+	shardID := int32(1)
 
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("asd"),

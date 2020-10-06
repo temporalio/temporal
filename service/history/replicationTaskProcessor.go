@@ -431,7 +431,7 @@ func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *
 	p.metricsClient.Scope(
 		metrics.ReplicationDLQStatsScope,
 		metrics.TargetClusterTag(p.sourceCluster),
-		metrics.InstanceTag(strconv.Itoa(p.shard.GetShardID())),
+		metrics.InstanceTag(strconv.Itoa(int(p.shard.GetShardID()))),
 	).UpdateGauge(
 		metrics.ReplicationDLQMaxLevelGauge,
 		float64(request.TaskInfo.GetTaskId()),

@@ -208,7 +208,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) GetShardID() int {
+func (p *workflowExecutionRateLimitedPersistenceClient) GetShardID() int32 {
 	return p.persistence.GetShardID()
 }
 

@@ -691,7 +691,7 @@ type (
 	// Implements ExecutionManager, ShardManager and TaskManager
 	cassandraPersistence struct {
 		cassandraStore
-		shardID            int
+		shardID            int32
 		currentClusterName string
 	}
 )
@@ -723,7 +723,7 @@ func newShardPersistence(cfg config.Cassandra, clusterName string, logger log.Lo
 
 // NewWorkflowExecutionPersistence is used to create an instance of workflowExecutionManager implementation
 func NewWorkflowExecutionPersistence(
-	shardID int,
+	shardID int32,
 	session *gocql.Session,
 	logger log.Logger,
 ) (p.ExecutionStore, error) {
@@ -758,7 +758,7 @@ func (d *cassandraStore) Close() {
 	}
 }
 
-func (d *cassandraPersistence) GetShardID() int {
+func (d *cassandraPersistence) GetShardID() int32 {
 	return d.shardID
 }
 

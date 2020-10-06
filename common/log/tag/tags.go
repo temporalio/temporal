@@ -448,8 +448,8 @@ func Bool(b bool) Tag {
 // history engine shard
 
 // ShardID returns tag for ShardID
-func ShardID(shardID int) Tag {
-	return newInt("shard-id", shardID)
+func ShardID(shardID int32) Tag {
+	return newInt32("shard-id", shardID)
 }
 
 // ShardItem returns tag for ShardItem
