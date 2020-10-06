@@ -68,12 +68,21 @@ message Alert {
     int32 severity = 2;
 }
 
-// ClusterMetadata contains mutable cluster configuration and metadata.
-message ClusterMetadata {
+// VersionInfo contains details about current and recommended release versions as well as alerts and upgrade instructions.
+message VersionInfo {
     ReleaseInfo current = 1;
     ReleaseInfo recommended = 2;
     string instructions = 3;
     repeated Alert alerts = 4;
+}
+
+// ClusterMetadata contains mutable cluster configuration and metadata.
+message ClusterMetadata {
+    int64 version = 1;
+    string cluster_name = 2;
+    int32 history_shard_count = 3;
+    string cluster_id = 4;
+    VersionInfo version_info = 5;
 }
 
 message ActivityInfo {
