@@ -318,7 +318,7 @@ func (mdb *db) SelectFromRequestCancelInfoMaps(filter *sqlplugin.RequestCancelIn
 	var rows []sqlplugin.RequestCancelInfoMapsRow
 	err := mdb.conn.Select(&rows, getRequestCancelInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
-		rows[i].ShardID = int64(filter.ShardID)
+		rows[i].ShardID = filter.ShardID
 		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
@@ -365,7 +365,7 @@ func (mdb *db) SelectFromSignalInfoMaps(filter *sqlplugin.SignalInfoMapsFilter) 
 	var rows []sqlplugin.SignalInfoMapsRow
 	err := mdb.conn.Select(&rows, getSignalInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
-		rows[i].ShardID = int64(filter.ShardID)
+		rows[i].ShardID = filter.ShardID
 		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
@@ -411,7 +411,7 @@ run_id = ?`
 )
 
 // InsertIntoSignalsRequestedSets inserts one or more rows into signals_requested_sets table
-func (mdb *db) InsertIntoSignalsRequestedSets(rows []sqlplugin.SignalsRequestedSetsRow) (sql.Result, error) {
+func (mdb *db) ReplaceIntoSignalsRequestedSets(rows []sqlplugin.SignalsRequestedSetsRow) (sql.Result, error) {
 	q, args, err := mdb.db.BindNamed(createSignalsRequestedSetQry, rows)
 	if err != nil {
 		return nil, err
@@ -427,7 +427,7 @@ func (mdb *db) SelectFromSignalsRequestedSets(filter *sqlplugin.SignalsRequested
 	var rows []sqlplugin.SignalsRequestedSetsRow
 	err := mdb.conn.Select(&rows, getSignalsRequestedSetQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
-		rows[i].ShardID = int64(filter.ShardID)
+		rows[i].ShardID = filter.ShardID
 		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
