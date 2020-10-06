@@ -27,8 +27,6 @@ package postgresql
 import (
 	"database/sql"
 
-	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -244,23 +242,19 @@ func (pdb *db) InsertIntoTransferTasks(rows []sqlplugin.TransferTasksRow) (sql.R
 }
 
 // SelectFromTransferTasks reads one or more rows from transfer_tasks table
-func (pdb *db) SelectFromTransferTasks(filter *sqlplugin.TransferTasksFilter) ([]sqlplugin.TransferTasksRow, error) {
+func (pdb *db) SelectFromTransferTasks(filter sqlplugin.TransferTasksFilter) ([]sqlplugin.TransferTasksRow, error) {
 	var rows []sqlplugin.TransferTasksRow
-	if filter.TaskID != nil {
-		if filter.MinTaskID != nil || filter.MaxTaskID != nil {
-			return nil, serviceerror.NewInternal("PostgreSQL SelectFromTransferTasks operation failed, invalid input")
-		}
-		err := pdb.conn.Select(&rows, getTransferTaskQuery, filter.ShardID, *filter.TaskID)
-		if err != nil {
-			return nil, err
-		}
-		return rows, err
+	err := pdb.conn.Select(&rows, getTransferTaskQuery, filter.ShardID, filter.TaskID)
+	if err != nil {
+		return nil, err
 	}
+	return rows, err
+}
 
-	if filter.MinTaskID == nil || filter.MaxTaskID == nil {
-		return nil, serviceerror.NewInternal("PostgreSQL SelectFromTransferTasks operation failed, invalid input")
-	}
-	err := pdb.conn.Select(&rows, getTransferTasksQuery, filter.ShardID, *filter.MinTaskID, *filter.MaxTaskID)
+// RangeSelectFromTransferTasks reads one or more rows from transfer_tasks table
+func (pdb *db) RangeSelectFromTransferTasks(filter sqlplugin.TransferTasksRangeFilter) ([]sqlplugin.TransferTasksRow, error) {
+	var rows []sqlplugin.TransferTasksRow
+	err := pdb.conn.Select(&rows, getTransferTasksQuery, filter.ShardID, filter.MinTaskID, filter.MaxTaskID)
 	if err != nil {
 		return nil, err
 	}
@@ -268,18 +262,13 @@ func (pdb *db) SelectFromTransferTasks(filter *sqlplugin.TransferTasksFilter) ([
 }
 
 // DeleteFromTransferTasks deletes one or more rows from transfer_tasks table
-func (pdb *db) DeleteFromTransferTasks(filter *sqlplugin.TransferTasksFilter) (sql.Result, error) {
-	if filter.TaskID != nil {
-		if filter.MinTaskID != nil || filter.MaxTaskID != nil {
-			return nil, serviceerror.NewInternal("PostgreSQL DeleteFromTransferTasks operation failed, invalid input")
-		}
-		return pdb.conn.Exec(deleteTransferTaskQuery, filter.ShardID, *filter.TaskID)
-	}
+func (pdb *db) DeleteFromTransferTasks(filter sqlplugin.TransferTasksFilter) (sql.Result, error) {
+	return pdb.conn.Exec(deleteTransferTaskQuery, filter.ShardID, filter.TaskID)
+}
 
-	if filter.MinTaskID == nil || filter.MaxTaskID == nil {
-		return nil, serviceerror.NewInternal("PostgreSQL DeleteFromTransferTasks operation failed, invalid input")
-	}
-	return pdb.conn.Exec(rangeDeleteTransferTaskQuery, filter.ShardID, *filter.MinTaskID, *filter.MaxTaskID)
+// RangeDeleteFromTransferTasks deletes one or more rows from transfer_tasks table
+func (pdb *db) RangeDeleteFromTransferTasks(filter sqlplugin.TransferTasksRangeFilter) (sql.Result, error) {
+	return pdb.conn.Exec(rangeDeleteTransferTaskQuery, filter.ShardID, filter.MinTaskID, filter.MaxTaskID)
 }
 
 // InsertIntoTimerTasks inserts one or more rows into timer_tasks table
@@ -291,34 +280,26 @@ func (pdb *db) InsertIntoTimerTasks(rows []sqlplugin.TimerTasksRow) (sql.Result,
 }
 
 // SelectFromTimerTasks reads one or more rows from timer_tasks table
-func (pdb *db) SelectFromTimerTasks(filter *sqlplugin.TimerTasksFilter) ([]sqlplugin.TimerTasksRow, error) {
+func (pdb *db) SelectFromTimerTasks(filter sqlplugin.TimerTasksFilter) ([]sqlplugin.TimerTasksRow, error) {
 	var rows []sqlplugin.TimerTasksRow
+	filter.VisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.VisibilityTimestamp)
+	err := pdb.conn.Select(&rows, getTimerTaskQuery, filter.ShardID, filter.VisibilityTimestamp, filter.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		rows[i].VisibilityTimestamp = pdb.converter.FromPostgreSQLDateTime(rows[i].VisibilityTimestamp)
+	}
+	return rows, err
+}
 
-	if filter.VisibilityTimestamp != nil && filter.TaskID != nil {
-		if filter.PageSize != nil || filter.MinVisibilityTimestamp != nil || filter.MaxVisibilityTimestamp != nil {
-			return nil, serviceerror.NewInternal("PostgreSQL SelectFromTimerTasks operation failed, invalid input")
-		}
-		err := pdb.conn.Select(&rows, getTimerTaskQuery, filter.ShardID, *filter.VisibilityTimestamp, *filter.TaskID)
-		if err != nil {
-			return nil, err
-		}
-		for i := range rows {
-			rows[i].VisibilityTimestamp = pdb.converter.FromPostgreSQLDateTime(rows[i].VisibilityTimestamp)
-		}
-		return rows, err
-	}
-
-	if filter.PageSize == nil || filter.MinVisibilityTimestamp == nil || filter.MaxVisibilityTimestamp == nil {
-		return nil, serviceerror.NewInternal("PostgreSQL SelectFromTimerTasks operation failed, invalid input")
-	}
-	taskID := int64(0)
-	if filter.TaskID != nil {
-		taskID = *filter.TaskID
-	}
-	*filter.MinVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(*filter.MinVisibilityTimestamp)
-	*filter.MaxVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(*filter.MaxVisibilityTimestamp)
-	err := pdb.conn.Select(&rows, getTimerTasksQuery, filter.ShardID, *filter.MinVisibilityTimestamp,
-		taskID, *filter.MinVisibilityTimestamp, *filter.MaxVisibilityTimestamp, *filter.PageSize)
+// RangeSelectFromTimerTasks reads one or more rows from timer_tasks table
+func (pdb *db) RangeSelectFromTimerTasks(filter sqlplugin.TimerTasksRangeFilter) ([]sqlplugin.TimerTasksRow, error) {
+	var rows []sqlplugin.TimerTasksRow
+	filter.MinVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.MinVisibilityTimestamp)
+	filter.MaxVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.MaxVisibilityTimestamp)
+	err := pdb.conn.Select(&rows, getTimerTasksQuery, filter.ShardID, filter.MinVisibilityTimestamp,
+		filter.TaskID, filter.MinVisibilityTimestamp, filter.MaxVisibilityTimestamp, filter.PageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -329,21 +310,16 @@ func (pdb *db) SelectFromTimerTasks(filter *sqlplugin.TimerTasksFilter) ([]sqlpl
 }
 
 // DeleteFromTimerTasks deletes one or more rows from timer_tasks table
-func (pdb *db) DeleteFromTimerTasks(filter *sqlplugin.TimerTasksFilter) (sql.Result, error) {
-	if filter.VisibilityTimestamp != nil && filter.TaskID != nil {
-		if filter.PageSize != nil || filter.MinVisibilityTimestamp != nil || filter.MaxVisibilityTimestamp != nil {
-			return nil, serviceerror.NewInternal("PostgreSQL DeleteFromTimerTasks operation failed, invalid input")
-		}
-		*filter.VisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(*filter.VisibilityTimestamp)
-		return pdb.conn.Exec(deleteTimerTaskQuery, filter.ShardID, *filter.VisibilityTimestamp, filter.TaskID)
-	}
+func (pdb *db) DeleteFromTimerTasks(filter sqlplugin.TimerTasksFilter) (sql.Result, error) {
+	filter.VisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.VisibilityTimestamp)
+	return pdb.conn.Exec(deleteTimerTaskQuery, filter.ShardID, filter.VisibilityTimestamp, filter.TaskID)
+}
 
-	if filter.PageSize != nil || filter.MinVisibilityTimestamp == nil || filter.MaxVisibilityTimestamp == nil {
-		return nil, serviceerror.NewInternal("PostgreSQL DeleteFromTimerTasks operation failed, invalid input")
-	}
-	*filter.MinVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(*filter.MinVisibilityTimestamp)
-	*filter.MaxVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(*filter.MaxVisibilityTimestamp)
-	return pdb.conn.Exec(rangeDeleteTimerTaskQuery, filter.ShardID, *filter.MinVisibilityTimestamp, *filter.MaxVisibilityTimestamp)
+// RangeDeleteFromTimerTasks deletes one or more rows from timer_tasks table
+func (pdb *db) RangeDeleteFromTimerTasks(filter sqlplugin.TimerTasksRangeFilter) (sql.Result, error) {
+	filter.MinVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.MinVisibilityTimestamp)
+	filter.MaxVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.MaxVisibilityTimestamp)
+	return pdb.conn.Exec(rangeDeleteTimerTaskQuery, filter.ShardID, filter.MinVisibilityTimestamp, filter.MaxVisibilityTimestamp)
 }
 
 // InsertIntoBufferedEvents inserts one or more rows into buffered_events table
