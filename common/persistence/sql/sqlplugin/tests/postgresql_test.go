@@ -50,7 +50,7 @@ const (
 
 	// TODO hard code this dir for now
 	//  need to merge persistence test config / initialization in one place
-	testPostgreSQLSchema = "../../../../../schema/postgresql/temporal/schema.sql"
+	testPostgreSQLSchema = "../../../../../schema/postgresql/v96/temporal/schema.sql"
 )
 
 func TestPostgreSQLNamespaceSuite(t *testing.T) {
@@ -118,6 +118,40 @@ func TestPostgreSQLHistoryShardSuite(t *testing.T) {
 	}()
 
 	s := newHistoryShardSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestPostgreSQLHistoryTransferTaskSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newHistoryTransferTaskSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestPostgreSQLHistoryTimerTaskSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newHistoryTimerTaskSuite(t, store)
 	suite.Run(t, s)
 }
 

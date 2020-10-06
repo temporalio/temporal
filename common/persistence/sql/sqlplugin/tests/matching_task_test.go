@@ -204,6 +204,22 @@ func (s *matchingTaskSuite) TestInsertSelect_Multiple() {
 	s.Equal([]sqlplugin.TasksRow{task1, task2}, rows)
 }
 
+func (s *matchingTaskSuite) TestDeleteSelect() {
+	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
+	taskID := int64(100)
+
+	filter := &sqlplugin.TasksFilter{
+		RangeHash:   testMatchingTaskRangeHash,
+		TaskQueueID: queueID,
+		TaskID:      convert.Int64Ptr(taskID),
+	}
+	result, err := s.store.DeleteFromTasks(filter)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(0, int(rowsAffected))
+}
+
 func (s *matchingTaskSuite) TestInsertDeleteSelect_Single() {
 	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
 	taskID := int64(100)
@@ -218,7 +234,7 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Single() {
 	filter := &sqlplugin.TasksFilter{
 		RangeHash:   testMatchingTaskRangeHash,
 		TaskQueueID: queueID,
-		TaskID:      convert.Int64Ptr(task.TaskID),
+		TaskID:      convert.Int64Ptr(taskID),
 	}
 	result, err = s.store.DeleteFromTasks(filter)
 	s.NoError(err)

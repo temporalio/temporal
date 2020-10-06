@@ -113,7 +113,7 @@ type (
 
 	// TransferTasksRow represents a row in transfer_tasks table
 	TransferTasksRow struct {
-		ShardID      int
+		ShardID      int32
 		TaskID       int64
 		Data         []byte
 		DataEncoding string
@@ -122,7 +122,7 @@ type (
 	// TransferTasksFilter contains the column names within transfer_tasks table that
 	// can be used to filter results through a WHERE clause
 	TransferTasksFilter struct {
-		ShardID   int
+		ShardID   int32
 		TaskID    *int64
 		MinTaskID *int64
 		MaxTaskID *int64
@@ -239,7 +239,7 @@ type (
 
 	// ReplicationTasksRow represents a row in replication_tasks table
 	ReplicationTasksRow struct {
-		ShardID      int
+		ShardID      int32
 		TaskID       int64
 		Data         []byte
 		DataEncoding string
@@ -257,7 +257,7 @@ type (
 	// ReplicationTasksFilter contains the column names within replication_tasks table that
 	// can be used to filter results through a WHERE clause
 	ReplicationTasksFilter struct {
-		ShardID            int
+		ShardID            int32
 		TaskID             int64
 		InclusiveEndTaskID int64
 		MinTaskID          int64
@@ -274,7 +274,7 @@ type (
 
 	// TimerTasksRow represents a row in timer_tasks table
 	TimerTasksRow struct {
-		ShardID             int
+		ShardID             int32
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Data                []byte
@@ -284,8 +284,8 @@ type (
 	// TimerTasksFilter contains the column names within timer_tasks table that
 	// can be used to filter results through a WHERE clause
 	TimerTasksFilter struct {
-		ShardID                int
-		TaskID                 int64
+		ShardID                int32
+		TaskID                 *int64
 		VisibilityTimestamp    *time.Time
 		MinVisibilityTimestamp *time.Time
 		MaxVisibilityTimestamp *time.Time

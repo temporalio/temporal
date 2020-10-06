@@ -44,8 +44,8 @@ type (
 		DeleteFromHistoryTree(filter *HistoryTreeFilter) (sql.Result, error)
 	}
 
-	// historyExecution is the SQL persistence interface for history nodes and history executions
-	historyExecution interface {
+	// HistoryExecution is the SQL persistence interface for history nodes and history executions
+	HistoryExecution interface {
 		InsertIntoExecutions(row *ExecutionsRow) (sql.Result, error)
 		UpdateExecutions(row *ExecutionsRow) (sql.Result, error)
 		SelectFromExecutions(filter *ExecutionsFilter) (*ExecutionsRow, error)
@@ -154,8 +154,8 @@ type (
 		DeleteFromSignalsRequestedSets(filter *SignalsRequestedSetsFilter) (sql.Result, error)
 	}
 
-	// historyTransferTask is the SQL persistence interface for history nodes and history transfer tasks
-	historyTransferTask interface {
+	// HistoryTransferTask is the SQL persistence interface for history nodes and history transfer tasks
+	HistoryTransferTask interface {
 		InsertIntoTransferTasks(rows []TransferTasksRow) (sql.Result, error)
 		// SelectFromTransferTasks returns rows that match filter criteria from transfer_tasks table.
 		// Required filter params - {shardID, minTaskID, maxTaskID}
@@ -166,8 +166,8 @@ type (
 		DeleteFromTransferTasks(filter *TransferTasksFilter) (sql.Result, error)
 	}
 
-	// historyTimerTask is the SQL persistence interface for history nodes and history timer tasks
-	historyTimerTask interface {
+	// HistoryTimerTask is the SQL persistence interface for history nodes and history timer tasks
+	HistoryTimerTask interface {
 		InsertIntoTimerTasks(rows []TimerTasksRow) (sql.Result, error)
 		// SelectFromTimerTasks returns one or more rows from timer_tasks table
 		// Required filter Params - {shardID, taskID, minVisibilityTimestamp, maxVisibilityTimestamp, pageSize}
@@ -179,8 +179,8 @@ type (
 		DeleteFromTimerTasks(filter *TimerTasksFilter) (sql.Result, error)
 	}
 
-	// historyReplicationTask is the SQL persistence interface for history nodes and history replication tasks
-	historyReplicationTask interface {
+	// HistoryReplicationTask is the SQL persistence interface for history nodes and history replication tasks
+	HistoryReplicationTask interface {
 		InsertIntoReplicationTasks(rows []ReplicationTasksRow) (sql.Result, error)
 		// SelectFromReplicationTasks returns one or more rows from replication_tasks table
 		// Required filter params - {shardID, minTaskID, maxTaskID, pageSize}

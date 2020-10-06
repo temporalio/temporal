@@ -27,6 +27,8 @@ package mysql
 import (
 	"database/sql"
 
+	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -83,11 +85,13 @@ namespace_id = :namespace_id AND
 workflow_id = :workflow_id
 `
 
-	getTransferTasksQuery = `SELECT task_id, data, data_encoding 
- FROM transfer_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ? ORDER BY shard_id, task_id`
-
 	createTransferTasksQuery = `INSERT INTO transfer_tasks(shard_id, task_id, data, data_encoding) 
  VALUES(:shard_id, :task_id, :data, :data_encoding)`
+
+	getTransferTaskQuery = `SELECT task_id, data, data_encoding 
+ FROM transfer_tasks WHERE shard_id = ? AND task_id = ?`
+	getTransferTasksQuery = `SELECT task_id, data, data_encoding 
+ FROM transfer_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ? ORDER BY shard_id, task_id`
 
 	deleteTransferTaskQuery      = `DELETE FROM transfer_tasks WHERE shard_id = ? AND task_id = ?`
 	rangeDeleteTransferTaskQuery = `DELETE FROM transfer_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ?`
@@ -95,6 +99,8 @@ workflow_id = :workflow_id
 	createTimerTasksQuery = `INSERT INTO timer_tasks (shard_id, visibility_timestamp, task_id, data, data_encoding)
   VALUES (:shard_id, :visibility_timestamp, :task_id, :data, :data_encoding)`
 
+	getTimerTaskQuery = `SELECT visibility_timestamp, task_id, data, data_encoding FROM timer_tasks 
+  WHERE shard_id = ? AND visibility_timestamp = ? AND task_id = ?`
 	getTimerTasksQuery = `SELECT visibility_timestamp, task_id, data, data_encoding FROM timer_tasks 
   WHERE shard_id = ? 
   AND ((visibility_timestamp >= ? AND task_id >= ?) OR visibility_timestamp > ?) 
@@ -107,11 +113,10 @@ workflow_id = :workflow_id
 	createReplicationTasksQuery = `INSERT INTO replication_tasks (shard_id, task_id, data, data_encoding) 
   VALUES(:shard_id, :task_id, :data, :data_encoding)`
 
+	getReplicationTaskQuery = `SELECT task_id, data, data_encoding FROM replication_tasks WHERE 
+shard_id = ? AND task_id = ?`
 	getReplicationTasksQuery = `SELECT task_id, data, data_encoding FROM replication_tasks WHERE 
-shard_id = ? AND
-task_id > ? AND
-task_id <= ? 
-ORDER BY task_id LIMIT ?`
+shard_id = ? AND task_id > ? AND task_id <= ? ORDER BY task_id LIMIT ?`
 
 	deleteReplicationTaskQuery      = `DELETE FROM replication_tasks WHERE shard_id = ? AND task_id = ?`
 	rangeDeleteReplicationTaskQuery = `DELETE FROM replication_tasks WHERE shard_id = ? AND task_id <= ?`
@@ -242,6 +247,20 @@ func (mdb *db) InsertIntoTransferTasks(rows []sqlplugin.TransferTasksRow) (sql.R
 // SelectFromTransferTasks reads one or more rows from transfer_tasks table
 func (mdb *db) SelectFromTransferTasks(filter *sqlplugin.TransferTasksFilter) ([]sqlplugin.TransferTasksRow, error) {
 	var rows []sqlplugin.TransferTasksRow
+	if filter.TaskID != nil {
+		if filter.MinTaskID != nil || filter.MaxTaskID != nil {
+			return nil, serviceerror.NewInternal("MySQL SelectFromTransferTasks operation failed, invalid input")
+		}
+		err := mdb.conn.Select(&rows, getTransferTaskQuery, filter.ShardID, *filter.TaskID)
+		if err != nil {
+			return nil, err
+		}
+		return rows, err
+	}
+
+	if filter.MinTaskID == nil || filter.MaxTaskID == nil {
+		return nil, serviceerror.NewInternal("MySQL SelectFromTransferTasks operation failed, invalid input")
+	}
 	err := mdb.conn.Select(&rows, getTransferTasksQuery, filter.ShardID, *filter.MinTaskID, *filter.MaxTaskID)
 	if err != nil {
 		return nil, err
@@ -251,10 +270,17 @@ func (mdb *db) SelectFromTransferTasks(filter *sqlplugin.TransferTasksFilter) ([
 
 // DeleteFromTransferTasks deletes one or more rows from transfer_tasks table
 func (mdb *db) DeleteFromTransferTasks(filter *sqlplugin.TransferTasksFilter) (sql.Result, error) {
-	if filter.MinTaskID != nil {
-		return mdb.conn.Exec(rangeDeleteTransferTaskQuery, filter.ShardID, *filter.MinTaskID, *filter.MaxTaskID)
+	if filter.TaskID != nil {
+		if filter.MinTaskID != nil || filter.MaxTaskID != nil {
+			return nil, serviceerror.NewInternal("MySQL DeleteFromTransferTasks operation failed, invalid input")
+		}
+		return mdb.conn.Exec(deleteTransferTaskQuery, filter.ShardID, *filter.TaskID)
 	}
-	return mdb.conn.Exec(deleteTransferTaskQuery, filter.ShardID, *filter.TaskID)
+
+	if filter.MinTaskID == nil || filter.MaxTaskID == nil {
+		return nil, serviceerror.NewInternal("MySQL DeleteFromTransferTasks operation failed, invalid input")
+	}
+	return mdb.conn.Exec(rangeDeleteTransferTaskQuery, filter.ShardID, *filter.MinTaskID, *filter.MaxTaskID)
 }
 
 // InsertIntoTimerTasks inserts one or more rows into timer_tasks table
@@ -268,10 +294,32 @@ func (mdb *db) InsertIntoTimerTasks(rows []sqlplugin.TimerTasksRow) (sql.Result,
 // SelectFromTimerTasks reads one or more rows from timer_tasks table
 func (mdb *db) SelectFromTimerTasks(filter *sqlplugin.TimerTasksFilter) ([]sqlplugin.TimerTasksRow, error) {
 	var rows []sqlplugin.TimerTasksRow
+
+	if filter.VisibilityTimestamp != nil && filter.TaskID != nil {
+		if filter.PageSize != nil || filter.MinVisibilityTimestamp != nil || filter.MaxVisibilityTimestamp != nil {
+			return nil, serviceerror.NewInternal("MySQL SelectFromTimerTasks operation failed, invalid input")
+		}
+		err := mdb.conn.Select(&rows, getTimerTaskQuery, filter.ShardID, *filter.VisibilityTimestamp, *filter.TaskID)
+		if err != nil {
+			return nil, err
+		}
+		for i := range rows {
+			rows[i].VisibilityTimestamp = mdb.converter.FromMySQLDateTime(rows[i].VisibilityTimestamp)
+		}
+		return rows, err
+	}
+
+	if filter.PageSize == nil || filter.MinVisibilityTimestamp == nil || filter.MaxVisibilityTimestamp == nil {
+		return nil, serviceerror.NewInternal("MySQL SelectFromTimerTasks operation failed, invalid input")
+	}
+	taskID := int64(0)
+	if filter.TaskID != nil {
+		taskID = *filter.TaskID
+	}
 	*filter.MinVisibilityTimestamp = mdb.converter.ToMySQLDateTime(*filter.MinVisibilityTimestamp)
 	*filter.MaxVisibilityTimestamp = mdb.converter.ToMySQLDateTime(*filter.MaxVisibilityTimestamp)
 	err := mdb.conn.Select(&rows, getTimerTasksQuery, filter.ShardID, *filter.MinVisibilityTimestamp,
-		filter.TaskID, *filter.MinVisibilityTimestamp, *filter.MaxVisibilityTimestamp, *filter.PageSize)
+		taskID, *filter.MinVisibilityTimestamp, *filter.MaxVisibilityTimestamp, *filter.PageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -283,13 +331,20 @@ func (mdb *db) SelectFromTimerTasks(filter *sqlplugin.TimerTasksFilter) ([]sqlpl
 
 // DeleteFromTimerTasks deletes one or more rows from timer_tasks table
 func (mdb *db) DeleteFromTimerTasks(filter *sqlplugin.TimerTasksFilter) (sql.Result, error) {
-	if filter.MinVisibilityTimestamp != nil {
-		*filter.MinVisibilityTimestamp = mdb.converter.ToMySQLDateTime(*filter.MinVisibilityTimestamp)
-		*filter.MaxVisibilityTimestamp = mdb.converter.ToMySQLDateTime(*filter.MaxVisibilityTimestamp)
-		return mdb.conn.Exec(rangeDeleteTimerTaskQuery, filter.ShardID, *filter.MinVisibilityTimestamp, *filter.MaxVisibilityTimestamp)
+	if filter.VisibilityTimestamp != nil && filter.TaskID != nil {
+		if filter.PageSize != nil || filter.MinVisibilityTimestamp != nil || filter.MaxVisibilityTimestamp != nil {
+			return nil, serviceerror.NewInternal("MySQL DeleteFromTimerTasks operation failed, invalid input")
+		}
+		*filter.VisibilityTimestamp = mdb.converter.ToMySQLDateTime(*filter.VisibilityTimestamp)
+		return mdb.conn.Exec(deleteTimerTaskQuery, filter.ShardID, *filter.VisibilityTimestamp, *filter.TaskID)
 	}
-	*filter.VisibilityTimestamp = mdb.converter.ToMySQLDateTime(*filter.VisibilityTimestamp)
-	return mdb.conn.Exec(deleteTimerTaskQuery, filter.ShardID, *filter.VisibilityTimestamp, filter.TaskID)
+
+	if filter.PageSize != nil || filter.MinVisibilityTimestamp == nil || filter.MaxVisibilityTimestamp == nil {
+		return nil, serviceerror.NewInternal("MySQL DeleteFromTimerTasks operation failed, invalid input")
+	}
+	*filter.MinVisibilityTimestamp = mdb.converter.ToMySQLDateTime(*filter.MinVisibilityTimestamp)
+	*filter.MaxVisibilityTimestamp = mdb.converter.ToMySQLDateTime(*filter.MaxVisibilityTimestamp)
+	return mdb.conn.Exec(rangeDeleteTimerTaskQuery, filter.ShardID, *filter.MinVisibilityTimestamp, *filter.MaxVisibilityTimestamp)
 }
 
 // InsertIntoBufferedEvents inserts one or more rows into buffered_events table

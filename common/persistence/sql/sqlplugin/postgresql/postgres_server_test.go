@@ -36,7 +36,7 @@ import (
 const (
 	testUser      = "temporal"
 	testPassword  = "temporal"
-	testSchemaDir = "schema/postgresql"
+	testSchemaDir = "schema/postgresql/v96"
 )
 
 func getTestClusterOption() *pt.TestBaseOptions {
