@@ -200,12 +200,12 @@ func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMe
 	}, nil
 }
 
-func (m *cassandraClusterMetadata) UpdateClusterMetadata(request *p.InternalUpdateClusterMetadataRequest) error {
+func (m *cassandraClusterMetadata) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) error {
 	query := m.session.Query(templateUpsertClusterMetadata, request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), constMembershipPartition)
 	err := query.Exec()
 
 	if err != nil {
-		return convertCommonErrors("UpdateClusterMetadata", err)
+		return convertCommonErrors("SaveClusterMetadata", err)
 	}
 
 	return nil

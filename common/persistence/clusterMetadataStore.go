@@ -153,10 +153,10 @@ func (m *clusterMetadataManagerImpl) GetClusterMetadata() (*GetClusterMetadataRe
 	return &GetClusterMetadataResponse{ClusterMetadata: *mcm}, nil
 }
 
-func (m *clusterMetadataManagerImpl) UpdateClusterMetadata(request *UpdateClusterMetadataRequest) error {
+func (m *clusterMetadataManagerImpl) SaveClusterMetadata(request *SaveClusterMetadataRequest) error {
 	mcm, err := m.serializer.SerializeClusterMetadata(&request.ClusterMetadata, clusterMetadataEncoding)
 	if err != nil {
 		return err
 	}
-	return m.persistence.UpdateClusterMetadata(&InternalUpdateClusterMetadataRequest{ClusterMetadata: mcm})
+	return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{ClusterMetadata: mcm})
 }

@@ -105,14 +105,14 @@ func (s *sqlClusterMetadataManager) GetClusterMetadata() (*p.InternalGetClusterM
 	}, nil
 }
 
-func (s *sqlClusterMetadataManager) UpdateClusterMetadata(request *p.InternalUpdateClusterMetadataRequest) error {
-	_, err := s.db.UpdateClusterMetadata(&sqlplugin.ClusterMetadataRow{
+func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) error {
+	_, err := s.db.SaveClusterMetadata(&sqlplugin.ClusterMetadataRow{
 		MutableData:         request.ClusterMetadata.Data,
 		MutableDataEncoding: request.ClusterMetadata.Encoding.String(),
 	})
 
 	if err != nil {
-		return convertCommonErrors("UpdateClusterMetadata", err)
+		return convertCommonErrors("SaveClusterMetadata", err)
 	}
 
 	return nil

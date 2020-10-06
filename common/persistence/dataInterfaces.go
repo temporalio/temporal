@@ -1192,7 +1192,7 @@ type (
 		persistenceblobs.ClusterMetadata
 	}
 
-	UpdateClusterMetadataRequest struct {
+	SaveClusterMetadataRequest struct {
 		persistenceblobs.ClusterMetadata
 	}
 
@@ -1376,7 +1376,7 @@ type (
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
 		GetClusterMetadata() (*GetClusterMetadataResponse, error)
-		UpdateClusterMetadata(request *UpdateClusterMetadataRequest) error
+		SaveClusterMetadata(request *SaveClusterMetadataRequest) error
 	}
 )
 

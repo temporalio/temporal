@@ -944,11 +944,11 @@ func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMetadata() (*Get
 	return c.persistence.GetClusterMetadata()
 }
 
-func (c *clusterMetadataRateLimitedPersistenceClient) UpdateClusterMetadata(request *UpdateClusterMetadataRequest) error {
+func (c *clusterMetadataRateLimitedPersistenceClient) SaveClusterMetadata(request *SaveClusterMetadataRequest) error {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
-	return c.persistence.UpdateClusterMetadata(request)
+	return c.persistence.SaveClusterMetadata(request)
 }
 
 func (c *metadataRateLimitedPersistenceClient) InitializeSystemNamespaces(currentClusterName string) error {

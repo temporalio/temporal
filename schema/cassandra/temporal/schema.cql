@@ -128,6 +128,7 @@ CREATE TABLE cluster_metadata (
   immutable_data_encoding text,
   data                    blob,
   data_encoding           text,
+  version                 bigint,
   PRIMARY KEY  (metadata_partition)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'

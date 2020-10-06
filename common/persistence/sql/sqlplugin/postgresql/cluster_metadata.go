@@ -46,7 +46,7 @@ cluster_metadata (metadata_partition, immutable_data, immutable_data_encoding)
 VALUES($1, $2, $3)
 ON CONFLICT DO NOTHING`
 
-	updateClusterMetadataQry = `UPDATE cluster_metadata SET data = $1, data_encoding = $2 WHERE metadata_partition = $3`
+	saveClusterMetadataQry = `UPDATE cluster_metadata SET data = $1, data_encoding = $2 WHERE metadata_partition = $3`
 
 	getImmutableClusterMetadataQry = `SELECT immutable_data, immutable_data_encoding FROM 
 cluster_metadata WHERE metadata_partition = $1`
@@ -89,8 +89,8 @@ func (pdb *db) InsertIfNotExistsIntoClusterMetadata(row *sqlplugin.ClusterMetada
 		row.ImmutableDataEncoding)
 }
 
-func (pdb *db) UpdateClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Result, error) {
-	return pdb.conn.Exec(updateClusterMetadataQry,
+func (pdb *db) SaveClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Result, error) {
+	return pdb.conn.Exec(saveClusterMetadataQry,
 		row.MutableData,
 		row.MutableDataEncoding,
 		constMetadataPartition)
