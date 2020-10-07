@@ -57,25 +57,25 @@ const (
 // InsertIntoHistoryNode inserts a row into history_node table
 func (pdb *db) InsertIntoHistoryNode(row *sqlplugin.HistoryNodeRow) (sql.Result, error) {
 	// NOTE: Query 5.6 doesn't support clustering order, to workaround, we let txn_id multiple by -1
-	*row.TxnID *= -1
+	row.TxnID = -row.TxnID
 	return pdb.conn.NamedExec(addHistoryNodesQuery, row)
 }
 
 // SelectFromHistoryNode reads one or more rows from history_node table
-func (pdb *db) SelectFromHistoryNode(filter *sqlplugin.HistoryNodeFilter) ([]sqlplugin.HistoryNodeRow, error) {
+func (pdb *db) SelectFromHistoryNode(filter sqlplugin.HistoryNodeSelectFilter) ([]sqlplugin.HistoryNodeRow, error) {
 	var rows []sqlplugin.HistoryNodeRow
 	err := pdb.conn.Select(&rows, getHistoryNodesQuery,
-		filter.ShardID, filter.TreeID, filter.BranchID, *filter.MinNodeID, *filter.MaxNodeID, *filter.PageSize)
+		filter.ShardID, filter.TreeID, filter.BranchID, filter.MinNodeID, filter.MaxNodeID, filter.PageSize)
 	// NOTE: since we let txn_id multiple by -1 when inserting, we have to revert it back here
-	for _, row := range rows {
-		*row.TxnID *= -1
+	for index := range rows {
+		rows[index].TxnID = -rows[index].TxnID
 	}
 	return rows, err
 }
 
 // DeleteFromHistoryNode deletes one or more rows from history_node table
-func (pdb *db) DeleteFromHistoryNode(filter *sqlplugin.HistoryNodeFilter) (sql.Result, error) {
-	return pdb.conn.Exec(deleteHistoryNodesQuery, filter.ShardID, filter.TreeID, filter.BranchID, *filter.MinNodeID)
+func (pdb *db) DeleteFromHistoryNode(filter sqlplugin.HistoryNodeDeleteFilter) (sql.Result, error) {
+	return pdb.conn.Exec(deleteHistoryNodesQuery, filter.ShardID, filter.TreeID, filter.BranchID, filter.MinNodeID)
 }
 
 // For history_tree table:
@@ -86,13 +86,13 @@ func (pdb *db) InsertIntoHistoryTree(row *sqlplugin.HistoryTreeRow) (sql.Result,
 }
 
 // SelectFromHistoryTree reads one or more rows from history_tree table
-func (pdb *db) SelectFromHistoryTree(filter *sqlplugin.HistoryTreeFilter) ([]sqlplugin.HistoryTreeRow, error) {
+func (pdb *db) SelectFromHistoryTree(filter sqlplugin.HistoryTreeSelectFilter) ([]sqlplugin.HistoryTreeRow, error) {
 	var rows []sqlplugin.HistoryTreeRow
 	err := pdb.conn.Select(&rows, getHistoryTreeQuery, filter.ShardID, filter.TreeID)
 	return rows, err
 }
 
 // DeleteFromHistoryTree deletes one or more rows from history_tree table
-func (pdb *db) DeleteFromHistoryTree(filter *sqlplugin.HistoryTreeFilter) (sql.Result, error) {
+func (pdb *db) DeleteFromHistoryTree(filter sqlplugin.HistoryTreeDeleteFilter) (sql.Result, error) {
 	return pdb.conn.Exec(deleteHistoryTreeQuery, filter.ShardID, filter.TreeID, filter.BranchID)
 }

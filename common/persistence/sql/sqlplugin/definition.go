@@ -230,48 +230,6 @@ type (
 		PageSize     *int
 	}
 
-	// HistoryNodeRow represents a row in history_node table
-	HistoryNodeRow struct {
-		ShardID  int32
-		TreeID   primitives.UUID
-		BranchID primitives.UUID
-		NodeID   int64
-		// use pointer so that it's easier to multiple by -1
-		TxnID        *int64
-		Data         []byte
-		DataEncoding string
-	}
-
-	// HistoryNodeFilter contains the column names within history_node table that
-	// can be used to filter results through a WHERE clause
-	HistoryNodeFilter struct {
-		ShardID  int32
-		TreeID   primitives.UUID
-		BranchID primitives.UUID
-		// Inclusive
-		MinNodeID *int64
-		// Exclusive
-		MaxNodeID *int64
-		PageSize  *int
-	}
-
-	// HistoryTreeRow represents a row in history_tree table
-	HistoryTreeRow struct {
-		ShardID      int32
-		TreeID       primitives.UUID
-		BranchID     primitives.UUID
-		Data         []byte
-		DataEncoding string
-	}
-
-	// HistoryTreeFilter contains the column names within history_tree table that
-	// can be used to filter results through a WHERE clause
-	HistoryTreeFilter struct {
-		ShardID  int32
-		TreeID   primitives.UUID
-		BranchID primitives.UUID
-	}
-
 	// ActivityInfoMapsRow represents a row in activity_info_maps table
 	ActivityInfoMapsRow struct {
 		ShardID      int32

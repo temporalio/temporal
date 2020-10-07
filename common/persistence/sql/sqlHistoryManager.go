@@ -85,7 +85,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 		TreeID:       treeIDBytes,
 		BranchID:     branchIDBytes,
 		NodeID:       request.NodeID,
-		TxnID:        &request.TransactionID,
+		TxnID:        request.TransactionID,
 		Data:         request.Events.Data,
 		DataEncoding: request.Events.Encoding.String(),
 		ShardID:      request.ShardID,
@@ -179,16 +179,14 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 		minNodeID = lastNodeID + 1
 	}
 
-	filter := &sqlplugin.HistoryNodeFilter{
+	rows, err := m.db.SelectFromHistoryNode(sqlplugin.HistoryNodeSelectFilter{
+		ShardID:   request.ShardID,
 		TreeID:    treeIDBytes,
 		BranchID:  branchIDBytes,
-		MinNodeID: &minNodeID,
-		MaxNodeID: &maxNodeID,
-		PageSize:  &request.PageSize,
-		ShardID:   request.ShardID,
-	}
-
-	rows, err := m.db.SelectFromHistoryNode(filter)
+		MinNodeID: minNodeID,
+		MaxNodeID: maxNodeID,
+		PageSize:  request.PageSize,
+	})
 	if err == sql.ErrNoRows || (err == nil && len(rows) == 0) {
 		return &p.InternalReadHistoryBranchResponse{}, nil
 	}
@@ -198,7 +196,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 	for _, row := range rows {
 		eventBlob := p.NewDataBlob(row.Data, row.DataEncoding)
 
-		if *row.TxnID < lastTxnID {
+		if row.TxnID < lastTxnID {
 			// assuming that business logic layer is correct and transaction ID only increase
 			// thus, valid event batch will come with increasing transaction ID
 
@@ -227,7 +225,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"))
 		default: // row.NodeID > lastNodeID:
 			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
-			lastTxnID = *row.TxnID
+			lastTxnID = row.TxnID
 			lastNodeID = row.NodeID
 			history = append(history, eventBlob)
 			eventBlob = &serialization.DataBlob{}
@@ -416,12 +414,11 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 	}
 
 	return m.txExecute("DeleteHistoryBranch", func(tx sqlplugin.Tx) error {
-		treeFilter := &sqlplugin.HistoryTreeFilter{
+		_, err = tx.DeleteFromHistoryTree(sqlplugin.HistoryTreeDeleteFilter{
 			TreeID:   treeIDBytes,
 			BranchID: branchIDBytes,
 			ShardID:  request.ShardID,
-		}
-		_, err = tx.DeleteFromHistoryTree(treeFilter)
+		})
 		if err != nil {
 			return err
 		}
@@ -431,21 +428,21 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 		for i := len(brsToDelete) - 1; i >= 0; i-- {
 			br := brsToDelete[i]
 			maxReferredEndNodeID, ok := validBRsMaxEndNode[br.GetBranchId()]
-			nodeFilter := &sqlplugin.HistoryNodeFilter{
+			deleteFilter := sqlplugin.HistoryNodeDeleteFilter{
+				ShardID:  request.ShardID,
 				TreeID:   treeIDBytes,
 				BranchID: branchIDBytes,
-				ShardID:  request.ShardID,
 			}
 
 			if ok {
 				// we can only delete from the maxEndNode and stop here
-				nodeFilter.MinNodeID = &maxReferredEndNodeID
+				deleteFilter.MinNodeID = maxReferredEndNodeID
 				done = true
 			} else {
 				// No any branch is using this range, we can delete all of it
-				nodeFilter.MinNodeID = &br.BeginNodeId
+				deleteFilter.MinNodeID = br.BeginNodeId
 			}
-			_, err := tx.DeleteFromHistoryNode(nodeFilter)
+			_, err := tx.DeleteFromHistoryNode(deleteFilter)
 			if err != nil {
 				return err
 			}
@@ -478,11 +475,10 @@ func (m *sqlHistoryV2Manager) GetHistoryTree(
 
 	branches := make([]*persistenceblobs.HistoryBranch, 0)
 
-	treeFilter := &sqlplugin.HistoryTreeFilter{
+	rows, err := m.db.SelectFromHistoryTree(sqlplugin.HistoryTreeSelectFilter{
 		TreeID:  treeID,
 		ShardID: *request.ShardID,
-	}
-	rows, err := m.db.SelectFromHistoryTree(treeFilter)
+	})
 	if err == sql.ErrNoRows || (err == nil && len(rows) == 0) {
 		return &p.GetHistoryTreeResponse{}, nil
 	}
