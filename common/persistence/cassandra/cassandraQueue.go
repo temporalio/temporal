@@ -408,7 +408,7 @@ func (q *cassandraQueue) updateQueueMetadata(
 		queueType,
 		metadata.version-1,
 	)
-	applied, err := query.ScanCAS()
+	applied, err := query.ScanCAS(nil)
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err))
 	}
