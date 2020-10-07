@@ -50,7 +50,8 @@ const (
 
 	// TODO hard code this dir for now
 	//  need to merge persistence test config / initialization in one place
-	testMySQLSchema = "../../../../../schema/mysql/v57/temporal/schema.sql"
+	testMySQLExecutionSchema  = "../../../../../schema/mysql/v57/temporal/schema.sql"
+	testMySQLVisibilitySchema = "../../../../../schema/mysql/v57/visibility/schema.sql"
 )
 
 func TestMySQLNamespaceSuite(t *testing.T) {
@@ -274,6 +275,23 @@ func TestMySQLHistoryExecutionSignalRequestSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestMySQLVisibilitySuite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(cfg)
+	SetupMySQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(cfg)
+	}()
+
+	s := newVisibilitySuite(t, store)
+	suite.Run(t, s)
+}
+
 // NewMySQLConfig returns a new MySQL config for test
 func NewMySQLConfig() *config.SQL {
 	return &config.SQL{
@@ -313,12 +331,26 @@ func SetupMySQLSchema(cfg *config.SQL) {
 	}
 	defer func() { _ = db.Close() }()
 
-	schemaPath, err := filepath.Abs(testMySQLSchema)
+	schemaPath, err := filepath.Abs(testMySQLExecutionSchema)
 	if err != nil {
 		panic(err)
 	}
 
 	content, err := ioutil.ReadFile(schemaPath)
+	if err != nil {
+		panic(err)
+	}
+	err = db.Exec(string(content))
+	if err != nil {
+		panic(err)
+	}
+
+	schemaPath, err = filepath.Abs(testMySQLVisibilitySchema)
+	if err != nil {
+		panic(err)
+	}
+
+	content, err = ioutil.ReadFile(schemaPath)
 	if err != nil {
 		panic(err)
 	}

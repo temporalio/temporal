@@ -482,34 +482,6 @@ type (
 		SignalID    *string
 	}
 
-	// VisibilityRow represents a row in executions_visibility table
-	VisibilityRow struct {
-		NamespaceID      string
-		RunID            string
-		WorkflowTypeName string
-		WorkflowID       string
-		StartTime        time.Time
-		ExecutionTime    time.Time
-		Status           int32
-		CloseTime        *time.Time
-		HistoryLength    *int64
-		Memo             []byte
-		Encoding         string
-	}
-
-	// VisibilityFilter contains the column names within executions_visibility table that
-	// can be used to filter results through a WHERE clause
-	VisibilityFilter struct {
-		NamespaceID      string
-		RunID            *string
-		WorkflowID       *string
-		WorkflowTypeName *string
-		Status           int32
-		MinStartTime     *time.Time
-		MaxStartTime     *time.Time
-		PageSize         *int
-	}
-
 	// QueueRow represents a row in queue table
 	QueueRow struct {
 		QueueType      persistence.QueueType

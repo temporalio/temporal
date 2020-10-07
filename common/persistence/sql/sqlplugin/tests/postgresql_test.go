@@ -50,7 +50,8 @@ const (
 
 	// TODO hard code this dir for now
 	//  need to merge persistence test config / initialization in one place
-	testPostgreSQLSchema = "../../../../../schema/postgresql/v96/temporal/schema.sql"
+	testPostgreSQLExecutionSchema  = "../../../../../schema/postgresql/v96/temporal/schema.sql"
+	testPostgreSQLVisibilitySchema = "../../../../../schema/postgresql/v96/visibility/schema.sql"
 )
 
 func TestPostgreSQLNamespaceSuite(t *testing.T) {
@@ -274,6 +275,23 @@ func TestPostgreSQLHistoryExecutionSignalRequestSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestPostgreSQLVisibilitySuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newVisibilitySuite(t, store)
+	suite.Run(t, s)
+}
+
 // NewPostgreSQLConfig returns a new MySQL config for test
 func NewPostgreSQLConfig() *config.SQL {
 	return &config.SQL{
@@ -313,12 +331,26 @@ func SetupPostgreSQLSchema(cfg *config.SQL) {
 	}
 	defer func() { _ = db.Close() }()
 
-	schemaPath, err := filepath.Abs(testPostgreSQLSchema)
+	schemaPath, err := filepath.Abs(testPostgreSQLExecutionSchema)
 	if err != nil {
 		panic(err)
 	}
 
 	content, err := ioutil.ReadFile(schemaPath)
+	if err != nil {
+		panic(err)
+	}
+	err = db.Exec(string(content))
+	if err != nil {
+		panic(err)
+	}
+
+	schemaPath, err = filepath.Abs(testPostgreSQLVisibilitySchema)
+	if err != nil {
+		panic(err)
+	}
+
+	content, err = ioutil.ReadFile(schemaPath)
 	if err != nil {
 		panic(err)
 	}
