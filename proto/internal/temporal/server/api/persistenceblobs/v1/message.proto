@@ -48,13 +48,6 @@ message ExecutionStats {
     int64 history_size = 1;
 }
 
-// ImmutableClusterMetadata contains initialization configuration and metadata for the cluster.
-message ImmutableClusterMetadata {
-    string cluster_name = 1;
-    int32 history_shard_count = 2;
-    string cluster_id = 3;
-}
-
 // ReleaseInfo contains information about specific version of temporal.
 message ReleaseInfo {
     string version = 1;

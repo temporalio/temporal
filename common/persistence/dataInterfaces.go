@@ -1169,24 +1169,6 @@ type (
 		Branches []HistoryBranchDetail
 	}
 
-	// InitializeImmutableClusterMetadataRequest is a request of InitializeImmutableClusterMetadata
-	// These values can only be set a single time upon cluster initialization.
-	InitializeImmutableClusterMetadataRequest struct {
-		persistenceblobs.ImmutableClusterMetadata
-	}
-
-	// InitializeImmutableClusterMetadataResponse is a request of InitializeImmutableClusterMetadata
-	InitializeImmutableClusterMetadataResponse struct {
-		PersistedImmutableData persistenceblobs.ImmutableClusterMetadata
-		RequestApplied         bool
-	}
-
-	// GetImmutableClusterMetadataResponse is the response to GetImmutableClusterMetadata
-	// These values are set a single time upon cluster initialization.
-	GetImmutableClusterMetadataResponse struct {
-		persistenceblobs.ImmutableClusterMetadata
-	}
-
 	// GetClusterMetadataResponse is the response to GetClusterMetadata
 	GetClusterMetadataResponse struct {
 		persistenceblobs.ClusterMetadata
