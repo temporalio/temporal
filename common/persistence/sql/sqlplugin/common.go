@@ -33,6 +33,7 @@ type (
 	clusterMetadata interface {
 		SaveClusterMetadata(row *ClusterMetadataRow) (sql.Result, error)
 		GetClusterMetadata() (*ClusterMetadataRow, error)
+		WriteLockGetClusterMetadata() (*ClusterMetadataRow, error)
 		GetClusterMembers(filter *ClusterMembershipFilter) ([]ClusterMembershipRow, error)
 		UpsertClusterMembership(row *ClusterMembershipRow) (sql.Result, error)
 		PruneClusterMembership(filter *PruneClusterMembershipFilter) (sql.Result, error)

@@ -58,7 +58,7 @@ func (s *sqlClusterMetadataManager) GetClusterMetadata() (*p.InternalGetClusterM
 
 func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
 	err := s.txExecute("SaveClusterMetadata", func(tx sqlplugin.Tx) error {
-		oldClusterMetadata, err := tx.GetClusterMetadata()
+		oldClusterMetadata, err := tx.WriteLockGetClusterMetadata()
 		var lastVersion int64
 		if err != nil {
 			if err != sql.ErrNoRows {

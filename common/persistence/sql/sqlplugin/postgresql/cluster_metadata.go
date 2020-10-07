@@ -44,6 +44,8 @@ const (
 
 	getClusterMetadataQry = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = $1`
 
+	writeLockGetClusterMetadataQry = getClusterMetadataQry + ` FOR UPDATE`
+
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
 	templateUpsertActiveClusterMembership = `INSERT INTO
 cluster_membership (membership_partition, host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry)
@@ -84,6 +86,15 @@ func (pdb *db) SaveClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Resul
 func (pdb *db) GetClusterMetadata() (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
 	err := pdb.conn.Get(&row, getClusterMetadataQry, constMetadataPartition)
+	if err != nil {
+		return nil, err
+	}
+	return &row, err
+}
+
+func (pdb *db) WriteLockGetClusterMetadata() (*sqlplugin.ClusterMetadataRow, error) {
+	var row sqlplugin.ClusterMetadataRow
+	err := pdb.conn.Get(&row, writeLockGetClusterMetadataQry, constMetadataPartition)
 	if err != nil {
 		return nil, err
 	}
