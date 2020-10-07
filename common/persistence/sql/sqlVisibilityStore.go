@@ -117,12 +117,12 @@ func (s *sqlVisibilityStore) ListOpenWorkflowExecutions(request *p.ListWorkflowE
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
 			minStartTime := time.Unix(0, request.EarliestStartTime).UTC()
 			return s.db.SelectFromVisibility(sqlplugin.VisibilitySelectFilter{
-				NamespaceID:  request.NamespaceID,
-				MinStartTime: &minStartTime,
-				MaxStartTime: &readLevel.Time,
-				RunID:        &readLevel.RunID,
-				PageSize:     &request.PageSize,
-				Status:       int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
+				NamespaceID: request.NamespaceID,
+				MinTime:     &minStartTime,
+				MaxTime:     &readLevel.Time,
+				RunID:       &readLevel.RunID,
+				PageSize:    &request.PageSize,
+				Status:      int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 			})
 		})
 }
@@ -132,11 +132,11 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutions(request *p.ListWorkflo
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
 			minStartTime := time.Unix(0, request.EarliestStartTime).UTC()
 			return s.db.SelectFromVisibility(sqlplugin.VisibilitySelectFilter{
-				NamespaceID:  request.NamespaceID,
-				MinStartTime: &minStartTime,
-				MaxStartTime: &readLevel.Time,
-				RunID:        &readLevel.RunID,
-				PageSize:     &request.PageSize,
+				NamespaceID: request.NamespaceID,
+				MinTime:     &minStartTime,
+				MaxTime:     &readLevel.Time,
+				RunID:       &readLevel.RunID,
+				PageSize:    &request.PageSize,
 			})
 		})
 }
@@ -147,8 +147,8 @@ func (s *sqlVisibilityStore) ListOpenWorkflowExecutionsByType(request *p.ListWor
 			minStartTime := time.Unix(0, request.EarliestStartTime).UTC()
 			return s.db.SelectFromVisibility(sqlplugin.VisibilitySelectFilter{
 				NamespaceID:      request.NamespaceID,
-				MinStartTime:     &minStartTime,
-				MaxStartTime:     &readLevel.Time,
+				MinTime:          &minStartTime,
+				MaxTime:          &readLevel.Time,
 				RunID:            &readLevel.RunID,
 				WorkflowTypeName: &request.WorkflowTypeName,
 				PageSize:         &request.PageSize,
@@ -163,8 +163,8 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByType(request *p.ListW
 			minStartTime := time.Unix(0, request.EarliestStartTime).UTC()
 			return s.db.SelectFromVisibility(sqlplugin.VisibilitySelectFilter{
 				NamespaceID:      request.NamespaceID,
-				MinStartTime:     &minStartTime,
-				MaxStartTime:     &readLevel.Time,
+				MinTime:          &minStartTime,
+				MaxTime:          &readLevel.Time,
 				RunID:            &readLevel.RunID,
 				WorkflowTypeName: &request.WorkflowTypeName,
 				PageSize:         &request.PageSize,
@@ -177,13 +177,13 @@ func (s *sqlVisibilityStore) ListOpenWorkflowExecutionsByWorkflowID(request *p.L
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
 			minStartTime := time.Unix(0, request.EarliestStartTime).UTC()
 			return s.db.SelectFromVisibility(sqlplugin.VisibilitySelectFilter{
-				NamespaceID:  request.NamespaceID,
-				MinStartTime: &minStartTime,
-				MaxStartTime: &readLevel.Time,
-				RunID:        &readLevel.RunID,
-				WorkflowID:   &request.WorkflowID,
-				PageSize:     &request.PageSize,
-				Status:       int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
+				NamespaceID: request.NamespaceID,
+				MinTime:     &minStartTime,
+				MaxTime:     &readLevel.Time,
+				RunID:       &readLevel.RunID,
+				WorkflowID:  &request.WorkflowID,
+				PageSize:    &request.PageSize,
+				Status:      int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 			})
 		})
 }
@@ -193,12 +193,12 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(request *p
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
 			minStartTime := time.Unix(0, request.EarliestStartTime).UTC()
 			return s.db.SelectFromVisibility(sqlplugin.VisibilitySelectFilter{
-				NamespaceID:  request.NamespaceID,
-				MinStartTime: &minStartTime,
-				MaxStartTime: &readLevel.Time,
-				RunID:        &readLevel.RunID,
-				WorkflowID:   &request.WorkflowID,
-				PageSize:     &request.PageSize,
+				NamespaceID: request.NamespaceID,
+				MinTime:     &minStartTime,
+				MaxTime:     &readLevel.Time,
+				RunID:       &readLevel.RunID,
+				WorkflowID:  &request.WorkflowID,
+				PageSize:    &request.PageSize,
 			})
 		})
 }
@@ -208,12 +208,12 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByStatus(request *p.Lis
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
 			minStartTime := time.Unix(0, request.EarliestStartTime).UTC()
 			return s.db.SelectFromVisibility(sqlplugin.VisibilitySelectFilter{
-				NamespaceID:  request.NamespaceID,
-				MinStartTime: &minStartTime,
-				MaxStartTime: &readLevel.Time,
-				RunID:        &readLevel.RunID,
-				Status:       int32(request.Status),
-				PageSize:     &request.PageSize,
+				NamespaceID: request.NamespaceID,
+				MinTime:     &minStartTime,
+				MaxTime:     &readLevel.Time,
+				RunID:       &readLevel.RunID,
+				Status:      int32(request.Status),
+				PageSize:    &request.PageSize,
 			})
 		})
 }
