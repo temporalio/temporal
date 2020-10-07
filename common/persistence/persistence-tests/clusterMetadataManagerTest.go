@@ -272,6 +272,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertInvalidExpiry()
 // 2 - Init, no data persisted
 // 3 - Get, data persisted
 // 4 - Init, data persisted
+// 5 - Update, add version info and make sure it's persisted and can be retrieved.
 func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	// Case 1 - Get, mo data persisted
 	// Fetch the persisted values, there should be nothing on start.
@@ -328,8 +329,24 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 
 	// Validate they match our initial values
 	s.Nil(err)
-	s.True(getResp != nil)
+	s.NotNil(getResp)
 	s.Equal(clusterNameToPersist, getResp.ClusterName)
 	s.Equal(historyShardsToPersist, getResp.HistoryShardCount)
 	s.Equal(clusterIdToPersist, getResp.ClusterId)
+	// Case 5 - Update version info
+	getResp.VersionInfo = &persistenceblobs.VersionInfo{
+		Current: &persistenceblobs.ReleaseInfo{
+			Version: "1.0",
+		},
+	}
+	thirdResp, err := s.ClusterMetadataManager.SaveClusterMetadata(&p.SaveClusterMetadataRequest{
+		ClusterMetadata: getResp.ClusterMetadata,
+		Version:         getResp.Version,
+	})
+	s.Nil(err)
+	s.True(thirdResp)
+	getResp, err = s.ClusterMetadataManager.GetClusterMetadata()
+	s.Nil(err)
+	s.NotNil(getResp)
+	s.Equal("1.0", getResp.ClusterMetadata.VersionInfo.Current.Version)
 }
