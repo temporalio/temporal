@@ -159,22 +159,19 @@ func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMe
 }
 
 func (m *cassandraClusterMetadata) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
-	if request.Version == 0 {
-		query := m.session.Query(templateCreateClusterMetadata, constMembershipPartition, request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), 1)
-		err := query.Exec()
-		if err != nil {
-			return false, convertCommonErrors("SaveClusterMetadata", err)
-		}
-	} else {
-		query := m.session.Query(templateUpdateClusterMetadata, request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), request.Version+1, constMembershipPartition, request.Version)
-		previous := make(map[string]interface{})
-		applied, err := query.MapScanCAS(previous)
-		if err != nil {
-			return false, convertCommonErrors("SaveClusterMetadata", err)
-		}
-		if !applied {
-			return false, serviceerror.NewInternal("SaveClusterMetadata operation encountered concurrent write.")
-		}
+	query := m.session.Query(templateCreateClusterMetadata,
+		constMembershipPartition, request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), 1)
+	if request.Version > 0 {
+		query = m.session.Query(templateUpdateClusterMetadata,
+			request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), request.Version+1, constMembershipPartition, request.Version)
+	}
+	previous := make(map[string]interface{})
+	applied, err := query.MapScanCAS(previous)
+	if err != nil {
+		return false, convertCommonErrors("SaveClusterMetadata", err)
+	}
+	if !applied {
+		return false, serviceerror.NewInternal("SaveClusterMetadata operation encountered concurrent write.")
 	}
 	return true, nil
 }

@@ -25,9 +25,10 @@
 package temporal
 
 import (
-	"github.com/pborman/uuid"
 	"log"
 	"time"
+
+	"github.com/pborman/uuid"
 
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
