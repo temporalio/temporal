@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/shuffle"
 )
@@ -150,11 +149,9 @@ func (s *historyHistoryTransferTaskSuite) TestInsertSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.TransferTasksFilter{
-		ShardID:   shardID,
-		TaskID:    convert.Int64Ptr(taskID),
-		MinTaskID: nil,
-		MaxTaskID: nil,
+	filter := sqlplugin.TransferTasksFilter{
+		ShardID: shardID,
+		TaskID:  taskID,
 	}
 	rows, err := s.store.SelectFromTransferTasks(filter)
 	s.NoError(err)
@@ -184,13 +181,12 @@ func (s *historyHistoryTransferTaskSuite) TestInsertSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(numTasks, int(rowsAffected))
 
-	filter := &sqlplugin.TransferTasksFilter{
+	filter := sqlplugin.TransferTasksRangeFilter{
 		ShardID:   shardID,
-		TaskID:    nil,
-		MinTaskID: convert.Int64Ptr(minTaskID),
-		MaxTaskID: convert.Int64Ptr(maxTaskID),
+		MinTaskID: minTaskID,
+		MaxTaskID: maxTaskID,
 	}
-	rows, err := s.store.SelectFromTransferTasks(filter)
+	rows, err := s.store.RangeSelectFromTransferTasks(filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -202,11 +198,9 @@ func (s *historyHistoryTransferTaskSuite) TestDeleteSelect_Single() {
 	shardID := rand.Int31()
 	taskID := int64(1)
 
-	filter := &sqlplugin.TransferTasksFilter{
-		ShardID:   shardID,
-		TaskID:    convert.Int64Ptr(taskID),
-		MinTaskID: nil,
-		MaxTaskID: nil,
+	filter := sqlplugin.TransferTasksFilter{
+		ShardID: shardID,
+		TaskID:  taskID,
 	}
 	result, err := s.store.DeleteFromTransferTasks(filter)
 	s.NoError(err)
@@ -227,19 +221,18 @@ func (s *historyHistoryTransferTaskSuite) TestDeleteSelect_Multiple() {
 	minTaskID := int64(1)
 	maxTaskID := int64(100)
 
-	filter := &sqlplugin.TransferTasksFilter{
+	filter := sqlplugin.TransferTasksRangeFilter{
 		ShardID:   shardID,
-		TaskID:    nil,
-		MinTaskID: convert.Int64Ptr(minTaskID),
-		MaxTaskID: convert.Int64Ptr(maxTaskID),
+		MinTaskID: minTaskID,
+		MaxTaskID: maxTaskID,
 	}
-	result, err := s.store.DeleteFromTransferTasks(filter)
+	result, err := s.store.RangeDeleteFromTransferTasks(filter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.SelectFromTransferTasks(filter)
+	rows, err := s.store.RangeSelectFromTransferTasks(filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -258,11 +251,9 @@ func (s *historyHistoryTransferTaskSuite) TestInsertDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.TransferTasksFilter{
-		ShardID:   shardID,
-		TaskID:    convert.Int64Ptr(taskID),
-		MinTaskID: nil,
-		MaxTaskID: nil,
+	filter := sqlplugin.TransferTasksFilter{
+		ShardID: shardID,
+		TaskID:  taskID,
 	}
 	result, err = s.store.DeleteFromTransferTasks(filter)
 	s.NoError(err)
@@ -298,19 +289,18 @@ func (s *historyHistoryTransferTaskSuite) TestInsertDeleteSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(numTasks, int(rowsAffected))
 
-	filter := &sqlplugin.TransferTasksFilter{
+	filter := sqlplugin.TransferTasksRangeFilter{
 		ShardID:   shardID,
-		TaskID:    nil,
-		MinTaskID: convert.Int64Ptr(minTaskID),
-		MaxTaskID: convert.Int64Ptr(maxTaskID),
+		MinTaskID: minTaskID,
+		MaxTaskID: maxTaskID,
 	}
-	result, err = s.store.DeleteFromTransferTasks(filter)
+	result, err = s.store.RangeDeleteFromTransferTasks(filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(numTasks, int(rowsAffected))
 
-	rows, err := s.store.SelectFromTransferTasks(filter)
+	rows, err := s.store.RangeSelectFromTransferTasks(filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
