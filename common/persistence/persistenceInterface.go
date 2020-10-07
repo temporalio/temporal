@@ -72,7 +72,7 @@ type (
 		InitializeImmutableClusterMetadata(request *InternalInitializeImmutableClusterMetadataRequest) (*InternalInitializeImmutableClusterMetadataResponse, error)
 		GetImmutableClusterMetadata() (*InternalGetImmutableClusterMetadataResponse, error)
 		GetClusterMetadata() (*InternalGetClusterMetadataResponse, error)
-		SaveClusterMetadata(request *InternalSaveClusterMetadataRequest) error
+		SaveClusterMetadata(request *InternalSaveClusterMetadataRequest) (bool, error)
 		// Membership APIs
 		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
@@ -561,11 +561,13 @@ type (
 	InternalGetClusterMetadataResponse struct {
 		// Serialized MutableCusterMetadata.
 		ClusterMetadata *serialization.DataBlob
+		Version         int64
 	}
 
 	InternalSaveClusterMetadataRequest struct {
 		// Serialized MutableCusterMetadata.
 		ClusterMetadata *serialization.DataBlob
+		Version         int64
 	}
 
 	// InternalUpsertClusterMembershipRequest is the request to UpsertClusterMembership

@@ -1427,18 +1427,18 @@ func (c *clusterMetadataPersistenceClient) GetClusterMetadata() (*GetClusterMeta
 	return result, err
 }
 
-func (c *clusterMetadataPersistenceClient) SaveClusterMetadata(request *SaveClusterMetadataRequest) error {
+func (c *clusterMetadataPersistenceClient) SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error) {
 	c.metricClient.IncCounter(metrics.PersistenceSaveClusterMetadataScope, metrics.PersistenceRequests)
 
 	sw := c.metricClient.StartTimer(metrics.PersistenceSaveClusterMetadataScope, metrics.PersistenceLatency)
-	err := c.persistence.SaveClusterMetadata(request)
+	applied, err := c.persistence.SaveClusterMetadata(request)
 	sw.Stop()
 
 	if err != nil {
 		c.metricClient.IncCounter(metrics.PersistenceSaveClusterMetadataScope, metrics.PersistenceFailures)
 	}
 
-	return err
+	return applied, err
 }
 
 func (c *clusterMetadataPersistenceClient) GetName() string {

@@ -26,6 +26,9 @@ package persistence
 
 import (
 	"errors"
+	"fmt"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -150,13 +153,34 @@ func (m *clusterMetadataManagerImpl) GetClusterMetadata() (*GetClusterMetadataRe
 	if err != nil {
 		return nil, err
 	}
-	return &GetClusterMetadataResponse{ClusterMetadata: *mcm}, nil
+	return &GetClusterMetadataResponse{ClusterMetadata: *mcm, Version: resp.Version}, nil
 }
 
-func (m *clusterMetadataManagerImpl) SaveClusterMetadata(request *SaveClusterMetadataRequest) error {
+func (m *clusterMetadataManagerImpl) SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error) {
 	mcm, err := m.serializer.SerializeClusterMetadata(&request.ClusterMetadata, clusterMetadataEncoding)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{ClusterMetadata: mcm})
+	oldClusterMetadata, err := m.GetClusterMetadata()
+	if _, notFound := err.(*serviceerror.NotFound); notFound {
+		return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{ClusterMetadata: mcm, Version: request.Version})
+	}
+	if err != nil {
+		return false, err
+	}
+	if immutableFieldsChanged(oldClusterMetadata.ClusterMetadata, request.ClusterMetadata) {
+		return false, nil
+	}
+	if oldClusterMetadata.Version != request.Version {
+		return false, serviceerror.NewInternal(fmt.Sprintf("SaveClusterMetadata encountered version mismatch, expected %v but got %v.",
+			request.Version, oldClusterMetadata.Version))
+	}
+	return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{ClusterMetadata: mcm, Version: request.Version})
+}
+
+// immutableFieldsChanged returns true if any of immutable fields changed.
+func immutableFieldsChanged(old persistenceblobs.ClusterMetadata, cur persistenceblobs.ClusterMetadata) bool {
+	return old.ClusterName != cur.ClusterName ||
+		old.ClusterId != cur.ClusterId ||
+		old.HistoryShardCount != cur.HistoryShardCount
 }

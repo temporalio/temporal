@@ -1190,10 +1190,12 @@ type (
 	// GetClusterMetadataResponse is the response to GetClusterMetadata
 	GetClusterMetadataResponse struct {
 		persistenceblobs.ClusterMetadata
+		Version int64
 	}
 
 	SaveClusterMetadataRequest struct {
 		persistenceblobs.ClusterMetadata
+		Version int64
 	}
 
 	// GetClusterMembersRequest is the response to GetClusterMembers
@@ -1376,7 +1378,7 @@ type (
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
 		GetClusterMetadata() (*GetClusterMetadataResponse, error)
-		SaveClusterMetadata(request *SaveClusterMetadataRequest) error
+		SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error)
 	}
 )
 

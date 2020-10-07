@@ -58,11 +58,10 @@ WHERE metadata_partition = ?`
 
 	immutableEncodingFieldName = immutablePayloadFieldName + `_encoding`
 
-	templateGetClusterMetadata = `SELECT data, data_encoding FROM 
-cluster_metadata 
-WHERE metadata_partition = ?`
+	templateGetClusterMetadata = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = ?`
 
-	templateUpsertClusterMetadata = `UPDATE cluster_metadata SET data = ?, data_encoding = ? WHERE metadata_partition = ?`
+	templateCreateClusterMetadata = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES(?, ?, ?, ?) IF NOT EXISTS`
+	templateUpdateClusterMetadata = `UPDATE cluster_metadata SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ? IF version = ?`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
 	templateUpsertActiveClusterMembership = `INSERT INTO 
@@ -188,27 +187,39 @@ func (m *cassandraClusterMetadata) GetImmutableClusterMetadata() (*p.InternalGet
 
 func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMetadataResponse, error) {
 	query := m.session.Query(templateGetClusterMetadata, constMetadataPartition)
-	var mutableMetadata []byte
+	var clusterMetadata []byte
 	var encoding string
-	err := query.Scan(&mutableMetadata, &encoding)
+	var version int64
+	err := query.Scan(&clusterMetadata, &encoding, &version)
 	if err != nil {
 		return nil, convertCommonErrors("GetClusterMetadata", err)
 	}
 
 	return &p.InternalGetClusterMetadataResponse{
-		ClusterMetadata: p.NewDataBlob(mutableMetadata, encoding),
+		ClusterMetadata: p.NewDataBlob(clusterMetadata, encoding),
+		Version:         version,
 	}, nil
 }
 
-func (m *cassandraClusterMetadata) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) error {
-	query := m.session.Query(templateUpsertClusterMetadata, request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), constMembershipPartition)
-	err := query.Exec()
-
-	if err != nil {
-		return convertCommonErrors("SaveClusterMetadata", err)
+func (m *cassandraClusterMetadata) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
+	if request.Version == 0 {
+		query := m.session.Query(templateCreateClusterMetadata, constMembershipPartition, request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), 1)
+		err := query.Exec()
+		if err != nil {
+			return false, convertCommonErrors("SaveClusterMetadata", err)
+		}
+	} else {
+		query := m.session.Query(templateUpdateClusterMetadata, request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), request.Version+1, constMembershipPartition, request.Version)
+		previous := make(map[string]interface{})
+		applied, err := query.MapScanCAS(previous)
+		if err != nil {
+			return false, convertCommonErrors("SaveClusterMetadata", err)
+		}
+		if !applied {
+			return false, serviceerror.NewInternal("SaveClusterMetadata operation encountered concurrent write.")
+		}
 	}
-
-	return nil
+	return true, nil
 }
 
 func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {

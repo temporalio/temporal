@@ -25,6 +25,8 @@
 package sql
 
 import (
+	"database/sql"
+	"fmt"
 	"net"
 	"time"
 
@@ -101,21 +103,41 @@ func (s *sqlClusterMetadataManager) GetClusterMetadata() (*p.InternalGetClusterM
 	}
 
 	return &p.InternalGetClusterMetadataResponse{
-		ClusterMetadata: p.NewDataBlob(row.MutableData, row.MutableDataEncoding),
+		ClusterMetadata: p.NewDataBlob(row.Data, row.DataEncoding),
+		Version:         row.Version,
 	}, nil
 }
 
-func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) error {
-	_, err := s.db.SaveClusterMetadata(&sqlplugin.ClusterMetadataRow{
-		MutableData:         request.ClusterMetadata.Data,
-		MutableDataEncoding: request.ClusterMetadata.Encoding.String(),
+func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
+	err := s.txExecute("SaveClusterMetadata", func(tx sqlplugin.Tx) error {
+		oldClusterMetadata, err := tx.GetClusterMetadata()
+		var lastVersion int64
+		if err != nil {
+			if err != sql.ErrNoRows {
+				return serviceerror.NewInternal(fmt.Sprintf("SaveClusterMetadata operation failed. Error %v", err))
+			}
+		} else {
+			lastVersion = oldClusterMetadata.Version
+		}
+		if request.Version != lastVersion {
+			return serviceerror.NewInternal(fmt.Sprintf("SaveClusterMetadata encountered version mismatch, expected %v but got %v.",
+				request.Version, oldClusterMetadata.Version))
+		}
+		_, err = tx.SaveClusterMetadata(&sqlplugin.ClusterMetadataRow{
+			Data:         request.ClusterMetadata.Data,
+			DataEncoding: request.ClusterMetadata.Encoding.String(),
+			Version:      request.Version + 1,
+		})
+		if err != nil {
+			return convertCommonErrors("SaveClusterMetadata", err)
+		}
+		return nil
 	})
 
 	if err != nil {
-		return convertCommonErrors("SaveClusterMetadata", err)
+		return false, serviceerror.NewInternal(err.Error())
 	}
-
-	return nil
+	return true, nil
 }
 
 func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {

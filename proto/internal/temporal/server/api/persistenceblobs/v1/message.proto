@@ -78,11 +78,10 @@ message VersionInfo {
 
 // ClusterMetadata contains mutable cluster configuration and metadata.
 message ClusterMetadata {
-    int64 version = 1;
-    string cluster_name = 2;
-    int32 history_shard_count = 3;
-    string cluster_id = 4;
-    VersionInfo version_info = 5;
+    string cluster_name = 1;
+    int32 history_shard_count = 2;
+    string cluster_id = 3;
+    VersionInfo version_info = 4;
 }
 
 message ActivityInfo {

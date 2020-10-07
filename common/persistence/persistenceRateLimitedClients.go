@@ -944,9 +944,9 @@ func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMetadata() (*Get
 	return c.persistence.GetClusterMetadata()
 }
 
-func (c *clusterMetadataRateLimitedPersistenceClient) SaveClusterMetadata(request *SaveClusterMetadataRequest) error {
+func (c *clusterMetadataRateLimitedPersistenceClient) SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error) {
 	if ok := c.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
+		return false, ErrPersistenceLimitExceeded
 	}
 	return c.persistence.SaveClusterMetadata(request)
 }

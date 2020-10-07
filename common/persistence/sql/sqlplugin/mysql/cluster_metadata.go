@@ -85,8 +85,8 @@ func (mdb *db) InsertIfNotExistsIntoClusterMetadata(row *sqlplugin.ClusterMetada
 
 func (mdb *db) SaveClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Result, error) {
 	return mdb.conn.Exec(saveClusterMetadataQry,
-		row.MutableData,
-		row.MutableDataEncoding,
+		row.Data,
+		row.DataEncoding,
 		constMetadataPartition)
 }
 
