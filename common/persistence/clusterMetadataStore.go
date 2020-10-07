@@ -75,46 +75,6 @@ func (m *clusterMetadataManagerImpl) Close() {
 	m.persistence.Close()
 }
 
-func (m *clusterMetadataManagerImpl) InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error) {
-	icm, err := m.serializer.SerializeImmutableClusterMetadata(&request.ImmutableClusterMetadata, clusterMetadataEncoding)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := m.persistence.InitializeImmutableClusterMetadata(&InternalInitializeImmutableClusterMetadataRequest{
-		ImmutableClusterMetadata: icm,
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	deserialized, err := m.serializer.DeserializeImmutableClusterMetadata(resp.PersistedImmutableMetadata)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &InitializeImmutableClusterMetadataResponse{
-		PersistedImmutableData: *deserialized,
-		RequestApplied:         resp.RequestApplied,
-	}, nil
-}
-
-func (m *clusterMetadataManagerImpl) GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error) {
-	resp, err := m.persistence.GetImmutableClusterMetadata()
-	if err != nil {
-		return nil, err
-	}
-
-	icm, err := m.serializer.DeserializeImmutableClusterMetadata(resp.ImmutableClusterMetadata)
-	if err != nil {
-		return nil, err
-	}
-
-	return &GetImmutableClusterMetadataResponse{*icm}, nil
-}
-
 func (m *clusterMetadataManagerImpl) GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {
 	return m.persistence.GetClusterMembers(request)
 }

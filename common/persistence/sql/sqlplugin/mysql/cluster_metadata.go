@@ -37,15 +37,11 @@ const constMetadataPartition = 0
 const constMembershipPartition = 0
 const (
 	// ****** CLUSTER_METADATA TABLE ******
-	// One time only for the immutable data, so lets just use insert ignore
-	insertClusterMetadataOneTimeOnlyQry = `INSERT IGNORE INTO 
-cluster_metadata (metadata_partition, immutable_data, immutable_data_encoding)
-VALUES(?, ?, ?)`
+	insertClusterMetadataQry = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES(?, ?, ?, ?)`
 
-	saveClusterMetadataQry = `UPDATE cluster_metadata SET data = ?, data_encoding = ? WHERE metadata_partition = ?`
+	updateClusterMetadataQry = `UPDATE cluster_metadata SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ?`
 
-	getImmutableClusterMetadataQry = `SELECT immutable_data, immutable_data_encoding FROM 
-cluster_metadata WHERE metadata_partition = ?`
+	getClusterMetadataQry = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = ?`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
 	templateUpsertActiveClusterMembership = `INSERT INTO
@@ -75,24 +71,16 @@ cluster_membership WHERE membership_partition = ?`
 	templateWithOrderBySessionStartSuffix = ` ORDER BY membership_partition ASC, host_id ASC`
 )
 
-// Does not follow traditional lock, select, read, insert as we only expect a single row.
-func (mdb *db) InsertIfNotExistsIntoClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Result, error) {
-	return mdb.conn.Exec(insertClusterMetadataOneTimeOnlyQry,
-		constMetadataPartition,
-		row.ImmutableData,
-		row.ImmutableDataEncoding)
-}
-
 func (mdb *db) SaveClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Result, error) {
-	return mdb.conn.Exec(saveClusterMetadataQry,
-		row.Data,
-		row.DataEncoding,
-		constMetadataPartition)
+	if row.Version == 0 {
+		mdb.conn.Exec(insertClusterMetadataQry, constMetadataPartition, row.Data, row.DataEncoding, 1)
+	}
+	return mdb.conn.Exec(updateClusterMetadataQry, row.Data, row.DataEncoding, row.Version+1, constMetadataPartition)
 }
 
 func (mdb *db) GetClusterMetadata() (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
-	err := mdb.conn.Get(&row, getImmutableClusterMetadataQry, constMetadataPartition)
+	err := mdb.conn.Get(&row, getClusterMetadataQry, constMetadataPartition)
 	if err != nil {
 		return nil, err
 	}

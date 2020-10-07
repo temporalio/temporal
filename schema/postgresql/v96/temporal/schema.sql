@@ -236,10 +236,9 @@ CREATE TABLE queue_metadata (
 
 CREATE TABLE cluster_metadata (
   metadata_partition        INTEGER NOT NULL,
-  immutable_data            BYTEA NOT NULL,
-  immutable_data_encoding   VARCHAR(16) NOT NULL,
-  data                      BYTEA,
-  data_encoding             VARCHAR(16),
+  data                      BYTEA NOT NULL,
+  data_encoding             VARCHAR(16) NOT NULL,
+  version                   BIGINT NOT NULL,
   PRIMARY KEY(metadata_partition)
 );
 

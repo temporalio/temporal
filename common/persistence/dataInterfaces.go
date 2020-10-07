@@ -1372,8 +1372,6 @@ type (
 	ClusterMetadataManager interface {
 		Closeable
 		GetName() string
-		InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error)
-		GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error)
 		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error

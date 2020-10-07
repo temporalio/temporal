@@ -68,9 +68,6 @@ type (
 	ClusterMetadataStore interface {
 		Closeable
 		GetName() string
-		// Initialize immutable metadata for the cluster. Takes no action if already initialized.
-		InitializeImmutableClusterMetadata(request *InternalInitializeImmutableClusterMetadataRequest) (*InternalInitializeImmutableClusterMetadataResponse, error)
-		GetImmutableClusterMetadata() (*InternalGetImmutableClusterMetadataResponse, error)
 		GetClusterMetadata() (*InternalGetClusterMetadataResponse, error)
 		SaveClusterMetadata(request *InternalSaveClusterMetadataRequest) (bool, error)
 		// Membership APIs

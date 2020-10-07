@@ -1399,20 +1399,6 @@ func (c *clusterMetadataPersistenceClient) Close() {
 	c.persistence.Close()
 }
 
-func (c *clusterMetadataPersistenceClient) GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error) {
-	c.metricClient.IncCounter(metrics.PersistenceGetImmutableClusterMetadataScope, metrics.PersistenceRequests)
-
-	sw := c.metricClient.StartTimer(metrics.PersistenceGetImmutableClusterMetadataScope, metrics.PersistenceLatency)
-	result, err := c.persistence.GetImmutableClusterMetadata()
-	sw.Stop()
-
-	if err != nil {
-		c.metricClient.IncCounter(metrics.PersistenceGetImmutableClusterMetadataScope, metrics.PersistenceFailures)
-	}
-
-	return result, err
-}
-
 func (c *clusterMetadataPersistenceClient) GetClusterMetadata() (*GetClusterMetadataResponse, error) {
 	c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceRequests)
 
@@ -1443,20 +1429,6 @@ func (c *clusterMetadataPersistenceClient) SaveClusterMetadata(request *SaveClus
 
 func (c *clusterMetadataPersistenceClient) GetName() string {
 	return c.persistence.GetName()
-}
-
-func (c *clusterMetadataPersistenceClient) InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error) {
-	c.metricClient.IncCounter(metrics.PersistenceInitImmutableClusterMetadataScope, metrics.PersistenceRequests)
-
-	sw := c.metricClient.StartTimer(metrics.PersistenceInitImmutableClusterMetadataScope, metrics.PersistenceLatency)
-	res, err := c.persistence.InitializeImmutableClusterMetadata(request)
-	sw.Stop()
-
-	if err != nil {
-		c.metricClient.IncCounter(metrics.PersistenceInitImmutableClusterMetadataScope, metrics.PersistenceFailures)
-	}
-
-	return res, err
 }
 
 func (c *clusterMetadataPersistenceClient) GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {

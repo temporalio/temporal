@@ -38,18 +38,11 @@ const constMetadataPartition = 0
 const constMembershipPartition = 0
 const (
 	// ****** CLUSTER_METADATA TABLE ******
-	// One time only for the immutable data, so just use idempotent insert that does nothing if a record exists
-	// This particular query requires PostgreSQL 9.5, PostgreSQL 9.4 comes out of LTS on February 13, 2020
-	// QueryInfo: https://wiki.postgresql.org/wiki/What%27s_new_in_PostgreSQL_9.5#INSERT_..._ON_CONFLICT_DO_NOTHING.2FUPDATE_.28.22UPSERT.22.29
-	insertClusterMetadataOneTimeOnlyQry = `INSERT INTO 
-cluster_metadata (metadata_partition, immutable_data, immutable_data_encoding)
-VALUES($1, $2, $3)
-ON CONFLICT DO NOTHING`
+	insertClusterMetadataQry = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES($1, $2, $3, $4)`
 
-	saveClusterMetadataQry = `UPDATE cluster_metadata SET data = $1, data_encoding = $2 WHERE metadata_partition = $3`
+	updateClusterMetadataQry = `UPDATE cluster_metadata SET data = $1, data_encoding = $2, version = $3 WHERE metadata_partition = $4`
 
-	getImmutableClusterMetadataQry = `SELECT immutable_data, immutable_data_encoding FROM 
-cluster_metadata WHERE metadata_partition = $1`
+	getClusterMetadataQry = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = $1`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
 	templateUpsertActiveClusterMembership = `INSERT INTO
@@ -81,24 +74,16 @@ cluster_membership WHERE membership_partition = $`
 	templateWithOrderBySessionStartSuffix = ` ORDER BY membership_partition ASC, host_id ASC`
 )
 
-// Does not follow traditional lock, select, read, insert as we only expect a single row.
-func (pdb *db) InsertIfNotExistsIntoClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Result, error) {
-	return pdb.conn.Exec(insertClusterMetadataOneTimeOnlyQry,
-		constMetadataPartition,
-		row.ImmutableData,
-		row.ImmutableDataEncoding)
-}
-
 func (pdb *db) SaveClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Result, error) {
-	return pdb.conn.Exec(saveClusterMetadataQry,
-		row.MutableData,
-		row.MutableDataEncoding,
-		constMetadataPartition)
+	if row.Version == 0 {
+		pdb.conn.Exec(insertClusterMetadataQry, constMetadataPartition, row.Data, row.DataEncoding, 1)
+	}
+	return pdb.conn.Exec(updateClusterMetadataQry, row.Data, row.DataEncoding, row.Version+1, constMetadataPartition)
 }
 
 func (pdb *db) GetClusterMetadata() (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
-	err := pdb.conn.Get(&row, getImmutableClusterMetadataQry, constMetadataPartition)
+	err := pdb.conn.Get(&row, getClusterMetadataQry, constMetadataPartition)
 	if err != nil {
 		return nil, err
 	}
