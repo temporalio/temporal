@@ -25,15 +25,21 @@
 package cli
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
+	"io/ioutil"
+	"net"
+
 	"github.com/urfave/cli"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/rpc"
 )
 
 // ClientFactory is used to construct rpc clients
@@ -61,14 +67,14 @@ func NewClientFactory() ClientFactory {
 
 // FrontendClient builds a frontend client
 func (b *clientFactory) FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient {
-	connection := b.createGRPCConnection(c.GlobalString(FlagAddress))
+	connection := b.createGRPCConnection(c)
 
 	return workflowservice.NewWorkflowServiceClient(connection)
 }
 
 // AdminClient builds an admin client (based on server side thrift interface)
 func (b *clientFactory) AdminClient(c *cli.Context) adminservice.AdminServiceClient {
-	connection := b.createGRPCConnection(c.GlobalString(FlagAddress))
+	connection := b.createGRPCConnection(c)
 
 	return adminservice.NewAdminServiceClient(connection)
 }
@@ -95,16 +101,66 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 	return sdkClient
 }
 
-func (b *clientFactory) createGRPCConnection(hostPort string) *grpc.ClientConn {
+func (b *clientFactory) createGRPCConnection(c *cli.Context) *grpc.ClientConn {
+	hostPort := c.GlobalString(FlagAddress)
 	if hostPort == "" {
 		hostPort = localHostPort
 	}
+	// Ignoring error as we'll fail to dial anyway, and that will produce a meaningful error
+	host, _, _ := net.SplitHostPort(hostPort)
 
-	connection, err := rpc.Dial(hostPort, nil)
+	certPath := c.GlobalString(FlagTLSCertPath)
+	keyPath := c.GlobalString(FlagTLSKeyPath)
+	caPath := c.GlobalString(FlagTLSCaPath)
+
+	grpcSecurityOptions := grpc.WithInsecure()
+	var cert *tls.Certificate
+	var caPool *x509.CertPool
+
+	if caPath != "" {
+		caCertPool, err := fetchCACert(caPath)
+		if err != nil {
+			b.logger.Fatal("Failed to load server CA certificate", zap.Error(err))
+			return nil
+		}
+		caPool = caCertPool
+	}
+	if certPath != "" {
+		myCert, err := tls.LoadX509KeyPair(certPath, keyPath)
+		if err != nil {
+			b.logger.Fatal("Failed to load client certificate", zap.Error(err))
+			return nil
+		}
+		cert = &myCert
+	}
+	// If we are given arguments to verify either server or client, configure TLS
+	if caPool != nil || cert != nil {
+		tlsConfig := &tls.Config{
+			ServerName:   host,
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			Certificates: []tls.Certificate{*cert},
+			ClientCAs:    caPool,
+		}
+		grpcSecurityOptions = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
+	}
+
+	connection, err := grpc.Dial(hostPort, grpcSecurityOptions)
 	if err != nil {
 		b.logger.Fatal("Failed to create connection", zap.Error(err))
 		return nil
 	}
-
 	return connection
+}
+
+func fetchCACert(path string) (*x509.CertPool, error) {
+	caPool := x509.NewCertPool()
+	caBytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if !caPool.AppendCertsFromPEM(caBytes) {
+		return nil, errors.New("unknown failure constructing cert pool for ca")
+	}
+	return caPool, nil
 }
