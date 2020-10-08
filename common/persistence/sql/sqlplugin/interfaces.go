@@ -41,7 +41,7 @@ type (
 	tableCRUD interface {
 		clusterMetadata
 		Namespace
-		visibility
+		Visibility
 		queue
 
 		MatchingTask

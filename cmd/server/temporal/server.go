@@ -28,6 +28,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/pborman/uuid"
+
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 
@@ -301,30 +303,33 @@ func immutableClusterMetadataInitialization(
 	}
 	defer clusterMetadataManager.Close()
 
-	resp, err := clusterMetadataManager.InitializeImmutableClusterMetadata(
-		&persistence.InitializeImmutableClusterMetadataRequest{
-			ImmutableClusterMetadata: persistenceblobs.ImmutableClusterMetadata{
+	applied, err := clusterMetadataManager.SaveClusterMetadata(
+		&persistence.SaveClusterMetadataRequest{
+			ClusterMetadata: persistenceblobs.ClusterMetadata{
 				HistoryShardCount: int32(persistenceConfig.NumHistoryShards),
 				ClusterName:       clusterMetadata.CurrentClusterName,
+				ClusterId:         uuid.New(),
 			}})
-
 	if err != nil {
-		log.Fatalf("Error while fetching or persisting immutable cluster metadata: %v", err)
+		log.Fatalf("Error while saving cluster metadata: %v", err)
 	}
-
-	if resp.RequestApplied {
-		logger.Info("Successfully applied immutable cluster metadata.")
+	if applied {
+		logger.Info("Successfully saved cluster metadata.")
 	} else {
-		if clusterMetadata.CurrentClusterName != resp.PersistedImmutableData.ClusterName {
+		resp, err := clusterMetadataManager.GetClusterMetadata()
+		if err != nil {
+			log.Fatalf("Error while fetching cluster metadata: %v", err)
+		}
+		if clusterMetadata.CurrentClusterName != resp.ClusterName {
 			logImmutableMismatch(logger,
 				"ClusterMetadata.CurrentClusterName",
 				clusterMetadata.CurrentClusterName,
-				resp.PersistedImmutableData.ClusterName)
+				resp.ClusterName)
 
-			clusterMetadata.CurrentClusterName = resp.PersistedImmutableData.ClusterName
+			clusterMetadata.CurrentClusterName = resp.ClusterName
 		}
 
-		var persistedShardCount = int(resp.PersistedImmutableData.HistoryShardCount)
+		var persistedShardCount = int(resp.HistoryShardCount)
 		if persistenceConfig.NumHistoryShards != persistedShardCount {
 			logImmutableMismatch(logger,
 				"Persistence.NumHistoryShards",

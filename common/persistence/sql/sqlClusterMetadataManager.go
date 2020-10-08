@@ -25,6 +25,8 @@
 package sql
 
 import (
+	"database/sql"
+	"fmt"
 	"net"
 	"time"
 
@@ -41,56 +43,49 @@ type sqlClusterMetadataManager struct {
 
 var _ p.ClusterMetadataStore = (*sqlClusterMetadataManager)(nil)
 
-func (s *sqlClusterMetadataManager) InitializeImmutableClusterMetadata(request *p.InternalInitializeImmutableClusterMetadataRequest) (*p.InternalInitializeImmutableClusterMetadataResponse, error) {
-	resp, err := s.GetImmutableClusterMetadata()
-
-	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
-			// If we have received EntityNotExistsError, we have not yet initialized
-			return s.InsertImmutableDataIfNotExists(request)
-		}
-		return nil, err
-	}
-
-	// Return our get result if we didn't need to initialize
-	return &p.InternalInitializeImmutableClusterMetadataResponse{
-		PersistedImmutableMetadata: resp.ImmutableClusterMetadata,
-		RequestApplied:             false,
-	}, nil
-
-}
-
-func (s *sqlClusterMetadataManager) InsertImmutableDataIfNotExists(request *p.InternalInitializeImmutableClusterMetadataRequest) (*p.InternalInitializeImmutableClusterMetadataResponse, error) {
-	// InsertIfNotExists is idempotent and silently fails if already exists.
-	// Assuming that if we make it here, no out-of-band method or tool is deleting the db row
-	//	in between the Get above and Insert below as that would violate the immutability guarantees.
-	// Alternative would be to make the insert non-idempotent and detect insert conflicts
-	// or even move to a lock mechanism, but that doesn't appear worth the extra lines of code.
-	_, err := s.db.InsertIfNotExistsIntoClusterMetadata(&sqlplugin.ClusterMetadataRow{
-		ImmutableData:         request.ImmutableClusterMetadata.Data,
-		ImmutableDataEncoding: request.ImmutableClusterMetadata.Encoding.String(),
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &p.InternalInitializeImmutableClusterMetadataResponse{
-		PersistedImmutableMetadata: request.ImmutableClusterMetadata,
-		RequestApplied:             true,
-	}, nil
-}
-
-func (s *sqlClusterMetadataManager) GetImmutableClusterMetadata() (*p.InternalGetImmutableClusterMetadataResponse, error) {
+func (s *sqlClusterMetadataManager) GetClusterMetadata() (*p.InternalGetClusterMetadataResponse, error) {
 	row, err := s.db.GetClusterMetadata()
 
 	if err != nil {
-		return nil, convertCommonErrors("GetImmutableClusterMetadata", err)
+		return nil, convertCommonErrors("GetClusterMetadata", err)
 	}
 
-	return &p.InternalGetImmutableClusterMetadataResponse{
-		ImmutableClusterMetadata: p.NewDataBlob(row.ImmutableData, row.ImmutableDataEncoding),
+	return &p.InternalGetClusterMetadataResponse{
+		ClusterMetadata: p.NewDataBlob(row.Data, row.DataEncoding),
+		Version:         row.Version,
 	}, nil
+}
+
+func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
+	err := s.txExecute("SaveClusterMetadata", func(tx sqlplugin.Tx) error {
+		oldClusterMetadata, err := tx.WriteLockGetClusterMetadata()
+		var lastVersion int64
+		if err != nil {
+			if err != sql.ErrNoRows {
+				return serviceerror.NewInternal(fmt.Sprintf("SaveClusterMetadata operation failed. Error %v", err))
+			}
+		} else {
+			lastVersion = oldClusterMetadata.Version
+		}
+		if request.Version != lastVersion {
+			return serviceerror.NewInternal(fmt.Sprintf("SaveClusterMetadata encountered version mismatch, expected %v but got %v.",
+				request.Version, oldClusterMetadata.Version))
+		}
+		_, err = tx.SaveClusterMetadata(&sqlplugin.ClusterMetadataRow{
+			Data:         request.ClusterMetadata.Data,
+			DataEncoding: request.ClusterMetadata.Encoding.String(),
+			Version:      request.Version,
+		})
+		if err != nil {
+			return convertCommonErrors("SaveClusterMetadata", err)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return false, serviceerror.NewInternal(err.Error())
+	}
+	return true, nil
 }
 
 func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
