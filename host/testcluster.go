@@ -131,9 +131,9 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		var ops *persistencetests.TestBaseOptions
 		switch TestFlags.PersistenceDriver {
 		case mysql.PluginName:
-			ops = mysql.GetTestClusterOption()
+			ops = persistencetests.GetMySQLTestClusterOption()
 		case postgresql.PluginName:
-			ops = postgresql.GetTestClusterOption()
+			ops = persistencetests.GetPostgreSQLTestClusterOption()
 		default:
 			panic(fmt.Sprintf("unknown sql store drier: %v", TestFlags.PersistenceDriver))
 		}

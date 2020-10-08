@@ -33,11 +33,9 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 
-	pt "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/environment"
 )
 
 const (
@@ -138,23 +136,4 @@ func registerTLSConfig(cfg *config.SQL) error {
 		return nil
 	}
 	return errTLSNotImplemented
-}
-
-const (
-	testUser      = "temporal"
-	testPassword  = "temporal"
-	testSchemaDir = "schema/postgresql/v96"
-)
-
-// GetTestClusterOption return test options
-func GetTestClusterOption() *pt.TestBaseOptions {
-	return &pt.TestBaseOptions{
-		SQLDBPluginName: PluginName,
-		DBUsername:      testUser,
-		DBPassword:      testPassword,
-		DBHost:          environment.GetPostgreSQLAddress(),
-		DBPort:          environment.GetPostgreSQLPort(),
-		SchemaDir:       testSchemaDir,
-		StoreType:       config.StoreTypeSQL,
-	}
 }

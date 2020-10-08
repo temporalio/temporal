@@ -34,11 +34,8 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
-	"go.temporal.io/server/environment"
 )
 
 // TestCluster allows executing cassandra operations in testing.
@@ -64,16 +61,6 @@ func NewTestCluster(
 	result.logger = logger
 	result.dbName = dbName
 
-	if port == 0 {
-		switch pluginName {
-		case mysql.PluginName:
-			port = environment.GetMySQLPort()
-		case postgresql.PluginName:
-			port = environment.GetPostgreSQLPort()
-		default:
-			panic(fmt.Sprintf("unknown sql store drier: %v", pluginName))
-		}
-	}
 	if schemaDir == "" {
 		panic("must provide schema dir")
 	}
