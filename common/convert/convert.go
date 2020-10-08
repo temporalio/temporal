@@ -84,3 +84,7 @@ func Int64ToString(v int64) string {
 func Int32ToString(v int32) string {
 	return Int64ToString(int64(v))
 }
+
+func Uint16ToString(v uint16) string {
+	return strconv.FormatUint(uint64(v), 10)
+}

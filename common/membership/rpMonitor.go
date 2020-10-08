@@ -34,6 +34,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/primitives"
 
 	"github.com/pborman/uuid"
@@ -245,7 +246,7 @@ func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager) 
 
 		// Dedupe on hostport
 		for _, host := range resp.ActiveMembers {
-			set[net.JoinHostPort(host.RPCAddress.String(), strconv.Itoa(int(host.RPCPort)))] = struct{}{}
+			set[net.JoinHostPort(host.RPCAddress.String(), convert.Uint16ToString(host.RPCPort))] = struct{}{}
 		}
 
 		// Stop iterating once we have either 500 unique ip:port combos or there is no more results.

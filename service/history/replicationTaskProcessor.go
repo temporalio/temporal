@@ -30,7 +30,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -42,6 +41,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -431,7 +431,7 @@ func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *
 	p.metricsClient.Scope(
 		metrics.ReplicationDLQStatsScope,
 		metrics.TargetClusterTag(p.sourceCluster),
-		metrics.InstanceTag(strconv.Itoa(int(p.shard.GetShardID()))),
+		metrics.InstanceTag(convert.Int32ToString(p.shard.GetShardID())),
 	).UpdateGauge(
 		metrics.ReplicationDLQMaxLevelGauge,
 		float64(request.TaskInfo.GetTaskId()),

@@ -26,7 +26,6 @@ package history
 
 import (
 	"errors"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -286,7 +285,7 @@ func (s *shardContextImpl) UpdateReplicatorDLQAckLevel(
 	s.GetMetricsClient().Scope(
 		metrics.ReplicationDLQStatsScope,
 		metrics.TargetClusterTag(sourceCluster),
-		metrics.InstanceTag(strconv.Itoa(int(s.shardID))),
+		metrics.InstanceTag(convert.Int32ToString(s.shardID)),
 	).UpdateGauge(
 		metrics.ReplicationDLQAckLevelGauge,
 		float64(ackLevel),

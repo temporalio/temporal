@@ -27,7 +27,6 @@ package host
 import (
 	"bytes"
 	"encoding/binary"
-	"strconv"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -38,6 +37,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -89,7 +89,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             strconv.Itoa(int(1)),
+					ActivityId:             convert.Int32ToString(1),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              taskQueue,
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
@@ -255,7 +255,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             strconv.Itoa(int(1)),
+					ActivityId:             convert.Int32ToString(1),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              taskQueue,
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
