@@ -137,9 +137,8 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) *grpc.ClientConn {
 	if caPool != nil || cert != nil {
 		tlsConfig := &tls.Config{
 			ServerName:   host,
-			ClientAuth:   tls.RequireAndVerifyClientCert,
 			Certificates: []tls.Certificate{*cert},
-			ClientCAs:    caPool,
+			RootCAs:      caPool,
 		}
 		grpcSecurityOptions = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 	}
