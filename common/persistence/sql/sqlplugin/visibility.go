@@ -29,8 +29,8 @@ type (
 		WorkflowID       *string
 		WorkflowTypeName *string
 		Status           int32
-		MinStartTime     *time.Time
-		MaxStartTime     *time.Time
+		MinTime          *time.Time
+		MaxTime          *time.Time
 		PageSize         *int
 	}
 

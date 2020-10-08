@@ -138,21 +138,22 @@ func (mdb *db) DeleteFromVisibility(filter sqlplugin.VisibilityDeleteFilter) (sq
 func (mdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]sqlplugin.VisibilityRow, error) {
 	var err error
 	var rows []sqlplugin.VisibilityRow
-	if filter.MinStartTime != nil {
-		*filter.MinStartTime = mdb.converter.ToMySQLDateTime(*filter.MinStartTime)
+	if filter.MinTime != nil {
+		*filter.MinTime = mdb.converter.ToMySQLDateTime(*filter.MinTime)
 	}
-	if filter.MaxStartTime != nil {
-		*filter.MaxStartTime = mdb.converter.ToMySQLDateTime(*filter.MaxStartTime)
+	if filter.MaxTime != nil {
+		*filter.MaxTime = mdb.converter.ToMySQLDateTime(*filter.MaxTime)
 	}
 	// If filter.Status == 0 (UNSPECIFIED) then only closed workflows will be returned (all excluding 1 (RUNNING)).
 	switch {
-	case filter.MinStartTime == nil && filter.RunID != nil && filter.Status != 1:
+	case filter.MinTime == nil && filter.RunID != nil && filter.Status != 1:
 		var row sqlplugin.VisibilityRow
 		err = mdb.conn.Get(&row, templateGetClosedWorkflowExecution, filter.NamespaceID, *filter.RunID)
 		if err == nil {
 			rows = append(rows, row)
 		}
-	case filter.MinStartTime != nil && filter.WorkflowID != nil:
+	case filter.MinTime != nil && filter.MaxTime != nil &&
+		filter.WorkflowID != nil && filter.RunID != nil && filter.PageSize != nil:
 		qry := templateGetOpenWorkflowExecutionsByID
 		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutionsByID
@@ -161,13 +162,14 @@ func (mdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 			qry,
 			*filter.WorkflowID,
 			filter.NamespaceID,
-			mdb.converter.ToMySQLDateTime(*filter.MinStartTime),
-			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
+			*filter.MinTime,
+			*filter.MaxTime,
 			*filter.RunID,
-			*filter.MaxStartTime,
-			*filter.MaxStartTime,
+			*filter.MaxTime,
+			*filter.MaxTime,
 			*filter.PageSize)
-	case filter.MinStartTime != nil && filter.WorkflowTypeName != nil:
+	case filter.MinTime != nil && filter.MaxTime != nil &&
+		filter.WorkflowTypeName != nil && filter.RunID != nil && filter.PageSize != nil:
 		qry := templateGetOpenWorkflowExecutionsByType
 		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutionsByType
@@ -176,24 +178,27 @@ func (mdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 			qry,
 			*filter.WorkflowTypeName,
 			filter.NamespaceID,
-			mdb.converter.ToMySQLDateTime(*filter.MinStartTime),
-			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
+			*filter.MinTime,
+			*filter.MaxTime,
 			*filter.RunID,
-			*filter.MaxStartTime,
-			*filter.MaxStartTime,
+			*filter.MaxTime,
+			*filter.MaxTime,
 			*filter.PageSize)
-	case filter.MinStartTime != nil && filter.Status != 0 && filter.Status != 1: // 0 is UNSPECIFIED, 1 is RUNNING
+	case filter.MinTime != nil && filter.MaxTime != nil &&
+		filter.RunID != nil && filter.PageSize != nil &&
+		filter.Status != 0 && filter.Status != 1: // 0 is UNSPECIFIED, 1 is RUNNING
 		err = mdb.conn.Select(&rows,
 			templateGetClosedWorkflowExecutionsByStatus,
 			filter.Status,
 			filter.NamespaceID,
-			mdb.converter.ToMySQLDateTime(*filter.MinStartTime),
-			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
+			*filter.MinTime,
+			*filter.MaxTime,
 			*filter.RunID,
-			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
-			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
+			*filter.MaxTime,
+			*filter.MaxTime,
 			*filter.PageSize)
-	case filter.MinStartTime != nil:
+	case filter.MinTime != nil && filter.MaxTime != nil &&
+		filter.RunID != nil && filter.PageSize != nil:
 		qry := templateGetOpenWorkflowExecutions
 		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutions
@@ -201,11 +206,11 @@ func (mdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 		err = mdb.conn.Select(&rows,
 			qry,
 			filter.NamespaceID,
-			mdb.converter.ToMySQLDateTime(*filter.MinStartTime),
-			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
+			*filter.MinTime,
+			*filter.MaxTime,
 			*filter.RunID,
-			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
-			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
+			*filter.MaxTime,
+			*filter.MaxTime,
 			*filter.PageSize)
 	default:
 		return nil, fmt.Errorf("invalid query filter")

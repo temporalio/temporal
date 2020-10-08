@@ -27,6 +27,7 @@ package convert
 import (
 	"math"
 	"strconv"
+	"time"
 )
 
 // IntPtr makes a copy and returns the pointer to an int.
@@ -56,6 +57,16 @@ func BoolPtr(v bool) *bool {
 
 // StringPtr makes a copy and returns the pointer to a string.
 func StringPtr(v string) *string {
+	return &v
+}
+
+// TimePtr makes a copy and returns the pointer to a time.Time.
+func TimePtr(v time.Time) *time.Time {
+	return &v
+}
+
+// DurationPtr makes a copy and returns the pointer to a time.Duration.
+func DurationPtr(v time.Duration) *time.Duration {
 	return &v
 }
 
