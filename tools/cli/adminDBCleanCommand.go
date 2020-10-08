@@ -44,7 +44,7 @@ import (
 type (
 	// ShardCleanReport represents the result of cleaning a single shard
 	ShardCleanReport struct {
-		ShardID         int
+		ShardID         int32
 		TotalDBRequests int64
 		Handled         *ShardCleanReportHandled
 		Failure         *ShardCleanReportFailure
@@ -96,14 +96,14 @@ type (
 
 // AdminDBClean is the command to clean up executions
 func AdminDBClean(c *cli.Context) {
-	lowerShardBound := c.Int(FlagLowerShardBound)
-	upperShardBound := c.Int(FlagUpperShardBound)
+	lowerShardBound := int32(c.Int(FlagLowerShardBound))
+	upperShardBound := int32(c.Int(FlagUpperShardBound))
 	numShards := upperShardBound - lowerShardBound
 	startingRPS := c.Int(FlagStartingRPS)
 	targetRPS := c.Int(FlagRPS)
 	scaleUpSeconds := c.Int(FlagRPSScaleUpSeconds)
-	scanWorkerCount := c.Int(FlagConcurrency)
-	scanReportRate := c.Int(FlagReportRate)
+	scanWorkerCount := int32(c.Int(FlagConcurrency))
+	scanReportRate := int32(c.Int(FlagReportRate))
 	if numShards < scanWorkerCount {
 		scanWorkerCount = numShards
 	}
@@ -115,8 +115,8 @@ func AdminDBClean(c *cli.Context) {
 	cleanOutputDirectories := createCleanOutputDirectories()
 
 	reports := make(chan *ShardCleanReport)
-	for i := 0; i < scanWorkerCount; i++ {
-		go func(workerIdx int) {
+	for i := int32(0); i < scanWorkerCount; i++ {
+		go func(workerIdx int32) {
 			for shardID := lowerShardBound; shardID < upperShardBound; shardID++ {
 				if shardID%scanWorkerCount == workerIdx {
 					reports <- cleanShard(
@@ -124,7 +124,8 @@ func AdminDBClean(c *cli.Context) {
 						session,
 						cleanOutputDirectories,
 						inputDirectory,
-						shardID)
+						shardID,
+					)
 				}
 			}
 		}(i)
@@ -132,7 +133,7 @@ func AdminDBClean(c *cli.Context) {
 
 	startTime := time.Now().UTC()
 	progressReport := &CleanProgressReport{}
-	for i := 0; i < numShards; i++ {
+	for i := int32(0); i < numShards; i++ {
 		report := <-reports
 		includeShardCleanInProgressReport(report, progressReport, startTime)
 		if i%scanReportRate == 0 || i == numShards-1 {
@@ -150,7 +151,7 @@ func cleanShard(
 	session *gocql.Session,
 	outputDirectories *CleanOutputDirectories,
 	inputDirectory string,
-	shardID int,
+	shardID int32,
 ) *ShardCleanReport {
 	outputFiles, closeFn := createShardCleanOutputFiles(shardID, outputDirectories)
 	report := &ShardCleanReport{
@@ -232,7 +233,7 @@ func cleanShard(
 	return report
 }
 
-func getShardCorruptedFile(inputDir string, shardID int) (*os.File, error) {
+func getShardCorruptedFile(inputDir string, shardID int32) (*os.File, error) {
 	filepath := fmt.Sprintf("%v/%v", inputDir, constructFileNameFromShard(shardID))
 	return os.Open(filepath)
 }
@@ -258,7 +259,7 @@ func includeShardCleanInProgressReport(report *ShardCleanReport, progressReport 
 	progressReport.DatabaseRPS = math.Round(float64(progressReport.TotalDBRequests) / secondsPast)
 }
 
-func createShardCleanOutputFiles(shardID int, cod *CleanOutputDirectories) (*ShardCleanOutputFiles, func()) {
+func createShardCleanOutputFiles(shardID int32, cod *CleanOutputDirectories) (*ShardCleanOutputFiles, func()) {
 	shardCleanReportFile, err := os.Create(fmt.Sprintf("%v/%v", cod.ShardCleanReportDirectoryPath, constructFileNameFromShard(shardID)))
 	if err != nil {
 		ErrorAndExit("failed to create ShardCleanReportFile", err)

@@ -1,0 +1,11 @@
+# Overrides for Mac/Darwin users.
+version: "3.5"
+
+services:
+  temporal-web:
+    environment:
+      - "TEMPORAL_GRPC_ENDPOINT=host.docker.internal:7233"
+    ports:
+      - "8088:8088"
+    networks:
+      - temporal-dependencies-network

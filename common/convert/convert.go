@@ -27,6 +27,7 @@ package convert
 import (
 	"math"
 	"strconv"
+	"time"
 )
 
 // IntPtr makes a copy and returns the pointer to an int.
@@ -59,6 +60,16 @@ func StringPtr(v string) *string {
 	return &v
 }
 
+// TimePtr makes a copy and returns the pointer to a time.Time.
+func TimePtr(v time.Time) *time.Time {
+	return &v
+}
+
+// DurationPtr makes a copy and returns the pointer to a time.Duration.
+func DurationPtr(v time.Duration) *time.Duration {
+	return &v
+}
+
 // Int32Ceil return the int32 ceil of a float64
 func Int32Ceil(v float64) int32 {
 	return int32(math.Ceil(v))
@@ -83,4 +94,8 @@ func Int64ToString(v int64) string {
 
 func Int32ToString(v int32) string {
 	return Int64ToString(int64(v))
+}
+
+func Uint16ToString(v uint16) string {
+	return strconv.FormatUint(uint64(v), 10)
 }

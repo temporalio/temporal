@@ -140,7 +140,7 @@ func (s *engine3Suite) SetupTest() {
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		config:               s.config,
 		timeSource:           s.mockShard.GetTimeSource(),
-		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int { return 1 }),
+		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,

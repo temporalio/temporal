@@ -151,7 +151,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		logger:               s.logger,
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		metricsClient:        s.mockShard.GetMetricsClient(),
-		historyEventNotifier: newHistoryEventNotifier(s.timeSource, metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int { return 1 }),
+		historyEventNotifier: newHistoryEventNotifier(s.timeSource, metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,

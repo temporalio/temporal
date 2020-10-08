@@ -37,7 +37,7 @@ import (
 // of data read, the next page token, and an error if present.
 func ReadFullPageV2Events(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*historypb.HistoryEvent, int, []byte, error) {
 	var historyEvents []*historypb.HistoryEvent
-	size := int(0)
+	size := 0
 	for {
 		response, err := historyV2Mgr.ReadHistoryBranch(req)
 		if err != nil {
@@ -86,7 +86,7 @@ func GetBeginNodeID(bi *persistenceblobs.HistoryBranch) int64 {
 	return bi.Ancestors[idx].GetEndNodeId()
 }
 
-func getShardID(shardID *int) (int, error) {
+func getShardID(shardID *int32) (int32, error) {
 	if shardID == nil {
 		return 0, fmt.Errorf("shardID is not set for persistence operation")
 	}

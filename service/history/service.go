@@ -50,7 +50,7 @@ import (
 
 // Config represents configuration for history service
 type Config struct {
-	NumberOfShards int
+	NumberOfShards int32
 
 	RPS                           dynamicconfig.IntPropertyFn
 	MaxIDLengthLimit              dynamicconfig.IntPropertyFn
@@ -266,7 +266,7 @@ const (
 )
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType string, isAdvancedVisConfigExist bool) *Config {
+func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, storeType string, isAdvancedVisConfigExist bool) *Config {
 	cfg := &Config{
 		NumberOfShards:                       numberOfShards,
 		RPS:                                  dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
@@ -429,7 +429,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 }
 
 // GetShardID return the corresponding shard ID for a given namespaceID and workflowID pair
-func (config *Config) GetShardID(namespaceID, workflowID string) int {
+func (config *Config) GetShardID(namespaceID, workflowID string) int32 {
 	return common.WorkflowIDToHistoryShard(namespaceID, workflowID, config.NumberOfShards)
 }
 

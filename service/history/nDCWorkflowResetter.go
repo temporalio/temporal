@@ -212,7 +212,7 @@ func (r *nDCWorkflowResetterImpl) getResetBranchToken(
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.namespaceID, r.workflowID, r.newRunID),
-		ShardID:         convert.IntPtr(shardID),
+		ShardID:         convert.Int32Ptr(shardID),
 	})
 	if err != nil {
 		return nil, err

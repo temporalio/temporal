@@ -53,7 +53,7 @@ func newTestShardContext(
 	eventsCache := NewMockeventsCache(ctrl)
 	shard := &shardContextImpl{
 		Resource:                  resource,
-		shardID:                   int(shardInfo.GetShardId()),
+		shardID:                   shardInfo.GetShardId(),
 		rangeID:                   shardInfo.GetRangeId(),
 		shardInfo:                 shardInfo,
 		executionManager:          resource.ExecutionMgr,

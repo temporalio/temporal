@@ -1,7 +1,9 @@
-# Runs all Temporal service dependencies.
-# Useful for integration testing.
-
+# Runs all required Temporal service dependencies.
+# Use to run service locally or run integration tests.
+# Include platform specific file also:
+# docker-compose -f docker-compose.yml -f docker-compose.linux.yml up
 version: "3.5"
+
 services:
   mysql:
     image: mysql:5.7
@@ -79,9 +81,6 @@ services:
   temporal-web:
     image: temporalio/web:1.0.0
     container_name: temporal-web
-    environment:
-      - "TEMPORAL_GRPC_ENDPOINT=localhost:7233"
-    network_mode: host
 
 networks:
   temporal-dependencies-network:

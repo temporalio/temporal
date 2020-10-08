@@ -29,13 +29,13 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli"
 
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
@@ -101,7 +101,7 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 
 	for i := 0; i < 4; i++ {
 
-		ver := strconv.Itoa(int(tb.rand.Int31()))
+		ver := convert.Int32ToString(tb.rand.Int31())
 		versioningEnabled := (i%2 == 0)
 
 		// test overwrite with versioning works

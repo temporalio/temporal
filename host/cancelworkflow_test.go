@@ -29,7 +29,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -41,6 +40,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -86,7 +86,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
@@ -237,7 +237,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
@@ -287,7 +287,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             strconv.Itoa(int(foreignActivityCounter)),
+					ActivityId:             convert.Int32ToString(foreignActivityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
@@ -457,7 +457,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_UnKnownTarg
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),

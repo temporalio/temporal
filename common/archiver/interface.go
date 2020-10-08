@@ -41,7 +41,7 @@ import (
 type (
 	// ArchiveHistoryRequest is request to Archive workflow history
 	ArchiveHistoryRequest struct {
-		ShardID              int
+		ShardID              int32
 		NamespaceID          string
 		Namespace            string
 		WorkflowID           string

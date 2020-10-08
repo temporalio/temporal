@@ -248,7 +248,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
 		}
 		return t.shard.GetHistoryManager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 			BranchToken: branchToken,
-			ShardID:     convert.IntPtr(t.shard.GetShardID()),
+			ShardID:     convert.Int32Ptr(t.shard.GetShardID()),
 		})
 
 	}

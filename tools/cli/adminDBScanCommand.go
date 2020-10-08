@@ -96,7 +96,7 @@ type (
 
 	// CorruptedExecution is the type that gets written to CorruptedExecutionFile
 	CorruptedExecution struct {
-		ShardID                    int
+		ShardID                    int32
 		NamespaceID                string
 		WorkflowID                 string
 		RunID                      string
@@ -116,7 +116,7 @@ type (
 
 	// ExecutionCheckFailure is the type that gets written to ExecutionCheckFailureFile
 	ExecutionCheckFailure struct {
-		ShardID     int
+		ShardID     int32
 		NamespaceID string
 		WorkflowID  string
 		RunID       string
@@ -126,7 +126,7 @@ type (
 
 	// ShardScanReport is the type that gets written to ShardScanReportFile
 	ShardScanReport struct {
-		ShardID         int
+		ShardID         int32
 		TotalDBRequests int64
 		Scanned         *ShardScanReportExecutionsScanned
 		Failure         *ShardScanReportFailure
@@ -217,15 +217,15 @@ func (h *historyBranchByteKey) GetBranchId() primitives.UUID {
 
 // AdminDBScan is used to scan over all executions in database and detect corruptions
 func AdminDBScan(c *cli.Context) {
-	lowerShardBound := c.Int(FlagLowerShardBound)
-	upperShardBound := c.Int(FlagUpperShardBound)
+	lowerShardBound := int32(c.Int(FlagLowerShardBound))
+	upperShardBound := int32(c.Int(FlagUpperShardBound))
 	numShards := upperShardBound - lowerShardBound
 	startingRPS := c.Int(FlagStartingRPS)
 	targetRPS := c.Int(FlagRPS)
 	scaleUpSeconds := c.Int(FlagRPSScaleUpSeconds)
-	scanWorkerCount := c.Int(FlagConcurrency)
+	scanWorkerCount := int32(c.Int(FlagConcurrency))
 	executionsPageSize := c.Int(FlagPageSize)
-	scanReportRate := c.Int(FlagReportRate)
+	scanReportRate := int32(c.Int(FlagReportRate))
 	if numShards < scanWorkerCount {
 		scanWorkerCount = numShards
 	}
@@ -239,8 +239,8 @@ func AdminDBScan(c *cli.Context) {
 	scanOutputDirectories := createScanOutputDirectories()
 
 	reports := make(chan *ShardScanReport)
-	for i := 0; i < scanWorkerCount; i++ {
-		go func(workerIdx int) {
+	for i := int32(0); i < scanWorkerCount; i++ {
+		go func(workerIdx int32) {
 			for shardID := lowerShardBound; shardID < upperShardBound; shardID++ {
 				if shardID%scanWorkerCount == workerIdx {
 					reports <- scanShard(
@@ -259,7 +259,7 @@ func AdminDBScan(c *cli.Context) {
 
 	startTime := time.Now().UTC()
 	progressReport := &ProgressReport{}
-	for i := 0; i < numShards; i++ {
+	for i := int32(0); i < numShards; i++ {
 		report := <-reports
 		includeShardInProgressReport(report, progressReport, startTime)
 		if i%scanReportRate == 0 || i == numShards-1 {
@@ -274,7 +274,7 @@ func AdminDBScan(c *cli.Context) {
 
 func scanShard(
 	session *gocql.Session,
-	shardID int,
+	shardID int32,
 	scanOutputDirectories *ScanOutputDirectories,
 	limiter *quotas.DynamicRateLimiter,
 	executionsPageSize int,
@@ -403,7 +403,7 @@ func verifyHistoryExists(
 	branchDecoder *codec.JSONPBEncoder,
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
-	shardID int,
+	shardID int32,
 	limiter *quotas.DynamicRateLimiter,
 	historyStore persistence.HistoryStore,
 	totalDBRequests *int64,
@@ -499,7 +499,7 @@ func verifyFirstHistoryEvent(
 	branch *persistenceblobs.HistoryBranch,
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
-	shardID int,
+	shardID int32,
 	payloadSerializer persistence.PayloadSerializer,
 	history *persistence.InternalReadHistoryBranchResponse,
 ) VerificationResult {
@@ -560,7 +560,7 @@ func verifyCurrentExecution(
 	execution *persistence.WorkflowExecutionInfo,
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
-	shardID int,
+	shardID int32,
 	branch *persistenceblobs.HistoryBranch,
 	execStore persistence.ExecutionStore,
 	limiter *quotas.DynamicRateLimiter,
@@ -641,7 +641,7 @@ func verifyCurrentExecution(
 
 func concreteExecutionStillExists(
 	execution *persistence.WorkflowExecutionInfo,
-	shardID int,
+	shardID int32,
 	execStore persistence.ExecutionStore,
 	limiter *quotas.DynamicRateLimiter,
 	totalDBRequests *int64,
@@ -676,7 +676,7 @@ func concreteExecutionStillExists(
 
 func concreteExecutionStillOpen(
 	execution *persistence.WorkflowExecutionInfo,
-	shardID int,
+	shardID int32,
 	execStore persistence.ExecutionStore,
 	limiter *quotas.DynamicRateLimiter,
 	totalDBRequests *int64,
@@ -716,7 +716,7 @@ func deleteEmptyFiles(files ...*os.File) {
 	}
 }
 
-func createShardScanOutputFiles(shardID int, sod *ScanOutputDirectories) (*ShardScanOutputFiles, func()) {
+func createShardScanOutputFiles(shardID int32, sod *ScanOutputDirectories) (*ShardScanOutputFiles, func()) {
 	executionCheckFailureFile, err := os.Create(fmt.Sprintf("%v/%v", sod.ExecutionCheckFailureDirectoryPath, constructFileNameFromShard(shardID)))
 	if err != nil {
 		ErrorAndExit("failed to create executionCheckFailureFile", err)
@@ -742,7 +742,7 @@ func createShardScanOutputFiles(shardID int, sod *ScanOutputDirectories) (*Shard
 	}, deferFn
 }
 
-func constructFileNameFromShard(shardID int) string {
+func constructFileNameFromShard(shardID int32) string {
 	return fmt.Sprintf("shard_%v.json", shardID)
 }
 

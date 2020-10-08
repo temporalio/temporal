@@ -87,7 +87,7 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 }
 
 // NewExecutionStore returns an ExecutionStore for a given shardID
-func (f *Factory) NewExecutionStore(shardID int) (p.ExecutionStore, error) {
+func (f *Factory) NewExecutionStore(shardID int32) (p.ExecutionStore, error) {
 	factory, err := f.executionStoreFactory()
 	if err != nil {
 		return nil, err
@@ -158,7 +158,7 @@ func (f *executionStoreFactory) close() {
 }
 
 // new implements ExecutionStoreFactory interface
-func (f *executionStoreFactory) new(shardID int) (p.ExecutionStore, error) {
+func (f *executionStoreFactory) new(shardID int32) (p.ExecutionStore, error) {
 	pmgr, err := NewWorkflowExecutionPersistence(shardID, f.session, f.logger)
 	if err != nil {
 		return nil, err

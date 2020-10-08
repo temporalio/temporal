@@ -49,7 +49,7 @@ const (
 	testNamespace                    = "test-namespace"
 	testWorkflowID                   = "test-workflow-id"
 	testRunID                        = "test-run-id"
-	testShardID                      = 1
+	testShardID                      = int32(1)
 	testNextEventID                  = 1800
 	testCloseFailoverVersion         = 100
 	testDefaultPersistencePageSize   = 250

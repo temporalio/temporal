@@ -80,7 +80,7 @@ type (
 	ExecutionStore interface {
 		Closeable
 		GetName() string
-		GetShardID() int
+		GetShardID() int32
 		// The below three APIs are related to serialization/deserialization
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *InternalUpdateWorkflowExecutionRequest) error
@@ -342,7 +342,7 @@ type (
 		// Requested TransactionID for conditional update
 		TransactionID int64
 		// Used in sharded data stores to identify which shard to use
-		ShardID int
+		ShardID int32
 	}
 
 	// InternalGetWorkflowExecutionResponse is the response to GetworkflowExecution for Persistence Interface
@@ -367,7 +367,7 @@ type (
 		// the info for clean up data in background
 		Info string
 		// Used in sharded data stores to identify which shard to use
-		ShardID int
+		ShardID int32
 	}
 
 	// InternalForkHistoryBranchResponse is the response to ForkHistoryBranchRequest
@@ -381,7 +381,7 @@ type (
 		// branch to be deleted
 		BranchInfo *persistenceblobs.HistoryBranch
 		// Used in sharded data stores to identify which shard to use
-		ShardID int
+		ShardID int32
 	}
 
 	// InternalReadHistoryBranchRequest is used to read a history branch
@@ -403,7 +403,7 @@ type (
 		// LastTransactionID is the last known transaction ID attached to a history node
 		LastTransactionID int64
 		// Used in sharded data stores to identify which shard to use
-		ShardID int
+		ShardID int32
 	}
 
 	// InternalCompleteForkBranchRequest is used to update some tree/branch meta data for forking
@@ -413,7 +413,7 @@ type (
 		// whether fork is successful
 		Success bool
 		// Used in sharded data stores to identify which shard to use
-		ShardID int
+		ShardID int32
 	}
 
 	// InternalReadHistoryBranchResponse is the response to ReadHistoryBranchRequest

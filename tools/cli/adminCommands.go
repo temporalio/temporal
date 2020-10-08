@@ -60,7 +60,7 @@ const maxEventID = 9999
 func AdminShowWorkflow(c *cli.Context) {
 	tid := c.String(FlagTreeID)
 	bid := c.String(FlagBranchID)
-	sid := c.Int(FlagShardID)
+	sid := int32(c.Int(FlagShardID))
 	outputFileName := c.String(FlagOutputFilename)
 
 	session := connectToCassandra(c)
@@ -268,7 +268,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("strconv.Atoi(shardID) err", err)
 	}
-
+	shardIDInt32 := int32(shardIDInt)
 	var branchTokens [][]byte
 	if vhs, ok := ms["VersionHistories"]; ok && vhs != nil {
 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
@@ -302,7 +302,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
 		err = histV2.DeleteHistoryBranch(&persistence.InternalDeleteHistoryBranchRequest{
 			BranchInfo: branchInfo,
-			ShardID:    shardIDInt,
+			ShardID:    shardIDInt32,
 		})
 		if err != nil {
 			if skipError {
@@ -313,7 +313,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		}
 	}
 
-	exeStore, _ := cassp.NewWorkflowExecutionPersistence(shardIDInt, session, loggerimpl.NewNopLogger())
+	exeStore, _ := cassp.NewWorkflowExecutionPersistence(shardIDInt32, session, loggerimpl.NewNopLogger())
 	req := &persistence.DeleteWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  wid,
@@ -439,7 +439,7 @@ func AdminGetNamespaceIDOrName(c *cli.Context) {
 func AdminGetShardID(c *cli.Context) {
 	namespaceID := getRequiredOption(c, FlagNamespaceID)
 	wid := getRequiredOption(c, FlagWorkflowID)
-	numberOfShards := c.Int(FlagNumberOfShards)
+	numberOfShards := int32(c.Int(FlagNumberOfShards))
 
 	if numberOfShards <= 0 {
 		ErrorAndExit("numberOfShards is required", nil)
@@ -451,7 +451,7 @@ func AdminGetShardID(c *cli.Context) {
 
 // AdminDescribeTask outputs the details of a task given Task Id, Task Type, Shard Id and Visibility Timestamp
 func AdminDescribeTask(c *cli.Context) {
-	sid := getRequiredIntOption(c, FlagShardID)
+	sid := int32(getRequiredIntOption(c, FlagShardID))
 	tid := getRequiredIntOption(c, FlagTaskID)
 	categoryInt, err := stringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
 	if err != nil {
@@ -497,7 +497,7 @@ func AdminDescribeTask(c *cli.Context) {
 
 // AdminListTasks outputs a list of a tasks for given Shard and Task Type
 func AdminListTasks(c *cli.Context) {
-	sid := getRequiredIntOption(c, FlagShardID)
+	sid := int32(getRequiredIntOption(c, FlagShardID))
 	categoryInt, err := stringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
 	if err != nil {
 		ErrorAndExit("Failed to parse Task Type", err)

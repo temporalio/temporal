@@ -32,6 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+
 	persistence "go.temporal.io/server/common/persistence"
 )
 
@@ -253,7 +254,7 @@ func (mr *MockBeanMockRecorder) SetHistoryManager(arg0 interface{}) *gomock.Call
 }
 
 // GetExecutionManager mocks base method.
-func (m *MockBean) GetExecutionManager(arg0 int) (persistence.ExecutionManager, error) {
+func (m *MockBean) GetExecutionManager(arg0 int32) (persistence.ExecutionManager, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetExecutionManager", arg0)
 	ret0, _ := ret[0].(persistence.ExecutionManager)
@@ -268,7 +269,7 @@ func (mr *MockBeanMockRecorder) GetExecutionManager(arg0 interface{}) *gomock.Ca
 }
 
 // SetExecutionManager mocks base method.
-func (m *MockBean) SetExecutionManager(arg0 int, arg1 persistence.ExecutionManager) {
+func (m *MockBean) SetExecutionManager(arg0 int32, arg1 persistence.ExecutionManager) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetExecutionManager", arg0, arg1)
 }

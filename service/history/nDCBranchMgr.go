@@ -242,7 +242,7 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseBranchLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, uuid.New()),
-		ShardID:         convert.IntPtr(shardID),
+		ShardID:         convert.Int32Ptr(shardID),
 	})
 	if err != nil {
 		return 0, err

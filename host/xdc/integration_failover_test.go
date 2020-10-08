@@ -55,6 +55,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
@@ -289,7 +290,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
@@ -897,7 +898,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),

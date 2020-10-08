@@ -93,8 +93,8 @@ type (
 	// requests using the stale entry from cache upto an hour
 	NamespaceCache interface {
 		common.Daemon
-		RegisterNamespaceChangeCallback(shard int, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn)
-		UnregisterNamespaceChangeCallback(shard int)
+		RegisterNamespaceChangeCallback(shard int32, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn)
+		UnregisterNamespaceChangeCallback(shard int32)
 		GetNamespace(name string) (*NamespaceCacheEntry, error)
 		GetNamespaceByID(id string) (*NamespaceCacheEntry, error)
 		GetNamespaceID(name string) (string, error)
@@ -119,8 +119,8 @@ type (
 		refreshLock sync.Mutex
 
 		callbackLock     sync.Mutex
-		prepareCallbacks map[int]PrepareCallbackFn
-		callbacks        map[int]CallbackFn
+		prepareCallbacks map[int32]PrepareCallbackFn
+		callbacks        map[int32]CallbackFn
 	}
 
 	// NamespaceCacheEntries is NamespaceCacheEntry slice
@@ -160,8 +160,8 @@ func NewNamespaceCache(
 		timeSource:       clock.NewRealTimeSource(),
 		metricsClient:    metricsClient,
 		logger:           logger,
-		prepareCallbacks: make(map[int]PrepareCallbackFn),
-		callbacks:        make(map[int]CallbackFn),
+		prepareCallbacks: make(map[int32]PrepareCallbackFn),
+		callbacks:        make(map[int32]CallbackFn),
 	}
 	cache.cacheNameToID.Store(newNamespaceCache())
 	cache.cacheByID.Store(newNamespaceCache())
@@ -295,7 +295,7 @@ func (c *namespaceCache) GetAllNamespace() map[string]*NamespaceCacheEntry {
 // make sure the callback function will not call namespace cache again in case of dead lock
 // afterCallback will be invoked when NOT holding the namespace cache lock.
 func (c *namespaceCache) RegisterNamespaceChangeCallback(
-	shard int,
+	shard int32,
 	initialNotificationVersion int64,
 	prepareCallback PrepareCallbackFn,
 	callback CallbackFn,
@@ -332,7 +332,7 @@ func (c *namespaceCache) RegisterNamespaceChangeCallback(
 
 // UnregisterNamespaceChangeCallback delete a namespace failover callback
 func (c *namespaceCache) UnregisterNamespaceChangeCallback(
-	shard int,
+	shard int32,
 ) {
 
 	c.callbackLock.Lock()

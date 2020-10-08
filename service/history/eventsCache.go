@@ -71,7 +71,7 @@ type (
 		disabled      bool
 		logger        log.Logger
 		metricsClient metrics.Client
-		shardID       *int
+		shardID       *int32
 	}
 
 	eventKey struct {
@@ -90,13 +90,13 @@ var _ eventsCache = (*eventsCacheImpl)(nil)
 
 func newEventsCache(shardCtx ShardContext) eventsCache {
 	config := shardCtx.GetConfig()
-	shardID := convert.IntPtr(shardCtx.GetShardID())
+	shardID := convert.Int32Ptr(shardCtx.GetShardID())
 	return newEventsCacheWithOptions(config.EventsCacheInitialSize(), config.EventsCacheMaxSize(), config.EventsCacheTTL(),
 		shardCtx.GetHistoryManager(), false, shardCtx.GetLogger(), shardCtx.GetMetricsClient(), shardID)
 }
 
 func newEventsCacheWithOptions(initialSize, maxSize int, ttl time.Duration,
-	eventsV2Mgr persistence.HistoryManager, disabled bool, logger log.Logger, metrics metrics.Client, shardID *int) *eventsCacheImpl {
+	eventsV2Mgr persistence.HistoryManager, disabled bool, logger log.Logger, metrics metrics.Client, shardID *int32) *eventsCacheImpl {
 	opts := &cache.Options{}
 	opts.InitialCapacity = initialSize
 	opts.TTL = ttl
