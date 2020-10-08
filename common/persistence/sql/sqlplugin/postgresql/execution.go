@@ -171,7 +171,7 @@ func (pdb *db) UpdateExecutions(row *sqlplugin.ExecutionsRow) (sql.Result, error
 }
 
 // SelectFromExecutions reads a single row from executions table
-func (pdb *db) SelectFromExecutions(filter *sqlplugin.ExecutionsFilter) (*sqlplugin.ExecutionsRow, error) {
+func (pdb *db) SelectFromExecutions(filter sqlplugin.ExecutionsFilter) (*sqlplugin.ExecutionsRow, error) {
 	var row sqlplugin.ExecutionsRow
 	err := pdb.conn.Get(&row, getExecutionQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	if err != nil {
@@ -181,20 +181,20 @@ func (pdb *db) SelectFromExecutions(filter *sqlplugin.ExecutionsFilter) (*sqlplu
 }
 
 // DeleteFromExecutions deletes a single row from executions table
-func (pdb *db) DeleteFromExecutions(filter *sqlplugin.ExecutionsFilter) (sql.Result, error) {
+func (pdb *db) DeleteFromExecutions(filter sqlplugin.ExecutionsFilter) (sql.Result, error) {
 	return pdb.conn.Exec(deleteExecutionQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 }
 
 // ReadLockExecutions acquires a write lock on a single row in executions table
-func (pdb *db) ReadLockExecutions(filter *sqlplugin.ExecutionsFilter) (int, error) {
-	var nextEventID int
+func (pdb *db) ReadLockExecutions(filter sqlplugin.ExecutionsFilter) (int64, error) {
+	var nextEventID int64
 	err := pdb.conn.Get(&nextEventID, readLockExecutionQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	return nextEventID, err
 }
 
 // WriteLockExecutions acquires a write lock on a single row in executions table
-func (pdb *db) WriteLockExecutions(filter *sqlplugin.ExecutionsFilter) (int, error) {
-	var nextEventID int
+func (pdb *db) WriteLockExecutions(filter sqlplugin.ExecutionsFilter) (int64, error) {
+	var nextEventID int64
 	err := pdb.conn.Get(&nextEventID, writeLockExecutionQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	return nextEventID, err
 }
@@ -210,19 +210,19 @@ func (pdb *db) UpdateCurrentExecutions(row *sqlplugin.CurrentExecutionsRow) (sql
 }
 
 // SelectFromCurrentExecutions reads one or more rows from current_executions table
-func (pdb *db) SelectFromCurrentExecutions(filter *sqlplugin.CurrentExecutionsFilter) (*sqlplugin.CurrentExecutionsRow, error) {
+func (pdb *db) SelectFromCurrentExecutions(filter sqlplugin.CurrentExecutionsFilter) (*sqlplugin.CurrentExecutionsRow, error) {
 	var row sqlplugin.CurrentExecutionsRow
 	err := pdb.conn.Get(&row, getCurrentExecutionQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID)
 	return &row, err
 }
 
 // DeleteFromCurrentExecutions deletes a single row in current_executions table
-func (pdb *db) DeleteFromCurrentExecutions(filter *sqlplugin.CurrentExecutionsFilter) (sql.Result, error) {
+func (pdb *db) DeleteFromCurrentExecutions(filter sqlplugin.CurrentExecutionsFilter) (sql.Result, error) {
 	return pdb.conn.Exec(deleteCurrentExecutionQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 }
 
 // LockCurrentExecutions acquires a write lock on a single row in current_executions table
-func (pdb *db) LockCurrentExecutions(filter *sqlplugin.CurrentExecutionsFilter) (*sqlplugin.CurrentExecutionsRow, error) {
+func (pdb *db) LockCurrentExecutions(filter sqlplugin.CurrentExecutionsFilter) (*sqlplugin.CurrentExecutionsRow, error) {
 	var row sqlplugin.CurrentExecutionsRow
 	err := pdb.conn.Get(&row, lockCurrentExecutionQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID)
 	return &row, err
@@ -230,7 +230,7 @@ func (pdb *db) LockCurrentExecutions(filter *sqlplugin.CurrentExecutionsFilter) 
 
 // LockCurrentExecutionsJoinExecutions joins a row in current_executions with executions table and acquires a
 // write lock on the result
-func (pdb *db) LockCurrentExecutionsJoinExecutions(filter *sqlplugin.CurrentExecutionsFilter) ([]sqlplugin.CurrentExecutionsRow, error) {
+func (pdb *db) LockCurrentExecutionsJoinExecutions(filter sqlplugin.CurrentExecutionsFilter) ([]sqlplugin.CurrentExecutionsRow, error) {
 	var rows []sqlplugin.CurrentExecutionsRow
 	err := pdb.conn.Select(&rows, lockCurrentExecutionJoinExecutionsQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID)
 	return rows, err
