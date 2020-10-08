@@ -25,9 +25,6 @@ package sqlplugin
 import (
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 )
@@ -110,53 +107,6 @@ type (
 	// can be used to filter results through a WHERE clause
 	ShardsFilter struct {
 		ShardID int32
-	}
-
-	// ExecutionsRow represents a row in executions table
-	ExecutionsRow struct {
-		ShardID                  int32
-		NamespaceID              primitives.UUID
-		WorkflowID               string
-		RunID                    primitives.UUID
-		NextEventID              int64
-		LastWriteVersion         int64
-		Data                     []byte
-		DataEncoding             string
-		State                    []byte
-		StateEncoding            string
-		VersionHistories         []byte
-		VersionHistoriesEncoding string
-	}
-
-	// ExecutionsFilter contains the column names within executions table that
-	// can be used to filter results through a WHERE clause
-	ExecutionsFilter struct {
-		ShardID     int32
-		NamespaceID primitives.UUID
-		WorkflowID  string
-		RunID       primitives.UUID
-	}
-
-	// CurrentExecutionsRow represents a row in current_executions table
-	CurrentExecutionsRow struct {
-		ShardID          int32
-		NamespaceID      primitives.UUID
-		WorkflowID       string
-		RunID            primitives.UUID
-		CreateRequestID  string
-		State            enumsspb.WorkflowExecutionState
-		Status           enumspb.WorkflowExecutionStatus
-		LastWriteVersion int64
-		StartVersion     int64
-	}
-
-	// CurrentExecutionsFilter contains the column names within current_executions table that
-	// can be used to filter results through a WHERE clause
-	CurrentExecutionsFilter struct {
-		ShardID     int32
-		NamespaceID primitives.UUID
-		WorkflowID  string
-		RunID       primitives.UUID
 	}
 
 	// BufferedEventsRow represents a row in buffered_events table

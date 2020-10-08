@@ -45,8 +45,6 @@ type (
 
 const (
 	testHistoryExecutionBufferEncoding = "random encoding"
-
-	testHistoryExecutionWorkflowID = "random workflow ID"
 )
 
 var (
