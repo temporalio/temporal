@@ -107,7 +107,6 @@ global:
                 keyFile: {{ default .Env.TEMPORAL_TLS_FRONTEND_KEY "" }}
                 requireClientAuth: {{ default .Env.TEMPORAL_TLS_REQUIRE_CLIENT_AUTH "false" }}
                 clientCaFiles:
-                    - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
                     - {{ default .Env.TEMPORAL_TLS_CLIENT1_CA_CERT "" }}
                     - {{ default .Env.TEMPORAL_TLS_CLIENT2_CA_CERT "" }}
             client:
