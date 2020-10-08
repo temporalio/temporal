@@ -67,9 +67,9 @@ type (
 		SerializeVersionHistories(histories *historyspb.VersionHistories, encodingType enumspb.EncodingType) (*serialization.DataBlob, error)
 		DeserializeVersionHistories(data *serialization.DataBlob) (*historyspb.VersionHistories, error)
 
-		// serialize/deserialize immutable cluster metadata
-		SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType enumspb.EncodingType) (*serialization.DataBlob, error)
-		DeserializeImmutableClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.ImmutableClusterMetadata, error)
+		// serialize/deserialize mutable cluster metadata
+		SerializeClusterMetadata(icm *persistenceblobs.ClusterMetadata, encodingType enumspb.EncodingType) (*serialization.DataBlob, error)
+		DeserializeClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.ClusterMetadata, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -288,14 +288,14 @@ func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlo
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeClusterMetadata(icm *persistenceblobs.ClusterMetadata, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
 	if icm == nil {
-		icm = &persistenceblobs.ImmutableClusterMetadata{}
+		icm = &persistenceblobs.ClusterMetadata{}
 	}
 	return t.serialize(icm, encodingType)
 }
 
-func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.ImmutableClusterMetadata, error) {
+func (t *serializerImpl) DeserializeClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.ClusterMetadata, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -303,7 +303,7 @@ func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *serialization
 		return nil, nil
 	}
 
-	event := &persistenceblobs.ImmutableClusterMetadata{}
+	event := &persistenceblobs.ClusterMetadata{}
 	var err error
 	switch data.Encoding {
 	case enumspb.ENCODING_TYPE_PROTO3:
@@ -311,7 +311,7 @@ func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *serialization
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = event.Unmarshal(data.Data)
 	default:
-		return nil, NewDeserializationError("DeserializeImmutableClusterMetadata invalid encoding")
+		return nil, NewDeserializationError("DeserializeClusterMetadata invalid encoding")
 	}
 
 	if err != nil {

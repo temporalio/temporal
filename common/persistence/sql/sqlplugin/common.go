@@ -31,8 +31,9 @@ import (
 type (
 	// clusterMetadata is the SQL persistence interface for cluster metadata
 	clusterMetadata interface {
-		InsertIfNotExistsIntoClusterMetadata(row *ClusterMetadataRow) (sql.Result, error)
+		SaveClusterMetadata(row *ClusterMetadataRow) (sql.Result, error)
 		GetClusterMetadata() (*ClusterMetadataRow, error)
+		WriteLockGetClusterMetadata() (*ClusterMetadataRow, error)
 		GetClusterMembers(filter *ClusterMembershipFilter) ([]ClusterMembershipRow, error)
 		UpsertClusterMembership(row *ClusterMembershipRow) (sql.Result, error)
 		PruneClusterMembership(filter *PruneClusterMembershipFilter) (sql.Result, error)

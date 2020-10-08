@@ -1169,22 +1169,15 @@ type (
 		Branches []HistoryBranchDetail
 	}
 
-	// InitializeImmutableClusterMetadataRequest is a request of InitializeImmutableClusterMetadata
-	// These values can only be set a single time upon cluster initialization.
-	InitializeImmutableClusterMetadataRequest struct {
-		persistenceblobs.ImmutableClusterMetadata
+	// GetClusterMetadataResponse is the response to GetClusterMetadata
+	GetClusterMetadataResponse struct {
+		persistenceblobs.ClusterMetadata
+		Version int64
 	}
 
-	// InitializeImmutableClusterMetadataResponse is a request of InitializeImmutableClusterMetadata
-	InitializeImmutableClusterMetadataResponse struct {
-		PersistedImmutableData persistenceblobs.ImmutableClusterMetadata
-		RequestApplied         bool
-	}
-
-	// GetImmutableClusterMetadataResponse is the response to GetImmutableClusterMetadata
-	// These values are set a single time upon cluster initialization.
-	GetImmutableClusterMetadataResponse struct {
-		persistenceblobs.ImmutableClusterMetadata
+	SaveClusterMetadataRequest struct {
+		persistenceblobs.ClusterMetadata
+		Version int64
 	}
 
 	// GetClusterMembersRequest is the response to GetClusterMembers
@@ -1361,11 +1354,11 @@ type (
 	ClusterMetadataManager interface {
 		Closeable
 		GetName() string
-		InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error)
-		GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error)
 		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
+		GetClusterMetadata() (*GetClusterMetadataResponse, error)
+		SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error)
 	}
 )
 
