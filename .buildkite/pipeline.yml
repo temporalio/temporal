@@ -113,6 +113,51 @@ steps:
           run: integration-test-xdc-mysql
           config: docker/buildkite/docker-compose.yml
 
+  - label: ":golang: integration test with postgresql"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-postgresql
+          config: docker/buildkite/docker-compose.yml
+
+  - label: ":golang: integration xdc test with postgresql"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_xdc_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-xdc-postgresql
+          config: docker/buildkite/docker-compose.yml
+
+  - label: ":golang: integration ndc test with postgresql"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_ndc_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-xdc-postgresql
+          config: docker/buildkite/docker-compose.yml
+
   - wait
 
   - label: ":golang: code-coverage"

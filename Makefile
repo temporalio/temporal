@@ -68,7 +68,11 @@ GO_BUILD_LDFLAGS          := $(shell $(GO_BUILD_LDFLAGS_CMD) LDFLAG)
 DOCKER_IMAGE_TAG := $(shell whoami | tr -d " ")-local
 
 ifndef PERSISTENCE_TYPE
-override PERSISTENCE_TYPE := cassandra
+override PERSISTENCE_TYPE := nosql
+endif
+
+ifndef PERSISTENCE_DRIVER
+override PERSISTENCE_DRIVER := cassandra
 endif
 
 ifndef TEST_RUN_COUNT
@@ -93,13 +97,13 @@ UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(IN
 # Code coverage output files.
 COVER_ROOT                 := $(BUILD)/coverage
 UNIT_COVER_FILE            := $(COVER_ROOT)/unit_cover.out
-INTEG_COVER_FILE           := $(COVER_ROOT)/integ_$(PERSISTENCE_TYPE)_cover.out
-INTEG_XDC_COVER_FILE       := $(COVER_ROOT)/integ_xdc_$(PERSISTENCE_TYPE)_cover.out
+INTEG_COVER_FILE           := $(COVER_ROOT)/integ_$(PERSISTENCE_TYPE)_$(PERSISTENCE_DRIVER)_cover.out
+INTEG_XDC_COVER_FILE       := $(COVER_ROOT)/integ_xdc_$(PERSISTENCE_TYPE)_$(PERSISTENCE_DRIVER)_cover.out
 INTEG_CASS_COVER_FILE      := $(COVER_ROOT)/integ_cassandra_cover.out
 INTEG_XDC_CASS_COVER_FILE  := $(COVER_ROOT)/integ_xdc_cassandra_cover.out
 INTEG_SQL_COVER_FILE       := $(COVER_ROOT)/integ_sql_cover.out
 INTEG_XDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_xdc_sql_cover.out
-INTEG_NDC_COVER_FILE       := $(COVER_ROOT)/integ_ndc_$(PERSISTENCE_TYPE)_cover.out
+INTEG_NDC_COVER_FILE       := $(COVER_ROOT)/integ_ndc_$(PERSISTENCE_TYPE)_$(PERSISTENCE_DRIVER)_cover.out
 INTEG_NDC_CASS_COVER_FILE  := $(COVER_ROOT)/integ_ndc_cassandra_cover.out
 INTEG_NDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_ndc_sql_cover.out
 
@@ -284,17 +288,17 @@ cover_profile: clean-build-results
 cover_integration_profile: clean-build-results
 	@echo "mode: atomic" > $(INTEG_COVER_FILE)
 
-	@echo Running integration test with $(PERSISTENCE_TYPE)
+	@echo Running integration test with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_OUT_DIR)
-	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out || exit 1;
+	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" >> $(INTEG_COVER_FILE)
 
 cover_xdc_profile: clean-build-results
 	@echo "mode: atomic" > $(INTEG_XDC_COVER_FILE)
 
-	@echo Running integration test for cross dc with $(PERSISTENCE_TYPE)
+	@echo Running integration test for cross dc with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)
-	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out || exit 1;
+	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE)
 
 cover_ndc_profile: clean-build-results
@@ -302,9 +306,9 @@ cover_ndc_profile: clean-build-results
 	@mkdir -p $(COVER_ROOT)
 	@echo "mode: atomic" > $(INTEG_NDC_COVER_FILE)
 
-	@echo Running integration test for 3+ dc with $(PERSISTENCE_TYPE)
+	@echo Running integration test for 3+ dc with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)
-	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_NDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out -count=$(TEST_RUN_COUNT) || exit 1;
+	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_NDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out -count=$(TEST_RUN_COUNT) || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_NDC_COVER_FILE)
 
 $(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_CASS_COVER_FILE) $(INTEG_XDC_CASS_COVER_FILE) $(INTEG_SQL_COVER_FILE) $(INTEG_XDC_SQL_COVER_FILE)

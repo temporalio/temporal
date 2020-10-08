@@ -30,78 +30,60 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	pt "go.temporal.io/server/common/persistence/persistence-tests"
-	"go.temporal.io/server/environment"
 )
-
-const (
-	testUser      = "temporal"
-	testPassword  = "temporal"
-	testSchemaDir = "schema/postgresql/v96"
-)
-
-func getTestClusterOption() *pt.TestBaseOptions {
-	return &pt.TestBaseOptions{
-		SQLDBPluginName: PluginName,
-		DBUsername:      testUser,
-		DBPassword:      testPassword,
-		DBHost:          environment.GetPostgreSQLAddress(),
-		DBPort:          environment.GetPostgreSQLPort(),
-		SchemaDir:       testSchemaDir,
-	}
-}
 
 func TestSQLHistoryV2PersistenceSuite(t *testing.T) {
 	s := new(pt.HistoryV2PersistenceSuite)
-	s.TestBase = pt.NewTestBaseWithSQL(getTestClusterOption())
+	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
 func TestSQLMatchingPersistenceSuite(t *testing.T) {
 	s := new(pt.MatchingPersistenceSuite)
-	s.TestBase = pt.NewTestBaseWithSQL(getTestClusterOption())
+	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
 func TestSQLMetadataPersistenceSuiteV2(t *testing.T) {
 	s := new(pt.MetadataPersistenceSuiteV2)
-	s.TestBase = pt.NewTestBaseWithSQL(getTestClusterOption())
+	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
 func TestSQLShardPersistenceSuite(t *testing.T) {
 	s := new(pt.ShardPersistenceSuite)
-	s.TestBase = pt.NewTestBaseWithSQL(getTestClusterOption())
+	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
 func TestSQLExecutionManagerSuite(t *testing.T) {
 	s := new(pt.ExecutionManagerSuite)
-	s.TestBase = pt.NewTestBaseWithSQL(getTestClusterOption())
+	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
 func TestSQLExecutionManagerWithEventsV2(t *testing.T) {
 	s := new(pt.ExecutionManagerSuiteForEventsV2)
-	s.TestBase = pt.NewTestBaseWithSQL(getTestClusterOption())
+	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
 func TestSQLVisibilityPersistenceSuite(t *testing.T) {
 	s := new(pt.VisibilityPersistenceSuite)
-	s.TestBase = pt.NewTestBaseWithSQL(getTestClusterOption())
+	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
 func TestClusterMetadataPersistence(t *testing.T) {
 	s := new(pt.ClusterMetadataManagerSuite)
-	s.TestBase = pt.NewTestBaseWithSQL(getTestClusterOption())
+	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
@@ -119,7 +101,7 @@ FAIL: TestSQLQueuePersistence/TestNamespaceReplicationQueue (0.26s)
 */
 //func TestSQLQueuePersistence(t *testing.T) {
 //	s := new(pt.QueuePersistenceSuite)
-//	s.TestBase = pt.NewTestBaseWithSQL(getTestClusterOption())
+//	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
 //	s.TestBase.Setup()
 //	suite.Run(t, s)
 //}

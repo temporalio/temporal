@@ -34,6 +34,8 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/environment"
@@ -48,12 +50,29 @@ type TestCluster struct {
 }
 
 // NewTestCluster returns a new SQL test cluster
-func NewTestCluster(pluginName, dbName, username, password, host string, port int, schemaDir string, logger log.Logger) *TestCluster {
+func NewTestCluster(
+	pluginName string,
+	dbName string,
+	username string,
+	password string,
+	host string,
+	port int,
+	schemaDir string,
+	logger log.Logger,
+) *TestCluster {
 	var result TestCluster
 	result.logger = logger
 	result.dbName = dbName
+
 	if port == 0 {
-		port = environment.GetMySQLPort()
+		switch pluginName {
+		case mysql.PluginName:
+			port = environment.GetMySQLPort()
+		case postgresql.PluginName:
+			port = environment.GetPostgreSQLPort()
+		default:
+			panic(fmt.Sprintf("unknown sql store drier: %v", pluginName))
+		}
 	}
 	if schemaDir == "" {
 		panic("must provide schema dir")
@@ -148,7 +167,8 @@ func (s *TestCluster) DropDatabase() {
 	}()
 	err = db.DropDatabase(s.cfg.DatabaseName)
 	if err != nil {
-		panic(err)
+		// TODO https://github.com/temporalio/temporal/issues/817
+		s.logger.Error("unable to drop database", tag.Error(err))
 	}
 }
 

@@ -131,7 +131,7 @@ func (s *Scanner) Start() error {
 	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskQueueScannerEnabled() {
 		go s.startWorkflowWithRetry(tlScannerWFStartOptions, tqScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, tqScannerTaskQueueName)
-	} else if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeCassandra && s.context.cfg.HistoryScannerEnabled() {
+	} else if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeNoSQL && s.context.cfg.HistoryScannerEnabled() {
 		go s.startWorkflowWithRetry(historyScannerWFStartOptions, historyScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, historyScannerTaskQueueName)
 	}
