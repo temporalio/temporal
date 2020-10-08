@@ -251,17 +251,17 @@ func convertToTime(timeStr string) (time.Time, error) {
 func convertStatusStr(statusStr string) (enumspb.WorkflowExecutionStatus, error) {
 	statusStr = strings.ToLower(strings.TrimSpace(statusStr))
 	switch statusStr {
-	case "completed", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)):
+	case "completed", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)):
 		return enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, nil
-	case "failed", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)):
+	case "failed", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)):
 		return enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, nil
-	case "canceled", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED)):
+	case "canceled", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED)):
 		return enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, nil
-	case "terminated", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)):
+	case "terminated", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)):
 		return enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, nil
-	case "continuedasnew", "continued_as_new", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW)):
+	case "continuedasnew", "continued_as_new", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW)):
 		return enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, nil
-	case "timedout", "timed_out", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT)):
+	case "timedout", "timed_out", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT)):
 		return enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, nil
 	default:
 		return 0, fmt.Errorf("unknown workflow close status: %s", statusStr)

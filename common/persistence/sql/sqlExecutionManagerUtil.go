@@ -45,7 +45,7 @@ import (
 
 func applyWorkflowMutationTx(
 	tx sqlplugin.Tx,
-	shardID int,
+	shardID int32,
 	workflowMutation *p.InternalWorkflowMutation,
 ) error {
 	executionInfo := workflowMutation.ExecutionInfo
@@ -184,7 +184,7 @@ func applyWorkflowMutationTx(
 
 func applyWorkflowSnapshotTxAsReset(
 	tx sqlplugin.Tx,
-	shardID int,
+	shardID int32,
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
 
@@ -359,7 +359,7 @@ func applyWorkflowSnapshotTxAsReset(
 
 func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 	tx sqlplugin.Tx,
-	shardID int,
+	shardID int32,
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
 
@@ -464,7 +464,7 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 
 func applyTasks(
 	tx sqlplugin.Tx,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -507,13 +507,13 @@ func applyTasks(
 // locking it in the DB
 func lockCurrentExecutionIfExists(
 	tx sqlplugin.Tx,
-	shardID int,
+	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 ) (*sqlplugin.CurrentExecutionsRow, error) {
 
 	rows, err := tx.LockCurrentExecutionsJoinExecutions(&sqlplugin.CurrentExecutionsFilter{
-		ShardID: int64(shardID), NamespaceID: namespaceID, WorkflowID: workflowID})
+		ShardID: shardID, NamespaceID: namespaceID, WorkflowID: workflowID})
 	if err != nil {
 		if err != sql.ErrNoRows {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("lockCurrentExecutionIfExists failed. Failed to get current_executions row for (shard,namespace,workflow) = (%v, %v, %v). Error: %v", shardID, namespaceID, workflowID, err))
@@ -532,7 +532,7 @@ func lockCurrentExecutionIfExists(
 func createOrUpdateCurrentExecution(
 	tx sqlplugin.Tx,
 	createMode p.CreateWorkflowMode,
-	shardID int,
+	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
@@ -544,7 +544,7 @@ func createOrUpdateCurrentExecution(
 ) error {
 
 	row := sqlplugin.CurrentExecutionsRow{
-		ShardID:          int64(shardID),
+		ShardID:          shardID,
 		NamespaceID:      namespaceID,
 		WorkflowID:       workflowID,
 		RunID:            runID,
@@ -597,7 +597,7 @@ func createOrUpdateCurrentExecution(
 
 func lockAndCheckNextEventID(
 	tx sqlplugin.Tx,
-	shardID int,
+	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
@@ -618,7 +618,7 @@ func lockAndCheckNextEventID(
 
 func lockNextEventID(
 	tx sqlplugin.Tx,
-	shardID int,
+	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
@@ -647,7 +647,7 @@ func lockNextEventID(
 func createTransferTasks(
 	tx sqlplugin.Tx,
 	transferTasks []p.Task,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -669,7 +669,7 @@ func createTransferTasks(
 			TaskId:            task.GetTaskID(),
 		}
 
-		transferTasksRows[i].ShardID = int32(shardID)
+		transferTasksRows[i].ShardID = shardID
 		transferTasksRows[i].TaskID = task.GetTaskID()
 
 		switch task.GetType() {
@@ -749,7 +749,7 @@ func createTransferTasks(
 func createReplicationTasks(
 	tx sqlplugin.Tx,
 	replicationTasks []p.Task,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -807,7 +807,7 @@ func createReplicationTasks(
 		if err != nil {
 			return err
 		}
-		replicationTasksRows[i].ShardID = int32(shardID)
+		replicationTasksRows[i].ShardID = shardID
 		replicationTasksRows[i].TaskID = task.GetTaskID()
 		replicationTasksRows[i].Data = blob.Data
 		replicationTasksRows[i].DataEncoding = blob.Encoding.String()
@@ -833,7 +833,7 @@ func createReplicationTasks(
 func createTimerTasks(
 	tx sqlplugin.Tx,
 	timerTasks []p.Task,
-	shardID int,
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -891,7 +891,7 @@ func createTimerTasks(
 				return err
 			}
 
-			timerTasksRows[i].ShardID = int32(shardID)
+			timerTasksRows[i].ShardID = shardID
 			timerTasksRows[i].VisibilityTimestamp = *goVisTs
 			timerTasksRows[i].TaskID = task.GetTaskID()
 			timerTasksRows[i].Data = blob.Data
@@ -917,13 +917,13 @@ func createTimerTasks(
 
 func assertNotCurrentExecution(
 	tx sqlplugin.Tx,
-	shardID int,
+	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
 ) error {
 	currentRow, err := tx.LockCurrentExecutions(&sqlplugin.CurrentExecutionsFilter{
-		ShardID:     int64(shardID),
+		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 	})
@@ -939,7 +939,7 @@ func assertNotCurrentExecution(
 
 func assertRunIDAndUpdateCurrentExecution(
 	tx sqlplugin.Tx,
-	shardID int,
+	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 	newRunID primitives.UUID,
@@ -970,14 +970,14 @@ func assertRunIDAndUpdateCurrentExecution(
 
 func assertCurrentExecution(
 	tx sqlplugin.Tx,
-	shardID int,
+	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 	assertFn func(currentRow *sqlplugin.CurrentExecutionsRow) error,
 ) error {
 
 	currentRow, err := tx.LockCurrentExecutions(&sqlplugin.CurrentExecutionsFilter{
-		ShardID:     int64(shardID),
+		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 	})
@@ -1001,7 +1001,7 @@ func assertRunIDMismatch(runID primitives.UUID, currentRunID primitives.UUID) er
 
 func updateCurrentExecution(
 	tx sqlplugin.Tx,
-	shardID int,
+	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
@@ -1013,7 +1013,7 @@ func updateCurrentExecution(
 ) error {
 
 	result, err := tx.UpdateCurrentExecutions(&sqlplugin.CurrentExecutionsRow{
-		ShardID:          int64(shardID),
+		ShardID:          shardID,
 		NamespaceID:      namespaceID,
 		WorkflowID:       workflowID,
 		RunID:            runID,
@@ -1041,7 +1041,7 @@ func buildExecutionRow(
 	versionHistories *historyspb.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
-	shardID int,
+	shardID int32,
 ) (row *sqlplugin.ExecutionsRow, err error) {
 
 	info, state, err := p.WorkflowExecutionToProto(executionInfo, startVersion, versionHistories)
@@ -1089,7 +1089,7 @@ func (m *sqlExecutionManager) createExecution(
 	versionHistories *historyspb.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
-	shardID int,
+	shardID int32,
 ) error {
 
 	// validate workflow state & close status
@@ -1144,7 +1144,7 @@ func updateExecution(
 	versionHistories *historyspb.VersionHistories,
 	startVersion int64,
 	lastWriteVersion int64,
-	shardID int,
+	shardID int32,
 ) error {
 
 	// validate workflow state & close status

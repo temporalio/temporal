@@ -159,7 +159,7 @@ func loadMutableStateForTimerTask(
 }
 
 func initializeLoggerForTask(
-	shardID int,
+	shardID int32,
 	task queueTaskInfo,
 	logger log.Logger,
 ) log.Logger {

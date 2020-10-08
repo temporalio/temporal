@@ -47,7 +47,7 @@ import (
 
 type sqlExecutionManager struct {
 	sqlStore
-	shardID int
+	shardID int32
 }
 
 var _ p.ExecutionStore = (*sqlExecutionManager)(nil)
@@ -56,7 +56,7 @@ var _ p.ExecutionStore = (*sqlExecutionManager)(nil)
 func NewSQLExecutionStore(
 	db sqlplugin.DB,
 	logger log.Logger,
-	shardID int,
+	shardID int32,
 ) (p.ExecutionStore, error) {
 
 	return &sqlExecutionManager{
@@ -87,7 +87,7 @@ func (m *sqlExecutionManager) txExecuteShardLocked(
 	})
 }
 
-func (m *sqlExecutionManager) GetShardID() int {
+func (m *sqlExecutionManager) GetShardID() int32 {
 	return m.shardID
 }
 
@@ -649,7 +649,7 @@ func (m *sqlExecutionManager) DeleteCurrentWorkflowExecution(
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.RunID)
 	_, err := m.db.DeleteFromCurrentExecutions(&sqlplugin.CurrentExecutionsFilter{
-		ShardID:     int64(m.shardID),
+		ShardID:     m.shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  request.WorkflowID,
 		RunID:       runID,
@@ -662,7 +662,7 @@ func (m *sqlExecutionManager) GetCurrentExecution(
 ) (*p.GetCurrentExecutionResponse, error) {
 
 	row, err := m.db.SelectFromCurrentExecutions(&sqlplugin.CurrentExecutionsFilter{
-		ShardID:     int64(m.shardID),
+		ShardID:     m.shardID,
 		NamespaceID: primitives.MustParseUUID(request.NamespaceID),
 		WorkflowID:  request.WorkflowID,
 	})
@@ -716,7 +716,7 @@ func (m *sqlExecutionManager) GetTransferTasks(
 ) (*p.GetTransferTasksResponse, error) {
 
 	rows, err := m.db.RangeSelectFromTransferTasks(sqlplugin.TransferTasksRangeFilter{
-		ShardID: int32(m.shardID), MinTaskID: request.ReadLevel, MaxTaskID: request.MaxReadLevel})
+		ShardID: m.shardID, MinTaskID: request.ReadLevel, MaxTaskID: request.MaxReadLevel})
 	if err != nil {
 		if err != sql.ErrNoRows {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTransferTasks operation failed. Select failed. Error: %v", err))
@@ -739,7 +739,7 @@ func (m *sqlExecutionManager) CompleteTransferTask(
 ) error {
 
 	if _, err := m.db.DeleteFromTransferTasks(sqlplugin.TransferTasksFilter{
-		ShardID: int32(m.shardID),
+		ShardID: m.shardID,
 		TaskID:  request.TaskID,
 	}); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("CompleteTransferTask operation failed. Error: %v", err))
@@ -752,7 +752,7 @@ func (m *sqlExecutionManager) RangeCompleteTransferTask(
 ) error {
 
 	if _, err := m.db.RangeDeleteFromTransferTasks(sqlplugin.TransferTasksRangeFilter{
-		ShardID:   int32(m.shardID),
+		ShardID:   m.shardID,
 		MinTaskID: request.ExclusiveBeginTaskID,
 		MaxTaskID: request.InclusiveEndTaskID,
 	}); err != nil {
@@ -796,7 +796,7 @@ func (m *sqlExecutionManager) GetReplicationTasks(
 
 	rows, err := m.db.SelectFromReplicationTasks(
 		&sqlplugin.ReplicationTasksFilter{
-			ShardID:   int32(m.shardID),
+			ShardID:   m.shardID,
 			MinTaskID: readLevel,
 			MaxTaskID: maxReadLevelInclusive,
 			PageSize:  request.BatchSize,
@@ -858,7 +858,7 @@ func (m *sqlExecutionManager) CompleteReplicationTask(
 ) error {
 
 	if _, err := m.db.DeleteFromReplicationTasks(&sqlplugin.ReplicationTasksFilter{
-		ShardID: int32(m.shardID),
+		ShardID: m.shardID,
 		TaskID:  request.TaskID,
 	}); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("CompleteReplicationTask operation failed. Error: %v", err))
@@ -871,7 +871,7 @@ func (m *sqlExecutionManager) RangeCompleteReplicationTask(
 ) error {
 
 	if _, err := m.db.RangeDeleteFromReplicationTasks(&sqlplugin.ReplicationTasksFilter{
-		ShardID: int32(m.shardID),
+		ShardID: m.shardID,
 		TaskID:  request.InclusiveEndTaskID,
 	}); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteReplicationTask operation failed. Error: %v", err))
@@ -889,7 +889,7 @@ func (m *sqlExecutionManager) GetReplicationTasksFromDLQ(
 	}
 
 	filter := sqlplugin.ReplicationTasksFilter{
-		ShardID:   int32(m.shardID),
+		ShardID:   m.shardID,
 		MinTaskID: readLevel,
 		MaxTaskID: maxReadLevelInclusive,
 		PageSize:  request.BatchSize,
@@ -914,7 +914,7 @@ func (m *sqlExecutionManager) DeleteReplicationTaskFromDLQ(
 ) error {
 
 	filter := sqlplugin.ReplicationTasksFilter{
-		ShardID: int32(m.shardID),
+		ShardID: m.shardID,
 		TaskID:  request.TaskID,
 	}
 
@@ -932,7 +932,7 @@ func (m *sqlExecutionManager) RangeDeleteReplicationTaskFromDLQ(
 ) error {
 
 	filter := sqlplugin.ReplicationTasksFilter{
-		ShardID:            int32(m.shardID),
+		ShardID:            m.shardID,
 		TaskID:             request.ExclusiveBeginTaskID,
 		InclusiveEndTaskID: request.InclusiveEndTaskID,
 	}
@@ -995,7 +995,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 	}
 
 	rows, err := m.db.RangeSelectFromTimerTasks(sqlplugin.TimerTasksRangeFilter{
-		ShardID:                int32(m.shardID),
+		ShardID:                m.shardID,
 		MinVisibilityTimestamp: pageToken.Timestamp,
 		TaskID:                 pageToken.TaskID,
 		MaxVisibilityTimestamp: request.MaxTimestamp,
@@ -1041,7 +1041,7 @@ func (m *sqlExecutionManager) CompleteTimerTask(
 ) error {
 
 	if _, err := m.db.DeleteFromTimerTasks(sqlplugin.TimerTasksFilter{
-		ShardID:             int32(m.shardID),
+		ShardID:             m.shardID,
 		VisibilityTimestamp: request.VisibilityTimestamp,
 		TaskID:              request.TaskID,
 	}); err != nil {
@@ -1057,7 +1057,7 @@ func (m *sqlExecutionManager) RangeCompleteTimerTask(
 	start := request.InclusiveBeginTimestamp
 	end := request.ExclusiveEndTimestamp
 	if _, err := m.db.RangeDeleteFromTimerTasks(sqlplugin.TimerTasksRangeFilter{
-		ShardID:                int32(m.shardID),
+		ShardID:                m.shardID,
 		MinVisibilityTimestamp: start,
 		MaxVisibilityTimestamp: end,
 	}); err != nil {

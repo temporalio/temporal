@@ -100,7 +100,7 @@ type (
 
 	// ShardsRow represents a row in shards table
 	ShardsRow struct {
-		ShardID      int64
+		ShardID      int32
 		RangeID      int64
 		Data         []byte
 		DataEncoding string
@@ -109,12 +109,12 @@ type (
 	// ShardsFilter contains the column names within shards table that
 	// can be used to filter results through a WHERE clause
 	ShardsFilter struct {
-		ShardID int64
+		ShardID int32
 	}
 
 	// ExecutionsRow represents a row in executions table
 	ExecutionsRow struct {
-		ShardID                  int
+		ShardID                  int32
 		NamespaceID              primitives.UUID
 		WorkflowID               string
 		RunID                    primitives.UUID
@@ -131,7 +131,7 @@ type (
 	// ExecutionsFilter contains the column names within executions table that
 	// can be used to filter results through a WHERE clause
 	ExecutionsFilter struct {
-		ShardID     int
+		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
@@ -139,7 +139,7 @@ type (
 
 	// CurrentExecutionsRow represents a row in current_executions table
 	CurrentExecutionsRow struct {
-		ShardID          int64
+		ShardID          int32
 		NamespaceID      primitives.UUID
 		WorkflowID       string
 		RunID            primitives.UUID
@@ -153,7 +153,7 @@ type (
 	// CurrentExecutionsFilter contains the column names within current_executions table that
 	// can be used to filter results through a WHERE clause
 	CurrentExecutionsFilter struct {
-		ShardID     int64
+		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
@@ -232,7 +232,7 @@ type (
 	// ReplicationTaskDLQRow represents a row in replication_tasks_dlq table
 	ReplicationTaskDLQRow struct {
 		SourceClusterName string
-		ShardID           int
+		ShardID           int32
 		TaskID            int64
 		Data              []byte
 		DataEncoding      string
@@ -282,7 +282,7 @@ type (
 
 	// HistoryNodeRow represents a row in history_node table
 	HistoryNodeRow struct {
-		ShardID  int
+		ShardID  int32
 		TreeID   primitives.UUID
 		BranchID primitives.UUID
 		NodeID   int64
@@ -295,7 +295,7 @@ type (
 	// HistoryNodeFilter contains the column names within history_node table that
 	// can be used to filter results through a WHERE clause
 	HistoryNodeFilter struct {
-		ShardID  int
+		ShardID  int32
 		TreeID   primitives.UUID
 		BranchID primitives.UUID
 		// Inclusive
@@ -307,7 +307,7 @@ type (
 
 	// HistoryTreeRow represents a row in history_tree table
 	HistoryTreeRow struct {
-		ShardID      int
+		ShardID      int32
 		TreeID       primitives.UUID
 		BranchID     primitives.UUID
 		Data         []byte
@@ -317,7 +317,7 @@ type (
 	// HistoryTreeFilter contains the column names within history_tree table that
 	// can be used to filter results through a WHERE clause
 	HistoryTreeFilter struct {
-		ShardID  int
+		ShardID  int32
 		TreeID   primitives.UUID
 		BranchID primitives.UUID
 	}

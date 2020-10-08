@@ -40,7 +40,7 @@ func updateSignalsRequested(
 	tx sqlplugin.Tx,
 	signalRequestedIDs []string,
 	deleteSignalRequestID string,
-	shardID int,
+	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
@@ -50,7 +50,7 @@ func updateSignalsRequested(
 		rows := make([]sqlplugin.SignalsRequestedSetsRow, len(signalRequestedIDs))
 		for i, v := range signalRequestedIDs {
 			rows[i] = sqlplugin.SignalsRequestedSetsRow{
-				ShardID:     int32(shardID),
+				ShardID:     shardID,
 				NamespaceID: namespaceID,
 				WorkflowID:  workflowID,
 				RunID:       runID,
@@ -64,7 +64,7 @@ func updateSignalsRequested(
 
 	if deleteSignalRequestID != "" {
 		if _, err := tx.DeleteFromSignalsRequestedSets(&sqlplugin.SignalsRequestedSetsFilter{
-			ShardID:     int32(shardID),
+			ShardID:     shardID,
 			NamespaceID: namespaceID,
 			WorkflowID:  workflowID,
 			RunID:       runID,
@@ -79,14 +79,14 @@ func updateSignalsRequested(
 
 func getSignalsRequested(
 	db sqlplugin.DB,
-	shardID int,
+	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
 ) (map[string]struct{}, error) {
 
 	rows, err := db.SelectFromSignalsRequestedSets(&sqlplugin.SignalsRequestedSetsFilter{
-		ShardID:     int32(shardID),
+		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
@@ -103,14 +103,14 @@ func getSignalsRequested(
 
 func deleteSignalsRequestedSet(
 	tx sqlplugin.Tx,
-	shardID int,
+	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
 ) error {
 
 	if _, err := tx.DeleteFromSignalsRequestedSets(&sqlplugin.SignalsRequestedSetsFilter{
-		ShardID:     int32(shardID),
+		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
@@ -123,7 +123,7 @@ func deleteSignalsRequestedSet(
 func updateBufferedEvents(
 	tx sqlplugin.Tx,
 	batch *serialization.DataBlob,
-	shardID int,
+	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
@@ -133,7 +133,7 @@ func updateBufferedEvents(
 		return nil
 	}
 	row := sqlplugin.BufferedEventsRow{
-		ShardID:      int32(shardID),
+		ShardID:      shardID,
 		NamespaceID:  namespaceID,
 		WorkflowID:   workflowID,
 		RunID:        runID,
@@ -149,14 +149,14 @@ func updateBufferedEvents(
 
 func getBufferedEvents(
 	db sqlplugin.DB,
-	shardID int,
+	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
 ) ([]*serialization.DataBlob, error) {
 
 	rows, err := db.SelectFromBufferedEvents(&sqlplugin.BufferedEventsFilter{
-		ShardID:     int32(shardID),
+		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
@@ -173,14 +173,14 @@ func getBufferedEvents(
 
 func deleteBufferedEvents(
 	tx sqlplugin.Tx,
-	shardID int,
+	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
 ) error {
 
 	if _, err := tx.DeleteFromBufferedEvents(&sqlplugin.BufferedEventsFilter{
-		ShardID:     int32(shardID),
+		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,

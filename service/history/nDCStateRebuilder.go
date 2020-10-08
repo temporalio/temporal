@@ -243,7 +243,7 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 			nextEventID,
 			paginationToken,
 			nDCDefaultPageSize,
-			convert.IntPtr(r.shard.GetShardID()),
+			convert.Int32Ptr(r.shard.GetShardID()),
 		)
 		if err != nil {
 			return nil, nil, err

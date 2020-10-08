@@ -50,14 +50,14 @@ func (_m *ExecutionManager) GetName() string {
 }
 
 // GetShardID provides a mock function with given fields:
-func (_m *ExecutionManager) GetShardID() int {
+func (_m *ExecutionManager) GetShardID() int32 {
 	ret := _m.Called()
 
-	var r0 int
-	if rf, ok := ret.Get(0).(func() int); ok {
+	var r0 int32
+	if rf, ok := ret.Get(0).(func() int32); ok {
 		r0 = rf()
 	} else {
-		r0 = ret.Get(0).(int)
+		r0 = ret.Get(0).(int32)
 	}
 
 	return r0

@@ -53,7 +53,7 @@ import (
 
 // Config represents configuration for frontend service
 type Config struct {
-	NumHistoryShards           int
+	NumHistoryShards           int32
 	PersistenceMaxQPS          dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS    dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize      dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -124,7 +124,7 @@ type Config struct {
 }
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFromES bool) *Config {
+func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadFromES bool) *Config {
 	return &Config{
 		NumHistoryShards:                       numHistoryShards,
 		PersistenceMaxQPS:                      dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),

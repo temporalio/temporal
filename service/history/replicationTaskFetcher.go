@@ -271,7 +271,7 @@ func (f *ReplicationTaskFetcherImpl) fetchAndDistributeTasks(requestByShard map[
 		request, ok := requestByShard[shardID]
 
 		if !ok {
-			f.logger.Error("No outstanding request found for shardId.  Skipping Messages.", tag.ShardID(int(shardID)))
+			f.logger.Error("No outstanding request found for shardId.  Skipping Messages.", tag.ShardID(shardID))
 			continue
 		}
 		request.respChan <- tasks

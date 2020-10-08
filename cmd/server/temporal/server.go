@@ -329,7 +329,7 @@ func immutableClusterMetadataInitialization(
 			clusterMetadata.CurrentClusterName = resp.ClusterName
 		}
 
-		var persistedShardCount = int(resp.HistoryShardCount)
+		var persistedShardCount = resp.HistoryShardCount
 		if persistenceConfig.NumHistoryShards != persistedShardCount {
 			logImmutableMismatch(logger,
 				"Persistence.NumHistoryShards",

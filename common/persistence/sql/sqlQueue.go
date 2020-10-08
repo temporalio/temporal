@@ -216,7 +216,7 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 	var newPagingToken []byte
 	if messages != nil && len(messages) >= pageSize {
 		lastReadMessageID := messages[len(messages)-1].ID
-		newPagingToken = serializePageToken(int64(lastReadMessageID))
+		newPagingToken = serializePageToken(lastReadMessageID)
 	}
 	return messages, newPagingToken, nil
 }

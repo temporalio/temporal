@@ -300,7 +300,7 @@ func GetAllHistory(
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
-	shardID *int,
+	shardID *int32,
 ) (*historypb.History, []*historypb.History, error) {
 
 	// overall result
@@ -350,7 +350,7 @@ func PaginateHistory(
 	nextEventID int64,
 	tokenIn []byte,
 	pageSize int,
-	shardID *int,
+	shardID *int32,
 ) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, error) {
 
 	var historyEvents []*historypb.HistoryEvent
@@ -682,7 +682,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 		MaxEventID:    nextEventID,
 		PageSize:      1,
 		NextPageToken: pageToken,
-		ShardID:       convert.IntPtr(p.shard.GetShardID()),
+		ShardID:       convert.Int32Ptr(p.shard.GetShardID()),
 	}
 
 	for {

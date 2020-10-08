@@ -247,9 +247,9 @@ func (s *engineSuite) SetupTest() {
 	historyEventNotifier := newHistoryEventNotifier(
 		clock.NewRealTimeSource(),
 		s.mockShard.resource.MetricsClient,
-		func(namespaceID, workflowID string) int {
+		func(namespaceID, workflowID string) int32 {
 			key := namespaceID + "_" + workflowID
-			return len(key)
+			return int32(len(key))
 		},
 	)
 

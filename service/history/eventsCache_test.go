@@ -83,7 +83,7 @@ func (s *eventsCacheSuite) TearDownTest() {
 }
 
 func (s *eventsCacheSuite) newTestEventsCache() *eventsCacheImpl {
-	shardId := 10
+	shardId := int32(10)
 	return newEventsCacheWithOptions(16, 32, time.Minute, s.mockEventsV2Mgr, false, s.logger,
 		metrics.NewClient(tally.NoopScope, metrics.History), &shardId)
 }
@@ -140,7 +140,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
 	}
 
-	shardId := 10
+	shardId := int32(10)
 	s.mockEventsV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event1.GetEventId(),
@@ -166,7 +166,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 	workflowID := "events-cache-miss-failure-workflow-id"
 	runID := "events-cache-miss-failure-run-id"
 
-	shardId := 10
+	shardId := int32(10)
 	expectedErr := errors.New("persistence call failed")
 	s.mockEventsV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
@@ -198,7 +198,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
 	}
 
-	shardId := 10
+	shardId := int32(10)
 	s.mockEventsV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event2.GetEventId(),

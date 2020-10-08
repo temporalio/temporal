@@ -872,7 +872,7 @@ func TaskTypeFilter(taskType enumspb.TaskQueueType) FilterOption {
 }
 
 // ShardIDFilter filters by shard id
-func ShardIDFilter(shardID int) FilterOption {
+func ShardIDFilter(shardID int32) FilterOption {
 	return func(filterMap map[Filter]interface{}) {
 		filterMap[ShardID] = shardID
 	}

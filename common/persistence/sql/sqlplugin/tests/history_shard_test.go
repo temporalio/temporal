@@ -77,7 +77,7 @@ func (s *historyShardSuite) TearDownTest() {
 }
 
 func (s *historyShardSuite) TestInsert_Success() {
-	shardID := int64(rand.Int31())
+	shardID := rand.Int31()
 	rangeID := int64(1)
 
 	shard := s.newRandomShardRow(shardID, rangeID)
@@ -89,7 +89,7 @@ func (s *historyShardSuite) TestInsert_Success() {
 }
 
 func (s *historyShardSuite) TestInsert_Fail_Duplicate() {
-	shardID := int64(rand.Int31())
+	shardID := rand.Int31()
 	rangeID := int64(1)
 
 	shard := s.newRandomShardRow(shardID, rangeID)
@@ -105,7 +105,7 @@ func (s *historyShardSuite) TestInsert_Fail_Duplicate() {
 }
 
 func (s *historyShardSuite) TestInsertSelect() {
-	shardID := int64(rand.Int31())
+	shardID := rand.Int31()
 	rangeID := int64(1)
 
 	shard := s.newRandomShardRow(shardID, rangeID)
@@ -124,7 +124,7 @@ func (s *historyShardSuite) TestInsertSelect() {
 }
 
 func (s *historyShardSuite) TestInsertUpdate_Success() {
-	shardID := int64(rand.Int31())
+	shardID := rand.Int31()
 	rangeID := int64(1)
 
 	shard := s.newRandomShardRow(shardID, rangeID)
@@ -143,7 +143,7 @@ func (s *historyShardSuite) TestInsertUpdate_Success() {
 }
 
 func (s *historyShardSuite) TestUpdate_Fail() {
-	shardID := int64(rand.Int31())
+	shardID := rand.Int31()
 	rangeID := int64(1)
 
 	shard := s.newRandomShardRow(shardID, rangeID)
@@ -154,7 +154,7 @@ func (s *historyShardSuite) TestUpdate_Fail() {
 }
 
 func (s *historyShardSuite) TestInsertUpdateSelect() {
-	shardID := int64(rand.Int31())
+	shardID := rand.Int31()
 	rangeID := int64(1)
 
 	shard := s.newRandomShardRow(shardID, rangeID)
@@ -180,7 +180,7 @@ func (s *historyShardSuite) TestInsertUpdateSelect() {
 }
 
 func (s *historyShardSuite) TestSelectReadLock() {
-	shardID := int64(rand.Int31())
+	shardID := rand.Int31()
 	rangeID := int64(rand.Int31())
 
 	shard := s.newRandomShardRow(shardID, rangeID)
@@ -201,7 +201,7 @@ func (s *historyShardSuite) TestSelectReadLock() {
 }
 
 func (s *historyShardSuite) TestSelectWriteLock() {
-	shardID := int64(rand.Int31())
+	shardID := rand.Int31()
 	rangeID := int64(rand.Int31())
 
 	shard := s.newRandomShardRow(shardID, rangeID)
@@ -222,7 +222,7 @@ func (s *historyShardSuite) TestSelectWriteLock() {
 }
 
 func (s *historyShardSuite) newRandomShardRow(
-	shardID int64,
+	shardID int32,
 	rangeID int64,
 ) sqlplugin.ShardsRow {
 	return sqlplugin.ShardsRow{

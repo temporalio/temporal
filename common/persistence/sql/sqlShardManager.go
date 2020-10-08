@@ -75,7 +75,7 @@ func (m *sqlShardManager) CreateShard(request *persistence.CreateShardRequest) e
 }
 
 func (m *sqlShardManager) GetShard(request *persistence.GetShardRequest) (*persistence.GetShardResponse, error) {
-	row, err := m.db.SelectFromShards(&sqlplugin.ShardsFilter{ShardID: int64(request.ShardID)})
+	row, err := m.db.SelectFromShards(&sqlplugin.ShardsFilter{ShardID: request.ShardID})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetShard operation failed. Shard with ID %v not found. Error: %v", request.ShardID, err))
@@ -99,7 +99,7 @@ func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) e
 		return serviceerror.NewInternal(fmt.Sprintf("UpdateShard operation failed. Error: %v", err))
 	}
 	return m.txExecute("UpdateShard", func(tx sqlplugin.Tx) error {
-		if err := lockShard(tx, int(request.ShardInfo.GetShardId()), request.PreviousRangeID); err != nil {
+		if err := lockShard(tx, request.ShardInfo.GetShardId(), request.PreviousRangeID); err != nil {
 			return err
 		}
 		result, err := tx.UpdateShards(row)
@@ -118,8 +118,8 @@ func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) e
 }
 
 // initiated by the owning shard
-func lockShard(tx sqlplugin.Tx, shardID int, oldRangeID int64) error {
-	rangeID, err := tx.WriteLockShards(&sqlplugin.ShardsFilter{ShardID: int64(shardID)})
+func lockShard(tx sqlplugin.Tx, shardID int32, oldRangeID int64) error {
+	rangeID, err := tx.WriteLockShards(&sqlplugin.ShardsFilter{ShardID: shardID})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID))
@@ -138,8 +138,8 @@ func lockShard(tx sqlplugin.Tx, shardID int, oldRangeID int64) error {
 }
 
 // initiated by the owning shard
-func readLockShard(tx sqlplugin.Tx, shardID int, oldRangeID int64) error {
-	rangeID, err := tx.ReadLockShards(&sqlplugin.ShardsFilter{ShardID: int64(shardID)})
+func readLockShard(tx sqlplugin.Tx, shardID int32, oldRangeID int64) error {
+	rangeID, err := tx.ReadLockShards(&sqlplugin.ShardsFilter{ShardID: shardID})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID))
@@ -162,7 +162,7 @@ func shardInfoToShardsRow(s persistenceblobs.ShardInfo) (*sqlplugin.ShardsRow, e
 		return nil, err
 	}
 	return &sqlplugin.ShardsRow{
-		ShardID:      int64(s.GetShardId()),
+		ShardID:      s.GetShardId(),
 		RangeID:      s.GetRangeId(),
 		Data:         blob.Data,
 		DataEncoding: blob.Encoding.String(),

@@ -68,7 +68,7 @@ type (
 		monitor               membership.Monitor
 		metricsClient         metrics.Client
 		dynConfig             *dynamicconfig.Collection
-		numberOfHistoryShards int
+		numberOfHistoryShards int32
 		logger                log.Logger
 	}
 )
@@ -79,7 +79,7 @@ func NewRPCClientFactory(
 	monitor membership.Monitor,
 	metricsClient metrics.Client,
 	dc *dynamicconfig.Collection,
-	numberOfHistoryShards int,
+	numberOfHistoryShards int32,
 	logger log.Logger,
 ) Factory {
 	return &rpcClientFactory{

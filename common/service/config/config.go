@@ -173,7 +173,7 @@ type (
 		HistoryMaxConns int `yaml:"historyMaxConns"`
 		// NumHistoryShards is the desired number of history shards. This config doesn't
 		// belong here, needs refactoring
-		NumHistoryShards int `yaml:"numHistoryShards" validate:"nonzero"`
+		NumHistoryShards int32 `yaml:"numHistoryShards" validate:"nonzero"`
 		// DataStores contains the configuration for all datastores
 		DataStores map[string]DataStore `yaml:"datastores"`
 		// VisibilityConfig is config for visibility sampling

@@ -67,7 +67,7 @@ type (
 	AdminHandler struct {
 		resource.Resource
 
-		numberOfHistoryShards int
+		numberOfHistoryShards int32
 		params                *resource.BootstrapParams
 		config                *Config
 		namespaceDLQHandler   namespace.DLQMessageHandler
@@ -204,9 +204,9 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 	namespaceID, err := adh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, request.Execution.WorkflowId, adh.numberOfHistoryShards)
-	shardIDstr := convert.IntToString(shardID)
+	shardIDStr := convert.Int32ToString(shardID)
 
-	historyHost, err := adh.GetMembershipMonitor().Lookup(common.HistoryServiceName, shardIDstr)
+	historyHost, err := adh.GetMembershipMonitor().Lookup(common.HistoryServiceName, shardIDStr)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
@@ -221,7 +221,7 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 		return &adminservice.DescribeWorkflowExecutionResponse{}, err
 	}
 	return &adminservice.DescribeWorkflowExecutionResponse{
-		ShardId:              shardIDstr,
+		ShardId:              shardIDStr,
 		HistoryAddr:          historyAddr,
 		DatabaseMutableState: resp2.GetDatabaseMutableState(),
 		CacheMutableState:    resp2.GetCacheMutableState(),

@@ -190,7 +190,7 @@ func (s *integrationSuite) isHistoryDeleted(execution *commonpb.WorkflowExecutio
 		s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	request := &persistence.GetHistoryTreeRequest{
 		TreeID:  execution.GetRunId(),
-		ShardID: convert.IntPtr(shardID),
+		ShardID: convert.Int32Ptr(shardID),
 	}
 	for i := 0; i < retryLimit; i++ {
 		resp, err := s.testCluster.testBase.HistoryV2Mgr.GetHistoryTree(request)
@@ -268,7 +268,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),

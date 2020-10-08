@@ -41,6 +41,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -288,10 +289,10 @@ func IsResourceExhausted(err error) bool {
 }
 
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID
-func WorkflowIDToHistoryShard(namespaceID, workflowID string, numberOfShards int) int {
+func WorkflowIDToHistoryShard(namespaceID, workflowID string, numberOfShards int32) int32 {
 	idBytes := []byte(namespaceID + "_" + workflowID)
 	hash := farm.Fingerprint32(idBytes)
-	return int(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
+	return int32(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
 // PrettyPrintHistory prints history in human readable format

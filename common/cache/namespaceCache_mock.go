@@ -82,7 +82,7 @@ func (mr *MockNamespaceCacheMockRecorder) Stop() *gomock.Call {
 }
 
 // RegisterNamespaceChangeCallback mocks base method.
-func (m *MockNamespaceCache) RegisterNamespaceChangeCallback(shard int, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn) {
+func (m *MockNamespaceCache) RegisterNamespaceChangeCallback(shard int32, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RegisterNamespaceChangeCallback", shard, initialNotificationVersion, prepareCallback, callback)
 }
@@ -94,7 +94,7 @@ func (mr *MockNamespaceCacheMockRecorder) RegisterNamespaceChangeCallback(shard,
 }
 
 // UnregisterNamespaceChangeCallback mocks base method.
-func (m *MockNamespaceCache) UnregisterNamespaceChangeCallback(shard int) {
+func (m *MockNamespaceCache) UnregisterNamespaceChangeCallback(shard int32) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "UnregisterNamespaceChangeCallback", shard)
 }
