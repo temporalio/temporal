@@ -31,8 +31,9 @@ import (
 type (
 	// clusterMetadata is the SQL persistence interface for cluster metadata
 	clusterMetadata interface {
-		InsertIfNotExistsIntoClusterMetadata(row *ClusterMetadataRow) (sql.Result, error)
+		SaveClusterMetadata(row *ClusterMetadataRow) (sql.Result, error)
 		GetClusterMetadata() (*ClusterMetadataRow, error)
+		WriteLockGetClusterMetadata() (*ClusterMetadataRow, error)
 		GetClusterMembers(filter *ClusterMembershipFilter) ([]ClusterMembershipRow, error)
 		UpsertClusterMembership(row *ClusterMembershipRow) (sql.Result, error)
 		PruneClusterMembership(filter *PruneClusterMembershipFilter) (sql.Result, error)
@@ -65,23 +66,5 @@ type (
 		InsertAckLevel(queueType persistence.QueueType, messageID int64, clusterName string) error
 		UpdateAckLevels(queueType persistence.QueueType, clusterAckLevels map[string]int64) error
 		GetAckLevels(queueType persistence.QueueType, forUpdate bool) (map[string]int64, error)
-	}
-
-	visibility interface {
-		// InsertIntoVisibility inserts a row into visibility table. If a row already exist,
-		// no changes will be made by this API
-		InsertIntoVisibility(row *VisibilityRow) (sql.Result, error)
-		// ReplaceIntoVisibility deletes old row (if it exist) and inserts new row into visibility table
-		ReplaceIntoVisibility(row *VisibilityRow) (sql.Result, error)
-		// SelectFromVisibility returns one or more rows from visibility table
-		// Required filter params:
-		// - getClosedWorkflowExecution - retrieves single row - {namespaceID, runID, closed=true}
-		// - All other queries retrieve multiple rows (range):
-		//   - MUST specify following required params:
-		//     - namespaceID, minStartTime, maxStartTime, runID and pageSize where some or all of these may come from previous page token
-		//   - OPTIONALLY specify one of following params
-		//     - workflowID, workflowTypeName, status (along with closed=true)
-		SelectFromVisibility(filter *VisibilityFilter) ([]VisibilityRow, error)
-		DeleteFromVisibility(filter *VisibilityFilter) (sql.Result, error)
 	}
 )

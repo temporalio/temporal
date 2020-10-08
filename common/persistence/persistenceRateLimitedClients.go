@@ -902,20 +902,6 @@ func (c *clusterMetadataRateLimitedPersistenceClient) GetName() string {
 	return c.persistence.GetName()
 }
 
-func (c *clusterMetadataRateLimitedPersistenceClient) InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error) {
-	if ok := c.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-	return c.persistence.InitializeImmutableClusterMetadata(request)
-}
-
-func (c *clusterMetadataRateLimitedPersistenceClient) GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error) {
-	if ok := c.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-	return c.persistence.GetImmutableClusterMetadata()
-}
-
 func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
@@ -935,6 +921,20 @@ func (c *clusterMetadataRateLimitedPersistenceClient) PruneClusterMembership(req
 		return ErrPersistenceLimitExceeded
 	}
 	return c.persistence.PruneClusterMembership(request)
+}
+
+func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMetadata() (*GetClusterMetadataResponse, error) {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return c.persistence.GetClusterMetadata()
+}
+
+func (c *clusterMetadataRateLimitedPersistenceClient) SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error) {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return false, ErrPersistenceLimitExceeded
+	}
+	return c.persistence.SaveClusterMetadata(request)
 }
 
 func (c *metadataRateLimitedPersistenceClient) InitializeSystemNamespaces(currentClusterName string) error {

@@ -42,7 +42,7 @@ const (
 	templateCreateWorkflowExecutionClosed = `INSERT INTO executions_visibility (` +
 		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
-		`ON DUPLICATE KEY UPDATE start_time = VALUES(start_time), execution_time = VALUES(execution_time), workflow_type_name = VALUES(workflow_type_name), ` +
+		`ON DUPLICATE KEY UPDATE workflow_id = VALUES(workflow_id), start_time = VALUES(start_time), execution_time = VALUES(execution_time), workflow_type_name = VALUES(workflow_type_name), ` +
 		`close_time = VALUES(close_time), status = VALUES(status), history_length = VALUES(history_length), memo = VALUES(memo), encoding = VALUES(encoding)`
 
 	// RunID condition is needed for correct pagination
@@ -85,7 +85,7 @@ const (
 		 WHERE namespace_id = ? AND status != 1
 		 AND run_id = ?`
 
-	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE namespace_id=? AND run_id=?"
+	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE namespace_id = ? AND run_id = ?"
 )
 
 var errCloseParams = errors.New("missing one of {closeTime, historyLength} params")
@@ -130,12 +130,12 @@ func (mdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, 
 }
 
 // DeleteFromVisibility deletes a row from visibility table if it exist
-func (mdb *db) DeleteFromVisibility(filter *sqlplugin.VisibilityFilter) (sql.Result, error) {
+func (mdb *db) DeleteFromVisibility(filter sqlplugin.VisibilityDeleteFilter) (sql.Result, error) {
 	return mdb.conn.Exec(templateDeleteWorkflowExecution, filter.NamespaceID, filter.RunID)
 }
 
 // SelectFromVisibility reads one or more rows from visibility table
-func (mdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlplugin.VisibilityRow, error) {
+func (mdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]sqlplugin.VisibilityRow, error) {
 	var err error
 	var rows []sqlplugin.VisibilityRow
 	if filter.MinStartTime != nil {

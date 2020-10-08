@@ -107,7 +107,7 @@ const (
 		 WHERE namespace_id = $1 AND status != 1
 		 AND run_id = $2`
 
-	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE namespace_id=$1 AND run_id=$2"
+	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE namespace_id = $1 AND run_id = $2"
 )
 
 var errCloseParams = errors.New("missing one of {closeTime, historyLength} params")
@@ -152,12 +152,12 @@ func (pdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, 
 }
 
 // DeleteFromVisibility deletes a row from visibility table if it exist
-func (pdb *db) DeleteFromVisibility(filter *sqlplugin.VisibilityFilter) (sql.Result, error) {
+func (pdb *db) DeleteFromVisibility(filter sqlplugin.VisibilityDeleteFilter) (sql.Result, error) {
 	return pdb.conn.Exec(templateDeleteWorkflowExecution, filter.NamespaceID, filter.RunID)
 }
 
 // SelectFromVisibility reads one or more rows from visibility table
-func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlplugin.VisibilityRow, error) {
+func (pdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]sqlplugin.VisibilityRow, error) {
 	var err error
 	var rows []sqlplugin.VisibilityRow
 	if filter.MinStartTime != nil {
@@ -244,8 +244,9 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			closeTime := pdb.converter.FromPostgreSQLDateTime(*rows[i].CloseTime)
 			rows[i].CloseTime = &closeTime
 		}
+		// need to trim the run ID, or otherwise the returned value will
+		//  come with lots of trailing spaces, probably due to the CHAR(64) type
 		rows[i].RunID = strings.TrimSpace(rows[i].RunID)
-		rows[i].WorkflowID = strings.TrimSpace(rows[i].WorkflowID)
 	}
 	return rows, err
 }
