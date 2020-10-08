@@ -44,11 +44,6 @@ const constMembershipPartition = 0
 
 const (
 	// ****** CLUSTER_METADATA TABLE ******
-	// This should insert the row only if it does not exist. Otherwise noop.
-	templateInitImmutableClusterMetadata = `INSERT INTO 
-cluster_metadata (metadata_partition, immutable_data, immutable_data_encoding) 
-VALUES(?, ?, ?) IF NOT EXISTS`
-
 	// metadata_partition is constant and PK, this should only return one row.
 	templateGetImmutableClusterMetadata = `SELECT immutable_data, immutable_data_encoding FROM 
 cluster_metadata 
@@ -57,6 +52,11 @@ WHERE metadata_partition = ?`
 	immutablePayloadFieldName = `immutable_data`
 
 	immutableEncodingFieldName = immutablePayloadFieldName + `_encoding`
+
+	templateGetClusterMetadata = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = ?`
+
+	templateCreateClusterMetadata = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES(?, ?, ?, ?) IF NOT EXISTS`
+	templateUpdateClusterMetadata = `UPDATE cluster_metadata SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ? IF version = ?`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
 	templateUpsertActiveClusterMembership = `INSERT INTO 
@@ -113,30 +113,6 @@ func (m *cassandraClusterMetadata) Close() {
 	}
 }
 
-func (m *cassandraClusterMetadata) InitializeImmutableClusterMetadata(
-	request *p.InternalInitializeImmutableClusterMetadataRequest) (*p.InternalInitializeImmutableClusterMetadataResponse, error) {
-	query := m.session.Query(templateInitImmutableClusterMetadata, constMetadataPartition,
-		request.ImmutableClusterMetadata.Data, request.ImmutableClusterMetadata.Encoding.String())
-
-	previous := make(map[string]interface{})
-	applied, err := query.MapScanCAS(previous)
-
-	if err != nil {
-		return nil, convertCommonErrors("InitializeImmutableClusterMetadata", err)
-	}
-
-	if !applied {
-		// We didn't apply, parse the previous row
-		return m.convertPreviousMapToInitializeResponse(previous)
-	}
-
-	// If we applied, return the request back as the persisted data
-	return &p.InternalInitializeImmutableClusterMetadataResponse{
-		PersistedImmutableMetadata: request.ImmutableClusterMetadata,
-		RequestApplied:             true,
-	}, nil
-}
-
 func (m *cassandraClusterMetadata) convertPreviousMapToInitializeResponse(previous map[string]interface{}) (*p.InternalInitializeImmutableClusterMetadataResponse, error) {
 	// First, check if fields we are looking for is in previous map and verify we can type assert successfully
 	rawImData, ok := previous[immutablePayloadFieldName]
@@ -166,18 +142,38 @@ func (m *cassandraClusterMetadata) convertPreviousMapToInitializeResponse(previo
 	}, nil
 }
 
-func (m *cassandraClusterMetadata) GetImmutableClusterMetadata() (*p.InternalGetImmutableClusterMetadataResponse, error) {
-	query := m.session.Query(templateGetImmutableClusterMetadata, constMetadataPartition)
-	var immutableMetadata []byte
+func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMetadataResponse, error) {
+	query := m.session.Query(templateGetClusterMetadata, constMetadataPartition)
+	var clusterMetadata []byte
 	var encoding string
-	err := query.Scan(&immutableMetadata, &encoding)
+	var version int64
+	err := query.Scan(&clusterMetadata, &encoding, &version)
 	if err != nil {
-		return nil, convertCommonErrors("GetImmutableClusterMetadata", err)
+		return nil, convertCommonErrors("GetClusterMetadata", err)
 	}
 
-	return &p.InternalGetImmutableClusterMetadataResponse{
-		ImmutableClusterMetadata: p.NewDataBlob(immutableMetadata, encoding),
+	return &p.InternalGetClusterMetadataResponse{
+		ClusterMetadata: p.NewDataBlob(clusterMetadata, encoding),
+		Version:         version,
 	}, nil
+}
+
+func (m *cassandraClusterMetadata) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
+	query := m.session.Query(templateCreateClusterMetadata,
+		constMembershipPartition, request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), 1)
+	if request.Version > 0 {
+		query = m.session.Query(templateUpdateClusterMetadata,
+			request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), request.Version+1, constMembershipPartition, request.Version)
+	}
+	previous := make(map[string]interface{})
+	applied, err := query.MapScanCAS(previous)
+	if err != nil {
+		return false, convertCommonErrors("SaveClusterMetadata", err)
+	}
+	if !applied {
+		return false, serviceerror.NewInternal("SaveClusterMetadata operation encountered concurrent write.")
+	}
+	return true, nil
 }
 
 func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {

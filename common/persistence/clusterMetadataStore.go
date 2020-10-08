@@ -26,6 +26,10 @@ package persistence
 
 import (
 	"errors"
+	"fmt"
+
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -72,46 +76,6 @@ func (m *clusterMetadataManagerImpl) Close() {
 	m.persistence.Close()
 }
 
-func (m *clusterMetadataManagerImpl) InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error) {
-	icm, err := m.serializer.SerializeImmutableClusterMetadata(&request.ImmutableClusterMetadata, clusterMetadataEncoding)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := m.persistence.InitializeImmutableClusterMetadata(&InternalInitializeImmutableClusterMetadataRequest{
-		ImmutableClusterMetadata: icm,
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	deserialized, err := m.serializer.DeserializeImmutableClusterMetadata(resp.PersistedImmutableMetadata)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &InitializeImmutableClusterMetadataResponse{
-		PersistedImmutableData: *deserialized,
-		RequestApplied:         resp.RequestApplied,
-	}, nil
-}
-
-func (m *clusterMetadataManagerImpl) GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error) {
-	resp, err := m.persistence.GetImmutableClusterMetadata()
-	if err != nil {
-		return nil, err
-	}
-
-	icm, err := m.serializer.DeserializeImmutableClusterMetadata(resp.ImmutableClusterMetadata)
-	if err != nil {
-		return nil, err
-	}
-
-	return &GetImmutableClusterMetadataResponse{*icm}, nil
-}
-
 func (m *clusterMetadataManagerImpl) GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {
 	return m.persistence.GetClusterMembers(request)
 }
@@ -138,4 +102,46 @@ func (m *clusterMetadataManagerImpl) UpsertClusterMembership(request *UpsertClus
 
 func (m *clusterMetadataManagerImpl) PruneClusterMembership(request *PruneClusterMembershipRequest) error {
 	return m.persistence.PruneClusterMembership(request)
+}
+
+func (m *clusterMetadataManagerImpl) GetClusterMetadata() (*GetClusterMetadataResponse, error) {
+	resp, err := m.persistence.GetClusterMetadata()
+	if err != nil {
+		return nil, err
+	}
+
+	mcm, err := m.serializer.DeserializeClusterMetadata(resp.ClusterMetadata)
+	if err != nil {
+		return nil, err
+	}
+	return &GetClusterMetadataResponse{ClusterMetadata: *mcm, Version: resp.Version}, nil
+}
+
+func (m *clusterMetadataManagerImpl) SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error) {
+	mcm, err := m.serializer.SerializeClusterMetadata(&request.ClusterMetadata, clusterMetadataEncoding)
+	if err != nil {
+		return false, err
+	}
+	oldClusterMetadata, err := m.GetClusterMetadata()
+	if _, notFound := err.(*serviceerror.NotFound); notFound {
+		return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{ClusterMetadata: mcm, Version: request.Version})
+	}
+	if err != nil {
+		return false, err
+	}
+	if immutableFieldsChanged(oldClusterMetadata.ClusterMetadata, request.ClusterMetadata) {
+		return false, nil
+	}
+	if oldClusterMetadata.Version != request.Version {
+		return false, serviceerror.NewInternal(fmt.Sprintf("SaveClusterMetadata encountered version mismatch, expected %v but got %v.",
+			request.Version, oldClusterMetadata.Version))
+	}
+	return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{ClusterMetadata: mcm, Version: request.Version})
+}
+
+// immutableFieldsChanged returns true if any of immutable fields changed.
+func immutableFieldsChanged(old persistenceblobs.ClusterMetadata, cur persistenceblobs.ClusterMetadata) bool {
+	return old.ClusterName != cur.ClusterName ||
+		old.ClusterId != cur.ClusterId ||
+		old.HistoryShardCount != cur.HistoryShardCount
 }
