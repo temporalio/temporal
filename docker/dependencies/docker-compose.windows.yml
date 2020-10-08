@@ -1,4 +1,4 @@
-# Overrides for Mac users.
+# Overrides for Windows users.
 version: "3.5"
 
 services:
@@ -7,4 +7,5 @@ services:
       - "TEMPORAL_GRPC_ENDPOINT=host.docker.internal:7233"
     ports:
       - "8088:8088"
-    network_mode: bridge
+    networks:
+      - temporal-dependencies-network

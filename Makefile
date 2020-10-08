@@ -384,18 +384,10 @@ install-schema-cdc: temporal-cassandra-tool
 
 ##### Run server #####
 start-dependencies:
-ifeq ($(GOOS),darwin)
-	docker-compose -f docker/dependencies/docker-compose.yml -f docker/dependencies/docker-compose.mac.yml up
-else
-	docker-compose -f docker/dependencies/docker-compose.yml up
-endif
+	docker-compose -f docker/dependencies/docker-compose.yml -f docker/dependencies/docker-compose.$(GOOS).yml up
 
 stop-dependencies:
-ifeq ($(GOOS),darwin)
-	docker-compose -f docker/dependencies/docker-compose.yml -f docker/dependencies/docker-compose.mac.yml down
-else
-	docker-compose -f docker/dependencies/docker-compose.yml down
-endif
+	docker-compose -f docker/dependencies/docker-compose.yml -f docker/dependencies/docker-compose.$(GOOS).yml down
 
 start: temporal-server
 	./temporal-server start
