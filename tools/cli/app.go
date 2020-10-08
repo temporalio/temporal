@@ -65,6 +65,24 @@ func NewCliApp() *cli.App {
 			Usage:  "automatically confirm all prompts",
 			Hidden: true,
 		},
+		cli.StringFlag{
+			Name:   FlagTLSCertPath,
+			Value:  "",
+			Usage:  "path to x509 certificate",
+			EnvVar: "TEMPORAL_CLI_TLS_CERT",
+		},
+		cli.StringFlag{
+			Name:   FlagTLSKeyPath,
+			Value:  "",
+			Usage:  "path to private key",
+			EnvVar: "TEMPORAL_CLI_TLS_KEY",
+		},
+		cli.StringFlag{
+			Name:   FlagTLSCaPath,
+			Value:  "",
+			Usage:  "path to server CA certificate",
+			EnvVar: "TEMPORAL_CLI_TLS_CA",
+		},
 	}
 	app.Commands = []cli.Command{
 		{
