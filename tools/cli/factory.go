@@ -67,14 +67,14 @@ func NewClientFactory() ClientFactory {
 
 // FrontendClient builds a frontend client
 func (b *clientFactory) FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient {
-	connection := b.createGRPCConnection(c)
+	connection, _ := b.createGRPCConnection(c)
 
 	return workflowservice.NewWorkflowServiceClient(connection)
 }
 
 // AdminClient builds an admin client (based on server side thrift interface)
 func (b *clientFactory) AdminClient(c *cli.Context) adminservice.AdminServiceClient {
-	connection := b.createGRPCConnection(c)
+	connection, _ := b.createGRPCConnection(c)
 
 	return adminservice.NewAdminServiceClient(connection)
 }
@@ -101,7 +101,7 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 	return sdkClient
 }
 
-func (b *clientFactory) createGRPCConnection(c *cli.Context) *grpc.ClientConn {
+func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, error) {
 	hostPort := c.GlobalString(FlagAddress)
 	if hostPort == "" {
 		hostPort = localHostPort
@@ -121,7 +121,7 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) *grpc.ClientConn {
 		caCertPool, err := fetchCACert(caPath)
 		if err != nil {
 			b.logger.Fatal("Failed to load server CA certificate", zap.Error(err))
-			return nil
+			return nil, err
 		}
 		caPool = caCertPool
 	}
@@ -129,16 +129,20 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) *grpc.ClientConn {
 		myCert, err := tls.LoadX509KeyPair(certPath, keyPath)
 		if err != nil {
 			b.logger.Fatal("Failed to load client certificate", zap.Error(err))
-			return nil
+			return nil, err
 		}
 		cert = &myCert
 	}
 	// If we are given arguments to verify either server or client, configure TLS
 	if caPool != nil || cert != nil {
 		tlsConfig := &tls.Config{
-			ServerName:   host,
-			Certificates: []tls.Certificate{*cert},
-			RootCAs:      caPool,
+			ServerName: host,
+		}
+		if caPool != nil {
+			tlsConfig.RootCAs = caPool
+		}
+		if cert != nil {
+			tlsConfig.Certificates = []tls.Certificate{*cert}
 		}
 		grpcSecurityOptions = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 	}
@@ -146,9 +150,9 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) *grpc.ClientConn {
 	connection, err := grpc.Dial(hostPort, grpcSecurityOptions)
 	if err != nil {
 		b.logger.Fatal("Failed to create connection", zap.Error(err))
-		return nil
+		return nil, err
 	}
-	return connection
+	return connection, nil
 }
 
 func fetchCACert(path string) (*x509.CertPool, error) {
