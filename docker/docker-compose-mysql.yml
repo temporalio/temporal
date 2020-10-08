@@ -14,7 +14,7 @@ services:
       - "8125:8125"
       - "8126:8126"
   cadence:
-    image: ubercadence/server:master-auto-setup
+    image: ubercadence/server:0.15.0-auto-setup
     ports:
       - "7933:7933"
       - "7934:7934"
@@ -31,7 +31,7 @@ services:
       - mysql
       - statsd
   cadence-web:
-    image: ubercadence/web:latest
+    image: ubercadence/web:3.19.1
     environment:
       - "CADENCE_TCHANNEL_PEERS=cadence:7933"
     ports:
