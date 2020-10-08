@@ -27,13 +27,13 @@ package main
 import (
 	"os"
 
-	"go.temporal.io/server/cmd/server/temporal"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
+	"go.temporal.io/server/server"
 )
 
 // main entry point for the temporal server
 func main() {
-	app := temporal.BuildCLI()
+	app := server.BuildCLI()
 	_ = app.Run(os.Args)
 }
