@@ -160,21 +160,22 @@ func (pdb *db) DeleteFromVisibility(filter sqlplugin.VisibilityDeleteFilter) (sq
 func (pdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]sqlplugin.VisibilityRow, error) {
 	var err error
 	var rows []sqlplugin.VisibilityRow
-	if filter.MinStartTime != nil {
-		*filter.MinStartTime = pdb.converter.ToPostgreSQLDateTime(*filter.MinStartTime)
+	if filter.MinTime != nil {
+		*filter.MinTime = pdb.converter.ToPostgreSQLDateTime(*filter.MinTime)
 	}
-	if filter.MaxStartTime != nil {
-		*filter.MaxStartTime = pdb.converter.ToPostgreSQLDateTime(*filter.MaxStartTime)
+	if filter.MaxTime != nil {
+		*filter.MaxTime = pdb.converter.ToPostgreSQLDateTime(*filter.MaxTime)
 	}
 	// If filter.Status == 0 (UNSPECIFIED) then only closed workflows will be returned (all excluding 1 (RUNNING)).
 	switch {
-	case filter.MinStartTime == nil && filter.RunID != nil && filter.Status != 1:
+	case filter.MinTime == nil && filter.RunID != nil && filter.Status != 1:
 		var row sqlplugin.VisibilityRow
 		err = pdb.conn.Get(&row, templateGetClosedWorkflowExecution, filter.NamespaceID, *filter.RunID)
 		if err == nil {
 			rows = append(rows, row)
 		}
-	case filter.MinStartTime != nil && filter.WorkflowID != nil:
+	case filter.MinTime != nil && filter.MaxTime != nil &&
+		filter.WorkflowID != nil && filter.RunID != nil && filter.PageSize != nil:
 		qry := templateGetOpenWorkflowExecutionsByID
 		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutionsByID
@@ -183,13 +184,14 @@ func (pdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 			qry,
 			*filter.WorkflowID,
 			filter.NamespaceID,
-			pdb.converter.ToPostgreSQLDateTime(*filter.MinStartTime),
-			pdb.converter.ToPostgreSQLDateTime(*filter.MaxStartTime),
+			*filter.MinTime,
+			*filter.MaxTime,
 			*filter.RunID,
-			*filter.MaxStartTime,
-			*filter.MaxStartTime,
+			*filter.MaxTime,
+			*filter.MaxTime,
 			*filter.PageSize)
-	case filter.MinStartTime != nil && filter.WorkflowTypeName != nil:
+	case filter.MinTime != nil && filter.MaxTime != nil &&
+		filter.WorkflowTypeName != nil && filter.RunID != nil && filter.PageSize != nil:
 		qry := templateGetOpenWorkflowExecutionsByType
 		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutionsByType
@@ -198,38 +200,39 @@ func (pdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 			qry,
 			*filter.WorkflowTypeName,
 			filter.NamespaceID,
-			pdb.converter.ToPostgreSQLDateTime(*filter.MinStartTime),
-			pdb.converter.ToPostgreSQLDateTime(*filter.MaxStartTime),
+			*filter.MinTime,
+			*filter.MaxTime,
 			*filter.RunID,
-			*filter.MaxStartTime,
-			*filter.MaxStartTime,
+			*filter.MaxTime,
+			*filter.MaxTime,
 			*filter.PageSize)
-	case filter.MinStartTime != nil && filter.Status != 0 && filter.Status != 1: // 0 is UNSPECIFIED, 1 is RUNNING
+	case filter.MinTime != nil && filter.MaxTime != nil &&
+		filter.RunID != nil && filter.PageSize != nil &&
+		filter.Status != 0 && filter.Status != 1: // 0 is UNSPECIFIED, 1 is RUNNING
 		err = pdb.conn.Select(&rows,
 			templateGetClosedWorkflowExecutionsByStatus,
 			filter.Status,
 			filter.NamespaceID,
-			pdb.converter.ToPostgreSQLDateTime(*filter.MinStartTime),
-			pdb.converter.ToPostgreSQLDateTime(*filter.MaxStartTime),
+			*filter.MinTime,
+			*filter.MaxTime,
 			*filter.RunID,
-			pdb.converter.ToPostgreSQLDateTime(*filter.MaxStartTime),
-			pdb.converter.ToPostgreSQLDateTime(*filter.MaxStartTime),
+			*filter.MaxTime,
+			*filter.MaxTime,
 			*filter.PageSize)
-	case filter.MinStartTime != nil:
+	case filter.MinTime != nil && filter.MaxTime != nil &&
+		filter.RunID != nil && filter.PageSize != nil:
 		qry := templateGetOpenWorkflowExecutions
 		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutions
 		}
-		minSt := pdb.converter.ToPostgreSQLDateTime(*filter.MinStartTime)
-		maxSt := pdb.converter.ToPostgreSQLDateTime(*filter.MaxStartTime)
 		err = pdb.conn.Select(&rows,
 			qry,
 			filter.NamespaceID,
-			minSt,
-			maxSt,
+			*filter.MinTime,
+			*filter.MaxTime,
 			*filter.RunID,
-			maxSt,
-			maxSt,
+			*filter.MaxTime,
+			*filter.MaxTime,
 			*filter.PageSize)
 	default:
 		return nil, fmt.Errorf("invalid query filter")
