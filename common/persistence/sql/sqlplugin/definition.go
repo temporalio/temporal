@@ -111,23 +111,6 @@ type (
 		ShardID int64
 	}
 
-	// TransferTasksRow represents a row in transfer_tasks table
-	TransferTasksRow struct {
-		ShardID      int32
-		TaskID       int64
-		Data         []byte
-		DataEncoding string
-	}
-
-	// TransferTasksFilter contains the column names within transfer_tasks table that
-	// can be used to filter results through a WHERE clause
-	TransferTasksFilter struct {
-		ShardID   int32
-		TaskID    *int64
-		MinTaskID *int64
-		MaxTaskID *int64
-	}
-
 	// ExecutionsRow represents a row in executions table
 	ExecutionsRow struct {
 		ShardID                  int
@@ -270,26 +253,6 @@ type (
 	ReplicationTasksDLQFilter struct {
 		ReplicationTasksFilter
 		SourceClusterName string
-	}
-
-	// TimerTasksRow represents a row in timer_tasks table
-	TimerTasksRow struct {
-		ShardID             int32
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		Data                []byte
-		DataEncoding        string
-	}
-
-	// TimerTasksFilter contains the column names within timer_tasks table that
-	// can be used to filter results through a WHERE clause
-	TimerTasksFilter struct {
-		ShardID                int32
-		TaskID                 *int64
-		VisibilityTimestamp    *time.Time
-		MinVisibilityTimestamp *time.Time
-		MaxVisibilityTimestamp *time.Time
-		PageSize               *int
 	}
 
 	// EventsRow represents a row in events table

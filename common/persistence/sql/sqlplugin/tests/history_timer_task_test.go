@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/shuffle"
 )
@@ -159,13 +158,10 @@ func (s *historyHistoryTimerTaskSuite) TestInsertSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.TimerTasksFilter{
-		ShardID:                shardID,
-		VisibilityTimestamp:    &timestamp,
-		TaskID:                 convert.Int64Ptr(taskID),
-		MinVisibilityTimestamp: nil,
-		MaxVisibilityTimestamp: nil,
-		PageSize:               nil,
+	filter := sqlplugin.TimerTasksFilter{
+		ShardID:             shardID,
+		VisibilityTimestamp: timestamp,
+		TaskID:              taskID,
 	}
 	rows, err := s.store.SelectFromTimerTasks(filter)
 	s.NoError(err)
@@ -197,15 +193,13 @@ func (s *historyHistoryTimerTaskSuite) TestInsertSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(numTasks, int(rowsAffected))
 
-	filter := &sqlplugin.TimerTasksFilter{
+	filter := sqlplugin.TimerTasksRangeFilter{
 		ShardID:                shardID,
-		VisibilityTimestamp:    nil,
-		TaskID:                 nil,
-		MinVisibilityTimestamp: &minTimestamp,
-		MaxVisibilityTimestamp: &maxTimestamp,
-		PageSize:               convert.IntPtr(numTasks),
+		MinVisibilityTimestamp: minTimestamp,
+		MaxVisibilityTimestamp: maxTimestamp,
+		PageSize:               numTasks,
 	}
-	rows, err := s.store.SelectFromTimerTasks(filter)
+	rows, err := s.store.RangeSelectFromTimerTasks(filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -218,13 +212,10 @@ func (s *historyHistoryTimerTaskSuite) TestDeleteSelect_Single() {
 	timestamp := s.now()
 	taskID := int64(1)
 
-	filter := &sqlplugin.TimerTasksFilter{
-		ShardID:                shardID,
-		VisibilityTimestamp:    &timestamp,
-		TaskID:                 convert.Int64Ptr(taskID),
-		MinVisibilityTimestamp: nil,
-		MaxVisibilityTimestamp: nil,
-		PageSize:               nil,
+	filter := sqlplugin.TimerTasksFilter{
+		ShardID:             shardID,
+		VisibilityTimestamp: timestamp,
+		TaskID:              taskID,
 	}
 	result, err := s.store.DeleteFromTimerTasks(filter)
 	s.NoError(err)
@@ -247,22 +238,20 @@ func (s *historyHistoryTimerTaskSuite) TestDeleteSelect_Multiple() {
 	minTimestamp := s.now()
 	maxTimestamp := minTimestamp.Add(time.Minute)
 
-	filter := &sqlplugin.TimerTasksFilter{
+	filter := sqlplugin.TimerTasksRangeFilter{
 		ShardID:                shardID,
-		VisibilityTimestamp:    nil,
-		TaskID:                 nil,
-		MinVisibilityTimestamp: &minTimestamp,
-		MaxVisibilityTimestamp: &maxTimestamp,
-		PageSize:               nil,
+		MinVisibilityTimestamp: minTimestamp,
+		MaxVisibilityTimestamp: maxTimestamp,
+		PageSize:               0,
 	}
-	result, err := s.store.DeleteFromTimerTasks(filter)
+	result, err := s.store.RangeDeleteFromTimerTasks(filter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	filter.PageSize = convert.IntPtr(pageSize)
-	rows, err := s.store.SelectFromTimerTasks(filter)
+	filter.PageSize = pageSize
+	rows, err := s.store.RangeSelectFromTimerTasks(filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -282,13 +271,10 @@ func (s *historyHistoryTimerTaskSuite) TestInsertDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.TimerTasksFilter{
-		ShardID:                shardID,
-		VisibilityTimestamp:    &timestamp,
-		TaskID:                 convert.Int64Ptr(taskID),
-		MinVisibilityTimestamp: nil,
-		MaxVisibilityTimestamp: nil,
-		PageSize:               nil,
+	filter := sqlplugin.TimerTasksFilter{
+		ShardID:             shardID,
+		VisibilityTimestamp: timestamp,
+		TaskID:              taskID,
 	}
 	result, err = s.store.DeleteFromTimerTasks(filter)
 	s.NoError(err)
@@ -327,22 +313,20 @@ func (s *historyHistoryTimerTaskSuite) TestInsertDeleteSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(numTasks, int(rowsAffected))
 
-	filter := &sqlplugin.TimerTasksFilter{
+	filter := sqlplugin.TimerTasksRangeFilter{
 		ShardID:                shardID,
-		VisibilityTimestamp:    nil,
-		TaskID:                 nil,
-		MinVisibilityTimestamp: &minTimestamp,
-		MaxVisibilityTimestamp: &maxTimestamp,
-		PageSize:               nil,
+		MinVisibilityTimestamp: minTimestamp,
+		MaxVisibilityTimestamp: maxTimestamp,
+		PageSize:               0,
 	}
-	result, err = s.store.DeleteFromTimerTasks(filter)
+	result, err = s.store.RangeDeleteFromTimerTasks(filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(numTasks, int(rowsAffected))
 
-	filter.PageSize = convert.IntPtr(pageSize)
-	rows, err := s.store.SelectFromTimerTasks(filter)
+	filter.PageSize = pageSize
+	rows, err := s.store.RangeSelectFromTimerTasks(filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID

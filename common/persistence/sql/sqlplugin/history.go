@@ -154,31 +154,6 @@ type (
 		DeleteFromSignalsRequestedSets(filter *SignalsRequestedSetsFilter) (sql.Result, error)
 	}
 
-	// HistoryTransferTask is the SQL persistence interface for history nodes and history transfer tasks
-	HistoryTransferTask interface {
-		InsertIntoTransferTasks(rows []TransferTasksRow) (sql.Result, error)
-		// SelectFromTransferTasks returns rows that match filter criteria from transfer_tasks table.
-		// Required filter params - {shardID, minTaskID, maxTaskID}
-		SelectFromTransferTasks(filter *TransferTasksFilter) ([]TransferTasksRow, error)
-		// DeleteFromTransferTasks deletes one or more rows from transfer_tasks table.
-		// Filter params - shardID is required. If TaskID is not nil, a single row is deleted.
-		// When MinTaskID and MaxTaskID are not-nil, a range of rows are deleted.
-		DeleteFromTransferTasks(filter *TransferTasksFilter) (sql.Result, error)
-	}
-
-	// HistoryTimerTask is the SQL persistence interface for history nodes and history timer tasks
-	HistoryTimerTask interface {
-		InsertIntoTimerTasks(rows []TimerTasksRow) (sql.Result, error)
-		// SelectFromTimerTasks returns one or more rows from timer_tasks table
-		// Required filter Params - {shardID, taskID, minVisibilityTimestamp, maxVisibilityTimestamp, pageSize}
-		SelectFromTimerTasks(filter *TimerTasksFilter) ([]TimerTasksRow, error)
-		// DeleteFromTimerTasks deletes one or more rows from timer_tasks table
-		// Required filter Params:
-		//  - to delete one row - {shardID, visibilityTimestamp, taskID}
-		//  - to delete multiple rows - {shardID, minVisibilityTimestamp, maxVisibilityTimestamp}
-		DeleteFromTimerTasks(filter *TimerTasksFilter) (sql.Result, error)
-	}
-
 	// HistoryReplicationTask is the SQL persistence interface for history nodes and history replication tasks
 	HistoryReplicationTask interface {
 		InsertIntoReplicationTasks(rows []ReplicationTasksRow) (sql.Result, error)
@@ -191,6 +166,7 @@ type (
 		// DeleteFromReplicationTasks deletes multi rows from replication_tasks table
 		// Required filter params - {shardID, inclusiveEndTaskID}
 		RangeDeleteFromReplicationTasks(filter *ReplicationTasksFilter) (sql.Result, error)
+
 		// InsertIntoReplicationTasksDLQ puts the replication task into DLQ
 		InsertIntoReplicationTasksDLQ(row *ReplicationTaskDLQRow) (sql.Result, error)
 		// SelectFromReplicationTasksDLQ returns one or more rows from replication_tasks_dlq table
