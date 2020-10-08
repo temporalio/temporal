@@ -38,16 +38,24 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/server"
 	"go.temporal.io/server/tools/cassandra"
 	"go.temporal.io/server/tools/sql"
 )
 
 // validServices is the list of all valid temporal services
-var validServices = []string{primitives.FrontendService, primitives.HistoryService, primitives.MatchingService, primitives.WorkerService}
+var (
+	validServices = []string{
+		primitives.FrontendService,
+		primitives.HistoryService,
+		primitives.MatchingService,
+		primitives.WorkerService,
+	}
+)
 
 func loadConfig(c *cli.Context) *config.Config {
-	env := getEnvironment(c)
-	zone := getZone(c)
+	env := strings.TrimSpace(c.GlobalString("env"))
+	zone := strings.TrimSpace(c.GlobalString("zone"))
 	configDir := getConfigDir(c)
 
 	log.Printf("Loading config; env=%v,zone=%v,configDir=%v\n", env, zone, configDir)
@@ -61,31 +69,23 @@ func loadConfig(c *cli.Context) *config.Config {
 		log.Printf("config=\n%v\n", cfg.String())
 	}
 
-	if err := cfg.Validate(); err != nil {
+	if err = cfg.Validate(); err != nil {
 		log.Fatalf("config validation failed: %v", err)
 	}
 	// cassandra schema version validation
-	if err := cassandra.VerifyCompatibleVersion(cfg.Persistence); err != nil {
+	if err = cassandra.VerifyCompatibleVersion(cfg.Persistence); err != nil {
 		log.Fatalf("cassandra schema version compatibility check failed: %v", err)
 	}
 	// sql schema version validation
-	if err := sql.VerifyCompatibleVersion(cfg.Persistence); err != nil {
+	if err = sql.VerifyCompatibleVersion(cfg.Persistence); err != nil {
 		log.Fatalf("sql schema version compatibility check failed: %v", err)
 	}
 
-	if err := cfg.Global.PProf.NewInitializer(loggerimpl.NewLogger(cfg.Log.NewZapLogger())).Start(); err != nil {
+	if err = cfg.Global.PProf.NewInitializer(loggerimpl.NewLogger(cfg.Log.NewZapLogger())).Start(); err != nil {
 		log.Fatalf("fail to start PProf: %v", err)
 	}
 
 	return &cfg
-}
-
-func getEnvironment(c *cli.Context) string {
-	return strings.TrimSpace(c.GlobalString("env"))
-}
-
-func getZone(c *cli.Context) string {
-	return strings.TrimSpace(c.GlobalString("zone"))
 }
 
 // getServices parses the services arg from cli
@@ -184,13 +184,13 @@ func BuildCLI() *cli.App {
 				cfg := loadConfig(c)
 				services := getServices(c)
 
-				var servers []*server
+				var servers []*server.Server
 				sigtermCh := make(chan os.Signal, 1)
 				signal.Notify(sigtermCh, os.Interrupt, syscall.SIGTERM)
 				for _, svc := range services {
-					s := newServer(
-						ForService(svc),
-						WithConfig(cfg),
+					s := server.New(
+						server.ForService(svc),
+						server.WithConfig(cfg),
 					)
 					servers = append(servers, s)
 					s.Start()
@@ -201,7 +201,7 @@ func BuildCLI() *cli.App {
 				for _, s := range servers {
 					s.Stop()
 				}
-				return cli.NewExitError("All services are stopped.", 0)
+				return cli.NewExitError("All services are shutdown.", 0)
 			},
 		},
 	}

@@ -35,5 +35,5 @@ import (
 // main entry point for the temporal server
 func main() {
 	app := temporal.BuildCLI()
-	app.Run(os.Args)
+	_ = app.Run(os.Args)
 }

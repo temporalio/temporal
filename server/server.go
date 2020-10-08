@@ -22,14 +22,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package temporal
+package server
 
 import (
 	"log"
 	"time"
 
 	"github.com/pborman/uuid"
-
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 
@@ -61,32 +60,31 @@ import (
 )
 
 type (
-	server struct {
-		name   string
-		config *config.Config
-		doneC  chan struct{}
-		daemon common.Daemon
+	Server struct {
+		name    string
+		config  *config.Config
+		doneC   chan struct{}
+		service common.Daemon
 	}
 )
 
-// newServer returns a new instance of a daemon
-// that represents a temporal service
-func newServer(opts ...ServerOption) *server {
-	server := &server{
+// New returns a new instance of server that serve one of the services.
+func New(opts ...ServerOption) *Server {
+	s := &Server{
 		name:   primitives.AllServices,
 		doneC:  make(chan struct{}),
 		config: &config.Config{},
 	}
 
 	for _, opt := range opts {
-		opt.apply(server)
+		opt.apply(s)
 	}
 
-	return server
+	return s
 }
 
 // Start starts the server
-func (s *server) Start() {
+func (s *Server) Start() {
 	if _, ok := s.config.Services[s.name]; !ok {
 		log.Fatalf("`%v` service missing config", s)
 	}
@@ -243,34 +241,34 @@ func (s *server) Start() {
 
 	switch s.name {
 	case primitives.FrontendService:
-		s.daemon, err = frontend.NewService(&params)
+		s.service, err = frontend.NewService(&params)
 	case primitives.HistoryService:
-		s.daemon, err = history.NewService(&params)
+		s.service, err = history.NewService(&params)
 	case primitives.MatchingService:
-		s.daemon, err = matching.NewService(&params)
+		s.service, err = matching.NewService(&params)
 	case primitives.WorkerService:
-		s.daemon, err = worker.NewService(&params)
+		s.service, err = worker.NewService(&params)
 	}
 	if err != nil {
 		params.Logger.Fatal("Fail to start "+s.name+" service ", tag.Error(err))
 	}
 
 	go func() {
-		s.daemon.Start()
+		s.service.Start()
 		close(s.doneC)
 	}()
 }
 
 // Stops the server
-func (s *server) Stop() {
-	if s.daemon == nil {
+func (s *Server) Stop() {
+	if s.service == nil {
 		return
 	}
 
 	select {
 	case <-s.doneC:
 	default:
-		s.daemon.Stop()
+		s.service.Stop()
 		select {
 		case <-s.doneC:
 		case <-time.After(time.Minute):
