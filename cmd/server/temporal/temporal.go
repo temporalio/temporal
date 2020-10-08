@@ -28,15 +28,15 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path"
 	"strings"
 	"syscall"
 
-	"go.temporal.io/server/common/log/loggerimpl"
-	"go.temporal.io/server/common/primitives"
-
 	"github.com/urfave/cli"
 
-	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/tools/cassandra"
 	"go.temporal.io/server/tools/sql"
@@ -45,8 +45,7 @@ import (
 // validServices is the list of all valid temporal services
 var validServices = []string{primitives.FrontendService, primitives.HistoryService, primitives.MatchingService, primitives.WorkerService}
 
-// startHandler is the handler for the cli start command
-func startHandler(c *cli.Context) {
+func loadConfig(c *cli.Context) *config.Config {
 	env := getEnvironment(c)
 	zone := getZone(c)
 	configDir := getConfigDir(c)
@@ -78,29 +77,7 @@ func startHandler(c *cli.Context) {
 		log.Fatalf("fail to start PProf: %v", err)
 	}
 
-	var daemons []common.Daemon
-	services := getServices(c)
-	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc, syscall.SIGTERM)
-	for _, svc := range services {
-		if _, ok := cfg.Services[svc]; !ok {
-			log.Fatalf("`%v` service missing config", svc)
-		}
-		server := newServer(svc, &cfg)
-		daemons = append(daemons, server)
-		server.Start()
-	}
-
-	select {
-	case <-sigc:
-		{
-			log.Println("Received SIGTERM signal, initiating shutdown.")
-			for _, daemon := range daemons {
-				daemon.Stop()
-			}
-			os.Exit(0)
-		}
-	}
+	return &cfg
 }
 
 func getEnvironment(c *cli.Context) string {
@@ -141,7 +118,7 @@ func isValidService(in string) bool {
 }
 
 func getConfigDir(c *cli.Context) string {
-	return constructPath(getRootDir(c), c.GlobalString("config"))
+	return path.Join(getRootDir(c), c.GlobalString("config"))
 }
 
 func getRootDir(c *cli.Context) string {
@@ -156,17 +133,13 @@ func getRootDir(c *cli.Context) string {
 	return dirpath
 }
 
-func constructPath(dir string, file string) string {
-	return dir + "/" + file
-}
-
 // BuildCLI is the main entry point for the temporal server
 func BuildCLI() *cli.App {
 
 	app := cli.NewApp()
 	app.Name = "temporal"
 	app.Usage = "Temporal server"
-	app.Version = "0.0.1"
+	app.Version = headers.ServerVersion
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -207,12 +180,30 @@ func BuildCLI() *cli.App {
 					Usage: "list of services to start",
 				},
 			},
-			Action: func(c *cli.Context) {
-				startHandler(c)
+			Action: func(c *cli.Context) error {
+				cfg := loadConfig(c)
+				services := getServices(c)
+
+				var servers []*server
+				sigtermCh := make(chan os.Signal, 1)
+				signal.Notify(sigtermCh, os.Interrupt, syscall.SIGTERM)
+				for _, svc := range services {
+					s := newServer(
+						ForService(svc),
+						WithConfig(cfg),
+					)
+					servers = append(servers, s)
+					s.Start()
+				}
+
+				sigterm := <-sigtermCh
+				log.Printf("Received %v signal, initiating shutdown.\n", sigterm)
+				for _, s := range servers {
+					s.Stop()
+				}
+				return cli.NewExitError("All services are stopped.", 0)
 			},
 		},
 	}
-
 	return app
-
 }

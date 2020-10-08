@@ -63,7 +63,7 @@ import (
 type (
 	server struct {
 		name   string
-		cfg    *config.Config
+		config *config.Config
 		doneC  chan struct{}
 		daemon common.Daemon
 	}
@@ -71,76 +71,59 @@ type (
 
 // newServer returns a new instance of a daemon
 // that represents a temporal service
-func newServer(service string, cfg *config.Config) common.Daemon {
-	return &server{
-		cfg:   cfg,
-		name:  service,
-		doneC: make(chan struct{}),
+func newServer(opts ...ServerOption) *server {
+	server := &server{
+		name:   primitives.AllServices,
+		doneC:  make(chan struct{}),
+		config: &config.Config{},
 	}
+
+	for _, opt := range opts {
+		opt.apply(server)
+	}
+
+	return server
 }
 
 // Start starts the server
 func (s *server) Start() {
-	if _, ok := s.cfg.Services[s.name]; !ok {
+	if _, ok := s.config.Services[s.name]; !ok {
 		log.Fatalf("`%v` service missing config", s)
 	}
-	s.daemon = s.startService()
-}
 
-// Stop stops the server
-func (s *server) Stop() {
-
-	if s.daemon == nil {
-		return
-	}
-
-	select {
-	case <-s.doneC:
-	default:
-		s.daemon.Stop()
-		select {
-		case <-s.doneC:
-		case <-time.After(time.Minute):
-			log.Printf("timed out waiting for server %v to exit\n", s.name)
-		}
-	}
-}
-
-// startService starts a service with the given name and config
-func (s *server) startService() common.Daemon {
 	var err error
 
 	params := resource.BootstrapParams{}
 	params.Name = s.name
-	params.Logger = loggerimpl.NewLogger(s.cfg.Log.NewZapLogger())
-	params.PersistenceConfig = s.cfg.Persistence
+	params.Logger = loggerimpl.NewLogger(s.config.Log.NewZapLogger())
+	params.PersistenceConfig = s.config.Persistence
 
-	params.DynamicConfig, err = dynamicconfig.NewFileBasedClient(&s.cfg.DynamicConfigClient, params.Logger.WithTags(tag.Service(params.Name)), s.doneC)
+	params.DynamicConfig, err = dynamicconfig.NewFileBasedClient(&s.config.DynamicConfigClient, params.Logger.WithTags(tag.Service(params.Name)), s.doneC)
 	if err != nil {
 		log.Printf("error creating file based dynamic config client, use no-op config client instead. error: %v", err)
 		params.DynamicConfig = dynamicconfig.NewNopClient()
 	}
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
 
-	err = ringpop.ValidateRingpopConfig(&s.cfg.Global.Membership)
+	err = ringpop.ValidateRingpopConfig(&s.config.Global.Membership)
 	if err != nil {
 		log.Fatalf("Ringpop config validation error - %v", err)
 	}
 
-	tlsFactory, err := encryption.NewTLSConfigProviderFromConfig(s.cfg.Global.TLS)
+	tlsFactory, err := encryption.NewTLSConfigProviderFromConfig(s.config.Global.TLS)
 
 	if err != nil {
 		log.Fatalf("error initializing TLS provider: %v", err)
 	}
 
-	svcCfg := s.cfg.Services[s.name]
+	svcCfg := s.config.Services[s.name]
 	params.MetricScope = svcCfg.Metrics.NewScope(params.Logger)
 	params.RPCFactory = rpc.NewFactory(&svcCfg.RPC, params.Name, params.Logger, tlsFactory)
 
 	// Ringpop uses a different port to register handlers, this map is needed to resolve
 	// services to correct addresses used by clients through ServiceResolver lookup API
 	servicePortMap := make(map[string]int)
-	for roleName, svcCfg := range s.cfg.Services {
+	for roleName, svcCfg := range s.config.Services {
 		serviceName := roleName
 		servicePortMap[serviceName] = svcCfg.RPC.GRPCPort
 	}
@@ -148,7 +131,7 @@ func (s *server) startService() common.Daemon {
 	params.MembershipFactoryInitializer =
 		func(persistenceBean persistenceClient.Bean, logger l.Logger) (resource.MembershipMonitorFactory, error) {
 			return ringpop.NewRingpopFactory(
-				&s.cfg.Global.Membership,
+				&s.config.Global.Membership,
 				params.RPCFactory.GetRingpopChannel(),
 				params.Name,
 				servicePortMap,
@@ -157,11 +140,11 @@ func (s *server) startService() common.Daemon {
 			)
 		}
 
-	params.DCRedirectionPolicy = s.cfg.DCRedirectionPolicy
+	params.DCRedirectionPolicy = s.config.DCRedirectionPolicy
 
 	params.MetricsClient = metrics.NewClient(params.MetricScope, metrics.GetMetricsServiceIdx(params.Name, params.Logger))
 
-	clusterMetadata := s.cfg.ClusterMetadata
+	clusterMetadata := s.config.ClusterMetadata
 
 	// This call performs a config check against the configured persistence store for immutable cluster metadata.
 	// If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
@@ -178,7 +161,7 @@ func (s *server) startService() common.Daemon {
 		clusterMetadata.ReplicationConsumer,
 	)
 
-	if s.cfg.PublicClient.HostPort == "" {
+	if s.config.PublicClient.HostPort == "" {
 		log.Fatal("need to provide an endpoint config for PublicClient")
 	} else {
 		zapLogger, err := zap.NewProduction()
@@ -192,7 +175,7 @@ func (s *server) startService() common.Daemon {
 		}
 
 		params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
-			HostPort:     s.cfg.PublicClient.HostPort,
+			HostPort:     s.config.PublicClient.HostPort,
 			Namespace:    common.SystemLocalNamespace,
 			MetricsScope: params.MetricScope,
 			Logger:       l.NewZapAdapter(zapLogger),
@@ -212,17 +195,17 @@ func (s *server) startService() common.Daemon {
 	)()
 	isAdvancedVisEnabled := advancedVisMode != common.AdvancedVisibilityWritingModeOff
 	if params.ClusterMetadata.IsGlobalNamespaceEnabled() {
-		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, true, isAdvancedVisEnabled)
+		params.MessagingClient = messaging.NewKafkaClient(&s.config.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, true, isAdvancedVisEnabled)
 	} else if isAdvancedVisEnabled {
-		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, false, isAdvancedVisEnabled)
+		params.MessagingClient = messaging.NewKafkaClient(&s.config.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, false, isAdvancedVisEnabled)
 	} else {
 		params.MessagingClient = nil
 	}
 
 	if isAdvancedVisEnabled {
 		// verify config of advanced visibility store
-		advancedVisStoreKey := s.cfg.Persistence.AdvancedVisibilityStore
-		advancedVisStore, ok := s.cfg.Persistence.DataStores[advancedVisStoreKey]
+		advancedVisStoreKey := s.config.Persistence.AdvancedVisibilityStore
+		advancedVisStore, ok := s.config.Persistence.DataStores[advancedVisStoreKey]
 		if !ok {
 			log.Fatalf("not able to find advanced visibility store in config: %v", advancedVisStoreKey)
 		}
@@ -243,14 +226,14 @@ func (s *server) startService() common.Daemon {
 
 	params.ArchivalMetadata = archiver.NewArchivalMetadata(
 		dc,
-		s.cfg.Archival.History.State,
-		s.cfg.Archival.History.EnableRead,
-		s.cfg.Archival.Visibility.State,
-		s.cfg.Archival.Visibility.EnableRead,
-		&s.cfg.NamespaceDefaults.Archival,
+		s.config.Archival.History.State,
+		s.config.Archival.History.EnableRead,
+		s.config.Archival.Visibility.State,
+		s.config.Archival.Visibility.EnableRead,
+		&s.config.NamespaceDefaults.Archival,
 	)
 
-	params.ArchiverProvider = provider.NewArchiverProvider(s.cfg.Archival.History.Provider, s.cfg.Archival.Visibility.Provider)
+	params.ArchiverProvider = provider.NewArchiverProvider(s.config.Archival.History.Provider, s.config.Archival.Visibility.Provider)
 
 	params.PersistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
 
@@ -258,25 +241,42 @@ func (s *server) startService() common.Daemon {
 
 	params.Logger.Info("Starting service " + s.name)
 
-	var daemon common.Daemon
-
 	switch s.name {
 	case primitives.FrontendService:
-		daemon, err = frontend.NewService(&params)
+		s.daemon, err = frontend.NewService(&params)
 	case primitives.HistoryService:
-		daemon, err = history.NewService(&params)
+		s.daemon, err = history.NewService(&params)
 	case primitives.MatchingService:
-		daemon, err = matching.NewService(&params)
+		s.daemon, err = matching.NewService(&params)
 	case primitives.WorkerService:
-		daemon, err = worker.NewService(&params)
+		s.daemon, err = worker.NewService(&params)
 	}
 	if err != nil {
 		params.Logger.Fatal("Fail to start "+s.name+" service ", tag.Error(err))
 	}
 
-	go execute(daemon, s.doneC)
+	go func() {
+		s.daemon.Start()
+		close(s.doneC)
+	}()
+}
 
-	return daemon
+// Stops the server
+func (s *server) Stop() {
+	if s.daemon == nil {
+		return
+	}
+
+	select {
+	case <-s.doneC:
+	default:
+		s.daemon.Stop()
+		select {
+		case <-s.doneC:
+		case <-time.After(time.Minute):
+			log.Printf("Timed out (1 minute) waiting for server %v to exit.\n", s.name)
+		}
+	}
 }
 
 func immutableClusterMetadataInitialization(
@@ -357,10 +357,4 @@ func logImmutableMismatch(l l.Logger, key string, ignored interface{}, value int
 		tag.Key(key),
 		tag.IgnoredValue(ignored),
 		tag.Value(value))
-}
-
-// execute runs the daemon in a separate go routine
-func execute(d common.Daemon, doneC chan struct{}) {
-	d.Start()
-	close(doneC)
 }
