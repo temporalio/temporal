@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"path/filepath"
 
 	"github.com/urfave/cli"
 
@@ -55,25 +54,25 @@ func buildCLI() *cli.App {
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:   "root, r",
-			Value:  getDefaultRootDir(),
-			Usage:  "Root directory of execution environment",
+			Value:  ".",
+			Usage:  "root directory of execution environment",
 			EnvVar: config.EnvKeyRoot,
 		},
 		cli.StringFlag{
 			Name:   "config, c",
 			Value:  "config",
-			Usage:  "Config dir path relative to root",
+			Usage:  "config dir path relative to root",
 			EnvVar: config.EnvKeyConfigDir,
 		},
 		cli.StringFlag{
 			Name:   "env, e",
 			Value:  "development",
-			Usage:  "Runtime environment",
+			Usage:  "runtime environment",
 			EnvVar: config.EnvKeyEnvironment,
 		},
 		cli.StringFlag{
 			Name:   "zone, az",
-			Usage:  "Availability zone",
+			Usage:  "availability zone",
 			EnvVar: config.EnvKeyAvailabilityZone,
 		},
 	}
@@ -112,12 +111,4 @@ func buildCLI() *cli.App {
 		},
 	}
 	return app
-}
-
-func getDefaultRootDir() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return "."
-	}
-	return filepath.Dir(exe)
 }
