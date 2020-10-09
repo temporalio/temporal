@@ -25,7 +25,9 @@
 package temporal
 
 import (
+	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -61,9 +63,11 @@ import (
 
 type (
 	Server struct {
-		so       *serverOptions
-		services map[string]common.Daemon
-		doneC    chan struct{}
+		so                *serverOptions
+		services          map[string]common.Daemon
+		serviceStoppedChs map[string]chan struct{}
+		stoppedCh         chan struct{}
+		logger            l.Logger
 	}
 )
 
@@ -80,11 +84,10 @@ var (
 // NewServer returns a new instance of server that serves one or many services.
 func NewServer(opts ...ServerOption) *Server {
 	s := &Server{
-		so:       newServerOptions(opts),
-		services: make(map[string]common.Daemon),
-		doneC:    make(chan struct{}),
+		so:                newServerOptions(opts),
+		services:          make(map[string]common.Daemon),
+		serviceStoppedChs: make(map[string]chan struct{}),
 	}
-
 	return s
 }
 
@@ -95,10 +98,12 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	zapLogger := s.so.config.Log.NewZapLogger()
-	logger := loggerimpl.NewLogger(zapLogger)
+	s.stoppedCh = make(chan struct{})
 
-	if err := s.so.config.Global.PProf.NewInitializer(loggerimpl.NewLogger(zapLogger)).Start(); err != nil {
+	zapLogger := s.so.config.Log.NewZapLogger()
+	s.logger = loggerimpl.NewLogger(zapLogger)
+
+	if err := s.so.config.Global.PProf.NewInitializer(s.logger).Start(); err != nil {
 		log.Fatalf("fail to start PProf: %v", err)
 	}
 
@@ -112,22 +117,37 @@ func (s *Server) Start() error {
 		log.Fatalf("error initializing TLS provider: %v", err)
 	}
 
-	for _, serviceName := range s.so.serviceNames {
+	dynamicConfig, err := dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
+	if err != nil {
+		log.Printf("error creating file based dynamic config client, use no-op config client instead. error: %v", err)
+		dynamicConfig = dynamicconfig.NewNopClient()
+	}
+	dc := dynamicconfig.NewCollection(dynamicConfig, s.logger)
+
+	// This call performs a config check against the configured persistence store for immutable cluster metadata.
+	// If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
+	// This is to keep this check hidden from independent downstream daemons and keep this in a single place.
+	immutableClusterMetadataInitialization(s.logger, dc, &s.so.config.Persistence, s.so.config.ClusterMetadata)
+
+	clusterMetadata := cluster.NewMetadata(
+		s.logger,
+		dc.GetBoolProperty(dynamicconfig.EnableGlobalNamespace, s.so.config.ClusterMetadata.EnableGlobalNamespace),
+		s.so.config.ClusterMetadata.FailoverVersionIncrement,
+		s.so.config.ClusterMetadata.MasterClusterName,
+		s.so.config.ClusterMetadata.CurrentClusterName,
+		s.so.config.ClusterMetadata.ClusterInformation,
+		s.so.config.ClusterMetadata.ReplicationConsumer,
+	)
+
+	for _, svcName := range s.so.serviceNames {
 		params := resource.BootstrapParams{}
-		params.Name = serviceName
-		params.Logger = logger
+		params.Name = svcName
+		params.Logger = s.logger
 		params.PersistenceConfig = s.so.config.Persistence
-
-		dynamicConfig, err := dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, logger.WithTags(tag.Service(serviceName)), s.doneC)
-		if err != nil {
-			log.Printf("error creating file based dynamic config client, use no-op config client instead. error: %v", err)
-			dynamicConfig = dynamicconfig.NewNopClient()
-		}
 		params.DynamicConfig = dynamicConfig
-		dc := dynamicconfig.NewCollection(dynamicConfig, logger)
 
-		svcCfg := s.so.config.Services[serviceName]
-		rpcFactory := rpc.NewFactory(&svcCfg.RPC, serviceName, logger, tlsFactory)
+		svcCfg := s.so.config.Services[svcName]
+		rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, tlsFactory)
 		params.RPCFactory = rpcFactory
 
 		// Ringpop uses a different port to register handlers, this map is needed to resolve
@@ -142,7 +162,7 @@ func (s *Server) Start() error {
 				return ringpop.NewRingpopFactory(
 					&s.so.config.Global.Membership,
 					rpcFactory.GetRingpopChannel(),
-					serviceName,
+					svcName,
 					servicePortMap,
 					logger,
 					persistenceBean.GetClusterMetadataManager(),
@@ -150,25 +170,10 @@ func (s *Server) Start() error {
 			}
 
 		params.DCRedirectionPolicy = s.so.config.DCRedirectionPolicy
-		metricsScope := svcCfg.Metrics.NewScope(logger)
+		metricsScope := svcCfg.Metrics.NewScope(s.logger)
 		params.MetricsScope = metricsScope
-		metricsClient := metrics.NewClient(metricsScope, metrics.GetMetricsServiceIdx(serviceName, logger))
+		metricsClient := metrics.NewClient(metricsScope, metrics.GetMetricsServiceIdx(svcName, s.logger))
 		params.MetricsClient = metricsClient
-
-		// This call performs a config check against the configured persistence store for immutable cluster metadata.
-		// If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
-		// This is to keep this check hidden from independent downstream daemons and keep this in a single place.
-		immutableClusterMetadataInitialization(logger, dc, &s.so.config.Persistence, s.so.config.ClusterMetadata)
-
-		clusterMetadata := cluster.NewMetadata(
-			logger,
-			dc.GetBoolProperty(dynamicconfig.EnableGlobalNamespace, s.so.config.ClusterMetadata.EnableGlobalNamespace),
-			s.so.config.ClusterMetadata.FailoverVersionIncrement,
-			s.so.config.ClusterMetadata.MasterClusterName,
-			s.so.config.ClusterMetadata.CurrentClusterName,
-			s.so.config.ClusterMetadata.ClusterInformation,
-			s.so.config.ClusterMetadata.ReplicationConsumer,
-		)
 		params.ClusterMetadata = clusterMetadata
 
 		options, err := tlsFactory.GetFrontendClientConfig()
@@ -196,9 +201,9 @@ func (s *Server) Start() error {
 		)()
 		isAdvancedVisEnabled := advancedVisMode != common.AdvancedVisibilityWritingModeOff
 		if clusterMetadata.IsGlobalNamespaceEnabled() {
-			params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), logger, metricsScope, true, isAdvancedVisEnabled)
+			params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), s.logger, metricsScope, true, isAdvancedVisEnabled)
 		} else if isAdvancedVisEnabled {
-			params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), logger, metricsScope, false, isAdvancedVisEnabled)
+			params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), s.logger, metricsScope, false, isAdvancedVisEnabled)
 		} else {
 			params.MessagingClient = nil
 		}
@@ -238,27 +243,39 @@ func (s *Server) Start() error {
 		params.PersistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
 		params.Authorizer = authorization.NewNopAuthorizer()
 
-		var service common.Daemon
-		switch serviceName {
+		var svc common.Daemon
+		switch svcName {
 		case primitives.FrontendService:
-			service, err = frontend.NewService(&params)
+			svc, err = frontend.NewService(&params)
 		case primitives.HistoryService:
-			service, err = history.NewService(&params)
+			svc, err = history.NewService(&params)
 		case primitives.MatchingService:
-			service, err = matching.NewService(&params)
+			svc, err = matching.NewService(&params)
 		case primitives.WorkerService:
-			service, err = worker.NewService(&params)
+			svc, err = worker.NewService(&params)
+		default:
+			return fmt.Errorf("uknown service %q", svcName)
 		}
 		if err != nil {
-			logger.Fatal("Fail to start service", tag.Service(serviceName), tag.Error(err))
+			s.logger.Fatal("Fail to start service", tag.Service(svcName), tag.Error(err))
 		}
 
-		go func() {
-			service.Start()
-			close(s.doneC)
-		}()
+		s.services[svcName] = svc
+		s.serviceStoppedChs[svcName] = make(chan struct{})
 
-		s.services[serviceName] = service
+		go func(svc common.Daemon, svcStoppedCh chan<- struct{}) {
+			// Start is blocked until Stop() is called.
+			svc.Start()
+			close(svcStoppedCh)
+		}(svc, s.serviceStoppedChs[svcName])
+
+	}
+
+	if s.so.blockingStart {
+		// If s.so.interruptCh is nil this will wait forever.
+		interruptSignal := <-s.so.interruptCh
+		log.Printf("Received %v signal, stopping the server.\n", interruptSignal)
+		s.Stop()
 	}
 
 	return nil
@@ -266,19 +283,23 @@ func (s *Server) Start() error {
 
 // Stops the server.
 func (s *Server) Stop() {
-	// TODO: async stop
-	for serviceName, service := range s.services {
-		select {
-		case <-s.doneC:
-		default:
-			service.Stop()
+	var wg sync.WaitGroup
+	wg.Add(len(s.services))
+	close(s.stoppedCh)
+
+	for svcName, svc := range s.services {
+		go func(svc common.Daemon, svcName string, svcStoppedCh <-chan struct{}) {
+			svc.Stop()
 			select {
-			case <-s.doneC:
+			case <-svcStoppedCh:
 			case <-time.After(time.Minute):
-				log.Printf("Timed out (1 minute) waiting for server %q to exit.\n", serviceName)
+				s.logger.Error("Timed out (1 minute) waiting for service to stop.", tag.Service(svcName))
 			}
-		}
+			wg.Done()
+		}(svc, svcName, s.serviceStoppedChs[svcName])
 	}
+	wg.Wait()
+	s.logger.Info("All services are stopped.")
 }
 
 func immutableClusterMetadataInitialization(

@@ -25,21 +25,15 @@
 package temporal
 
 import (
-	"log"
+	"fmt"
 	"os"
-	"os/signal"
 	"path"
 	"path/filepath"
-	"strings"
-	"syscall"
 
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/tools/cassandra"
-	"go.temporal.io/server/tools/sql"
 )
 
 // BuildCLI is the main entry point for the temporal server
@@ -75,6 +69,7 @@ func BuildCLI() *cli.App {
 		},
 	}
 
+	allServicesStringSlice := cli.StringSlice(Services)
 	app.Commands = []cli.Command{
 		{
 			Name:  "start",
@@ -82,92 +77,32 @@ func BuildCLI() *cli.App {
 			Flags: []cli.Flag{
 				cli.StringSliceFlag{
 					Name:  "services, s",
+					Value: &allServicesStringSlice,
 					Usage: "list of services to start",
 				},
 			},
 			Action: func(c *cli.Context) error {
-				cfg := loadConfig(c)
-				services := getServices(c)
+				env := c.GlobalString("env")
+				zone := c.GlobalString("zone")
+				configDir := path.Join(getRootDir(c), c.GlobalString("config"))
 
-				var servers []*Server
-				sigtermCh := make(chan os.Signal, 1)
-				signal.Notify(sigtermCh, os.Interrupt, syscall.SIGTERM)
-				for _, svc := range services {
-					s := NewServer(
-						ForService(svc),
-						WithConfig(cfg),
-					)
-					servers = append(servers, s)
-					s.Start()
-				}
+				services := c.StringSlice("services")
 
-				sigterm := <-sigtermCh
-				log.Printf("Received %v signal, initiating shutdown.\n", sigterm)
-				for _, s := range servers {
-					s.Stop()
+				s := NewServer(
+					ForServices(services),
+					WithConfigLoader(configDir, env, zone),
+					InterruptOn(InterruptCh()),
+				)
+
+				err := s.Start()
+				if err != nil {
+					return cli.NewExitError(fmt.Sprintf("Unable to start server: %v.", err), 1)
 				}
 				return cli.NewExitError("All services are shutdown.", 0)
 			},
 		},
 	}
 	return app
-}
-
-func loadConfig(c *cli.Context) *config.Config {
-	env := strings.TrimSpace(c.GlobalString("env"))
-	zone := strings.TrimSpace(c.GlobalString("zone"))
-	configDir := path.Join(getRootDir(c), c.GlobalString("config"))
-
-	var cfg config.Config
-	err := config.Load(env, configDir, zone, &cfg)
-	if err != nil {
-		log.Fatal("Config file corrupted.", err)
-	}
-
-	if err = cfg.Validate(); err != nil {
-		log.Fatalf("config validation failed: %v", err)
-	}
-	// cassandra schema version validation
-	if err = cassandra.VerifyCompatibleVersion(cfg.Persistence); err != nil {
-		log.Fatalf("cassandra schema version compatibility check failed: %v", err)
-	}
-	// sql schema version validation
-	if err = sql.VerifyCompatibleVersion(cfg.Persistence); err != nil {
-		log.Fatalf("sql schema version compatibility check failed: %v", err)
-	}
-
-	if err = cfg.Global.PProf.NewInitializer(loggerimpl.NewLogger(cfg.Log.NewZapLogger())).Start(); err != nil {
-		log.Fatalf("fail to start PProf: %v", err)
-	}
-
-	return &cfg
-}
-
-// getServices parses the services arg from cli
-// and returns a list of services to start
-func getServices(c *cli.Context) []string {
-	services := c.StringSlice("services")
-
-	if len(services) == 0 {
-		return Services
-	}
-
-	for _, s := range services {
-		if !isValidService(s) {
-			log.Fatalf("invalid service %q in service list [%v]", s, services)
-		}
-	}
-
-	return services
-}
-
-func isValidService(service string) bool {
-	for _, s := range Services {
-		if s == service {
-			return true
-		}
-	}
-	return false
 }
 
 func getRootDir(c *cli.Context) string {
@@ -178,7 +113,7 @@ func getRootDir(c *cli.Context) string {
 
 	exe, err := os.Executable()
 	if err != nil {
-		log.Fatalf("os.Executable(): %v", err)
+		return "."
 	}
 	return filepath.Dir(exe)
 }
