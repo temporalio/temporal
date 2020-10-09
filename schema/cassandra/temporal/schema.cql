@@ -124,8 +124,6 @@ PRIMARY KEY (queue_type)
 
 CREATE TABLE cluster_metadata (
   metadata_partition      int,
-  immutable_data          blob,
-  immutable_data_encoding text,
   data                    blob,
   data_encoding           text,
   version                 bigint,
