@@ -36,9 +36,9 @@ import (
 
 const (
 	defaultAbortReason                    = "Failover aborted through admin CLI"
-	defaultBatchFailoverSize              = 10
-	defaultBatchFailoverWaitTimeInSeconds = 10
-	defaultFailoverTimeoutInSeconds       = 600
+	defaultBatchFailoverSize              = 20
+	defaultBatchFailoverWaitTimeInSeconds = 30
+	defaultFailoverTimeoutInSeconds       = 1200
 )
 
 type startParams struct {

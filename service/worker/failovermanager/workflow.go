@@ -46,8 +46,8 @@ const (
 	failoverActivityName   = "cadence-sys-failover-activity"
 	getDomainsActivityName = "cadence-sys-getDomains-activity"
 
-	defaultBatchFailoverSize              = 10
-	defaultBatchFailoverWaitTimeInSeconds = 10
+	defaultBatchFailoverSize              = 20
+	defaultBatchFailoverWaitTimeInSeconds = 30
 
 	errMsgParamsIsNil                 = "params is nil"
 	errMsgTargetClusterIsEmpty        = "targetCluster is empty"
