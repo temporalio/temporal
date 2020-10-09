@@ -68,6 +68,16 @@ type (
 	}
 )
 
+// Services is the list of all valid temporal services
+var (
+	Services = []string{
+		primitives.FrontendService,
+		primitives.HistoryService,
+		primitives.MatchingService,
+		primitives.WorkerService,
+	}
+)
+
 // New returns a new instance of server that serve one of the services.
 func New(opts ...ServerOption) *Server {
 	s := &Server{

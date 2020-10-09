@@ -29,6 +29,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -36,20 +37,9 @@ import (
 
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/loggerimpl"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/tools/cassandra"
 	"go.temporal.io/server/tools/sql"
-)
-
-// validServices is the list of all valid temporal services
-var (
-	validServices = []string{
-		primitives.FrontendService,
-		primitives.HistoryService,
-		primitives.MatchingService,
-		primitives.WorkerService,
-	}
 )
 
 // BuildCLI is the main entry point for the temporal server
@@ -80,7 +70,6 @@ func BuildCLI() *cli.App {
 		},
 		cli.StringFlag{
 			Name:   "zone, az",
-			Value:  "",
 			Usage:  "availability zone",
 			EnvVar: config.EnvKeyAvailabilityZone,
 		},
@@ -88,13 +77,11 @@ func BuildCLI() *cli.App {
 
 	app.Commands = []cli.Command{
 		{
-			Name:    "start",
-			Aliases: []string{""},
-			Usage:   "start temporal server",
+			Name:  "start",
+			Usage: "start temporal server",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				cli.StringSliceFlag{
 					Name:  "services, s",
-					Value: strings.Join(validServices, ","),
 					Usage: "list of services to start",
 				},
 			},
@@ -129,17 +116,12 @@ func BuildCLI() *cli.App {
 func loadConfig(c *cli.Context) *config.Config {
 	env := strings.TrimSpace(c.GlobalString("env"))
 	zone := strings.TrimSpace(c.GlobalString("zone"))
-	configDir := getConfigDir(c)
-
-	log.Printf("Loading config; env=%v,zone=%v,configDir=%v\n", env, zone, configDir)
+	configDir := path.Join(getRootDir(c), c.GlobalString("config"))
 
 	var cfg config.Config
 	err := config.Load(env, configDir, zone, &cfg)
 	if err != nil {
 		log.Fatal("Config file corrupted.", err)
-	}
-	if cfg.Log.Level == "debug" {
-		log.Printf("config=\n%v\n", cfg.String())
 	}
 
 	if err = cfg.Validate(); err != nil {
@@ -164,43 +146,39 @@ func loadConfig(c *cli.Context) *config.Config {
 // getServices parses the services arg from cli
 // and returns a list of services to start
 func getServices(c *cli.Context) []string {
-	val := strings.TrimSpace(c.String("services"))
-	tokens := strings.Split(val, ",")
+	services := c.StringSlice("services")
 
-	if len(tokens) == 0 {
-		log.Fatal("list of services is empty")
+	if len(services) == 0 {
+		return Services
 	}
 
-	for _, t := range tokens {
-		if !isValidService(t) {
-			log.Fatalf("invalid service `%v` in service list [%v]", t, val)
+	for _, s := range services {
+		if !isValidService(s) {
+			log.Fatalf("invalid service %q in service list [%v]", s, services)
 		}
 	}
 
-	return tokens
+	return services
 }
 
-func isValidService(in string) bool {
-	for _, s := range validServices {
-		if s == in {
+func isValidService(service string) bool {
+	for _, s := range Services {
+		if s == service {
 			return true
 		}
 	}
 	return false
 }
 
-func getConfigDir(c *cli.Context) string {
-	return path.Join(getRootDir(c), c.GlobalString("config"))
-}
-
 func getRootDir(c *cli.Context) string {
 	dirpath := c.GlobalString("root")
-	if len(dirpath) == 0 {
-		cwd, err := os.Getwd()
-		if err != nil {
-			log.Fatalf("os.Getwd() failed, err=%v", err)
-		}
-		return cwd
+	if len(dirpath) != 0 {
+		return dirpath
 	}
-	return dirpath
+
+	exe, err := os.Executable()
+	if err != nil {
+		log.Fatalf("os.Executable(): %v", err)
+	}
+	return filepath.Dir(exe)
 }

@@ -67,22 +67,22 @@ const (
 //       env.yaml   -- environment is one of the input params ex-development
 //         env_az.yaml -- zone is another input param
 //
-func Load(env string, configDir string, zone string, config interface{}) error {
-
+func Load(env string, configDir string, zone string, config *Config) error {
 	if len(env) == 0 {
 		env = envDevelopment
 	}
-
 	if len(configDir) == 0 {
 		configDir = defaultConfigDir
 	}
+
+	log.Printf("Loading config; env=%v,zone=%v,configDir=%v\n", env, zone, configDir)
 
 	files, err := getConfigFiles(env, configDir, zone)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Loading configFiles=%v\n", files)
+	log.Printf("Loading config files=%v\n", files)
 
 	for _, f := range files {
 		// This is tagged nosec because the file names being read are for config files that are not user supplied
@@ -95,6 +95,10 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	if config.Log.Level == "debug" {
+		log.Printf("config=\n%v\n", config.String())
 	}
 
 	return validator.Validate(config)
