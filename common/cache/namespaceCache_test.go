@@ -353,7 +353,7 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 	s.Nil(s.namespaceCache.refreshNamespaces())
 
 	prepareCallbacckInvoked := false
-	entriesNotification := []*NamespaceCacheEntry{}
+	var entriesNotification []*NamespaceCacheEntry
 	// we are not testing catching up, so make this really large
 	currentNamespaceNotificationVersion := int64(0)
 	s.namespaceCache.RegisterNamespaceChangeCallback(
@@ -480,8 +480,8 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 	namespaceNotificationVersion++
 
 	prepareCallbacckInvoked := false
-	entriesOld := []*NamespaceCacheEntry{}
-	entriesNew := []*NamespaceCacheEntry{}
+	var entriesOld []*NamespaceCacheEntry
+	var entriesNew []*NamespaceCacheEntry
 	// we are not testing catching up, so make this really large
 	currentNamespaceNotificationVersion := int64(9999999)
 	s.namespaceCache.RegisterNamespaceChangeCallback(
@@ -559,12 +559,26 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 	testGetFn := func() {
 		<-startChan
 		entryNew, err := s.namespaceCache.GetNamespaceByID(id)
-		s.Nil(err)
-		// make the config version the same so we can easily compare those
-		entryNew.configVersion = 0
-		entryNew.failoverVersion = 0
-		s.Equal(entryOld, entryNew)
-		waitGroup.Done()
+		switch err.(type) {
+		case nil:
+			// make the config version the same so we can easily compare those
+			entryNew.configVersion = 0
+			entryNew.failoverVersion = 0
+			s.Equal(entryOld, entryNew)
+			waitGroup.Done()
+		case *serviceerror.NotFound:
+			time.Sleep(2 * NamespaceCacheMinRefreshInterval)
+			entryNew, err := s.namespaceCache.GetNamespaceByID(id)
+			s.NoError(err)
+			// make the config version the same so we can easily compare those
+			entryNew.configVersion = 0
+			entryNew.failoverVersion = 0
+			s.Equal(entryOld, entryNew)
+			waitGroup.Done()
+		default:
+			s.NoError(err)
+			waitGroup.Done()
+		}
 	}
 
 	for i := 0; i < coroutineCountGet; i++ {

@@ -27,6 +27,7 @@
 package cache
 
 import (
+	"fmt"
 	"hash/fnv"
 	"sort"
 	"strconv"
@@ -65,6 +66,8 @@ const (
 	namespaceCacheInitialSize = 10 * 1024
 	namespaceCacheMaxSize     = 64 * 1024
 	namespaceCacheTTL         = 0 // 0 means infinity
+	// NamespaceCacheMinRefreshInterval namespace cache refresh interval
+	NamespaceCacheMinRefreshInterval = 2 * time.Second
 	// NamespaceCacheRefreshInterval namespace cache refresh interval
 	NamespaceCacheRefreshInterval = 10 * time.Second
 	// NamespaceCacheRefreshFailureRetryInterval is the wait time
@@ -116,7 +119,10 @@ type (
 
 		// refresh lock is used to guarantee at most one
 		// coroutine is doing namespace refreshment
-		refreshLock sync.Mutex
+		refreshLock     sync.Mutex
+		lastRefreshTime atomic.Value
+		checkLock       sync.Mutex
+		lastCheckTime   time.Time
 
 		callbackLock     sync.Mutex
 		prepareCallbacks map[int32]PrepareCallbackFn
@@ -165,6 +171,7 @@ func NewNamespaceCache(
 	}
 	cache.cacheNameToID.Store(newNamespaceCache())
 	cache.cacheByID.Store(newNamespaceCache())
+	cache.lastRefreshTime.Store(time.Time{})
 
 	return cache
 }
@@ -316,8 +323,8 @@ func (c *namespaceCache) RegisterNamespaceChangeCallback(
 	// with namespace change version.
 	sort.Sort(namespaces)
 
-	prevEntries := []*NamespaceCacheEntry{}
-	nextEntries := []*NamespaceCacheEntry{}
+	var prevEntries []*NamespaceCacheEntry
+	var nextEntries []*NamespaceCacheEntry
 	for _, namespace := range namespaces {
 		if namespace.notificationVersion >= initialNotificationVersion {
 			prevEntries = append(prevEntries, nil)
@@ -420,6 +427,8 @@ func (c *namespaceCache) refreshNamespaces() error {
 // this function only refresh the namespaces in the v2 table
 // the namespaces in the v1 table will be refreshed if cache is stale
 func (c *namespaceCache) refreshNamespacesLocked() error {
+	now := c.timeSource.Now()
+
 	// first load the metadata record, then load namespaces
 	// this can guarantee that namespaces in the cache are not updated more than metadata record
 	metadata, err := c.metadataMgr.GetMetadata()
@@ -451,8 +460,8 @@ func (c *namespaceCache) refreshNamespacesLocked() error {
 	// with namespace change version.
 	sort.Sort(namespaces)
 
-	prevEntries := []*NamespaceCacheEntry{}
-	nextEntries := []*NamespaceCacheEntry{}
+	var prevEntries []*NamespaceCacheEntry
+	var nextEntries []*NamespaceCacheEntry
 
 	// make a copy of the existing namespace cache, so we can calculate diff and do compare and swap
 	newCacheNameToID := newNamespaceCache()
@@ -492,16 +501,34 @@ UpdateLoop:
 	c.cacheByID.Store(newCacheByID)
 	c.cacheNameToID.Store(newCacheNameToID)
 	c.triggerNamespaceChangeCallbackLocked(prevEntries, nextEntries)
+
+	// only update last refresh time when refresh succeeded
+	c.lastRefreshTime.Store(now)
 	return nil
 }
 
 func (c *namespaceCache) checkNamespaceExists(
 	name string,
 	id string,
-) error {
+) (bool, error) {
+	now := c.timeSource.Now()
+	if now.Sub(c.lastRefreshTime.Load().(time.Time)) < NamespaceCacheMinRefreshInterval {
+		return false, nil
+	}
 
+	c.checkLock.Lock()
+	defer c.checkLock.Unlock()
+
+	now = c.timeSource.Now()
+	if now.Sub(c.lastCheckTime) < NamespaceCacheMinRefreshInterval {
+		return true, nil
+	}
+	c.lastCheckTime = now
 	_, err := c.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: name, ID: id})
-	return err
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (c *namespaceCache) updateNameToIDCache(
@@ -563,8 +590,12 @@ func (c *namespaceCache) getNamespace(
 		return c.getNamespaceByID(id, true)
 	}
 
-	if err := c.checkNamespaceExists(name, ""); err != nil {
+	doContinue, err := c.checkNamespaceExists(name, "")
+	if err != nil {
 		return nil, err
+	}
+	if !doContinue {
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("namespace: %v not found", name))
 	}
 
 	c.refreshLock.Lock()
@@ -581,7 +612,7 @@ func (c *namespaceCache) getNamespace(
 		return c.getNamespaceByID(id, true)
 	}
 	// impossible case
-	return nil, serviceerror.NewInternal("namespaceCache encounter case where namespace exists but cannot be loaded")
+	return nil, serviceerror.NewNotFound(fmt.Sprintf("namespace: %v not found", name))
 }
 
 // getNamespaceByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
@@ -603,8 +634,12 @@ func (c *namespaceCache) getNamespaceByID(
 		return result, nil
 	}
 
-	if err := c.checkNamespaceExists("", id); err != nil {
+	doContinue, err := c.checkNamespaceExists("", id)
+	if err != nil {
 		return nil, err
+	}
+	if !doContinue {
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("namespace ID: %v not found", id))
 	}
 
 	c.refreshLock.Lock()
@@ -632,8 +667,7 @@ func (c *namespaceCache) getNamespaceByID(
 		entry.RUnlock()
 		return result, nil
 	}
-	// impossible case
-	return nil, serviceerror.NewInternal("namespaceCache encounter case where namespace exists but cannot be loaded")
+	return nil, serviceerror.NewNotFound(fmt.Sprintf("namespace ID: %v not found", id))
 }
 
 func (c *namespaceCache) triggerNamespaceChangePrepareCallbackLocked() {
