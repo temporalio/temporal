@@ -29,20 +29,15 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
-	"path"
-	"runtime"
-	"strconv"
 	"time"
-
-	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common"
+	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
-	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tools/sql"
 )
 
@@ -51,14 +46,29 @@ type (
 	VersionTestSuite struct {
 		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 		suite.Suite
-		pluginName string
+
+		host                         string
+		port                         string
+		pluginName                   string
+		executionSchemaFileLocation  string
+		visibilitySchemaFileLocation string
 	}
 )
 
 // NewVersionTestSuite returns a test suite
-func NewVersionTestSuite(pluginName string) *VersionTestSuite {
+func NewVersionTestSuite(
+	host string,
+	port string,
+	pluginName string,
+	executionSchemaFileLocation string,
+	visibilitySchemaFileLocation string,
+) *VersionTestSuite {
 	return &VersionTestSuite{
-		pluginName: pluginName,
+		host:                         host,
+		port:                         port,
+		pluginName:                   pluginName,
+		executionSchemaFileLocation:  executionSchemaFileLocation,
+		visibilitySchemaFileLocation: visibilitySchemaFileLocation,
 	}
 }
 
@@ -71,47 +81,42 @@ func (s *VersionTestSuite) SetupTest() {
 func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 	database := "temporal_ver_test_" + persistencetests.GenerateRandomDBName(3)
 	visDatabase := "temporal_vis_ver_test_" + persistencetests.GenerateRandomDBName(3)
-	_, filename, _, ok := runtime.Caller(0)
-	s.True(ok)
-	root := path.Dir(path.Dir(path.Dir(path.Dir(filename))))
-	sqlFile := path.Join(root, "schema/mysql/v57/temporal/schema.sql")
-	visSQLFile := path.Join(root, "schema/mysql/v57/visibility/schema.sql")
 
 	defer s.createDatabase(database)()
 	defer s.createDatabase(visDatabase)()
 	err := sql.RunTool([]string{
 		"./tool",
-		"-ep", environment.GetMySQLAddress(),
-		"-p", strconv.Itoa(environment.GetMySQLPort()),
+		"-ep", s.host,
+		"-p", s.port,
 		"-u", testUser,
 		"-pw", testPassword,
 		"-db", database,
 		"-pl", s.pluginName,
 		"-q",
 		"setup-schema",
-		"-f", sqlFile,
+		"-f", s.executionSchemaFileLocation,
 		"-version", "10.0",
 		"-o",
 	})
 	s.NoError(err)
 	err = sql.RunTool([]string{
 		"./tool",
-		"-ep", environment.GetMySQLAddress(),
-		"-p", strconv.Itoa(environment.GetMySQLPort()),
+		"-ep", s.host,
+		"-p", s.port,
 		"-u", testUser,
 		"-pw", testPassword,
 		"-db", visDatabase,
 		"-pl", s.pluginName,
 		"-q",
 		"setup-schema",
-		"-f", visSQLFile,
+		"-f", s.visibilitySchemaFileLocation,
 		"-version", "10.0",
 		"-o",
 	})
 	s.NoError(err)
 
 	defaultCfg := config.SQL{
-		ConnectAddr:  fmt.Sprintf("%v:%v", environment.GetMySQLAddress(), environment.GetMySQLPort()),
+		ConnectAddr:  fmt.Sprintf("%v:%v", s.host, s.port),
 		User:         testUser,
 		Password:     testPassword,
 		PluginName:   s.pluginName,
@@ -142,7 +147,7 @@ func (s *VersionTestSuite) TestCheckCompatibleVersion() {
 		{"2.0", "1.0", "version mismatch", false},
 		{"1.0", "1.0", "", false},
 		{"1.0", "2.0", "", false},
-		{"1.0", "abc", "unable to read cassandra schema version", false},
+		{"1.0", "abc", "unable to read DB schema version", false},
 	}
 	for _, flag := range flags {
 		s.runCheckCompatibleVersion(flag.expectedVersion, flag.actualVersion, flag.errStr, flag.expectedFail)
@@ -150,7 +155,7 @@ func (s *VersionTestSuite) TestCheckCompatibleVersion() {
 }
 
 func (s *VersionTestSuite) createDatabase(database string) func() {
-	connection, err := newTestConn("", s.pluginName)
+	connection, err := newTestConn("", s.host, s.port, s.pluginName)
 	s.NoError(err)
 	err = connection.CreateDatabase(database)
 	s.NoError(err)
@@ -183,8 +188,8 @@ func (s *VersionTestSuite) runCheckCompatibleVersion(
 	sqlFile := subdir + "/v" + actual + "/tmp.sql"
 	s.NoError(sql.RunTool([]string{
 		"./tool",
-		"-ep", environment.GetMySQLAddress(),
-		"-p", strconv.Itoa(environment.GetMySQLPort()),
+		"-ep", s.host,
+		"-p", s.port,
 		"-u", testUser,
 		"-pw", testPassword,
 		"-db", database,
@@ -200,7 +205,7 @@ func (s *VersionTestSuite) runCheckCompatibleVersion(
 	}
 
 	cfg := config.SQL{
-		ConnectAddr:  fmt.Sprintf("%v:%v", environment.GetMySQLAddress(), environment.GetMySQLPort()),
+		ConnectAddr:  fmt.Sprintf("%v:%v", s.host, s.port),
 		User:         testUser,
 		Password:     testPassword,
 		PluginName:   s.pluginName,

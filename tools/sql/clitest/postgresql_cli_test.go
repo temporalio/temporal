@@ -31,43 +31,43 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/environment"
-	mysqlversion "go.temporal.io/server/schema/mysql"
+	postgresqlversion "go.temporal.io/server/schema/postgresql"
 )
 
 const (
-	testMySQLExecutionSchemaFile        = "../../../schema/mysql/v57/temporal/schema.sql"
-	testMySQLVisibilitySchemaFile       = "../../../schema/mysql/v57/visibility/schema.sql"
-	testMySQLExecutionSchemaVersionDir  = "../../../schema/mysql/v57/temporal/versioned"
-	testMySQLVisibilitySchemaVersionDir = "../../../schema/mysql/v57/visibility/versioned"
-	testMySQLQuery                      = `
+	testPostgreSQLExecutionSchemaFile        = "../../../schema/postgresql/v96/temporal/schema.sql"
+	testPostgreSQLVisibilitySchemaFile       = "../../../schema/postgresql/v96/visibility/schema.sql"
+	testPostgreSQLExecutionSchemaVersionDir  = "../../../schema/postgresql/v96/temporal/versioned"
+	testPostgreSQLVisibilitySchemaVersionDir = "../../../schema/postgresql/v96/visibility/versioned"
+	testPostgreSQLQuery                      = `
 -- test sql file content
 
 CREATE TABLE executions(
-  shard_id INT NOT NULL,
-  namespace_id BINARY(16) NOT NULL,
+  shard_id INTEGER NOT NULL,
+  namespace_id BYTEA NOT NULL,
   workflow_id VARCHAR(255) NOT NULL,
-  run_id BINARY(16) NOT NULL,
+  run_id BYTEA NOT NULL,
   --
   next_event_id BIGINT NOT NULL,
   last_write_version BIGINT NOT NULL,
-  data BLOB NOT NULL,
+  data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
-  state BLOB NOT NULL,
+  state BYTEA NOT NULL,
   state_encoding VARCHAR(16) NOT NULL,
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id)
 );
 
 CREATE TABLE current_executions(
-  shard_id INT NOT NULL,
-  namespace_id BINARY(16) NOT NULL,
+  shard_id INTEGER NOT NULL,
+  namespace_id BYTEA NOT NULL,
   workflow_id VARCHAR(255) NOT NULL,
   --
-  run_id BINARY(16) NOT NULL,
+  run_id BYTEA NOT NULL,
   create_request_id VARCHAR(64) NOT NULL,
-  state INT NOT NULL,
-  status INT NOT NULL,
+  state INTEGER NOT NULL,
+  status INTEGER NOT NULL,
   start_version BIGINT NOT NULL,
   last_write_version BIGINT NOT NULL,
   PRIMARY KEY (shard_id, namespace_id, workflow_id)
@@ -75,61 +75,60 @@ CREATE TABLE current_executions(
 `
 )
 
-func TestMySQLConnTestSuite(t *testing.T) {
+func TestPostgreSQLConnTestSuite(t *testing.T) {
 	suite.Run(t, NewSQLConnTestSuite(
-		environment.GetMySQLAddress(),
-		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginName,
-		testMySQLQuery,
+		environment.GetPostgreSQLAddress(),
+		strconv.Itoa(environment.GetPostgreSQLPort()),
+		postgresql.PluginName, testPostgreSQLQuery,
 	))
 }
 
-func TestMySQLHandlerTestSuite(t *testing.T) {
+func TestPostgreSQLHandlerTestSuite(t *testing.T) {
 	suite.Run(t, NewHandlerTestSuite(
-		environment.GetMySQLAddress(),
-		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginName,
+		environment.GetPostgreSQLAddress(),
+		strconv.Itoa(environment.GetPostgreSQLPort()),
+		postgresql.PluginName,
 	))
 }
 
-func TestMySQLSetupSchemaTestSuite(t *testing.T) {
-	os.Setenv("SQL_HOST", environment.GetMySQLAddress())
-	os.Setenv("SQL_PORT", strconv.Itoa(environment.GetMySQLPort()))
+func TestPostgreSQLSetupSchemaTestSuite(t *testing.T) {
+	os.Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
+	os.Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
 	os.Setenv("SQL_USER", testUser)
 	os.Setenv("SQL_PASSWORD", testPassword)
 	suite.Run(t, NewSetupSchemaTestSuite(
-		environment.GetMySQLAddress(),
-		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginName,
-		testMySQLQuery,
+		environment.GetPostgreSQLAddress(),
+		strconv.Itoa(environment.GetPostgreSQLPort()),
+		postgresql.PluginName,
+		testPostgreSQLQuery,
 	))
 }
 
-func TestMySQLUpdateSchemaTestSuite(t *testing.T) {
-	os.Setenv("SQL_HOST", environment.GetMySQLAddress())
-	os.Setenv("SQL_PORT", strconv.Itoa(environment.GetMySQLPort()))
+func TestPostgreSQLUpdateSchemaTestSuite(t *testing.T) {
+	os.Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
+	os.Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
 	os.Setenv("SQL_USER", testUser)
 	os.Setenv("SQL_PASSWORD", testPassword)
 	suite.Run(t, NewUpdateSchemaTestSuite(
-		environment.GetMySQLAddress(),
-		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginName,
-		testMySQLQuery,
-		testMySQLExecutionSchemaVersionDir,
-		mysqlversion.Version,
-		testMySQLVisibilitySchemaVersionDir,
-		mysqlversion.VisibilityVersion,
+		environment.GetPostgreSQLAddress(),
+		strconv.Itoa(environment.GetPostgreSQLPort()),
+		postgresql.PluginName,
+		testPostgreSQLQuery,
+		testPostgreSQLExecutionSchemaVersionDir,
+		postgresqlversion.Version,
+		testPostgreSQLVisibilitySchemaVersionDir,
+		postgresqlversion.VisibilityVersion,
 	))
 }
 
-func TestMySQLVersionTestSuite(t *testing.T) {
+func TestPostgreSQLVersionTestSuite(t *testing.T) {
 	os.Setenv("SQL_USER", testUser)
 	os.Setenv("SQL_PASSWORD", testPassword)
 	suite.Run(t, NewVersionTestSuite(
-		environment.GetMySQLAddress(),
-		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginName,
-		testMySQLExecutionSchemaFile,
-		testMySQLVisibilitySchemaFile,
+		environment.GetPostgreSQLAddress(),
+		strconv.Itoa(environment.GetPostgreSQLPort()),
+		postgresql.PluginName,
+		testPostgreSQLExecutionSchemaFile,
+		testPostgreSQLVisibilitySchemaFile,
 	))
 }
