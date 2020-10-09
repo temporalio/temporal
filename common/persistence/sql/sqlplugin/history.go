@@ -34,16 +34,6 @@ type (
 		WriteLockShards(filter *ShardsFilter) (int64, error)
 	}
 
-	// historyEvent is the SQL persistence interface for history nodes and history trees
-	historyEvent interface {
-		InsertIntoHistoryNode(row *HistoryNodeRow) (sql.Result, error)
-		SelectFromHistoryNode(filter *HistoryNodeFilter) ([]HistoryNodeRow, error)
-		DeleteFromHistoryNode(filter *HistoryNodeFilter) (sql.Result, error)
-		InsertIntoHistoryTree(row *HistoryTreeRow) (sql.Result, error)
-		SelectFromHistoryTree(filter *HistoryTreeFilter) ([]HistoryTreeRow, error)
-		DeleteFromHistoryTree(filter *HistoryTreeFilter) (sql.Result, error)
-	}
-
 	// HistoryExecutionBuffer is the SQL persistence interface for history nodes and history execution buffer events
 	HistoryExecutionBuffer interface {
 		InsertIntoBufferedEvents(rows []BufferedEventsRow) (sql.Result, error)
