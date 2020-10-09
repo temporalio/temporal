@@ -248,6 +248,7 @@ func isWorkflowRunning(queryResult *failovermanager.QueryResult) bool {
 // AdminFailoverList list failover runs
 func AdminFailoverList(c *cli.Context) {
 	c.Set(FlagWorkflowID, failovermanager.WorkflowID)
+	c.GlobalSet(FlagDomain, common.SystemLocalDomainName)
 	ListWorkflow(c)
 }
 
