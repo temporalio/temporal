@@ -90,24 +90,22 @@ func (s *historyTreeSuite) TestInsert_Success() {
 	s.Equal(1, int(rowsAffected))
 }
 
-// TODO: when issue https://github.com/temporalio/temporal/issues/818
-//  is resolved, uncomment this test
-//func (s *historyTreeSuite) TestInsert_Fail_Duplicate() {
-//	shardID := rand.Int31()
-//	treeID := primitives.NewUUID()
-//	branchID := primitives.NewUUID()
-//
-//	node := s.newRandomTreeRow(shardID, treeID, branchID)
-//	result, err := s.store.InsertIntoHistoryTree(&node)
-//	s.NoError(err)
-//	rowsAffected, err := result.RowsAffected()
-//	s.NoError(err)
-//	s.Equal(1, int(rowsAffected))
-//
-//	node = s.newRandomTreeRow(shardID, treeID, branchID)
-//	_, err = s.store.InsertIntoHistoryTree(&node)
-//	s.Error(err) // TODO persistence layer should do proper error translation
-//}
+func (s *historyTreeSuite) TestInsert_Fail_Duplicate() {
+	shardID := rand.Int31()
+	treeID := primitives.NewUUID()
+	branchID := primitives.NewUUID()
+
+	node := s.newRandomTreeRow(shardID, treeID, branchID)
+	result, err := s.store.InsertIntoHistoryTree(&node)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(1, int(rowsAffected))
+
+	node = s.newRandomTreeRow(shardID, treeID, branchID)
+	_, err = s.store.InsertIntoHistoryTree(&node)
+	s.Error(err) // TODO persistence layer should do proper error translation
+}
 
 func (s *historyTreeSuite) TestInsertSelect() {
 	shardID := rand.Int31()
