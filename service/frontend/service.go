@@ -26,6 +26,7 @@ package frontend
 
 import (
 	"context"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -121,6 +122,9 @@ type Config struct {
 
 	// DefaultWorkflowTaskTimeout the default workflow task timeout
 	DefaultWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+
+	// EnableServerVersionCheck disables periodic version checking performed by the frontend
+	EnableServerVersionCheck dynamicconfig.BoolPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -167,6 +171,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		MaxWorkflowExecutionTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxWorkflowExecutionTimeout, common.DefaultWorkflowExecutionTimeout),
 		MaxWorkflowRunTimeout:                  dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxWorkflowRunTimeout, common.DefaultWorkflowRunTimeout),
 		DefaultWorkflowTaskTimeout:             dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
+		EnableServerVersionCheck:               dc.GetBoolProperty(dynamicconfig.EnableServerVersionCheck, os.Getenv("TEMPORAL_VERSION_CHECK_DISABLED") == ""),
 	}
 }
 
@@ -178,9 +183,10 @@ type Service struct {
 	config *Config
 	params *resource.BootstrapParams
 
-	handler      Handler
-	adminHandler *AdminHandler
-	server       *grpc.Server
+	handler        Handler
+	adminHandler   *AdminHandler
+	versionChecker *VersionChecker
+	server         *grpc.Server
 }
 
 // NewService builds a new frontend service
@@ -294,10 +300,12 @@ func (s *Service) Start() {
 	adminNilCheckHandler := NewAdminNilCheckHandler(s.adminHandler)
 
 	adminservice.RegisterAdminServiceServer(s.server, adminNilCheckHandler)
+	s.versionChecker = NewVersionChecker(s, s.params, s.config)
 
 	// must start resource first
 	s.Resource.Start()
 	s.adminHandler.Start()
+	s.versionChecker.Start()
 
 	listener := s.GetGRPCListener()
 	logger.Info("Starting to serve on frontend listener")
@@ -329,6 +337,7 @@ func (s *Service) Stop() {
 	time.Sleep(failureDetectionTime)
 
 	s.adminHandler.Stop()
+	s.versionChecker.Stop()
 
 	s.GetLogger().Info("ShutdownHandler: Draining traffic")
 	time.Sleep(requestDrainTime)

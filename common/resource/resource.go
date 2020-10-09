@@ -94,6 +94,7 @@ type (
 		// persistence clients
 
 		GetMetadataManager() persistence.MetadataManager
+		GetClusterMetadataManager() persistence.ClusterMetadataManager
 		GetTaskManager() persistence.TaskManager
 		GetVisibilityManager() persistence.VisibilityManager
 		GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue
