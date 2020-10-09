@@ -99,13 +99,20 @@ COVER_ROOT                 := $(BUILD)/coverage
 UNIT_COVER_FILE            := $(COVER_ROOT)/unit_cover.out
 INTEG_COVER_FILE           := $(COVER_ROOT)/integ_$(PERSISTENCE_TYPE)_$(PERSISTENCE_DRIVER)_cover.out
 INTEG_XDC_COVER_FILE       := $(COVER_ROOT)/integ_xdc_$(PERSISTENCE_TYPE)_$(PERSISTENCE_DRIVER)_cover.out
-INTEG_CASS_COVER_FILE      := $(COVER_ROOT)/integ_cassandra_cover.out
-INTEG_XDC_CASS_COVER_FILE  := $(COVER_ROOT)/integ_xdc_cassandra_cover.out
-INTEG_SQL_COVER_FILE       := $(COVER_ROOT)/integ_sql_cover.out
-INTEG_XDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_xdc_sql_cover.out
 INTEG_NDC_COVER_FILE       := $(COVER_ROOT)/integ_ndc_$(PERSISTENCE_TYPE)_$(PERSISTENCE_DRIVER)_cover.out
-INTEG_NDC_CASS_COVER_FILE  := $(COVER_ROOT)/integ_ndc_cassandra_cover.out
-INTEG_NDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_ndc_sql_cover.out
+
+# NoSQL Cassandra
+INTEG_NOSQL_CASS_COVER_FILE         := $(COVER_ROOT)/integ_nosql_cassandra_cover.out
+INTEG_XDC_NOSQL_CASS_COVER_FILE     := $(COVER_ROOT)/integ_xdc_nosql_cassandra_cover.out
+INTEG_NDC_NOSQL_CASS_COVER_FILE     := $(COVER_ROOT)/integ_ndc_nosql_cassandra_cover.out
+# SQL MySQL
+INTEG_SQL_MYSQL_COVER_FILE          := $(COVER_ROOT)/integ_sql_mysql_cover.out
+INTEG_XDC_SQL_MYSQL_COVER_FILE      := $(COVER_ROOT)/integ_xdc_sql_mysql_cover.out
+INTEG_NDC_SQL_MYSQL_COVER_FILE      := $(COVER_ROOT)/integ_ndc_sql_mysql_cover.out
+# SQL PostgreSQL
+INTEG_SQL_POSTGRESQL_COVER_FILE     := $(COVER_ROOT)/integ_sql_postgres_cover.out
+INTEG_XDC_SQL_POSTGRESQL_COVER_FILE := $(COVER_ROOT)/integ_xdc_sql_postgres_cover.out
+INTEG_NDC_SQL_POSTGRESQL_COVER_FILE := $(COVER_ROOT)/integ_ndc_sql_postgres_cover.out
 
 # Need the following option to have integration tests count towards coverage. godoc below:
 # -coverpkg pkg1,pkg2,pkg3
@@ -306,18 +313,26 @@ cover_ndc_profile: clean-build-results
 	@mkdir -p $(COVER_ROOT)
 	@echo "mode: atomic" > $(INTEG_NDC_COVER_FILE)
 
-	@echo Running integration test for 3+ dc with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)
+	@echo Running integration test for N DC with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)
 	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_NDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out -count=$(TEST_RUN_COUNT) || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_NDC_COVER_FILE)
 
-$(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_CASS_COVER_FILE) $(INTEG_XDC_CASS_COVER_FILE) $(INTEG_SQL_COVER_FILE) $(INTEG_XDC_SQL_COVER_FILE)
+$(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_NOSQL_CASS_COVER_FILE) $(INTEG_XDC_NOSQL_CASS_COVER_FILE) $(INTEG_NDC_NOSQL_CASS_COVER_FILE) $(INTEG_SQL_MYSQL_COVER_FILE) $(INTEG_XDC_SQL_MYSQL_COVER_FILE) $(INTEG_NDC_SQL_MYSQL_COVER_FILE) $(INTEG_SQL_POSTGRESQL_COVER_FILE) $(INTEG_XDC_SQL_POSTGRESQL_COVER_FILE) $(INTEG_NDC_SQL_POSTGRESQL_COVER_FILE)
 	@echo "mode: atomic" > $(COVER_ROOT)/cover.out
 	cat $(UNIT_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_XDC_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_XDC_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	# NoSQL Cassandra
+	cat $(INTEG_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_XDC_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_NDC_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	# SQL MySQL
+	cat $(INTEG_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_XDC_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_NDC_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	# SQL PostgreSQL
+	cat $(INTEG_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_XDC_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_NDC_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
 
 cover: $(COVER_ROOT)/cover.out
 	go tool cover -html=$(COVER_ROOT)/cover.out;
