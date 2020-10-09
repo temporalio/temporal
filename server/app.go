@@ -93,7 +93,7 @@ func BuildCLI() *cli.App {
 				sigtermCh := make(chan os.Signal, 1)
 				signal.Notify(sigtermCh, os.Interrupt, syscall.SIGTERM)
 				for _, svc := range services {
-					s := New(
+					s := NewServer(
 						ForService(svc),
 						WithConfig(cfg),
 					)
