@@ -105,22 +105,9 @@ func (s *Server) Start() error {
 	zapLogger := s.so.config.Log.NewZapLogger()
 	s.logger = loggerimpl.NewLogger(zapLogger)
 
-	// cassandra schema version validation
-	if err := cassandra.VerifyCompatibleVersion(s.so.config.Persistence); err != nil {
-		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
-	}
-	// sql schema version validation
-	if err := sql.VerifyCompatibleVersion(s.so.config.Persistence); err != nil {
-		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
-	}
-
-	if err := s.so.config.Global.PProf.NewInitializer(s.logger).Start(); err != nil {
-		return fmt.Errorf("unable to start PProf: %w", err)
-	}
-
-	err = ringpop.ValidateRingpopConfig(&s.so.config.Global.Membership)
+	err = s.validate()
 	if err != nil {
-		return fmt.Errorf("ringpop config validation error: %w", err)
+		return err
 	}
 
 	tlsFactory, err := encryption.NewTLSConfigProviderFromConfig(s.so.config.Global.TLS)
@@ -154,119 +141,21 @@ func (s *Server) Start() error {
 	)
 
 	for _, svcName := range s.so.serviceNames {
-		params := resource.BootstrapParams{}
-		params.Name = svcName
-		params.Logger = s.logger
-		params.PersistenceConfig = s.so.config.Persistence
-		params.DynamicConfig = dynamicConfig
-
-		svcCfg := s.so.config.Services[svcName]
-		rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, tlsFactory)
-		params.RPCFactory = rpcFactory
-
-		// Ringpop uses a different port to register handlers, this map is needed to resolve
-		// services to correct addresses used by clients through ServiceResolver lookup API
-		servicePortMap := make(map[string]int)
-		for svcName, svcCfg := range s.so.config.Services {
-			servicePortMap[svcName] = svcCfg.RPC.GRPCPort
-		}
-
-		params.MembershipFactoryInitializer =
-			func(persistenceBean persistenceClient.Bean, logger l.Logger) (resource.MembershipMonitorFactory, error) {
-				return ringpop.NewRingpopFactory(
-					&s.so.config.Global.Membership,
-					rpcFactory.GetRingpopChannel(),
-					svcName,
-					servicePortMap,
-					logger,
-					persistenceBean.GetClusterMetadataManager(),
-				)
-			}
-
-		params.DCRedirectionPolicy = s.so.config.DCRedirectionPolicy
-		metricsScope := svcCfg.Metrics.NewScope(s.logger)
-		params.MetricsScope = metricsScope
-		metricsClient := metrics.NewClient(metricsScope, metrics.GetMetricsServiceIdx(svcName, s.logger))
-		params.MetricsClient = metricsClient
-		params.ClusterMetadata = clusterMetadata
-
-		options, err := tlsFactory.GetFrontendClientConfig()
+		params, err := s.getServiceParams(svcName, dynamicConfig, tlsFactory, clusterMetadata, dc, zapLogger)
 		if err != nil {
-			return fmt.Errorf("unable to load frontend TLS configuration: %w", err)
+			return err
 		}
-
-		params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
-			HostPort:     s.so.config.PublicClient.HostPort,
-			Namespace:    common.SystemLocalNamespace,
-			MetricsScope: metricsScope,
-			Logger:       l.NewZapAdapter(zapLogger),
-			ConnectionOptions: sdkclient.ConnectionOptions{
-				TLS:                options,
-				DisableHealthCheck: true,
-			},
-		})
-		if err != nil {
-			return fmt.Errorf("unable to create public client: %w", err)
-		}
-
-		advancedVisMode := dc.GetStringProperty(
-			dynamicconfig.AdvancedVisibilityWritingMode,
-			common.GetDefaultAdvancedVisibilityWritingMode(s.so.config.Persistence.IsAdvancedVisibilityConfigExist()),
-		)()
-		isAdvancedVisEnabled := advancedVisMode != common.AdvancedVisibilityWritingModeOff
-		if clusterMetadata.IsGlobalNamespaceEnabled() {
-			params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), s.logger, metricsScope, true, isAdvancedVisEnabled)
-		} else if isAdvancedVisEnabled {
-			params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), s.logger, metricsScope, false, isAdvancedVisEnabled)
-		} else {
-			params.MessagingClient = nil
-		}
-
-		if isAdvancedVisEnabled {
-			// verify config of advanced visibility store
-			advancedVisStoreKey := s.so.config.Persistence.AdvancedVisibilityStore
-			advancedVisStore, ok := s.so.config.Persistence.DataStores[advancedVisStoreKey]
-			if !ok {
-				return fmt.Errorf("unable to find advanced visibility store in config for %q key", advancedVisStoreKey)
-			}
-
-			esClient, err := elasticsearch.NewClient(advancedVisStore.ElasticSearch)
-			if err != nil {
-				return fmt.Errorf("error creating elastic search client: %v", err)
-			}
-			params.ESConfig = advancedVisStore.ElasticSearch
-			params.ESClient = esClient
-
-			// verify index name
-			indexName, ok := advancedVisStore.ElasticSearch.Indices[common.VisibilityAppName]
-			if !ok || len(indexName) == 0 {
-				return errors.New("elastic search config missing visibility index")
-			}
-		}
-
-		params.ArchivalMetadata = archiver.NewArchivalMetadata(
-			dc,
-			s.so.config.Archival.History.State,
-			s.so.config.Archival.History.EnableRead,
-			s.so.config.Archival.Visibility.State,
-			s.so.config.Archival.Visibility.EnableRead,
-			&s.so.config.NamespaceDefaults.Archival,
-		)
-
-		params.ArchiverProvider = provider.NewArchiverProvider(s.so.config.Archival.History.Provider, s.so.config.Archival.Visibility.Provider)
-		params.PersistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
-		params.Authorizer = authorization.NewNopAuthorizer()
 
 		var svc common.Daemon
 		switch svcName {
 		case primitives.FrontendService:
-			svc, err = frontend.NewService(&params)
+			svc, err = frontend.NewService(params)
 		case primitives.HistoryService:
-			svc, err = history.NewService(&params)
+			svc, err = history.NewService(params)
 		case primitives.MatchingService:
-			svc, err = matching.NewService(&params)
+			svc, err = matching.NewService(params)
 		case primitives.WorkerService:
-			svc, err = worker.NewService(&params)
+			svc, err = worker.NewService(params)
 		default:
 			return fmt.Errorf("uknown service %q", svcName)
 		}
@@ -313,6 +202,143 @@ func (s *Server) Stop() {
 		}(svc, svcName, s.serviceStoppedChs[svcName])
 	}
 	wg.Wait()
+}
+
+// Populates parameters for a service
+func (s *Server) getServiceParams(
+	svcName string,
+	dynamicConfig dynamicconfig.Client,
+	tlsFactory encryption.TLSConfigProvider,
+	clusterMetadata cluster.Metadata,
+	dc *dynamicconfig.Collection,
+	zapLogger *zap.Logger) (*resource.BootstrapParams, error) {
+
+	params := resource.BootstrapParams{}
+	params.Name = svcName
+	params.Logger = s.logger
+	params.PersistenceConfig = s.so.config.Persistence
+	params.DynamicConfig = dynamicConfig
+
+	svcCfg := s.so.config.Services[svcName]
+	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, tlsFactory)
+	params.RPCFactory = rpcFactory
+
+	// Ringpop uses a different port to register handlers, this map is needed to resolve
+	// services to correct addresses used by clients through ServiceResolver lookup API
+	servicePortMap := make(map[string]int)
+	for svcName, svcCfg := range s.so.config.Services {
+		servicePortMap[svcName] = svcCfg.RPC.GRPCPort
+	}
+
+	params.MembershipFactoryInitializer =
+		func(persistenceBean persistenceClient.Bean, logger l.Logger) (resource.MembershipMonitorFactory, error) {
+			return ringpop.NewRingpopFactory(
+				&s.so.config.Global.Membership,
+				rpcFactory.GetRingpopChannel(),
+				svcName,
+				servicePortMap,
+				logger,
+				persistenceBean.GetClusterMetadataManager(),
+			)
+		}
+
+	params.DCRedirectionPolicy = s.so.config.DCRedirectionPolicy
+	metricsScope := svcCfg.Metrics.NewScope(s.logger)
+	params.MetricsScope = metricsScope
+	metricsClient := metrics.NewClient(metricsScope, metrics.GetMetricsServiceIdx(svcName, s.logger))
+	params.MetricsClient = metricsClient
+	params.ClusterMetadata = clusterMetadata
+
+	options, err := tlsFactory.GetFrontendClientConfig()
+	if err != nil {
+		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
+	}
+
+	params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
+		HostPort:     s.so.config.PublicClient.HostPort,
+		Namespace:    common.SystemLocalNamespace,
+		MetricsScope: metricsScope,
+		Logger:       l.NewZapAdapter(zapLogger),
+		ConnectionOptions: sdkclient.ConnectionOptions{
+			TLS:                options,
+			DisableHealthCheck: true,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("unable to create public client: %w", err)
+	}
+
+	advancedVisMode := dc.GetStringProperty(
+		dynamicconfig.AdvancedVisibilityWritingMode,
+		common.GetDefaultAdvancedVisibilityWritingMode(s.so.config.Persistence.IsAdvancedVisibilityConfigExist()),
+	)()
+	isAdvancedVisEnabled := advancedVisMode != common.AdvancedVisibilityWritingModeOff
+	if clusterMetadata.IsGlobalNamespaceEnabled() {
+		params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), s.logger, metricsScope, true, isAdvancedVisEnabled)
+	} else if isAdvancedVisEnabled {
+		params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), s.logger, metricsScope, false, isAdvancedVisEnabled)
+	} else {
+		params.MessagingClient = nil
+	}
+
+	if isAdvancedVisEnabled {
+		// verify config of advanced visibility store
+		advancedVisStoreKey := s.so.config.Persistence.AdvancedVisibilityStore
+		advancedVisStore, ok := s.so.config.Persistence.DataStores[advancedVisStoreKey]
+		if !ok {
+			return nil, fmt.Errorf("unable to find advanced visibility store in config for %q key", advancedVisStoreKey)
+		}
+
+		esClient, err := elasticsearch.NewClient(advancedVisStore.ElasticSearch)
+		if err != nil {
+			return nil, fmt.Errorf("error creating elastic search client: %v", err)
+		}
+		params.ESConfig = advancedVisStore.ElasticSearch
+		params.ESClient = esClient
+
+		// verify index name
+		indexName, ok := advancedVisStore.ElasticSearch.Indices[common.VisibilityAppName]
+		if !ok || len(indexName) == 0 {
+			return nil, errors.New("elastic search config missing visibility index")
+		}
+	}
+
+	params.ArchivalMetadata = archiver.NewArchivalMetadata(
+		dc,
+		s.so.config.Archival.History.State,
+		s.so.config.Archival.History.EnableRead,
+		s.so.config.Archival.Visibility.State,
+		s.so.config.Archival.Visibility.EnableRead,
+		&s.so.config.NamespaceDefaults.Archival,
+	)
+
+	params.ArchiverProvider = provider.NewArchiverProvider(s.so.config.Archival.History.Provider, s.so.config.Archival.Visibility.Provider)
+	params.PersistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
+	params.Authorizer = authorization.NewNopAuthorizer()
+
+	return &params, nil
+}
+
+// Validates configuration of dependencies
+func (s *Server) validate() error {
+	// cassandra schema version validation
+	if err := cassandra.VerifyCompatibleVersion(s.so.config.Persistence); err != nil {
+		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
+	}
+	// sql schema version validation
+	if err := sql.VerifyCompatibleVersion(s.so.config.Persistence); err != nil {
+		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
+	}
+
+	if err := s.so.config.Global.PProf.NewInitializer(s.logger).Start(); err != nil {
+		return fmt.Errorf("unable to start PProf: %w", err)
+	}
+
+	err := ringpop.ValidateRingpopConfig(&s.so.config.Global.Membership)
+	if err != nil {
+		return fmt.Errorf("ringpop config validation error: %w", err)
+	}
+	return nil
 }
 
 func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collection) error {
