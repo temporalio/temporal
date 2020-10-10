@@ -77,7 +77,8 @@ func (so *serverOptions) validate() error {
 }
 
 func (so *serverOptions) loadConfig() error {
-	err := config.Load(so.env, so.configDir, so.zone, &(*so.config))
+	so.config = &config.Config{}
+	err := config.Load(so.env, so.configDir, so.zone, so.config)
 	if err != nil {
 		return fmt.Errorf("config file corrupted: %w", err)
 	}
