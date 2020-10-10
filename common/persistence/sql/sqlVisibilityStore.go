@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	"go.temporal.io/server/common/service/config"
 )
 
 type (
@@ -51,11 +50,7 @@ type (
 )
 
 // NewSQLVisibilityStore creates an instance of ExecutionStore
-func NewSQLVisibilityStore(cfg config.SQL, logger log.Logger) (p.VisibilityStore, error) {
-	db, err := NewSQLDB(&cfg)
-	if err != nil {
-		return nil, err
-	}
+func NewSQLVisibilityStore(db sqlplugin.DB, logger log.Logger) (p.VisibilityStore, error) {
 	return &sqlVisibilityStore{
 		sqlStore: sqlStore{
 			db:     db,

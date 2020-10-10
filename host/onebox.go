@@ -83,6 +83,7 @@ type (
 		frontendService common.Daemon
 		matchingService common.Daemon
 		historyServices []common.Daemon
+		workerService   common.Daemon
 
 		adminClient                      adminservice.AdminServiceClient
 		frontendClient                   workflowservice.WorkflowServiceClient
@@ -221,6 +222,7 @@ func (c *temporalImpl) Start() error {
 func (c *temporalImpl) Stop() {
 	if c.enableWorker() {
 		c.shutdownWG.Add(4)
+		c.workerService.Stop()
 	} else {
 		c.shutdownWG.Add(3)
 	}
@@ -607,7 +609,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	if err != nil {
 		params.Logger.Fatal("unable to create worker service", tag.Error(err))
 	}
-
+	c.workerService = service
 	service.Start()
 
 	var replicatorNamespaceCache cache.NamespaceCache
