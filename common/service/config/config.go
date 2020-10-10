@@ -26,6 +26,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/uber-go/tally/m3"
@@ -482,7 +483,16 @@ func (c *Config) Validate() error {
 	if err := c.Persistence.Validate(); err != nil {
 		return err
 	}
-	return c.Archival.Validate(&c.NamespaceDefaults.Archival)
+
+	if err := c.Archival.Validate(&c.NamespaceDefaults.Archival); err != nil {
+		return err
+	}
+
+	if c.PublicClient.HostPort == "" {
+		return errors.New("publicClient.hostPort can't be empty")
+	}
+
+	return nil
 }
 
 // String converts the config object into a string

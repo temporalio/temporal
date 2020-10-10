@@ -58,6 +58,8 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
+	"go.temporal.io/server/tools/cassandra"
+	"go.temporal.io/server/tools/sql"
 )
 
 type (
@@ -102,6 +104,15 @@ func (s *Server) Start() error {
 
 	zapLogger := s.so.config.Log.NewZapLogger()
 	s.logger = loggerimpl.NewLogger(zapLogger)
+
+	// cassandra schema version validation
+	if err := cassandra.VerifyCompatibleVersion(s.so.config.Persistence); err != nil {
+		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
+	}
+	// sql schema version validation
+	if err := sql.VerifyCompatibleVersion(s.so.config.Persistence); err != nil {
+		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
+	}
 
 	if err := s.so.config.Global.PProf.NewInitializer(s.logger).Start(); err != nil {
 		return fmt.Errorf("unable to start PProf: %w", err)
