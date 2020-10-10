@@ -1,12 +1,12 @@
-version: '3'
+version: "3"
 services:
-  postgres:
-    image: postgres:12
+  postgresql:
+    image: postgres:9.6
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
-    ports:
-      - "5432:5432"
   temporal:
     image: temporalio/auto-setup:${SERVER_TAG:-1.0.0}
     ports:
@@ -21,7 +21,7 @@ services:
       - "POSTGRES_SEEDS=postgres"
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"
     depends_on:
-      - postgres
+      - postgresql
   temporal-admin-tools:
     image: temporalio/admin-tools:${SERVER_TAG:-1.0.0}
     stdin_open: true

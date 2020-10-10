@@ -27,6 +27,7 @@ package clitest
 import (
 	"log"
 	"os"
+	"path/filepath"
 
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/schema/mysql"
@@ -75,17 +76,18 @@ func (s *UpdateSchemaTestSuite) TestUpdateSchema() {
 // TestDryrun test
 func (s *UpdateSchemaTestSuite) TestDryrun() {
 	conn, err := newTestConn(s.DBName, s.pluginName)
-	s.Nil(err)
+	s.NoError(err)
 	defer conn.Close()
-	dir := "../../../../../schema/mysql/v57/temporal/versioned"
+	dir, err := filepath.Abs("../../../schema/mysql/v57/temporal/versioned")
+	s.NoError(err)
 	s.RunDryrunTest(sql.BuildCLIOptions(), conn, "--db", dir, mysql.Version)
 }
 
 // TestVisibilityDryrun test
 func (s *UpdateSchemaTestSuite) TestVisibilityDryrun() {
 	conn, err := newTestConn(s.DBName, s.pluginName)
-	s.Nil(err)
 	defer conn.Close()
-	dir := "../../../../../schema/mysql/v57/visibility/versioned"
+	dir, err := filepath.Abs("../../../schema/mysql/v57/visibility/versioned")
+	s.NoError(err)
 	s.RunDryrunTest(sql.BuildCLIOptions(), conn, "--db", dir, mysql.VisibilityVersion)
 }
