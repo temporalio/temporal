@@ -777,6 +777,8 @@ const (
 	FrontendResetWorkflowExecutionScope
 	// FrontendGetSearchAttributesScope is the metric scope for frontend.GetSearchAttributes
 	FrontendGetSearchAttributesScope
+	// VersionCheckScope is scope used by version checker
+	VersionCheckScope
 
 	NumFrontendScopes
 )
@@ -983,8 +985,6 @@ const (
 	ReplicationTaskCleanupScope
 	// ReplicationDLQStatsScope is scope used by all metrics emitted related to replication DLQ
 	ReplicationDLQStatsScope
-	// VersionCheckScope is scope used by version checker
-	VersionCheckScope
 
 	NumHistoryScopes
 )
