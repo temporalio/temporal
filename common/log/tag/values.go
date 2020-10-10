@@ -126,6 +126,7 @@ var (
 	ComponentWorker                   = component("worker")
 	ComponentServiceResolver          = component("service-resolver")
 	ComponentMetadataInitializer      = component("metadata-initializer")
+	VersionChecker                    = component("version-checker")
 )
 
 // Pre-defined values for TagSysLifecycle
