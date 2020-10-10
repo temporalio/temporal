@@ -22,75 +22,73 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package mysql
+package persistencetests
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-
-	pt "go.temporal.io/server/common/persistence/persistence-tests"
 )
 
-func TestSQLHistoryV2PersistenceSuite(t *testing.T) {
-	s := new(pt.HistoryV2PersistenceSuite)
-	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
+func TestMySQLHistoryV2PersistenceSuite(t *testing.T) {
+	s := new(HistoryV2PersistenceSuite)
+	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
-func TestSQLMatchingPersistenceSuite(t *testing.T) {
-	s := new(pt.MatchingPersistenceSuite)
-	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
+func TestMySQLMatchingPersistenceSuite(t *testing.T) {
+	s := new(MatchingPersistenceSuite)
+	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
-func TestSQLMetadataPersistenceSuiteV2(t *testing.T) {
-	s := new(pt.MetadataPersistenceSuiteV2)
-	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
+func TestMySQLMetadataPersistenceSuiteV2(t *testing.T) {
+	s := new(MetadataPersistenceSuiteV2)
+	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
-func TestSQLShardPersistenceSuite(t *testing.T) {
-	s := new(pt.ShardPersistenceSuite)
-	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
+func TestMySQLShardPersistenceSuite(t *testing.T) {
+	s := new(ShardPersistenceSuite)
+	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
-func TestSQLExecutionManagerSuite(t *testing.T) {
-	s := new(pt.ExecutionManagerSuite)
-	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
+func TestMySQLExecutionManagerSuite(t *testing.T) {
+	s := new(ExecutionManagerSuite)
+	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
-func TestSQLExecutionManagerWithEventsV2(t *testing.T) {
-	s := new(pt.ExecutionManagerSuiteForEventsV2)
-	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
+func TestMySQLExecutionManagerWithEventsV2(t *testing.T) {
+	s := new(ExecutionManagerSuiteForEventsV2)
+	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
-func TestSQLVisibilityPersistenceSuite(t *testing.T) {
-	s := new(pt.VisibilityPersistenceSuite)
-	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
+func TestMySQLVisibilityPersistenceSuite(t *testing.T) {
+	s := new(VisibilityPersistenceSuite)
+	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
-func TestSQLQueuePersistence(t *testing.T) {
-	s := new(pt.QueuePersistenceSuite)
-	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
+func TestMySQLQueuePersistence(t *testing.T) {
+	s := new(QueuePersistenceSuite)
+	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
 
-func TestClusterMetadataPersistence(t *testing.T) {
-	s := new(pt.ClusterMetadataManagerSuite)
-	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
+func TestMySQLClusterMetadataPersistence(t *testing.T) {
+	s := new(ClusterMetadataManagerSuite)
+	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }

@@ -19,17 +19,17 @@ services:
         aliases:
           - mysql
 
-  postgres:
-    image: postgres:12
+  postgresql:
+    image: postgres:9.6
     environment:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
-    ports:
-      - "5432:5432"
+    volumes:
+      - ./postgresql-init:/docker-entrypoint-initdb.d
     networks:
       services-network:
         aliases:
-          - postgres
+          - postgresql
 
   zookeeper:
     image: wurstmeister/zookeeper:3.4.6
@@ -67,7 +67,7 @@ services:
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "MYSQL_SEEDS=mysql"
-      - "POSTGRES_SEEDS=postgres"
+      - "POSTGRES_SEEDS=postgresql"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
@@ -83,7 +83,7 @@ services:
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "MYSQL_SEEDS=mysql"
-      - "POSTGRES_SEEDS=postgres"
+      - "POSTGRES_SEEDS=postgresql"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
@@ -91,7 +91,7 @@ services:
     depends_on:
       - cassandra
       - mysql
-      - postgres
+      - postgresql
     volumes:
       - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
@@ -108,6 +108,8 @@ services:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
       - "KAFKA_SEEDS=kafka"
+      - "PERSISTENCE_TYPE=nosql"
+      - "PERSISTENCE_DRIVER=cassandra"
       - "TEST_TAG=esintegration"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
@@ -134,6 +136,7 @@ services:
       - "ES_SEEDS=elasticsearch"
       - "KAFKA_SEEDS=kafka"
       - "PERSISTENCE_TYPE=sql"
+      - "PERSISTENCE_DRIVER=mysql"
       - "TEST_TAG=esintegration"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
@@ -141,6 +144,33 @@ services:
       - BUILDKITE_BUILD_NUMBER
     depends_on:
       - mysql
+      - elasticsearch
+      - kafka
+    volumes:
+      - ../../:/temporal
+      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+    networks:
+      services-network:
+        aliases:
+          - integration-test
+
+  integration-test-postgresql:
+    build:
+      context: ../../
+      dockerfile: ./docker/buildkite/Dockerfile
+    environment:
+      - "POSTGRES_SEEDS=postgresql"
+      - "ES_SEEDS=elasticsearch"
+      - "KAFKA_SEEDS=kafka"
+      - "PERSISTENCE_TYPE=sql"
+      - "PERSISTENCE_DRIVER=postgres"
+      - "TEST_TAG=esintegration"
+      - BUILDKITE_AGENT_ACCESS_TOKEN
+      - BUILDKITE_JOB_ID
+      - BUILDKITE_BUILD_ID
+      - BUILDKITE_BUILD_NUMBER
+    depends_on:
+      - postgresql
       - elasticsearch
       - kafka
     volumes:
@@ -159,6 +189,8 @@ services:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
       - "KAFKA_SEEDS=kafka"
+      - "PERSISTENCE_TYPE=nosql"
+      - "PERSISTENCE_DRIVER=cassandra"
       - "TEST_TAG=esintegration"
       - "TEST_RUN_COUNT=10"
       - BUILDKITE_AGENT_ACCESS_TOKEN
@@ -186,6 +218,7 @@ services:
       - "ES_SEEDS=elasticsearch"
       - "KAFKA_SEEDS=kafka"
       - "PERSISTENCE_TYPE=sql"
+      - "PERSISTENCE_DRIVER=mysql"
       - "TEST_TAG=esintegration"
       - "TEST_RUN_COUNT=10"
       - BUILDKITE_AGENT_ACCESS_TOKEN
@@ -194,6 +227,34 @@ services:
       - BUILDKITE_BUILD_NUMBER
     depends_on:
       - mysql
+      - elasticsearch
+      - kafka
+    volumes:
+      - ../../:/temporal
+      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+    networks:
+      services-network:
+        aliases:
+          - integration-test-xdc
+
+  integration-test-xdc-postgresql:
+    build:
+      context: ../../
+      dockerfile: ./docker/buildkite/Dockerfile
+    environment:
+      - "POSTGRES_SEEDS=postgresql"
+      - "ES_SEEDS=elasticsearch"
+      - "KAFKA_SEEDS=kafka"
+      - "PERSISTENCE_TYPE=sql"
+      - "PERSISTENCE_DRIVER=postgres"
+      - "TEST_TAG=esintegration"
+      - "TEST_RUN_COUNT=10"
+      - BUILDKITE_AGENT_ACCESS_TOKEN
+      - BUILDKITE_JOB_ID
+      - BUILDKITE_BUILD_ID
+      - BUILDKITE_BUILD_NUMBER
+    depends_on:
+      - postgresql
       - elasticsearch
       - kafka
     volumes:

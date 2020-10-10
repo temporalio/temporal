@@ -2,8 +2,6 @@
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -22,23 +20,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package host
+package sqlplugin
 
-import "flag"
+import (
+	"database/sql"
 
-// TestFlags contains the feature flags for integration tests
-var TestFlags struct {
-	FrontendAddr          string
-	FrontendAddrGRPC      string
-	PersistenceType       string
-	PersistenceDriver     string
-	TestClusterConfigFile string
-}
+	"go.temporal.io/server/common/primitives"
+)
 
-func init() {
-	flag.StringVar(&TestFlags.FrontendAddr, "frontendAddress", "", "host:port for temporal frontend service")
-	flag.StringVar(&TestFlags.FrontendAddrGRPC, "frontendAddressGRPC", "", "host:port for temporal frontend gRPC service")
-	flag.StringVar(&TestFlags.PersistenceType, "persistenceType", "nosql", "type of persistence - [nosql or sql]")
-	flag.StringVar(&TestFlags.PersistenceDriver, "persistenceDriver", "cassandra", "driver of nosql / sql- [cassandra, mysql, postgresql]")
-	flag.StringVar(&TestFlags.TestClusterConfigFile, "TestClusterConfigFile", "", "test cluster config file location")
-}
+type (
+	// HistoryTreeRow represents a row in history_tree table
+	HistoryTreeRow struct {
+		ShardID      int32
+		TreeID       primitives.UUID
+		BranchID     primitives.UUID
+		Data         []byte
+		DataEncoding string
+	}
+
+	// HistoryTreeSelectFilter contains the column names within history_tree table that
+	// can be used to filter results through a WHERE clause
+	HistoryTreeSelectFilter struct {
+		ShardID int32
+		TreeID  primitives.UUID
+	}
+
+	// HistoryTreeDeleteFilter contains the column names within history_tree table that
+	// can be used to filter results through a WHERE clause
+	HistoryTreeDeleteFilter struct {
+		ShardID  int32
+		TreeID   primitives.UUID
+		BranchID primitives.UUID
+	}
+
+	// HistoryNode is the SQL persistence interface for history trees
+	HistoryTree interface {
+		InsertIntoHistoryTree(row *HistoryTreeRow) (sql.Result, error)
+		SelectFromHistoryTree(filter HistoryTreeSelectFilter) ([]HistoryTreeRow, error)
+		DeleteFromHistoryTree(filter HistoryTreeDeleteFilter) (sql.Result, error)
+	}
+)

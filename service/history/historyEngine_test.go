@@ -70,7 +70,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
-	cconfig "go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -186,7 +185,7 @@ var testGlobalChildNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 
 func NewDynamicConfigForTest() *Config {
 	dc := dynamicconfig.NewNopCollection()
-	config := NewConfig(dc, 1, cconfig.StoreTypeCassandra, false)
+	config := NewConfig(dc, 1, false)
 	// reduce the duration of long poll to increase test speed
 	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
 	return config
