@@ -22,32 +22,32 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package mysql
+package clitest
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/tools/sql/clitest"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 )
 
-func TestSQLConnTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewSQLConnTestSuite(PluginName))
+func TestMySQLConnTestSuite(t *testing.T) {
+	suite.Run(t, NewSQLConnTestSuite(mysql.PluginName))
 }
 
-func TestHandlerTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewHandlerTestSuite(PluginName))
+func TestMySQLHandlerTestSuite(t *testing.T) {
+	suite.Run(t, NewHandlerTestSuite(mysql.PluginName))
 }
 
-func TestSetupSchemaTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewSetupSchemaTestSuite(PluginName))
+func TestMySQLSetupSchemaTestSuite(t *testing.T) {
+	suite.Run(t, NewSetupSchemaTestSuite(mysql.PluginName))
 }
 
-func TestUpdateSchemaTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewUpdateSchemaTestSuite(PluginName))
+func TestMySQLUpdateSchemaTestSuite(t *testing.T) {
+	suite.Run(t, NewUpdateSchemaTestSuite(mysql.PluginName))
 }
 
-func TestVersionTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewVersionTestSuite(PluginName))
+func TestMySQLVersionTestSuite(t *testing.T) {
+	suite.Run(t, NewVersionTestSuite(mysql.PluginName))
 }

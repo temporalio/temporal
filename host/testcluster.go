@@ -25,6 +25,7 @@
 package host
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 
@@ -48,6 +49,7 @@ import (
 	pes "go.temporal.io/server/common/persistence/elasticsearch"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -124,20 +126,29 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	}
 
 	options.Persistence.StoreType = TestFlags.PersistenceType
-	if TestFlags.PersistenceType == config.StoreTypeSQL {
+	switch TestFlags.PersistenceType {
+	case config.StoreTypeSQL:
 		var ops *persistencetests.TestBaseOptions
-		if TestFlags.SQLPluginName == mysql.PluginName {
-			ops = mysql.GetTestClusterOption()
-		} else {
-			panic("not supported plugin " + TestFlags.SQLPluginName)
+		switch TestFlags.PersistenceDriver {
+		case mysql.PluginName:
+			ops = persistencetests.GetMySQLTestClusterOption()
+		case postgresql.PluginName:
+			ops = persistencetests.GetPostgreSQLTestClusterOption()
+		default:
+			panic(fmt.Sprintf("unknown sql store drier: %v", TestFlags.PersistenceDriver))
 		}
-		options.Persistence.SQLDBPluginName = TestFlags.SQLPluginName
+		options.Persistence.SQLDBPluginName = TestFlags.PersistenceDriver
 		options.Persistence.DBUsername = ops.DBUsername
 		options.Persistence.DBPassword = ops.DBPassword
 		options.Persistence.DBHost = ops.DBHost
 		options.Persistence.DBPort = ops.DBPort
 		options.Persistence.SchemaDir = ops.SchemaDir
+	case config.StoreTypeNoSQL:
+		// noop for now
+	default:
+		panic(fmt.Sprintf("unknown store type: %v", options.Persistence.StoreType))
 	}
+
 	options.Persistence.ClusterMetadata = clusterMetadata
 	testBase := persistencetests.NewTestBase(&options.Persistence)
 	testBase.Setup()

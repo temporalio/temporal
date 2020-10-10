@@ -266,7 +266,7 @@ const (
 )
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, storeType string, isAdvancedVisConfigExist bool) *Config {
+func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVisConfigExist bool) *Config {
 	cfg := &Config{
 		NumberOfShards:                       numberOfShards,
 		RPS:                                  dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
@@ -451,7 +451,6 @@ func NewService(
 ) (resource.Resource, error) {
 	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
 		params.PersistenceConfig.NumHistoryShards,
-		params.PersistenceConfig.DefaultStoreType(),
 		params.PersistenceConfig.IsAdvancedVisibilityConfigExist())
 
 	params.PersistenceConfig.HistoryMaxConns = serviceConfig.HistoryMgrNumConns()

@@ -25,6 +25,7 @@
 package persistencetests
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"strings"
@@ -55,8 +56,11 @@ import (
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/environment"
 )
 
 type (
@@ -140,6 +144,27 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 	if err != nil {
 		panic(err)
 	}
+
+	if options.DBPort == 0 {
+		switch options.SQLDBPluginName {
+		case mysql.PluginName:
+			options.DBPort = environment.GetMySQLPort()
+		case postgresql.PluginName:
+			options.DBPort = environment.GetPostgreSQLPort()
+		default:
+			panic(fmt.Sprintf("unknown sql store drier: %v", options.SQLDBPluginName))
+		}
+	}
+	if options.DBHost == "" {
+		switch options.SQLDBPluginName {
+		case mysql.PluginName:
+			options.DBHost = environment.GetMySQLAddress()
+		case postgresql.PluginName:
+			options.DBHost = environment.GetPostgreSQLAddress()
+		default:
+			panic(fmt.Sprintf("unknown sql store drier: %v", options.SQLDBPluginName))
+		}
+	}
 	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, logger)
 	return newTestBase(options, testCluster, logger)
 }
@@ -149,7 +174,7 @@ func NewTestBase(options *TestBaseOptions) TestBase {
 	switch options.StoreType {
 	case config.StoreTypeSQL:
 		return NewTestBaseWithSQL(options)
-	case config.StoreTypeCassandra:
+	case config.StoreTypeNoSQL:
 		return NewTestBaseWithCassandra(options)
 	default:
 		panic("invalid storeType " + options.StoreType)
