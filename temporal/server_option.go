@@ -10,7 +10,7 @@ type (
 	}
 )
 
-func WithConfig(cfg *config.Config) ServerOption {
+func WithConfig(cfg config.Config) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.config = cfg
 	})

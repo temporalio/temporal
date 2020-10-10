@@ -25,8 +25,8 @@
 package temporal
 
 import (
+	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
-	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/config/ringpop"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/service/frontend"
@@ -62,6 +61,7 @@ import (
 )
 
 type (
+	// Server is temporal server.
 	Server struct {
 		so                *serverOptions
 		services          map[string]common.Daemon
@@ -104,22 +104,22 @@ func (s *Server) Start() error {
 	s.logger = loggerimpl.NewLogger(zapLogger)
 
 	if err := s.so.config.Global.PProf.NewInitializer(s.logger).Start(); err != nil {
-		log.Fatalf("fail to start PProf: %v", err)
+		return fmt.Errorf("unable to start PProf: %w", err)
 	}
 
 	err = ringpop.ValidateRingpopConfig(&s.so.config.Global.Membership)
 	if err != nil {
-		log.Fatalf("Ringpop config validation error - %v", err)
+		return fmt.Errorf("ringpop config validation error: %w", err)
 	}
 
 	tlsFactory, err := encryption.NewTLSConfigProviderFromConfig(s.so.config.Global.TLS)
 	if err != nil {
-		log.Fatalf("error initializing TLS provider: %v", err)
+		return fmt.Errorf("TLS provider initialization error : %w", err)
 	}
 
 	dynamicConfig, err := dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
 	if err != nil {
-		log.Printf("error creating file based dynamic config client, use no-op config client instead. error: %v", err)
+		s.logger.Info("Error creating file based dynamic config client, use no-op config client instead.", tag.Error(err))
 		dynamicConfig = dynamicconfig.NewNopClient()
 	}
 	dc := dynamicconfig.NewCollection(dynamicConfig, s.logger)
@@ -127,7 +127,10 @@ func (s *Server) Start() error {
 	// This call performs a config check against the configured persistence store for immutable cluster metadata.
 	// If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
 	// This is to keep this check hidden from independent downstream daemons and keep this in a single place.
-	immutableClusterMetadataInitialization(s.logger, dc, &s.so.config.Persistence, s.so.config.ClusterMetadata)
+	err = s.immutableClusterMetadataInitialization(dc)
+	if err != nil {
+		return fmt.Errorf("unable to initialize cluster metadata: %w", err)
+	}
 
 	clusterMetadata := cluster.NewMetadata(
 		s.logger,
@@ -178,7 +181,7 @@ func (s *Server) Start() error {
 
 		options, err := tlsFactory.GetFrontendClientConfig()
 		if err != nil {
-			log.Fatalf("unable to load frontend tls configuration: %v", err)
+			return fmt.Errorf("unable to load frontend TLS configuration: %w", err)
 		}
 
 		params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
@@ -192,7 +195,7 @@ func (s *Server) Start() error {
 			},
 		})
 		if err != nil {
-			log.Fatalf("failed to create public client: %v", err)
+			return fmt.Errorf("unable to create public client: %w", err)
 		}
 
 		advancedVisMode := dc.GetStringProperty(
@@ -213,12 +216,12 @@ func (s *Server) Start() error {
 			advancedVisStoreKey := s.so.config.Persistence.AdvancedVisibilityStore
 			advancedVisStore, ok := s.so.config.Persistence.DataStores[advancedVisStoreKey]
 			if !ok {
-				log.Fatalf("not able to find advanced visibility store in config: %v", advancedVisStoreKey)
+				return fmt.Errorf("unable to find advanced visibility store in config for %q key", advancedVisStoreKey)
 			}
 
 			esClient, err := elasticsearch.NewClient(advancedVisStore.ElasticSearch)
 			if err != nil {
-				log.Fatalf("error creating elastic search client: %v", err)
+				return fmt.Errorf("error creating elastic search client: %v", err)
 			}
 			params.ESConfig = advancedVisStore.ElasticSearch
 			params.ESClient = esClient
@@ -226,7 +229,7 @@ func (s *Server) Start() error {
 			// verify index name
 			indexName, ok := advancedVisStore.ElasticSearch.Indices[common.VisibilityAppName]
 			if !ok || len(indexName) == 0 {
-				log.Fatalf("elastic search config missing visibility index")
+				return errors.New("elastic search config missing visibility index")
 			}
 		}
 
@@ -257,7 +260,7 @@ func (s *Server) Start() error {
 			return fmt.Errorf("uknown service %q", svcName)
 		}
 		if err != nil {
-			s.logger.Fatal("Fail to start service", tag.Service(svcName), tag.Error(err))
+			return fmt.Errorf("unable to start service %q: %w", svcName, err)
 		}
 
 		s.services[svcName] = svc
@@ -274,7 +277,7 @@ func (s *Server) Start() error {
 	if s.so.blockingStart {
 		// If s.so.interruptCh is nil this will wait forever.
 		interruptSignal := <-s.so.interruptCh
-		log.Printf("Received %v signal, stopping the server.\n", interruptSignal)
+		s.logger.Info("Received interrupt signal, stopping the server.", tag.Value(interruptSignal))
 		s.Stop()
 	}
 
@@ -299,80 +302,75 @@ func (s *Server) Stop() {
 		}(svc, svcName, s.serviceStoppedChs[svcName])
 	}
 	wg.Wait()
-	s.logger.Info("All services are stopped.")
 }
 
-func immutableClusterMetadataInitialization(
-	logger l.Logger,
-	dc *dynamicconfig.Collection,
-	persistenceConfig *config.Persistence,
-	clusterMetadata *config.ClusterMetadata) {
-
-	logger = logger.WithTags(tag.ComponentMetadataInitializer)
+func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collection) error {
+	logger := s.logger.WithTags(tag.ComponentMetadataInitializer)
 	factory := persistenceClient.NewFactory(
-		persistenceConfig,
+		&s.so.config.Persistence,
 		dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 3000),
 		nil,
-		clusterMetadata.CurrentClusterName,
+		s.so.config.ClusterMetadata.CurrentClusterName,
 		nil,
 		logger,
 	)
 
 	clusterMetadataManager, err := factory.NewClusterMetadataManager()
 	if err != nil {
-		log.Fatalf("Error initializing cluster metadata manager: %v", err)
+		return fmt.Errorf("error initializing cluster metadata manager: %w", err)
 	}
 	defer clusterMetadataManager.Close()
 
 	applied, err := clusterMetadataManager.SaveClusterMetadata(
 		&persistence.SaveClusterMetadataRequest{
 			ClusterMetadata: persistenceblobs.ClusterMetadata{
-				HistoryShardCount: persistenceConfig.NumHistoryShards,
-				ClusterName:       clusterMetadata.CurrentClusterName,
+				HistoryShardCount: s.so.config.Persistence.NumHistoryShards,
+				ClusterName:       s.so.config.ClusterMetadata.CurrentClusterName,
 				ClusterId:         uuid.New(),
 			}})
 	if err != nil {
-		log.Fatalf("Error while saving cluster metadata: %v", err)
+		return fmt.Errorf("error while saving cluster metadata: %w", err)
 	}
 	if applied {
 		logger.Info("Successfully saved cluster metadata.")
 	} else {
 		resp, err := clusterMetadataManager.GetClusterMetadata()
 		if err != nil {
-			log.Fatalf("Error while fetching cluster metadata: %v", err)
+			return fmt.Errorf("error while fetching cluster metadata: %w", err)
 		}
-		if clusterMetadata.CurrentClusterName != resp.ClusterName {
-			logImmutableMismatch(logger,
+		if s.so.config.ClusterMetadata.CurrentClusterName != resp.ClusterName {
+			s.logImmutableMismatch(logger,
 				"ClusterMetadata.CurrentClusterName",
-				clusterMetadata.CurrentClusterName,
+				s.so.config.ClusterMetadata.CurrentClusterName,
 				resp.ClusterName)
 
-			clusterMetadata.CurrentClusterName = resp.ClusterName
+			s.so.config.ClusterMetadata.CurrentClusterName = resp.ClusterName
 		}
 
 		var persistedShardCount = resp.HistoryShardCount
-		if persistenceConfig.NumHistoryShards != persistedShardCount {
-			logImmutableMismatch(logger,
+		if s.so.config.Persistence.NumHistoryShards != persistedShardCount {
+			s.logImmutableMismatch(logger,
 				"Persistence.NumHistoryShards",
-				persistenceConfig.NumHistoryShards,
+				s.so.config.Persistence.NumHistoryShards,
 				persistedShardCount)
 
-			persistenceConfig.NumHistoryShards = persistedShardCount
+			s.so.config.Persistence.NumHistoryShards = persistedShardCount
 		}
 	}
 
 	metadataManager, err := factory.NewMetadataManager()
 	if err != nil {
-		log.Fatalf("Error initializing metadata manager: %v", err)
+		return fmt.Errorf("error initializing metadata manager: %w", err)
 	}
 	defer metadataManager.Close()
-	if err := metadataManager.InitializeSystemNamespaces(clusterMetadata.CurrentClusterName); err != nil {
-		log.Fatalf("failed to register system namespace: %v", err)
+	if err = metadataManager.InitializeSystemNamespaces(s.so.config.ClusterMetadata.CurrentClusterName); err != nil {
+		return fmt.Errorf("unable to register system namespace: %w", err)
 	}
+	return nil
 }
 
-func logImmutableMismatch(l l.Logger, key string, ignored interface{}, value interface{}) {
-	l.Error(
+func (s *Server) logImmutableMismatch(logger l.Logger, key string, ignored interface{}, value interface{}) {
+	logger.Error(
 		"Supplied configuration key/value mismatches persisted ImmutableClusterMetadata."+
 			"Continuing with the persisted value as this value cannot be changed once initialized.",
 		tag.Key(key),

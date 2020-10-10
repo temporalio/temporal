@@ -10,7 +10,7 @@ import (
 
 type (
 	serverOptions struct {
-		config    *config.Config
+		config    config.Config
 		configDir string
 		env       string
 		zone      string
@@ -62,7 +62,7 @@ func (so *serverOptions) validate() error {
 }
 
 func (so *serverOptions) loadConfig() {
-	err := config.Load(so.env, so.configDir, so.zone, so.config)
+	err := config.Load(so.env, so.configDir, so.zone, &so.config)
 	if err != nil {
 		log.Fatal("Config file corrupted.", err)
 	}
