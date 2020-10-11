@@ -242,7 +242,7 @@ errcheck:
 
 api-linter:
 	@printf $(COLOR) "Run api-linter..."
-	@api-linter --set-exit-status --output-format=summary $(PROTO_IMPORTS) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES)
+	@api-linter --set-exit-status $(PROTO_IMPORTS) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES)
 
 buf-lint:
 	@printf $(COLOR) "Run buf linter..."

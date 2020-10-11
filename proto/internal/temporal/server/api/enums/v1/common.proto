@@ -34,3 +34,12 @@ enum ChecksumFlavor {
     CHECKSUM_FLAVOR_UNSPECIFIED = 0;
     CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY = 1;
 }
+
+// Severity defines how important given alert is. Levels should match those defined in the
+// https://github.com/temporalio/version-info-model/blob/master/check/response.go#L4
+enum Severity {
+    SEVERITY_UNSPECIFIED = 0;
+    SEVERITY_HIGH = 1;
+    SEVERITY_MEDIUM = 2;
+    SEVERITY_LOW = 3;
+}
