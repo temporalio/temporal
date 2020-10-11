@@ -67,7 +67,7 @@ const (
 //       env.yaml   -- environment is one of the input params ex-development
 //         env_az.yaml -- zone is another input param
 //
-func Load(env string, configDir string, zone string, config *Config) error {
+func Load(env string, configDir string, zone string, config interface{}) error {
 	if len(env) == 0 {
 		env = envDevelopment
 	}
@@ -75,6 +75,7 @@ func Load(env string, configDir string, zone string, config *Config) error {
 		configDir = defaultConfigDir
 	}
 
+	// TODO: remove log dependency.
 	log.Printf("Loading config; env=%v,zone=%v,configDir=%v\n", env, zone, configDir)
 
 	files, err := getConfigFiles(env, configDir, zone)
@@ -82,6 +83,7 @@ func Load(env string, configDir string, zone string, config *Config) error {
 		return err
 	}
 
+	// TODO: remove log dependency.
 	log.Printf("Loading config files=%v\n", files)
 
 	for _, f := range files {
@@ -95,10 +97,6 @@ func Load(env string, configDir string, zone string, config *Config) error {
 		if err != nil {
 			return err
 		}
-	}
-
-	if config.Log.Level == "debug" {
-		log.Printf("config=\n%v\n", config.String())
 	}
 
 	return validator.Validate(config)
