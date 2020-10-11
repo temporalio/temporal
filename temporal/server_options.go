@@ -27,12 +27,14 @@ package temporal
 import (
 	"fmt"
 
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/service/config"
 )
 
 type (
 	serverOptions struct {
 		config    *config.Config
+		params    *resource.BootstrapParams
 		configDir string
 		env       string
 		zone      string
@@ -47,6 +49,7 @@ type (
 func newServerOptions(opts []ServerOption) *serverOptions {
 	so := &serverOptions{
 		// Set defaults here.
+		params: &resource.BootstrapParams{},
 	}
 	for _, opt := range opts {
 		opt.apply(so)

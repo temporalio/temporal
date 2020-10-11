@@ -316,7 +316,12 @@ func (s *Server) getServiceParams(
 
 	params.ArchiverProvider = provider.NewArchiverProvider(s.so.config.Archival.History.Provider, s.so.config.Archival.Visibility.Provider)
 	params.PersistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
-	params.Authorizer = authorization.NewNopAuthorizer()
+
+	if s.so.params.Authorizer != nil {
+		params.Authorizer = s.so.params.Authorizer
+	} else {
+		params.Authorizer = authorization.NewNopAuthorizer()
+	}
 
 	return &params, nil
 }
