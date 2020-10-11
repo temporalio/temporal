@@ -293,7 +293,7 @@ func New(
 		numShards:       numShards,
 		serviceName:     params.Name,
 		hostName:        hostName,
-		metricsScope:    params.MetricScope,
+		metricsScope:    params.MetricsScope,
 		clusterMetadata: params.ClusterMetadata,
 
 		// other common resources
@@ -343,7 +343,7 @@ func New(
 
 		// internal vars
 		runtimeMetricsReporter: metrics.NewRuntimeMetricsReporter(
-			params.MetricScope,
+			params.MetricsScope,
 			time.Minute,
 			logger,
 			params.InstanceID,

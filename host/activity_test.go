@@ -318,7 +318,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 			s.Equal(int32(i+2), pendingActivity.GetAttempt())
 			s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pendingActivity.GetState())
 			if i == 0 {
-				s.Equal(failure.NewTimeoutFailure("ActivityTask timeout", enumspb.TIMEOUT_TYPE_HEARTBEAT), pendingActivity.GetLastFailure())
+				s.Equal(failure.NewTimeoutFailure("activity timeout", enumspb.TIMEOUT_TYPE_HEARTBEAT), pendingActivity.GetLastFailure())
 			} else { // i == 1
 				expectedErrString := "retryable-error"
 				s.NotNil(pendingActivity.GetLastFailure().GetApplicationFailureInfo())
