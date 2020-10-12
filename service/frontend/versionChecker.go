@@ -5,12 +5,12 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/version/v1"
 
 	"go.temporal.io/version/check"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -141,8 +141,8 @@ func (vc *VersionChecker) saveVersionInfo(resp *check.VersionCheckResponse) erro
 	return nil
 }
 
-func toVersionInfo(resp *check.VersionCheckResponse) *persistenceblobs.VersionInfo {
-	return &persistenceblobs.VersionInfo{
+func toVersionInfo(resp *check.VersionCheckResponse) *version.VersionInfo {
+	return &version.VersionInfo{
 		Current:        convertReleaseInfo(resp.Current),
 		Recommended:    convertReleaseInfo(resp.Recommended),
 		Instructions:   resp.Instructions,
@@ -151,19 +151,19 @@ func toVersionInfo(resp *check.VersionCheckResponse) *persistenceblobs.VersionIn
 	}
 }
 
-func convertAlerts(alerts []check.Alert) []*persistenceblobs.Alert {
-	var result []*persistenceblobs.Alert
+func convertAlerts(alerts []check.Alert) []*version.Alert {
+	var result []*version.Alert
 	for _, alert := range alerts {
-		result = append(result, &persistenceblobs.Alert{
+		result = append(result, &version.Alert{
 			Message:  alert.Message,
-			Severity: enumsspb.Severity(alert.Severity),
+			Severity: enums.Severity(alert.Severity),
 		})
 	}
 	return result
 }
 
-func convertReleaseInfo(releaseInfo check.ReleaseInfo) *persistenceblobs.ReleaseInfo {
-	return &persistenceblobs.ReleaseInfo{
+func convertReleaseInfo(releaseInfo check.ReleaseInfo) *version.ReleaseInfo {
+	return &version.ReleaseInfo{
 		Version:     releaseInfo.Version,
 		ReleaseTime: timestamp.UnixOrZeroTimePtr(releaseInfo.ReleaseTime),
 		Notes:       releaseInfo.Notes,
