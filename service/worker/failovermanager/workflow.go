@@ -22,6 +22,7 @@ package failovermanager
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -71,6 +72,8 @@ const (
 	WorkflowCompleted = "complete"
 	// WorkflowAborted state
 	WorkflowAborted = "aborted"
+
+	unknownOperator = "unknown"
 )
 
 type (
@@ -123,6 +126,7 @@ type (
 		SourceCluster  string
 		SuccessDomains []string // SuccessDomains are guaranteed succeed processed
 		FailedDomains  []string // FailedDomains contains false positive
+		Operator       string
 	}
 )
 
@@ -144,6 +148,7 @@ func FailoverWorkflow(ctx workflow.Context, params *FailoverParams) (*FailoverRe
 	var successDomains []string
 	var totalNumOfDomains int
 	wfState := WorkflowRunning
+	operator := getOperator(ctx)
 	err = workflow.SetQueryHandler(ctx, QueryType, func(input []byte) (*QueryResult, error) {
 		return &QueryResult{
 			TotalDomains:   totalNumOfDomains,
@@ -154,6 +159,7 @@ func FailoverWorkflow(ctx workflow.Context, params *FailoverParams) (*FailoverRe
 			SourceCluster:  params.SourceCluster,
 			SuccessDomains: successDomains,
 			FailedDomains:  failedDomains,
+			Operator:       operator,
 		}, nil
 	})
 	if err != nil {
@@ -215,6 +221,23 @@ func FailoverWorkflow(ctx workflow.Context, params *FailoverParams) (*FailoverRe
 		SuccessDomains: successDomains,
 		FailedDomains:  failedDomains,
 	}, nil
+}
+
+func getOperator(ctx workflow.Context) string {
+	memo := workflow.GetInfo(ctx).Memo
+	if memo == nil || len(memo.Fields) == 0 {
+		return unknownOperator
+	}
+	opBytes, ok := memo.Fields[common.MemoKeyForOperator]
+	if !ok {
+		return unknownOperator
+	}
+	var operator string
+	err := json.Unmarshal(opBytes, &operator)
+	if err != nil {
+		return unknownOperator
+	}
+	return operator
 }
 
 func getGetDomainsActivityOptions() workflow.ActivityOptions {

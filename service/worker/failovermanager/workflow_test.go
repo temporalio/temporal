@@ -128,7 +128,7 @@ func (s *failoverWorkflowTestSuite) TestWorkflow_Success() {
 	s.Equal("s", res.SourceCluster)
 	s.Equal(domains, res.SuccessDomains)
 	s.Equal(0, len(res.FailedDomains))
-
+	s.Equal(unknownOperator, res.Operator)
 }
 
 func (s *failoverWorkflowTestSuite) TestWorkflow_Success_Batches() {
@@ -431,4 +431,31 @@ func (s *failoverWorkflowTestSuite) TestFailoverActivity_Error() {
 	s.NoError(actResult.Get(&result))
 	s.Equal([]string{"d1"}, result.SuccessDomains)
 	s.Equal([]string{"d2"}, result.FailedDomains)
+}
+
+func (s *failoverWorkflowTestSuite) TestGetOperator() {
+	env := s.NewTestWorkflowEnvironment()
+
+	operator := "testOperator"
+	env.SetMemoOnStart(map[string]interface{}{
+		common.MemoKeyForOperator: operator,
+	})
+
+	env.OnActivity(getDomainsActivityName, mock.Anything, mock.Anything).Return(nil, nil)
+	env.OnActivity(failoverActivityName, mock.Anything, mock.Anything).Return(nil, nil)
+	params := &FailoverParams{
+		TargetCluster: "t",
+		SourceCluster: "s",
+	}
+
+	env.ExecuteWorkflow(WorkflowTypeName, params)
+	var result FailoverResult
+	s.NoError(env.GetWorkflowResult(&result))
+
+	queryResult, err := env.QueryWorkflow(QueryType)
+	s.NoError(err)
+	var res QueryResult
+	s.NoError(queryResult.Get(&res))
+
+	s.Equal(operator, res.Operator)
 }

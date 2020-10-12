@@ -173,3 +173,6 @@ const (
 
 // StickyTaskConditionFailedErrorMsg error msg for sticky task ConditionFailedError
 const StickyTaskConditionFailedErrorMsg = "StickyTaskConditionFailedError"
+
+// MemoKeyForOperator is the memo key for operator
+const MemoKeyForOperator = "operator"
