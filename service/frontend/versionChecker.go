@@ -5,10 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/api/enums/v1"
+	enumsbp "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/version/v1"
-
+	versionpb "go.temporal.io/api/version/v1"
 	"go.temporal.io/version/check"
 
 	"go.temporal.io/server/common/headers"
@@ -141,8 +140,8 @@ func (vc *VersionChecker) saveVersionInfo(resp *check.VersionCheckResponse) erro
 	return nil
 }
 
-func toVersionInfo(resp *check.VersionCheckResponse) *version.VersionInfo {
-	return &version.VersionInfo{
+func toVersionInfo(resp *check.VersionCheckResponse) *versionpb.VersionInfo {
+	return &versionpb.VersionInfo{
 		Current:        convertReleaseInfo(resp.Current),
 		Recommended:    convertReleaseInfo(resp.Recommended),
 		Instructions:   resp.Instructions,
@@ -151,19 +150,19 @@ func toVersionInfo(resp *check.VersionCheckResponse) *version.VersionInfo {
 	}
 }
 
-func convertAlerts(alerts []check.Alert) []*version.Alert {
-	var result []*version.Alert
+func convertAlerts(alerts []check.Alert) []*versionpb.Alert {
+	var result []*versionpb.Alert
 	for _, alert := range alerts {
-		result = append(result, &version.Alert{
+		result = append(result, &versionpb.Alert{
 			Message:  alert.Message,
-			Severity: enums.Severity(alert.Severity),
+			Severity: enumsbp.Severity(alert.Severity),
 		})
 	}
 	return result
 }
 
-func convertReleaseInfo(releaseInfo check.ReleaseInfo) *version.ReleaseInfo {
-	return &version.ReleaseInfo{
+func convertReleaseInfo(releaseInfo check.ReleaseInfo) *versionpb.ReleaseInfo {
+	return &versionpb.ReleaseInfo{
 		Version:     releaseInfo.Version,
 		ReleaseTime: timestamp.UnixOrZeroTimePtr(releaseInfo.ReleaseTime),
 		Notes:       releaseInfo.Notes,
