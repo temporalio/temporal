@@ -64,6 +64,6 @@ func InterruptOn(interruptCh <-chan interface{}) ServerOption {
 // Sets low level authorizer to allow/deny all API calls
 func WithAuthorizer(authorizer authorization.Authorizer) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
-		s.params.Authorizer = authorizer
+		s.authorizer = authorizer
 	})
 }
