@@ -225,6 +225,7 @@ func (s *server) startService() common.Daemon {
 			log.Fatalf("not able to find advanced visibility store in config: %v", advancedVisStoreKey)
 		}
 
+		advancedVisStore.ElasticSearch.CompleteUserInfo()
 		params.ESConfig = advancedVisStore.ElasticSearch
 		esClient, err := elasticsearch.NewClient(params.ESConfig)
 		if err != nil {
