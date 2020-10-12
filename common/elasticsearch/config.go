@@ -33,12 +33,23 @@ import (
 // Config for connecting to ElasticSearch
 type (
 	Config struct {
-		URL     url.URL           `yaml:url`     //nolint:govet
-		Indices map[string]string `yaml:indices` //nolint:govet
+		URL      url.URL           `yaml:"url"` //nolint:govet
+		Username *string           `yaml:"username"`
+		Password *string           `yaml:"password"`
+		Indices  map[string]string `yaml:"indices"` //nolint:govet
 	}
 )
 
 // GetVisibilityIndex return visibility index name
 func (cfg *Config) GetVisibilityIndex() string {
 	return cfg.Indices[common.VisibilityAppName]
+}
+
+// CompleteUserInfo complete url.URL with username and password for ElasticSearch
+func (cfg *Config) CompleteUserInfo() {
+	if cfg.Username != nil && cfg.Password != nil {
+		cfg.URL.User = url.UserPassword(*cfg.Username, *cfg.Password)
+	} else if cfg.Username != nil {
+		cfg.URL.User = url.User(*cfg.Username)
+	}
 }
