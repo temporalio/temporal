@@ -113,8 +113,8 @@ func (s *Server) Start() error {
 	}
 
 	var tlsFactory encryption.TLSConfigProvider
-	if s.so.params.TLSConfigProvider != nil {
-		tlsFactory = s.so.params.TLSConfigProvider
+	if s.so.tlsConfigProvider != nil {
+		tlsFactory = s.so.tlsConfigProvider
 	} else {
 		tlsFactory, err = encryption.NewTLSConfigProviderFromConfig(s.so.config.Global.TLS)
 		if err != nil {

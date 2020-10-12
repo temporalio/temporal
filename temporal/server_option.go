@@ -72,6 +72,6 @@ func WithAuthorizer(authorizer authorization.Authorizer) ServerOption {
 // Overrides default provider of TLS configuration
 func WithTLSConfigFactory(tlsConfigProvider encryption.TLSConfigProvider) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
-		s.params.TLSConfigProvider = tlsConfigProvider
+		s.tlsConfigProvider = tlsConfigProvider
 	})
 }

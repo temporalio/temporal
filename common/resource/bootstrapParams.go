@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -70,7 +69,6 @@ type (
 		ArchivalMetadata             archiver.ArchivalMetadata
 		ArchiverProvider             provider.ArchiverProvider
 		Authorizer                   authorization.Authorizer
-		TLSConfigProvider            encryption.TLSConfigProvider
 	}
 
 	// MembershipMonitorFactory provides a bootstrapped membership monitor
