@@ -33,8 +33,6 @@ services:
     environment:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
-    volumes:
-      - ./postgresql-init:/docker-entrypoint-initdb.d
     networks:
       - temporal-dependencies-network
   zookeeper:
