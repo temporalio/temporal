@@ -23,6 +23,7 @@
 package worker
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -194,7 +195,7 @@ func (s *Service) Start() {
 
 	s.Resource.Start()
 
-	s.ensureSystemDomainExists()
+	s.ensureDomainExists(common.SystemLocalDomainName)
 	s.startScanner()
 	if s.config.IndexerCfg != nil {
 		s.startIndexer()
@@ -207,6 +208,7 @@ func (s *Service) Start() {
 		s.startArchiver()
 	}
 	if s.config.EnableBatcher() {
+		s.ensureDomainExists(common.BatcherLocalDomainName)
 		s.startBatcher()
 	}
 	if s.config.EnableParentClosePolicyWorker() {
@@ -339,26 +341,26 @@ func (s *Service) startFailoverManager() {
 	}
 }
 
-func (s *Service) ensureSystemDomainExists() {
-	_, err := s.GetMetadataManager().GetDomain(&persistence.GetDomainRequest{Name: common.SystemLocalDomainName})
+func (s *Service) ensureDomainExists(domain string) {
+	_, err := s.GetMetadataManager().GetDomain(&persistence.GetDomainRequest{Name: domain})
 	switch err.(type) {
 	case nil:
 		// noop
 	case *shared.EntityNotExistsError:
-		s.GetLogger().Info("cadence-system domain does not exist, attempting to register domain")
-		s.registerSystemDomain()
+		s.GetLogger().Info(fmt.Sprintf("domain %s does not exist, attempting to register domain", domain))
+		s.registerSystemDomain(domain)
 	default:
-		s.GetLogger().Fatal("failed to verify if cadence system domain exists", tag.Error(err))
+		s.GetLogger().Fatal("failed to verify if system domain exists", tag.Error(err))
 	}
 }
 
-func (s *Service) registerSystemDomain() {
+func (s *Service) registerSystemDomain(domain string) {
 
 	currentClusterName := s.GetClusterMetadata().GetCurrentClusterName()
 	_, err := s.GetMetadataManager().CreateDomain(&persistence.CreateDomainRequest{
 		Info: &persistence.DomainInfo{
-			ID:          common.SystemDomainID,
-			Name:        common.SystemLocalDomainName,
+			ID:          getDomainID(domain),
+			Name:        domain,
 			Description: "Cadence internal system domain",
 		},
 		Config: &persistence.DomainConfig{
@@ -378,4 +380,15 @@ func (s *Service) registerSystemDomain() {
 		}
 		s.GetLogger().Fatal("failed to register system domain", tag.Error(err))
 	}
+}
+
+func getDomainID(domain string) string {
+	var domainID string
+	switch domain {
+	case common.SystemLocalDomainName:
+		domainID = common.SystemDomainID
+	case common.BatcherLocalDomainName:
+		domainID = common.BatcherDomainID
+	}
+	return domainID
 }

@@ -95,6 +95,6 @@ func (s *Batcher) Start() error {
 		BackgroundActivityContext: ctx,
 		Tracer:                    opentracing.GlobalTracer(),
 	}
-	batchWorker := worker.New(s.svcClient, common.SystemLocalDomainName, BatcherTaskListName, workerOpts)
+	batchWorker := worker.New(s.svcClient, common.BatcherLocalDomainName, BatcherTaskListName, workerOpts)
 	return batchWorker.Start()
 }
