@@ -118,14 +118,13 @@ func (s *historyExecutionSignalRequestSuite) TestReplaceSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.SignalsRequestedSetsFilter{
+	selectFilter := sqlplugin.SignalsRequestedSetsSelectFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		SignalID:    convert.StringPtr(signalID),
 	}
-	rows, err := s.store.SelectFromSignalsRequestedSets(filter)
+	rows, err := s.store.SelectFromSignalsRequestedSets(selectFilter)
 	s.NoError(err)
 	rowMap := map[string]sqlplugin.SignalsRequestedSetsRow{}
 	for _, signalRequest := range rows {
@@ -155,14 +154,13 @@ func (s *historyExecutionSignalRequestSuite) TestReplaceSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(numSignalRequests, int(rowsAffected))
 
-	filter := &sqlplugin.SignalsRequestedSetsFilter{
+	selectFilter := sqlplugin.SignalsRequestedSetsSelectFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		SignalID:    nil,
 	}
-	rows, err := s.store.SelectFromSignalsRequestedSets(filter)
+	rows, err := s.store.SelectFromSignalsRequestedSets(selectFilter)
 	s.NoError(err)
 	signalRequestMap := map[string]sqlplugin.SignalsRequestedSetsRow{}
 	for _, signalRequest := range signalRequests {
@@ -182,20 +180,26 @@ func (s *historyExecutionSignalRequestSuite) TestDeleteSelect_Single() {
 	runID := primitives.NewUUID()
 	signalID := shuffle.String(testHistoryExecutionSignalID)
 
-	filter := &sqlplugin.SignalsRequestedSetsFilter{
+	deleteFilter := sqlplugin.SignalsRequestedSetsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		SignalID:    convert.StringPtr(signalID),
 	}
-	result, err := s.store.DeleteFromSignalsRequestedSets(filter)
+	result, err := s.store.DeleteFromSignalsRequestedSets(deleteFilter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.SelectFromSignalsRequestedSets(filter)
+	selectFilter := sqlplugin.SignalsRequestedSetsSelectFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	rows, err := s.store.SelectFromSignalsRequestedSets(selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.SignalsRequestedSetsRow(nil), rows)
 }
@@ -206,20 +210,26 @@ func (s *historyExecutionSignalRequestSuite) TestDeleteSelect_Multiple() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 
-	filter := &sqlplugin.SignalsRequestedSetsFilter{
+	deleteFilter := sqlplugin.SignalsRequestedSetsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		SignalID:    nil,
 	}
-	result, err := s.store.DeleteFromSignalsRequestedSets(filter)
+	result, err := s.store.DeleteFromSignalsRequestedSets(deleteFilter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.SelectFromSignalsRequestedSets(filter)
+	selectFilter := sqlplugin.SignalsRequestedSetsSelectFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	rows, err := s.store.SelectFromSignalsRequestedSets(selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.SignalsRequestedSetsRow(nil), rows)
 }
@@ -238,20 +248,26 @@ func (s *historyExecutionSignalRequestSuite) TestReplaceDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.SignalsRequestedSetsFilter{
+	deleteFilter := sqlplugin.SignalsRequestedSetsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		SignalID:    convert.StringPtr(signalID),
 	}
-	result, err = s.store.DeleteFromSignalsRequestedSets(filter)
+	result, err = s.store.DeleteFromSignalsRequestedSets(deleteFilter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	rows, err := s.store.SelectFromSignalsRequestedSets(filter)
+	selectFilter := sqlplugin.SignalsRequestedSetsSelectFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	rows, err := s.store.SelectFromSignalsRequestedSets(selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.SignalsRequestedSetsRow(nil), rows)
 }
@@ -275,20 +291,26 @@ func (s *historyExecutionSignalRequestSuite) TestReplaceDeleteSelect_Multiple() 
 	s.NoError(err)
 	s.Equal(numSignalRequests, int(rowsAffected))
 
-	filter := &sqlplugin.SignalsRequestedSetsFilter{
+	deleteFilter := sqlplugin.SignalsRequestedSetsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		SignalID:    nil,
 	}
-	result, err = s.store.DeleteFromSignalsRequestedSets(filter)
+	result, err = s.store.DeleteFromSignalsRequestedSets(deleteFilter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(numSignalRequests, int(rowsAffected))
 
-	rows, err := s.store.SelectFromSignalsRequestedSets(filter)
+	selectFilter := sqlplugin.SignalsRequestedSetsSelectFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	rows, err := s.store.SelectFromSignalsRequestedSets(selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.SignalsRequestedSetsRow(nil), rows)
 }

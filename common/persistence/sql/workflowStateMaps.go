@@ -72,7 +72,7 @@ func updateActivityInfos(
 
 	if len(deleteInfos) > 0 {
 		for _, v := range deleteInfos {
-			result, err := tx.DeleteFromActivityInfoMaps(&sqlplugin.ActivityInfoMapsFilter{
+			result, err := tx.DeleteFromActivityInfoMaps(sqlplugin.ActivityInfoMapsDeleteFilter{
 				ShardID:     shardID,
 				NamespaceID: namespaceID,
 				WorkflowID:  workflowID,
@@ -103,7 +103,7 @@ func getActivityInfoMap(
 	runID primitives.UUID,
 ) (map[int64]*persistenceblobs.ActivityInfo, error) {
 
-	rows, err := db.SelectFromActivityInfoMaps(&sqlplugin.ActivityInfoMapsFilter{
+	rows, err := db.SelectFromActivityInfoMaps(sqlplugin.ActivityInfoMapsSelectFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -133,7 +133,7 @@ func deleteActivityInfoMap(
 	runID primitives.UUID,
 ) error {
 
-	if _, err := tx.DeleteFromActivityInfoMaps(&sqlplugin.ActivityInfoMapsFilter{
+	if _, err := tx.DeleteFromActivityInfoMaps(sqlplugin.ActivityInfoMapsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -177,7 +177,7 @@ func updateTimerInfos(
 	}
 	if len(deleteInfos) > 0 {
 		for _, v := range deleteInfos {
-			result, err := tx.DeleteFromTimerInfoMaps(&sqlplugin.TimerInfoMapsFilter{
+			result, err := tx.DeleteFromTimerInfoMaps(sqlplugin.TimerInfoMapsDeleteFilter{
 				ShardID:     shardID,
 				NamespaceID: namespaceID,
 				WorkflowID:  workflowID,
@@ -207,7 +207,7 @@ func getTimerInfoMap(
 	runID primitives.UUID,
 ) (map[string]*persistenceblobs.TimerInfo, error) {
 
-	rows, err := db.SelectFromTimerInfoMaps(&sqlplugin.TimerInfoMapsFilter{
+	rows, err := db.SelectFromTimerInfoMaps(sqlplugin.TimerInfoMapsSelectFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -236,7 +236,7 @@ func deleteTimerInfoMap(
 	runID primitives.UUID,
 ) error {
 
-	if _, err := tx.DeleteFromTimerInfoMaps(&sqlplugin.TimerInfoMapsFilter{
+	if _, err := tx.DeleteFromTimerInfoMaps(sqlplugin.TimerInfoMapsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -279,7 +279,7 @@ func updateChildExecutionInfos(
 		}
 	}
 	if deleteInfos != nil {
-		if _, err := tx.DeleteFromChildExecutionInfoMaps(&sqlplugin.ChildExecutionInfoMapsFilter{
+		if _, err := tx.DeleteFromChildExecutionInfoMaps(sqlplugin.ChildExecutionInfoMapsDeleteFilter{
 			ShardID:     shardID,
 			NamespaceID: namespaceID,
 			WorkflowID:  workflowID,
@@ -301,7 +301,7 @@ func getChildExecutionInfoMap(
 	runID primitives.UUID,
 ) (map[int64]*persistenceblobs.ChildExecutionInfo, error) {
 
-	rows, err := db.SelectFromChildExecutionInfoMaps(&sqlplugin.ChildExecutionInfoMapsFilter{
+	rows, err := db.SelectFromChildExecutionInfoMaps(sqlplugin.ChildExecutionInfoMapsSelectFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -331,7 +331,7 @@ func deleteChildExecutionInfoMap(
 	runID primitives.UUID,
 ) error {
 
-	if _, err := tx.DeleteFromChildExecutionInfoMaps(&sqlplugin.ChildExecutionInfoMapsFilter{
+	if _, err := tx.DeleteFromChildExecutionInfoMaps(sqlplugin.ChildExecutionInfoMapsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -377,7 +377,7 @@ func updateRequestCancelInfos(
 	if deleteInfo == nil {
 		return nil
 	}
-	result, err := tx.DeleteFromRequestCancelInfoMaps(&sqlplugin.RequestCancelInfoMapsFilter{
+	result, err := tx.DeleteFromRequestCancelInfoMaps(sqlplugin.RequestCancelInfoMapsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -405,7 +405,7 @@ func getRequestCancelInfoMap(
 	runID primitives.UUID,
 ) (map[int64]*persistenceblobs.RequestCancelInfo, error) {
 
-	rows, err := db.SelectFromRequestCancelInfoMaps(&sqlplugin.RequestCancelInfoMapsFilter{
+	rows, err := db.SelectFromRequestCancelInfoMaps(sqlplugin.RequestCancelInfoMapsSelectFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -440,7 +440,7 @@ func deleteRequestCancelInfoMap(
 	runID primitives.UUID,
 ) error {
 
-	if _, err := tx.DeleteFromRequestCancelInfoMaps(&sqlplugin.RequestCancelInfoMapsFilter{
+	if _, err := tx.DeleteFromRequestCancelInfoMaps(sqlplugin.RequestCancelInfoMapsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -486,7 +486,7 @@ func updateSignalInfos(
 	if deleteInfo == nil {
 		return nil
 	}
-	result, err := tx.DeleteFromSignalInfoMaps(&sqlplugin.SignalInfoMapsFilter{
+	result, err := tx.DeleteFromSignalInfoMaps(sqlplugin.SignalInfoMapsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -514,7 +514,7 @@ func getSignalInfoMap(
 	runID primitives.UUID,
 ) (map[int64]*persistenceblobs.SignalInfo, error) {
 
-	rows, err := db.SelectFromSignalInfoMaps(&sqlplugin.SignalInfoMapsFilter{
+	rows, err := db.SelectFromSignalInfoMaps(sqlplugin.SignalInfoMapsSelectFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -544,7 +544,7 @@ func deleteSignalInfoMap(
 	runID primitives.UUID,
 ) error {
 
-	if _, err := tx.DeleteFromSignalInfoMaps(&sqlplugin.SignalInfoMapsFilter{
+	if _, err := tx.DeleteFromSignalInfoMaps(sqlplugin.SignalInfoMapsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,

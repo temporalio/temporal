@@ -122,14 +122,13 @@ func (s *historyExecutionChildWorkflowSuite) TestReplaceSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.ChildExecutionInfoMapsFilter{
+	selectFilter := sqlplugin.ChildExecutionInfoMapsSelectFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		InitiatedID: convert.Int64Ptr(initiatedID),
 	}
-	rows, err := s.store.SelectFromChildExecutionInfoMaps(filter)
+	rows, err := s.store.SelectFromChildExecutionInfoMaps(selectFilter)
 	s.NoError(err)
 	rowMap := map[int64]sqlplugin.ChildExecutionInfoMapsRow{}
 	for _, childWorkflow := range rows {
@@ -159,14 +158,13 @@ func (s *historyExecutionChildWorkflowSuite) TestReplaceSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(numChildWorkflows, int(rowsAffected))
 
-	filter := &sqlplugin.ChildExecutionInfoMapsFilter{
+	selectFilter := sqlplugin.ChildExecutionInfoMapsSelectFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		InitiatedID: nil,
 	}
-	rows, err := s.store.SelectFromChildExecutionInfoMaps(filter)
+	rows, err := s.store.SelectFromChildExecutionInfoMaps(selectFilter)
 	s.NoError(err)
 	childWorkflowMap := map[int64]sqlplugin.ChildExecutionInfoMapsRow{}
 	for _, childWorkflow := range childWorkflows {
@@ -186,20 +184,26 @@ func (s *historyExecutionChildWorkflowSuite) TestDeleteSelect_Single() {
 	runID := primitives.NewUUID()
 	initiatedID := rand.Int63()
 
-	filter := &sqlplugin.ChildExecutionInfoMapsFilter{
+	deleteFilter := sqlplugin.ChildExecutionInfoMapsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		InitiatedID: convert.Int64Ptr(initiatedID),
 	}
-	result, err := s.store.DeleteFromChildExecutionInfoMaps(filter)
+	result, err := s.store.DeleteFromChildExecutionInfoMaps(deleteFilter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.SelectFromChildExecutionInfoMaps(filter)
+	selectFilter := sqlplugin.ChildExecutionInfoMapsSelectFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	rows, err := s.store.SelectFromChildExecutionInfoMaps(selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.ChildExecutionInfoMapsRow(nil), rows)
 }
@@ -210,20 +214,26 @@ func (s *historyExecutionChildWorkflowSuite) TestDeleteSelect_Multiple() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 
-	filter := &sqlplugin.ChildExecutionInfoMapsFilter{
+	deleteFilter := sqlplugin.ChildExecutionInfoMapsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		InitiatedID: nil,
 	}
-	result, err := s.store.DeleteFromChildExecutionInfoMaps(filter)
+	result, err := s.store.DeleteFromChildExecutionInfoMaps(deleteFilter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.SelectFromChildExecutionInfoMaps(filter)
+	selectFilter := sqlplugin.ChildExecutionInfoMapsSelectFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	rows, err := s.store.SelectFromChildExecutionInfoMaps(selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.ChildExecutionInfoMapsRow(nil), rows)
 }
@@ -242,20 +252,26 @@ func (s *historyExecutionChildWorkflowSuite) TestReplaceDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.ChildExecutionInfoMapsFilter{
+	deleteFilter := sqlplugin.ChildExecutionInfoMapsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		InitiatedID: convert.Int64Ptr(initiatedID),
 	}
-	result, err = s.store.DeleteFromChildExecutionInfoMaps(filter)
+	result, err = s.store.DeleteFromChildExecutionInfoMaps(deleteFilter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	rows, err := s.store.SelectFromChildExecutionInfoMaps(filter)
+	selectFilter := sqlplugin.ChildExecutionInfoMapsSelectFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	rows, err := s.store.SelectFromChildExecutionInfoMaps(selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.ChildExecutionInfoMapsRow(nil), rows)
 }
@@ -279,20 +295,26 @@ func (s *historyExecutionChildWorkflowSuite) TestReplaceDeleteSelect_Multiple() 
 	s.NoError(err)
 	s.Equal(numChildWorkflows, int(rowsAffected))
 
-	filter := &sqlplugin.ChildExecutionInfoMapsFilter{
+	deleteFilter := sqlplugin.ChildExecutionInfoMapsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		InitiatedID: nil,
 	}
-	result, err = s.store.DeleteFromChildExecutionInfoMaps(filter)
+	result, err = s.store.DeleteFromChildExecutionInfoMaps(deleteFilter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(numChildWorkflows, int(rowsAffected))
 
-	rows, err := s.store.SelectFromChildExecutionInfoMaps(filter)
+	selectFilter := sqlplugin.ChildExecutionInfoMapsSelectFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	rows, err := s.store.SelectFromChildExecutionInfoMaps(selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.ChildExecutionInfoMapsRow(nil), rows)
 }
