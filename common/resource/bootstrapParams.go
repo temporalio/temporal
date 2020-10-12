@@ -52,7 +52,7 @@ type (
 		Logger          log.Logger
 		ThrottledLogger log.Logger
 
-		MetricScope                  tally.Scope
+		MetricsScope                 tally.Scope
 		MembershipFactoryInitializer MembershipFactoryInitializerFunc
 		RPCFactory                   common.RPCFactory
 		AbstractDatastoreFactory     persistenceClient.AbstractDataStoreFactory

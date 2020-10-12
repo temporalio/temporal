@@ -25,35 +25,37 @@
 package temporal
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/service/config"
 )
 
-type TemporalSuite struct {
-	*require.Assertions
-	suite.Suite
+type (
+	ServerOption interface {
+		apply(*serverOptions)
+	}
+)
+
+func WithConfig(cfg *config.Config) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.config = cfg
+	})
 }
 
-func TestTemporalSuite(t *testing.T) {
-	suite.Run(t, new(TemporalSuite))
+func WithConfigLoader(configDir string, env string, zone string) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.configDir, s.env, s.zone = configDir, env, zone
+	})
 }
 
-func (s *TemporalSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+func ForServices(names []string) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.serviceNames = names
+	})
 }
 
-func (s *TemporalSuite) TestIsValidService() {
-	s.True(isValidService("history"))
-	s.True(isValidService("matching"))
-	s.True(isValidService("frontend"))
-	s.False(isValidService("temporal-history"))
-	s.False(isValidService("temporal-matching"))
-	s.False(isValidService("temporal-frontend"))
-	s.False(isValidService("foobar"))
-}
-
-func (s *TemporalSuite) TestPath() {
-	s.Equal("foo/bar", constructPath("foo", "bar"))
+// InterruptOn interrupts server on the signal from server. If channel is nil Start() will block forever.
+func InterruptOn(interruptCh <-chan interface{}) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.blockingStart = true
+		s.interruptCh = interruptCh
+	})
 }
