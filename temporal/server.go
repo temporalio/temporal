@@ -112,9 +112,14 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	tlsFactory, err := encryption.NewTLSConfigProviderFromConfig(s.so.config.Global.TLS)
-	if err != nil {
-		return fmt.Errorf("TLS provider initialization error : %w", err)
+	var tlsFactory encryption.TLSConfigProvider
+	if s.so.tlsConfigProvider != nil {
+		tlsFactory = s.so.tlsConfigProvider
+	} else {
+		tlsFactory, err = encryption.NewTLSConfigProviderFromConfig(s.so.config.Global.TLS)
+		if err != nil {
+			return fmt.Errorf("TLS provider initialization error: %w", err)
+		}
 	}
 
 	dynamicConfig, err := dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
@@ -316,7 +321,12 @@ func (s *Server) getServiceParams(
 
 	params.ArchiverProvider = provider.NewArchiverProvider(s.so.config.Archival.History.Provider, s.so.config.Archival.Visibility.Provider)
 	params.PersistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
-	params.Authorizer = authorization.NewNopAuthorizer()
+
+	if s.so.authorizer != nil {
+		params.Authorizer = s.so.authorizer
+	} else {
+		params.Authorizer = authorization.NewNopAuthorizer()
+	}
 
 	return &params, nil
 }

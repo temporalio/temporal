@@ -27,15 +27,19 @@ package temporal
 import (
 	"fmt"
 
+	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/service/config"
 )
 
 type (
 	serverOptions struct {
-		config    *config.Config
-		configDir string
-		env       string
-		zone      string
+		config            *config.Config
+		authorizer        authorization.Authorizer
+		tlsConfigProvider encryption.TLSConfigProvider
+		configDir         string
+		env               string
+		zone              string
 
 		serviceNames []string
 

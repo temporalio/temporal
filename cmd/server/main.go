@@ -31,6 +31,7 @@ import (
 
 	"github.com/urfave/cli"
 
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/headers"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
@@ -100,6 +101,7 @@ func buildCLI() *cli.App {
 					temporal.ForServices(services),
 					temporal.WithConfigLoader(configDir, env, zone),
 					temporal.InterruptOn(temporal.InterruptCh()),
+					temporal.WithAuthorizer(authorization.NewNopAuthorizer()),
 				)
 
 				err := s.Start()
