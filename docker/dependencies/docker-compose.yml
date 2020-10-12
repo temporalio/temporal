@@ -25,14 +25,16 @@ services:
       CASSANDRA_LISTEN_ADDRESS: 127.0.0.1
     networks:
       - temporal-dependencies-network
-  postgres:
-    image: postgres:12
-    container_name: temporal-postgres
+  postgresql:
+    image: postgres:9.6
+    container_name: temporal-postgresql
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
-    ports:
-      - "5432:5432"
+    volumes:
+      - ./postgresql-init:/docker-entrypoint-initdb.d
     networks:
       - temporal-dependencies-network
   zookeeper:
@@ -55,7 +57,6 @@ services:
       - temporal-dependencies-network
   elasticsearch:
     image: elasticsearch:6.8.8
-    command: elasticsearch
     container_name: temporal-elasticsearch
     ports:
       - "9200:9200"
@@ -67,7 +68,7 @@ services:
       # https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-network.html
       - network.host=_local_,_site_
       - network.publish_host=_local_
-      # Set storage limit to low number
+      # Set storage limit to low number.
       - cluster.routing.allocation.disk.threshold_enabled=true
       - cluster.routing.allocation.disk.watermark.low=512mb
       - cluster.routing.allocation.disk.watermark.high=256mb
