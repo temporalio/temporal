@@ -25,6 +25,7 @@
 package temporal
 
 import (
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -57,5 +58,12 @@ func InterruptOn(interruptCh <-chan interface{}) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.blockingStart = true
 		s.interruptCh = interruptCh
+	})
+}
+
+// Sets low level authorizer to allow/deny all API calls
+func WithAuthorizer(authorizer authorization.Authorizer) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.authorizer = authorizer
 	})
 }
