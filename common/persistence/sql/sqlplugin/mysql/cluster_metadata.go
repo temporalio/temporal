@@ -37,7 +37,7 @@ const constMetadataPartition = 0
 const constMembershipPartition = 0
 const (
 	// ****** CLUSTER_METADATA TABLE ******
-	insertClusterMetadataQry = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES(?, ?, ?, ?)`
+	insertClusterMetadataQry = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, immutable_data, immutable_data_encoding, version) VALUES(?, ?, ?, ?, ?, ?)`
 
 	updateClusterMetadataQry = `UPDATE cluster_metadata SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ?`
 
@@ -74,7 +74,7 @@ cluster_membership WHERE membership_partition = ?`
 
 func (mdb *db) SaveClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Result, error) {
 	if row.Version == 0 {
-		mdb.conn.Exec(insertClusterMetadataQry, constMetadataPartition, row.Data, row.DataEncoding, 1)
+		mdb.conn.Exec(insertClusterMetadataQry, constMetadataPartition, row.Data, row.DataEncoding, row.Data, row.DataEncoding, 1)
 	}
 	return mdb.conn.Exec(updateClusterMetadataQry, row.Data, row.DataEncoding, row.Version+1, constMetadataPartition)
 }

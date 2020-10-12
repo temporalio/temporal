@@ -55,7 +55,7 @@ WHERE metadata_partition = ?`
 
 	templateGetClusterMetadata = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = ?`
 
-	templateCreateClusterMetadata = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES(?, ?, ?, ?) IF NOT EXISTS`
+	templateCreateClusterMetadata = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, immutable_data, immutable_data_encoding, version) VALUES(?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 	templateUpdateClusterMetadata = `UPDATE cluster_metadata SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ? IF version = ?`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
@@ -160,7 +160,7 @@ func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMe
 
 func (m *cassandraClusterMetadata) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
 	query := m.session.Query(templateCreateClusterMetadata,
-		constMembershipPartition, request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), 1)
+		constMembershipPartition, request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), 1)
 	if request.Version > 0 {
 		query = m.session.Query(templateUpdateClusterMetadata,
 			request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), request.Version+1, constMembershipPartition, request.Version)
