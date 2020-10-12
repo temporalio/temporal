@@ -26,6 +26,7 @@ package temporal
 
 import (
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -65,5 +66,12 @@ func InterruptOn(interruptCh <-chan interface{}) ServerOption {
 func WithAuthorizer(authorizer authorization.Authorizer) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.authorizer = authorizer
+	})
+}
+
+// Overrides default provider of TLS configuration
+func WithTLSConfigFactory(tlsConfigProvider encryption.TLSConfigProvider) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.params.TLSConfigProvider = tlsConfigProvider
 	})
 }
