@@ -154,8 +154,7 @@ func (s *TestCluster) DropDatabase() {
 	}()
 	err = db.DropDatabase(s.cfg.DatabaseName)
 	if err != nil {
-		// TODO https://github.com/temporalio/temporal/issues/817
-		s.logger.Error("unable to drop database", tag.Error(err))
+		panic(err)
 	}
 }
 
