@@ -195,8 +195,5 @@ func CreateTLSConfig(tlsConfig auth.TLS) (*tls.Config, error) {
 	}
 	caCertPool.AppendCertsFromPEM(pemData)
 
-	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      caCertPool,
-	}, nil
+	return auth.NewTLSConfigWithCertsAndCAs([]tls.Certificate{cert}, caCertPool, ""), nil
 }
