@@ -91,7 +91,8 @@ func (ChecksumFlavor) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_4a3bfa9c01eff6e4, []int{1}
 }
 
-// Severity defines how important given alert is.
+// Severity defines how important given alert is. Levels should match those defined in the
+// https://github.com/temporalio/version-info-model/blob/master/check/response.go#L4
 type Severity int32
 
 const (
