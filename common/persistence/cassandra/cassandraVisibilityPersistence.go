@@ -44,7 +44,8 @@ const (
 	defaultCloseTTLSeconds = 86400
 	openExecutionTTLBuffer = int64(86400) // setting it to a day to account for shard going down
 
-	maxCassandraTTL = int64(157680000) // Cassandra max support time is 2038-01-19T03:14:06+00:00. Updated this to 5 years to support until year 2033
+	// ref: https://docs.datastax.com/en/dse-trblshoot/doc/troubleshooting/recoveringTtlYear2038Problem.html
+	maxCassandraTTL = int64(315360000) // Cassandra max support time is 2038-01-19T03:14:06+00:00. Updated this to 10 years to support until year 2028
 )
 
 const (
