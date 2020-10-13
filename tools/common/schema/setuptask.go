@@ -26,6 +26,7 @@ package schema
 
 import (
 	"log"
+	"path/filepath"
 
 	"github.com/blang/semver/v4"
 )
@@ -65,7 +66,11 @@ func (task *SetupTask) Run() error {
 	}
 
 	if len(config.SchemaFilePath) > 0 {
-		stmts, err := ParseFile(config.SchemaFilePath)
+		filePath, err := filepath.Abs(config.SchemaFilePath)
+		if err != nil {
+			return err
+		}
+		stmts, err := ParseFile(filePath)
 		if err != nil {
 			return err
 		}

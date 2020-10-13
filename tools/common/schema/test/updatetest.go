@@ -45,14 +45,15 @@ import (
 type UpdateSchemaTestBase struct {
 	suite.Suite
 	*require.Assertions
-	rand   *rand.Rand
-	Log    log.Logger
-	DBName string
-	db     DB
+	rand       *rand.Rand
+	Log        log.Logger
+	DBName     string
+	db         DB
+	pluginName string
 }
 
 // SetupSuiteBase sets up the test suite
-func (tb *UpdateSchemaTestBase) SetupSuiteBase(db DB) {
+func (tb *UpdateSchemaTestBase) SetupSuiteBase(db DB, pluginName string) {
 	tb.Assertions = require.New(tb.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, tb.T() will return nil
 	var err error
 	tb.Log, err = loggerimpl.NewDevelopment()
@@ -64,6 +65,7 @@ func (tb *UpdateSchemaTestBase) SetupSuiteBase(db DB) {
 		tb.Log.Fatal("error creating database, ", tag.Error(err))
 	}
 	tb.db = db
+	tb.pluginName = pluginName
 }
 
 // TearDownSuiteBase tears down the test suite
@@ -74,8 +76,21 @@ func (tb *UpdateSchemaTestBase) TearDownSuiteBase() {
 
 // RunDryrunTest tests a dryrun schema setup & update
 func (tb *UpdateSchemaTestBase) RunDryrunTest(app *cli.App, db DB, dbNameFlag string, dir string, endVersion string) {
-	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-v", "0.0"}))
-	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "update-schema", "-d", dir}))
+	command := append(tb.getCommandBase(), []string{
+		dbNameFlag, tb.DBName,
+		"-q",
+		"setup-schema",
+		"-v", "0.0",
+	}...)
+	tb.NoError(app.Run(command))
+
+	command = append(tb.getCommandBase(), []string{
+		dbNameFlag, tb.DBName,
+		"-q",
+		"update-schema",
+		"-d", dir,
+	}...)
+	tb.NoError(app.Run(command))
 	ver, err := db.ReadSchemaVersion()
 	tb.Nil(err)
 	// update the version to the latest
@@ -92,8 +107,22 @@ func (tb *UpdateSchemaTestBase) RunUpdateSchemaTest(app *cli.App, db DB, dbNameF
 
 	tb.makeSchemaVersionDirs(tmpDir, sqlFileContent)
 
-	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-v", "0.0"}))
-	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "update-schema", "-d", tmpDir, "-v", "2.0"}))
+	command := append(tb.getCommandBase(), []string{
+		dbNameFlag, tb.DBName,
+		"-q",
+		"setup-schema",
+		"-v", "0.0",
+	}...)
+	tb.NoError(app.Run(command))
+
+	command = append(tb.getCommandBase(), []string{
+		dbNameFlag, tb.DBName,
+		"-q",
+		"update-schema",
+		"-d", tmpDir,
+		"-v", "2.0",
+	}...)
+	tb.NoError(app.Run(command))
 
 	expected := getExpectedTables(true, expectedTables)
 	expected["namespaces"] = struct{}{}
@@ -149,4 +178,14 @@ func (tb *UpdateSchemaTestBase) makeSchemaVersionDirs(rootDir string, sqlFileCon
 	tb.Nil(err)
 	err = ioutil.WriteFile(dir+"/namespace.cql", []byte(namespace), os.FileMode(0600))
 	tb.Nil(err)
+}
+
+func (tb *UpdateSchemaTestBase) getCommandBase() []string {
+	command := []string{"./tool"}
+	if tb.pluginName != "" {
+		command = append(command, []string{
+			"-pl", tb.pluginName,
+		}...)
+	}
+	return command
 }
