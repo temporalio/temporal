@@ -296,6 +296,7 @@ func (s *Server) getServiceParams(
 			return nil, fmt.Errorf("unable to find advanced visibility store in config for %q key", advancedVisStoreKey)
 		}
 
+		advancedVisStore.ElasticSearch.CompleteUserInfo()
 		esClient, err := elasticsearch.NewClient(advancedVisStore.ElasticSearch)
 		if err != nil {
 			return nil, fmt.Errorf("error creating elastic search client: %v", err)
