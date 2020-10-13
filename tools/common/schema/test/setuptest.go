@@ -46,14 +46,15 @@ import (
 type SetupSchemaTestBase struct {
 	suite.Suite
 	*require.Assertions
-	rand   *rand.Rand
-	Log    log.Logger
-	DBName string
-	db     DB
+	rand       *rand.Rand
+	Log        log.Logger
+	DBName     string
+	db         DB
+	pluginName string
 }
 
 // SetupSuiteBase sets up the test suite
-func (tb *SetupSchemaTestBase) SetupSuiteBase(db DB) {
+func (tb *SetupSchemaTestBase) SetupSuiteBase(db DB, pluginName string) {
 	tb.Assertions = require.New(tb.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, tb.T() will return nil
 	var err error
 	tb.Log, err = loggerimpl.NewDevelopment()
@@ -65,6 +66,7 @@ func (tb *SetupSchemaTestBase) SetupSuiteBase(db DB) {
 		tb.Log.Fatal("error creating database, ", tag.Error(err))
 	}
 	tb.db = db
+	tb.pluginName = pluginName
 }
 
 // TearDownSuiteBase tears down the test suite
@@ -77,7 +79,12 @@ func (tb *SetupSchemaTestBase) TearDownSuiteBase() {
 func (tb *SetupSchemaTestBase) RunSetupTest(
 	app *cli.App, db DB, dbNameFlag string, sqlFileContent string, expectedTables []string) {
 	// test command fails without required arguments
-	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema"}))
+	command := append(tb.getCommandBase(), []string{
+		dbNameFlag, tb.DBName,
+		"-q",
+		"setup-schema",
+	}...)
+	tb.NoError(app.Run(command))
 	tables, err := db.ListTables()
 	tb.Nil(err)
 	tb.Equal(0, len(tables))
@@ -94,7 +101,13 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 	tb.NoError(err)
 
 	// make sure command doesn't succeed without version or disable-version
-	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-f", sqlFile.Name()}))
+	command = append(tb.getCommandBase(), []string{
+		dbNameFlag, tb.DBName,
+		"-q",
+		"setup-schema",
+		"-f", sqlFile.Name(),
+	}...)
+	tb.NoError(app.Run(command))
 	tables, err = db.ListTables()
 	tb.Nil(err)
 	tb.Equal(0, len(tables))
@@ -106,9 +119,25 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 
 		// test overwrite with versioning works
 		if versioningEnabled {
-			tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-f", sqlFile.Name(), "-version", ver, "-o"}))
+			command = append(tb.getCommandBase(), []string{
+				dbNameFlag, tb.DBName,
+				"-q",
+				"setup-schema",
+				"-f", sqlFile.Name(),
+				"-version", ver,
+				"-o",
+			}...)
+			tb.NoError(app.Run(command))
 		} else {
-			tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-f", sqlFile.Name(), "-d", "-o"}))
+			command = append(tb.getCommandBase(), []string{
+				dbNameFlag, tb.DBName,
+				"-q",
+				"setup-schema",
+				"-f", sqlFile.Name(),
+				"-d",
+				"-o",
+			}...)
+			tb.NoError(app.Run(command))
 		}
 
 		expectedTables := getExpectedTables(versioningEnabled, expectedTables)
@@ -131,6 +160,16 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 			tb.NotNil(err)
 		}
 	}
+}
+
+func (tb *SetupSchemaTestBase) getCommandBase() []string {
+	command := []string{"./tool"}
+	if tb.pluginName != "" {
+		command = append(command, []string{
+			"-pl", tb.pluginName,
+		}...)
+	}
+	return command
 }
 
 func getExpectedTables(versioningEnabled bool, wantTables []string) map[string]struct{} {

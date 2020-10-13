@@ -53,7 +53,7 @@ func (s *SetupSchemaTestSuite) SetupSuite() {
 		log.Fatal("Error creating CQLClient")
 	}
 	s.client = client
-	s.SetupSuiteBase(client)
+	s.SetupSuiteBase(client, "")
 }
 
 func (s *SetupSchemaTestSuite) TearDownSuite() {
