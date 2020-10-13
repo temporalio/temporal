@@ -33,8 +33,11 @@ import (
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/schema/mysql"
+	mysqlversion "go.temporal.io/server/schema/mysql"
+	posrgresqlversion "go.temporal.io/server/schema/postgresql"
 	"go.temporal.io/server/tools/common/schema"
 )
 
@@ -46,16 +49,36 @@ func VerifyCompatibleVersion(
 
 	ds, ok := cfg.DataStores[cfg.DefaultStore]
 	if ok && ds.SQL != nil {
-		err := CheckCompatibleVersion(*ds.SQL, mysql.Version)
-		if err != nil {
-			return err
+		switch ds.SQL.PluginName {
+		case mysql.PluginName:
+			err := CheckCompatibleVersion(*ds.SQL, mysqlversion.Version)
+			if err != nil {
+				return err
+			}
+		case postgresql.PluginName:
+			err := CheckCompatibleVersion(*ds.SQL, posrgresqlversion.Version)
+			if err != nil {
+				return err
+			}
+		default:
+			panic(fmt.Sprintf("unknown sql store drier: %v", ds.SQL.PluginName))
 		}
 	}
 	ds, ok = cfg.DataStores[cfg.VisibilityStore]
 	if ok && ds.SQL != nil {
-		err := CheckCompatibleVersion(*ds.SQL, mysql.VisibilityVersion)
-		if err != nil {
-			return err
+		switch ds.SQL.PluginName {
+		case mysql.PluginName:
+			err := CheckCompatibleVersion(*ds.SQL, mysqlversion.VisibilityVersion)
+			if err != nil {
+				return err
+			}
+		case postgresql.PluginName:
+			err := CheckCompatibleVersion(*ds.SQL, posrgresqlversion.VisibilityVersion)
+			if err != nil {
+				return err
+			}
+		default:
+			panic(fmt.Sprintf("unknown sql store drier: %v", ds.SQL.PluginName))
 		}
 	}
 	return nil
@@ -103,10 +126,10 @@ func updateSchema(cli *cli.Context) error {
 		return handleErr(schema.NewConfigError(err.Error()))
 	}
 	if cfg.DatabaseName == schema.DryrunDBName {
-		if err := doCreateDatabase(cfg, cfg.DatabaseName); err != nil {
+		if err := DoCreateDatabase(cfg, cfg.DatabaseName); err != nil {
 			return handleErr(fmt.Errorf("error creating dryrun database: %v", err))
 		}
-		defer doDropDatabase(cfg, cfg.DatabaseName)
+		defer DoDropDatabase(cfg, cfg.DatabaseName)
 	}
 	conn, err := NewConnection(cfg)
 	if err != nil {
@@ -129,14 +152,14 @@ func createDatabase(cli *cli.Context) error {
 	if database == "" {
 		return handleErr(schema.NewConfigError("missing " + flag(schema.CLIOptDatabase) + " argument "))
 	}
-	err = doCreateDatabase(cfg, database)
+	err = DoCreateDatabase(cfg, database)
 	if err != nil {
 		return handleErr(fmt.Errorf("error creating database:%v", err))
 	}
 	return nil
 }
 
-func doCreateDatabase(cfg *config.SQL, name string) error {
+func DoCreateDatabase(cfg *config.SQL, name string) error {
 	cfg.DatabaseName = ""
 	conn, err := NewConnection(cfg)
 	if err != nil {
@@ -146,7 +169,7 @@ func doCreateDatabase(cfg *config.SQL, name string) error {
 	return conn.CreateDatabase(name)
 }
 
-func doDropDatabase(cfg *config.SQL, name string) {
+func DoDropDatabase(cfg *config.SQL, name string) {
 	cfg.DatabaseName = ""
 	conn, err := NewConnection(cfg)
 	if err != nil {

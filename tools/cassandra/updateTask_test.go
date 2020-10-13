@@ -47,7 +47,7 @@ func (s *UpdateSchemaTestSuite) SetupSuite() {
 	if err != nil {
 		log.Fatal("Error creating CQLClient")
 	}
-	s.SetupSuiteBase(client)
+	s.SetupSuiteBase(client, "")
 }
 
 func (s *UpdateSchemaTestSuite) TearDownSuite() {
