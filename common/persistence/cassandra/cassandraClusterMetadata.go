@@ -168,6 +168,7 @@ func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMe
 }
 
 func (m *cassandraClusterMetadata) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove in the next release.
 	query := m.session.Query(templateCreateClusterMetadata,
 		constMembershipPartition, request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), 1)
 	if request.Version > 0 {

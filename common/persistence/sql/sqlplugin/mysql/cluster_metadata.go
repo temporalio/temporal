@@ -76,6 +76,7 @@ cluster_membership WHERE membership_partition = ?`
 
 func (mdb *db) SaveClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Result, error) {
 	if row.Version == 0 {
+		// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove in the next release.
 		mdb.conn.Exec(insertClusterMetadataQry, constMetadataPartition, row.Data, row.DataEncoding, row.Data, row.DataEncoding, 1)
 	}
 	return mdb.conn.Exec(updateClusterMetadataQry, row.Data, row.DataEncoding, row.Version+1, constMetadataPartition)
