@@ -23,17 +23,19 @@ services:
         aliases:
           - mysql
 
-  postgres:
-    image: postgres:12
+  postgresql:
+    image: postgres:9.6
     environment:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
+    volumes:
+      - ./postgresql-init:/docker-entrypoint-initdb.d
     ports:
       - "5432:5432"
     networks:
       services-network:
         aliases:
-          - postgres
+          - postgresql
 
   zookeeper:
     image: wurstmeister/zookeeper:3.4.6
@@ -92,10 +94,11 @@ services:
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "MYSQL_SEEDS=mysql"
+      - "POSTGRES_SEEDS=postgresql"
     depends_on:
       - cassandra
       - mysql
-      - postgres
+      - postgresql
     volumes:
       - ../../:/temporal
     networks:
@@ -126,6 +129,8 @@ services:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
       - "KAFKA_SEEDS=kafka"
+      - "PERSISTENCE_TYPE=nosql"
+      - "PERSISTENCE_DRIVER=cassandra"
       - "TEST_TAG=esintegration"
     depends_on:
       - cassandra
@@ -162,6 +167,7 @@ services:
       - "ES_SEEDS=elasticsearch"
       - "KAFKA_SEEDS=kafka"
       - "PERSISTENCE_TYPE=sql"
+      - "PERSISTENCE_DRIVER=mysql"
       - "TEST_TAG=esintegration"
     depends_on:
       - mysql
@@ -174,7 +180,7 @@ services:
         aliases:
           - integration-test
 
-  integration-test-v2:
+  integration-test-postgresql:
     build:
       context: ../../
       dockerfile: ./docker/buildkite/Dockerfile
@@ -183,7 +189,7 @@ services:
       - -e
       - -c
       - |
-        make cover_integration_profile EVENTSV2=true
+        make cover_integration_profile
     ports:
       - "7233:7233"
       - "7234:7234"
@@ -194,12 +200,14 @@ services:
       - "6935:6935"
       - "6939:6939"
     environment:
-      - "CASSANDRA_SEEDS=cassandra"
+      - "POSTGRES_SEEDS=postgresql"
       - "ES_SEEDS=elasticsearch"
       - "KAFKA_SEEDS=kafka"
+      - "PERSISTENCE_TYPE=sql"
+      - "PERSISTENCE_DRIVER=postgres"
       - "TEST_TAG=esintegration"
     depends_on:
-      - cassandra
+      - postgresql
       - elasticsearch
       - kafka
     volumes:
@@ -232,6 +240,8 @@ services:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
       - "KAFKA_SEEDS=kafka"
+      - "PERSISTENCE_TYPE=nosql"
+      - "PERSISTENCE_DRIVER=cassandra"
       - "TEST_TAG=esintegration"
     depends_on:
       - cassandra
@@ -268,9 +278,47 @@ services:
       - "ES_SEEDS=elasticsearch"
       - "KAFKA_SEEDS=kafka"
       - "PERSISTENCE_TYPE=sql"
+      - "PERSISTENCE_DRIVER=mysql"
       - "TEST_TAG=esintegration"
     depends_on:
       - mysql
+      - elasticsearch
+      - kafka
+    volumes:
+      - ../../:/temporal
+    networks:
+      services-network:
+        aliases:
+          - integration-test-xdc
+
+  integration-test-xdc-postgresql:
+    build:
+      context: ../../
+      dockerfile: ./docker/buildkite/Dockerfile
+    command:
+      - /bin/sh
+      - -e
+      - -c
+      - |
+        make cover_xdc_profile
+    ports:
+      - "7233:7233"
+      - "7234:7234"
+      - "7235:7235"
+      - "7239:7239"
+      - "6933:6933"
+      - "6934:6934"
+      - "6935:6935"
+      - "6939:6939"
+    environment:
+      - "MYSQL_SEEDS=mysql"
+      - "ES_SEEDS=elasticsearch"
+      - "KAFKA_SEEDS=kafka"
+      - "PERSISTENCE_TYPE=sql"
+      - "PERSISTENCE_DRIVER=postgres"
+      - "TEST_TAG=esintegration"
+    depends_on:
+      - postgresql
       - elasticsearch
       - kafka
     volumes:

@@ -343,6 +343,7 @@ func (s *BeanImpl) Close() {
 	s.Lock()
 	defer s.Unlock()
 
+	s.clusterMetadataManager.Close()
 	s.metadataManager.Close()
 	s.taskManager.Close()
 	s.visibilityManager.Close()

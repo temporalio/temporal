@@ -35,8 +35,8 @@ import (
 const (
 	// StoreTypeSQL refers to sql based storage as persistence store
 	StoreTypeSQL = "sql"
-	// StoreTypeCassandra refers to cassandra as persistence store
-	StoreTypeCassandra = "cassandra"
+	// StoreTypeNoSQL refers to nosql based storage as persistence store
+	StoreTypeNoSQL = "nosql"
 )
 
 // DefaultStoreType returns the storeType for the default persistence store
@@ -44,7 +44,7 @@ func (c *Persistence) DefaultStoreType() string {
 	if c.DataStores[c.DefaultStore].SQL != nil {
 		return StoreTypeSQL
 	}
-	return StoreTypeCassandra
+	return StoreTypeNoSQL
 }
 
 // Validate validates the persistence config

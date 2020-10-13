@@ -39,6 +39,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
 )
 
@@ -135,9 +136,7 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 	}
 	// If we are given arguments to verify either server or client, configure TLS
 	if caPool != nil || cert != nil {
-		tlsConfig := &tls.Config{
-			ServerName: host,
-		}
+		tlsConfig := auth.NewTLSConfigForServer(host)
 		if caPool != nil {
 			tlsConfig.RootCAs = caPool
 		}

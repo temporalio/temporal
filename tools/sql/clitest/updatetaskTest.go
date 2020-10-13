@@ -26,10 +26,8 @@ package clitest
 
 import (
 	"log"
-	"os"
+	"path/filepath"
 
-	"go.temporal.io/server/environment"
-	"go.temporal.io/server/schema/mysql"
 	"go.temporal.io/server/tools/common/schema/test"
 	"go.temporal.io/server/tools/sql"
 )
@@ -37,26 +35,46 @@ import (
 // UpdateSchemaTestSuite defines a test suite
 type UpdateSchemaTestSuite struct {
 	test.UpdateSchemaTestBase
-	pluginName string
+	host                       string
+	port                       string
+	pluginName                 string
+	sqlQuery                   string
+	executionSchemaVersionDir  string
+	executionVersion           string
+	visibilitySchemaVersionDir string
+	visibilityVersion          string
 }
 
 // NewUpdateSchemaTestSuite returns a test suite
-func NewUpdateSchemaTestSuite(pluginName string) *UpdateSchemaTestSuite {
+func NewUpdateSchemaTestSuite(
+	host string,
+	port string,
+	pluginName string,
+	sqlQuery string,
+	executionSchemaVersionDir string,
+	executionVersion string,
+	visibilitySchemaVersionDir string,
+	visibilityVersion string,
+) *UpdateSchemaTestSuite {
 	return &UpdateSchemaTestSuite{
-		pluginName: pluginName,
+		host:                       host,
+		port:                       port,
+		pluginName:                 pluginName,
+		sqlQuery:                   sqlQuery,
+		executionSchemaVersionDir:  executionSchemaVersionDir,
+		executionVersion:           executionVersion,
+		visibilitySchemaVersionDir: visibilitySchemaVersionDir,
+		visibilityVersion:          visibilityVersion,
 	}
 }
 
 // SetupSuite setups test suite
 func (s *UpdateSchemaTestSuite) SetupSuite() {
-	os.Setenv("SQL_HOST", environment.GetMySQLAddress())
-	os.Setenv("SQL_USER", testUser)
-	os.Setenv("SQL_PASSWORD", testPassword)
-	conn, err := newTestConn("", s.pluginName)
+	conn, err := newTestConn("", s.host, s.port, s.pluginName)
 	if err != nil {
 		log.Fatal("Error creating CQLClient")
 	}
-	s.SetupSuiteBase(conn)
+	s.SetupSuiteBase(conn, s.pluginName)
 }
 
 // TearDownSuite tear down test suite
@@ -66,26 +84,27 @@ func (s *UpdateSchemaTestSuite) TearDownSuite() {
 
 // TestUpdateSchema test
 func (s *UpdateSchemaTestSuite) TestUpdateSchema() {
-	conn, err := newTestConn(s.DBName, s.pluginName)
+	conn, err := newTestConn(s.DBName, s.host, s.port, s.pluginName)
 	s.Nil(err)
 	defer conn.Close()
-	s.RunUpdateSchemaTest(sql.BuildCLIOptions(), conn, "--db", createTestSQLFileContent(), []string{"task_maps", "tasks"})
+	s.RunUpdateSchemaTest(sql.BuildCLIOptions(), conn, "--db", s.sqlQuery, []string{"executions", "current_executions"})
 }
 
 // TestDryrun test
 func (s *UpdateSchemaTestSuite) TestDryrun() {
-	conn, err := newTestConn(s.DBName, s.pluginName)
-	s.Nil(err)
+	conn, err := newTestConn(s.DBName, s.host, s.port, s.pluginName)
+	s.NoError(err)
 	defer conn.Close()
-	dir := "../../../../../schema/mysql/v57/temporal/versioned"
-	s.RunDryrunTest(sql.BuildCLIOptions(), conn, "--db", dir, mysql.Version)
+	dir, err := filepath.Abs(s.executionSchemaVersionDir)
+	s.NoError(err)
+	s.RunDryrunTest(sql.BuildCLIOptions(), conn, "--db", dir, s.executionVersion)
 }
 
 // TestVisibilityDryrun test
 func (s *UpdateSchemaTestSuite) TestVisibilityDryrun() {
-	conn, err := newTestConn(s.DBName, s.pluginName)
-	s.Nil(err)
+	conn, err := newTestConn(s.DBName, s.host, s.port, s.pluginName)
 	defer conn.Close()
-	dir := "../../../../../schema/mysql/v57/visibility/versioned"
-	s.RunDryrunTest(sql.BuildCLIOptions(), conn, "--db", dir, mysql.VisibilityVersion)
+	dir, err := filepath.Abs(s.visibilitySchemaVersionDir)
+	s.NoError(err)
+	s.RunDryrunTest(sql.BuildCLIOptions(), conn, "--db", dir, s.visibilityVersion)
 }

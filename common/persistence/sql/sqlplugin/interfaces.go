@@ -47,8 +47,11 @@ type (
 		MatchingTask
 		MatchingTaskQueue
 
+		HistoryNode
+		HistoryTree
+
 		HistoryShard
-		historyEvent
+
 		HistoryExecution
 		HistoryExecutionBuffer
 		HistoryExecutionActivity
@@ -57,6 +60,7 @@ type (
 		HistoryExecutionRequestCancel
 		HistoryExecutionSignal
 		HistoryExecutionSignalRequest
+
 		HistoryTransferTask
 		HistoryTimerTask
 		HistoryReplicationTask

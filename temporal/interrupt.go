@@ -25,35 +25,21 @@
 package temporal
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
-type TemporalSuite struct {
-	*require.Assertions
-	suite.Suite
-}
+func InterruptCh() <-chan interface{} {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
-func TestTemporalSuite(t *testing.T) {
-	suite.Run(t, new(TemporalSuite))
-}
+	ret := make(chan interface{}, 1)
+	go func() {
+		s := <-c
+		ret <- s
+		close(ret)
+	}()
 
-func (s *TemporalSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
-
-func (s *TemporalSuite) TestIsValidService() {
-	s.True(isValidService("history"))
-	s.True(isValidService("matching"))
-	s.True(isValidService("frontend"))
-	s.False(isValidService("temporal-history"))
-	s.False(isValidService("temporal-matching"))
-	s.False(isValidService("temporal-frontend"))
-	s.False(isValidService("foobar"))
-}
-
-func (s *TemporalSuite) TestPath() {
-	s.Equal("foo/bar", constructPath("foo", "bar"))
+	return ret
 }

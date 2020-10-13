@@ -27,9 +27,7 @@ package clitest
 import (
 	log "github.com/sirupsen/logrus"
 
-	"os"
-
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/tools/common/schema/test"
 	"go.temporal.io/server/tools/sql"
 )
@@ -38,29 +36,43 @@ type (
 	// SetupSchemaTestSuite defines a test suite
 	SetupSchemaTestSuite struct {
 		test.SetupSchemaTestBase
-		conn       *sql.Connection
+		host       string
+		port       string
 		pluginName string
+		sqlQuery   string
+
+		conn *sql.Connection
 	}
 )
 
+const (
+	testCLIDatabasePrefix = "test_"
+	testCLIDatabaseSuffix = "cli_database"
+)
+
 // NewSetupSchemaTestSuite returns a test suite
-func NewSetupSchemaTestSuite(pluginName string) *SetupSchemaTestSuite {
+func NewSetupSchemaTestSuite(
+	host string,
+	port string,
+	pluginName string,
+	sqlQuery string,
+) *SetupSchemaTestSuite {
 	return &SetupSchemaTestSuite{
+		host:       host,
+		port:       port,
 		pluginName: pluginName,
+		sqlQuery:   sqlQuery,
 	}
 }
 
 // SetupSuite setup test suite
 func (s *SetupSchemaTestSuite) SetupSuite() {
-	os.Setenv("SQL_HOST", environment.GetMySQLAddress())
-	os.Setenv("SQL_USER", testUser)
-	os.Setenv("SQL_PASSWORD", testPassword)
-	conn, err := newTestConn("", s.pluginName)
+	conn, err := newTestConn("", s.host, s.port, s.pluginName)
 	if err != nil {
 		log.Fatalf("error creating sql connection:%v", err)
 	}
 	s.conn = conn
-	s.SetupSuiteBase(conn)
+	s.SetupSuiteBase(conn, s.pluginName)
 }
 
 // TearDownSuite tear down test suite
@@ -70,14 +82,26 @@ func (s *SetupSchemaTestSuite) TearDownSuite() {
 
 // TestCreateDatabase test
 func (s *SetupSchemaTestSuite) TestCreateDatabase() {
-	s.NoError(sql.RunTool([]string{"./tool", "-u", testUser, "--pw", testPassword, "create", "--db", "foobar123"}))
-	err := s.conn.DropDatabase("foobar123")
-	s.Nil(err)
+	testDatabase := testCLIDatabasePrefix + shuffle.String(testCLIDatabaseSuffix)
+	err := sql.RunTool([]string{
+		"./tool",
+		"--ep", s.host,
+		"--p", s.port,
+		"-u", testUser,
+		"--pw", testPassword,
+		"--pl", s.pluginName,
+		"create",
+		"--db", testDatabase,
+	})
+	s.NoError(err)
+	err = s.conn.DropDatabase(testDatabase)
+	s.NoError(err)
 }
 
 // TestSetupSchema test
 func (s *SetupSchemaTestSuite) TestSetupSchema() {
-	conn, err := newTestConn(s.DBName, s.pluginName)
-	s.Nil(err)
-	s.RunSetupTest(sql.BuildCLIOptions(), conn, "--db", createTestSQLFileContent(), []string{"task_maps", "tasks"})
+	conn, err := newTestConn(s.DBName, s.host, s.port, s.pluginName)
+	s.NoError(err)
+	defer conn.Close()
+	s.RunSetupTest(sql.BuildCLIOptions(), conn, "--db", s.sqlQuery, []string{"executions", "current_executions"})
 }

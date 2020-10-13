@@ -114,6 +114,7 @@ var keys = map[Key]string{
 	VisibilityArchivalQueryMaxPageSize:    "frontend.visibilityArchivalQueryMaxPageSize",
 	VisibilityArchivalQueryMaxRangeInDays: "frontend.visibilityArchivalQueryMaxRangeInDays",
 	VisibilityArchivalQueryMaxQPS:         "frontend.visibilityArchivalQueryMaxQPS",
+	EnableServerVersionCheck:              "frontend.enableServerVersionCheck",
 
 	// matching settings
 	MatchingRPS:                             "matching.rps",
@@ -420,6 +421,8 @@ const (
 	VisibilityArchivalQueryMaxRangeInDays
 	// VisibilityArchivalQueryMaxQPS is the timeout for a visibility archival query
 	VisibilityArchivalQueryMaxQPS
+	// EnableServerVersionCheck is a flag that controls whether or not periodic version checking is enabled
+	EnableServerVersionCheck
 
 	// key for matching
 

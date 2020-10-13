@@ -38,11 +38,10 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 
-	pt "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/environment"
 )
 
 const (
@@ -130,9 +129,7 @@ func registerTLSConfig(cfg *config.SQL) error {
 	}
 
 	// TODO: create a way to set MinVersion and CipherSuites via cfg.
-	tlsConfig := &tls.Config{
-		ServerName: host,
-	}
+	tlsConfig := auth.NewTLSConfigForServer(host)
 
 	if cfg.TLS.CaFile != "" {
 		rootCertPool := x509.NewCertPool()
@@ -236,24 +233,5 @@ func sanitizeAttr(inkey string, invalue string) (string, string) {
 		return key, value
 	default:
 		return inkey, invalue
-	}
-}
-
-const (
-	testUser      = "temporal"
-	testPassword  = "temporal"
-	testSchemaDir = "schema/mysql/v57"
-)
-
-// GetTestClusterOption return test options
-func GetTestClusterOption() *pt.TestBaseOptions {
-	return &pt.TestBaseOptions{
-		SQLDBPluginName: PluginName,
-		DBUsername:      testUser,
-		DBPassword:      testPassword,
-		DBHost:          environment.GetMySQLAddress(),
-		DBPort:          environment.GetMySQLPort(),
-		SchemaDir:       testSchemaDir,
-		StoreType:       config.StoreTypeSQL,
 	}
 }

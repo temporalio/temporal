@@ -2,8 +2,6 @@
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -22,32 +20,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package mysql
+package auth
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/suite"
-
-	"go.temporal.io/server/tools/sql/clitest"
+	"crypto/tls"
+	"crypto/x509"
 )
 
-func TestSQLConnTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewSQLConnTestSuite(PluginName))
+// Helper methods for creating tls.Config structs to ensure MinVersion is 1.3
+
+func NewEmptyTLSConfig() *tls.Config {
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
 }
 
-func TestHandlerTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewHandlerTestSuite(PluginName))
+func NewTLSConfigForServer(serverName string) *tls.Config {
+	c := NewEmptyTLSConfig()
+	c.ServerName = serverName
+	return c
 }
 
-func TestSetupSchemaTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewSetupSchemaTestSuite(PluginName))
+func NewTLSConfigWithCertsAndCAs(certificates []tls.Certificate, rootCAs *x509.CertPool, serverName string) *tls.Config {
+	c := NewTLSConfigForServer(serverName)
+	c.Certificates = certificates
+	c.RootCAs = rootCAs
+	return c
 }
 
-func TestUpdateSchemaTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewUpdateSchemaTestSuite(PluginName))
-}
-
-func TestVersionTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewVersionTestSuite(PluginName))
+func NewTLSConfigWithClientAuthAndCAs(clientAuth tls.ClientAuthType, certificates []tls.Certificate, clientCAs *x509.CertPool) *tls.Config {
+	c := NewEmptyTLSConfig()
+	c.ClientAuth = clientAuth
+	c.Certificates = certificates
+	c.ClientCAs = clientCAs
+	return c
 }

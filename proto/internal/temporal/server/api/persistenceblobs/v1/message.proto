@@ -37,6 +37,7 @@ import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
+import "temporal/api/version/v1/message.proto";
 
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
@@ -48,33 +49,12 @@ message ExecutionStats {
     int64 history_size = 1;
 }
 
-// ReleaseInfo contains information about specific version of temporal.
-message ReleaseInfo {
-    string version = 1;
-    google.protobuf.Timestamp release_time = 2;
-    string notes = 3;
-}
-
-// Alert contains notification and severity.
-message Alert {
-    string message = 1;
-    int32 severity = 2;
-}
-
-// VersionInfo contains details about current and recommended release versions as well as alerts and upgrade instructions.
-message VersionInfo {
-    ReleaseInfo current = 1;
-    ReleaseInfo recommended = 2;
-    string instructions = 3;
-    repeated Alert alerts = 4;
-}
-
 // ClusterMetadata contains mutable cluster configuration and metadata.
 message ClusterMetadata {
     string cluster_name = 1;
     int32 history_shard_count = 2;
     string cluster_id = 3;
-    VersionInfo version_info = 4;
+    temporal.api.version.v1.VersionInfo version_info = 4;
 }
 
 message ActivityInfo {

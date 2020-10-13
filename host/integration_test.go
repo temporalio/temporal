@@ -2154,6 +2154,9 @@ ListClosedLoop:
 			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
+			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				WorkflowId: id,
+			}},
 		})
 		s.NoError(err3)
 		closedCount = len(resp.Executions)
