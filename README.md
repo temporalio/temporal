@@ -32,7 +32,7 @@ Try out [Temporal Web UI](https://github.com/temporalio/web) to view your workfl
 
 We'd love your help in making Temporal great. Please review our [contribution guide](CONTRIBUTING.md).
 
-If you'd like to propose a new feature, first join the Temporal [Slack channel](https://join.slack.com/t/temporalio/shared_invite/zt-c1e99p8g-beF7~ZZW2HP6gGStXD8Nuw) to start a discussion and check if there are existing design discussions. Also peruse our [design docs](docs/design/index.md) in case a feature has been designed but not yet implemented. Once you're sure the proposal is not covered elsewhere, please follow our [proposal instructions](PROPOSALS.md).
+If you'd like to work on or propose a new feature, first peruse [feature requests](https://community.temporal.io/c/feature-requests/6) and our [proposals repo](https://github.com/temporalio/proposals) to discover existing active and accepted proposals. Feel free to join the Temporal [Slack channel](https://join.slack.com/t/temporalio/shared_invite/zt-c1e99p8g-beF7~ZZW2HP6gGStXD8Nuw) to start a discussion or check if a feature has already been discussed. Once you're sure the proposal is not covered elsewhere, please follow our [proposal instructions](https://github.com/temporalio/proposals#creating-a-new-proposal) or submit a [feature request](https://community.temporal.io/c/feature-requests/6).
 
 ## License
 
