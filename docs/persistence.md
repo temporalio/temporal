@@ -21,7 +21,7 @@ make install-schema
 ### Start temporal server
 ```
 cd $GOPATH/github.com/temporalio/temporal
-./temporal-server start --services=frontend,matching,history,worker
+./temporal-server start
 ```  
  
 ## MySQL
@@ -40,7 +40,7 @@ make install-schema-mysql
 ```
 cd $GOPATH/github.com/temporalio/temporal
 cp config/development_mysql.yaml config/development.yaml
-./temporal-server start --services=frontend,matching,history,worker
+./temporal-server start
 ```
 
 # Config
