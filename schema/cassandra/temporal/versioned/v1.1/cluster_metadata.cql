@@ -1,9 +1,3 @@
-DROP TABLE cluster_metadata;
-
-CREATE TABLE cluster_metadata (
-  metadata_partition      int,
-  data                    blob,
-  data_encoding           text,
-  version                 bigint,
-  PRIMARY KEY  (metadata_partition)
-) WITH COMPACTION = {'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'};
+ALTER TABLE cluster_metadata ADD data blob;
+ALTER TABLE cluster_metadata ADD data_encoding text;
+ALTER TABLE cluster_metadata ADD version bigint;
