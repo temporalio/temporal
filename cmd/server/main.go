@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/urfave/cli"
 
@@ -95,7 +96,7 @@ func buildCLI() *cli.App {
 				zone := c.GlobalString("zone")
 				configDir := path.Join(c.GlobalString("root"), c.GlobalString("config"))
 
-				services := c.StringSlice("services")
+				services := splitServices(c.StringSlice("services"))
 
 				s := temporal.NewServer(
 					temporal.ForServices(services),
@@ -113,4 +114,13 @@ func buildCLI() *cli.App {
 		},
 	}
 	return app
+}
+
+// For backward compatiblity to support old flag format (i.e. `--services=frontend,history,matching`).
+func splitServices(services []string) []string {
+	var result []string
+	for _, service := range services {
+		result = append(result, strings.Split(service, ",")...)
+	}
+	return result
 }

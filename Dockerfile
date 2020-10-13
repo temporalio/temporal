@@ -71,7 +71,7 @@ COPY docker/start.sh /start.sh
 
 WORKDIR /etc/temporal
 
-ENV SERVICES="history,matching,frontend,worker"
+ENV SERVICES="--services=history --services=matching --services=frontend --services=worker"
 
 EXPOSE 6933 6934 6935 6939 7233 7234 7235 7239
 ENTRYPOINT ["/docker-entrypoint.sh"]
