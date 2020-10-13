@@ -36,7 +36,7 @@ type (
 		Data         []byte
 		DataEncoding string
 		Version      int64
-		// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove in the next release.
+		// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove after 1.1 release.
 		ImmutableData         []byte
 		ImmutableDataEncoding string
 	}

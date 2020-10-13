@@ -132,9 +132,12 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(request *SaveClusterMet
 	if immutableFieldsChanged(oldClusterMetadata.ClusterMetadata, request.ClusterMetadata) {
 		return false, nil
 	}
-	if oldClusterMetadata.Version != request.Version {
+	if request.Version != 0 && oldClusterMetadata.Version != request.Version {
 		return false, serviceerror.NewInternal(fmt.Sprintf("SaveClusterMetadata encountered version mismatch, expected %v but got %v.",
 			request.Version, oldClusterMetadata.Version))
+	} else {
+		// TODO(vitarb): Needed to handle legacy records during upgrade. Can be removed after v1.1 release.
+		request.Version = oldClusterMetadata.Version
 	}
 	return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{ClusterMetadata: mcm, Version: request.Version})
 }
