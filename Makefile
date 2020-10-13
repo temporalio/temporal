@@ -213,7 +213,7 @@ temporal-sql-tool:
 ##### Checks #####
 copyright:
 	@printf $(COLOR) "Check license header..."
-	@go run ./cmd/tools/copyright/licensegen.go --verifyOnly
+	@go run ./cmd/tools/copyright/licensegen.go --verifyOnly || true
 
 lint:
 	@printf $(COLOR) "Run linter..."
