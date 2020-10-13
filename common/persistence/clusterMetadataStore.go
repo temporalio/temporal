@@ -133,6 +133,7 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(request *SaveClusterMet
 	if immutableFieldsChanged(oldClusterMetadata.ClusterMetadata, request.ClusterMetadata) {
 		return false, nil
 	}
+	// TODO(vitarb): Check for Version != 0 is needed to allow legacy record override with a new cluster ID. Can be removed after v1.1 release.
 	if request.Version != 0 && oldClusterMetadata.Version != request.Version {
 		return false, serviceerror.NewInternal(fmt.Sprintf("SaveClusterMetadata encountered version mismatch, expected %v but got %v.",
 			request.Version, oldClusterMetadata.Version))
