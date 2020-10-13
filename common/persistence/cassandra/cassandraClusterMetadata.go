@@ -162,18 +162,18 @@ func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMe
 	if clusterMetadata == nil {
 		clusterMetadata = immutableMetadata
 		encoding = immutableMetadataEncoding
-	}
-	// Version can only be 0 for legacy records that have NULL version in the DB.
-	// In this case we want to initialize version with a value 1 so that conditional updates can proceed successfully.
-	if version == 0 {
-		applied, err := m.initializeClusterMetadataVersion()
-		if err != nil {
-			return nil, convertCommonErrors("GetClusterMetadata", err)
+		// Version can only be 0 for legacy records that have NULL version in the DB.
+		// In this case we want to initialize version with a value 1 so that conditional updates can proceed successfully.
+		if version == 0 {
+			applied, err := m.initializeClusterMetadataVersion()
+			if err != nil {
+				return nil, convertCommonErrors("GetClusterMetadata", err)
+			}
+			if !applied {
+				return nil, serviceerror.NewInternal("GetClusterMetadata was unable to initialize version for the legacy record.")
+			}
+			version = 1
 		}
-		if !applied {
-			return nil, serviceerror.NewInternal("GetClusterMetadata was unable to initialize version for the legacy record.")
-		}
-		version = 1
 	}
 	return &p.InternalGetClusterMetadataResponse{
 		ClusterMetadata: p.NewDataBlob(clusterMetadata, encoding),
