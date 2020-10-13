@@ -15,7 +15,6 @@ persistence:
         keyspace: "temporal_visibility"
 global:
   membership:
-    name: temporal
     maxJoinDuration: 30s
     broadcastAddress: "127.0.0.1"
   pprof:

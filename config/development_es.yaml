@@ -21,7 +21,6 @@ persistence:
           visibility: temporal-visibility-dev
 global:
   membership:
-    name: temporal
     maxJoinDuration: 30s
   pprof:
       port: 7936
