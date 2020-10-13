@@ -141,7 +141,7 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(request *SaveClusterMet
 
 // immutableFieldsChanged returns true if any of immutable fields changed.
 func immutableFieldsChanged(old persistenceblobs.ClusterMetadata, cur persistenceblobs.ClusterMetadata) bool {
-	return old.ClusterName != cur.ClusterName ||
-		old.ClusterId != cur.ClusterId ||
-		old.HistoryShardCount != cur.HistoryShardCount
+	return (old.ClusterName != "" && old.ClusterName != cur.ClusterName) ||
+		(old.ClusterId != "" && old.ClusterId != cur.ClusterId) ||
+		(old.HistoryShardCount != 0 && old.HistoryShardCount != cur.HistoryShardCount)
 }

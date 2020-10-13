@@ -42,7 +42,8 @@ const (
 
 	updateClusterMetadataQry = `UPDATE cluster_metadata SET data = $1, data_encoding = $2, version = $3 WHERE metadata_partition = $4`
 
-	getClusterMetadataQry = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = $1`
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove in the next release.
+	getClusterMetadataQry = `SELECT data, data_encoding, immutable_data, immutable_data_encoding, version FROM cluster_metadata WHERE metadata_partition = $1`
 
 	writeLockGetClusterMetadataQry = getClusterMetadataQry + ` FOR UPDATE`
 

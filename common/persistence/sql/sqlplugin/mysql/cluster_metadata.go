@@ -37,11 +37,13 @@ const constMetadataPartition = 0
 const constMembershipPartition = 0
 const (
 	// ****** CLUSTER_METADATA TABLE ******
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove in the next release.
 	insertClusterMetadataQry = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, immutable_data, immutable_data_encoding, version) VALUES(?, ?, ?, ?, ?, ?)`
 
 	updateClusterMetadataQry = `UPDATE cluster_metadata SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ?`
 
-	getClusterMetadataQry          = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = ?`
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove in the next release.
+	getClusterMetadataQry          = `SELECT data, data_encoding, immutable_data, immutable_data_encoding, version FROM cluster_metadata WHERE metadata_partition = ?`
 	writeLockGetClusterMetadataQry = getClusterMetadataQry + ` FOR UPDATE`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******

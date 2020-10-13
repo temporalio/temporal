@@ -53,8 +53,10 @@ WHERE metadata_partition = ?`
 
 	immutableEncodingFieldName = immutablePayloadFieldName + `_encoding`
 
-	templateGetClusterMetadata = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = ?`
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove in the next release.
+	templateGetClusterMetadata = `SELECT data, data_encoding, immutable_data, immutable_data_encoding, version FROM cluster_metadata WHERE metadata_partition = ?`
 
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove in the next release.
 	templateCreateClusterMetadata = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, immutable_data, immutable_data_encoding, version) VALUES(?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 	templateUpdateClusterMetadata = `UPDATE cluster_metadata SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ? IF version = ?`
 
@@ -146,12 +148,19 @@ func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMe
 	query := m.session.Query(templateGetClusterMetadata, constMetadataPartition)
 	var clusterMetadata []byte
 	var encoding string
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove in the next release.
+	var immutableMetadata []byte
+	var immutableMetadataEncoding string
 	var version int64
-	err := query.Scan(&clusterMetadata, &encoding, &version)
+	err := query.Scan(&clusterMetadata, &encoding, &immutableMetadata, &immutableMetadataEncoding, &version)
 	if err != nil {
 		return nil, convertCommonErrors("GetClusterMetadata", err)
 	}
-
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove in the next release.
+	if clusterMetadata == nil {
+		clusterMetadata = immutableMetadata
+		encoding = immutableMetadataEncoding
+	}
 	return &p.InternalGetClusterMetadataResponse{
 		ClusterMetadata: p.NewDataBlob(clusterMetadata, encoding),
 		Version:         version,
