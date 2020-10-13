@@ -42,10 +42,9 @@ const (
 	deleteHistoryNodesQuery = `DELETE FROM history_node WHERE shard_id = $1 AND tree_id = $2 AND branch_id = $3 AND node_id >= $4 `
 
 	// below are templates for history_tree table
-	upsertHistoryTreeQuery = `INSERT INTO history_tree (` +
+	addHistoryTreeQuery = `INSERT INTO history_tree (` +
 		`shard_id, tree_id, branch_id, data, data_encoding) ` +
-		`VALUES (:shard_id, :tree_id, :branch_id, :data, :data_encoding) ` +
-		`ON CONFLICT (shard_id, tree_id, branch_id) DO UPDATE SET data = excluded.data, data_encoding = excluded.data_encoding`
+		`VALUES (:shard_id, :tree_id, :branch_id, :data, :data_encoding) `
 
 	getHistoryTreeQuery = `SELECT branch_id, data, data_encoding FROM history_tree WHERE shard_id = $1 AND tree_id = $2 `
 
@@ -82,7 +81,7 @@ func (pdb *db) DeleteFromHistoryNode(filter sqlplugin.HistoryNodeDeleteFilter) (
 
 // InsertIntoHistoryTree inserts a row into history_tree table
 func (pdb *db) InsertIntoHistoryTree(row *sqlplugin.HistoryTreeRow) (sql.Result, error) {
-	return pdb.conn.NamedExec(upsertHistoryTreeQuery, row)
+	return pdb.conn.NamedExec(addHistoryTreeQuery, row)
 }
 
 // SelectFromHistoryTree reads one or more rows from history_tree table
