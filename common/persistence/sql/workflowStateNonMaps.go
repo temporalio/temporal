@@ -63,7 +63,7 @@ func updateSignalsRequested(
 	}
 
 	if deleteSignalRequestID != "" {
-		if _, err := tx.DeleteFromSignalsRequestedSets(&sqlplugin.SignalsRequestedSetsFilter{
+		if _, err := tx.DeleteFromSignalsRequestedSets(sqlplugin.SignalsRequestedSetsDeleteFilter{
 			ShardID:     shardID,
 			NamespaceID: namespaceID,
 			WorkflowID:  workflowID,
@@ -85,7 +85,7 @@ func getSignalsRequested(
 	runID primitives.UUID,
 ) (map[string]struct{}, error) {
 
-	rows, err := db.SelectFromSignalsRequestedSets(&sqlplugin.SignalsRequestedSetsFilter{
+	rows, err := db.SelectFromSignalsRequestedSets(sqlplugin.SignalsRequestedSetsSelectFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -109,7 +109,7 @@ func deleteSignalsRequestedSet(
 	runID primitives.UUID,
 ) error {
 
-	if _, err := tx.DeleteFromSignalsRequestedSets(&sqlplugin.SignalsRequestedSetsFilter{
+	if _, err := tx.DeleteFromSignalsRequestedSets(sqlplugin.SignalsRequestedSetsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
