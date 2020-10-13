@@ -2,8 +2,6 @@
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -22,38 +20,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package temporal
+package auth
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"crypto/tls"
+	"crypto/x509"
 )
 
-type TemporalSuite struct {
-	*require.Assertions
-	suite.Suite
+// Helper methods for creating tls.Config structs to ensure MinVersion is 1.3
+
+func NewEmptyTLSConfig() *tls.Config {
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
 }
 
-func TestTemporalSuite(t *testing.T) {
-	suite.Run(t, new(TemporalSuite))
+func NewTLSConfigForServer(serverName string) *tls.Config {
+	c := NewEmptyTLSConfig()
+	c.ServerName = serverName
+	return c
 }
 
-func (s *TemporalSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+func NewTLSConfigWithCertsAndCAs(certificates []tls.Certificate, rootCAs *x509.CertPool, serverName string) *tls.Config {
+	c := NewTLSConfigForServer(serverName)
+	c.Certificates = certificates
+	c.RootCAs = rootCAs
+	return c
 }
 
-func (s *TemporalSuite) TestIsValidService() {
-	s.True(isValidService("history"))
-	s.True(isValidService("matching"))
-	s.True(isValidService("frontend"))
-	s.False(isValidService("temporal-history"))
-	s.False(isValidService("temporal-matching"))
-	s.False(isValidService("temporal-frontend"))
-	s.False(isValidService("foobar"))
-}
-
-func (s *TemporalSuite) TestPath() {
-	s.Equal("foo/bar", constructPath("foo", "bar"))
+func NewTLSConfigWithClientAuthAndCAs(clientAuth tls.ClientAuthType, certificates []tls.Certificate, clientCAs *x509.CertPool) *tls.Config {
+	c := NewEmptyTLSConfig()
+	c.ClientAuth = clientAuth
+	c.Certificates = certificates
+	c.ClientCAs = clientCAs
+	return c
 }

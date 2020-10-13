@@ -95,6 +95,7 @@ type (
 		// persistence clients
 
 		MetadataMgr               *mocks.MetadataManager
+		ClusterMetadataMgr        *mocks.MockClusterMetadataManager
 		TaskMgr                   *mocks.TaskManager
 		VisibilityMgr             *mocks.VisibilityManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
@@ -134,6 +135,7 @@ func NewTest(
 	historyClient := historyservicemock.NewMockHistoryServiceClient(controller)
 	remoteFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	remoteAdminClient := adminservicemock.NewMockAdminServiceClient(controller)
+	clusterMetadataManager := mocks.NewMockClusterMetadataManager(controller)
 	clientBean := client.NewMockBean(controller)
 	clientBean.EXPECT().GetFrontendClient().Return(frontendClient).AnyTimes()
 	clientBean.EXPECT().GetMatchingClient(gomock.Any()).Return(matchingClient, nil).AnyTimes()
@@ -158,6 +160,7 @@ func NewTest(
 	persistenceBean.EXPECT().GetShardManager().Return(shardMgr).AnyTimes()
 	persistenceBean.EXPECT().GetExecutionManager(gomock.Any()).Return(executionMgr, nil).AnyTimes()
 	persistenceBean.EXPECT().GetNamespaceReplicationQueue().Return(namespaceReplicationQueue).AnyTimes()
+	persistenceBean.EXPECT().GetClusterMetadataManager().Return(clusterMetadataManager).AnyTimes()
 
 	membershipMonitor := membership.NewMockMonitor(controller)
 	frontendServiceResolver := membership.NewMockServiceResolver(controller)
@@ -205,6 +208,7 @@ func NewTest(
 		// persistence clients
 
 		MetadataMgr:               metadataMgr,
+		ClusterMetadataMgr:        clusterMetadataManager,
 		TaskMgr:                   taskMgr,
 		VisibilityMgr:             visibilityMgr,
 		NamespaceReplicationQueue: namespaceReplicationQueue,
@@ -251,6 +255,10 @@ func (s *Test) GetClusterMetadata() cluster.Metadata {
 	return s.ClusterMetadata
 }
 
+// GetClusterMetadata for testing
+func (s *Test) GetClusterMetadataManager() persistence.ClusterMetadataManager {
+	return s.ClusterMetadataMgr
+}
 // other common resources
 
 // GetNamespaceCache for testing

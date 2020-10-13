@@ -22,17 +22,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package temporal
 
-import (
-	"os"
-
-	"go.temporal.io/server/tools/cli"
+type (
+	applyFuncContainer struct {
+		applyInternal func(*serverOptions)
+	}
 )
 
-// Start using this CLI tool with command
-// See temporal/tools/cli/README.md for usage
-func main() {
-	app := cli.NewCliApp()
-	_ = app.Run(os.Args)
+func (fso *applyFuncContainer) apply(s *serverOptions) {
+	fso.applyInternal(s)
+}
+
+func newApplyFuncContainer(apply func(option *serverOptions)) *applyFuncContainer {
+	return &applyFuncContainer{
+		applyInternal: apply,
+	}
 }

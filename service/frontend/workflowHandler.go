@@ -3126,9 +3126,18 @@ func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservic
 		return nil, wh.error(errServiceBusy, scope)
 	}
 
+	metadata, err := wh.GetClusterMetadataManager().GetClusterMetadata()
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
 	return &workflowservice.GetClusterInfoResponse{
-		SupportedClients: headers.SupportedClients,
-		ServerVersion:    headers.ServerVersion,
+		SupportedClients:  headers.SupportedClients,
+		ServerVersion:     headers.ServerVersion,
+		ClusterId:         metadata.ClusterId,
+		VersionInfo:       metadata.VersionInfo,
+		ClusterName:       metadata.ClusterName,
+		HistoryShardCount: metadata.HistoryShardCount,
 	}, nil
 }
 

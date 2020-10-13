@@ -38,6 +38,7 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 
+	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/service/config"
@@ -128,9 +129,7 @@ func registerTLSConfig(cfg *config.SQL) error {
 	}
 
 	// TODO: create a way to set MinVersion and CipherSuites via cfg.
-	tlsConfig := &tls.Config{
-		ServerName: host,
-	}
+	tlsConfig := auth.NewTLSConfigForServer(host)
 
 	if cfg.TLS.CaFile != "" {
 		rootCertPool := x509.NewCertPool()

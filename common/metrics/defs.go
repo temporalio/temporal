@@ -777,6 +777,8 @@ const (
 	FrontendResetWorkflowExecutionScope
 	// FrontendGetSearchAttributesScope is the metric scope for frontend.GetSearchAttributes
 	FrontendGetSearchAttributesScope
+	// VersionCheckScope is scope used by version checker
+	VersionCheckScope
 
 	NumFrontendScopes
 )
@@ -1387,6 +1389,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendDescribeTaskQueueScope:                  {operation: "DescribeTaskQueue"},
 		FrontendResetStickyTaskQueueScope:               {operation: "ResetStickyTaskQueue"},
 		FrontendGetSearchAttributesScope:                {operation: "GetSearchAttributes"},
+		VersionCheckScope:                               {operation: "VersionCheckScope"},
 	},
 	// History Scope Names
 	History: {
@@ -1654,6 +1657,10 @@ const (
 	ServiceErrNonDeterministicPerTaskQueueCounter
 	ServiceErrUnauthorizedPerTaskQueueCounter
 	ServiceErrAuthorizeFailedPerTaskQueueCounter
+	VersionCheckSuccessCount
+	VersionCheckRequestFailedCount
+	VersionCheckFailedCount
+	VersionCheckLatency
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
@@ -2011,6 +2018,10 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		VisibilityArchiverArchiveNonRetryableErrorCount:           {metricName: "visibility_archiver_archive_non_retryable_error", metricType: Counter},
 		VisibilityArchiverArchiveTransientErrorCount:              {metricName: "visibility_archiver_archive_transient_error", metricType: Counter},
 		VisibilityArchiveSuccessCount:                             {metricName: "visibility_archiver_archive_success", metricType: Counter},
+		VersionCheckSuccessCount:                                  {metricName: "version_check_success", metricType: Counter},
+		VersionCheckFailedCount:                                   {metricName: "version_check_failed", metricType: Counter},
+		VersionCheckRequestFailedCount:                            {metricName: "version_check_request_failed", metricType: Counter},
+		VersionCheckLatency:                                       {metricName: "version_check_latency", metricType: Timer},
 		MatchingClientForwardedCounter:                            {metricName: "forwarded", metricType: Counter},
 		MatchingClientInvalidTaskQueueName:                        {metricName: "invalid_task_queue_name", metricType: Counter},
 
