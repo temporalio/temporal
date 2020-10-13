@@ -34,8 +34,8 @@ import (
 type (
 	Config struct {
 		URL      url.URL           `yaml:"url"` //nolint:govet
-		Username *string           `yaml:"username"`
-		Password *string           `yaml:"password"`
+		Username string            `yaml:"username"`
+		Password string            `yaml:"password"`
 		Indices  map[string]string `yaml:"indices"` //nolint:govet
 	}
 )
@@ -47,9 +47,9 @@ func (cfg *Config) GetVisibilityIndex() string {
 
 // CompleteUserInfo complete url.URL with username and password for ElasticSearch
 func (cfg *Config) CompleteUserInfo() {
-	if cfg.Username != nil && cfg.Password != nil {
-		cfg.URL.User = url.UserPassword(*cfg.Username, *cfg.Password)
-	} else if cfg.Username != nil {
-		cfg.URL.User = url.User(*cfg.Username)
+	if len(cfg.Username) > 0 && len(cfg.Password) > 0 {
+		cfg.URL.User = url.UserPassword(cfg.Username, cfg.Password)
+	} else if len(cfg.Username) > 0 {
+		cfg.URL.User = url.User(cfg.Username)
 	}
 }
