@@ -36,6 +36,9 @@ type (
 		Data         []byte
 		DataEncoding string
 		Version      int64
+		// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove after 1.1 release.
+		ImmutableData         []byte
+		ImmutableDataEncoding string
 	}
 
 	// ClusterMembershipRow represents a row in the cluster_membership table

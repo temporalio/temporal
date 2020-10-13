@@ -38,11 +38,13 @@ const constMetadataPartition = 0
 const constMembershipPartition = 0
 const (
 	// ****** CLUSTER_METADATA TABLE ******
-	insertClusterMetadataQry = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES($1, $2, $3, $4)`
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove after 1.1 release.
+	insertClusterMetadataQry = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, immutable_data, immutable_data_encoding, version) VALUES($1, $2, $3, $4, $5, $6)`
 
 	updateClusterMetadataQry = `UPDATE cluster_metadata SET data = $1, data_encoding = $2, version = $3 WHERE metadata_partition = $4`
 
-	getClusterMetadataQry = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = $1`
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove after 1.1 release.
+	getClusterMetadataQry = `SELECT data, data_encoding, immutable_data, immutable_data_encoding, version FROM cluster_metadata WHERE metadata_partition = $1`
 
 	writeLockGetClusterMetadataQry = getClusterMetadataQry + ` FOR UPDATE`
 
@@ -78,7 +80,8 @@ cluster_membership WHERE membership_partition = $`
 
 func (pdb *db) SaveClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Result, error) {
 	if row.Version == 0 {
-		pdb.conn.Exec(insertClusterMetadataQry, constMetadataPartition, row.Data, row.DataEncoding, 1)
+		// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove after 1.1 release.
+		pdb.conn.Exec(insertClusterMetadataQry, constMetadataPartition, row.Data, row.DataEncoding, row.Data, row.DataEncoding, 1)
 	}
 	return pdb.conn.Exec(updateClusterMetadataQry, row.Data, row.DataEncoding, row.Version+1, constMetadataPartition)
 }

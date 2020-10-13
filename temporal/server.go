@@ -379,7 +379,7 @@ func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collec
 				ClusterId:         uuid.New(),
 			}})
 	if err != nil {
-		return fmt.Errorf("error while saving cluster metadata: %w", err)
+		logger.Warn(fmt.Sprintf("Failed to save cluster metadata: %v", err))
 	}
 	if applied {
 		logger.Info("Successfully saved cluster metadata.")

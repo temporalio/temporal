@@ -53,10 +53,14 @@ WHERE metadata_partition = ?`
 
 	immutableEncodingFieldName = immutablePayloadFieldName + `_encoding`
 
-	templateGetClusterMetadata = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = ?`
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove after 1.1 release.
+	templateGetClusterMetadata = `SELECT data, data_encoding, immutable_data, immutable_data_encoding, version FROM cluster_metadata WHERE metadata_partition = ?`
 
-	templateCreateClusterMetadata = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES(?, ?, ?, ?) IF NOT EXISTS`
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove after 1.1 release.
+	templateCreateClusterMetadata = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, immutable_data, immutable_data_encoding, version) VALUES(?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 	templateUpdateClusterMetadata = `UPDATE cluster_metadata SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ? IF version = ?`
+	// TODO(vitarb): needed only to support legacy records in the immutable metadata, remove after 1.1 release.
+	templateInitializeVersionIfNull = `UPDATE cluster_metadata SET version = 1 WHERE metadata_partition = ? IF version = NULL`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
 	templateUpsertActiveClusterMembership = `INSERT INTO 
@@ -146,12 +150,31 @@ func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMe
 	query := m.session.Query(templateGetClusterMetadata, constMetadataPartition)
 	var clusterMetadata []byte
 	var encoding string
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove after 1.1 release.
+	var immutableMetadata []byte
+	var immutableMetadataEncoding string
 	var version int64
-	err := query.Scan(&clusterMetadata, &encoding, &version)
+	err := query.Scan(&clusterMetadata, &encoding, &immutableMetadata, &immutableMetadataEncoding, &version)
 	if err != nil {
 		return nil, convertCommonErrors("GetClusterMetadata", err)
 	}
-
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove after 1.1 release.
+	if clusterMetadata == nil {
+		clusterMetadata = immutableMetadata
+		encoding = immutableMetadataEncoding
+		// Version can only be 0 for legacy records that have NULL version in the DB.
+		// In this case we want to initialize version with a value 1 so that conditional updates can proceed successfully.
+		if version == 0 {
+			applied, err := m.initializeClusterMetadataVersion()
+			if err != nil {
+				return nil, convertCommonErrors("GetClusterMetadata", err)
+			}
+			if !applied {
+				return nil, serviceerror.NewInternal("GetClusterMetadata was unable to initialize version for the legacy record.")
+			}
+			version = 1
+		}
+	}
 	return &p.InternalGetClusterMetadataResponse{
 		ClusterMetadata: p.NewDataBlob(clusterMetadata, encoding),
 		Version:         version,
@@ -159,12 +182,26 @@ func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMe
 }
 
 func (m *cassandraClusterMetadata) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
+	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove after 1.1 release.
 	query := m.session.Query(templateCreateClusterMetadata,
-		constMembershipPartition, request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), 1)
+		constMembershipPartition, request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), 1)
 	if request.Version > 0 {
 		query = m.session.Query(templateUpdateClusterMetadata,
 			request.ClusterMetadata.Data, request.ClusterMetadata.Encoding.String(), request.Version+1, constMembershipPartition, request.Version)
 	}
+	previous := make(map[string]interface{})
+	applied, err := query.MapScanCAS(previous)
+	if err != nil {
+		return false, convertCommonErrors("SaveClusterMetadata", err)
+	}
+	if !applied {
+		return false, serviceerror.NewInternal("SaveClusterMetadata operation encountered concurrent write.")
+	}
+	return true, nil
+}
+
+func (m *cassandraClusterMetadata) initializeClusterMetadataVersion() (bool, error) {
+	query := m.session.Query(templateInitializeVersionIfNull, constMetadataPartition)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
