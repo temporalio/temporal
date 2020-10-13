@@ -39,7 +39,7 @@ func VerifyCompatibleVersion(
 
 	version, err := db.ReadSchemaVersion()
 	if err != nil {
-		return fmt.Errorf("unable to read cassandra schema version keyspace/database: %s error: %v", dbName, err.Error())
+		return fmt.Errorf("unable to read DB schema version keyspace/database: %s error: %v", dbName, err.Error())
 	}
 	// In most cases, the versions should match. However if after a schema upgrade there is a code
 	// rollback, the code version (expected version) would fall lower than the actual version in

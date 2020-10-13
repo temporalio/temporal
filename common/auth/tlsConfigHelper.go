@@ -1,4 +1,6 @@
-// Copyright (c) 2020 Temporal Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,19 +20,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-syntax = "proto3";
+package auth
 
-package temporal.server.api.enums.v1;
+import (
+	"crypto/tls"
+	"crypto/x509"
+)
 
-option go_package = "go.temporal.io/server/api/enums/v1;enums";
+// Helper methods for creating tls.Config structs to ensure MinVersion is 1.3
 
-enum DeadLetterQueueType {
-    DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED = 0;
-    DEAD_LETTER_QUEUE_TYPE_REPLICATION = 1;
-    DEAD_LETTER_QUEUE_TYPE_NAMESPACE = 2;
+func NewEmptyTLSConfig() *tls.Config {
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
 }
 
-enum ChecksumFlavor {
-    CHECKSUM_FLAVOR_UNSPECIFIED = 0;
-    CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY = 1;
+func NewTLSConfigForServer(serverName string) *tls.Config {
+	c := NewEmptyTLSConfig()
+	c.ServerName = serverName
+	return c
+}
+
+func NewTLSConfigWithCertsAndCAs(certificates []tls.Certificate, rootCAs *x509.CertPool, serverName string) *tls.Config {
+	c := NewTLSConfigForServer(serverName)
+	c.Certificates = certificates
+	c.RootCAs = rootCAs
+	return c
+}
+
+func NewTLSConfigWithClientAuthAndCAs(clientAuth tls.ClientAuthType, certificates []tls.Certificate, clientCAs *x509.CertPool) *tls.Config {
+	c := NewEmptyTLSConfig()
+	c.ClientAuth = clientAuth
+	c.Certificates = certificates
+	c.ClientCAs = clientCAs
+	return c
 }

@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"sync"
 
+	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -137,11 +138,7 @@ func newServerTLSConfig(certProvider CertProvider, settingsProvider CertProvider
 		clientCaPool = ca
 	}
 
-	return &tls.Config{
-		ClientAuth:   clientAuthType,
-		Certificates: []tls.Certificate{*serverCert},
-		ClientCAs:    clientCaPool,
-	}, nil
+	return auth.NewTLSConfigWithClientAuthAndCAs(clientAuthType, []tls.Certificate{*serverCert}, clientCaPool), nil
 }
 
 func newClientTLSConfig(localProvider CertProvider, remoteProvider CertProvider) (*tls.Config, error) {
@@ -165,9 +162,9 @@ func newClientTLSConfig(localProvider CertProvider, remoteProvider CertProvider)
 		clientCerts = []tls.Certificate{*cert}
 	}
 
-	return &tls.Config{
-		Certificates: clientCerts,
-		RootCAs:      serverCa,
-		ServerName:   remoteProvider.GetSettings().Client.ServerName,
-	}, nil
+	return auth.NewTLSConfigWithCertsAndCAs(
+		clientCerts,
+		serverCa,
+		remoteProvider.GetSettings().Client.ServerName,
+	), nil
 }

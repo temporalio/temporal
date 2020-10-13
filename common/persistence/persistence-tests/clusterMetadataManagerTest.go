@@ -31,6 +31,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
+	versionpb "go.temporal.io/api/version/v1"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	p "go.temporal.io/server/common/persistence"
@@ -334,8 +335,8 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	s.Equal(historyShardsToPersist, getResp.HistoryShardCount)
 	s.Equal(clusterIdToPersist, getResp.ClusterId)
 	// Case 5 - Update version info
-	getResp.VersionInfo = &persistenceblobs.VersionInfo{
-		Current: &persistenceblobs.ReleaseInfo{
+	getResp.VersionInfo = &versionpb.VersionInfo{
+		Current: &versionpb.ReleaseInfo{
 			Version: "1.0",
 		},
 	}

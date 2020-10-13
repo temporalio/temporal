@@ -43,13 +43,21 @@ type (
 	HandlerTestSuite struct {
 		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 		suite.Suite
+		host       string
+		port       string
 		pluginName string
 	}
 )
 
 // NewHandlerTestSuite returns a test suite
-func NewHandlerTestSuite(pluginName string) *HandlerTestSuite {
+func NewHandlerTestSuite(
+	host string,
+	port string,
+	pluginName string,
+) *HandlerTestSuite {
 	return &HandlerTestSuite{
+		host:       host,
+		port:       port,
 		pluginName: pluginName,
 	}
 }
