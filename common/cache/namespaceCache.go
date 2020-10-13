@@ -66,7 +66,7 @@ const (
 	namespaceCacheInitialSize = 10 * 1024
 	namespaceCacheMaxSize     = 64 * 1024
 	namespaceCacheTTL         = 0 // 0 means infinity
-	// NamespaceCacheMinRefreshInterval namespace cache refresh interval
+	// NamespaceCacheMinRefreshInterval is a minimun namespace cache refresh interval.
 	NamespaceCacheMinRefreshInterval = 2 * time.Second
 	// NamespaceCacheRefreshInterval namespace cache refresh interval
 	NamespaceCacheRefreshInterval = 10 * time.Second
