@@ -172,10 +172,15 @@ func AdminFailoverQuery(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Failed to describe workflow", err)
 	}
-	if descResp.WorkflowExecutionInfo.CloseStatus.Equals(shared.WorkflowExecutionCloseStatusTerminated) {
+	if isWorkflowTerminated(descResp) {
 		result.State = failovermanager.WorkflowAborted
 	}
 	prettyPrintJSONObject(result)
+}
+
+func isWorkflowTerminated(descResp *shared.DescribeWorkflowExecutionResponse) bool {
+	return descResp.WorkflowExecutionInfo.CloseStatus != nil &&
+		descResp.WorkflowExecutionInfo.CloseStatus.Equals(shared.WorkflowExecutionCloseStatusTerminated)
 }
 
 // AdminFailoverAbort abort a failover workflow
