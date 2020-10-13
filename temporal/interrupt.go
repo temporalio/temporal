@@ -22,17 +22,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package temporal
 
 import (
 	"os"
-
-	"go.temporal.io/server/tools/cli"
+	"os/signal"
+	"syscall"
 )
 
-// Start using this CLI tool with command
-// See temporal/tools/cli/README.md for usage
-func main() {
-	app := cli.NewCliApp()
-	_ = app.Run(os.Args)
+func InterruptCh() <-chan interface{} {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	ret := make(chan interface{}, 1)
+	go func() {
+		s := <-c
+		ret <- s
+		close(ret)
+	}()
+
+	return ret
 }

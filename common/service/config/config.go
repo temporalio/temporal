@@ -482,7 +482,12 @@ func (c *Config) Validate() error {
 	if err := c.Persistence.Validate(); err != nil {
 		return err
 	}
-	return c.Archival.Validate(&c.NamespaceDefaults.Archival)
+
+	if err := c.Archival.Validate(&c.NamespaceDefaults.Archival); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // String converts the config object into a string

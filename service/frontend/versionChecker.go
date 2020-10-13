@@ -1,3 +1,27 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package frontend
 
 import (
@@ -5,12 +29,11 @@ import (
 	"sync"
 	"time"
 
+	enumsbp "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
+	versionpb "go.temporal.io/api/version/v1"
 	"go.temporal.io/version/check"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -141,8 +164,8 @@ func (vc *VersionChecker) saveVersionInfo(resp *check.VersionCheckResponse) erro
 	return nil
 }
 
-func toVersionInfo(resp *check.VersionCheckResponse) *persistenceblobs.VersionInfo {
-	return &persistenceblobs.VersionInfo{
+func toVersionInfo(resp *check.VersionCheckResponse) *versionpb.VersionInfo {
+	return &versionpb.VersionInfo{
 		Current:        convertReleaseInfo(resp.Current),
 		Recommended:    convertReleaseInfo(resp.Recommended),
 		Instructions:   resp.Instructions,
@@ -151,19 +174,19 @@ func toVersionInfo(resp *check.VersionCheckResponse) *persistenceblobs.VersionIn
 	}
 }
 
-func convertAlerts(alerts []check.Alert) []*persistenceblobs.Alert {
-	var result []*persistenceblobs.Alert
+func convertAlerts(alerts []check.Alert) []*versionpb.Alert {
+	var result []*versionpb.Alert
 	for _, alert := range alerts {
-		result = append(result, &persistenceblobs.Alert{
+		result = append(result, &versionpb.Alert{
 			Message:  alert.Message,
-			Severity: enumsspb.Severity(alert.Severity),
+			Severity: enumsbp.Severity(alert.Severity),
 		})
 	}
 	return result
 }
 
-func convertReleaseInfo(releaseInfo check.ReleaseInfo) *persistenceblobs.ReleaseInfo {
-	return &persistenceblobs.ReleaseInfo{
+func convertReleaseInfo(releaseInfo check.ReleaseInfo) *versionpb.ReleaseInfo {
+	return &versionpb.ReleaseInfo{
 		Version:     releaseInfo.Version,
 		ReleaseTime: timestamp.UnixOrZeroTimePtr(releaseInfo.ReleaseTime),
 		Notes:       releaseInfo.Notes,

@@ -35,6 +35,7 @@ import (
 
 	"github.com/gocql/gocql"
 
+	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -65,9 +66,7 @@ func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 			CaPath:                 cfg.TLS.CaFile,
 			EnableHostVerification: cfg.TLS.EnableHostVerification,
 
-			Config: &tls.Config{
-				ServerName: cfg.TLS.ServerName,
-			},
+			Config: auth.NewTLSConfigForServer(cfg.TLS.ServerName),
 		}
 
 		if cfg.TLS.CertData != "" {

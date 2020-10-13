@@ -219,7 +219,7 @@ Loop:
 			break Loop
 		}
 
-		timeoutFailure := failure.NewTimeoutFailure("ActivityTask timeout", timerSequenceID.timerType)
+		timeoutFailure := failure.NewTimeoutFailure("activity timeout", timerSequenceID.timerType)
 		var retryState enumspb.RetryState
 		if retryState, err = mutableState.RetryActivity(
 			activityInfo,
@@ -486,7 +486,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 
 	eventBatchFirstEventID := mutableState.GetNextEventID()
 
-	timeoutFailure := failure.NewTimeoutFailure("WorkflowTask timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	timeoutFailure := failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	backoffInterval := backoff.NoBackoff
 	retryState := enumspb.RETRY_STATE_TIMEOUT
 	continueAsNewInitiator := enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY

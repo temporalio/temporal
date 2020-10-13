@@ -68,21 +68,23 @@ const (
 //         env_az.yaml -- zone is another input param
 //
 func Load(env string, configDir string, zone string, config interface{}) error {
-
 	if len(env) == 0 {
 		env = envDevelopment
 	}
-
 	if len(configDir) == 0 {
 		configDir = defaultConfigDir
 	}
+
+	// TODO: remove log dependency.
+	log.Printf("Loading config; env=%v,zone=%v,configDir=%v\n", env, zone, configDir)
 
 	files, err := getConfigFiles(env, configDir, zone)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Loading configFiles=%v\n", files)
+	// TODO: remove log dependency.
+	log.Printf("Loading config files=%v\n", files)
 
 	for _, f := range files {
 		// This is tagged nosec because the file names being read are for config files that are not user supplied
