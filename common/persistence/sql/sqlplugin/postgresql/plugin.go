@@ -107,7 +107,6 @@ func buildDSN(cfg *config.SQL) string {
 		databaseName(cfg.DatabaseName),
 		tlsAttrs,
 	)
-	fmt.Println(dsn)
 	return dsn
 }
 
