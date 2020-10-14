@@ -84,6 +84,7 @@ services:
       - "CASSANDRA_SEEDS=cassandra"
       - "MYSQL_SEEDS=mysql"
       - "POSTGRES_SEEDS=postgresql"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
@@ -111,6 +112,7 @@ services:
       - "PERSISTENCE_TYPE=nosql"
       - "PERSISTENCE_DRIVER=cassandra"
       - "TEST_TAG=esintegration"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
@@ -138,6 +140,7 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=mysql"
       - "TEST_TAG=esintegration"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
@@ -165,6 +168,7 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres"
       - "TEST_TAG=esintegration"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
@@ -193,6 +197,7 @@ services:
       - "PERSISTENCE_DRIVER=cassandra"
       - "TEST_TAG=esintegration"
       - "TEST_RUN_COUNT=10"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
@@ -221,6 +226,7 @@ services:
       - "PERSISTENCE_DRIVER=mysql"
       - "TEST_TAG=esintegration"
       - "TEST_RUN_COUNT=10"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
@@ -249,6 +255,7 @@ services:
       - "PERSISTENCE_DRIVER=postgres"
       - "TEST_TAG=esintegration"
       - "TEST_RUN_COUNT=10"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
