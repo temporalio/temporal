@@ -338,8 +338,6 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() error {
 	ackLevel := t.ackLevel
 	outstandingTasks := t.outstandingTasks
 
-	t.logger.Debug("Moving timer ack level", tag.AckLevel(ackLevel), tag.Tasks(outstandingTasks))
-
 	// Timer Sequence IDs can have holes in the middle. So we sort the map to get the order to
 	// check. TODO: we can maintain a sorted slice as well.
 	var sequenceIDs timerKeys

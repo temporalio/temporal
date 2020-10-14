@@ -170,8 +170,6 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() error {
 	a.Lock()
 	ackLevel := a.ackLevel
 
-	a.logger.Debug("Moving timer ack level", tag.AckLevel(ackLevel), tag.Tasks(a.outstandingTasks))
-
 	// task ID is not sequancial, meaning there are a ton of missing chunks,
 	// so to optimize the performance, a sort is required
 	var taskIDs []int64
