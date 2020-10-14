@@ -14,7 +14,6 @@ persistence:
 
 global:
   membership:
-    name: temporal_standby
     maxJoinDuration: 30s
   pprof:
     port: 8936

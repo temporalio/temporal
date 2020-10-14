@@ -22,43 +22,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sqlplugin
+package postgresql
 
 import (
-	"database/sql"
+	"net/url"
 
-	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/service/config"
 )
 
-type (
-	// HistoryTreeRow represents a row in history_tree table
-	HistoryTreeRow struct {
-		ShardID      int32
-		TreeID       primitives.UUID
-		BranchID     primitives.UUID
-		Data         []byte
-		DataEncoding string
+func dsnTSL(cfg *config.SQL) url.Values {
+	sslParams := url.Values{}
+	if cfg.TLS != nil && cfg.TLS.Enabled {
+		sslParams.Set("sslmode", "verify-ca")
+		sslParams.Set("sslrootcert", cfg.TLS.CaFile)
+		sslParams.Set("sslkey", cfg.TLS.KeyFile)
+		sslParams.Set("sslcert", cfg.TLS.CertFile)
+	} else {
+		sslParams.Set("sslmode", "disable")
 	}
-
-	// HistoryTreeSelectFilter contains the column names within history_tree table that
-	// can be used to filter results through a WHERE clause
-	HistoryTreeSelectFilter struct {
-		ShardID int32
-		TreeID  primitives.UUID
-	}
-
-	// HistoryTreeDeleteFilter contains the column names within history_tree table that
-	// can be used to filter results through a WHERE clause
-	HistoryTreeDeleteFilter struct {
-		ShardID  int32
-		TreeID   primitives.UUID
-		BranchID primitives.UUID
-	}
-
-	// HistoryNode is the SQL persistence interface for history trees
-	HistoryTree interface {
-		InsertIntoHistoryTree(row *HistoryTreeRow) (sql.Result, error)
-		SelectFromHistoryTree(filter HistoryTreeSelectFilter) ([]HistoryTreeRow, error)
-		DeleteFromHistoryTree(filter HistoryTreeDeleteFilter) (sql.Result, error)
-	}
-)
+	return sslParams
+}

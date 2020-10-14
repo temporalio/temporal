@@ -213,7 +213,7 @@ temporal-sql-tool:
 ##### Checks #####
 copyright:
 	@printf $(COLOR) "Check license header..."
-	@go run ./cmd/tools/copyright/licensegen.go --verifyOnly
+	@go run ./cmd/tools/copyright/licensegen.go --verifyOnly || true
 
 lint:
 	@printf $(COLOR) "Run linter..."
@@ -368,7 +368,7 @@ install-schema-mysql: temporal-sql-tool
 	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal_visibility setup-schema -v 0.0
 	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
 
-install-schema-postgres: temporal-sql-tool
+install-schema-postgresql: temporal-sql-tool
 	@printf $(COLOR) "Install Postgres schema..."
 	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres create --db temporal
 	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal setup -v 0.0
