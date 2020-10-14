@@ -509,11 +509,6 @@ func Task(task interface{}) Tag {
 	return newObjectTag("queue-task", task)
 }
 
-// AckLevel returns tag for upper ack level
-func Tasks(s interface{}) Tag {
-	return newObjectTag("tasks", s)
-}
-
 // TaskID returns tag for TaskID
 func TaskID(taskID int64) Tag {
 	return newInt64("queue-task-id", taskID)
