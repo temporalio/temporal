@@ -2075,12 +2075,16 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 	currentRunID := result["current_run_id"].(gocql.UUID).String()
 	executionInfo := createWorkflowExecutionInfo(result["execution"].(map[string]interface{}))
 	replicationState := createReplicationState(result["replication_state"].(map[string]interface{}))
+	lastWriteVersion := common.EmptyVersion
+	if replicationState != nil {
+		lastWriteVersion = replicationState.LastWriteVersion
+	}
 	return &p.GetCurrentExecutionResponse{
 		RunID:            currentRunID,
 		StartRequestID:   executionInfo.CreateRequestID,
 		State:            executionInfo.State,
 		CloseStatus:      executionInfo.CloseStatus,
-		LastWriteVersion: replicationState.LastWriteVersion,
+		LastWriteVersion: lastWriteVersion,
 	}, nil
 }
 
