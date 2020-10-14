@@ -36,6 +36,8 @@ const (
 	postgreSQLSSLModeCA   = "verify-ca"
 	postgreSQLSSLModeFull = "verify-full"
 
+	postgreSQLSSLHost = "host"
+
 	postgreSQLCA   = "sslrootcert"
 	postgreSQLKey  = "sslkey"
 	postgreSQLCert = "sslcert"
@@ -44,11 +46,13 @@ const (
 func dsnTSL(cfg *config.SQL) url.Values {
 	sslParams := url.Values{}
 	if cfg.TLS != nil && cfg.TLS.Enabled {
-		tlsMode := postgreSQLSSLModeCA
-		if cfg.TLS.EnableHostVerification {
-			tlsMode = postgreSQLSSLModeFull
+		if !cfg.TLS.EnableHostVerification {
+			sslParams.Set(postgreSQLSSLMode, postgreSQLSSLModeCA)
+		} else {
+			sslParams.Set(postgreSQLSSLMode, postgreSQLSSLModeFull)
+			sslParams.Set(postgreSQLSSLHost, cfg.TLS.ServerName)
 		}
-		sslParams.Set(postgreSQLSSLMode, tlsMode)
+
 		if cfg.TLS.CaFile != "" {
 			sslParams.Set(postgreSQLCA, cfg.TLS.CaFile)
 		}
