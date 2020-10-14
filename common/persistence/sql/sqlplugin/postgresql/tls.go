@@ -34,7 +34,7 @@ const (
 	postgreSQLSSLMode     = "sslmode"
 	postgreSQLSSLModeNoop = "disable"
 	postgreSQLSSLModeCA   = "verify-ca"
-	postgreSQLSSLModeFull = "verify-ful"
+	postgreSQLSSLModeFull = "verify-full"
 
 	postgreSQLCA   = "sslrootcert"
 	postgreSQLKey  = "sslkey"
