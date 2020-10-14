@@ -113,6 +113,7 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 	certPath := c.GlobalString(FlagTLSCertPath)
 	keyPath := c.GlobalString(FlagTLSKeyPath)
 	caPath := c.GlobalString(FlagTLSCaPath)
+	hostNameVerification := c.GlobalBool(FlagTLSEnableHostVerification)
 
 	grpcSecurityOptions := grpc.WithInsecure()
 	var cert *tls.Certificate
@@ -136,7 +137,7 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 	}
 	// If we are given arguments to verify either server or client, configure TLS
 	if caPool != nil || cert != nil {
-		tlsConfig := auth.NewTLSConfigForServer(host)
+		tlsConfig := auth.NewTLSConfigForServer(host, hostNameVerification)
 		if caPool != nil {
 			tlsConfig.RootCAs = caPool
 		}

@@ -37,20 +37,33 @@ func NewEmptyTLSConfig() *tls.Config {
 	}
 }
 
-func NewTLSConfigForServer(serverName string) *tls.Config {
+func NewTLSConfigForServer(
+	serverName string,
+	enableHostVerification bool,
+) *tls.Config {
 	c := NewEmptyTLSConfig()
 	c.ServerName = serverName
+	c.InsecureSkipVerify = !enableHostVerification
 	return c
 }
 
-func NewTLSConfigWithCertsAndCAs(certificates []tls.Certificate, rootCAs *x509.CertPool, serverName string) *tls.Config {
-	c := NewTLSConfigForServer(serverName)
+func NewTLSConfigWithCertsAndCAs(
+	certificates []tls.Certificate,
+	rootCAs *x509.CertPool,
+	serverName string,
+	enableHostVerification bool,
+) *tls.Config {
+	c := NewTLSConfigForServer(serverName, enableHostVerification)
 	c.Certificates = certificates
 	c.RootCAs = rootCAs
 	return c
 }
 
-func NewTLSConfigWithClientAuthAndCAs(clientAuth tls.ClientAuthType, certificates []tls.Certificate, clientCAs *x509.CertPool) *tls.Config {
+func NewTLSConfigWithClientAuthAndCAs(
+	clientAuth tls.ClientAuthType,
+	certificates []tls.Certificate,
+	clientCAs *x509.CertPool,
+) *tls.Config {
 	c := NewEmptyTLSConfig()
 	c.ClientAuth = clientAuth
 	c.Certificates = certificates

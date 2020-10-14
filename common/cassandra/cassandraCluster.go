@@ -66,7 +66,7 @@ func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 			CaPath:                 cfg.TLS.CaFile,
 			EnableHostVerification: cfg.TLS.EnableHostVerification,
 
-			Config: auth.NewTLSConfigForServer(cfg.TLS.ServerName),
+			Config: auth.NewTLSConfigForServer(cfg.TLS.ServerName, cfg.TLS.EnableHostVerification),
 		}
 
 		if cfg.TLS.CertData != "" {
