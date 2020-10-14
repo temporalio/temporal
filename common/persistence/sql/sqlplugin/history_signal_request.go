@@ -31,7 +31,7 @@ type (
 		SignalID    *string
 	}
 
-	// HistoryExecutionSignalRequest is the SQL persistence interface for history nodes and history execution signal request
+	// HistoryExecutionSignalRequest is the SQL persistence interface for history execution signal request
 	HistoryExecutionSignalRequest interface {
 		ReplaceIntoSignalsRequestedSets(rows []SignalsRequestedSetsRow) (sql.Result, error)
 		// SelectFromSignalInfoMaps returns one or more rows form signals_requested_sets table

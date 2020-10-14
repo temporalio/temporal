@@ -33,7 +33,7 @@ type (
 		InitiatedID *int64
 	}
 
-	// HistoryExecutionSignal is the SQL persistence interface for history nodes and history execution signals
+	// HistoryExecutionSignal is the SQL persistence interface for history execution signals
 	HistoryExecutionSignal interface {
 		ReplaceIntoSignalInfoMaps(rows []SignalInfoMapsRow) (sql.Result, error)
 		// SelectFromSignalInfoMaps returns one or more rows form signal_info_maps table

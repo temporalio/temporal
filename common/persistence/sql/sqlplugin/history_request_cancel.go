@@ -33,7 +33,7 @@ type (
 		InitiatedID *int64
 	}
 
-	// HistoryExecutionRequestCancel is the SQL persistence interface for history nodes and history execution request cancels
+	// HistoryExecutionRequestCancel is the SQL persistence interface for history execution request cancels
 	HistoryExecutionRequestCancel interface {
 		ReplaceIntoRequestCancelInfoMaps(rows []RequestCancelInfoMapsRow) (sql.Result, error)
 		// SelectFromRequestCancelInfoMaps returns one or more rows form request_cancel_info_maps table

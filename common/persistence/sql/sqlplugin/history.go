@@ -42,30 +42,4 @@ type (
 		SelectFromBufferedEvents(filter *BufferedEventsFilter) ([]BufferedEventsRow, error)
 		DeleteFromBufferedEvents(filter *BufferedEventsFilter) (sql.Result, error)
 	}
-
-	// HistoryReplicationTask is the SQL persistence interface for history nodes and history replication tasks
-	HistoryReplicationTask interface {
-		InsertIntoReplicationTasks(rows []ReplicationTasksRow) (sql.Result, error)
-		// SelectFromReplicationTasks returns one or more rows from replication_tasks table
-		// Required filter params - {shardID, minTaskID, maxTaskID, pageSize}
-		SelectFromReplicationTasks(filter *ReplicationTasksFilter) ([]ReplicationTasksRow, error)
-		// DeleteFromReplicationTasks deletes a row from replication_tasks table
-		// Required filter params - {shardID, inclusiveEndTaskID}
-		DeleteFromReplicationTasks(filter *ReplicationTasksFilter) (sql.Result, error)
-		// DeleteFromReplicationTasks deletes multi rows from replication_tasks table
-		// Required filter params - {shardID, inclusiveEndTaskID}
-		RangeDeleteFromReplicationTasks(filter *ReplicationTasksFilter) (sql.Result, error)
-
-		// InsertIntoReplicationTasksDLQ puts the replication task into DLQ
-		InsertIntoReplicationTasksDLQ(row *ReplicationTaskDLQRow) (sql.Result, error)
-		// SelectFromReplicationTasksDLQ returns one or more rows from replication_tasks_dlq table
-		// Required filter params - {sourceClusterName, shardID, minTaskID, pageSize}
-		SelectFromReplicationTasksDLQ(filter *ReplicationTasksDLQFilter) ([]ReplicationTasksRow, error)
-		// DeleteMessageFromReplicationTasksDLQ deletes one row from replication_tasks_dlq table
-		// Required filter params - {sourceClusterName, shardID, taskID}
-		DeleteMessageFromReplicationTasksDLQ(filter *ReplicationTasksDLQFilter) (sql.Result, error)
-		// RangeDeleteMessageFromReplicationTasksDLQ deletes one or more rows from replication_tasks_dlq table
-		// Required filter params - {sourceClusterName, shardID, taskID, inclusiveTaskID}
-		RangeDeleteMessageFromReplicationTasksDLQ(filter *ReplicationTasksDLQFilter) (sql.Result, error)
-	}
 )

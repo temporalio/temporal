@@ -50,7 +50,7 @@ type (
 		MaxTaskID int64
 	}
 
-	// HistoryTransferTask is the SQL persistence interface for history nodes and history transfer tasks
+	// HistoryTransferTask is the SQL persistence interface for history transfer tasks
 	HistoryTransferTask interface {
 		InsertIntoTransferTasks(rows []TransferTasksRow) (sql.Result, error)
 		// SelectFromTransferTasks returns rows that match filter criteria from transfer_tasks table.

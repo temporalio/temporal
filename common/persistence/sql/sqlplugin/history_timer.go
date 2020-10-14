@@ -33,7 +33,7 @@ type (
 		TimerID     *string
 	}
 
-	// HistoryExecutionTimer is the SQL persistence interface for history nodes and history execution timers
+	// HistoryExecutionTimer is the SQL persistence interface for history execution timers
 	HistoryExecutionTimer interface {
 		ReplaceIntoTimerInfoMaps(rows []TimerInfoMapsRow) (sql.Result, error)
 		// SelectFromTimerInfoMaps returns one or more rows form timer_info_maps table

@@ -33,7 +33,7 @@ type (
 		InitiatedID *int64
 	}
 
-	// HistoryExecutionChildWorkflow is the SQL persistence interface for history nodes and history execution child workflows
+	// HistoryExecutionChildWorkflow is the SQL persistence interface for history execution child workflows
 	HistoryExecutionChildWorkflow interface {
 		ReplaceIntoChildExecutionInfoMaps(rows []ChildExecutionInfoMapsRow) (sql.Result, error)
 		// SelectFromChildExecutionInfoMaps returns one or more rows form child_execution_info_maps table
