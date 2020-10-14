@@ -59,8 +59,8 @@ require (
 	github.com/urfave/cli v1.22.4
 	github.com/valyala/fastjson v1.5.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/api v1.0.1-0.20201013063958-a477d9f6dfd4
-	go.temporal.io/sdk v1.0.0
+	go.temporal.io/api v1.1.0
+	go.temporal.io/sdk v1.1.0
 	go.temporal.io/version v0.0.0-20201010013230-09a97e02aa8c
 	go.uber.org/atomic v1.6.0
 	go.uber.org/multierr v1.5.0
