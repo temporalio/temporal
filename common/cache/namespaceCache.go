@@ -507,7 +507,7 @@ UpdateLoop:
 	return nil
 }
 
-func (c *namespaceCache) checkNamespaceExists(
+func (c *namespaceCache) checkAndRefresh(
 	name string,
 	id string,
 ) (bool, error) {
@@ -590,7 +590,7 @@ func (c *namespaceCache) getNamespace(
 		return c.getNamespaceByID(id, true)
 	}
 
-	doContinue, err := c.checkNamespaceExists(name, "")
+	doContinue, err := c.checkAndRefresh(name, "")
 	if err != nil {
 		return nil, err
 	}
@@ -634,7 +634,7 @@ func (c *namespaceCache) getNamespaceByID(
 		return result, nil
 	}
 
-	doContinue, err := c.checkNamespaceExists("", id)
+	doContinue, err := c.checkAndRefresh("", id)
 	if err != nil {
 		return nil, err
 	}
