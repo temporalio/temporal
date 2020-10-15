@@ -52,7 +52,7 @@ persistence:
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "20" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "20" }}
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
-        {{- else if eq $db "postgres" }}
+        {{- else if eq $db "postgresql" }}
         default:
             sql:
                 pluginName: "postgres"
