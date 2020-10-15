@@ -32,8 +32,8 @@ Refer to [Temporal service docker](docker/README.md) for more advanced options.
 
 ### Run the Samples
 
-Clone or download samples for [Go](https://github.com/temporalio/samples-go) or [Java](https://github.com/temporalio/samples-java) and try to run them against the local Temporal server.
-We have a number of [HelloWorld type scenarios](https://github.com/temporalio/samples-java#helloworld) available.
+Clone or download samples for [Go](https://github.com/temporalio/samples-go) or [Java](https://github.com/temporalio/samples-java) and run them with the local Temporal server.
+We have a number of [HelloWorld type scenarios](https://github.com/temporalio/samples-java#helloworld) available, as well as more advanced ones. Note that the sets of samples are currently different between Go and Java.
 
 ### Use CLI
 
