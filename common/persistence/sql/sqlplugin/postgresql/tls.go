@@ -30,15 +30,38 @@ import (
 	"go.temporal.io/server/common/service/config"
 )
 
+const (
+	postgreSQLSSLMode     = "sslmode"
+	postgreSQLSSLModeNoop = "disable"
+	postgreSQLSSLModeCA   = "verify-ca"
+	postgreSQLSSLModeFull = "verify-full"
+
+	postgreSQLSSLHost = "host"
+
+	postgreSQLCA   = "sslrootcert"
+	postgreSQLKey  = "sslkey"
+	postgreSQLCert = "sslcert"
+)
+
 func dsnTSL(cfg *config.SQL) url.Values {
 	sslParams := url.Values{}
 	if cfg.TLS != nil && cfg.TLS.Enabled {
-		sslParams.Set("sslmode", "verify-ca")
-		sslParams.Set("sslrootcert", cfg.TLS.CaFile)
-		sslParams.Set("sslkey", cfg.TLS.KeyFile)
-		sslParams.Set("sslcert", cfg.TLS.CertFile)
+		if !cfg.TLS.EnableHostVerification {
+			sslParams.Set(postgreSQLSSLMode, postgreSQLSSLModeCA)
+		} else {
+			sslParams.Set(postgreSQLSSLMode, postgreSQLSSLModeFull)
+			sslParams.Set(postgreSQLSSLHost, cfg.TLS.ServerName)
+		}
+
+		if cfg.TLS.CaFile != "" {
+			sslParams.Set(postgreSQLCA, cfg.TLS.CaFile)
+		}
+		if cfg.TLS.KeyFile != "" && cfg.TLS.CertFile != "" {
+			sslParams.Set(postgreSQLKey, cfg.TLS.KeyFile)
+			sslParams.Set(postgreSQLCert, cfg.TLS.CertFile)
+		}
 	} else {
-		sslParams.Set("sslmode", "disable")
+		sslParams.Set(postgreSQLSSLMode, postgreSQLSSLModeNoop)
 	}
 	return sslParams
 }

@@ -14,11 +14,11 @@ services:
     volumes:
       - ${DYNAMIC_CONFIG_DIR:-../config/dynamicconfig}:/etc/temporal/config/dynamicconfig
     environment:
-      - "DB=postgres"
+      - "DB=postgresql"
       - "DB_PORT=5432"
       - "POSTGRES_USER=temporal"
       - "POSTGRES_PWD=temporal"
-      - "POSTGRES_SEEDS=postgres"
+      - "POSTGRES_SEEDS=postgresql"
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"
     depends_on:
       - postgresql

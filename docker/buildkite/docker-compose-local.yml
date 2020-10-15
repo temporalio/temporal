@@ -95,6 +95,7 @@ services:
       - "CASSANDRA_SEEDS=cassandra"
       - "MYSQL_SEEDS=mysql"
       - "POSTGRES_SEEDS=postgresql"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
     depends_on:
       - cassandra
       - mysql
@@ -132,6 +133,7 @@ services:
       - "PERSISTENCE_TYPE=nosql"
       - "PERSISTENCE_DRIVER=cassandra"
       - "TEST_TAG=esintegration"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
     depends_on:
       - cassandra
       - elasticsearch
@@ -169,6 +171,7 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=mysql"
       - "TEST_TAG=esintegration"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
     depends_on:
       - mysql
       - elasticsearch
@@ -206,6 +209,7 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres"
       - "TEST_TAG=esintegration"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
     depends_on:
       - postgresql
       - elasticsearch
@@ -243,6 +247,7 @@ services:
       - "PERSISTENCE_TYPE=nosql"
       - "PERSISTENCE_DRIVER=cassandra"
       - "TEST_TAG=esintegration"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
     depends_on:
       - cassandra
       - elasticsearch
@@ -280,6 +285,7 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=mysql"
       - "TEST_TAG=esintegration"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
     depends_on:
       - mysql
       - elasticsearch
@@ -317,6 +323,7 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres"
       - "TEST_TAG=esintegration"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
     depends_on:
       - postgresql
       - elasticsearch

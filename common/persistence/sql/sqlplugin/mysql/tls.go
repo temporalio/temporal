@@ -29,7 +29,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
-	"net"
 
 	"github.com/go-sql-driver/mysql"
 
@@ -42,13 +41,8 @@ func registerTLSConfig(cfg *config.SQL) error {
 		return nil
 	}
 
-	host, _, err := net.SplitHostPort(cfg.ConnectAddr)
-	if err != nil {
-		return fmt.Errorf("error in host port from ConnectAddr: %v", err)
-	}
-
 	// TODO: create a way to set MinVersion and CipherSuites via cfg.
-	tlsConfig := auth.NewTLSConfigForServer(host)
+	tlsConfig := auth.NewTLSConfigForServer(cfg.TLS.ServerName, cfg.TLS.EnableHostVerification)
 
 	if cfg.TLS.CaFile != "" {
 		rootCertPool := x509.NewCertPool()
@@ -77,7 +71,7 @@ func registerTLSConfig(cfg *config.SQL) error {
 
 	// In order to use the TLS configuration you need to register it. Once registered you use it by specifying
 	// `tls` in the connect attributes.
-	err = mysql.RegisterTLSConfig(customTLSName, tlsConfig)
+	err := mysql.RegisterTLSConfig(customTLSName, tlsConfig)
 	if err != nil {
 		return fmt.Errorf("failed to register tls config: %v", err)
 	}

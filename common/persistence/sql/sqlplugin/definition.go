@@ -176,41 +176,6 @@ type (
 		PageSize                    *int
 	}
 
-	// ReplicationTasksRow represents a row in replication_tasks table
-	ReplicationTasksRow struct {
-		ShardID      int32
-		TaskID       int64
-		Data         []byte
-		DataEncoding string
-	}
-
-	// ReplicationTaskDLQRow represents a row in replication_tasks_dlq table
-	ReplicationTaskDLQRow struct {
-		SourceClusterName string
-		ShardID           int32
-		TaskID            int64
-		Data              []byte
-		DataEncoding      string
-	}
-
-	// ReplicationTasksFilter contains the column names within replication_tasks table that
-	// can be used to filter results through a WHERE clause
-	ReplicationTasksFilter struct {
-		ShardID            int32
-		TaskID             int64
-		InclusiveEndTaskID int64
-		MinTaskID          int64
-		MaxTaskID          int64
-		PageSize           int
-	}
-
-	// ReplicationTasksDLQFilter contains the column names within replication_tasks_dlq table that
-	// can be used to filter results through a WHERE clause
-	ReplicationTasksDLQFilter struct {
-		ReplicationTasksFilter
-		SourceClusterName string
-	}
-
 	// EventsRow represents a row in events table
 	EventsRow struct {
 		NamespaceID  primitives.UUID
