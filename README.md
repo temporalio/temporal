@@ -12,7 +12,7 @@ The programming model of Temporal exposed via the SDKs (currently for Java and G
 Temporal is a mature technology, a fork of Uber's Cadence.
 Temporal is being developed by [Temporal Technologies](https://temporal.io/), a startup by the creators of Cadence.
 
-[![IMAGE ALT TEXT](http://img.youtube.com/vi/f-18XztyN6c/0.jpg)](http://www.youtube.com/watch?v=f-18XztyN6c "Temporal")
+[![Temporal](video.png)](http://www.youtube.com/watch?v=f-18XztyN6c "Temporal")
 
 Learn more about Temporal at [docs.temporal.io](https://docs.temporal.io).
 
