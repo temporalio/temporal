@@ -4,7 +4,7 @@ set -x
 
 DB="${DB:-cassandra}"
 ENABLE_ES="${ENABLE_ES:-false}"
-BEST_EFFORT_ES_SCHEMA_SETUP="${BEST_EFFORT_ES_SCHEMA_SETUP:-false}"
+ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS="${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS:-0}"
 ES_PORT="${ES_PORT:-9200}"
 ES_SCHEME="${ES_SCHEME:-http}"
 RF=${RF:-1}
@@ -122,7 +122,6 @@ wait_for_postgres() {
 
 setup_es() {
     SECONDS=0
-    duration=0
     
     server=`echo $ES_SEEDS | awk -F ',' '{print $1}'`
     URL="${ES_SCHEME}://$server:$ES_PORT"
@@ -131,7 +130,7 @@ setup_es() {
     until [ $? -eq 0 ]; do
         duration=$SECONDS
 
-        if [ $duration -ge 30 ] && [ "$BEST_EFFORT_ES_SCHEMA_SETUP" == "true" ]; then
+        if [ $ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS -gt 0 ] && [ $duration -ge $ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS ]; then
             echo 'WARNING: timed out waiting for elasticsearch to start up. skipping index creation'
             return;
         fi
