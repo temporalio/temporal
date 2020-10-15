@@ -7,7 +7,7 @@
 Temporal is a microservice orchestration platform which enables developers to build scalable applications without sacrificing productivity or reliability.
 Temporal server executes units of application logic, Workflows, in a resilient manner that automatically handles intermittent failures, and retries failed operations.
 
-The programming model of Temporal exposed via the SDKs (currently for Java and Go) offers developers the simple abstractions of Workflows and Activities that can virtually "resume" execution after a failure from the same line of code.
+The programming model of Temporal exposed via the SDKs (currently for Java and Go) offers developers the simple abstractions of Workflows and Activities that can virtually "resume" execution of a Workflow after a failure, from the same line of code.
 
 Temporal is a mature technology, a fork of Uber's Cadence.
 Temporal is being developed by [Temporal Technologies](https://temporal.io/), a startup by the creators of Cadence.
@@ -40,11 +40,12 @@ We have a number of [HelloWorld type scenarios](https://github.com/temporalio/sa
 Use [Temporal's command line tool](https://docs.temporal.io/docs/tctl) `tctl` to interact with the local Temporal server.
 
 ```bash
+$ alias tctl="docker run --rm temporalio/tctl:latest --address host.docker.internal:7233"
 $ tctl namespace list
 $ tctl workflow list
 ```
 
-### Use Temporal Web
+### Use Temporal Web UI
 
 Try [Temporal Web UI](https://github.com/temporalio/web) by opening [http://localhost:8088](http://localhost:8088)for viewing your sample workflows executing on Temporal.
 
