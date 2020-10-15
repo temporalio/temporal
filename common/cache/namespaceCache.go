@@ -523,6 +523,7 @@ func (c *namespaceCache) checkAndContinue(
 	if now.Sub(c.lastCheckTime) < NamespaceCacheMinRefreshInterval {
 		return true, nil
 	}
+
 	c.lastCheckTime = now
 	_, err := c.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: name, ID: id})
 	if err != nil {
