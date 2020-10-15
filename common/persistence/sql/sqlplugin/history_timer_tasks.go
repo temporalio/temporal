@@ -57,7 +57,7 @@ type (
 		PageSize               int
 	}
 
-	// HistoryTimerTask is the SQL persistence interface for history nodes and history timer tasks
+	// HistoryTimerTask is the SQL persistence interface for history timer tasks
 	HistoryTimerTask interface {
 		InsertIntoTimerTasks(rows []TimerTasksRow) (sql.Result, error)
 		// SelectFromTimerTasks returns one or more rows from timer_tasks table
@@ -67,7 +67,7 @@ type (
 		// DeleteFromTimerTasks deletes one or more rows from timer_tasks table
 		DeleteFromTimerTasks(filter TimerTasksFilter) (sql.Result, error)
 		// RangeDeleteFromTimerTasks deletes one or more rows from timer_tasks table
-		//  TimerTasksRangeFilter {TaskID, PageSize} will be ignored
+		//  TimerTasksRangeFilter - {TaskID, PageSize} will be ignored
 		RangeDeleteFromTimerTasks(filter TimerTasksRangeFilter) (sql.Result, error)
 	}
 )

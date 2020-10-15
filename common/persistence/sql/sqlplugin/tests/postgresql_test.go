@@ -226,6 +226,40 @@ func TestPostgreSQLHistoryTimerTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestPostgreSQLHistoryReplicationTaskSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newHistoryReplicationTaskSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestPostgreSQLHistoryReplicationDLQTaskSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newHistoryReplicationDLQTaskSuite(t, store)
+	suite.Run(t, s)
+}
+
 func TestPostgreSQLHistoryExecutionBufferSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
