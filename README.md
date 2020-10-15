@@ -18,7 +18,7 @@ Learn more about Temporal at [docs.temporal.io](https://docs.temporal.io).
 
 ## Getting Started
 
-### Download and start Temporal server locally
+### Download and Start Temporal Server Locally
 
 Execute the following commands to start a pre-built image along with all the dependencies.
 
@@ -33,6 +33,7 @@ Refer to [Temporal service docker](docker/README.md) for more advanced options.
 ### Run the Samples
 
 Clone or download samples for [Go](https://github.com/temporalio/samples-go) or [Java](https://github.com/temporalio/samples-java) and try to run them against the local Temporal server.
+We have a number of [HelloWorld type scenarios](https://github.com/temporalio/samples-java#helloworld) available.
 
 ### Use CLI
 
