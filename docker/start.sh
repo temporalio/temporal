@@ -55,11 +55,11 @@ setup_mysql_schema() {
 setup_postgres_schema() {
     { export SQL_PASSWORD=$POSTGRES_PWD; } 2> /dev/null
 
-    SCHEMA_DIR=$TEMPORAL_HOME/schema/postgres/temporal/versioned
+    SCHEMA_DIR=$TEMPORAL_HOME/schema/postgresql/v96/temporal/versioned
     temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT create --db $DBNAME
     temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $DBNAME setup-schema -v 0.0
     temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $DBNAME update-schema -d $SCHEMA_DIR
-    VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/postgres/visibility/versioned
+    VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/postgresql/v96/visibility/versioned
     temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT create --db $VISIBILITY_DBNAME
     temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $VISIBILITY_DBNAME setup-schema -v 0.0
     temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
@@ -79,8 +79,8 @@ setup_schema() {
     if [ "$DB" == "mysql" ]; then
         echo 'setup mysql schema'
         setup_mysql_schema
-    elif [ "$DB" == "postgres" ]; then
-        echo 'setup postgres schema'
+    elif [ "$DB" == "postgresql" ]; then
+        echo 'setup postgresql schema'
         setup_postgres_schema
     else
         echo 'setup cassandra schema'
@@ -112,7 +112,7 @@ wait_for_postgres() {
     server=`echo $POSTGRES_SEEDS | awk -F ',' '{print $1}'`
     nc -z $server $DB_PORT < /dev/null
     until [ $? -eq 0 ]; do
-        echo 'waiting for postgres to start up'
+        echo 'waiting for postgresql to start up'
         sleep 1
         nc -z $server $DB_PORT < /dev/null
     done
@@ -148,7 +148,7 @@ setup_es() {
 wait_for_db() {
     if [ "$DB" == "mysql" ]; then
         wait_for_mysql
-    elif [ "$DB" == "postgres" ]; then
+    elif [ "$DB" == "postgresql" ]; then
         wait_for_postgres
     else
         wait_for_cassandra
