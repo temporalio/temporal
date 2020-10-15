@@ -7,8 +7,6 @@
 Temporal is a microservice orchestration platform which enables developers to build scalable applications without sacrificing productivity or reliability.
 Temporal server executes units of application logic, Workflows, in a resilient manner that automatically handles intermittent failures, and retries failed operations.
 
-The programming model of Temporal exposed via the SDKs (currently for Java and Go) offers developers the simple abstractions of Workflows and Activities that can virtually "resume" execution of a Workflow after a failure, from the same line of code.
-
 Temporal is a mature technology, a fork of Uber's Cadence.
 Temporal is being developed by [Temporal Technologies](https://temporal.io/), a startup by the creators of Cadence.
 
