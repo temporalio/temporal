@@ -4,6 +4,7 @@ set -x
 
 DB="${DB:-cassandra}"
 ENABLE_ES="${ENABLE_ES:-false}"
+BEST_EFFORT_ES_SCHEMA_SETUP="${BEST_EFFORT_ES_SCHEMA_SETUP:-false}"
 ES_PORT="${ES_PORT:-9200}"
 ES_SCHEME="${ES_SCHEME:-http}"
 RF=${RF:-1}
@@ -119,16 +120,29 @@ wait_for_postgres() {
 }
 
 
-wait_for_es() {
+setup_es() {
+    SECONDS=0
+    duration=0
+    
     server=`echo $ES_SEEDS | awk -F ',' '{print $1}'`
     URL="${ES_SCHEME}://$server:$ES_PORT"
     curl -s $URL 2>&1 > /dev/null
+    
     until [ $? -eq 0 ]; do
+        duration=$SECONDS
+
+        if [ $duration -ge 30 ] && [ "$BEST_EFFORT_ES_SCHEMA_SETUP" == "true" ]; then
+            echo 'WARNING: timed out waiting for elasticsearch to start up. skipping index creation'
+            return;
+        fi
+
         echo 'waiting for elasticsearch to start up'
         sleep 1
         curl -s $URL 2>&1 > /dev/null
     done
+    
     echo 'elasticsearch started'
+    setup_es_template
 }
 
 wait_for_db() {
@@ -169,8 +183,7 @@ if [ "$1" = "autosetup" ]; then
 fi
 
 if [ "$ENABLE_ES" == "true" ]; then
-    wait_for_es
-    setup_es_template
+    setup_es
 fi
 
 exec bash /start-temporal.sh
