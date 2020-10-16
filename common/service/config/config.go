@@ -146,18 +146,18 @@ type (
 		RequireClientAuth bool `yaml:"requireClientAuth"`
 	}
 
-	// ClientTLS contains TLS configuration for clients.
+	// ClientTLS contains TLS configuration for clients. It is used to create
 	ClientTLS struct {
 		// DNS name to validate against for server to server connections.
 		// Required when TLS is enabled in a multi-host cluster.
 		// This name should be referenced by the certificate specified in the ServerTLS section.
 		ServerName string `yaml:"serverName"`
 
-		// Optional - A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to return to the client.
+		// Optional - A list of paths to files containing the PEM-encoded public key of the Certificate Authorities that are used to validate the server's TLS certificate
 		// You cannot specify both RootCAFiles and RootCAData
 		RootCAFiles []string `yaml:"rootCaFiles"`
 
-		// Optional - A list of base64 PEM-encoded public keys of the Certificate Authorities you wish to return to the client.
+		// Optional - A list of base64 PEM-encoded public keys of the Certificate Authorities that are used to validate the server's TLS certificate.
 		// You cannot specify both RootCAFiles and RootCAData
 		RootCAData []string `yaml:"rootCaData"`
 	}
