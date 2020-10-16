@@ -22,6 +22,9 @@ persistence:
                 port: {{ default .Env.CASSANDRA_PORT "9042" }}
                 tls:
                     enabled: {{ default .Env.CASSANDRA_TLS_ENABLED "false" }}
+                    caFile: {{ default .Env.CASSANDRA_CA ""}}
+                    certFile: {{ default .Env.CASSANDRA_CERT "" }}
+                    keyFile: {{ default .Env.CASSANDRA_CERT_KEY "" }}
                     caData: {{ default .Env.CASSANDRA_CA_DATA "" }}
                     certData: {{ default .Env.CASSANDRA_CERT_DATA "" }}
                     keyData: {{ default .Env.CASSANDRA_CERT_KEY_DATA "" }}
@@ -36,6 +39,9 @@ persistence:
                 port: {{ default .Env.CASSANDRA_PORT "9042" }}
                 tls:
                     enabled: {{ default .Env.CASSANDRA_TLS_ENABLED "false" }}
+                    caFile: {{ default .Env.CASSANDRA_CA ""}}
+                    certFile: {{ default .Env.CASSANDRA_CERT "" }}
+                    keyFile: {{ default .Env.CASSANDRA_CERT_KEY "" }}
                     caData: {{ default .Env.CASSANDRA_CA_DATA "" }}
                     certData: {{ default .Env.CASSANDRA_CERT_DATA "" }}
                     keyData: {{ default .Env.CASSANDRA_CERT_KEY_DATA "" }}
