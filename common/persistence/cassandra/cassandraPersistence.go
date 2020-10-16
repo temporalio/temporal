@@ -1877,7 +1877,10 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 			continue
 		}
 		if _, ok := result["execution"]; ok {
-			state, _ := mutableStateFromRow(result)
+			state, err := mutableStateFromRow(result)
+			if err != nil {
+				return nil, err
+			}
 			wfInfo := state.ExecutionInfo
 			response.ExecutionInfos = append(response.ExecutionInfos, wfInfo)
 		}
