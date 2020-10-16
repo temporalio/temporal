@@ -136,8 +136,8 @@ type (
 		// This value is ignored if `requireClientAuth` is not enabled. Merged with the data from ClientCAData.
 		ClientCAFiles []string `yaml:"clientCaFiles"`
 
-		// Base64 analogues of the above file paths. If present, will override the corresponding entry above, except for
-		// ClientCAData, which is merged with the data from ClientCAFiles.
+		// Base64 equivalents of the above artifacts.
+		// You cannot specify both a Data and a File for the same artifact (e.g. setting CertFile and CertData)
 		CertData     string   `yaml:"certData"`
 		KeyData      string   `yaml:"keyData"`
 		ClientCAData []string `yaml:"clientCaData"`

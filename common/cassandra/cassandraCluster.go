@@ -61,6 +61,18 @@ func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 		cluster.HostFilter = gocql.DataCentreHostFilter(cfg.Datacenter)
 	}
 	if cfg.TLS != nil && cfg.TLS.Enabled {
+		if cfg.TLS.CertData != "" && cfg.TLS.CertFile != "" {
+			return nil, errors.New("Cannot specify both certData and certFile properties")
+		}
+
+		if cfg.TLS.KeyData != "" && cfg.TLS.KeyFile != "" {
+			return nil, errors.New("Cannot specify both keyData and keyFile properties")
+		}
+
+		if cfg.TLS.CaData != "" && cfg.TLS.CaFile != "" {
+			return nil, errors.New("Cannot specify both caData and CaFile properties")
+		}
+
 		cluster.SslOpts = &gocql.SslOptions{
 			CaPath:                 cfg.TLS.CaFile,
 			EnableHostVerification: cfg.TLS.EnableHostVerification,
@@ -99,12 +111,14 @@ func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 			}
 		}
 
-		clientCert, err := tls.X509KeyPair(certBytes, keyBytes)
-		if err != nil {
-			return nil, fmt.Errorf("unable to generate x509 key pair: %w", err)
-		}
+		if len(certBytes) > 0 {
+			clientCert, err := tls.X509KeyPair(certBytes, keyBytes)
+			if err != nil {
+				return nil, fmt.Errorf("unable to generate x509 key pair: %w", err)
+			}
 
-		cluster.SslOpts.Certificates = []tls.Certificate{clientCert}
+			cluster.SslOpts.Certificates = []tls.Certificate{clientCert}
+		}
 
 		if cfg.TLS.CaData != "" {
 			cluster.SslOpts.RootCAs = x509.NewCertPool()

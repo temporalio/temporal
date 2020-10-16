@@ -57,6 +57,10 @@ func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, err
 		return nil, nil
 	}
 
+	if s.tlsSettings.Server.CertFile != "" && s.tlsSettings.Server.CertData != "" {
+		return nil, errors.New("Cannot specify both certFile and certData properties")
+	}
+
 	s.RLock()
 	if s.serverCert != nil {
 		defer s.RUnlock()

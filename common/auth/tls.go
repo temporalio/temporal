@@ -43,8 +43,8 @@ type (
 
 		ServerName string `yaml:"serverName"`
 
-		// Optional inline base64 encoded versions of the above files
-		// If present, will override corresponding certs passed in via file paths.
+		// Base64 equivalents of the above artifacts.
+		// You cannot specify both a Data and a File for the same artifact (e.g. setting CertFile and CertData)
 		CertData string `yaml:"certData"`
 		KeyData  string `yaml:"keyData"`
 		CaData   string `yaml:"caData"` // optional depending on server config
