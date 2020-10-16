@@ -84,9 +84,7 @@ func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, err
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	if s.tlsSettings.Server.CertData != "" {
+	} else if s.tlsSettings.Server.CertData != "" {
 		certBytes, err = base64.StdEncoding.DecodeString(s.tlsSettings.Server.CertData)
 		if err != nil {
 			return nil, fmt.Errorf("TLS public certificate could not be decoded: %w", err)
@@ -98,9 +96,7 @@ func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, err
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	if s.tlsSettings.Server.KeyData != "" {
+	} else if s.tlsSettings.Server.KeyData != "" {
 		keyBytes, err = base64.StdEncoding.DecodeString(s.tlsSettings.Server.KeyData)
 		if err != nil {
 			return nil, fmt.Errorf("TLS private key could not be decoded: %w", err)
@@ -119,6 +115,10 @@ func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, err
 func (s *localStoreCertProvider) FetchClientCAs() (*x509.CertPool, error) {
 	if len(s.tlsSettings.Server.ClientCAFiles) == 0 && len(s.tlsSettings.Server.ClientCAData) == 0 {
 		return nil, nil
+	}
+
+	if len(s.tlsSettings.Server.ClientCAFiles) > 0 && len(s.tlsSettings.Server.ClientCAData) > 0 {
+		return nil, errors.New("cannot specify both clientCAFiles and clientCAData properties")
 	}
 
 	s.RLock()
@@ -147,6 +147,10 @@ func (s *localStoreCertProvider) FetchClientCAs() (*x509.CertPool, error) {
 func (s *localStoreCertProvider) FetchServerRootCAsForClient() (*x509.CertPool, error) {
 	if len(s.tlsSettings.Client.RootCAFiles) == 0 && len(s.tlsSettings.Client.RootCAData) == 0 {
 		return nil, nil
+	}
+
+	if len(s.tlsSettings.Client.RootCAFiles) > 0 && len(s.tlsSettings.Client.RootCAData) > 0 {
+		return nil, errors.New("cannot specify both rootCAFiles and rootCAData properties")
 	}
 
 	s.RLock()

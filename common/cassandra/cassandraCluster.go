@@ -88,9 +88,7 @@ func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 			if err != nil {
 				return nil, fmt.Errorf("error reading client certificate file: %w", err)
 			}
-		}
-
-		if cfg.TLS.CertData != "" {
+		} else if cfg.TLS.CertData != "" {
 			certBytes, err = base64.StdEncoding.DecodeString(cfg.TLS.CertData)
 			if err != nil {
 				return nil, fmt.Errorf("client certificate could not be decoded: %w", err)
@@ -102,9 +100,7 @@ func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 			if err != nil {
 				return nil, fmt.Errorf("error reading client certificate private key file: %w", err)
 			}
-		}
-
-		if cfg.TLS.KeyData != "" {
+		} else if cfg.TLS.KeyData != "" {
 			keyBytes, err = base64.StdEncoding.DecodeString(cfg.TLS.KeyData)
 			if err != nil {
 				return nil, fmt.Errorf("client certificate private key could not be decoded: %w", err)
