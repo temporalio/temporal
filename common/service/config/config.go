@@ -146,7 +146,7 @@ type (
 		RequireClientAuth bool `yaml:"requireClientAuth"`
 	}
 
-	// ClientTLS contains TLS configuration for clients. It is used to create
+	// ClientTLS contains TLS configuration for clients within the Temporal Cluster to connect to Temporal nodes.
 	ClientTLS struct {
 		// DNS name to validate against for server to server connections.
 		// Required when TLS is enabled in a multi-host cluster.
