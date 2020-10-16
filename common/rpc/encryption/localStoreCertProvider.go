@@ -27,6 +27,7 @@ package encryption
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -52,22 +53,36 @@ func (s *localStoreCertProvider) GetSettings() *config.GroupTLS {
 }
 
 func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, error) {
-	if s.tlsSettings.Server.CertFile == "" {
+	if !s.tlsSettings.Server.InlineData && s.tlsSettings.Server.CertFile == "" {
 		return nil, nil
 	}
 
-	// Check under a read lock first
+	if s.tlsSettings.Server.InlineData && s.tlsSettings.Server.CertData == "" {
+		return nil, nil
+	}
+
 	s.RLock()
 	if s.serverCert != nil {
 		defer s.RUnlock()
 		return s.serverCert, nil
 	}
-	// Not found, manually unlock read lock and move to write lock
+
 	s.RUnlock()
 	s.Lock()
 	defer s.Unlock()
 
-	// Get serverCert from disk
+	if s.serverCert != nil {
+		return s.serverCert, nil
+	}
+
+	if s.tlsSettings.Server.InlineData {
+		return s.fetchServerCertificateFromInline()
+	}
+
+	return s.fetchServerCertificateFromFile()
+}
+
+func (s *localStoreCertProvider) fetchServerCertificateFromFile() (*tls.Certificate, error) {
 	serverCert, err := tls.LoadX509KeyPair(s.tlsSettings.Server.CertFile, s.tlsSettings.Server.KeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("loading server tls certificate failed: %v", err)
@@ -77,29 +92,85 @@ func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, err
 	return s.serverCert, nil
 }
 
-func (s *localStoreCertProvider) FetchClientCAs() (*x509.CertPool, error) {
-	if s.tlsSettings.Server.ClientCAFiles == nil {
+func (s *localStoreCertProvider) fetchServerCertificateFromInline() (*tls.Certificate, error) {
+	if s.tlsSettings.Server.CertData == "" {
 		return nil, nil
 	}
 
-	// Check under a read lock first
+	certBytes, err := base64.StdEncoding.DecodeString(s.tlsSettings.Server.CertData)
+	if err != nil {
+		return nil, fmt.Errorf("TLS public certificate could not be decoded: %w", err)
+	}
+
+	keyBytes, err := base64.StdEncoding.DecodeString(s.tlsSettings.Server.KeyData)
+	if err != nil {
+		return nil, fmt.Errorf("TLS certificate private key could not be decoded: %w", err)
+	}
+
+	serverCert, err := tls.X509KeyPair(certBytes, keyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("loading server tls certificate failed: %v", err)
+	}
+
+	s.serverCert = &serverCert
+	return s.serverCert, nil
+}
+
+func (s *localStoreCertProvider) FetchClientCAs() (*x509.CertPool, error) {
+	if !s.tlsSettings.Server.InlineData && len(s.tlsSettings.Server.ClientCAFiles) == 0 {
+		return nil, nil
+	}
+	if s.tlsSettings.Server.InlineData && len(s.tlsSettings.Server.ClientCaData) == 0 {
+		return nil, nil
+	}
+
 	s.RLock()
 	if s.clientCAs != nil {
 		defer s.RUnlock()
 		return s.clientCAs, nil
 	}
-	// Not found, manually unlock read lock and move to write lock
+
 	s.RUnlock()
 	s.Lock()
 	defer s.Unlock()
 
+	if s.clientCAs != nil {
+		return s.clientCAs, nil
+	}
+
+	if s.tlsSettings.Server.InlineData {
+		return s.fetchClientCAsFromInline()
+	}
+
+	return s.fetchClientCAsFromFiles()
+}
+
+func (s *localStoreCertProvider) fetchClientCAsFromFiles() (*x509.CertPool, error) {
+	if len(s.tlsSettings.Server.ClientCAFiles) == 0 {
+		return nil, nil
+	}
+
 	var clientCaPool *x509.CertPool
-	if len(s.tlsSettings.Server.ClientCAFiles) > 0 {
-		var err error
-		clientCaPool, err = buildCAPool(s.tlsSettings.Server.ClientCAFiles)
-		if err != nil {
-			return nil, err
-		}
+	var err error
+	clientCaPool, err = buildCAPool(s.tlsSettings.Server.ClientCAFiles)
+	if err != nil {
+		return nil, err
+	}
+
+	s.clientCAs = clientCaPool
+	return s.clientCAs, nil
+}
+
+func (s *localStoreCertProvider) fetchClientCAsFromInline() (*x509.CertPool, error) {
+	if len(s.tlsSettings.Server.ClientCaData) == 0 {
+		return nil, nil
+	}
+
+	var clientCaPool *x509.CertPool
+	var err error
+	clientCaPool, err = buildCAPoolFromInline(s.tlsSettings.Server.ClientCaData)
+	if err != nil {
+		return nil, err
 	}
 
 	s.clientCAs = clientCaPool
@@ -107,27 +178,56 @@ func (s *localStoreCertProvider) FetchClientCAs() (*x509.CertPool, error) {
 }
 
 func (s *localStoreCertProvider) FetchServerRootCAsForClient() (*x509.CertPool, error) {
-	if s.tlsSettings.Client.RootCAFiles == nil {
+	if !s.tlsSettings.Client.InlineData && len(s.tlsSettings.Client.RootCAFiles) == 0 {
 		return nil, nil
 	}
-	// Check under a read lock first
+	if s.tlsSettings.Client.InlineData && len(s.tlsSettings.Client.RootCAData) == 0 {
+		return nil, nil
+	}
+
 	s.RLock()
 	if s.serverCAs != nil {
 		defer s.RUnlock()
 		return s.clientCAs, nil
 	}
-	// Not found, manually unlock read lock and move to write lock
+
 	s.RUnlock()
 	s.Lock()
 	defer s.Unlock()
 
+	if s.tlsSettings.Client.InlineData {
+		return s.fetchServerRootCAsForClientFromInline()
+	}
+
+	return s.fetchServerRootCAsForClientFromFiles()
+}
+
+func (s *localStoreCertProvider) fetchServerRootCAsForClientFromFiles() (*x509.CertPool, error) {
+	if len(s.tlsSettings.Client.RootCAFiles) == 0 {
+		return nil, nil
+	}
+
 	var serverCAPool *x509.CertPool
-	if len(s.tlsSettings.Client.RootCAFiles) > 0 {
-		var err error
-		serverCAPool, err = buildCAPool(s.tlsSettings.Client.RootCAFiles)
-		if err != nil {
-			return nil, err
-		}
+	var err error
+	serverCAPool, err = buildCAPool(s.tlsSettings.Client.RootCAFiles)
+	if err != nil {
+		return nil, err
+	}
+
+	s.serverCAs = serverCAPool
+	return s.serverCAs, nil
+}
+
+func (s *localStoreCertProvider) fetchServerRootCAsForClientFromInline() (*x509.CertPool, error) {
+	if len(s.tlsSettings.Client.RootCAData) == 0 {
+		return nil, nil
+	}
+
+	var serverCAPool *x509.CertPool
+	var err error
+	serverCAPool, err = buildCAPoolFromInline(s.tlsSettings.Client.RootCAData)
+	if err != nil {
+		return nil, err
 	}
 
 	s.serverCAs = serverCAPool
@@ -138,6 +238,21 @@ func buildCAPool(caFiles []string) (*x509.CertPool, error) {
 	caPool := x509.NewCertPool()
 	for _, ca := range caFiles {
 		caBytes, err := ioutil.ReadFile(ca)
+		if err != nil {
+			return nil, fmt.Errorf("failed reading client ca cert: %v", err)
+		}
+
+		if !caPool.AppendCertsFromPEM(caBytes) {
+			return nil, errors.New("unknown failure constructing cert pool for ca")
+		}
+	}
+	return caPool, nil
+}
+
+func buildCAPoolFromInline(caData []string) (*x509.CertPool, error) {
+	caPool := x509.NewCertPool()
+	for _, ca := range caData {
+		caBytes, err := base64.StdEncoding.DecodeString(ca)
 		if err != nil {
 			return nil, fmt.Errorf("failed reading client ca cert: %v", err)
 		}

@@ -135,6 +135,15 @@ type (
 		// A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust for client authentication.
 		// This value is ignored if `requireClientAuth` is not enabled.
 		ClientCAFiles []string `yaml:"clientCaFiles"`
+
+		// Optional inline base64 encoded versions of the above file paths
+		// Either specify base64 versions or file paths for all settings.
+		// Do not mix/match both. Set InlineData to true to use base64
+		InlineData   bool     `yaml:"inlineData"`
+		CertData     string   `yaml:"certData"`
+		KeyData      string   `yaml:"keyData"`
+		ClientCaData []string `yaml:"clientCaData"`
+
 		// Requires clients to authenticate with a certificate when connecting, otherwise known as mutual TLS.
 		RequireClientAuth bool `yaml:"requireClientAuth"`
 	}
@@ -148,6 +157,10 @@ type (
 
 		// Optional - A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust.
 		RootCAFiles []string `yaml:"rootCaFiles"`
+
+		// InlineData - indicates whether to read certificates from RootCAFiles or via RootCAData
+		InlineData bool     `yaml:"inlineData"`
+		RootCAData []string `yaml:"rootCaData"`
 	}
 
 	// Membership contains config items related to the membership layer of temporal
@@ -497,5 +510,5 @@ func (c *Config) String() string {
 }
 
 func (r *GroupTLS) IsEnabled() bool {
-	return r.Server.KeyFile != ""
+	return r.Server.KeyFile != "" || r.Server.KeyData != ""
 }
