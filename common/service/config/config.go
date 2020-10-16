@@ -133,7 +133,7 @@ type (
 		// The path to the file containing the PEM-encoded private key of the certificate to use.
 		KeyFile string `yaml:"keyFile"`
 		// A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust for client authentication.
-		// This value is ignored if `requireClientAuth` is not enabled. Merged with the data from ClientCAData.
+		// This value is ignored if `requireClientAuth` is not enabled. Cannot specify both ClientCAFiles and ClientCAData
 		ClientCAFiles []string `yaml:"clientCaFiles"`
 
 		// Base64 equivalents of the above artifacts.
