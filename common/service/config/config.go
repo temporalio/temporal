@@ -138,6 +138,7 @@ type (
 
 		// Base64 equivalents of the above artifacts.
 		// You cannot specify both a Data and a File for the same artifact (e.g. setting CertFile and CertData)
+		// The exception is ClientCAData and ClientCAFiles, which will be merged together.
 		CertData     string   `yaml:"certData"`
 		KeyData      string   `yaml:"keyData"`
 		ClientCAData []string `yaml:"clientCaData"`
