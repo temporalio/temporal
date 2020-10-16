@@ -117,10 +117,6 @@ func (s *localStoreCertProvider) FetchClientCAs() (*x509.CertPool, error) {
 		return nil, nil
 	}
 
-	if len(s.tlsSettings.Server.ClientCAFiles) > 0 && len(s.tlsSettings.Server.ClientCAData) > 0 {
-		return nil, errors.New("cannot specify both clientCAFiles and clientCAData properties")
-	}
-
 	s.RLock()
 	if s.clientCAs != nil {
 		defer s.RUnlock()
@@ -135,12 +131,26 @@ func (s *localStoreCertProvider) FetchClientCAs() (*x509.CertPool, error) {
 		return s.clientCAs, nil
 	}
 
-	clientCaPool, err := buildCAPool(s.tlsSettings.Server.ClientCAFiles, s.tlsSettings.Server.ClientCAData)
+	clientCaPoolFromFiles, err := buildCAPoolFromFiles(s.tlsSettings.Server.ClientCAFiles)
 	if err != nil {
 		return nil, err
 	}
 
-	s.clientCAs = clientCaPool
+	clientCaPoolFromData, err := buildCAPoolFromData(s.tlsSettings.Server.ClientCAData)
+	if err != nil {
+		return nil, err
+	}
+
+	if clientCaPoolFromFiles != nil && clientCaPoolFromData != nil {
+		return nil, errors.New("cannot specify both clientCAFiles and clientCAData properties")
+	}
+
+	if clientCaPoolFromData != nil {
+		s.clientCAs = clientCaPoolFromData
+	} else {
+		s.clientCAs = clientCaPoolFromFiles
+	}
+
 	return s.clientCAs, nil
 }
 
@@ -149,10 +159,6 @@ func (s *localStoreCertProvider) FetchServerRootCAsForClient() (*x509.CertPool, 
 		return nil, nil
 	}
 
-	if len(s.tlsSettings.Client.RootCAFiles) > 0 && len(s.tlsSettings.Client.RootCAData) > 0 {
-		return nil, errors.New("cannot specify both rootCAFiles and rootCAData properties")
-	}
-
 	s.RLock()
 	if s.serverCAs != nil {
 		defer s.RUnlock()
@@ -167,16 +173,58 @@ func (s *localStoreCertProvider) FetchServerRootCAsForClient() (*x509.CertPool, 
 		return s.serverCAs, nil
 	}
 
-	serverCAPool, err := buildCAPool(s.tlsSettings.Client.RootCAFiles, s.tlsSettings.Client.RootCAData)
+	serverCAPoolFromFiles, err := buildCAPoolFromFiles(s.tlsSettings.Client.RootCAFiles)
 	if err != nil {
 		return nil, err
 	}
 
-	s.serverCAs = serverCAPool
+	serverCAPoolFromData, err := buildCAPoolFromData(s.tlsSettings.Client.RootCAData)
+	if err != nil {
+		return nil, err
+	}
+
+	if serverCAPoolFromData != nil && serverCAPoolFromFiles != nil {
+		return nil, errors.New("cannot specify both rootCAFiles and rootCAData properties")
+	}
+
+	if serverCAPoolFromData != nil {
+		s.serverCAs = serverCAPoolFromData
+	} else {
+		s.serverCAs = serverCAPoolFromFiles
+	}
+
 	return s.serverCAs, nil
 }
 
-func buildCAPool(caFiles []string, caData []string) (*x509.CertPool, error) {
+func buildCAPoolFromData(caData []string) (*x509.CertPool, error) {
+	atLeastOneCert := false
+	caPool := x509.NewCertPool()
+
+	for _, ca := range caData {
+		if ca == "" {
+			continue
+		}
+
+		caBytes, err := base64.StdEncoding.DecodeString(ca)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode ca cert: %v", err)
+		}
+
+		if !caPool.AppendCertsFromPEM(caBytes) {
+			return nil, errors.New("unknown failure constructing cert pool for ca")
+		}
+
+		atLeastOneCert = true
+	}
+
+	if !atLeastOneCert {
+		return nil, nil
+	}
+
+	return caPool, nil
+}
+
+func buildCAPoolFromFiles(caFiles []string) (*x509.CertPool, error) {
 	atLeastOneCert := false
 	caPool := x509.NewCertPool()
 
@@ -188,23 +236,6 @@ func buildCAPool(caFiles []string, caData []string) (*x509.CertPool, error) {
 		caBytes, err := ioutil.ReadFile(ca)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read ca cert from file '%v': %v", ca, err)
-		}
-
-		if !caPool.AppendCertsFromPEM(caBytes) {
-			return nil, errors.New("unknown failure constructing cert pool for ca")
-		}
-
-		atLeastOneCert = true
-	}
-
-	for _, ca := range caData {
-		if ca == "" {
-			continue
-		}
-
-		caBytes, err := base64.StdEncoding.DecodeString(ca)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode ca cert: %v", err)
 		}
 
 		if !caPool.AppendCertsFromPEM(caBytes) {

@@ -138,7 +138,6 @@ type (
 
 		// Base64 equivalents of the above artifacts.
 		// You cannot specify both a Data and a File for the same artifact (e.g. setting CertFile and CertData)
-		// The exception is ClientCAData and ClientCAFiles, which will be merged together.
 		CertData     string   `yaml:"certData"`
 		KeyData      string   `yaml:"keyData"`
 		ClientCAData []string `yaml:"clientCaData"`
@@ -155,11 +154,11 @@ type (
 		ServerName string `yaml:"serverName"`
 
 		// Optional - A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to return to the client.
-		// Merged with the contents of RootCAData. Empty entries are ignored.
+		// You cannot specify both RootCAFiles and RootCAData
 		RootCAFiles []string `yaml:"rootCaFiles"`
 
 		// Optional - A list of base64 PEM-encoded public keys of the Certificate Authorities you wish to return to the client.
-		// Merged with the contents of RootCAFiles. Empty entries are ignored.
+		// You cannot specify both RootCAFiles and RootCAData
 		RootCAData []string `yaml:"rootCaData"`
 	}
 
