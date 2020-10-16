@@ -27,6 +27,7 @@ package rpc
 import (
 	"bytes"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"io/ioutil"
 	"os"
@@ -159,16 +160,16 @@ func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendCh
 		TLS: config.RootTLS{
 			Internode: config.GroupTLS{
 				Server: config.ServerTLS{
-					CertFile: internodeChain.CertPubFile,
-					KeyFile:  internodeChain.CertKeyFile,
+					CertData: convertFileToBase64(internodeChain.CertPubFile),
+					KeyData:  convertFileToBase64(internodeChain.CertKeyFile),
 				},
 				Client: config.ClientTLS{
-					RootCAFiles: []string{internodeChain.CaPubFile},
+					RootCAData: []string{convertFileToBase64(internodeChain.CaPubFile)},
 				},
 			},
 			Frontend: config.GroupTLS{
 				Client: config.ClientTLS{
-					RootCAFiles: []string{frontendChain.CaPubFile},
+					RootCAData: []string{convertFileToBase64(frontendChain.CaPubFile)},
 				},
 			},
 		},
@@ -260,6 +261,15 @@ func f(r *RPCFactory) *TestFactory {
 
 func i(r *RPCFactory) *TestFactory {
 	return &TestFactory{serverUsage: Internode, RPCFactory: r}
+}
+
+func convertFileToBase64(file string) string {
+	fileBytes, err := ioutil.ReadFile(file)
+	if err != nil {
+		panic(err)
+	}
+
+	return base64.StdEncoding.EncodeToString(fileBytes)
 }
 
 func (s *localStoreRPCSuite) TestServerTLS() {
