@@ -117,6 +117,8 @@ global:
         broadcastAddress: {{ default .Env.TEMPORAL_BROADCAST_ADDRESS "" }}
     tls:
         internode:
+            # This server section configures the TLS certificate that internal temporal
+            # cluster nodes (history or matching) present to other clients within the Temporal Cluster. 
             server:
                 requireClientAuth: {{ default .Env.TEMPORAL_TLS_REQUIRE_CLIENT_AUTH "false" }}
 
@@ -129,12 +131,18 @@ global:
                 keyData: {{ default .Env.TEMPORAL_TLS_SERVER_KEY_DATA "" }}
                 clientCaData:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA "" }}
+            
+            # This client section is used to configure the TLS clients within
+            # the Temporal Cluster that connect to an Internode (history or matching)
             client:
                 rootCaFiles:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
                 rootCaData:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA "" }}
         frontend:
+            # This server section configures the TLS certificate that the Frontend
+            # server presents to all clients (specifically the Worker role within
+            # the Temporal Cluster and all External SDKs connecting to the Cluster)
             server:
                 requireClientAuth: {{ default .Env.TEMPORAL_TLS_REQUIRE_CLIENT_AUTH "false" }}
                 certFile: {{ default .Env.TEMPORAL_TLS_FRONTEND_CERT "" }}
@@ -148,6 +156,9 @@ global:
                 clientCaData:
                     - {{ default .Env.TEMPORAL_TLS_CLIENT1_CA_CERT_DATA "" }}
                     - {{ default .Env.TEMPORAL_TLS_CLIENT2_CA_CERT_DATA "" }}
+            
+            # This client section is used to configure the TLS clients within
+            # the Temporal Cluster (specifically the Worker role) that connect to the Frontend service
             client:
                 rootCaFiles:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
