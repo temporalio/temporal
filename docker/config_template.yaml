@@ -17,10 +17,35 @@ persistence:
             cassandra:
                 hosts: {{ default .Env.CASSANDRA_SEEDS "" }}
                 keyspace: {{ default .Env.KEYSPACE "temporal" }}
+                user: {{ default .Env.CASSANDRA_USER "" }}
+                password: {{ default .Env.CASSANDRA_PASSWORD "" }}
+                port: {{ default .Env.CASSANDRA_PORT "9042" }}
+                tls:
+                    enabled: {{ default .Env.CASSANDRA_TLS_ENABLED "false" }}
+                    caFile: {{ default .Env.CASSANDRA_CA ""}}
+                    certFile: {{ default .Env.CASSANDRA_CERT "" }}
+                    keyFile: {{ default .Env.CASSANDRA_CERT_KEY "" }}
+                    caData: {{ default .Env.CASSANDRA_CA_DATA "" }}
+                    certData: {{ default .Env.CASSANDRA_CERT_DATA "" }}
+                    keyData: {{ default .Env.CASSANDRA_CERT_KEY_DATA "" }}
+                    enableHostVerification: {{ default .Env.CASSANDRA_HOST_VERIFICATION "false"}}
+
         visibility:
             cassandra:
                 hosts: {{ default .Env.CASSANDRA_SEEDS "" }}
                 keyspace: {{ default .Env.VISIBILITY_KEYSPACE "temporal_visibility" }}
+                user: {{ default .Env.CASSANDRA_USER "" }}
+                password: {{ default .Env.CASSANDRA_PASSWORD "" }}
+                port: {{ default .Env.CASSANDRA_PORT "9042" }}
+                tls:
+                    enabled: {{ default .Env.CASSANDRA_TLS_ENABLED "false" }}
+                    caFile: {{ default .Env.CASSANDRA_CA ""}}
+                    certFile: {{ default .Env.CASSANDRA_CERT "" }}
+                    keyFile: {{ default .Env.CASSANDRA_CERT_KEY "" }}
+                    caData: {{ default .Env.CASSANDRA_CA_DATA "" }}
+                    certData: {{ default .Env.CASSANDRA_CERT_DATA "" }}
+                    keyData: {{ default .Env.CASSANDRA_CERT_KEY_DATA "" }}
+                    enableHostVerification: {{ default .Env.CASSANDRA_HOST_VERIFICATION "false"}}
         {{- else if eq $db "mysql" }}
         default:
             sql:
@@ -93,26 +118,41 @@ global:
     tls:
         internode:
             server:
+                requireClientAuth: {{ default .Env.TEMPORAL_TLS_REQUIRE_CLIENT_AUTH "false" }}
+
                 certFile: {{ default .Env.TEMPORAL_TLS_SERVER_CERT "" }}
                 keyFile: {{ default .Env.TEMPORAL_TLS_SERVER_KEY "" }}
-                requireClientAuth: {{ default .Env.TEMPORAL_TLS_REQUIRE_CLIENT_AUTH "false" }}
                 clientCaFiles:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
+
+                certData: {{ default .Env.TEMPORAL_TLS_SERVER_CERT_DATA "" }}
+                keyData: {{ default .Env.TEMPORAL_TLS_SERVER_KEY_DATA "" }}
+                clientCaData:
+                    - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA "" }}
             client:
                 rootCaFiles:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
+                rootCaData:
+                    - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA "" }}
         frontend:
             server:
+                requireClientAuth: {{ default .Env.TEMPORAL_TLS_REQUIRE_CLIENT_AUTH "false" }}
                 certFile: {{ default .Env.TEMPORAL_TLS_FRONTEND_CERT "" }}
                 keyFile: {{ default .Env.TEMPORAL_TLS_FRONTEND_KEY "" }}
-                requireClientAuth: {{ default .Env.TEMPORAL_TLS_REQUIRE_CLIENT_AUTH "false" }}
                 clientCaFiles:
                     - {{ default .Env.TEMPORAL_TLS_CLIENT1_CA_CERT "" }}
                     - {{ default .Env.TEMPORAL_TLS_CLIENT2_CA_CERT "" }}
+
+                certData: {{ default .Env.TEMPORAL_TLS_FRONTEND_CERT_DATA "" }}
+                keyData: {{ default .Env.TEMPORAL_TLS_FRONTEND_KEY_DATA "" }}
+                clientCaData:
+                    - {{ default .Env.TEMPORAL_TLS_CLIENT1_CA_CERT_DATA "" }}
+                    - {{ default .Env.TEMPORAL_TLS_CLIENT2_CA_CERT_DATA "" }}
             client:
                 rootCaFiles:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
-
+                rootCaData:
+                    - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA "" }}
 services:
     frontend:
         rpc:

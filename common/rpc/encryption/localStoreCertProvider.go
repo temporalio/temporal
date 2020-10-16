@@ -27,6 +27,7 @@ package encryption
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -52,23 +53,57 @@ func (s *localStoreCertProvider) GetSettings() *config.GroupTLS {
 }
 
 func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, error) {
-	if s.tlsSettings.Server.CertFile == "" {
+	if s.tlsSettings.Server.CertFile == "" && s.tlsSettings.Server.CertData == "" {
 		return nil, nil
 	}
 
-	// Check under a read lock first
+	if s.tlsSettings.Server.CertFile != "" && s.tlsSettings.Server.CertData != "" {
+		return nil, errors.New("Cannot specify both certFile and certData properties")
+	}
+
 	s.RLock()
 	if s.serverCert != nil {
 		defer s.RUnlock()
 		return s.serverCert, nil
 	}
-	// Not found, manually unlock read lock and move to write lock
+
 	s.RUnlock()
 	s.Lock()
 	defer s.Unlock()
 
-	// Get serverCert from disk
-	serverCert, err := tls.LoadX509KeyPair(s.tlsSettings.Server.CertFile, s.tlsSettings.Server.KeyFile)
+	if s.serverCert != nil {
+		return s.serverCert, nil
+	}
+
+	var certBytes []byte
+	var keyBytes []byte
+	var err error
+
+	if s.tlsSettings.Server.CertFile != "" {
+		certBytes, err = ioutil.ReadFile(s.tlsSettings.Server.CertFile)
+		if err != nil {
+			return nil, err
+		}
+	} else if s.tlsSettings.Server.CertData != "" {
+		certBytes, err = base64.StdEncoding.DecodeString(s.tlsSettings.Server.CertData)
+		if err != nil {
+			return nil, fmt.Errorf("TLS public certificate could not be decoded: %w", err)
+		}
+	}
+
+	if s.tlsSettings.Server.KeyFile != "" {
+		keyBytes, err = ioutil.ReadFile(s.tlsSettings.Server.KeyFile)
+		if err != nil {
+			return nil, err
+		}
+	} else if s.tlsSettings.Server.KeyData != "" {
+		keyBytes, err = base64.StdEncoding.DecodeString(s.tlsSettings.Server.KeyData)
+		if err != nil {
+			return nil, fmt.Errorf("TLS private key could not be decoded: %w", err)
+		}
+	}
+
+	serverCert, err := tls.X509KeyPair(certBytes, keyBytes)
 	if err != nil {
 		return nil, fmt.Errorf("loading server tls certificate failed: %v", err)
 	}
@@ -78,73 +113,141 @@ func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, err
 }
 
 func (s *localStoreCertProvider) FetchClientCAs() (*x509.CertPool, error) {
-	if s.tlsSettings.Server.ClientCAFiles == nil {
+	if len(s.tlsSettings.Server.ClientCAFiles) == 0 && len(s.tlsSettings.Server.ClientCAData) == 0 {
 		return nil, nil
 	}
 
-	// Check under a read lock first
 	s.RLock()
 	if s.clientCAs != nil {
 		defer s.RUnlock()
 		return s.clientCAs, nil
 	}
-	// Not found, manually unlock read lock and move to write lock
+
 	s.RUnlock()
 	s.Lock()
 	defer s.Unlock()
 
-	var clientCaPool *x509.CertPool
-	if len(s.tlsSettings.Server.ClientCAFiles) > 0 {
-		var err error
-		clientCaPool, err = buildCAPool(s.tlsSettings.Server.ClientCAFiles)
-		if err != nil {
-			return nil, err
-		}
+	if s.clientCAs != nil {
+		return s.clientCAs, nil
 	}
 
-	s.clientCAs = clientCaPool
+	clientCaPoolFromFiles, err := buildCAPoolFromFiles(s.tlsSettings.Server.ClientCAFiles)
+	if err != nil {
+		return nil, err
+	}
+
+	clientCaPoolFromData, err := buildCAPoolFromData(s.tlsSettings.Server.ClientCAData)
+	if err != nil {
+		return nil, err
+	}
+
+	if clientCaPoolFromFiles != nil && clientCaPoolFromData != nil {
+		return nil, errors.New("cannot specify both clientCAFiles and clientCAData properties")
+	}
+
+	if clientCaPoolFromData != nil {
+		s.clientCAs = clientCaPoolFromData
+	} else {
+		s.clientCAs = clientCaPoolFromFiles
+	}
+
 	return s.clientCAs, nil
 }
 
 func (s *localStoreCertProvider) FetchServerRootCAsForClient() (*x509.CertPool, error) {
-	if s.tlsSettings.Client.RootCAFiles == nil {
+	if len(s.tlsSettings.Client.RootCAFiles) == 0 && len(s.tlsSettings.Client.RootCAData) == 0 {
 		return nil, nil
 	}
-	// Check under a read lock first
+
 	s.RLock()
 	if s.serverCAs != nil {
 		defer s.RUnlock()
-		return s.clientCAs, nil
+		return s.serverCAs, nil
 	}
-	// Not found, manually unlock read lock and move to write lock
+
 	s.RUnlock()
 	s.Lock()
 	defer s.Unlock()
 
-	var serverCAPool *x509.CertPool
-	if len(s.tlsSettings.Client.RootCAFiles) > 0 {
-		var err error
-		serverCAPool, err = buildCAPool(s.tlsSettings.Client.RootCAFiles)
-		if err != nil {
-			return nil, err
-		}
+	if s.serverCAs != nil {
+		return s.serverCAs, nil
 	}
 
-	s.serverCAs = serverCAPool
+	serverCAPoolFromFiles, err := buildCAPoolFromFiles(s.tlsSettings.Client.RootCAFiles)
+	if err != nil {
+		return nil, err
+	}
+
+	serverCAPoolFromData, err := buildCAPoolFromData(s.tlsSettings.Client.RootCAData)
+	if err != nil {
+		return nil, err
+	}
+
+	if serverCAPoolFromData != nil && serverCAPoolFromFiles != nil {
+		return nil, errors.New("cannot specify both rootCAFiles and rootCAData properties")
+	}
+
+	if serverCAPoolFromData != nil {
+		s.serverCAs = serverCAPoolFromData
+	} else {
+		s.serverCAs = serverCAPoolFromFiles
+	}
+
 	return s.serverCAs, nil
 }
 
-func buildCAPool(caFiles []string) (*x509.CertPool, error) {
+func buildCAPoolFromData(caData []string) (*x509.CertPool, error) {
+	atLeastOneCert := false
 	caPool := x509.NewCertPool()
-	for _, ca := range caFiles {
-		caBytes, err := ioutil.ReadFile(ca)
+
+	for _, ca := range caData {
+		if ca == "" {
+			continue
+		}
+
+		caBytes, err := base64.StdEncoding.DecodeString(ca)
 		if err != nil {
-			return nil, fmt.Errorf("failed reading client ca cert: %v", err)
+			return nil, fmt.Errorf("failed to decode ca cert: %v", err)
 		}
 
 		if !caPool.AppendCertsFromPEM(caBytes) {
 			return nil, errors.New("unknown failure constructing cert pool for ca")
 		}
+
+		atLeastOneCert = true
 	}
+
+	if !atLeastOneCert {
+		return nil, nil
+	}
+
+	return caPool, nil
+}
+
+func buildCAPoolFromFiles(caFiles []string) (*x509.CertPool, error) {
+	atLeastOneCert := false
+	caPool := x509.NewCertPool()
+
+	for _, ca := range caFiles {
+		if ca == "" {
+			continue
+		}
+
+		caBytes, err := ioutil.ReadFile(ca)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read ca cert from file '%v': %v", ca, err)
+		}
+
+		if !caPool.AppendCertsFromPEM(caBytes) {
+			return nil, errors.New("unknown failure constructing cert pool for ca")
+		}
+
+		atLeastOneCert = true
+	}
+
+	if !atLeastOneCert {
+		return nil, nil
+	}
+
 	return caPool, nil
 }

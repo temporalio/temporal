@@ -28,6 +28,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"io/ioutil"
 
 	"errors"
 	"fmt"
@@ -60,26 +61,53 @@ func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 		cluster.HostFilter = gocql.DataCentreHostFilter(cfg.Datacenter)
 	}
 	if cfg.TLS != nil && cfg.TLS.Enabled {
-		cluster.SslOpts = &gocql.SslOptions{
-			CertPath:               cfg.TLS.CertFile,
-			KeyPath:                cfg.TLS.KeyFile,
-			CaPath:                 cfg.TLS.CaFile,
-			EnableHostVerification: cfg.TLS.EnableHostVerification,
-
-			Config: auth.NewTLSConfigForServer(cfg.TLS.ServerName, cfg.TLS.EnableHostVerification),
+		if cfg.TLS.CertData != "" && cfg.TLS.CertFile != "" {
+			return nil, errors.New("Cannot specify both certData and certFile properties")
 		}
 
-		if cfg.TLS.CertData != "" {
-			certBytes, err := base64.StdEncoding.DecodeString(cfg.TLS.CertData)
+		if cfg.TLS.KeyData != "" && cfg.TLS.KeyFile != "" {
+			return nil, errors.New("Cannot specify both keyData and keyFile properties")
+		}
+
+		if cfg.TLS.CaData != "" && cfg.TLS.CaFile != "" {
+			return nil, errors.New("Cannot specify both caData and caFile properties")
+		}
+
+		cluster.SslOpts = &gocql.SslOptions{
+			CaPath:                 cfg.TLS.CaFile,
+			EnableHostVerification: cfg.TLS.EnableHostVerification,
+			Config:                 auth.NewTLSConfigForServer(cfg.TLS.ServerName, cfg.TLS.EnableHostVerification),
+		}
+
+		var certBytes []byte
+		var keyBytes []byte
+		var err error
+
+		if cfg.TLS.CertFile != "" {
+			certBytes, err = ioutil.ReadFile(cfg.TLS.CertFile)
+			if err != nil {
+				return nil, fmt.Errorf("error reading client certificate file: %w", err)
+			}
+		} else if cfg.TLS.CertData != "" {
+			certBytes, err = base64.StdEncoding.DecodeString(cfg.TLS.CertData)
 			if err != nil {
 				return nil, fmt.Errorf("client certificate could not be decoded: %w", err)
 			}
+		}
 
-			keyBytes, err := base64.StdEncoding.DecodeString(cfg.TLS.KeyData)
+		if cfg.TLS.KeyFile != "" {
+			keyBytes, err = ioutil.ReadFile(cfg.TLS.KeyFile)
+			if err != nil {
+				return nil, fmt.Errorf("error reading client certificate private key file: %w", err)
+			}
+		} else if cfg.TLS.KeyData != "" {
+			keyBytes, err = base64.StdEncoding.DecodeString(cfg.TLS.KeyData)
 			if err != nil {
 				return nil, fmt.Errorf("client certificate private key could not be decoded: %w", err)
 			}
+		}
 
+		if len(certBytes) > 0 {
 			clientCert, err := tls.X509KeyPair(certBytes, keyBytes)
 			if err != nil {
 				return nil, fmt.Errorf("unable to generate x509 key pair: %w", err)
@@ -99,15 +127,16 @@ func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 			}
 		}
 	}
+
 	if cfg.MaxConns > 0 {
 		cluster.NumConns = cfg.MaxConns
 	}
+
 	if cfg.ConnectTimeout > 0 {
 		cluster.ConnectTimeout = cfg.ConnectTimeout
 	}
 
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
-
 	return cluster, nil
 }
 
