@@ -70,7 +70,7 @@ func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 		}
 
 		if cfg.TLS.CaData != "" && cfg.TLS.CaFile != "" {
-			return nil, errors.New("Cannot specify both caData and CaFile properties")
+			return nil, errors.New("Cannot specify both caData and caFile properties")
 		}
 
 		cluster.SslOpts = &gocql.SslOptions{
