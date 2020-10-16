@@ -133,16 +133,14 @@ type (
 		// The path to the file containing the PEM-encoded private key of the certificate to use.
 		KeyFile string `yaml:"keyFile"`
 		// A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust for client authentication.
-		// This value is ignored if `requireClientAuth` is not enabled.
+		// This value is ignored if `requireClientAuth` is not enabled. Merged with the data from ClientCAData.
 		ClientCAFiles []string `yaml:"clientCaFiles"`
 
-		// Optional inline base64 encoded versions of the above file paths
-		// Either specify base64 versions or file paths for all settings.
-		// Do not mix/match both. Set InlineData to true to use base64
-		InlineData   bool     `yaml:"inlineData"`
+		// Base64 analogues of the above file paths. If present, will override the corresponding entry above, except for
+		// ClientCAData, which is merged with the data from ClientCAFiles.
 		CertData     string   `yaml:"certData"`
 		KeyData      string   `yaml:"keyData"`
-		ClientCaData []string `yaml:"clientCaData"`
+		ClientCAData []string `yaml:"clientCaData"`
 
 		// Requires clients to authenticate with a certificate when connecting, otherwise known as mutual TLS.
 		RequireClientAuth bool `yaml:"requireClientAuth"`
@@ -155,11 +153,12 @@ type (
 		// This name should be referenced by the certificate specified in the ServerTLS section.
 		ServerName string `yaml:"serverName"`
 
-		// Optional - A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust.
+		// Optional - A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to return to the client.
+		// Merged with the contents of RootCAData. Empty entries are ignored.
 		RootCAFiles []string `yaml:"rootCaFiles"`
 
-		// InlineData - indicates whether to read certificates from RootCAFiles or via RootCAData
-		InlineData bool     `yaml:"inlineData"`
+		// Optional - A list of base64 PEM-encoded public keys of the Certificate Authorities you wish to return to the client.
+		// Merged with the contents of RootCAFiles. Empty entries are ignored.
 		RootCAData []string `yaml:"rootCaData"`
 	}
 

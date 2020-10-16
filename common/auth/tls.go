@@ -34,8 +34,8 @@ type (
 		// client certificate
 		CertFile string `yaml:"certFile"`
 		KeyFile  string `yaml:"keyFile"`
+		CaFile   string `yaml:"caFile"` //optional depending on server config
 
-		CaFile string `yaml:"caFile"` //optional depending on server config
 		// If you want to verify the hostname and server cert (like a wildcard for cass cluster) then you should turn this on
 		// This option is basically the inverse of InSecureSkipVerify
 		// See InSecureSkipVerify in http://golang.org/pkg/crypto/tls/ for more info
@@ -43,12 +43,10 @@ type (
 
 		ServerName string `yaml:"serverName"`
 
-		// optional inline base64 encoded versions of the above files
-		// Either BOTH CertData and KeyData must be supplied as base64 encoded values,
-		// or NEITHER of them should be supplied as base64 encoded values.
-		// (e.g. it is not supported to specify 'CertFile' and 'KeyData' or vice-versa)
+		// Optional inline base64 encoded versions of the above files
+		// If present, will override any certs passed in via file paths.
 		CertData string `yaml:"certData"`
 		KeyData  string `yaml:"keyData"`
-		CaData   string `yaml:"caData"`
+		CaData   string `yaml:"caData"` // optional depending on server config
 	}
 )
