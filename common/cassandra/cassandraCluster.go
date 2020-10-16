@@ -88,7 +88,7 @@ func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 		if cfg.TLS.KeyFile != "" {
 			keyBytes, err = ioutil.ReadFile(cfg.TLS.KeyFile)
 			if err != nil {
-				return nil, fmt.Errorf("error reading client certificate private keyfile: %w", err)
+				return nil, fmt.Errorf("error reading client certificate private key file: %w", err)
 			}
 		}
 

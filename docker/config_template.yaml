@@ -119,7 +119,6 @@ global:
                 clientCaFiles:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
 
-                inlineData: {{ default .Env.TEMPORAL_TLS_INLINE "false" }}
                 certData: {{ default .Env.TEMPORAL_TLS_SERVER_CERT_DATA "" }}
                 keyData: {{ default .Env.TEMPORAL_TLS_SERVER_KEY_DATA "" }}
                 clientCaData:
@@ -129,7 +128,6 @@ global:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
                 rootCaData:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA "" }}
-                inlineData: {{ default .Env.TEMPORAL_TLS_INLINE "false" }}
         frontend:
             server:
                 requireClientAuth: {{ default .Env.TEMPORAL_TLS_REQUIRE_CLIENT_AUTH "false" }}
@@ -139,7 +137,6 @@ global:
                     - {{ default .Env.TEMPORAL_TLS_CLIENT1_CA_CERT "" }}
                     - {{ default .Env.TEMPORAL_TLS_CLIENT2_CA_CERT "" }}
 
-                inlineData: {{ default .Env.TEMPORAL_TLS_INLINE "false" }}
                 certData: {{ default .Env.TEMPORAL_TLS_FRONTEND_CERT_DATA "" }}
                 keyData: {{ default .Env.TEMPORAL_TLS_FRONTEND_KEY_DATA "" }}
                 clientCaData:
@@ -150,8 +147,6 @@ global:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
                 rootCaData:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA "" }}
-                inlineData: {{ default .Env.TEMPORAL_TLS_INLINE "false" }}
-
 services:
     frontend:
         rpc:
