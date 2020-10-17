@@ -89,7 +89,7 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 
 	tlsConfig, err := b.createTLSConfig(c)
 	if err != nil {
-		b.logger.Fatal("Failed to create SDK client", zap.Error(err))
+		b.logger.Fatal("Failed to configure TLS for SDK client", zap.Error(err))
 	}
 
 	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
