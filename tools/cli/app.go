@@ -83,6 +83,11 @@ func NewCliApp() *cli.App {
 			Usage:  "path to server CA certificate",
 			EnvVar: "TEMPORAL_CLI_TLS_CA",
 		},
+		cli.BoolFlag{
+			Name:   FlagTLSEnableHostVerification,
+			Usage:  "validates hostname of temporal cluster against Certificate",
+			EnvVar: "TEMPORAL_CLI_TLS_ENABLE_HOST_VERIFICATION",
+		},
 	}
 	app.Commands = []cli.Command{
 		{
