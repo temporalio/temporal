@@ -135,6 +135,8 @@ global:
             # This client section is used to configure the TLS clients within
             # the Temporal Cluster that connect to an Internode (history or matching)
             client:
+                serverName: {{ default .Env.TEMPORAL_TLS_INTERNODE_SERVER_NAME "" }}
+                enableHostVerification: {{ default .Env.TEMPORAL_TLS_INTERNODE_ENABLE_HOST_VERIFICATION "false"}}
                 rootCaFiles:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
                 rootCaData:
@@ -160,6 +162,8 @@ global:
             # This client section is used to configure the TLS clients within
             # the Temporal Cluster (specifically the Worker role) that connect to the Frontend service
             client:
+                serverName: {{ default .Env.TEMPORAL_TLS_FRONTEND_SERVER_NAME "" }}
+                enableHostVerification: {{ default .Env.TEMPORAL_TLS_FRONTEND_ENABLE_HOST_VERIFICATION "false"}}
                 rootCaFiles:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
                 rootCaData:

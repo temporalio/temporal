@@ -153,6 +153,11 @@ type (
 		// This name should be referenced by the certificate specified in the ServerTLS section.
 		ServerName string `yaml:"serverName"`
 
+		// If you want to verify the temporal server hostname and server cert, then you should turn this on
+		// This option is basically the inverse of InSecureSkipVerify
+		// See InSecureSkipVerify in http://golang.org/pkg/crypto/tls/ for more info
+		EnableHostVerification bool `yaml:"enableHostVerification"`
+
 		// Optional - A list of paths to files containing the PEM-encoded public key of the Certificate Authorities that are used to validate the server's TLS certificate
 		// You cannot specify both RootCAFiles and RootCAData
 		RootCAFiles []string `yaml:"rootCaFiles"`
