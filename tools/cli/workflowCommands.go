@@ -1215,10 +1215,7 @@ func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latest
 }
 
 func getListResultInRaw(c *cli.Context, queryOpen bool, nextPageToken []byte) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
-	fmt.Println("creating workflow client")
 	wfClient := getWorkflowClient(c)
-	fmt.Println("workflow client created")
-
 	earliestTime := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now().UTC())
 	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UTC(), time.Now().UTC())
 	workflowID := c.String(FlagWorkflowID)
