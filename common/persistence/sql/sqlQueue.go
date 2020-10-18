@@ -35,10 +35,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
-const (
-	emptyMessageID = -1
-)
-
 type (
 	sqlQueue struct {
 		queueType persistence.QueueType
@@ -68,16 +64,20 @@ func (q *sqlQueue) EnqueueMessage(
 
 	err := q.txExecute("EnqueueMessage", func(tx sqlplugin.Tx) error {
 		lastMessageID, err := tx.GetLastEnqueuedMessageIDForUpdate(q.queueType)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				lastMessageID = -1
-			} else {
-				return fmt.Errorf("failed to get last enqueued message id: %v", err)
-			}
+		switch err {
+		case nil:
+			_, err = tx.InsertIntoMessages([]sqlplugin.QueueRow{
+				newQueueRow(q.queueType, lastMessageID+1, messagePayload),
+			})
+			return err
+		case sql.ErrNoRows:
+			_, err = tx.InsertIntoMessages([]sqlplugin.QueueRow{
+				newQueueRow(q.queueType, sqlplugin.EmptyMessageID+1, messagePayload),
+			})
+			return err
+		default:
+			return fmt.Errorf("failed to get last enqueued message id: %v", err)
 		}
-
-		_, err = tx.InsertIntoQueue(newQueueRow(q.queueType, lastMessageID+1, messagePayload))
-		return err
 	})
 	if err != nil {
 		return serviceerror.NewInternal(err.Error())
@@ -87,10 +87,15 @@ func (q *sqlQueue) EnqueueMessage(
 
 func (q *sqlQueue) ReadMessages(
 	lastMessageID int64,
-	maxCount int,
+	pageSize int,
 ) ([]*persistence.QueueMessage, error) {
 
-	rows, err := q.db.GetMessagesFromQueue(q.queueType, lastMessageID, maxCount)
+	rows, err := q.db.RangeSelectFromMessages(sqlplugin.QueueMessagesRangeFilter{
+		QueueType:    q.queueType,
+		MinMessageID: lastMessageID,
+		MaxMessageID: sqlplugin.MaxMessageID,
+		PageSize:     pageSize,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -106,16 +111,20 @@ func newQueueRow(
 	queueType persistence.QueueType,
 	messageID int64,
 	payload []byte,
-) *sqlplugin.QueueRow {
+) sqlplugin.QueueRow {
 
-	return &sqlplugin.QueueRow{QueueType: queueType, MessageID: messageID, MessagePayload: payload}
+	return sqlplugin.QueueRow{QueueType: queueType, MessageID: messageID, MessagePayload: payload}
 }
 
 func (q *sqlQueue) DeleteMessagesBefore(
 	messageID int64,
 ) error {
 
-	_, err := q.db.DeleteMessagesBefore(q.queueType, messageID)
+	_, err := q.db.RangeDeleteFromMessages(sqlplugin.QueueMessagesRangeFilter{
+		QueueType:    q.queueType,
+		MinMessageID: sqlplugin.EmptyMessageID,
+		MaxMessageID: messageID - 1,
+	})
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err))
 	}
@@ -172,18 +181,23 @@ func (q *sqlQueue) EnqueueMessageToDLQ(
 	err := q.txExecute("EnqueueMessageToDLQ", func(tx sqlplugin.Tx) error {
 		var err error
 		lastMessageID, err = tx.GetLastEnqueuedMessageIDForUpdate(q.getDLQTypeFromQueueType())
-		if err != nil {
-			if err == sql.ErrNoRows {
-				lastMessageID = -1
-			} else {
-				return fmt.Errorf("failed to get last enqueued message id from DLQ: %v", err)
-			}
+		switch err {
+		case nil:
+			_, err = tx.InsertIntoMessages([]sqlplugin.QueueRow{
+				newQueueRow(q.getDLQTypeFromQueueType(), lastMessageID+1, messagePayload),
+			})
+			return err
+		case sql.ErrNoRows:
+			_, err = tx.InsertIntoMessages([]sqlplugin.QueueRow{
+				newQueueRow(q.getDLQTypeFromQueueType(), sqlplugin.EmptyMessageID+1, messagePayload),
+			})
+			return err
+		default:
+			return fmt.Errorf("failed to get last enqueued message id from DLQ: %v", err)
 		}
-		_, err = tx.InsertIntoQueue(newQueueRow(q.getDLQTypeFromQueueType(), lastMessageID+1, messagePayload))
-		return err
 	})
 	if err != nil {
-		return emptyMessageID, serviceerror.NewInternal(err.Error())
+		return sqlplugin.EmptyMessageID, serviceerror.NewInternal(err.Error())
 	}
 	return lastMessageID + 1, nil
 }
@@ -203,7 +217,12 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 		firstMessageID = lastReadMessageID
 	}
 
-	rows, err := q.db.GetMessagesBetween(q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID, pageSize)
+	rows, err := q.db.RangeSelectFromMessages(sqlplugin.QueueMessagesRangeFilter{
+		QueueType:    q.getDLQTypeFromQueueType(),
+		MinMessageID: firstMessageID,
+		MaxMessageID: lastMessageID,
+		PageSize:     pageSize,
+	})
 	if err != nil {
 		return nil, nil, serviceerror.NewInternal(fmt.Sprintf("ReadMessagesFromDLQ operation failed. Error %v", err))
 	}
@@ -225,7 +244,10 @@ func (q *sqlQueue) DeleteMessageFromDLQ(
 	messageID int64,
 ) error {
 
-	_, err := q.db.DeleteMessage(q.getDLQTypeFromQueueType(), messageID)
+	_, err := q.db.DeleteFromMessages(sqlplugin.QueueMessagesFilter{
+		QueueType: q.getDLQTypeFromQueueType(),
+		MessageID: messageID,
+	})
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("DeleteMessageFromDLQ operation failed. Error %v", err))
 	}
@@ -237,7 +259,11 @@ func (q *sqlQueue) RangeDeleteMessagesFromDLQ(
 	lastMessageID int64,
 ) error {
 
-	_, err := q.db.RangeDeleteMessages(q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID)
+	_, err := q.db.RangeDeleteFromMessages(sqlplugin.QueueMessagesRangeFilter{
+		QueueType:    q.getDLQTypeFromQueueType(),
+		MinMessageID: firstMessageID,
+		MaxMessageID: lastMessageID,
+	})
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("RangeDeleteMessagesFromDLQ operation failed. Error %v", err))
 	}

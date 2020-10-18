@@ -42,8 +42,8 @@ const (
 )
 
 var (
-	testNamespaceName     = "random namespace"
-	testNamespaceNameData = []byte("random namespace data")
+	testNamespaceName = "random namespace"
+	testNamespaceData = []byte("random namespace data")
 )
 
 type (
@@ -400,7 +400,7 @@ func (s *namespaceSuite) newRandomNamespaceRow(
 	return sqlplugin.NamespaceRow{
 		ID:                  id,
 		Name:                name,
-		Data:                shuffle.Bytes(testNamespaceNameData),
+		Data:                shuffle.Bytes(testNamespaceData),
 		DataEncoding:        testNamespaceEncoding,
 		IsGlobal:            true,
 		NotificationVersion: notificationVersion,

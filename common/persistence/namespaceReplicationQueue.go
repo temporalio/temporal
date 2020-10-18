@@ -147,10 +147,10 @@ func (q *namespaceReplicationQueueImpl) PublishToDLQ(message interface{}) error 
 
 func (q *namespaceReplicationQueueImpl) GetReplicationMessages(
 	lastMessageID int64,
-	maxCount int,
+	pageSize int,
 ) ([]*replicationspb.ReplicationTask, int64, error) {
 
-	messages, err := q.queue.ReadMessages(lastMessageID, maxCount)
+	messages, err := q.queue.ReadMessages(lastMessageID, pageSize)
 	if err != nil {
 		return nil, lastMessageID, err
 	}
@@ -213,7 +213,7 @@ func (q *namespaceReplicationQueueImpl) GetMessagesFromDLQ(
 		}
 
 		// Overwrite to local cluster message id
-		replicationTask.SourceTaskId = int64(message.ID)
+		replicationTask.SourceTaskId = message.ID
 		replicationTasks = append(replicationTasks, replicationTask)
 	}
 

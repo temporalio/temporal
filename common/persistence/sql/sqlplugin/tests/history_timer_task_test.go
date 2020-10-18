@@ -294,7 +294,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsertDeleteSelect_Single() {
 
 func (s *historyHistoryTimerTaskSuite) TestInsertDeleteSelect_Multiple() {
 	numTasks := 20
-	pageSize := numTasks + 1
+	pageSize := numTasks
 
 	shardID := rand.Int31()
 	timestamp := s.now()
