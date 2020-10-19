@@ -617,7 +617,7 @@ func newAdminElasticSearchCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name: FlagInputFileWithAlias,
-					Usage: "Input file name. Redirect temporal wf list result (with tale format) to a file and use as delete input. " +
+					Usage: "Input file name. Redirect temporal wf list result (with table format) to a file and use as delete input. " +
 						"First line should be table header like WORKFLOW TYPE | WORKFLOW ID | RUN ID | ...",
 				},
 				cli.IntFlag{
