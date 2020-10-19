@@ -25,11 +25,9 @@
 package matching
 
 import (
-	"context"
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -40,6 +38,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -105,7 +104,7 @@ func (s *Service) Start() {
 	if err != nil {
 		logger.Fatal("creating grpc server options failed", tag.Error(err))
 	}
-	opts = append(opts, grpc.UnaryInterceptor(interceptor))
+	opts = append(opts, grpc.UnaryInterceptor(rpc.Interceptor))
 	s.server = grpc.NewServer(opts...)
 	nilCheckHandler := NewNilCheckHandler(s.handler)
 	matchingservice.RegisterMatchingServiceServer(s.server, nilCheckHandler)
@@ -137,9 +136,4 @@ func (s *Service) Stop() {
 	s.Resource.Stop()
 
 	s.GetLogger().Info("matching stopped")
-}
-
-func interceptor(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	resp, err := handler(ctx, req)
-	return resp, serviceerror.ToStatus(err).Err()
 }
