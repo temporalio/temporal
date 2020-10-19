@@ -25,12 +25,10 @@
 package history
 
 import (
-	"context"
 	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -43,6 +41,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/common/task"
@@ -523,7 +522,7 @@ func (s *Service) Start() {
 	if err != nil {
 		logger.Fatal("creating grpc server options failed", tag.Error(err))
 	}
-	opts = append(opts, grpc.UnaryInterceptor(interceptor))
+	opts = append(opts, grpc.UnaryInterceptor(rpc.Interceptor))
 	s.server = grpc.NewServer(opts...)
 	nilCheckHandler := NewNilCheckHandler(s.handler)
 	historyservice.RegisterHistoryServiceServer(s.server, nilCheckHandler)
@@ -581,11 +580,6 @@ func (s *Service) Stop() {
 	s.Resource.Stop()
 
 	s.GetLogger().Info("history stopped")
-}
-
-func interceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	resp, err := handler(ctx, req)
-	return resp, serviceerror.ToStatus(err).Err()
 }
 
 // sleep sleeps for the minimum of desired and available duration

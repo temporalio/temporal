@@ -25,13 +25,11 @@
 package frontend
 
 import (
-	"context"
 	"os"
 	"sync/atomic"
 	"time"
 
 	"github.com/stretchr/testify/mock"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -48,6 +46,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -283,7 +282,7 @@ func (s *Service) Start() {
 	if err != nil {
 		logger.Fatal("creating grpc server options failed", tag.Error(err))
 	}
-	opts = append(opts, grpc.UnaryInterceptor(interceptor))
+	opts = append(opts, grpc.UnaryInterceptor(rpc.Interceptor))
 	s.server = grpc.NewServer(opts...)
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
@@ -346,9 +345,4 @@ func (s *Service) Stop() {
 	s.server.Stop()
 	s.Resource.Stop()
 	s.params.Logger.Info("frontend stopped")
-}
-
-func interceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	resp, err := handler(ctx, req)
-	return resp, serviceerror.ToStatus(err).Err()
 }
