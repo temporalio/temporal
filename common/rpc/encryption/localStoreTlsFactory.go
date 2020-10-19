@@ -166,6 +166,6 @@ func newClientTLSConfig(localProvider CertProvider, remoteProvider CertProvider)
 		clientCerts,
 		serverCa,
 		remoteProvider.GetSettings().Client.ServerName,
-		remoteProvider.GetSettings().Client.EnableHostVerification,
+		!remoteProvider.GetSettings().Client.DisableHostVerification,
 	), nil
 }
