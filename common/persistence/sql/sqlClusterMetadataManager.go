@@ -51,7 +51,7 @@ func (s *sqlClusterMetadataManager) GetClusterMetadata() (*p.InternalGetClusterM
 	}
 
 	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove after 1.1 release.
-	if row.Data == nil {
+	if len(row.Data) == 0 {
 		row.Data = row.ImmutableData
 		row.DataEncoding = row.ImmutableDataEncoding
 	}
