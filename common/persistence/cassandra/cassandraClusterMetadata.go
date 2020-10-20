@@ -159,7 +159,7 @@ func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMe
 		return nil, convertCommonErrors("GetClusterMetadata", err)
 	}
 	// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove after 1.1 release.
-	if clusterMetadata == nil {
+	if len(clusterMetadata) == 0 {
 		clusterMetadata = immutableMetadata
 		encoding = immutableMetadataEncoding
 		// Version can only be 0 for legacy records that have NULL version in the DB.
