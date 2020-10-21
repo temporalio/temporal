@@ -4,7 +4,8 @@ set -ex
 
 dockerize -template /etc/temporal/config/config_template.yaml:/etc/temporal/config/docker.yaml
 
-# Convert comma or semicolon separated string (i.e. "history:matching") to valid arguments list (i.e. "--services=history --services=matching").
+# Convert semicolon (or comma for backward compatibility) separated string (i.e. "history:matching")
+# to valid flags list (i.e. "--services=history --services=matching").
 IFS=':,' read -ra SERVICES_LIST <<< "$SERVICES"
 SERVICES_ARGS=$(printf -- "--services=%s " "${SERVICES_LIST[@]}")
 
