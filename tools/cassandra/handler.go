@@ -154,7 +154,7 @@ func createKeyspace(cli *cli.Context) error {
 	return nil
 }
 
-func checkHealth(cli *cli.Context) error {
+func validateHealth(cli *cli.Context) error {
 	config, err := newCQLClientConfig(cli)
 	if err != nil {
 		return handleErr(schema.NewConfigError(err.Error()))

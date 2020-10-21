@@ -109,7 +109,7 @@ wait_for_cassandra() {
 
     { export CASSANDRA_PASSWORD=$CASSANDRA_PASSWORD; } 2> /dev/null
 
-    until temporal-cassandra-tool --ep $CASSANDRA_SEEDS check-health < /dev/null; do
+    until temporal-cassandra-tool --ep $CASSANDRA_SEEDS validate-health < /dev/null; do
         echo 'waiting for cassandra to start up'
         sleep 1
     done

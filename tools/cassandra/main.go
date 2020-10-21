@@ -205,11 +205,11 @@ func buildCLIOptions() *cli.App {
 			},
 		},
 		{
-			Name:    "check-health",
-			Aliases: []string{"check-health"},
-			Usage:   "validates general health of cluster by establishing session to system keyspace",
+			Name:    "validate-health",
+			Aliases: []string{"validate-health"},
+			Usage:   "validates health of cassandra by attempting to establish CQL session to system keyspace",
 			Action: func(c *cli.Context) {
-				cliHandler(c, checkHealth)
+				cliHandler(c, validateHealth)
 			},
 		},
 	}
