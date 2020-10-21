@@ -9,4 +9,4 @@ dockerize -template /etc/temporal/config/config_template.yaml:/etc/temporal/conf
 IFS=':,' read -ra SERVICES_LIST <<< "$SERVICES"
 SERVICES_ARGS=$(printf -- "--services=%s " "${SERVICES_LIST[@]}")
 
-exec temporal-server --root $TEMPORAL_HOME --env docker start $SERVICES_ARGS
+exec temporal-server --root $TEMPORAL_HOME --env docker start --services=$SERVICES_ARGS
