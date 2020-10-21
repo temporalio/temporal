@@ -212,15 +212,15 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
-		WorkflowId:  workflowID,
+		NamespaceId:      namespaceID,
+		WorkflowId:       workflowID,
+		VersionHistories: histories,
 	}).AnyTimes()
 	mutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
 		RunId: runID,
 	}).AnyTimes()
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	mutableState.EXPECT().GetPreviousStartedEventID().Return(lastWorkflowTaskStartedEventID).Times(1)
-	mutableState.EXPECT().GetVersionHistories().Return(histories).Times(1)
 
 	s.mockWorkflowResetter.EXPECT().resetWorkflow(
 		ctx,

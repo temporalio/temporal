@@ -124,7 +124,7 @@ func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {
 	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(testGlobalNamespaceEntry)
 	s.NotNil(mutableState)
 	s.NotNil(stateBuilder)
-	s.NotNil(mutableState.GetVersionHistories())
+	s.NotNil(mutableState.GetExecutionInfo().GetVersionHistories())
 }
 
 func (s *nDCStateRebuilderSuite) TestApplyEvents() {
@@ -345,6 +345,6 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 			targetBranchToken,
 			[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID, version)},
 		),
-	), rebuildMutableState.GetVersionHistories())
+	), rebuildMutableState.GetExecutionInfo().GetVersionHistories())
 	s.Equal(rebuildMutableState.GetExecutionInfo().StartTime, now)
 }

@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/cache"
@@ -135,7 +134,6 @@ type (
 		GetNamespaceEntry() *cache.NamespaceCacheEntry
 		GetStartEvent() (*historypb.HistoryEvent, error)
 		GetCurrentBranchToken() ([]byte, error)
-		GetVersionHistories() *historyspb.VersionHistories // TODO: remove? it can be get from ExecutioInfo
 		GetCurrentVersion() int64
 		GetExecutionInfo() *persistenceblobs.WorkflowExecutionInfo
 		GetExecutionState() *persistenceblobs.WorkflowExecutionState
@@ -219,7 +217,6 @@ type (
 		SetHistoryBuilder(hBuilder *historyBuilder)
 		SetHistoryTree(treeID string) error
 		SetNextEventID(nextEventID int64)
-		SetVersionHistories(*historyspb.VersionHistories) error
 		UpdateActivity(*persistenceblobs.ActivityInfo) error
 		UpdateActivityWithTimerHeartbeat(*persistenceblobs.ActivityInfo, time.Time) error
 		UpdateActivityProgress(ai *persistenceblobs.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)

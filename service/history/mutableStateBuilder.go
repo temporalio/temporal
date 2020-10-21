@@ -340,10 +340,6 @@ func (e *mutableStateBuilder) GetCurrentBranchToken() ([]byte, error) {
 	return e.executionInfo.EventBranchToken, nil
 }
 
-func (e *mutableStateBuilder) GetVersionHistories() *historyspb.VersionHistories {
-	return e.executionInfo.VersionHistories
-}
-
 // set treeID/historyBranches
 func (e *mutableStateBuilder) SetHistoryTree(
 	treeID string,
@@ -375,14 +371,6 @@ func (e *mutableStateBuilder) SetCurrentBranchToken(
 
 func (e *mutableStateBuilder) SetNextEventID(nextEventID int64) {
 	e.nextEventID = nextEventID
-}
-
-func (e *mutableStateBuilder) SetVersionHistories(
-	versionHistories *historyspb.VersionHistories,
-) error {
-
-	e.executionInfo.VersionHistories = versionHistories
-	return nil
 }
 
 func (e *mutableStateBuilder) GetHistoryBuilder() *historyBuilder {
@@ -4197,7 +4185,7 @@ func (e *mutableStateBuilder) eventsToReplicationTask(
 		NewRunBranchToken: nil,
 	}
 
-	if e.GetVersionHistories() == nil {
+	if e.executionInfo.GetVersionHistories() == nil {
 		return nil, serviceerror.NewInternal("should not generate replication task when missing replication state & version history")
 	}
 

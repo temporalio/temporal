@@ -29,9 +29,6 @@
 package history
 
 import (
-	reflect "reflect"
-	time "time"
-
 	gomock "github.com/golang/mock/gomock"
 	command "go.temporal.io/api/command/v1"
 	common "go.temporal.io/api/common/v1"
@@ -41,12 +38,13 @@ import (
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
 	enums0 "go.temporal.io/server/api/enums/v1"
-	history0 "go.temporal.io/server/api/history/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	persistenceblobs "go.temporal.io/server/api/persistenceblobs/v1"
 	cache "go.temporal.io/server/common/cache"
 	definition "go.temporal.io/server/common/definition"
 	persistence "go.temporal.io/server/common/persistence"
+	reflect "reflect"
+	time "time"
 )
 
 // MockmutableState is a mock of mutableState interface.
@@ -1047,20 +1045,6 @@ func (m *MockmutableState) GetCurrentBranchToken() ([]byte, error) {
 func (mr *MockmutableStateMockRecorder) GetCurrentBranchToken() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentBranchToken", reflect.TypeOf((*MockmutableState)(nil).GetCurrentBranchToken))
-}
-
-// GetVersionHistories mocks base method.
-func (m *MockmutableState) GetVersionHistories() *history0.VersionHistories {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVersionHistories")
-	ret0, _ := ret[0].(*history0.VersionHistories)
-	return ret0
-}
-
-// GetVersionHistories indicates an expected call of GetVersionHistories.
-func (mr *MockmutableStateMockRecorder) GetVersionHistories() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersionHistories", reflect.TypeOf((*MockmutableState)(nil).GetVersionHistories))
 }
 
 // GetCurrentVersion mocks base method.
@@ -2233,20 +2217,6 @@ func (m *MockmutableState) SetNextEventID(nextEventID int64) {
 func (mr *MockmutableStateMockRecorder) SetNextEventID(nextEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetNextEventID", reflect.TypeOf((*MockmutableState)(nil).SetNextEventID), nextEventID)
-}
-
-// SetVersionHistories mocks base method.
-func (m *MockmutableState) SetVersionHistories(arg0 *history0.VersionHistories) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetVersionHistories", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetVersionHistories indicates an expected call of SetVersionHistories.
-func (mr *MockmutableStateMockRecorder) SetVersionHistories(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVersionHistories", reflect.TypeOf((*MockmutableState)(nil).SetVersionHistories), arg0)
 }
 
 // UpdateActivity mocks base method.

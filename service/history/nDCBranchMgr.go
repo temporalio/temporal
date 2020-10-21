@@ -101,7 +101,7 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 		return false, 0, err
 	}
 
-	localVersionHistories := r.mutableState.GetVersionHistories()
+	localVersionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	versionHistory, err := versionhistory.GetVersionHistory(localVersionHistories, versionHistoryIndex)
 	if err != nil {
 		return false, 0, err
@@ -155,7 +155,7 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 	incomingVersionHistory *historyspb.VersionHistory,
 ) (int32, *historyspb.VersionHistoryItem, error) {
 
-	localVersionHistories := r.mutableState.GetVersionHistories()
+	localVersionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 
 	versionHistoryIndex, lcaVersionHistoryItem, err := versionhistory.FindLCAVersionHistoryIndexAndItem(
 		localVersionHistories,
@@ -192,7 +192,7 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 	r.context = targetWorkflow.getContext()
 	r.mutableState = targetWorkflow.getMutableState()
 
-	localVersionHistories = r.mutableState.GetVersionHistories()
+	localVersionHistories = r.mutableState.GetExecutionInfo().GetVersionHistories()
 	return versionhistory.FindLCAVersionHistoryIndexAndItem(localVersionHistories, incomingVersionHistory)
 }
 
@@ -256,7 +256,7 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 		return 0, err
 	}
 	branchChanged, newIndex, err := versionhistory.AddVersionHistory(
-		r.mutableState.GetVersionHistories(),
+		r.mutableState.GetExecutionInfo().GetVersionHistories(),
 		newVersionHistory,
 	)
 	if err != nil {

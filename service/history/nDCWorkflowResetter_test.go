@@ -149,7 +149,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	rebuiltHistorySize := int64(9999)
 	newBranchToken := []byte("other random branch token")
 
-	s.mockBaseMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
 	mockBaseWorkflowReleaseFnCalled := false
 	mockBaseWorkflowReleaseFn := func(err error) {
@@ -225,7 +225,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 	incomingFirstEventID := baseEventID + 12
 	incomingFirstEventVersion := baseVersion + 3
 
-	s.mockBaseMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
 	mockBaseWorkflowReleaseFn := func(err error) {
 	}

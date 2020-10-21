@@ -81,7 +81,7 @@ func (r *nDCConflictResolverImpl) prepareMutableState(
 	incomingVersion int64,
 ) (mutableState, bool, error) {
 
-	versionHistories := r.mutableState.GetVersionHistories()
+	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	currentVersionHistoryIndex := versionHistories.GetCurrentVersionHistoryIndex()
 
 	// replication task to be applied to current branch
@@ -123,7 +123,7 @@ func (r *nDCConflictResolverImpl) rebuild(
 	requestID string,
 ) (mutableState, error) {
 
-	versionHistories := r.mutableState.GetVersionHistories()
+	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	replayVersionHistory, err := versionhistory.GetVersionHistory(versionHistories, branchIndex)
 	if err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ func (r *nDCConflictResolverImpl) rebuild(
 	}
 
 	// after rebuilt verification
-	rebuildVersionHistories := rebuildMutableState.GetVersionHistories()
+	rebuildVersionHistories := rebuildMutableState.GetExecutionInfo().GetVersionHistories()
 	rebuildVersionHistory, err := versionhistory.GetCurrentVersionHistory(rebuildVersionHistories)
 	if err != nil {
 		return nil, err
@@ -175,9 +175,7 @@ func (r *nDCConflictResolverImpl) rebuild(
 	if err := versionhistory.SetCurrentVersionHistoryIndex(versionHistories, branchIndex); err != nil {
 		return nil, err
 	}
-	if err = rebuildMutableState.SetVersionHistories(versionHistories); err != nil {
-		return nil, err
-	}
+	rebuildMutableState.GetExecutionInfo().VersionHistories = versionHistories
 	// set the update condition from original mutable state
 	rebuildMutableState.SetUpdateCondition(r.mutableState.GetUpdateCondition())
 

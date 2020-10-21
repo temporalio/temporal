@@ -151,7 +151,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	if err := rebuiltMutableState.SetCurrentBranchToken(targetBranchToken); err != nil {
 		return nil, 0, err
 	}
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(rebuiltMutableState.GetVersionHistories())
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(rebuiltMutableState.GetExecutionInfo().GetVersionHistories())
 	if err != nil {
 		return nil, 0, err
 	}

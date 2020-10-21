@@ -112,7 +112,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
-	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionhistory.NewVHS(&historyspb.VersionHistory{})).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: versionhistory.NewVHS(&historyspb.VersionHistory{})}).AnyTimes()
 
 	s.stateBuilder = newStateBuilder(
 		s.mockShard,

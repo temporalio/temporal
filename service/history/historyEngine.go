@@ -1065,7 +1065,7 @@ func (e *historyEngineImpl) getMutableState(
 		WorkflowStatus:                        workflowStatus,
 		IsStickyTaskQueueEnabled:              mutableState.IsStickyTaskQueueEnabled(),
 	}
-	versionHistories := mutableState.GetVersionHistories()
+	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
 	if versionHistories != nil {
 		retResp.VersionHistories = versionHistories
 	}
@@ -2344,7 +2344,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 
 	resetRunID := uuid.New()
 	baseRebuildLastEventID := request.GetWorkflowTaskFinishEventId() - 1
-	baseVersionHistories := baseMutableState.GetVersionHistories()
+	baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
 	baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 	if err != nil {
 		return nil, err
@@ -2952,7 +2952,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 					return &updateWorkflowAction{noop: true}, nil
 				}
 
-				baseVersionHistories := mutableState.GetVersionHistories()
+				baseVersionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
 				baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 				if err != nil {
 					return nil, err

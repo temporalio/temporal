@@ -258,7 +258,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 		switch err.(type) {
 		case nil:
 			// Sanity check to make only 3DC mutable state here
-			if mutableState.GetVersionHistories() == nil {
+			if mutableState.GetExecutionInfo().GetVersionHistories() == nil {
 				return serviceerror.NewInternal("The mutable state does not support 3DC.")
 			}
 
@@ -275,7 +275,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 				return err
 			}
 
-			if mutableState.GetVersionHistories().GetCurrentVersionHistoryIndex() == branchIndex {
+			if mutableState.GetExecutionInfo().GetVersionHistories().GetCurrentVersionHistoryIndex() == branchIndex {
 				return r.applyNonStartEventsToCurrentBranch(ctx, context, mutableState, isRebuilt, releaseFn, task)
 			}
 			return r.applyNonStartEventsToNoneCurrentBranch(ctx, context, mutableState, branchIndex, releaseFn, task)
@@ -524,7 +524,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 		task.getLastEvent().GetEventId(),
 		task.getLastEvent().GetVersion(),
 	)
-	versionHistory, err := versionhistory.GetVersionHistory(mutableState.GetVersionHistories(), branchIndex)
+	versionHistory, err := versionhistory.GetVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories(), branchIndex)
 	if err != nil {
 		return err
 	}

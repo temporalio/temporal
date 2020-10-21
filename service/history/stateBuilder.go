@@ -112,11 +112,11 @@ func (b *stateBuilderImpl) applyEvents(
 
 	for _, event := range history {
 		// NOTE: stateBuilder is also being used in the active side
-		if b.mutableState.GetVersionHistories() != nil {
+		if b.mutableState.GetExecutionInfo().GetVersionHistories() != nil {
 			if err := b.mutableState.UpdateCurrentVersion(event.GetVersion(), true); err != nil {
 				return nil, err
 			}
-			versionHistories := b.mutableState.GetVersionHistories()
+			versionHistories := b.mutableState.GetExecutionInfo().GetVersionHistories()
 			versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 			if err != nil {
 				return nil, err

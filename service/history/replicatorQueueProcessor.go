@@ -564,7 +564,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 			heartbeatTime = activityInfo.LastHeartbeatUpdateTime
 
 			// Version history uses when replicate the sync activity task
-			versionHistories := mutableState.GetVersionHistories()
+			versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
 			var versionHistory *historyspb.VersionHistory
 			if versionHistories != nil {
 				var err error
@@ -713,7 +713,7 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 	version int64,
 ) ([]*historyspb.VersionHistoryItem, []byte, error) {
 
-	versionHistories := mutableState.GetVersionHistories()
+	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
 	if versionHistories == nil {
 		return nil, nil, serviceerror.NewInternal("replicatorQueueProcessor encounter workflow without version histories")
 	}
@@ -795,5 +795,5 @@ func (p *replicatorQueueProcessorImpl) isNewRunNDCEnabled(
 	if err != nil {
 		return false, err
 	}
-	return mutableState.GetVersionHistories() != nil, nil
+	return mutableState.GetExecutionInfo().GetVersionHistories() != nil, nil
 }
