@@ -93,7 +93,7 @@ func buildCLI() *cli.App {
 				&cli.StringFlag{
 					Name:    "services",
 					Aliases: []string{"s"},
-					Usage:   "comma separated list of services to start. Depricated",
+					Usage:   "comma separated list of services to start. Deprecated",
 					Hidden:  true,
 				},
 				&cli.StringSliceFlag{
@@ -115,9 +115,9 @@ func buildCLI() *cli.App {
 				configDir := path.Join(c.String("root"), c.String("config"))
 				services := c.StringSlice("service")
 
-				// For backward compatiblity to support old flag format (i.e. `--services=frontend,history,matching`).
+				// For backward compatibility to support old flag format (i.e. `--services=frontend,history,matching`).
 				if c.IsSet("services") {
-					log.Println("WARNING: --services flag is depricated. Specify multiply --service flags instead.")
+					log.Println("WARNING: --services flag is deprecated. Specify multiply --service flags instead.")
 					services = strings.Split(c.String("services"), ",")
 				}
 
