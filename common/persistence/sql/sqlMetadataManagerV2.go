@@ -116,7 +116,7 @@ func (m *sqlMetadataManagerV2) GetNamespace(request *persistence.GetNamespaceReq
 	if err != nil {
 		return nil, err
 	}
-	filter := &sqlplugin.NamespaceFilter{}
+	filter := sqlplugin.NamespaceFilter{}
 	switch {
 	case request.Name != "" && request.ID != "":
 		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name specified in request.")
@@ -206,14 +206,14 @@ func (m *sqlMetadataManagerV2) DeleteNamespace(request *persistence.DeleteNamesp
 	}
 
 	return m.txExecute("DeleteNamespace", func(tx sqlplugin.Tx) error {
-		_, err := tx.DeleteFromNamespace(&sqlplugin.NamespaceFilter{ID: &idBytes})
+		_, err := tx.DeleteFromNamespace(sqlplugin.NamespaceFilter{ID: &idBytes})
 		return err
 	})
 }
 
 func (m *sqlMetadataManagerV2) DeleteNamespaceByName(request *persistence.DeleteNamespaceByNameRequest) error {
 	return m.txExecute("DeleteNamespaceByName", func(tx sqlplugin.Tx) error {
-		_, err := tx.DeleteFromNamespace(&sqlplugin.NamespaceFilter{Name: &request.Name})
+		_, err := tx.DeleteFromNamespace(sqlplugin.NamespaceFilter{Name: &request.Name})
 		return err
 	})
 }
@@ -232,7 +232,7 @@ func (m *sqlMetadataManagerV2) ListNamespaces(request *persistence.ListNamespace
 		token := primitives.UUID(request.NextPageToken)
 		pageToken = &token
 	}
-	rows, err := m.db.SelectFromNamespace(&sqlplugin.NamespaceFilter{
+	rows, err := m.db.SelectFromNamespace(sqlplugin.NamespaceFilter{
 		GreaterThanID: pageToken,
 		PageSize:      &request.PageSize,
 	})

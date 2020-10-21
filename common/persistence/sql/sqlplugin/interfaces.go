@@ -37,12 +37,12 @@ type (
 		CreateAdminDB(cfg *config.SQL) (AdminDB, error)
 	}
 
-	// tableCRUD defines the API for interacting with the database tables
-	tableCRUD interface {
-		clusterMetadata
+	// TableCRUD defines the API for interacting with the database tables
+	TableCRUD interface {
+		ClusterMetadata
 		Namespace
 		Visibility
-		queue
+		Queue
 
 		MatchingTask
 		MatchingTaskQueue
@@ -67,8 +67,8 @@ type (
 		HistoryReplicationDLQTask
 	}
 
-	// adminCRUD defines admin operations for CLI and test suites
-	adminCRUD interface {
+	// AdminCRUD defines admin operations for CLI and test suites
+	AdminCRUD interface {
 		CreateSchemaVersionTables() error
 		ReadSchemaVersion(database string) (string, error)
 		UpdateSchemaVersion(database string, newVersion string, minCompatibleVersion string) error
@@ -83,14 +83,14 @@ type (
 
 	// Tx defines the API for a SQL transaction
 	Tx interface {
-		tableCRUD
+		TableCRUD
 		Commit() error
 		Rollback() error
 	}
 
 	// DB defines the API for regular SQL operations of a Temporal server
 	DB interface {
-		tableCRUD
+		TableCRUD
 
 		BeginTx() (Tx, error)
 		PluginName() string
@@ -100,7 +100,7 @@ type (
 
 	// AdminDB defines the API for admin SQL operations for CLI and testing suites
 	AdminDB interface {
-		adminCRUD
+		AdminCRUD
 		PluginName() string
 		Close() error
 	}
