@@ -117,7 +117,7 @@ func (s *historyShardSuite) TestInsertSelect() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.ShardsFilter{
+	filter := sqlplugin.ShardsFilter{
 		ShardID: shardID,
 	}
 	row, err := s.store.SelectFromShards(filter)
@@ -173,7 +173,7 @@ func (s *historyShardSuite) TestInsertUpdateSelect() {
 	rowsAffected, err = result.RowsAffected()
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.ShardsFilter{
+	filter := sqlplugin.ShardsFilter{
 		ShardID: shardID,
 	}
 	row, err := s.store.SelectFromShards(filter)
@@ -194,7 +194,7 @@ func (s *historyShardSuite) TestSelectReadLock() {
 
 	// NOTE: lock without transaction is equivalent to select
 	//  this test only test the select functionality
-	filter := &sqlplugin.ShardsFilter{
+	filter := sqlplugin.ShardsFilter{
 		ShardID: shardID,
 	}
 	shardRange, err := s.store.ReadLockShards(filter)
@@ -215,7 +215,7 @@ func (s *historyShardSuite) TestSelectWriteLock() {
 
 	// NOTE: lock without transaction is equivalent to select
 	//  this test only test the select functionality
-	filter := &sqlplugin.ShardsFilter{
+	filter := sqlplugin.ShardsFilter{
 		ShardID: shardID,
 	}
 	shardRange, err := s.store.WriteLockShards(filter)

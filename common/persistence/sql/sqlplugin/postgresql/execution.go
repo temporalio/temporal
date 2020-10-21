@@ -332,7 +332,7 @@ func (pdb *db) InsertIntoBufferedEvents(rows []sqlplugin.BufferedEventsRow) (sql
 }
 
 // SelectFromBufferedEvents reads one or more rows from buffered_events table
-func (pdb *db) SelectFromBufferedEvents(filter *sqlplugin.BufferedEventsFilter) ([]sqlplugin.BufferedEventsRow, error) {
+func (pdb *db) SelectFromBufferedEvents(filter sqlplugin.BufferedEventsFilter) ([]sqlplugin.BufferedEventsRow, error) {
 	var rows []sqlplugin.BufferedEventsRow
 	err := pdb.conn.Select(&rows, getBufferedEventsQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
@@ -345,7 +345,7 @@ func (pdb *db) SelectFromBufferedEvents(filter *sqlplugin.BufferedEventsFilter) 
 }
 
 // DeleteFromBufferedEvents deletes one or more rows from buffered_events table
-func (pdb *db) DeleteFromBufferedEvents(filter *sqlplugin.BufferedEventsFilter) (sql.Result, error) {
+func (pdb *db) DeleteFromBufferedEvents(filter sqlplugin.BufferedEventsFilter) (sql.Result, error) {
 	return pdb.conn.Exec(deleteBufferedEventsQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 }
 

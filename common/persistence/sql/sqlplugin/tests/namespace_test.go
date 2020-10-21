@@ -131,14 +131,14 @@ func (s *namespaceSuite) TestInsertSelect() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.NamespaceFilter{
+	filter := sqlplugin.NamespaceFilter{
 		ID: &id,
 	}
 	rows, err := s.store.SelectFromNamespace(filter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.NamespaceRow{namespace}, rows)
 
-	filter = &sqlplugin.NamespaceFilter{
+	filter = sqlplugin.NamespaceFilter{
 		Name: &name,
 	}
 	rows, err = s.store.SelectFromNamespace(filter)
@@ -197,14 +197,14 @@ func (s *namespaceSuite) TestInsertUpdateSelect() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.NamespaceFilter{
+	filter := sqlplugin.NamespaceFilter{
 		ID: &id,
 	}
 	rows, err := s.store.SelectFromNamespace(filter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.NamespaceRow{namespace}, rows)
 
-	filter = &sqlplugin.NamespaceFilter{
+	filter = sqlplugin.NamespaceFilter{
 		Name: &name,
 	}
 	rows, err = s.store.SelectFromNamespace(filter)
@@ -224,7 +224,7 @@ func (s *namespaceSuite) TestInsertDeleteSelect_ID() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.NamespaceFilter{
+	filter := sqlplugin.NamespaceFilter{
 		ID: &id,
 	}
 	result, err = s.store.DeleteFromNamespace(filter)
@@ -233,13 +233,13 @@ func (s *namespaceSuite) TestInsertDeleteSelect_ID() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter = &sqlplugin.NamespaceFilter{
+	filter = sqlplugin.NamespaceFilter{
 		ID: &id,
 	}
 	_, err = s.store.SelectFromNamespace(filter)
 	s.Error(err) // TODO persistence layer should do proper error translation
 
-	filter = &sqlplugin.NamespaceFilter{
+	filter = sqlplugin.NamespaceFilter{
 		Name: &name,
 	}
 	_, err = s.store.SelectFromNamespace(filter)
@@ -258,7 +258,7 @@ func (s *namespaceSuite) TestInsertDeleteSelect_Name() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.NamespaceFilter{
+	filter := sqlplugin.NamespaceFilter{
 		Name: &name,
 	}
 	result, err = s.store.DeleteFromNamespace(filter)
@@ -267,13 +267,13 @@ func (s *namespaceSuite) TestInsertDeleteSelect_Name() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter = &sqlplugin.NamespaceFilter{
+	filter = sqlplugin.NamespaceFilter{
 		ID: &id,
 	}
 	_, err = s.store.SelectFromNamespace(filter)
 	s.Error(err) // TODO persistence layer should do proper error translation
 
-	filter = &sqlplugin.NamespaceFilter{
+	filter = sqlplugin.NamespaceFilter{
 		Name: &name,
 	}
 	_, err = s.store.SelectFromNamespace(filter)
@@ -282,14 +282,14 @@ func (s *namespaceSuite) TestInsertDeleteSelect_Name() {
 
 func (s *namespaceSuite) TestInsertSelect_Pagination() {
 	// cleanup the namespace for pagination test
-	rowsPerPage, err := s.store.SelectFromNamespace(&sqlplugin.NamespaceFilter{
+	rowsPerPage, err := s.store.SelectFromNamespace(sqlplugin.NamespaceFilter{
 		GreaterThanID: nil,
 		PageSize:      convert.IntPtr(1000000),
 	})
 	switch err {
 	case nil:
 		for _, row := range rowsPerPage {
-			_, err := s.store.DeleteFromNamespace(&sqlplugin.NamespaceFilter{
+			_, err := s.store.DeleteFromNamespace(sqlplugin.NamespaceFilter{
 				ID: &row.ID,
 			})
 			s.NoError(err)
@@ -320,7 +320,7 @@ func (s *namespaceSuite) TestInsertSelect_Pagination() {
 	}
 
 	rows := map[string]*sqlplugin.NamespaceRow{}
-	filter := &sqlplugin.NamespaceFilter{
+	filter := sqlplugin.NamespaceFilter{
 		GreaterThanID: nil,
 		PageSize:      convert.IntPtr(numNamespacePerPage),
 	}
