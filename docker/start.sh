@@ -28,8 +28,8 @@ setup_cassandra_schema() {
     export CASSANDRA_USER=$CASSANDRA_USER
     export CASSANDRA_PORT=$CASSANDRA_PORT
     export CASSANDRA_ENABLE_TLS=$CASSANDRA_TLS_ENABLED
-    export CASSANDRA_TLS_CERT=$CASSANDRA_CERT;
-    export CASSANDRA_TLS_KEY=$CASSANDRA_CERT_KEY;
+    export CASSANDRA_TLS_CERT=$CASSANDRA_CERT
+    export CASSANDRA_TLS_KEY=$CASSANDRA_CERT_KEY
     export CASSANDRA_TLS_CA=$CASSANDRA_CA
 
     { export CASSANDRA_PASSWORD=$CASSANDRA_PASSWORD; } 2> /dev/null
@@ -42,7 +42,7 @@ setup_cassandra_schema() {
     VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/cassandra/visibility/versioned
     temporal-cassandra-tool --ep $CASSANDRA_SEEDS create -k $VISIBILITY_KEYSPACE --rf $RF
     temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE setup-schema -v 0.0
-    temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE update-schema -d $VISIBILITY_SCHEMA_DIR   
+    temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
 setup_mysql_schema() {
