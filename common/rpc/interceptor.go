@@ -22,51 +22,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package auth
+package rpc
 
 import (
-	"crypto/tls"
-	"crypto/x509"
+	"context"
+
+	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc"
 )
 
-// Helper methods for creating tls.Config structs to ensure MinVersion is 1.3
-
-func NewEmptyTLSConfig() *tls.Config {
-	return &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
-}
-
-func NewTLSConfigForServer(
-	serverName string,
-	enableHostVerification bool,
-) *tls.Config {
-	c := NewEmptyTLSConfig()
-	c.ServerName = serverName
-	c.InsecureSkipVerify = !enableHostVerification
-	return c
-}
-
-func NewTLSConfigWithCertsAndCAs(
-	certificates []tls.Certificate,
-	rootCAs *x509.CertPool,
-	serverName string,
-	enableHostVerification bool,
-) *tls.Config {
-	c := NewTLSConfigForServer(serverName, enableHostVerification)
-	c.Certificates = certificates
-	c.RootCAs = rootCAs
-	return c
-}
-
-func NewTLSConfigWithClientAuthAndCAs(
-	clientAuth tls.ClientAuthType,
-	certificates []tls.Certificate,
-	clientCAs *x509.CertPool,
-) *tls.Config {
-	c := NewEmptyTLSConfig()
-	c.ClientAuth = clientAuth
-	c.Certificates = certificates
-	c.ClientCAs = clientCAs
-	return c
+func Interceptor(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	resp, err := handler(ctx, req)
+	return resp, serviceerror.ToStatus(err).Err()
 }

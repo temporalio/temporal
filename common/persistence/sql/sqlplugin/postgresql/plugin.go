@@ -27,8 +27,6 @@ package postgresql
 import (
 	"errors"
 	"fmt"
-	"net"
-	"strings"
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
@@ -41,6 +39,7 @@ import (
 const (
 	// PluginName is the name of the plugin
 	PluginName = "postgres"
+	dsnFmt     = "postgres://%v:%v@%v/%v?%v"
 )
 
 var errTLSNotImplemented = errors.New("tls for postgresql has not been implemented")
@@ -73,45 +72,13 @@ func (d *plugin) CreateAdminDB(cfg *config.SQL) (sqlplugin.AdminDB, error) {
 	return db, nil
 }
 
-func composeConnectionString(user, password, host, port, dbName string) string {
-	composeSegment := func(paramName string, paramValue string) string {
-		paramValue = strings.TrimSpace(paramValue)
-		if paramValue != "" {
-			return fmt.Sprintf("%s=%s ", paramName, paramValue)
-		}
-		return ""
-	}
-
-	return composeSegment("user", user) +
-		composeSegment("password", password) +
-		composeSegment("host", host) +
-		composeSegment("port", port) +
-		composeSegment("dbname", dbName) +
-		composeSegment("sslmode", "disable")
-}
-
 // CreateDBConnection creates a returns a reference to a logical connection to the
 // underlying SQL database. The returned object is to tied to a single
 // SQL database and the object can be used to perform CRUD operations on
 // the tables in the database
 func (d *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
-	err := registerTLSConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
 
-	host, port, err := net.SplitHostPort(cfg.ConnectAddr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid connect address, it must be in host:port format, %v, err: %v", cfg.ConnectAddr, err)
-	}
-
-	dbName := cfg.DatabaseName
-	//NOTE: postgresql doesn't allow to connect with empty dbName, the admin dbName is "postgres"
-	if dbName == "" {
-		dbName = "postgres"
-	}
-
-	db, err := sqlx.Connect(PluginName, composeConnectionString(cfg.User, cfg.Password, host, port, dbName))
+	db, err := sqlx.Connect(PluginName, buildDSN(cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -130,10 +97,23 @@ func (d *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
 	return db, nil
 }
 
-// TODO: implement postgresql specific support for TLS
-func registerTLSConfig(cfg *config.SQL) error {
-	if cfg.TLS == nil || !cfg.TLS.Enabled {
-		return nil
+func buildDSN(cfg *config.SQL) string {
+	tlsAttrs := dsnTSL(cfg).Encode()
+	dsn := fmt.Sprintf(
+		dsnFmt,
+		cfg.User,
+		cfg.Password,
+		cfg.ConnectAddr,
+		databaseName(cfg.DatabaseName),
+		tlsAttrs,
+	)
+	return dsn
+}
+
+func databaseName(dbName string) string {
+	//NOTE: postgres doesn't allow to connect with empty dbName, the admin dbName is "postgres"
+	if dbName == "" {
+		return "postgres"
 	}
-	return errTLSNotImplemented
+	return dbName
 }

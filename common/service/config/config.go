@@ -133,21 +133,38 @@ type (
 		// The path to the file containing the PEM-encoded private key of the certificate to use.
 		KeyFile string `yaml:"keyFile"`
 		// A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust for client authentication.
-		// This value is ignored if `requireClientAuth` is not enabled.
+		// This value is ignored if `requireClientAuth` is not enabled. Cannot specify both ClientCAFiles and ClientCAData
 		ClientCAFiles []string `yaml:"clientCaFiles"`
+
+		// Base64 equivalents of the above artifacts.
+		// You cannot specify both a Data and a File for the same artifact (e.g. setting CertFile and CertData)
+		CertData     string   `yaml:"certData"`
+		KeyData      string   `yaml:"keyData"`
+		ClientCAData []string `yaml:"clientCaData"`
+
 		// Requires clients to authenticate with a certificate when connecting, otherwise known as mutual TLS.
 		RequireClientAuth bool `yaml:"requireClientAuth"`
 	}
 
-	// ClientTLS contains TLS configuration for clients.
+	// ClientTLS contains TLS configuration for clients within the Temporal Cluster to connect to Temporal nodes.
 	ClientTLS struct {
 		// DNS name to validate against for server to server connections.
 		// Required when TLS is enabled in a multi-host cluster.
 		// This name should be referenced by the certificate specified in the ServerTLS section.
 		ServerName string `yaml:"serverName"`
 
-		// Optional - A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust.
+		// If you want to verify the temporal server hostname and server cert, then you should turn this on
+		// This option is basically equivalent to InSecureSkipVerify
+		// See InSecureSkipVerify in http://golang.org/pkg/crypto/tls/ for more info
+		DisableHostVerification bool `yaml:"disableHostVerification"`
+
+		// Optional - A list of paths to files containing the PEM-encoded public key of the Certificate Authorities that are used to validate the server's TLS certificate
+		// You cannot specify both RootCAFiles and RootCAData
 		RootCAFiles []string `yaml:"rootCaFiles"`
+
+		// Optional - A list of base64 PEM-encoded public keys of the Certificate Authorities that are used to validate the server's TLS certificate.
+		// You cannot specify both RootCAFiles and RootCAData
+		RootCAData []string `yaml:"rootCaData"`
 	}
 
 	// Membership contains config items related to the membership layer of temporal
@@ -497,5 +514,5 @@ func (c *Config) String() string {
 }
 
 func (r *GroupTLS) IsEnabled() bool {
-	return r.Server.KeyFile != ""
+	return r.Server.KeyFile != "" || r.Server.KeyData != ""
 }

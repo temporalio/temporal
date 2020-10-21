@@ -117,8 +117,12 @@ shard_id = ? AND task_id = ?`
 shard_id = ? AND task_id > ? AND task_id <= ? ORDER BY task_id LIMIT ?`
 
 	deleteReplicationTaskQuery      = `DELETE FROM replication_tasks WHERE shard_id = ? AND task_id = ?`
-	rangeDeleteReplicationTaskQuery = `DELETE FROM replication_tasks WHERE shard_id = ? AND task_id <= ?`
+	rangeDeleteReplicationTaskQuery = `DELETE FROM replication_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ?`
 
+	getReplicationTaskDLQQuery = `SELECT task_id, data, data_encoding FROM replication_tasks_dlq WHERE 
+source_cluster_name = ? AND
+shard_id = ? AND
+task_id = ?`
 	getReplicationTasksDLQQuery = `SELECT task_id, data, data_encoding FROM replication_tasks_dlq WHERE 
 source_cluster_name = ? AND
 shard_id = ? AND
@@ -352,43 +356,63 @@ func (mdb *db) InsertIntoReplicationTasks(rows []sqlplugin.ReplicationTasksRow) 
 }
 
 // SelectFromReplicationTasks reads one or more rows from replication_tasks table
-func (mdb *db) SelectFromReplicationTasks(filter *sqlplugin.ReplicationTasksFilter) ([]sqlplugin.ReplicationTasksRow, error) {
+func (mdb *db) SelectFromReplicationTasks(filter sqlplugin.ReplicationTasksFilter) ([]sqlplugin.ReplicationTasksRow, error) {
+	var rows []sqlplugin.ReplicationTasksRow
+	err := mdb.conn.Select(&rows, getReplicationTaskQuery, filter.ShardID, filter.TaskID)
+	return rows, err
+}
+
+// RangeSelectFromReplicationTasks reads one or more rows from replication_tasks table
+func (mdb *db) RangeSelectFromReplicationTasks(filter sqlplugin.ReplicationTasksRangeFilter) ([]sqlplugin.ReplicationTasksRow, error) {
 	var rows []sqlplugin.ReplicationTasksRow
 	err := mdb.conn.Select(&rows, getReplicationTasksQuery, filter.ShardID, filter.MinTaskID, filter.MaxTaskID, filter.PageSize)
 	return rows, err
 }
 
 // DeleteFromReplicationTasks deletes one row from replication_tasks table
-func (mdb *db) DeleteFromReplicationTasks(filter *sqlplugin.ReplicationTasksFilter) (sql.Result, error) {
+func (mdb *db) DeleteFromReplicationTasks(filter sqlplugin.ReplicationTasksFilter) (sql.Result, error) {
 	return mdb.conn.Exec(deleteReplicationTaskQuery, filter.ShardID, filter.TaskID)
 }
 
 // RangeDeleteFromReplicationTasks deletes multi rows from replication_tasks table
-func (mdb *db) RangeDeleteFromReplicationTasks(filter *sqlplugin.ReplicationTasksFilter) (sql.Result, error) {
-	return mdb.conn.Exec(rangeDeleteReplicationTaskQuery, filter.ShardID, filter.InclusiveEndTaskID)
+func (mdb *db) RangeDeleteFromReplicationTasks(filter sqlplugin.ReplicationTasksRangeFilter) (sql.Result, error) {
+	return mdb.conn.Exec(rangeDeleteReplicationTaskQuery, filter.ShardID, filter.MinTaskID, filter.MaxTaskID)
 }
 
 // InsertIntoReplicationTasksDLQ inserts one or more rows into replication_tasks_dlq table
-func (mdb *db) InsertIntoReplicationTasksDLQ(row *sqlplugin.ReplicationTaskDLQRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(insertReplicationTaskDLQQuery, row)
+func (mdb *db) InsertIntoReplicationDLQTasks(rows []sqlplugin.ReplicationDLQTasksRow) (sql.Result, error) {
+	return mdb.conn.NamedExec(insertReplicationTaskDLQQuery, rows)
 }
 
 // SelectFromReplicationTasksDLQ reads one or more rows from replication_tasks_dlq table
-func (mdb *db) SelectFromReplicationTasksDLQ(filter *sqlplugin.ReplicationTasksDLQFilter) ([]sqlplugin.ReplicationTasksRow, error) {
-	var rows []sqlplugin.ReplicationTasksRow
+func (mdb *db) SelectFromReplicationDLQTasks(filter sqlplugin.ReplicationDLQTasksFilter) ([]sqlplugin.ReplicationDLQTasksRow, error) {
+	var rows []sqlplugin.ReplicationDLQTasksRow
+	err := mdb.conn.Select(
+		&rows, getReplicationTaskDLQQuery,
+		filter.SourceClusterName,
+		filter.ShardID,
+		filter.TaskID,
+	)
+	return rows, err
+}
+
+// RangeSelectFromReplicationTasksDLQ reads one or more rows from replication_tasks_dlq table
+func (mdb *db) RangeSelectFromReplicationDLQTasks(filter sqlplugin.ReplicationDLQTasksRangeFilter) ([]sqlplugin.ReplicationDLQTasksRow, error) {
+	var rows []sqlplugin.ReplicationDLQTasksRow
 	err := mdb.conn.Select(
 		&rows, getReplicationTasksDLQQuery,
 		filter.SourceClusterName,
 		filter.ShardID,
 		filter.MinTaskID,
 		filter.MaxTaskID,
-		filter.PageSize)
+		filter.PageSize,
+	)
 	return rows, err
 }
 
 // DeleteMessageFromReplicationTasksDLQ deletes one row from replication_tasks_dlq table
-func (mdb *db) DeleteMessageFromReplicationTasksDLQ(
-	filter *sqlplugin.ReplicationTasksDLQFilter,
+func (mdb *db) DeleteFromReplicationDLQTasks(
+	filter sqlplugin.ReplicationDLQTasksFilter,
 ) (sql.Result, error) {
 
 	return mdb.conn.Exec(
@@ -400,15 +424,15 @@ func (mdb *db) DeleteMessageFromReplicationTasksDLQ(
 }
 
 // DeleteMessageFromReplicationTasksDLQ deletes one or more rows from replication_tasks_dlq table
-func (mdb *db) RangeDeleteMessageFromReplicationTasksDLQ(
-	filter *sqlplugin.ReplicationTasksDLQFilter,
+func (mdb *db) RangeDeleteFromReplicationDLQTasks(
+	filter sqlplugin.ReplicationDLQTasksRangeFilter,
 ) (sql.Result, error) {
 
 	return mdb.conn.Exec(
 		rangeDeleteReplicationTaskFromDLQQuery,
 		filter.SourceClusterName,
 		filter.ShardID,
-		filter.TaskID,
-		filter.InclusiveEndTaskID,
+		filter.MinTaskID,
+		filter.MaxTaskID,
 	)
 }

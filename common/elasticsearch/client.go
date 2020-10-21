@@ -90,12 +90,23 @@ func NewClient(config *Config) (Client, error) {
 	client, err := elastic.NewClient(
 		elastic.SetURL(config.URL.String()),
 		elastic.SetSniff(false),
+
+		// Disable health check so we don't block client creation if ES happens to be down.
+		elastic.SetHealthcheck(false),
+
 		elastic.SetRetrier(elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
 		elastic.SetDecoder(&elastic.NumberDecoder{}), // critical to ensure decode of int64 won't lose precise
 	)
+
 	if err != nil {
 		return nil, err
 	}
+
+	// Re-enable the healthcheck after client has successfully been created.
+	client.Stop()
+	elastic.SetHealthcheck(true)(client)
+	client.Start()
+
 	return NewWrapperClient(client), nil
 }
 

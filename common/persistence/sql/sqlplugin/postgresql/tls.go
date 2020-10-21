@@ -22,51 +22,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package auth
+package postgresql
 
 import (
-	"crypto/tls"
-	"crypto/x509"
+	"net/url"
+
+	"go.temporal.io/server/common/service/config"
 )
 
-// Helper methods for creating tls.Config structs to ensure MinVersion is 1.3
+const (
+	postgreSQLSSLMode     = "sslmode"
+	postgreSQLSSLModeNoop = "disable"
+	postgreSQLSSLModeCA   = "verify-ca"
+	postgreSQLSSLModeFull = "verify-full"
 
-func NewEmptyTLSConfig() *tls.Config {
-	return &tls.Config{
-		MinVersion: tls.VersionTLS12,
+	postgreSQLSSLHost = "host"
+
+	postgreSQLCA   = "sslrootcert"
+	postgreSQLKey  = "sslkey"
+	postgreSQLCert = "sslcert"
+)
+
+func dsnTSL(cfg *config.SQL) url.Values {
+	sslParams := url.Values{}
+	if cfg.TLS != nil && cfg.TLS.Enabled {
+		if !cfg.TLS.EnableHostVerification {
+			sslParams.Set(postgreSQLSSLMode, postgreSQLSSLModeCA)
+		} else {
+			sslParams.Set(postgreSQLSSLMode, postgreSQLSSLModeFull)
+			sslParams.Set(postgreSQLSSLHost, cfg.TLS.ServerName)
+		}
+
+		if cfg.TLS.CaFile != "" {
+			sslParams.Set(postgreSQLCA, cfg.TLS.CaFile)
+		}
+		if cfg.TLS.KeyFile != "" && cfg.TLS.CertFile != "" {
+			sslParams.Set(postgreSQLKey, cfg.TLS.KeyFile)
+			sslParams.Set(postgreSQLCert, cfg.TLS.CertFile)
+		}
+	} else {
+		sslParams.Set(postgreSQLSSLMode, postgreSQLSSLModeNoop)
 	}
-}
-
-func NewTLSConfigForServer(
-	serverName string,
-	enableHostVerification bool,
-) *tls.Config {
-	c := NewEmptyTLSConfig()
-	c.ServerName = serverName
-	c.InsecureSkipVerify = !enableHostVerification
-	return c
-}
-
-func NewTLSConfigWithCertsAndCAs(
-	certificates []tls.Certificate,
-	rootCAs *x509.CertPool,
-	serverName string,
-	enableHostVerification bool,
-) *tls.Config {
-	c := NewTLSConfigForServer(serverName, enableHostVerification)
-	c.Certificates = certificates
-	c.RootCAs = rootCAs
-	return c
-}
-
-func NewTLSConfigWithClientAuthAndCAs(
-	clientAuth tls.ClientAuthType,
-	certificates []tls.Certificate,
-	clientCAs *x509.CertPool,
-) *tls.Config {
-	c := NewEmptyTLSConfig()
-	c.ClientAuth = clientAuth
-	c.Certificates = certificates
-	c.ClientCAs = clientCAs
-	return c
+	return sslParams
 }

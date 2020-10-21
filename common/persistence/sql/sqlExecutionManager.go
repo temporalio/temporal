@@ -755,7 +755,7 @@ func (m *sqlExecutionManager) RangeCompleteTransferTask(
 }
 
 func (m *sqlExecutionManager) GetReplicationTask(request *persistence.GetReplicationTaskRequest) (*persistence.GetReplicationTaskResponse, error) {
-	rows, err := m.db.SelectFromReplicationTasks(&sqlplugin.ReplicationTasksFilter{ShardID: request.ShardID, TaskID: request.TaskID})
+	rows, err := m.db.SelectFromReplicationTasks(sqlplugin.ReplicationTasksFilter{ShardID: request.ShardID, TaskID: request.TaskID})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetReplicationTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
@@ -787,8 +787,8 @@ func (m *sqlExecutionManager) GetReplicationTasks(
 		return nil, err
 	}
 
-	rows, err := m.db.SelectFromReplicationTasks(
-		&sqlplugin.ReplicationTasksFilter{
+	rows, err := m.db.RangeSelectFromReplicationTasks(
+		sqlplugin.ReplicationTasksRangeFilter{
 			ShardID:   m.shardID,
 			MinTaskID: readLevel,
 			MaxTaskID: maxReadLevelInclusive,
@@ -846,11 +846,39 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 	}, nil
 }
 
+func (m *sqlExecutionManager) populateGetReplicationDLQTasksResponse(
+	rows []sqlplugin.ReplicationDLQTasksRow,
+	requestMaxReadLevel int64,
+) (*p.GetReplicationTasksResponse, error) {
+	if len(rows) == 0 {
+		return &p.GetReplicationTasksResponse{}, nil
+	}
+
+	var tasks = make([]*persistenceblobs.ReplicationTaskInfo, len(rows))
+	for i, row := range rows {
+		info, err := serialization.ReplicationTaskInfoFromBlob(row.Data, row.DataEncoding)
+		if err != nil {
+			return nil, err
+		}
+
+		tasks[i] = info
+	}
+	var nextPageToken []byte
+	lastTaskID := rows[len(rows)-1].TaskID
+	if lastTaskID < requestMaxReadLevel {
+		nextPageToken = serializePageToken(lastTaskID)
+	}
+	return &p.GetReplicationTasksResponse{
+		Tasks:         tasks,
+		NextPageToken: nextPageToken,
+	}, nil
+}
+
 func (m *sqlExecutionManager) CompleteReplicationTask(
 	request *p.CompleteReplicationTaskRequest,
 ) error {
 
-	if _, err := m.db.DeleteFromReplicationTasks(&sqlplugin.ReplicationTasksFilter{
+	if _, err := m.db.DeleteFromReplicationTasks(sqlplugin.ReplicationTasksFilter{
 		ShardID: m.shardID,
 		TaskID:  request.TaskID,
 	}); err != nil {
@@ -863,9 +891,10 @@ func (m *sqlExecutionManager) RangeCompleteReplicationTask(
 	request *p.RangeCompleteReplicationTaskRequest,
 ) error {
 
-	if _, err := m.db.RangeDeleteFromReplicationTasks(&sqlplugin.ReplicationTasksFilter{
-		ShardID: m.shardID,
-		TaskID:  request.InclusiveEndTaskID,
+	if _, err := m.db.RangeDeleteFromReplicationTasks(sqlplugin.ReplicationTasksRangeFilter{
+		ShardID:   m.shardID,
+		MinTaskID: 0,
+		MaxTaskID: request.InclusiveEndTaskID,
 	}); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteReplicationTask operation failed. Error: %v", err))
 	}
@@ -881,20 +910,17 @@ func (m *sqlExecutionManager) GetReplicationTasksFromDLQ(
 		return nil, err
 	}
 
-	filter := sqlplugin.ReplicationTasksFilter{
-		ShardID:   m.shardID,
-		MinTaskID: readLevel,
-		MaxTaskID: maxReadLevelInclusive,
-		PageSize:  request.BatchSize,
-	}
-	rows, err := m.db.SelectFromReplicationTasksDLQ(&sqlplugin.ReplicationTasksDLQFilter{
-		ReplicationTasksFilter: filter,
-		SourceClusterName:      request.SourceClusterName,
+	rows, err := m.db.RangeSelectFromReplicationDLQTasks(sqlplugin.ReplicationDLQTasksRangeFilter{
+		ShardID:           m.shardID,
+		MinTaskID:         readLevel,
+		MaxTaskID:         maxReadLevelInclusive,
+		PageSize:          request.BatchSize,
+		SourceClusterName: request.SourceClusterName,
 	})
 
 	switch err {
 	case nil:
-		return m.populateGetReplicationTasksResponse(rows, request.MaxReadLevel)
+		return m.populateGetReplicationDLQTasksResponse(rows, request.MaxReadLevel)
 	case sql.ErrNoRows:
 		return &p.GetReplicationTasksResponse{}, nil
 	default:
@@ -906,14 +932,10 @@ func (m *sqlExecutionManager) DeleteReplicationTaskFromDLQ(
 	request *p.DeleteReplicationTaskFromDLQRequest,
 ) error {
 
-	filter := sqlplugin.ReplicationTasksFilter{
-		ShardID: m.shardID,
-		TaskID:  request.TaskID,
-	}
-
-	if _, err := m.db.DeleteMessageFromReplicationTasksDLQ(&sqlplugin.ReplicationTasksDLQFilter{
-		ReplicationTasksFilter: filter,
-		SourceClusterName:      request.SourceClusterName,
+	if _, err := m.db.DeleteFromReplicationDLQTasks(sqlplugin.ReplicationDLQTasksFilter{
+		ShardID:           m.shardID,
+		TaskID:            request.TaskID,
+		SourceClusterName: request.SourceClusterName,
 	}); err != nil {
 		return err
 	}
@@ -924,15 +946,11 @@ func (m *sqlExecutionManager) RangeDeleteReplicationTaskFromDLQ(
 	request *p.RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
 
-	filter := sqlplugin.ReplicationTasksFilter{
-		ShardID:            m.shardID,
-		TaskID:             request.ExclusiveBeginTaskID,
-		InclusiveEndTaskID: request.InclusiveEndTaskID,
-	}
-
-	if _, err := m.db.RangeDeleteMessageFromReplicationTasksDLQ(&sqlplugin.ReplicationTasksDLQFilter{
-		ReplicationTasksFilter: filter,
-		SourceClusterName:      request.SourceClusterName,
+	if _, err := m.db.RangeDeleteFromReplicationDLQTasks(sqlplugin.ReplicationDLQTasksRangeFilter{
+		ShardID:           m.shardID,
+		SourceClusterName: request.SourceClusterName,
+		MinTaskID:         request.ExclusiveBeginTaskID,
+		MaxTaskID:         request.InclusiveEndTaskID,
 	}); err != nil {
 		return err
 	}
@@ -1067,15 +1085,13 @@ func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationT
 		return err
 	}
 
-	row := &sqlplugin.ReplicationTaskDLQRow{
+	_, err = m.db.InsertIntoReplicationDLQTasks([]sqlplugin.ReplicationDLQTasksRow{{
 		SourceClusterName: request.SourceClusterName,
 		ShardID:           m.shardID,
 		TaskID:            replicationTask.GetTaskId(),
 		Data:              blob.Data,
 		DataEncoding:      blob.Encoding.String(),
-	}
-
-	_, err = m.db.InsertIntoReplicationTasksDLQ(row)
+	}})
 
 	// Tasks are immutable. So it's fine if we already persisted it before.
 	// This can happen when tasks are retried (ack and cleanup can have lag on source side).

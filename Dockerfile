@@ -4,7 +4,7 @@ ARG TARGET=server
 ARG GOPROXY
 
 # Build Temporal binaries
-FROM golang:1.14-alpine AS builder
+FROM golang:1.15-alpine AS builder
 
 RUN apk add --update --no-cache ca-certificates make curl git mercurial protobuf
 

@@ -79,7 +79,7 @@ type (
 		RunID       primitives.UUID
 	}
 
-	// HistoryExecution is the SQL persistence interface for history nodes and history executions
+	// HistoryExecution is the SQL persistence interface for history executions
 	HistoryExecution interface {
 		InsertIntoExecutions(row *ExecutionsRow) (sql.Result, error)
 		UpdateExecutions(row *ExecutionsRow) (sql.Result, error)

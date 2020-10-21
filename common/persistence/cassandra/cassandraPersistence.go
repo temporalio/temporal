@@ -1872,7 +1872,10 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 			continue
 		}
 		if _, ok := result["execution"]; ok {
-			state, _ := mutableStateFromRow(result)
+			state, err := mutableStateFromRow(result)
+			if err != nil {
+				return nil, err
+			}
 			response.States = append(response.States, state)
 		}
 		result = make(map[string]interface{})

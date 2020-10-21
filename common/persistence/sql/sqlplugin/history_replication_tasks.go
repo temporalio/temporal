@@ -27,39 +27,41 @@ package sqlplugin
 import "database/sql"
 
 type (
-	// TransferTasksRow represents a row in transfer_tasks table
-	TransferTasksRow struct {
+	// ReplicationTasksRow represents a row in replication_tasks table
+	ReplicationTasksRow struct {
 		ShardID      int32
 		TaskID       int64
 		Data         []byte
 		DataEncoding string
 	}
 
-	// TransferTasksFilter contains the column names within transfer_tasks table that
+	// ReplicationTasksFilter contains the column names within replication_tasks table that
 	// can be used to filter results through a WHERE clause
-	TransferTasksFilter struct {
+	ReplicationTasksFilter struct {
 		ShardID int32
 		TaskID  int64
 	}
 
-	// TransferTasksRangeFilter contains the column names within transfer_tasks table that
+	// ReplicationTasksFilter contains the column names within replication_tasks table that
 	// can be used to filter results through a WHERE clause
-	TransferTasksRangeFilter struct {
+	ReplicationTasksRangeFilter struct {
 		ShardID   int32
 		MinTaskID int64
 		MaxTaskID int64
+		PageSize  int
 	}
 
-	// HistoryTransferTask is the SQL persistence interface for history transfer tasks
-	HistoryTransferTask interface {
-		InsertIntoTransferTasks(rows []TransferTasksRow) (sql.Result, error)
-		// SelectFromTransferTasks returns rows that match filter criteria from transfer_tasks table.
-		SelectFromTransferTasks(filter TransferTasksFilter) ([]TransferTasksRow, error)
-		// RangeSelectFromTransferTasks returns rows that match filter criteria from transfer_tasks table.
-		RangeSelectFromTransferTasks(filter TransferTasksRangeFilter) ([]TransferTasksRow, error)
-		// DeleteFromTransferTasks deletes one rows from transfer_tasks table.
-		DeleteFromTransferTasks(filter TransferTasksFilter) (sql.Result, error)
-		// RangeDeleteFromTransferTasks deletes one or more rows from transfer_tasks table.
-		RangeDeleteFromTransferTasks(filter TransferTasksRangeFilter) (sql.Result, error)
+	// HistoryReplicationTask is the SQL persistence interface for history replication tasks
+	HistoryReplicationTask interface {
+		InsertIntoReplicationTasks(rows []ReplicationTasksRow) (sql.Result, error)
+		// SelectFromReplicationTasks returns one or more rows from replication_tasks table
+		SelectFromReplicationTasks(filter ReplicationTasksFilter) ([]ReplicationTasksRow, error)
+		// RangeSelectFromReplicationTasks returns one or more rows from replication_tasks table
+		RangeSelectFromReplicationTasks(filter ReplicationTasksRangeFilter) ([]ReplicationTasksRow, error)
+		// DeleteFromReplicationTasks deletes a row from replication_tasks table
+		DeleteFromReplicationTasks(filter ReplicationTasksFilter) (sql.Result, error)
+		// DeleteFromReplicationTasks deletes multi rows from replication_tasks table
+		//  ReplicationTasksRangeFilter - {PageSize} will be ignored
+		RangeDeleteFromReplicationTasks(filter ReplicationTasksRangeFilter) (sql.Result, error)
 	}
 )

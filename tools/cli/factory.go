@@ -87,12 +87,18 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 		hostPort = localHostPort
 	}
 
+	tlsConfig, err := b.createTLSConfig(c)
+	if err != nil {
+		b.logger.Fatal("Failed to configure TLS for SDK client", zap.Error(err))
+	}
+
 	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
 		HostPort:  hostPort,
 		Namespace: namespace,
 		Logger:    log.NewZapAdapter(b.logger),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			DisableHealthCheck: true,
+			TLS:                tlsConfig,
 		},
 	})
 	if err != nil {
@@ -107,14 +113,39 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 	if hostPort == "" {
 		hostPort = localHostPort
 	}
+
+	tlsConfig, err := b.createTLSConfig(c)
+	if err != nil {
+		return nil, err
+	}
+
+	grpcSecurityOptions := grpc.WithInsecure()
+
+	if tlsConfig != nil {
+		grpcSecurityOptions = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
+	}
+
+	connection, err := grpc.Dial(hostPort, grpcSecurityOptions)
+	if err != nil {
+		b.logger.Fatal("Failed to create connection", zap.Error(err))
+		return nil, err
+	}
+	return connection, nil
+}
+
+func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
+	hostPort := c.GlobalString(FlagAddress)
+	if hostPort == "" {
+		hostPort = localHostPort
+	}
 	// Ignoring error as we'll fail to dial anyway, and that will produce a meaningful error
 	host, _, _ := net.SplitHostPort(hostPort)
 
 	certPath := c.GlobalString(FlagTLSCertPath)
 	keyPath := c.GlobalString(FlagTLSKeyPath)
 	caPath := c.GlobalString(FlagTLSCaPath)
+	hostNameVerification := c.GlobalBool(FlagTLSEnableHostVerification)
 
-	grpcSecurityOptions := grpc.WithInsecure()
 	var cert *tls.Certificate
 	var caPool *x509.CertPool
 
@@ -136,22 +167,18 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 	}
 	// If we are given arguments to verify either server or client, configure TLS
 	if caPool != nil || cert != nil {
-		tlsConfig := auth.NewTLSConfigForServer(host)
+		tlsConfig := auth.NewTLSConfigForServer(host, hostNameVerification)
 		if caPool != nil {
 			tlsConfig.RootCAs = caPool
 		}
 		if cert != nil {
 			tlsConfig.Certificates = []tls.Certificate{*cert}
 		}
-		grpcSecurityOptions = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
+
+		return tlsConfig, nil
 	}
 
-	connection, err := grpc.Dial(hostPort, grpcSecurityOptions)
-	if err != nil {
-		b.logger.Fatal("Failed to create connection", zap.Error(err))
-		return nil, err
-	}
-	return connection, nil
+	return nil, nil
 }
 
 func fetchCACert(path string) (*x509.CertPool, error) {

@@ -4,6 +4,7 @@ set -x
 
 DB="${DB:-cassandra}"
 ENABLE_ES="${ENABLE_ES:-false}"
+ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS="${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS:-0}"
 ES_PORT="${ES_PORT:-9200}"
 ES_SCHEME="${ES_SCHEME:-http}"
 RF=${RF:-1}
@@ -54,11 +55,11 @@ setup_mysql_schema() {
 setup_postgres_schema() {
     { export SQL_PASSWORD=$POSTGRES_PWD; } 2> /dev/null
 
-    SCHEMA_DIR=$TEMPORAL_HOME/schema/postgres/temporal/versioned
+    SCHEMA_DIR=$TEMPORAL_HOME/schema/postgresql/v96/temporal/versioned
     temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT create --db $DBNAME
     temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $DBNAME setup-schema -v 0.0
     temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $DBNAME update-schema -d $SCHEMA_DIR
-    VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/postgres/visibility/versioned
+    VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/postgresql/v96/visibility/versioned
     temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT create --db $VISIBILITY_DBNAME
     temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $VISIBILITY_DBNAME setup-schema -v 0.0
     temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
@@ -78,8 +79,8 @@ setup_schema() {
     if [ "$DB" == "mysql" ]; then
         echo 'setup mysql schema'
         setup_mysql_schema
-    elif [ "$DB" == "postgres" ]; then
-        echo 'setup postgres schema'
+    elif [ "$DB" == "postgresql" ]; then
+        echo 'setup postgresql schema'
         setup_postgres_schema
     else
         echo 'setup cassandra schema'
@@ -111,7 +112,7 @@ wait_for_postgres() {
     server=`echo $POSTGRES_SEEDS | awk -F ',' '{print $1}'`
     nc -z $server $DB_PORT < /dev/null
     until [ $? -eq 0 ]; do
-        echo 'waiting for postgres to start up'
+        echo 'waiting for postgresql to start up'
         sleep 1
         nc -z $server $DB_PORT < /dev/null
     done
@@ -119,22 +120,34 @@ wait_for_postgres() {
 }
 
 
-wait_for_es() {
+setup_es() {
+    SECONDS=0
+    
     server=`echo $ES_SEEDS | awk -F ',' '{print $1}'`
     URL="${ES_SCHEME}://$server:$ES_PORT"
     curl -s $URL 2>&1 > /dev/null
+    
     until [ $? -eq 0 ]; do
+        duration=$SECONDS
+
+        if [ $ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS -gt 0 ] && [ $duration -ge $ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS ]; then
+            echo 'WARNING: timed out waiting for elasticsearch to start up. skipping index creation'
+            return;
+        fi
+
         echo 'waiting for elasticsearch to start up'
         sleep 1
         curl -s $URL 2>&1 > /dev/null
     done
+    
     echo 'elasticsearch started'
+    setup_es_template
 }
 
 wait_for_db() {
     if [ "$DB" == "mysql" ]; then
         wait_for_mysql
-    elif [ "$DB" == "postgres" ]; then
+    elif [ "$DB" == "postgresql" ]; then
         wait_for_postgres
     else
         wait_for_cassandra
@@ -169,8 +182,7 @@ if [ "$1" = "autosetup" ]; then
 fi
 
 if [ "$ENABLE_ES" == "true" ]; then
-    wait_for_es
-    setup_es_template
+    setup_es
 fi
 
 exec bash /start-temporal.sh
