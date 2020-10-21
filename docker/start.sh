@@ -100,8 +100,16 @@ setup_schema() {
 }
 
 wait_for_cassandra() {
-    server=`echo $CASSANDRA_SEEDS | awk -F ',' '{print $1}'`
-    until cqlsh --cqlversion=3.4.4 $server < /dev/null; do
+    export CASSANDRA_USER=$CASSANDRA_USER
+    export CASSANDRA_PORT=$CASSANDRA_PORT
+    export CASSANDRA_ENABLE_TLS=$CASSANDRA_TLS_ENABLED
+    export CASSANDRA_TLS_CERT=$CASSANDRA_CERT
+    export CASSANDRA_TLS_KEY=$CASSANDRA_CERT_KEY
+    export CASSANDRA_TLS_CA=$CASSANDRA_CA
+
+    { export CASSANDRA_PASSWORD=$CASSANDRA_PASSWORD; } 2> /dev/null
+
+    until temporal-cassandra-tool --ep $CASSANDRA_SEEDS check-health < /dev/null; do
         echo 'waiting for cassandra to start up'
         sleep 1
     done

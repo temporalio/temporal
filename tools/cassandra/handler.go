@@ -138,7 +138,6 @@ func updateSchema(cli *cli.Context) error {
 	return nil
 }
 
-// createKeyspace creates a cassandra Keyspace
 func createKeyspace(cli *cli.Context) error {
 	config, err := newCQLClientConfig(cli)
 	if err != nil {
@@ -150,8 +149,25 @@ func createKeyspace(cli *cli.Context) error {
 	}
 	err = doCreateKeyspace(*config, keyspace)
 	if err != nil {
-		return handleErr(fmt.Errorf("error creating Keyspace:%v", err))
+		return handleErr(fmt.Errorf("error creating Keyspace:%+v", err))
 	}
+	return nil
+}
+
+func checkHealth(cli *cli.Context) error {
+	config, err := newCQLClientConfig(cli)
+	if err != nil {
+		return handleErr(schema.NewConfigError(err.Error()))
+	}
+
+	config.Keyspace = systemKeyspace
+
+	client, err := newCQLClient(config)
+	if err != nil {
+		return handleErr(fmt.Errorf("unable to establish CQL session:%+v", err))
+	}
+
+	defer client.Close()
 	return nil
 }
 

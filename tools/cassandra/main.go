@@ -204,6 +204,14 @@ func buildCLIOptions() *cli.App {
 				cliHandler(c, createKeyspace)
 			},
 		},
+		{
+			Name:    "check-health",
+			Aliases: []string{"check-health"},
+			Usage:   "validates general health of cluster by establishing session to system keyspace",
+			Action: func(c *cli.Context) {
+				cliHandler(c, checkHealth)
+			},
+		},
 	}
 
 	return app
