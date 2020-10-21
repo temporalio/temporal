@@ -33,7 +33,6 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -454,12 +453,8 @@ func (b *historyBuilder) addTransientEvent(event *historypb.HistoryEvent) *histo
 
 func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	startRequest *historyservice.StartWorkflowExecutionRequest, previousExecution *persistenceblobs.WorkflowExecutionInfo, previousExecutionState *persistenceblobs.WorkflowExecutionState, firstRunID, originalRunID string) *historypb.HistoryEvent {
-	var prevRunID string
-	var resetPoints *workflowpb.ResetPoints
-	if previousExecution != nil && previousExecutionState != nil {
-		prevRunID = previousExecutionState.RunId
-		resetPoints = previousExecution.AutoResetPoints
-	}
+	prevRunID := previousExecutionState.GetRunId()
+	resetPoints := previousExecution.GetAutoResetPoints()
 	request := startRequest.StartRequest
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
 	attributes := &historypb.WorkflowExecutionStartedEventAttributes{
