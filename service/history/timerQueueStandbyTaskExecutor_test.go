@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 )
@@ -700,16 +701,18 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.MatchedBy(func(input *persistence.UpdateWorkflowExecutionRequest) bool {
 		s.Equal(1, len(input.UpdateWorkflowMutation.TimerTasks))
 		s.Equal(1, len(input.UpdateWorkflowMutation.UpsertActivityInfos))
-		mutableState.executionInfo.LastUpdatedTime = input.UpdateWorkflowMutation.ExecutionInfo.LastUpdatedTime
+		mutableState.executionInfo.LastUpdateTime = input.UpdateWorkflowMutation.ExecutionInfo.LastUpdateTime
 		input.RangeID = 0
 		input.UpdateWorkflowMutation.ExecutionInfo.LastEventTaskId = 0
 		mutableState.executionInfo.LastEventTaskId = 0
-		mutableState.executionInfo.WorkflowTaskOriginalScheduledTimestamp = input.UpdateWorkflowMutation.ExecutionInfo.WorkflowTaskOriginalScheduledTimestamp
+		mutableState.executionInfo.WorkflowTaskOriginalScheduledTime = input.UpdateWorkflowMutation.ExecutionInfo.WorkflowTaskOriginalScheduledTime
+		mutableState.executionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{}
+
 		s.Equal(&persistence.UpdateWorkflowExecutionRequest{
 			UpdateWorkflowMutation: persistence.WorkflowMutation{
 				ExecutionInfo:             mutableState.executionInfo,
-				ExecutionStats:            &persistenceblobs.ExecutionStats{},
-				VersionHistories:          mutableState.versionHistories,
+				ExecutionState:            mutableState.executionState,
+				NextEventID:               mutableState.nextEventID,
 				TransferTasks:             nil,
 				ReplicationTasks:          nil,
 				TimerTasks:                input.UpdateWorkflowMutation.TimerTasks,
@@ -1189,9 +1192,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
 ) *persistence.WorkflowMutableState {
 
 	if ms.GetVersionHistories() != nil {
-		currentVersionHistory, err := ms.GetVersionHistories().GetCurrentVersionHistory()
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetVersionHistories())
 		s.NoError(err)
-		err = currentVersionHistory.AddOrUpdateItem(persistence.NewVersionHistoryItem(
+		err = versionhistory.AddOrUpdateItem(currentVersionHistory, versionhistory.NewItem(
 			lastEventID, lastEventVersion,
 		))
 		s.NoError(err)

@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 )
@@ -1105,13 +1106,14 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	executionInfo := mutableState.GetExecutionInfo()
+	executionState := mutableState.GetExecutionState()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", &persistence.RecordWorkflowExecutionStartedRequest{
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: executionInfo.WorkflowId,
-			RunId:      executionInfo.ExecutionState.RunId,
+			RunId:      executionState.RunId,
 		},
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTimestamp:   timestamp.TimeValue(event.GetEventTime()).UnixNano(),
@@ -1169,13 +1171,14 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	executionInfo := mutableState.GetExecutionInfo()
+	executionState := mutableState.GetExecutionState()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.On("UpsertWorkflowExecution", &persistence.UpsertWorkflowExecutionRequest{
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: executionInfo.WorkflowId,
-			RunId:      executionInfo.ExecutionState.RunId,
+			RunId:      executionState.RunId,
 		},
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTimestamp:   timestamp.TimeValue(event.GetEventTime()).UnixNano(),
@@ -1197,9 +1200,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
 ) *persistence.WorkflowMutableState {
 
 	if ms.GetVersionHistories() != nil {
-		currentVersionHistory, err := ms.GetVersionHistories().GetCurrentVersionHistory()
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetVersionHistories())
 		s.NoError(err)
-		err = currentVersionHistory.AddOrUpdateItem(persistence.NewVersionHistoryItem(
+		err = versionhistory.AddOrUpdateItem(currentVersionHistory, versionhistory.NewItem(
 			lastEventID, lastEventVersion,
 		))
 		s.NoError(err)

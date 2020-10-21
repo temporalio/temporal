@@ -463,10 +463,10 @@ type (
 		RequestCancelInfos  map[int64]*persistenceblobs.RequestCancelInfo
 		SignalInfos         map[int64]*persistenceblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
-		ExecutionInfo       *WorkflowExecutionInfo
-		ExecutionStats      *persistenceblobs.ExecutionStats
+		ExecutionInfo       *persistenceblobs.WorkflowExecutionInfo
+		ExecutionState      *persistenceblobs.WorkflowExecutionState
+		NextEventID         int64
 		BufferedEvents      []*historypb.HistoryEvent
-		VersionHistories    *VersionHistories
 		Checksum            checksum.Checksum
 	}
 
@@ -542,8 +542,8 @@ type (
 
 	// ListConcreteExecutionsResponse is response to ListConcreteExecutions
 	ListConcreteExecutionsResponse struct {
-		ExecutionInfos []*WorkflowExecutionInfo
-		PageToken      []byte
+		States    []*WorkflowMutableState
+		PageToken []byte
 	}
 
 	// GetCurrentExecutionResponse is the response to GetCurrentExecution
@@ -612,9 +612,9 @@ type (
 
 	// WorkflowMutation is used as generic workflow execution state mutation
 	WorkflowMutation struct {
-		ExecutionInfo    *WorkflowExecutionInfo
-		ExecutionStats   *persistenceblobs.ExecutionStats
-		VersionHistories *VersionHistories
+		ExecutionInfo  *persistenceblobs.WorkflowExecutionInfo
+		ExecutionState *persistenceblobs.WorkflowExecutionState
+		NextEventID    int64
 
 		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
 		DeleteActivityInfos       []int64
@@ -641,9 +641,9 @@ type (
 
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
 	WorkflowSnapshot struct {
-		ExecutionInfo    *WorkflowExecutionInfo
-		ExecutionStats   *persistenceblobs.ExecutionStats
-		VersionHistories *VersionHistories
+		ExecutionInfo  *persistenceblobs.WorkflowExecutionInfo
+		ExecutionState *persistenceblobs.WorkflowExecutionState
+		NextEventID    int64
 
 		ActivityInfos       []*persistenceblobs.ActivityInfo
 		TimerInfos          []*persistenceblobs.TimerInfo

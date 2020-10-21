@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
@@ -199,15 +200,15 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_WorkflowClos
 	version := int64(100)
 
 	lastWriteVersion := version - 100
-	incomingVersionHistory := persistence.VersionHistory{
+	incomingVersionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte{},
-		Items: []*persistence.VersionHistoryItem{
+		Items: []*historyspb.VersionHistoryItem{
 			{
-				EventID: 50,
+				EventId: 50,
 				Version: 2,
 			},
 			{
-				EventID: scheduleID,
+				EventId: scheduleID,
 				Version: version,
 			},
 		},
@@ -227,16 +228,16 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_WorkflowClos
 		RunId:          runID,
 		Version:        version,
 		ScheduledId:    scheduleID,
-		VersionHistory: incomingVersionHistory.ToProto(),
+		VersionHistory: incomingVersionHistory,
 	}
-	localVersionHistories := &persistence.VersionHistories{
+	localVersionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*persistence.VersionHistory{
+		Histories: []*historyspb.VersionHistory{
 			{
 				BranchToken: []byte{},
-				Items: []*persistence.VersionHistoryItem{
+				Items: []*historyspb.VersionHistoryItem{
 					{
-						EventID: scheduleID,
+						EventId: scheduleID,
 						Version: version,
 					},
 				},
@@ -275,15 +276,15 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingVers
 	version := int64(99)
 
 	lastWriteVersion := version - 100
-	incomingVersionHistory := persistence.VersionHistory{
+	incomingVersionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte{},
-		Items: []*persistence.VersionHistoryItem{
+		Items: []*historyspb.VersionHistoryItem{
 			{
-				EventID: scheduleID - 1,
+				EventId: scheduleID - 1,
 				Version: version - 1,
 			},
 			{
-				EventID: scheduleID,
+				EventId: scheduleID,
 				Version: version,
 			},
 		},
@@ -303,20 +304,20 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingVers
 		RunId:          runID,
 		Version:        version,
 		ScheduledId:    scheduleID,
-		VersionHistory: incomingVersionHistory.ToProto(),
+		VersionHistory: incomingVersionHistory,
 	}
-	localVersionHistories := &persistence.VersionHistories{
+	localVersionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*persistence.VersionHistory{
+		Histories: []*historyspb.VersionHistory{
 			{
 				BranchToken: []byte{},
-				Items: []*persistence.VersionHistoryItem{
+				Items: []*historyspb.VersionHistoryItem{
 					{
-						EventID: scheduleID - 1,
+						EventId: scheduleID - 1,
 						Version: version - 1,
 					},
 					{
-						EventID: scheduleID + 1,
+						EventId: scheduleID + 1,
 						Version: version + 1,
 					},
 				},
@@ -353,15 +354,15 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 	version := int64(100)
 	lastWriteVersion := version - 100
 
-	incomingVersionHistory := persistence.VersionHistory{
+	incomingVersionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte{},
-		Items: []*persistence.VersionHistoryItem{
+		Items: []*historyspb.VersionHistoryItem{
 			{
-				EventID: 50,
+				EventId: 50,
 				Version: 2,
 			},
 			{
-				EventID: scheduleID,
+				EventId: scheduleID,
 				Version: version,
 			},
 		},
@@ -381,16 +382,16 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 		RunId:          runID,
 		Version:        version,
 		ScheduledId:    scheduleID,
-		VersionHistory: incomingVersionHistory.ToProto(),
+		VersionHistory: incomingVersionHistory,
 	}
-	localVersionHistories := &persistence.VersionHistories{
+	localVersionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*persistence.VersionHistory{
+		Histories: []*historyspb.VersionHistory{
 			{
 				BranchToken: []byte{},
-				Items: []*persistence.VersionHistoryItem{
+				Items: []*historyspb.VersionHistoryItem{
 					{
-						EventID: 100,
+						EventId: 100,
 						Version: 2,
 					},
 				},
@@ -438,19 +439,19 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 	version := int64(100)
 
 	lastWriteVersion := version - 100
-	incomingVersionHistory := persistence.VersionHistory{
+	incomingVersionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte{},
-		Items: []*persistence.VersionHistoryItem{
+		Items: []*historyspb.VersionHistoryItem{
 			{
-				EventID: 50,
+				EventId: 50,
 				Version: 2,
 			},
 			{
-				EventID: scheduleID,
+				EventId: scheduleID,
 				Version: version,
 			},
 			{
-				EventID: scheduleID + 100,
+				EventId: scheduleID + 100,
 				Version: version + 100,
 			},
 		},
@@ -470,16 +471,16 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 		RunId:          runID,
 		Version:        version,
 		ScheduledId:    scheduleID,
-		VersionHistory: incomingVersionHistory.ToProto(),
+		VersionHistory: incomingVersionHistory,
 	}
-	localVersionHistories := &persistence.VersionHistories{
+	localVersionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*persistence.VersionHistory{
+		Histories: []*historyspb.VersionHistory{
 			{
 				BranchToken: []byte{},
-				Items: []*persistence.VersionHistoryItem{
+				Items: []*historyspb.VersionHistoryItem{
 					{
-						EventID: scheduleID - 10,
+						EventId: scheduleID - 10,
 						Version: version,
 					},
 				},
@@ -527,15 +528,15 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 	version := int64(100)
 
 	lastWriteVersion := version - 100
-	incomingVersionHistory := persistence.VersionHistory{
+	incomingVersionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte{},
-		Items: []*persistence.VersionHistoryItem{
+		Items: []*historyspb.VersionHistoryItem{
 			{
-				EventID: 50,
+				EventId: 50,
 				Version: 2,
 			},
 			{
-				EventID: scheduleID,
+				EventId: scheduleID,
 				Version: version,
 			},
 		},
@@ -555,16 +556,16 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 		RunId:          runID,
 		Version:        version,
 		ScheduledId:    scheduleID,
-		VersionHistory: incomingVersionHistory.ToProto(),
+		VersionHistory: incomingVersionHistory,
 	}
-	localVersionHistories := &persistence.VersionHistories{
+	localVersionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*persistence.VersionHistory{
+		Histories: []*historyspb.VersionHistory{
 			{
 				BranchToken: []byte{},
-				Items: []*persistence.VersionHistoryItem{
+				Items: []*historyspb.VersionHistoryItem{
 					{
-						EventID: scheduleID,
+						EventId: scheduleID,
 						Version: version,
 					},
 				},
@@ -603,11 +604,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_LocalVersion
 	version := int64(100)
 
 	lastWriteVersion := version - 100
-	incomingVersionHistory := persistence.VersionHistory{
+	incomingVersionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte{},
-		Items: []*persistence.VersionHistoryItem{
+		Items: []*historyspb.VersionHistoryItem{
 			{
-				EventID: scheduleID,
+				EventId: scheduleID,
 				Version: version,
 			},
 		},
@@ -627,20 +628,20 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_LocalVersion
 		RunId:          runID,
 		Version:        version,
 		ScheduledId:    scheduleID,
-		VersionHistory: incomingVersionHistory.ToProto(),
+		VersionHistory: incomingVersionHistory,
 	}
-	localVersionHistories := &persistence.VersionHistories{
+	localVersionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*persistence.VersionHistory{
+		Histories: []*historyspb.VersionHistory{
 			{
 				BranchToken: []byte{},
-				Items: []*persistence.VersionHistoryItem{
+				Items: []*historyspb.VersionHistoryItem{
 					{
-						EventID: scheduleID,
+						EventId: scheduleID,
 						Version: version,
 					},
 					{
-						EventID: scheduleID + 1,
+						EventId: scheduleID + 1,
 						Version: version + 1,
 					},
 				},
@@ -685,15 +686,15 @@ func (s *activityReplicatorSuite) generateIncomingVersionHistory(eventID, versio
 	return incomingVersionHistory
 }
 
-func (s *activityReplicatorSuite) generateLocalVersionHistory(eventID, version int64) *persistence.VersionHistories {
-	localVersionHistories := &persistence.VersionHistories{
+func (s *activityReplicatorSuite) generateLocalVersionHistory(eventID, version int64) *historyspb.VersionHistories {
+	localVersionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*persistence.VersionHistory{
+		Histories: []*historyspb.VersionHistory{
 			{
 				BranchToken: []byte{},
-				Items: []*persistence.VersionHistoryItem{
+				Items: []*historyspb.VersionHistoryItem{
 					{
-						EventID: eventID,
+						EventId: eventID,
 						Version: version,
 					},
 				},

@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -117,11 +117,11 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 			versionHistories := b.mutableState.GetVersionHistories()
-			versionHistory, err := versionHistories.GetCurrentVersionHistory()
+			versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 			if err != nil {
 				return nil, err
 			}
-			if err := versionHistory.AddOrUpdateItem(persistence.NewVersionHistoryItem(
+			if err := versionhistory.AddOrUpdateItem(versionHistory, versionhistory.NewItem(
 				event.GetEventId(),
 				event.GetVersion(),
 			)); err != nil {
@@ -650,8 +650,8 @@ func (b *stateBuilderImpl) applyEvents(
 		return nil, err
 	}
 
-	b.mutableState.GetExecutionInfo().SetLastFirstEventID(firstEvent.GetEventId())
-	b.mutableState.GetExecutionInfo().SetNextEventID(lastEvent.GetEventId() + 1)
+	b.mutableState.GetExecutionInfo().LastFirstEventId = firstEvent.GetEventId()
+	b.mutableState.SetNextEventID(lastEvent.GetEventId() + 1)
 
 	b.mutableState.SetHistoryBuilder(newHistoryBuilderFromEvents(history, b.logger))
 

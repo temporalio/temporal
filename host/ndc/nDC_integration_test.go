@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 
 	"github.com/golang/mock/gomock"
@@ -323,7 +324,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 		baseVersionHistory := s.eventBatchesToVersionHistory(nil, baseBranch)
 
 		var branch1 []*historypb.History
-		branchVersionHistory1 := baseVersionHistory.Duplicate()
+		branchVersionHistory1 := versionhistory.Duplicate(baseVersionHistory)
 		branchGenerator1 := baseGenerator.DeepCopy()
 		for i := 0; i < 10 && branchGenerator1.HasNextVertex(); i++ {
 			events := branchGenerator1.GetNextVertices()
@@ -336,7 +337,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 		branchVersionHistory1 = s.eventBatchesToVersionHistory(branchVersionHistory1, branch1)
 
 		var branch2 []*historypb.History
-		branchVersionHistory2 := baseVersionHistory.Duplicate()
+		branchVersionHistory2 := versionhistory.Duplicate(baseVersionHistory)
 		branchGenerator2 := baseGenerator.DeepCopy()
 		branchGenerator2.SetVersion(branchGenerator2.GetVersion() + 1)
 		for i := 0; i < 10 && branchGenerator2.HasNextVertex(); i++ {
@@ -649,14 +650,14 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 
 	versionHistory1 := s.eventBatchesToVersionHistory(nil, eventsBatch1)
 
-	versionHistory2, err := versionHistory1.DuplicateUntilLCAItem(
-		persistence.NewVersionHistoryItem(14, 22),
+	versionHistory2, err := versionhistory.DuplicateUntilLCAItem(versionHistory1,
+		versionhistory.NewItem(14, 22),
 	)
 	s.NoError(err)
 	versionHistory2 = s.eventBatchesToVersionHistory(versionHistory2, eventsBatch2)
 
-	versionHistory3, err := versionHistory1.DuplicateUntilLCAItem(
-		persistence.NewVersionHistoryItem(14, 22),
+	versionHistory3, err := versionhistory.DuplicateUntilLCAItem(versionHistory1,
+		versionhistory.NewItem(14, 22),
 	)
 	s.NoError(err)
 	versionHistory3 = s.eventBatchesToVersionHistory(versionHistory3, eventsBatch3)
@@ -921,14 +922,14 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 
 	versionHistory1 := s.eventBatchesToVersionHistory(nil, eventsBatch1)
 
-	versionHistory2, err := versionHistory1.DuplicateUntilLCAItem(
-		persistence.NewVersionHistoryItem(14, 22),
+	versionHistory2, err := versionhistory.DuplicateUntilLCAItem(versionHistory1,
+		versionhistory.NewItem(14, 22),
 	)
 	s.NoError(err)
 	versionHistory2 = s.eventBatchesToVersionHistory(versionHistory2, eventsBatch2)
 
-	versionHistory3, err := versionHistory1.DuplicateUntilLCAItem(
-		persistence.NewVersionHistoryItem(14, 22),
+	versionHistory3, err := versionhistory.DuplicateUntilLCAItem(versionHistory1,
+		versionhistory.NewItem(14, 22),
 	)
 	s.NoError(err)
 	versionHistory3 = s.eventBatchesToVersionHistory(versionHistory3, eventsBatch3)
@@ -1077,8 +1078,8 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 	)
 
 	newGenerator := s.generator.DeepCopy()
-	newBranch := []*historypb.History{}
-	newVersionHistory := versionHistory.Duplicate()
+	var newBranch []*historypb.History
+	newVersionHistory := versionhistory.Duplicate(versionHistory)
 	newGenerator.SetVersion(newGenerator.GetVersion() + 1) // simulate events from other cluster
 	for i := 0; i < 4 && newGenerator.HasNextVertex(); i++ {
 		events := newGenerator.GetNextVertices()
@@ -1123,7 +1124,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 			},
 		},
 	}
-	staleVersionHistory := s.eventBatchesToVersionHistory(versionHistory.Duplicate(), staleBranch)
+	staleVersionHistory := s.eventBatchesToVersionHistory(versionhistory.Duplicate(versionHistory), staleBranch)
 	s.applyEvents(
 		workflowID,
 		runID,
@@ -1461,20 +1462,20 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 
 	versionHistory1 := s.eventBatchesToVersionHistory(nil, eventsBatch1)
 
-	versionHistory2, err := versionHistory1.DuplicateUntilLCAItem(
-		persistence.NewVersionHistoryItem(14, 22),
+	versionHistory2, err := versionhistory.DuplicateUntilLCAItem(versionHistory1,
+		versionhistory.NewItem(14, 22),
 	)
 	s.NoError(err)
 	versionHistory2 = s.eventBatchesToVersionHistory(versionHistory2, eventsBatch2)
 
-	versionHistory3, err := versionHistory1.DuplicateUntilLCAItem(
-		persistence.NewVersionHistoryItem(14, 22),
+	versionHistory3, err := versionhistory.DuplicateUntilLCAItem(versionHistory1,
+		versionhistory.NewItem(14, 22),
 	)
 	s.NoError(err)
 	versionHistory3 = s.eventBatchesToVersionHistory(versionHistory3, eventsBatch3)
 
-	versionHistory4, err := versionHistory2.DuplicateUntilLCAItem(
-		persistence.NewVersionHistoryItem(16, 32),
+	versionHistory4, err := versionhistory.DuplicateUntilLCAItem(versionHistory2,
+		versionhistory.NewItem(16, 32),
 	)
 	s.NoError(err)
 	versionHistory4 = s.eventBatchesToVersionHistory(versionHistory4, eventsBatch4)
@@ -1725,7 +1726,7 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 	runID string,
 	workflowType string,
 	taskqueue string,
-	versionHistory *persistence.VersionHistory,
+	versionHistory *historyspb.VersionHistory,
 	eventBatches []*historypb.History,
 	historyClient host.HistoryClient,
 ) {
@@ -1737,7 +1738,7 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
-			VersionHistoryItems: s.toProtoVersionHistoryItems(versionHistory),
+			VersionHistoryItems: versionHistory.GetItems(),
 			Events:              s.toProtoDataBlob(eventBlob),
 			NewRunEvents:        s.toProtoDataBlob(newRunEventBlob),
 		}
@@ -1756,7 +1757,7 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 	runID string,
 	workflowType string,
 	taskqueue string,
-	versionHistory *persistence.VersionHistory,
+	versionHistory *historyspb.VersionHistory,
 	eventBatches []*historypb.History,
 ) {
 	for _, batch := range eventBatches {
@@ -1771,7 +1772,7 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 				NamespaceId:         s.namespaceID,
 				WorkflowId:          workflowID,
 				RunId:               runID,
-				VersionHistoryItems: s.toProtoVersionHistoryItems(versionHistory),
+				VersionHistoryItems: versionHistory.GetItems(),
 				Events:              s.toProtoDataBlob(eventBlob),
 				NewRunEvents:        s.toProtoDataBlob(newRunEventBlob),
 			}},
@@ -1784,19 +1785,19 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 }
 
 func (s *nDCIntegrationTestSuite) eventBatchesToVersionHistory(
-	versionHistory *persistence.VersionHistory,
+	versionHistory *historyspb.VersionHistory,
 	eventBatches []*historypb.History,
-) *persistence.VersionHistory {
+) *historyspb.VersionHistory {
 
 	// TODO temporary code to generate version history
 	//  we should generate version as part of modeled based testing
 	if versionHistory == nil {
-		versionHistory = persistence.NewVersionHistory(nil, nil)
+		versionHistory = versionhistory.New(nil, nil)
 	}
 	for _, batch := range eventBatches {
 		for _, event := range batch.Events {
-			err := versionHistory.AddOrUpdateItem(
-				persistence.NewVersionHistoryItem(
+			err := versionhistory.AddOrUpdateItem(versionHistory,
+				versionhistory.NewItem(
 					event.GetEventId(),
 					event.GetVersion(),
 				))
@@ -1805,16 +1806,6 @@ func (s *nDCIntegrationTestSuite) eventBatchesToVersionHistory(
 	}
 
 	return versionHistory
-}
-
-func (s *nDCIntegrationTestSuite) toProtoVersionHistoryItems(
-	versionHistory *persistence.VersionHistory,
-) []*historyspb.VersionHistoryItem {
-	if versionHistory == nil {
-		return nil
-	}
-
-	return versionHistory.ToProto().Items
 }
 
 func (s *nDCIntegrationTestSuite) setupRemoteFrontendClients() {

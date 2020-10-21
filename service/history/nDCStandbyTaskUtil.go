@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -155,15 +156,15 @@ func getHistoryResendInfo(
 	mutableState mutableState,
 ) (*historyResendInfo, error) {
 
-	currentBranch, err := mutableState.GetVersionHistories().GetCurrentVersionHistory()
+	currentBranch, err := versionhistory.GetCurrentVersionHistory(mutableState.GetVersionHistories())
 	if err != nil {
 		return nil, err
 	}
-	lastItem, err := currentBranch.GetLastItem()
+	lastItem, err := versionhistory.GetLastItem(currentBranch)
 	if err != nil {
 		return nil, err
 	}
-	return newHistoryResendInfo(lastItem.GetEventID(), lastItem.GetVersion()), nil
+	return newHistoryResendInfo(lastItem.GetEventId(), lastItem.GetVersion()), nil
 }
 
 func getStandbyPostActionFn(

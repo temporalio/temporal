@@ -38,12 +38,14 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
 type (
@@ -165,7 +167,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(true).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: runID}}).Times(1)
+	mutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{RunId: runID}).Times(1)
 	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyActive, (*transactionPolicy)(nil),
@@ -185,10 +187,10 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 	lastWorkflowTaskStartedEventID := int64(9999)
 	nextEventID := lastWorkflowTaskStartedEventID * 2
 	lastWorkflowTaskStartedVersion := s.namespaceEntry.GetFailoverVersion()
-	versionHistory := persistence.NewVersionHistory([]byte("branch token"), []*persistence.VersionHistoryItem{
-		{EventID: lastWorkflowTaskStartedEventID, Version: lastWorkflowTaskStartedVersion},
+	versionHistory := versionhistory.New([]byte("branch token"), []*historyspb.VersionHistoryItem{
+		{EventId: lastWorkflowTaskStartedEventID, Version: lastWorkflowTaskStartedVersion},
 	})
-	histories := persistence.NewVersionHistories(versionHistory)
+	histories := versionhistory.NewVHS(versionHistory)
 
 	releaseCalled := false
 
@@ -209,10 +211,12 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId:    namespaceID,
-		WorkflowId:     workflowID,
-		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: runID},
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+		RunId: runID,
 	}).AnyTimes()
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	mutableState.EXPECT().GetPreviousStartedEventID().Return(lastWorkflowTaskStartedEventID).Times(1)
@@ -310,10 +314,12 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Cl
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId:    namespaceID,
-		WorkflowId:     workflowID,
-		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: runID},
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+		RunId: runID,
 	}).AnyTimes()
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
@@ -365,10 +371,12 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId:    namespaceID,
-		WorkflowId:     workflowID,
-		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: runID},
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+		RunId: runID,
 	}).AnyTimes()
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
@@ -419,10 +427,12 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId:    namespaceID,
-		WorkflowId:     workflowID,
-		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: runID},
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+		RunId: runID,
 	}).AnyTimes()
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{

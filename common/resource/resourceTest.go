@@ -259,6 +259,7 @@ func (s *Test) GetClusterMetadata() cluster.Metadata {
 func (s *Test) GetClusterMetadataManager() persistence.ClusterMetadataManager {
 	return s.ClusterMetadataMgr
 }
+
 // other common resources
 
 // GetNamespaceCache for testing

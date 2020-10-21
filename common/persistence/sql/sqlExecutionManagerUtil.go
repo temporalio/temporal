@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
@@ -48,13 +47,10 @@ func applyWorkflowMutationTx(
 	shardID int32,
 	workflowMutation *p.InternalWorkflowMutation,
 ) error {
-	executionInfo := workflowMutation.ExecutionInfo
-	versionHistories := workflowMutation.VersionHistories
-	startVersion := workflowMutation.StartVersion
 	lastWriteVersion := workflowMutation.LastWriteVersion
-	namespaceID := executionInfo.NamespaceId
-	workflowID := executionInfo.WorkflowId
-	runID := executionInfo.ExecutionState.RunId
+	namespaceID := workflowMutation.ExecutionInfo.NamespaceId
+	workflowID := workflowMutation.ExecutionInfo.WorkflowId
+	runID := workflowMutation.ExecutionState.RunId
 
 	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
 	if err != nil {
@@ -82,9 +78,9 @@ func applyWorkflowMutationTx(
 	}
 
 	if err := updateExecution(tx,
-		executionInfo,
-		versionHistories,
-		startVersion,
+		workflowMutation.ExecutionInfo,
+		workflowMutation.ExecutionState,
+		workflowMutation.NextEventID,
 		lastWriteVersion,
 		shardID); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Failed to update executions row. Erorr: %v", err))
@@ -188,13 +184,10 @@ func applyWorkflowSnapshotTxAsReset(
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
 
-	executionInfo := workflowSnapshot.ExecutionInfo
-	versionHistories := workflowSnapshot.VersionHistories
-	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	workflowID := executionInfo.WorkflowId
-	namespaceID := executionInfo.NamespaceId
-	runID := executionInfo.ExecutionState.RunId
+	workflowID := workflowSnapshot.ExecutionInfo.WorkflowId
+	namespaceID := workflowSnapshot.ExecutionInfo.NamespaceId
+	runID := workflowSnapshot.ExecutionState.RunId
 	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
 	if err != nil {
 		return err
@@ -220,9 +213,9 @@ func applyWorkflowSnapshotTxAsReset(
 	}
 
 	if err := updateExecution(tx,
-		executionInfo,
-		versionHistories,
-		startVersion,
+		workflowSnapshot.ExecutionInfo,
+		workflowSnapshot.ExecutionState,
+		workflowSnapshot.NextEventID,
 		lastWriteVersion,
 		shardID); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to update executions row. Erorr: %v", err))
@@ -363,13 +356,10 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
 
-	executionInfo := workflowSnapshot.ExecutionInfo
-	versionHistories := workflowSnapshot.VersionHistories
-	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	workflowID := executionInfo.WorkflowId
-	namespaceID := executionInfo.NamespaceId
-	runID := executionInfo.ExecutionState.RunId
+	workflowID := workflowSnapshot.ExecutionInfo.WorkflowId
+	namespaceID := workflowSnapshot.ExecutionInfo.NamespaceId
+	runID := workflowSnapshot.ExecutionState.RunId
 	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
 	if err != nil {
 		return err
@@ -380,9 +370,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 	}
 
 	if err := m.createExecution(tx,
-		executionInfo,
-		versionHistories,
-		startVersion,
+		workflowSnapshot.ExecutionInfo,
+		workflowSnapshot.ExecutionState,
+		workflowSnapshot.NextEventID,
 		lastWriteVersion,
 		shardID); err != nil {
 		return err
@@ -1038,24 +1028,19 @@ func updateCurrentExecution(
 }
 
 func buildExecutionRow(
-	executionInfo *p.WorkflowExecutionInfo,
-	versionHistories *historyspb.VersionHistories,
-	startVersion int64,
+	executionInfo *persistenceblobs.WorkflowExecutionInfo,
+	executionState *persistenceblobs.WorkflowExecutionState,
+	nextEventID int64,
 	lastWriteVersion int64,
 	shardID int32,
 ) (row *sqlplugin.ExecutionsRow, err error) {
 
-	info, state, err := p.WorkflowExecutionToProto(executionInfo, startVersion, versionHistories)
+	infoBlob, err := serialization.WorkflowExecutionInfoToBlob(executionInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	infoBlob, err := serialization.WorkflowExecutionInfoToBlob(info)
-	if err != nil {
-		return nil, err
-	}
-
-	stateBlob, err := serialization.WorkflowExecutionStateToBlob(state)
+	stateBlob, err := serialization.WorkflowExecutionStateToBlob(executionState)
 	if err != nil {
 		return nil, err
 	}
@@ -1065,7 +1050,7 @@ func buildExecutionRow(
 		return nil, err
 	}
 
-	ridBytes, err := primitives.ParseUUID(executionInfo.ExecutionState.RunId)
+	ridBytes, err := primitives.ParseUUID(executionState.RunId)
 	if err != nil {
 		return nil, err
 	}
@@ -1075,7 +1060,7 @@ func buildExecutionRow(
 		NamespaceID:      nsBytes,
 		WorkflowID:       executionInfo.WorkflowId,
 		RunID:            ridBytes,
-		NextEventID:      executionInfo.NextEventId,
+		NextEventID:      nextEventID,
 		LastWriteVersion: lastWriteVersion,
 		Data:             infoBlob.Data,
 		DataEncoding:     infoBlob.Encoding.String(),
@@ -1086,28 +1071,28 @@ func buildExecutionRow(
 
 func (m *sqlExecutionManager) createExecution(
 	tx sqlplugin.Tx,
-	executionInfo *p.WorkflowExecutionInfo,
-	versionHistories *historyspb.VersionHistories,
-	startVersion int64,
+	executionInfo *persistenceblobs.WorkflowExecutionInfo,
+	executionState *persistenceblobs.WorkflowExecutionState,
+	nextEventID int64,
 	lastWriteVersion int64,
 	shardID int32,
 ) error {
 
 	// validate workflow state & close status
 	if err := p.ValidateCreateWorkflowStateStatus(
-		executionInfo.ExecutionState.State,
-		executionInfo.ExecutionState.Status); err != nil {
+		executionState.State,
+		executionState.Status); err != nil {
 		return err
 	}
 
 	// TODO we should set the start time and last update time on business logic layer
 	executionInfo.StartTime = timestamp.TimeNowPtrUtc()
-	executionInfo.LastUpdatedTime = executionInfo.StartTime
+	executionInfo.LastUpdateTime = executionInfo.StartTime
 
 	row, err := buildExecutionRow(
 		executionInfo,
-		versionHistories,
-		startVersion,
+		executionState,
+		nextEventID,
 		lastWriteVersion,
 		shardID,
 	)
@@ -1119,10 +1104,10 @@ func (m *sqlExecutionManager) createExecution(
 		if m.db.IsDupEntryError(err) {
 			return &p.WorkflowExecutionAlreadyStartedError{
 				Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", executionInfo.WorkflowId),
-				StartRequestID:   executionInfo.ExecutionState.CreateRequestId,
-				RunID:            executionInfo.ExecutionState.RunId,
-				State:            executionInfo.ExecutionState.State,
-				Status:           executionInfo.ExecutionState.Status,
+				StartRequestID:   executionState.CreateRequestId,
+				RunID:            executionState.RunId,
+				State:            executionState.State,
+				Status:           executionState.Status,
 				LastWriteVersion: row.LastWriteVersion,
 			}
 		}
@@ -1141,27 +1126,27 @@ func (m *sqlExecutionManager) createExecution(
 
 func updateExecution(
 	tx sqlplugin.Tx,
-	executionInfo *p.WorkflowExecutionInfo,
-	versionHistories *historyspb.VersionHistories,
-	startVersion int64,
+	executionInfo *persistenceblobs.WorkflowExecutionInfo,
+	executionState *persistenceblobs.WorkflowExecutionState,
+	nextEventID int64,
 	lastWriteVersion int64,
 	shardID int32,
 ) error {
 
 	// validate workflow state & close status
 	if err := p.ValidateUpdateWorkflowStateStatus(
-		executionInfo.ExecutionState.State,
-		executionInfo.ExecutionState.Status); err != nil {
+		executionState.State,
+		executionState.Status); err != nil {
 		return err
 	}
 
 	// TODO we should set the last update time on business logic layer
-	executionInfo.LastUpdatedTime = timestamp.TimeNowPtrUtc()
+	executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 
 	row, err := buildExecutionRow(
 		executionInfo,
-		versionHistories,
-		startVersion,
+		executionState,
+		nextEventID,
 		lastWriteVersion,
 		shardID,
 	)

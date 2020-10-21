@@ -163,10 +163,10 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	currentWorkflow.EXPECT().getContext().Return(currentContext).AnyTimes()
 	currentWorkflow.EXPECT().getMutableState().Return(currentMutableState).AnyTimes()
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
-
-	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: s.currentRunID},
+	currentMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+		RunId: s.currentRunID,
 	}).AnyTimes()
+
 	currentMutableState.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 
 	resetWorkflow := NewMocknDCWorkflow(s.controller)

@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
 // NOTE: terminology
@@ -300,7 +301,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 				ctx,
 				targetWorkflow.getMutableState(),
 				targetWorkflowEvents.Events,
-				targetWorkflow.getMutableState().GetExecutionInfo().GetRunId(),
+				targetWorkflow.getMutableState().GetExecutionState().GetRunId(),
 			); err != nil {
 				return 0, transactionPolicyActive, err
 			}
@@ -313,7 +314,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 		baseMutableState := targetWorkflow.getMutableState()
 		namespaceID := baseMutableState.GetExecutionInfo().NamespaceId
 		workflowID := baseMutableState.GetExecutionInfo().WorkflowId
-		baseRunID := baseMutableState.GetExecutionInfo().GetRunId()
+		baseRunID := baseMutableState.GetExecutionState().GetRunId()
 		resetRunID := uuid.New()
 		baseRebuildLastEventID := baseMutableState.GetPreviousStartedEventID()
 
@@ -329,11 +330,11 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 		}
 
 		baseVersionHistories := baseMutableState.GetVersionHistories()
-		baseCurrentVersionHistory, err := baseVersionHistories.GetCurrentVersionHistory()
+		baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 		if err != nil {
 			return 0, transactionPolicyActive, err
 		}
-		baseRebuildLastEventVersion, err := baseCurrentVersionHistory.GetEventVersion(baseRebuildLastEventID)
+		baseRebuildLastEventVersion, err := versionhistory.GetEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
 		if err != nil {
 			return 0, transactionPolicyActive, err
 		}
@@ -468,9 +469,10 @@ func (r *nDCTransactionMgrImpl) isWorkflowCurrent(
 
 	// target workflow is not guaranteed to be current workflow, do additional check
 	executionInfo := targetWorkflow.getMutableState().GetExecutionInfo()
+	executionState := targetWorkflow.getMutableState().GetExecutionState()
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
-	runID := executionInfo.ExecutionState.RunId
+	runID := executionState.RunId
 
 	currentRunID, err := r.getCurrentWorkflowRunID(
 		ctx,

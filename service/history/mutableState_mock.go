@@ -41,6 +41,7 @@ import (
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
 	enums0 "go.temporal.io/server/api/enums/v1"
+	history0 "go.temporal.io/server/api/history/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	persistenceblobs "go.temporal.io/server/api/persistenceblobs/v1"
 	cache "go.temporal.io/server/common/cache"
@@ -1049,10 +1050,10 @@ func (mr *MockmutableStateMockRecorder) GetCurrentBranchToken() *gomock.Call {
 }
 
 // GetVersionHistories mocks base method.
-func (m *MockmutableState) GetVersionHistories() *persistence.VersionHistories {
+func (m *MockmutableState) GetVersionHistories() *history0.VersionHistories {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetVersionHistories")
-	ret0, _ := ret[0].(*persistence.VersionHistories)
+	ret0, _ := ret[0].(*history0.VersionHistories)
 	return ret0
 }
 
@@ -1077,10 +1078,10 @@ func (mr *MockmutableStateMockRecorder) GetCurrentVersion() *gomock.Call {
 }
 
 // GetExecutionInfo mocks base method.
-func (m *MockmutableState) GetExecutionInfo() *persistence.WorkflowExecutionInfo {
+func (m *MockmutableState) GetExecutionInfo() *persistenceblobs.WorkflowExecutionInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetExecutionInfo")
-	ret0, _ := ret[0].(*persistence.WorkflowExecutionInfo)
+	ret0, _ := ret[0].(*persistenceblobs.WorkflowExecutionInfo)
 	return ret0
 }
 
@@ -1088,6 +1089,20 @@ func (m *MockmutableState) GetExecutionInfo() *persistence.WorkflowExecutionInfo
 func (mr *MockmutableStateMockRecorder) GetExecutionInfo() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionInfo", reflect.TypeOf((*MockmutableState)(nil).GetExecutionInfo))
+}
+
+// GetExecutionState mocks base method.
+func (m *MockmutableState) GetExecutionState() *persistenceblobs.WorkflowExecutionState {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExecutionState")
+	ret0, _ := ret[0].(*persistenceblobs.WorkflowExecutionState)
+	return ret0
+}
+
+// GetExecutionState indicates an expected call of GetExecutionState.
+func (mr *MockmutableStateMockRecorder) GetExecutionState() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionState", reflect.TypeOf((*MockmutableState)(nil).GetExecutionState))
 }
 
 // GetHistoryBuilder mocks base method.
@@ -2208,8 +2223,20 @@ func (mr *MockmutableStateMockRecorder) SetHistoryTree(treeID interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistoryTree", reflect.TypeOf((*MockmutableState)(nil).SetHistoryTree), treeID)
 }
 
+// SetNextEventID mocks base method.
+func (m *MockmutableState) SetNextEventID(nextEventID int64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetNextEventID", nextEventID)
+}
+
+// SetNextEventID indicates an expected call of SetNextEventID.
+func (mr *MockmutableStateMockRecorder) SetNextEventID(nextEventID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetNextEventID", reflect.TypeOf((*MockmutableState)(nil).SetNextEventID), nextEventID)
+}
+
 // SetVersionHistories mocks base method.
-func (m *MockmutableState) SetVersionHistories(arg0 *persistence.VersionHistories) error {
+func (m *MockmutableState) SetVersionHistories(arg0 *history0.VersionHistories) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetVersionHistories", arg0)
 	ret0, _ := ret[0].(error)
