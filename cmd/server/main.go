@@ -26,6 +26,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path"
 	"strings"
@@ -97,6 +98,9 @@ func buildCLI() *cli.App {
 				configDir := path.Join(c.GlobalString("root"), c.GlobalString("config"))
 
 				services := splitServices(c.StringSlice("services"))
+				if len(c.Args()) > 0 {
+					return cli.NewExitError("ERROR: start command doesn't support arguments. Use --services flags instead.", 1)
+				}
 
 				s := temporal.NewServer(
 					temporal.ForServices(services),
@@ -120,7 +124,12 @@ func buildCLI() *cli.App {
 func splitServices(services []string) []string {
 	var result []string
 	for _, service := range services {
-		result = append(result, strings.Split(service, ",")...)
+		if strings.Contains(service, ",") {
+			result = append(result, strings.Split(service, ",")...)
+			log.Println("WARNING: comma separated format for --services flag is depricated. Specify multiply --services flags instead.")
+		} else {
+			result = append(result, service)
+		}
 	}
 	return result
 }
