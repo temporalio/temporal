@@ -672,12 +672,12 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_LocalVersion
 	s.Nil(err)
 }
 
-func (s *activityReplicatorSuite) generateIncomingVersionHistory(eventID, version int64) persistence.VersionHistory {
-	incomingVersionHistory := persistence.VersionHistory{
+func (s *activityReplicatorSuite) generateIncomingVersionHistory(eventID, version int64) historyspb.VersionHistory {
+	incomingVersionHistory := historyspb.VersionHistory{
 		BranchToken: []byte{},
-		Items: []*persistence.VersionHistoryItem{
+		Items: []*historyspb.VersionHistoryItem{
 			{
-				EventID: eventID,
+				EventId: eventID,
 				Version: version,
 			},
 		},
