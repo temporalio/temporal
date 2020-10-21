@@ -10,7 +10,8 @@ ES_SCHEME="${ES_SCHEME:-http}"
 RF=${RF:-1}
 DEFAULT_NAMESPACE="${DEFAULT_NAMESPACE:-default}"
 DEFAULT_NAMESPACE_RETENTION=${DEFAULT_NAMESPACE_RETENTION:-1}
-
+CASSANDRA_PORT="${CASSANDRA_PORT:-9042}"
+CASSANDRA_TLS_ENABLED="${CASSANDRA_TLS_ENABLED:-false}"
 # tctl env
 export TEMPORAL_CLI_ADDRESS="${BIND_ON_IP}:7233"
 
@@ -24,14 +25,35 @@ export VISIBILITY_DBNAME="${VISIBILITY_DBNAME:-temporal_visibility}"
 export DB_PORT=${DB_PORT:-3306}
 
 setup_cassandra_schema() {
-    SCHEMA_DIR=$TEMPORAL_HOME/schema/cassandra/temporal/versioned
-    temporal-cassandra-tool --ep $CASSANDRA_SEEDS create -k $KEYSPACE --rf $RF
-    temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $KEYSPACE setup-schema -v 0.0
-    temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $KEYSPACE update-schema -d $SCHEMA_DIR
-    VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/cassandra/visibility/versioned
-    temporal-cassandra-tool --ep $CASSANDRA_SEEDS create -k $VISIBILITY_KEYSPACE --rf $RF
-    temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE setup-schema -v 0.0
-    temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE update-schema -d $VISIBILITY_SCHEMA_DIR
+    export CASSANDRA_USER=$CASSANDRA_USER
+    export CASSANDRA_PORT=$CASSANDRA_PORT
+    { export CASSANDRA_PASSWORD=$CASSANDRA_PASSWORD; } 2> /dev/null
+
+    if [ "$CASSANDRA_TLS_ENABLED" == "true" ]; then
+        export CASSANDRA_TLS_CERT=$CASSANDRA_CERT;
+        export CASSANDRA_TLS_KEY=$CASSANDRA_CERT_KEY;
+        export CASSANDRA_TLS_CA=$CASSANDRA_CA
+
+        SCHEMA_DIR=$TEMPORAL_HOME/schema/cassandra/temporal/versioned
+        temporal-cassandra-tool --ep $CASSANDRA_SEEDS --tls create -k $KEYSPACE --rf $RF
+        temporal-cassandra-tool --ep $CASSANDRA_SEEDS --tls -k $KEYSPACE setup-schema -v 0.0
+        temporal-cassandra-tool --ep $CASSANDRA_SEEDS --tls -k $KEYSPACE update-schema -d $SCHEMA_DIR
+
+        VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/cassandra/visibility/versioned
+        temporal-cassandra-tool --ep $CASSANDRA_SEEDS --tls create -k $VISIBILITY_KEYSPACE --rf $RF
+        temporal-cassandra-tool --ep $CASSANDRA_SEEDS --tls -k $VISIBILITY_KEYSPACE setup-schema -v 0.0
+        temporal-cassandra-tool --ep $CASSANDRA_SEEDS --tls -k $VISIBILITY_KEYSPACE update-schema -d $VISIBILITY_SCHEMA_DIR
+    else
+        SCHEMA_DIR=$TEMPORAL_HOME/schema/cassandra/temporal/versioned
+        temporal-cassandra-tool --ep $CASSANDRA_SEEDS create -k $KEYSPACE --rf $RF
+        temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $KEYSPACE setup-schema -v 0.0
+        temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $KEYSPACE update-schema -d $SCHEMA_DIR
+
+        VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/cassandra/visibility/versioned
+        temporal-cassandra-tool --ep $CASSANDRA_SEEDS create -k $VISIBILITY_KEYSPACE --rf $RF
+        temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE setup-schema -v 0.0
+        temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE update-schema -d $VISIBILITY_SCHEMA_DIR
+    fi
 }
 
 setup_mysql_schema() {
