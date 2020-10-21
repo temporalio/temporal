@@ -49,7 +49,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/payload"
@@ -68,9 +67,9 @@ type (
 	}
 )
 
-var testWorkflowChecksum = checksum.Checksum{
+var testWorkflowChecksum = persistenceblobs.Checksum{
 	Version: 22,
-	Flavor:  checksum.FlavorIEEECRC32OverProto3Binary,
+	Flavor:  enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY,
 	Value:   []byte("test-checksum"),
 }
 
@@ -93,19 +92,19 @@ func (s *ExecutionManagerSuite) SetupTest() {
 	s.ClearTasks()
 }
 
-func (s *ExecutionManagerSuite) newRandomChecksum() checksum.Checksum {
-	return checksum.Checksum{
-		Flavor:  checksum.FlavorIEEECRC32OverProto3Binary,
+func (s *ExecutionManagerSuite) newRandomChecksum() persistenceblobs.Checksum {
+	return persistenceblobs.Checksum{
+		Flavor:  enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY,
 		Version: 22,
 		Value:   []byte(uuid.NewRandom()),
 	}
 }
 
-func (s *ExecutionManagerSuite) assertChecksumsEqual(expected checksum.Checksum, actual checksum.Checksum) {
-	if !actual.Flavor.IsValid() {
+func (s *ExecutionManagerSuite) assertChecksumsEqual(expected persistenceblobs.Checksum, actual persistenceblobs.Checksum) {
+	if actual.Flavor != enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY {
 		// not all stores support checksum persistence today
 		// if its not supported, assert that everything is zero'd out
-		expected = checksum.Checksum{}
+		expected = persistenceblobs.Checksum{}
 	}
 	s.EqualValues(expected, actual)
 }
@@ -655,7 +654,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 		WorkflowId: workflowID,
 		RunId:      uuid.New(),
 	}
-	csum = checksum.Checksum{} // set checksum to nil
+	csum = persistenceblobs.Checksum{} // set checksum to nil
 	req.NewWorkflowSnapshot.ExecutionInfo.WorkflowId = workflowExecutionRunning.GetWorkflowId()
 	req.NewWorkflowSnapshot.ExecutionInfo.ExecutionState.RunId = workflowExecutionRunning.GetRunId()
 	req.Mode = p.CreateWorkflowModeWorkflowIDReuse

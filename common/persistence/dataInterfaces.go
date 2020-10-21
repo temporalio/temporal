@@ -38,7 +38,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 )
@@ -467,7 +466,7 @@ type (
 		ExecutionStats      *persistenceblobs.ExecutionStats
 		BufferedEvents      []*historypb.HistoryEvent
 		VersionHistories    *VersionHistories
-		Checksum            checksum.Checksum
+		Checksum            persistenceblobs.Checksum
 	}
 
 	// TimerInfo details - metadata about user timer info.
@@ -636,7 +635,7 @@ type (
 		TimerTasks       []Task
 
 		Condition int64
-		Checksum  checksum.Checksum
+		Checksum  persistenceblobs.Checksum
 	}
 
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
@@ -657,7 +656,7 @@ type (
 		TimerTasks       []Task
 
 		Condition int64
-		Checksum  checksum.Checksum
+		Checksum  persistenceblobs.Checksum
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution

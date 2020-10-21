@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
@@ -355,14 +354,14 @@ func (s *mutableStateSuite) TestChecksum() {
 	testCases := []struct {
 		name                 string
 		enableBufferedEvents bool
-		closeTxFunc          func(ms *mutableStateBuilder) (checksum.Checksum, error)
+		closeTxFunc          func(ms *mutableStateBuilder) (persistenceblobs.Checksum, error)
 	}{
 		{
 			name: "closeTransactionAsSnapshot",
-			closeTxFunc: func(ms *mutableStateBuilder) (checksum.Checksum, error) {
+			closeTxFunc: func(ms *mutableStateBuilder) (persistenceblobs.Checksum, error) {
 				snapshot, _, err := ms.CloseTransactionAsSnapshot(time.Now().UTC(), transactionPolicyPassive)
 				if err != nil {
-					return checksum.Checksum{}, err
+					return persistenceblobs.Checksum{}, err
 				}
 				return snapshot.Checksum, err
 			},
@@ -370,10 +369,10 @@ func (s *mutableStateSuite) TestChecksum() {
 		{
 			name:                 "closeTransactionAsMutation",
 			enableBufferedEvents: true,
-			closeTxFunc: func(ms *mutableStateBuilder) (checksum.Checksum, error) {
+			closeTxFunc: func(ms *mutableStateBuilder) (persistenceblobs.Checksum, error) {
 				mutation, _, err := ms.CloseTransactionAsMutation(time.Now().UTC(), transactionPolicyPassive)
 				if err != nil {
-					return checksum.Checksum{}, err
+					return persistenceblobs.Checksum{}, err
 				}
 				return mutation.Checksum, err
 			},
@@ -406,7 +405,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			csum, err := tc.closeTxFunc(s.msBuilder)
 			s.Nil(err)
 			s.NotNil(csum.Value)
-			s.Equal(checksum.FlavorIEEECRC32OverProto3Binary, csum.Flavor)
+			s.Equal(enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY, csum.Flavor)
 			s.Equal(mutableStateChecksumPayloadV1, csum.Version)
 			s.EqualValues(csum, s.msBuilder.checksum)
 
@@ -434,7 +433,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			}
 			s.msBuilder.Load(dbState)
 			s.Equal(loadErrors, loadErrorsFunc())
-			s.EqualValues(checksum.Checksum{}, s.msBuilder.checksum)
+			s.EqualValues(persistenceblobs.Checksum{}, s.msBuilder.checksum)
 
 			// revert the config value for the next test case
 			s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {

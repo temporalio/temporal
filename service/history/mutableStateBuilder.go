@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -153,7 +152,7 @@ type (
 		// Load() and closeTransactionXXX methods. So when
 		// a transaction is in progress, this value will be
 		// wrong. This exist primarily for visibility via CLI
-		checksum checksum.Checksum
+		checksum persistenceblobs.Checksum
 
 		taskGenerator       mutableStateTaskGenerator
 		workflowTaskManager mutableStateWorkflowTaskManager
@@ -307,7 +306,7 @@ func (e *mutableStateBuilder) Load(
 	if len(state.Checksum.Value) > 0 {
 		switch {
 		case e.shouldInvalidateCheckum():
-			e.checksum = checksum.Checksum{}
+			e.checksum = persistenceblobs.Checksum{}
 			e.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumInvalidated)
 		case e.shouldVerifyChecksum():
 			if err := verifyMutableStateChecksum(e, state.Checksum); err != nil {
@@ -4508,14 +4507,14 @@ func (e *mutableStateBuilder) checkMutability(
 	return nil
 }
 
-func (e *mutableStateBuilder) generateChecksum() checksum.Checksum {
+func (e *mutableStateBuilder) generateChecksum() persistenceblobs.Checksum {
 	if !e.shouldGenerateChecksum() {
-		return checksum.Checksum{}
+		return persistenceblobs.Checksum{}
 	}
 	csum, err := generateMutableStateChecksum(e)
 	if err != nil {
 		e.logWarn("error generating mutableState checksum", tag.Error(err))
-		return checksum.Checksum{}
+		return persistenceblobs.Checksum{}
 	}
 	return csum
 }

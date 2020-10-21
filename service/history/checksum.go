@@ -28,26 +28,27 @@ import (
 	"fmt"
 
 	checksumspb "go.temporal.io/server/api/checksum/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/checksum"
 )
 
 const (
-	mutableStateChecksumPayloadV1 = 1
+	mutableStateChecksumPayloadV1 = int32(1)
 )
 
-func generateMutableStateChecksum(ms mutableState) (checksum.Checksum, error) {
+func generateMutableStateChecksum(ms mutableState) (persistenceblobs.Checksum, error) {
 	payload := newMutableStateChecksumPayload(ms)
 	csum, err := checksum.GenerateCRC32(payload, mutableStateChecksumPayloadV1)
 	if err != nil {
-		return checksum.Checksum{}, err
+		return persistenceblobs.Checksum{}, err
 	}
 	return csum, nil
 }
 
 func verifyMutableStateChecksum(
 	ms mutableState,
-	csum checksum.Checksum,
+	csum persistenceblobs.Checksum,
 ) error {
 	if csum.Version != mutableStateChecksumPayloadV1 {
 		return fmt.Errorf("invalid checksum payload version %v", csum.Version)

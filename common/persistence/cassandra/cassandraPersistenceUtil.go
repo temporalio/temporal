@@ -37,7 +37,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/checksum"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -397,7 +396,7 @@ func createExecution(
 	shardID int32,
 	executionInfo *p.WorkflowExecutionInfo,
 	versionHistories *historyspb.VersionHistories,
-	checksum checksum.Checksum,
+	checksum persistenceblobs.Checksum,
 	cqlNowTimestampMillis int64,
 	startVersion int64,
 ) error {
@@ -432,7 +431,7 @@ func createExecution(
 		return err
 	}
 
-	checksumDatablob, err := serialization.ChecksumToBlob(checksum.ToProto())
+	checksumDatablob, err := serialization.ChecksumToBlob(&checksum)
 	if err != nil {
 		return err
 	}
@@ -482,7 +481,7 @@ func updateExecution(
 	versionHistories *historyspb.VersionHistories,
 	cqlNowTimestampMillis int64,
 	condition int64,
-	checksum checksum.Checksum,
+	checksum persistenceblobs.Checksum,
 	startVersion int64,
 ) error {
 
@@ -515,7 +514,7 @@ func updateExecution(
 		return err
 	}
 
-	checksumDatablob, err := serialization.ChecksumToBlob(checksum.ToProto())
+	checksumDatablob, err := serialization.ChecksumToBlob(&checksum)
 	if err != nil {
 		return err
 	}

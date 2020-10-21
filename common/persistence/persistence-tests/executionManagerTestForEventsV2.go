@@ -36,7 +36,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/primitives/timestamp"
 
 	"github.com/pborman/uuid"
@@ -87,19 +86,19 @@ func (s *ExecutionManagerSuiteForEventsV2) SetupTest() {
 	s.ClearTasks()
 }
 
-func (s *ExecutionManagerSuiteForEventsV2) newRandomChecksum() checksum.Checksum {
-	return checksum.Checksum{
-		Flavor:  checksum.FlavorIEEECRC32OverProto3Binary,
+func (s *ExecutionManagerSuiteForEventsV2) newRandomChecksum() persistenceblobs.Checksum {
+	return persistenceblobs.Checksum{
+		Flavor:  enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY,
 		Version: 22,
-		Value:   []byte(uuid.NewRandom()),
+		Value:   uuid.NewRandom(),
 	}
 }
 
-func (s *ExecutionManagerSuiteForEventsV2) assertChecksumsEqual(expected checksum.Checksum, actual checksum.Checksum) {
-	if !actual.Flavor.IsValid() {
+func (s *ExecutionManagerSuiteForEventsV2) assertChecksumsEqual(expected persistenceblobs.Checksum, actual persistenceblobs.Checksum) {
+	if actual.Flavor != enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY {
 		// not all stores support checksum persistence today
 		// if its not supported, assert that everything is zero'd out
-		expected = checksum.Checksum{}
+		expected = persistenceblobs.Checksum{}
 	}
 	s.EqualValues(expected, actual)
 }
