@@ -27,18 +27,35 @@ package sqlplugin
 import (
 	"database/sql"
 
-	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 )
 
 type (
-	// clusterMetadata is the SQL persistence interface for cluster metadata
-	clusterMetadata interface {
-		SaveClusterMetadata(row *ClusterMetadataRow) (sql.Result, error)
-		GetClusterMetadata() (*ClusterMetadataRow, error)
-		WriteLockGetClusterMetadata() (*ClusterMetadataRow, error)
-		GetClusterMembers(filter *ClusterMembershipFilter) ([]ClusterMembershipRow, error)
-		UpsertClusterMembership(row *ClusterMembershipRow) (sql.Result, error)
-		PruneClusterMembership(filter *PruneClusterMembershipFilter) (sql.Result, error)
+	// NamespaceRow represents a row in namespace table
+	NamespaceRow struct {
+		ID                  primitives.UUID
+		Name                string
+		Data                []byte
+		DataEncoding        string
+		IsGlobal            bool
+		NotificationVersion int64
+	}
+
+	// NamespaceFilter contains the column names within namespace table that
+	// can be used to filter results through a WHERE clause. When ID is not
+	// nil, it will be used for WHERE condition. If ID is nil and Name is non-nil,
+	// Name will be used for WHERE condition. When both ID and Name are nil,
+	// no WHERE clause will be used
+	NamespaceFilter struct {
+		ID            *primitives.UUID
+		Name          *string
+		GreaterThanID *primitives.UUID
+		PageSize      *int
+	}
+
+	// NamespaceMetadataRow represents a row in namespace_metadata table
+	NamespaceMetadataRow struct {
+		NotificationVersion int64
 	}
 
 	// Namespace is the SQL persistence interface for namespaces
@@ -48,25 +65,12 @@ type (
 		// SelectFromNamespace returns namespaces that match filter criteria. Either ID or
 		// Name can be specified to filter results. If both are not specified, all rows
 		// will be returned
-		SelectFromNamespace(filter *NamespaceFilter) ([]NamespaceRow, error)
+		SelectFromNamespace(filter NamespaceFilter) ([]NamespaceRow, error)
 		// DeleteNamespace deletes a single row. One of ID or Name MUST be specified
-		DeleteFromNamespace(filter *NamespaceFilter) (sql.Result, error)
+		DeleteFromNamespace(filter NamespaceFilter) (sql.Result, error)
 
 		LockNamespaceMetadata() (*NamespaceMetadataRow, error)
 		UpdateNamespaceMetadata(row *NamespaceMetadataRow) (sql.Result, error)
 		SelectFromNamespaceMetadata() (*NamespaceMetadataRow, error)
-	}
-
-	queue interface {
-		InsertIntoQueue(row *QueueRow) (sql.Result, error)
-		GetLastEnqueuedMessageIDForUpdate(queueType persistence.QueueType) (int64, error)
-		GetMessagesFromQueue(queueType persistence.QueueType, lastMessageID int64, maxRows int) ([]QueueRow, error)
-		GetMessagesBetween(queueType persistence.QueueType, firstMessageID int64, lastMessageID int64, maxRows int) ([]QueueRow, error)
-		DeleteMessagesBefore(queueType persistence.QueueType, messageID int64) (sql.Result, error)
-		RangeDeleteMessages(queueType persistence.QueueType, exclusiveBeginMessageID int64, inclusiveEndMessageID int64) (sql.Result, error)
-		DeleteMessage(queueType persistence.QueueType, messageID int64) (sql.Result, error)
-		InsertAckLevel(queueType persistence.QueueType, messageID int64, clusterName string) error
-		UpdateAckLevels(queueType persistence.QueueType, clusterAckLevels map[string]int64) error
-		GetAckLevels(queueType persistence.QueueType, forUpdate bool) (map[string]int64, error)
 	}
 )

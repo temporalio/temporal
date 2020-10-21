@@ -127,7 +127,7 @@ func (s *historyExecutionBufferSuite) TestInsertSelect() {
 	s.NoError(err)
 	s.Equal(numBufferedEvents, int(rowsAffected))
 
-	filter := &sqlplugin.BufferedEventsFilter{
+	filter := sqlplugin.BufferedEventsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -144,7 +144,7 @@ func (s *historyExecutionBufferSuite) TestDeleteSelect() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 
-	filter := &sqlplugin.BufferedEventsFilter{
+	filter := sqlplugin.BufferedEventsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -180,7 +180,7 @@ func (s *historyExecutionBufferSuite) TestInsertDelete() {
 	s.NoError(err)
 	s.Equal(numBufferedEvents, int(rowsAffected))
 
-	filter := &sqlplugin.BufferedEventsFilter{
+	filter := sqlplugin.BufferedEventsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,

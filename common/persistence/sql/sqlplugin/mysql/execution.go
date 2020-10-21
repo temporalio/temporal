@@ -333,7 +333,7 @@ func (mdb *db) InsertIntoBufferedEvents(rows []sqlplugin.BufferedEventsRow) (sql
 }
 
 // SelectFromBufferedEvents reads one or more rows from buffered_events table
-func (mdb *db) SelectFromBufferedEvents(filter *sqlplugin.BufferedEventsFilter) ([]sqlplugin.BufferedEventsRow, error) {
+func (mdb *db) SelectFromBufferedEvents(filter sqlplugin.BufferedEventsFilter) ([]sqlplugin.BufferedEventsRow, error) {
 	var rows []sqlplugin.BufferedEventsRow
 	err := mdb.conn.Select(&rows, getBufferedEventsQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
@@ -346,7 +346,7 @@ func (mdb *db) SelectFromBufferedEvents(filter *sqlplugin.BufferedEventsFilter) 
 }
 
 // DeleteFromBufferedEvents deletes one or more rows from buffered_events table
-func (mdb *db) DeleteFromBufferedEvents(filter *sqlplugin.BufferedEventsFilter) (sql.Result, error) {
+func (mdb *db) DeleteFromBufferedEvents(filter sqlplugin.BufferedEventsFilter) (sql.Result, error) {
 	return mdb.conn.Exec(deleteBufferedEventsQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 }
 

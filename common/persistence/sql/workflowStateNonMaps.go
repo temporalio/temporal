@@ -155,7 +155,7 @@ func getBufferedEvents(
 	runID primitives.UUID,
 ) ([]*serialization.DataBlob, error) {
 
-	rows, err := db.SelectFromBufferedEvents(&sqlplugin.BufferedEventsFilter{
+	rows, err := db.SelectFromBufferedEvents(sqlplugin.BufferedEventsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -179,7 +179,7 @@ func deleteBufferedEvents(
 	runID primitives.UUID,
 ) error {
 
-	if _, err := tx.DeleteFromBufferedEvents(&sqlplugin.BufferedEventsFilter{
+	if _, err := tx.DeleteFromBufferedEvents(sqlplugin.BufferedEventsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
