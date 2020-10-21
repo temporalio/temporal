@@ -204,6 +204,14 @@ func buildCLIOptions() *cli.App {
 				cliHandler(c, createKeyspace)
 			},
 		},
+		{
+			Name:    "validate-health",
+			Aliases: []string{"vh"},
+			Usage:   "validates health of cassandra by attempting to establish CQL session to system keyspace",
+			Action: func(c *cli.Context) {
+				cliHandler(c, validateHealth)
+			},
+		},
 	}
 
 	return app
