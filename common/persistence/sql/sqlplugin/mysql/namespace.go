@@ -75,7 +75,7 @@ func (mdb *db) UpdateNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) 
 }
 
 // SelectFromNamespace reads one or more rows from namespaces table
-func (mdb *db) SelectFromNamespace(filter *sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
+func (mdb *db) SelectFromNamespace(filter sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
 	switch {
 	case filter.ID != nil || filter.Name != nil:
 		if filter.ID != nil && filter.Name != nil {
@@ -89,7 +89,7 @@ func (mdb *db) SelectFromNamespace(filter *sqlplugin.NamespaceFilter) ([]sqlplug
 	}
 }
 
-func (mdb *db) selectFromNamespace(filter *sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
+func (mdb *db) selectFromNamespace(filter sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
 	var err error
 	var row sqlplugin.NamespaceRow
 	switch {
@@ -104,7 +104,7 @@ func (mdb *db) selectFromNamespace(filter *sqlplugin.NamespaceFilter) ([]sqlplug
 	return []sqlplugin.NamespaceRow{row}, err
 }
 
-func (mdb *db) selectAllFromNamespace(filter *sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
+func (mdb *db) selectAllFromNamespace(filter sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
 	var err error
 	var rows []sqlplugin.NamespaceRow
 	switch {
@@ -117,7 +117,7 @@ func (mdb *db) selectAllFromNamespace(filter *sqlplugin.NamespaceFilter) ([]sqlp
 }
 
 // DeleteFromNamespace deletes a single row in namespaces table
-func (mdb *db) DeleteFromNamespace(filter *sqlplugin.NamespaceFilter) (sql.Result, error) {
+func (mdb *db) DeleteFromNamespace(filter sqlplugin.NamespaceFilter) (sql.Result, error) {
 	var err error
 	var result sql.Result
 	switch {

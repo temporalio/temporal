@@ -57,7 +57,7 @@ func (mdb *db) UpdateShards(row *sqlplugin.ShardsRow) (sql.Result, error) {
 }
 
 // SelectFromShards reads one or more rows from shards table
-func (mdb *db) SelectFromShards(filter *sqlplugin.ShardsFilter) (*sqlplugin.ShardsRow, error) {
+func (mdb *db) SelectFromShards(filter sqlplugin.ShardsFilter) (*sqlplugin.ShardsRow, error) {
 	var row sqlplugin.ShardsRow
 	err := mdb.conn.Get(&row, getShardQry, filter.ShardID)
 	if err != nil {
@@ -67,14 +67,14 @@ func (mdb *db) SelectFromShards(filter *sqlplugin.ShardsFilter) (*sqlplugin.Shar
 }
 
 // ReadLockShards acquires a read lock on a single row in shards table
-func (mdb *db) ReadLockShards(filter *sqlplugin.ShardsFilter) (int64, error) {
+func (mdb *db) ReadLockShards(filter sqlplugin.ShardsFilter) (int64, error) {
 	var rangeID int64
 	err := mdb.conn.Get(&rangeID, readLockShardQry, filter.ShardID)
 	return rangeID, err
 }
 
 // WriteLockShards acquires a write lock on a single row in shards table
-func (mdb *db) WriteLockShards(filter *sqlplugin.ShardsFilter) (int64, error) {
+func (mdb *db) WriteLockShards(filter sqlplugin.ShardsFilter) (int64, error) {
 	var rangeID int64
 	err := mdb.conn.Get(&rangeID, lockShardQry, filter.ShardID)
 	return rangeID, err

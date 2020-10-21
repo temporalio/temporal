@@ -29,20 +29,25 @@ import (
 )
 
 type (
-	// MatchingTask is the SQL persistence interface for matching tasks
-	MatchingTask interface {
-		InsertIntoTasks(rows []TasksRow) (sql.Result, error)
-		// SelectFromTasks retrieves one or more rows from the tasks table
-		// Required filter params - {namespaceID, taskqueueName, taskType, minTaskID, maxTaskID, pageSize}
-		SelectFromTasks(filter *TasksFilter) ([]TasksRow, error)
-		// DeleteFromTasks deletes a row from tasks table
-		// Required filter params:
-		//  to delete single row
-		//     - {namespaceID, taskqueueName, taskType, taskID}
-		//  to delete multiple rows
-		//    - {namespaceID, taskqueueName, taskType, taskIDLessThanEquals, limit }
-		//    - this will delete upto limit number of tasks less than or equal to the given task id
-		DeleteFromTasks(filter *TasksFilter) (sql.Result, error)
+	// TaskQueuesRow represents a row in task_queues table
+	TaskQueuesRow struct {
+		RangeHash    uint32
+		TaskQueueID  []byte
+		RangeID      int64
+		Data         []byte
+		DataEncoding string
+	}
+
+	// TaskQueuesFilter contains the column names within task_queues table that
+	// can be used to filter results through a WHERE clause
+	TaskQueuesFilter struct {
+		RangeHash                   uint32
+		RangeHashGreaterThanEqualTo uint32
+		RangeHashLessThanEqualTo    uint32
+		TaskQueueID                 []byte
+		TaskQueueIDGreaterThan      []byte
+		RangeID                     *int64
+		PageSize                    *int
 	}
 
 	// MatchingTaskQueue is the SQL persistence interface for matching task queues

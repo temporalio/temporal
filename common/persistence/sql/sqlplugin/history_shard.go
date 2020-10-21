@@ -27,19 +27,26 @@ package sqlplugin
 import "database/sql"
 
 type (
+	// ShardsRow represents a row in shards table
+	ShardsRow struct {
+		ShardID      int32
+		RangeID      int64
+		Data         []byte
+		DataEncoding string
+	}
+
+	// ShardsFilter contains the column names within shards table that
+	// can be used to filter results through a WHERE clause
+	ShardsFilter struct {
+		ShardID int32
+	}
+
 	// HistoryShard is the SQL persistence interface for history shards
 	HistoryShard interface {
 		InsertIntoShards(rows *ShardsRow) (sql.Result, error)
 		UpdateShards(row *ShardsRow) (sql.Result, error)
-		SelectFromShards(filter *ShardsFilter) (*ShardsRow, error)
-		ReadLockShards(filter *ShardsFilter) (int64, error)
-		WriteLockShards(filter *ShardsFilter) (int64, error)
-	}
-
-	// HistoryExecutionBuffer is the SQL persistence interface for history nodes and history execution buffer events
-	HistoryExecutionBuffer interface {
-		InsertIntoBufferedEvents(rows []BufferedEventsRow) (sql.Result, error)
-		SelectFromBufferedEvents(filter *BufferedEventsFilter) ([]BufferedEventsRow, error)
-		DeleteFromBufferedEvents(filter *BufferedEventsFilter) (sql.Result, error)
+		SelectFromShards(filter ShardsFilter) (*ShardsRow, error)
+		ReadLockShards(filter ShardsFilter) (int64, error)
+		WriteLockShards(filter ShardsFilter) (int64, error)
 	}
 )
