@@ -90,16 +90,22 @@ func buildCLI() *cli.App {
 			Usage:     "Start Temporal server",
 			ArgsUsage: " ",
 			Flags: []cli.Flag{
-				&cli.StringSliceFlag{
+				&cli.StringFlag{
 					Name:    "services",
 					Aliases: []string{"s"},
+					Usage:   "comma separated list of services to start. Depricated",
+					Hidden:  true,
+				},
+				&cli.StringSliceFlag{
+					Name:    "service",
+					Aliases: []string{"svc"},
 					Value:   cli.NewStringSlice(temporal.Services...),
-					Usage:   "List of services to start",
+					Usage:   "service(s) to start",
 				},
 			},
 			Before: func(c *cli.Context) error {
 				if c.Args().Len() > 0 {
-					return cli.NewExitError("ERROR: start command doesn't support arguments. Use --services flags instead.", 1)
+					return cli.NewExitError("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
 				}
 				return nil
 			},
@@ -107,8 +113,13 @@ func buildCLI() *cli.App {
 				env := c.String("env")
 				zone := c.String("zone")
 				configDir := path.Join(c.String("root"), c.String("config"))
+				services := c.StringSlice("service")
 
-				services := splitServices(c.StringSlice("services"))
+				// For backward compatiblity to support old flag format (i.e. `--services=frontend,history,matching`).
+				if c.IsSet("services") {
+					log.Println("WARNING: --services flag is depricated. Specify multiply --service flags instead.")
+					services = strings.Split(c.String("services"), ",")
+				}
 
 				s := temporal.NewServer(
 					temporal.ForServices(services),
@@ -126,18 +137,4 @@ func buildCLI() *cli.App {
 		},
 	}
 	return app
-}
-
-// For backward compatiblity to support old flag format (i.e. `--services=frontend,history,matching`).
-func splitServices(services []string) []string {
-	var result []string
-	for _, service := range services {
-		if strings.Contains(service, ",") {
-			result = append(result, strings.Split(service, ",")...)
-			log.Println("WARNING: comma separated format for --services flag is depricated. Specify multiply --services flags instead.")
-		} else {
-			result = append(result, service)
-		}
-	}
-	return result
 }
