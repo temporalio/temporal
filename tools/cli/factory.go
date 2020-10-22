@@ -165,6 +165,9 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 	if caPool != nil || cert != nil {
 		if serverName != "" {
 			host = serverName
+			// If server name is provided, we enable host verification
+			// because that's the only reason for providing server name
+			hostNameVerification = true
 		} else {
 			hostPort := c.GlobalString(FlagAddress)
 			if hostPort == "" {
