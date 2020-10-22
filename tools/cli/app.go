@@ -88,6 +88,12 @@ func NewCliApp() *cli.App {
 			Usage:  "validates hostname of temporal cluster against server certificate",
 			EnvVar: "TEMPORAL_CLI_TLS_ENABLE_HOST_VERIFICATION",
 		},
+		cli.StringFlag{
+			Name:   FlagTLSServerName,
+			Value:  "",
+			Usage:  "override for target server name",
+			EnvVar: "TEMPORAL_CLI_TLS_SERVER_NAME",
+		},
 	}
 	app.Commands = []cli.Command{
 		{
