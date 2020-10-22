@@ -3359,6 +3359,12 @@ func (wh *WorkflowHandler) getDefaultScope(scope int) metrics.Scope {
 }
 
 func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
+
+	if common.IsContextTimeoutErr(err) {
+		scope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
+		return err
+	}
+
 	switch err := err.(type) {
 	case *serviceerror.Internal, *serviceerror.DataLoss:
 		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
@@ -3390,9 +3396,6 @@ func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog
 		return err
 	case *serviceerror.ClientVersionNotSupported:
 		scope.IncCounter(metrics.ServiceErrClientVersionNotSupportedCounter)
-		return err
-	case *serviceerror.DeadlineExceeded:
-		scope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
 		return err
 	}
 

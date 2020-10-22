@@ -234,12 +234,12 @@ func TestIsContextTimeoutError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	time.Sleep(10 * time.Millisecond)
-	require.True(t, IsDeadlineExceeded(ctx.Err()))
-	require.True(t, IsDeadlineExceeded(serviceerror.NewDeadlineExceeded("something")))
+	require.True(t, IsContextTimeoutErr(ctx.Err()))
+	require.True(t, IsContextTimeoutErr(serviceerror.NewDeadlineExceeded("something")))
 
-	require.False(t, IsDeadlineExceeded(errors.New("some random error")))
+	require.False(t, IsContextTimeoutErr(errors.New("some random error")))
 
 	ctx, cancel = context.WithCancel(context.Background())
 	cancel()
-	require.False(t, IsDeadlineExceeded(ctx.Err()))
+	require.False(t, IsContextTimeoutErr(ctx.Err()))
 }

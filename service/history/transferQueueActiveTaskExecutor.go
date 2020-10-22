@@ -386,7 +386,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 
 		// Check to see if the error is non-transient, in which case add RequestCancelFailed
 		// event and complete transfer task by setting the err = nil
-		if !common.IsServiceNonRetryableError(err) || common.IsDeadlineExceeded(err) {
+		if !common.IsServiceNonRetryableError(err) || common.IsContextTimeoutErr(err) {
 			// for retryable error just return
 			return err
 		}
@@ -475,7 +475,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 
 		// Check to see if the error is non-transient, in which case add SignalFailed
 		// event and complete transfer task by setting the err = nil
-		if !common.IsServiceNonRetryableError(err) || common.IsDeadlineExceeded(err) {
+		if !common.IsServiceNonRetryableError(err) || common.IsContextTimeoutErr(err) {
 			// for retryable error just return
 			return err
 		}
