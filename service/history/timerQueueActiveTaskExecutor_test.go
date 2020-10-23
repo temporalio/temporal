@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -1318,7 +1319,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Re
 	// need to override the workflow retry policy
 	executionInfo := mutableState.executionInfo
 	executionInfo.HasRetryPolicy = true
-	executionInfo.WorkflowExpirationTime = timestamp.TimeNowPtrUtcAddSeconds(1000)
+	executionInfo.RetryExpirationTime = timestamp.TimeNowPtrUtcAddSeconds(1000)
 	executionInfo.RetryMaximumAttempts = 10
 	executionInfo.RetryInitialInterval = timestamp.DurationFromSeconds(1)
 	executionInfo.RetryMaximumInterval = timestamp.DurationFromSeconds(1)
@@ -1484,10 +1485,10 @@ func (s *timerQueueActiveTaskExecutorSuite) createPersistenceMutableState(
 	lastEventVersion int64,
 ) *persistence.WorkflowMutableState {
 
-	if ms.GetVersionHistories() != nil {
-		currentVersionHistory, err := ms.GetVersionHistories().GetCurrentVersionHistory()
+	if ms.GetExecutionInfo().GetVersionHistories() != nil {
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())
 		s.NoError(err)
-		err = currentVersionHistory.AddOrUpdateItem(persistence.NewVersionHistoryItem(
+		err = versionhistory.AddOrUpdateItem(currentVersionHistory, versionhistory.NewItem(
 			lastEventID, lastEventVersion,
 		))
 		s.NoError(err)

@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
@@ -220,27 +221,26 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 	scheduleID int64,
 	activityVersion int64,
 	mutableState mutableState,
-	incomingRawVersionHistory *historyspb.VersionHistory,
+	incomingVersionHistory *historyspb.VersionHistory,
 ) (bool, error) {
 
-	if mutableState.GetVersionHistories() != nil {
-		currentVersionHistory, err := mutableState.GetVersionHistories().GetCurrentVersionHistory()
+	if mutableState.GetExecutionInfo().GetVersionHistories() != nil {
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())
 		if err != nil {
 			return false, err
 		}
 
-		lastLocalItem, err := currentVersionHistory.GetLastItem()
+		lastLocalItem, err := versionhistory.GetLastItem(currentVersionHistory)
 		if err != nil {
 			return false, err
 		}
 
-		incomingVersionHistory := persistence.NewVersionHistoryFromProto(incomingRawVersionHistory)
-		lastIncomingItem, err := incomingVersionHistory.GetLastItem()
+		lastIncomingItem, err := versionhistory.GetLastItem(incomingVersionHistory)
 		if err != nil {
 			return false, err
 		}
 
-		lcaItem, err := currentVersionHistory.FindLCAItem(incomingVersionHistory)
+		lcaItem, err := versionhistory.FindLCAItem(currentVersionHistory, incomingVersionHistory)
 		if err != nil {
 			return false, err
 		}
@@ -252,15 +252,15 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 		// case 2: local version history and incoming version history diverged
 		// case 2-1: local version history has the higher version and discard the incoming event
 		// case 2-2: incoming version history has the higher version and resend the missing incoming events
-		if currentVersionHistory.IsLCAAppendable(lcaItem) || incomingVersionHistory.IsLCAAppendable(lcaItem) {
+		if versionhistory.IsLCAAppendable(currentVersionHistory, lcaItem) || versionhistory.IsLCAAppendable(incomingVersionHistory, lcaItem) {
 			// case 1
-			if scheduleID > lcaItem.GetEventID() {
+			if scheduleID > lcaItem.GetEventId() {
 				return false, serviceerrors.NewRetryTaskV2(
 					resendMissingEventMessage,
 					namespaceID,
 					workflowID,
 					runID,
-					lcaItem.GetEventID(),
+					lcaItem.GetEventId(),
 					lcaItem.GetVersion(),
 					common.EmptyEventID,
 					common.EmptyVersion,
@@ -278,7 +278,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 					namespaceID,
 					workflowID,
 					runID,
-					lcaItem.GetEventID(),
+					lcaItem.GetEventId(),
 					lcaItem.GetVersion(),
 					common.EmptyEventID,
 					common.EmptyVersion,

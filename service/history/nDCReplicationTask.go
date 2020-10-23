@@ -57,7 +57,7 @@ type (
 		getEvents() []*historypb.HistoryEvent
 		getNewEvents() []*historypb.HistoryEvent
 		getLogger() log.Logger
-		getVersionHistory() *persistence.VersionHistory
+		getVersionHistory() *historyspb.VersionHistory
 		isWorkflowReset() bool
 
 		splitTask(taskStartTime time.Time) (nDCReplicationTask, nDCReplicationTask, error)
@@ -73,7 +73,7 @@ type (
 		eventTime      time.Time
 		events         []*historypb.HistoryEvent
 		newEvents      []*historypb.HistoryEvent
-		versionHistory *persistence.VersionHistory
+		versionHistory *historyspb.VersionHistory
 
 		startTime time.Time
 		logger    log.Logger
@@ -157,7 +157,7 @@ func newNDCReplicationTask(
 		eventTime:      eventTime,
 		events:         events,
 		newEvents:      newEvents,
-		versionHistory: persistence.NewVersionHistoryFromProto(versionHistory),
+		versionHistory: versionHistory,
 
 		startTime: taskStartTime,
 		logger:    logger,
@@ -212,7 +212,7 @@ func (t *nDCReplicationTaskImpl) getLogger() log.Logger {
 	return t.logger
 }
 
-func (t *nDCReplicationTaskImpl) getVersionHistory() *persistence.VersionHistory {
+func (t *nDCReplicationTaskImpl) getVersionHistory() *historyspb.VersionHistory {
 	return t.versionHistory
 }
 
@@ -257,13 +257,13 @@ func (t *nDCReplicationTaskImpl) splitTask(
 		}
 	}
 
-	newVersionHistory := persistence.NewVersionHistoryFromProto(&historyspb.VersionHistory{
+	newVersionHistory := &historyspb.VersionHistory{
 		BranchToken: nil,
 		Items: []*historyspb.VersionHistoryItem{{
 			EventId: newLastEvent.GetEventId(),
 			Version: newLastEvent.GetVersion(),
 		}},
-	})
+	}
 
 	logger := t.logger.WithTags(
 		tag.WorkflowID(t.getExecution().GetWorkflowId()),

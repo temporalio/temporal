@@ -59,7 +59,7 @@ func (m *MocknDCConflictResolver) EXPECT() *MocknDCConflictResolverMockRecorder 
 }
 
 // prepareMutableState mocks base method.
-func (m *MocknDCConflictResolver) prepareMutableState(ctx context.Context, branchIndex int, incomingVersion int64) (mutableState, bool, error) {
+func (m *MocknDCConflictResolver) prepareMutableState(ctx context.Context, branchIndex int32, incomingVersion int64) (mutableState, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "prepareMutableState", ctx, branchIndex, incomingVersion)
 	ret0, _ := ret[0].(mutableState)

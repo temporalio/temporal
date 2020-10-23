@@ -38,6 +38,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
@@ -48,6 +49,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -122,7 +124,7 @@ func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {
 	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(testGlobalNamespaceEntry)
 	s.NotNil(mutableState)
 	s.NotNil(stateBuilder)
-	s.NotNil(mutableState.GetVersionHistories())
+	s.NotNil(mutableState.GetExecutionInfo().GetVersionHistories())
 }
 
 func (s *nDCStateRebuilderSuite) TestApplyEvents() {
@@ -336,13 +338,13 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	rebuildExecutionInfo := rebuildMutableState.GetExecutionInfo()
 	s.Equal(targetNamespaceID, rebuildExecutionInfo.NamespaceId)
 	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowId)
-	s.Equal(targetRunID, rebuildExecutionInfo.ExecutionState.RunId)
+	s.Equal(targetRunID, rebuildMutableState.GetExecutionState().RunId)
 	s.Equal(int64(historySize1+historySize2), rebuiltHistorySize)
-	s.Equal(persistence.NewVersionHistories(
-		persistence.NewVersionHistory(
+	s.Equal(versionhistory.NewVHS(
+		versionhistory.New(
 			targetBranchToken,
-			[]*persistence.VersionHistoryItem{persistence.NewVersionHistoryItem(lastEventID, version)},
+			[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID, version)},
 		),
-	), rebuildMutableState.GetVersionHistories())
+	), rebuildMutableState.GetExecutionInfo().GetVersionHistories())
 	s.Equal(rebuildMutableState.GetExecutionInfo().StartTime, now)
 }

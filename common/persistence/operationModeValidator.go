@@ -43,7 +43,7 @@ func ValidateCreateWorkflowModeState(
 	newWorkflowSnapshot InternalWorkflowSnapshot,
 ) error {
 
-	workflowState := newWorkflowSnapshot.ExecutionInfo.ExecutionState.State
+	workflowState := newWorkflowSnapshot.ExecutionState.State
 	if err := checkWorkflowState(workflowState); err != nil {
 		return err
 	}
@@ -84,13 +84,13 @@ func ValidateUpdateWorkflowModeState(
 	newWorkflowSnapshot *InternalWorkflowSnapshot,
 ) error {
 
-	currentWorkflowState := currentWorkflowMutation.ExecutionInfo.ExecutionState.State
+	currentWorkflowState := currentWorkflowMutation.ExecutionState.State
 	if err := checkWorkflowState(currentWorkflowState); err != nil {
 		return err
 	}
 	var newWorkflowState *enumsspb.WorkflowExecutionState
 	if newWorkflowSnapshot != nil {
-		newWorkflowState = &newWorkflowSnapshot.ExecutionInfo.ExecutionState.State
+		newWorkflowState = &newWorkflowSnapshot.ExecutionState.State
 		if err := checkWorkflowState(*newWorkflowState); err != nil {
 			return err
 		}
@@ -166,20 +166,20 @@ func ValidateConflictResolveWorkflowModeState(
 	currentWorkflowMutation *InternalWorkflowMutation,
 ) error {
 
-	resetWorkflowState := resetWorkflowSnapshot.ExecutionInfo.ExecutionState.State
+	resetWorkflowState := resetWorkflowSnapshot.ExecutionState.State
 	if err := checkWorkflowState(resetWorkflowState); err != nil {
 		return err
 	}
 	var newWorkflowState *enumsspb.WorkflowExecutionState
 	if newWorkflowSnapshot != nil {
-		newWorkflowState = &newWorkflowSnapshot.ExecutionInfo.ExecutionState.State
+		newWorkflowState = &newWorkflowSnapshot.ExecutionState.State
 		if err := checkWorkflowState(*newWorkflowState); err != nil {
 			return err
 		}
 	}
 	var currentWorkflowState *enumsspb.WorkflowExecutionState
 	if currentWorkflowMutation != nil {
-		currentWorkflowState = &currentWorkflowMutation.ExecutionInfo.ExecutionState.State
+		currentWorkflowState = &currentWorkflowMutation.ExecutionState.State
 		if err := checkWorkflowState(*currentWorkflowState); err != nil {
 			return err
 		}

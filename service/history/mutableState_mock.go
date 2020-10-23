@@ -29,9 +29,6 @@
 package history
 
 import (
-	reflect "reflect"
-	time "time"
-
 	gomock "github.com/golang/mock/gomock"
 	command "go.temporal.io/api/command/v1"
 	common "go.temporal.io/api/common/v1"
@@ -46,6 +43,8 @@ import (
 	cache "go.temporal.io/server/common/cache"
 	definition "go.temporal.io/server/common/definition"
 	persistence "go.temporal.io/server/common/persistence"
+	reflect "reflect"
+	time "time"
 )
 
 // MockmutableState is a mock of mutableState interface.
@@ -1048,20 +1047,6 @@ func (mr *MockmutableStateMockRecorder) GetCurrentBranchToken() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentBranchToken", reflect.TypeOf((*MockmutableState)(nil).GetCurrentBranchToken))
 }
 
-// GetVersionHistories mocks base method.
-func (m *MockmutableState) GetVersionHistories() *persistence.VersionHistories {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVersionHistories")
-	ret0, _ := ret[0].(*persistence.VersionHistories)
-	return ret0
-}
-
-// GetVersionHistories indicates an expected call of GetVersionHistories.
-func (mr *MockmutableStateMockRecorder) GetVersionHistories() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersionHistories", reflect.TypeOf((*MockmutableState)(nil).GetVersionHistories))
-}
-
 // GetCurrentVersion mocks base method.
 func (m *MockmutableState) GetCurrentVersion() int64 {
 	m.ctrl.T.Helper()
@@ -1077,10 +1062,10 @@ func (mr *MockmutableStateMockRecorder) GetCurrentVersion() *gomock.Call {
 }
 
 // GetExecutionInfo mocks base method.
-func (m *MockmutableState) GetExecutionInfo() *persistence.WorkflowExecutionInfo {
+func (m *MockmutableState) GetExecutionInfo() *persistenceblobs.WorkflowExecutionInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetExecutionInfo")
-	ret0, _ := ret[0].(*persistence.WorkflowExecutionInfo)
+	ret0, _ := ret[0].(*persistenceblobs.WorkflowExecutionInfo)
 	return ret0
 }
 
@@ -1088,6 +1073,20 @@ func (m *MockmutableState) GetExecutionInfo() *persistence.WorkflowExecutionInfo
 func (mr *MockmutableStateMockRecorder) GetExecutionInfo() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionInfo", reflect.TypeOf((*MockmutableState)(nil).GetExecutionInfo))
+}
+
+// GetExecutionState mocks base method.
+func (m *MockmutableState) GetExecutionState() *persistenceblobs.WorkflowExecutionState {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExecutionState")
+	ret0, _ := ret[0].(*persistenceblobs.WorkflowExecutionState)
+	return ret0
+}
+
+// GetExecutionState indicates an expected call of GetExecutionState.
+func (mr *MockmutableStateMockRecorder) GetExecutionState() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionState", reflect.TypeOf((*MockmutableState)(nil).GetExecutionState))
 }
 
 // GetHistoryBuilder mocks base method.
@@ -2208,18 +2207,16 @@ func (mr *MockmutableStateMockRecorder) SetHistoryTree(treeID interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistoryTree", reflect.TypeOf((*MockmutableState)(nil).SetHistoryTree), treeID)
 }
 
-// SetVersionHistories mocks base method.
-func (m *MockmutableState) SetVersionHistories(arg0 *persistence.VersionHistories) error {
+// SetNextEventID mocks base method.
+func (m *MockmutableState) SetNextEventID(nextEventID int64) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetVersionHistories", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "SetNextEventID", nextEventID)
 }
 
-// SetVersionHistories indicates an expected call of SetVersionHistories.
-func (mr *MockmutableStateMockRecorder) SetVersionHistories(arg0 interface{}) *gomock.Call {
+// SetNextEventID indicates an expected call of SetNextEventID.
+func (mr *MockmutableStateMockRecorder) SetNextEventID(nextEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVersionHistories", reflect.TypeOf((*MockmutableState)(nil).SetVersionHistories), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetNextEventID", reflect.TypeOf((*MockmutableState)(nil).SetNextEventID), nextEventID)
 }
 
 // UpdateActivity mocks base method.

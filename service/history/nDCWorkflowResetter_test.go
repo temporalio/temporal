@@ -34,12 +34,14 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
@@ -133,11 +135,11 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(500)
 	version := int64(123)
-	versionHistory := persistence.NewVersionHistory(
+	versionHistory := versionhistory.New(
 		branchToken,
-		[]*persistence.VersionHistoryItem{persistence.NewVersionHistoryItem(lastEventID, version)},
+		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID, version)},
 	)
-	versionHistories := persistence.NewVersionHistories(versionHistory)
+	versionHistories := versionhistory.NewVHS(versionHistory)
 
 	baseEventID := lastEventID - 100
 	baseVersion := version
@@ -147,7 +149,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	rebuiltHistorySize := int64(9999)
 	newBranchToken := []byte("other random branch token")
 
-	s.mockBaseMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
 	mockBaseWorkflowReleaseFnCalled := false
 	mockBaseWorkflowReleaseFn := func(err error) {
@@ -213,17 +215,17 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(500)
 	version := int64(123)
-	versionHistory := persistence.NewVersionHistory(
+	versionHistory := versionhistory.New(
 		branchToken,
-		[]*persistence.VersionHistoryItem{persistence.NewVersionHistoryItem(lastEventID, version)},
+		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID, version)},
 	)
-	versionHistories := persistence.NewVersionHistories(versionHistory)
+	versionHistories := versionhistory.NewVHS(versionHistory)
 	baseEventID := lastEventID + 100
 	baseVersion := version
 	incomingFirstEventID := baseEventID + 12
 	incomingFirstEventVersion := baseVersion + 3
 
-	s.mockBaseMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
 	mockBaseWorkflowReleaseFn := func(err error) {
 	}

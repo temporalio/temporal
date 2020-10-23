@@ -217,6 +217,7 @@ const (
 	FlagTLSKeyPath                       = "tls_key_path"
 	FlagTLSCaPath                        = "tls_ca_path"
 	FlagTLSEnableHostVerification        = "tls_enable_host_verification"
+	FlagTLSServerName                    = "tls_server_name"
 	FlagDLQType                          = "dlq_type"
 	FlagDLQTypeWithAlias                 = FlagDLQType + ", dt"
 	FlagMaxMessageCount                  = "max_message_count"

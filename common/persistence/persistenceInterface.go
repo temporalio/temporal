@@ -31,7 +31,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 )
@@ -207,11 +206,12 @@ type (
 		RequestCancelInfos  map[int64]*persistenceblobs.RequestCancelInfo
 		SignalInfos         map[int64]*persistenceblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
-		ExecutionInfo       *WorkflowExecutionInfo
+		ExecutionInfo       *persistenceblobs.WorkflowExecutionInfo
+		ExecutionState      *persistenceblobs.WorkflowExecutionState
+		NextEventID         int64
 
-		BufferedEvents   []*serialization.DataBlob
-		VersionHistories *historyspb.VersionHistories
-		Checksum         persistenceblobs.Checksum
+		BufferedEvents []*serialization.DataBlob
+		Checksum       persistenceblobs.Checksum
 	}
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
@@ -262,9 +262,9 @@ type (
 
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
 	InternalWorkflowMutation struct {
-		ExecutionInfo    *WorkflowExecutionInfo
-		VersionHistories *historyspb.VersionHistories
-		StartVersion     int64
+		ExecutionInfo    *persistenceblobs.WorkflowExecutionInfo
+		ExecutionState   *persistenceblobs.WorkflowExecutionState
+		NextEventID      int64
 		LastWriteVersion int64
 
 		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
@@ -293,10 +293,10 @@ type (
 
 	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
 	InternalWorkflowSnapshot struct {
-		ExecutionInfo    *WorkflowExecutionInfo
-		VersionHistories *historyspb.VersionHistories
-		StartVersion     int64
+		ExecutionInfo    *persistenceblobs.WorkflowExecutionInfo
+		ExecutionState   *persistenceblobs.WorkflowExecutionState
 		LastWriteVersion int64
+		NextEventID      int64
 
 		ActivityInfos       []*persistenceblobs.ActivityInfo
 		TimerInfos          []*persistenceblobs.TimerInfo
@@ -351,8 +351,8 @@ type (
 
 	// InternalListConcreteExecutionsResponse is the response to ListConcreteExecutions for Persistence Interface
 	InternalListConcreteExecutionsResponse struct {
-		ExecutionInfos []*WorkflowExecutionInfo
-		NextPageToken  []byte
+		States        []*InternalWorkflowMutableState
+		NextPageToken []byte
 	}
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch

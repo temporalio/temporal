@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -173,9 +174,10 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 		baseWorkflow.getReleaseFn()(retError)
 	}()
 
-	baseVersionHistories := baseWorkflow.getMutableState().GetVersionHistories()
-	index, err := baseVersionHistories.FindFirstVersionHistoryIndexByItem(
-		persistence.NewVersionHistoryItem(baseLastEventID, baseLastEventVersion),
+	baseVersionHistories := baseWorkflow.getMutableState().GetExecutionInfo().GetVersionHistories()
+	index, err := versionhistory.FindFirstVersionHistoryIndexByItem(
+		baseVersionHistories,
+		versionhistory.NewItem(baseLastEventID, baseLastEventVersion),
 	)
 	if err != nil {
 		// the base event and incoming event are from different branch
@@ -193,7 +195,7 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 		)
 	}
 
-	baseVersionHistory, err := baseVersionHistories.GetVersionHistory(index)
+	baseVersionHistory, err := versionhistory.GetVersionHistory(baseVersionHistories, index)
 	if err != nil {
 		return nil, err
 	}

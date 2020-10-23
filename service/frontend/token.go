@@ -26,13 +26,13 @@ package frontend
 
 import (
 	"go.temporal.io/server/api/adminservice/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/common/persistence"
 )
 
 func generatePaginationToken(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
-	versionHistories *persistence.VersionHistories,
+	versionHistories *historyspb.VersionHistories,
 ) *tokenspb.RawHistoryContinuation {
 
 	execution := request.Execution
@@ -44,7 +44,7 @@ func generatePaginationToken(
 		StartEventVersion: request.GetStartEventVersion(),
 		EndEventId:        request.GetEndEventId(),
 		EndEventVersion:   request.GetEndEventVersion(),
-		VersionHistories:  versionHistories.ToProto(),
+		VersionHistories:  versionHistories,
 		PersistenceToken:  nil, // this is the initialized value
 	}
 }

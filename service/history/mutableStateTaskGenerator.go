@@ -142,7 +142,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
 	runTimeoutDuration := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
 	runTimeoutDuration = runTimeoutDuration + firstWorkflowTaskDelayDuration
 	workflowExpirationTimestamp := now.Add(runTimeoutDuration)
-	wfExpTime := timestamp.TimeValue(executionInfo.WorkflowExpirationTime)
+	wfExpTime := timestamp.TimeValue(executionInfo.RetryExpirationTime)
 	if !wfExpTime.IsZero() && workflowExpirationTimestamp.After(wfExpTime) {
 		workflowExpirationTimestamp = wfExpTime
 	}
@@ -260,7 +260,7 @@ func (r *mutableStateTaskGeneratorImpl) generateScheduleWorkflowTaskTasks(
 	})
 
 	if r.mutableState.IsStickyTaskQueueEnabled() {
-		scheduledTime := timestamp.TimeValue(workflowTask.ScheduledTimestamp)
+		scheduledTime := timestamp.TimeValue(workflowTask.ScheduledTime)
 		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
 
 		r.mutableState.AddTimerTasks(&persistence.WorkflowTaskTimeoutTask{
@@ -288,7 +288,7 @@ func (r *mutableStateTaskGeneratorImpl) generateStartWorkflowTaskTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflowTaskInfo: %v", workflowTaskScheduleID))
 	}
 
-	startedTime := timestamp.TimeValue(workflowTask.StartedTimestamp)
+	startedTime := timestamp.TimeValue(workflowTask.StartedTime)
 	workflowTaskTimeout := timestamp.DurationValue(workflowTask.WorkflowTaskTimeout)
 
 	r.mutableState.AddTimerTasks(&persistence.WorkflowTaskTimeoutTask{

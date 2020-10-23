@@ -34,13 +34,14 @@ import (
 
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
 type (
 	nDCConflictResolver interface {
 		prepareMutableState(
 			ctx context.Context,
-			branchIndex int,
+			branchIndex int32,
 			incomingVersion int64,
 		) (mutableState, bool, error)
 	}
@@ -76,11 +77,11 @@ func newNDCConflictResolver(
 
 func (r *nDCConflictResolverImpl) prepareMutableState(
 	ctx context.Context,
-	branchIndex int,
+	branchIndex int32,
 	incomingVersion int64,
 ) (mutableState, bool, error) {
 
-	versionHistories := r.mutableState.GetVersionHistories()
+	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	currentVersionHistoryIndex := versionHistories.GetCurrentVersionHistoryIndex()
 
 	// replication task to be applied to current branch
@@ -88,11 +89,11 @@ func (r *nDCConflictResolverImpl) prepareMutableState(
 		return r.mutableState, false, nil
 	}
 
-	currentVersionHistory, err := versionHistories.GetVersionHistory(currentVersionHistoryIndex)
+	currentVersionHistory, err := versionhistory.GetVersionHistory(versionHistories, currentVersionHistoryIndex)
 	if err != nil {
 		return nil, false, err
 	}
-	currentLastItem, err := currentVersionHistory.GetLastItem()
+	currentLastItem, err := versionhistory.GetLastItem(currentVersionHistory)
 	if err != nil {
 		return nil, false, err
 	}
@@ -118,25 +119,26 @@ func (r *nDCConflictResolverImpl) prepareMutableState(
 
 func (r *nDCConflictResolverImpl) rebuild(
 	ctx context.Context,
-	branchIndex int,
+	branchIndex int32,
 	requestID string,
 ) (mutableState, error) {
 
-	versionHistories := r.mutableState.GetVersionHistories()
-	replayVersionHistory, err := versionHistories.GetVersionHistory(branchIndex)
+	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
+	replayVersionHistory, err := versionhistory.GetVersionHistory(versionHistories, branchIndex)
 	if err != nil {
 		return nil, err
 	}
-	lastItem, err := replayVersionHistory.GetLastItem()
+	lastItem, err := versionhistory.GetLastItem(replayVersionHistory)
 	if err != nil {
 		return nil, err
 	}
 
 	executionInfo := r.mutableState.GetExecutionInfo()
+	executionState := r.mutableState.GetExecutionState()
 	workflowIdentifier := definition.NewWorkflowIdentifier(
 		executionInfo.NamespaceId,
 		executionInfo.WorkflowId,
-		executionInfo.ExecutionState.RunId,
+		executionState.RunId,
 	)
 
 	rebuildMutableState, rebuiltHistorySize, err := r.stateRebuilder.rebuild(
@@ -144,7 +146,7 @@ func (r *nDCConflictResolverImpl) rebuild(
 		executionInfo.StartTime,
 		workflowIdentifier,
 		replayVersionHistory.GetBranchToken(),
-		lastItem.GetEventID(),
+		lastItem.GetEventId(),
 		lastItem.GetVersion(),
 		workflowIdentifier,
 		replayVersionHistory.GetBranchToken(),
@@ -155,13 +157,13 @@ func (r *nDCConflictResolverImpl) rebuild(
 	}
 
 	// after rebuilt verification
-	rebuildVersionHistories := rebuildMutableState.GetVersionHistories()
-	rebuildVersionHistory, err := rebuildVersionHistories.GetCurrentVersionHistory()
+	rebuildVersionHistories := rebuildMutableState.GetExecutionInfo().GetVersionHistories()
+	rebuildVersionHistory, err := versionhistory.GetCurrentVersionHistory(rebuildVersionHistories)
 	if err != nil {
 		return nil, err
 	}
 
-	if !rebuildVersionHistory.Equals(replayVersionHistory) {
+	if !rebuildVersionHistory.Equal(replayVersionHistory) {
 		return nil, serviceerror.NewInternal("nDCConflictResolver encounter mismatch version history after rebuild")
 	}
 
@@ -170,12 +172,10 @@ func (r *nDCConflictResolverImpl) rebuild(
 	//
 	// caller can use the IsRebuilt function in VersionHistories
 	// telling whether mutable state is rebuilt, before apply new history events
-	if err := versionHistories.SetCurrentVersionHistoryIndex(branchIndex); err != nil {
+	if err := versionhistory.SetCurrentVersionHistoryIndex(versionHistories, branchIndex); err != nil {
 		return nil, err
 	}
-	if err = rebuildMutableState.SetVersionHistories(versionHistories); err != nil {
-		return nil, err
-	}
+	rebuildMutableState.GetExecutionInfo().VersionHistories = versionHistories
 	// set the update condition from original mutable state
 	rebuildMutableState.SetUpdateCondition(r.mutableState.GetUpdateCondition())
 

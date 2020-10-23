@@ -59,23 +59,20 @@ func verifyMutableStateChecksum(
 
 func newMutableStateChecksumPayload(ms mutableState) *checksumspb.MutableStateChecksumPayload {
 	executionInfo := ms.GetExecutionInfo()
+	executionState := ms.GetExecutionState()
 	payload := &checksumspb.MutableStateChecksumPayload{
 		CancelRequested:         executionInfo.CancelRequested,
-		State:                   executionInfo.ExecutionState.State,
+		State:                   executionState.State,
 		LastFirstEventId:        executionInfo.LastFirstEventId,
-		NextEventId:             executionInfo.NextEventId,
+		NextEventId:             ms.GetNextEventID(),
 		LastProcessedEventId:    executionInfo.LastProcessedEvent,
-		SignalCount:             int64(executionInfo.SignalCount),
-		WorkflowTaskAttempt:     int32(executionInfo.WorkflowTaskAttempt),
+		SignalCount:             executionInfo.SignalCount,
+		WorkflowTaskAttempt:     executionInfo.WorkflowTaskAttempt,
 		WorkflowTaskScheduledId: executionInfo.WorkflowTaskScheduleId,
 		WorkflowTaskStartedId:   executionInfo.WorkflowTaskStartedId,
 		WorkflowTaskVersion:     executionInfo.WorkflowTaskVersion,
 		StickyTaskQueueName:     executionInfo.StickyTaskQueue,
-	}
-
-	versionHistories := ms.GetVersionHistories()
-	if versionHistories != nil {
-		payload.VersionHistories = versionHistories.ToProto()
+		VersionHistories:        executionInfo.VersionHistories,
 	}
 
 	// for each of the pendingXXX ids below, sorting is needed to guarantee that
