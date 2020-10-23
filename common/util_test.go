@@ -230,18 +230,18 @@ func Test_FromConfigToRetryPolicy(t *testing.T) {
 	assert.Equal(t, int32(5), defaultSettings.MaximumAttempts)
 }
 
-func TestIsContextTimeoutErr(t *testing.T) {
+func TestIsContextDeadlineExceededErr(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	time.Sleep(10 * time.Millisecond)
-	require.True(t, IsContextTimeoutErr(ctx.Err()))
-	require.True(t, IsContextTimeoutErr(serviceerror.NewDeadlineExceeded("something")))
+	require.True(t, IsContextDeadlineExceededErr(ctx.Err()))
+	require.True(t, IsContextDeadlineExceededErr(serviceerror.NewDeadlineExceeded("something")))
 
-	require.False(t, IsContextTimeoutErr(errors.New("some random error")))
+	require.False(t, IsContextDeadlineExceededErr(errors.New("some random error")))
 
 	ctx, cancel = context.WithCancel(context.Background())
 	cancel()
-	require.False(t, IsContextTimeoutErr(ctx.Err()))
+	require.False(t, IsContextDeadlineExceededErr(ctx.Err()))
 }
 
 func TestIsContextCanceledErr(t *testing.T) {

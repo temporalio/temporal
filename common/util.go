@@ -256,21 +256,21 @@ func IsServiceNonRetryableError(err error) bool {
 		return true
 	}
 
-	if IsContextTimeoutErr(err) {
+	if IsContextDeadlineExceededErr(err) {
 		return true
 	}
 
 	return false
 }
 
-// IsContextTimeoutErr checks if the error is context timeout error
-func IsContextTimeoutErr(err error) bool {
+// IsContextDeadlineExceededErr checks if the error is context.DeadlineExceeded or serviceerror.DeadlineExceeded error
+func IsContextDeadlineExceededErr(err error) bool {
 	var deadlineExceededSvcErr *serviceerror.DeadlineExceeded
 	return errors.Is(err, context.DeadlineExceeded) ||
 		errors.As(err, &deadlineExceededSvcErr)
 }
 
-// IsContextTimeoutErr checks if the error is context timeout error
+// IsContextCanceledErr checks if the error is context.Canceled or serviceerror.Canceled error
 func IsContextCanceledErr(err error) bool {
 	var canceledSvcErr *serviceerror.Canceled
 	return errors.Is(err, context.Canceled) ||

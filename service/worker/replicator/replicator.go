@@ -247,7 +247,7 @@ func isRetryableError(err error) bool {
 		return true
 	}
 
-	if common.IsContextTimeoutErr(err) {
+	if common.IsContextDeadlineExceededErr(err) {
 		return true
 	}
 

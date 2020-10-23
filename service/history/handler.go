@@ -1758,7 +1758,7 @@ func (h *Handler) updateErrorMetric(
 	err error,
 ) {
 
-	if common.IsContextTimeoutErr(err) || common.IsContextCanceledErr(err) {
+	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
 		return
 	}

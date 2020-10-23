@@ -287,7 +287,7 @@ func (t *queueTaskBase) HandleErr(
 func (t *queueTaskBase) RetryErr(
 	err error,
 ) bool {
-	if common.IsContextTimeoutErr(err) {
+	if common.IsContextDeadlineExceededErr(err) {
 		return false
 	}
 	return true
