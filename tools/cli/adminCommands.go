@@ -65,7 +65,7 @@ func AdminShowWorkflow(c *cli.Context) {
 
 	session := connectToCassandra(c)
 	serializer := persistence.NewPayloadSerializer()
-	var history []*serialization.DataBlob
+	var history []*commonpb.DataBlob
 	if len(tid) != 0 {
 		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
@@ -93,9 +93,9 @@ func AdminShowWorkflow(c *cli.Context) {
 	for idx, b := range history {
 		totalSize += len(b.Data)
 		fmt.Printf("======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
-		historyBatchThrift, err := serializer.DeserializeBatchEvents(b)
+		historyBatchThrift, err := serializer.DeserializeEvents(b)
 		if err != nil {
-			ErrorAndExit("DeserializeBatchEvents err", err)
+			ErrorAndExit("DeserializeEvents err", err)
 		}
 		historyBatch := historyBatchThrift
 		allEvents.Events = append(allEvents.Events, historyBatch...)

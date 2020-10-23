@@ -769,7 +769,7 @@ func decodeReplicationTask(
 	switch task.GetTaskType() {
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		historyV2 := task.GetHistoryTaskV2Attributes()
-		events, err := serializer.DeserializeBatchEvents(
+		events, err := serializer.DeserializeEvents(
 			persistence.NewDataBlobFromProto(historyV2.Events),
 		)
 		if err != nil {
@@ -777,7 +777,7 @@ func decodeReplicationTask(
 		}
 		var newRunEvents []*historypb.HistoryEvent
 		if historyV2.GetNewRunEvents() != nil {
-			newRunEvents, err = serializer.DeserializeBatchEvents(
+			newRunEvents, err = serializer.DeserializeEvents(
 				persistence.NewDataBlobFromProto(historyV2.NewRunEvents),
 			)
 			if err != nil {

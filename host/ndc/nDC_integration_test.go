@@ -43,7 +43,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 
@@ -1640,7 +1639,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 	version int64,
 	workflowType string,
 	taskQueue string,
-) *serialization.DataBlob {
+) *commonpb.DataBlob {
 
 	// TODO temporary code to generate first event & version history
 	//  we should generate these as part of modeled based testing
@@ -1681,24 +1680,10 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 		}},
 	}
 
-	eventBlob, err := s.serializer.SerializeBatchEvents([]*historypb.HistoryEvent{newRunFirstEvent}, enumspb.ENCODING_TYPE_PROTO3)
+	eventBlob, err := s.serializer.SerializeEvents([]*historypb.HistoryEvent{newRunFirstEvent}, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
 
 	return eventBlob
-}
-
-func (s *nDCIntegrationTestSuite) toProtoDataBlob(
-	blob *serialization.DataBlob,
-) *commonpb.DataBlob {
-
-	if blob == nil {
-		return nil
-	}
-
-	return &commonpb.DataBlob{
-		EncodingType: blob.Encoding,
-		Data:         blob.Data,
-	}
 }
 
 func (s *nDCIntegrationTestSuite) generateEventBlobs(
@@ -1707,7 +1692,7 @@ func (s *nDCIntegrationTestSuite) generateEventBlobs(
 	workflowType string,
 	taskqueue string,
 	batch *historypb.History,
-) (*serialization.DataBlob, *serialization.DataBlob) {
+) (*commonpb.DataBlob, *commonpb.DataBlob) {
 	// TODO temporary code to generate next run first event
 	//  we should generate these as part of modeled based testing
 	lastEvent := batch.Events[len(batch.Events)-1]
@@ -1716,7 +1701,7 @@ func (s *nDCIntegrationTestSuite) generateEventBlobs(
 	)
 	// must serialize events batch after attempt on continue as new as generateNewRunHistory will
 	// modify the NewExecutionRunId attr
-	eventBlob, err := s.serializer.SerializeBatchEvents(batch.Events, enumspb.ENCODING_TYPE_PROTO3)
+	eventBlob, err := s.serializer.SerializeEvents(batch.Events, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
 	return eventBlob, newRunEventBlob
 }
@@ -1739,8 +1724,8 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 				RunId:      runID,
 			},
 			VersionHistoryItems: versionHistory.GetItems(),
-			Events:              s.toProtoDataBlob(eventBlob),
-			NewRunEvents:        s.toProtoDataBlob(newRunEventBlob),
+			Events:              eventBlob,
+			NewRunEvents:        newRunEventBlob,
 		}
 
 		resp, err := historyClient.ReplicateEventsV2(host.NewContext(), req)
@@ -1773,8 +1758,8 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 				WorkflowId:          workflowID,
 				RunId:               runID,
 				VersionHistoryItems: versionHistory.GetItems(),
-				Events:              s.toProtoDataBlob(eventBlob),
-				NewRunEvents:        s.toProtoDataBlob(newRunEventBlob),
+				Events:              eventBlob,
+				NewRunEvents:        newRunEventBlob,
 			}},
 		}
 
