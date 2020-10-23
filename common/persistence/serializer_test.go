@@ -38,7 +38,6 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
@@ -126,37 +125,6 @@ func (s *temporalSerializerSuite) TestSerializer() {
 		},
 	}
 
-	histories := &historyspb.VersionHistories{
-		Histories: []*historyspb.VersionHistory{
-			{
-				BranchToken: []byte{1},
-				Items: []*historyspb.VersionHistoryItem{
-					{
-						EventId: 1,
-						Version: 0,
-					},
-					{
-						EventId: 2,
-						Version: 1,
-					},
-				},
-			},
-			{
-				BranchToken: []byte{2},
-				Items: []*historyspb.VersionHistoryItem{
-					{
-						EventId: 2,
-						Version: 0,
-					},
-					{
-						EventId: 3,
-						Version: 1,
-					},
-				},
-			},
-		},
-	}
-
 	for i := 0; i < concurrency; i++ {
 
 		go func() {
@@ -181,16 +149,16 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			// serialize batch events
 
-			nilEvents, err := serializer.SerializeBatchEvents(nil, enumspb.ENCODING_TYPE_PROTO3)
+			nilEvents, err := serializer.SerializeEvents(nil, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(nilEvents)
 
-			_, err = serializer.SerializeBatchEvents(history0.Events, enumspb.ENCODING_TYPE_UNSPECIFIED)
+			_, err = serializer.SerializeEvents(history0.Events, enumspb.ENCODING_TYPE_UNSPECIFIED)
 			s.NotNil(err)
 			_, ok = err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
-			dsProto, err := serializer.SerializeBatchEvents(history0.Events, enumspb.ENCODING_TYPE_PROTO3)
+			dsProto, err := serializer.SerializeEvents(history0.Events, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(dsProto)
 
@@ -209,16 +177,6 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.NotNil(mProto)
 
-			// serialize version histories
-
-			nilHistories, err := serializer.SerializeVersionHistories(nil, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.Nil(nilHistories)
-
-			historiesProto, err := serializer.SerializeVersionHistories(histories, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(historiesProto)
-
 			// deserialize event
 
 			dNilEvent, err := serializer.DeserializeEvent(nilEvent)
@@ -229,13 +187,13 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.True(reflect.DeepEqual(event0, event2))
 
-			// deserialize batch events
+			// deserialize events
 
-			dNilEvents, err := serializer.DeserializeBatchEvents(nilEvents)
+			dNilEvents, err := serializer.DeserializeEvents(nilEvents)
 			s.Nil(err)
 			s.Nil(dNilEvents)
 
-			events, err := serializer.DeserializeBatchEvents(dsProto)
+			events, err := serializer.DeserializeEvents(dsProto)
 			history2 := &historypb.History{Events: events}
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history2))
@@ -307,20 +265,6 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			badBinaries2, err := serializer.DeserializeBadBinaries(badBinariesProto)
 			s.Nil(err)
 			s.True(reflect.DeepEqual(badBinaries2, badBinaries0))
-
-			// serialize version histories
-
-			dNilHistories, err := serializer.DeserializeVersionHistories(nil)
-			s.Nil(err)
-			s.Equal(&historyspb.VersionHistories{}, dNilHistories)
-
-			dNilHistories2, err := serializer.DeserializeVersionHistories(nilHistories)
-			s.Nil(err)
-			s.Equal(&historyspb.VersionHistories{}, dNilHistories2)
-
-			dHistoriesProto, err := serializer.DeserializeVersionHistories(historiesProto)
-			s.Nil(err)
-			s.True(reflect.DeepEqual(dHistoriesProto, histories))
 		}()
 	}
 

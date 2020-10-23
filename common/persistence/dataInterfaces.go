@@ -998,7 +998,7 @@ type (
 	// ReadRawHistoryBranchResponse is the response to ReadHistoryBranchRequest
 	ReadRawHistoryBranchResponse struct {
 		// HistoryEventBlobs history event blobs
-		HistoryEventBlobs []*serialization.DataBlob
+		HistoryEventBlobs []*commonpb.DataBlob
 		// Token to read next page if there are more events beyond page size.
 		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
 		// Empty means we have reached the last page, not need to continue

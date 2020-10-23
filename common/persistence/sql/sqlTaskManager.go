@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -94,7 +95,7 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 				RangeHash:    tqHash,
 				TaskQueueID:  tqId,
 				Data:         blob.Data,
-				DataEncoding: blob.Encoding.String(),
+				DataEncoding: blob.EncodingType.String(),
 			}
 			rows = []sqlplugin.TaskQueuesRow{row}
 			if _, err := m.db.InsertIntoTaskQueues(&row); err != nil {
@@ -141,7 +142,7 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 			TaskQueueID:  tqId,
 			RangeID:      row.RangeID + 1,
 			Data:         blob.Data,
-			DataEncoding: blob.Encoding.String(),
+			DataEncoding: blob.EncodingType.String(),
 		})
 		if err1 != nil {
 			return err1
@@ -173,7 +174,7 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 	tq := request.TaskQueueInfo
 	tq.LastUpdateTime = timestamp.TimeNowPtrUtc()
 
-	var blob serialization.DataBlob
+	var blob commonpb.DataBlob
 	if request.TaskQueueInfo.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
 		tq.ExpiryTime = stickyTaskQueueTTL()
 		if err != nil {
@@ -188,7 +189,7 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 			TaskQueueID:  tqId,
 			RangeID:      request.RangeID,
 			Data:         blob.Data,
-			DataEncoding: blob.Encoding.String(),
+			DataEncoding: blob.EncodingType.String(),
 		}); err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("UpdateTaskQueue operation failed. Failed to make sticky task queue. Error: %v", err))
 		}
@@ -208,7 +209,7 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 			TaskQueueID:  tqId,
 			RangeID:      request.RangeID,
 			Data:         blob.Data,
-			DataEncoding: blob.Encoding.String(),
+			DataEncoding: blob.EncodingType.String(),
 		})
 		if err1 != nil {
 			return err1
@@ -407,7 +408,7 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 			TaskQueueID:  tqId,
 			TaskID:       v.GetTaskId(),
 			Data:         blob.Data,
-			DataEncoding: blob.Encoding.String(),
+			DataEncoding: blob.EncodingType.String(),
 		}
 	}
 	var resp *persistence.CreateTasksResponse

@@ -158,7 +158,7 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 		request.ID,
 		request.Name,
 		request.Namespace.Data,
-		request.Namespace.Encoding.String(),
+		request.Namespace.EncodingType.String(),
 		metadata.NotificationVersion,
 		request.IsGlobal,
 	)
@@ -197,7 +197,7 @@ func (m *cassandraMetadataPersistenceV2) UpdateNamespace(request *p.InternalUpda
 	batch := m.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateUpdateNamespaceByNameQueryWithinBatchV2,
 		request.Namespace.Data,
-		request.Namespace.Encoding.String(),
+		request.Namespace.EncodingType.String(),
 		request.NotificationVersion,
 		constNamespacePartition,
 		request.Name,

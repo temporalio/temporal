@@ -207,7 +207,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 		},
 	}
 	serializer := s.mockResource.GetPayloadSerializer()
-	data, err := serializer.SerializeBatchEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	data, err := serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,

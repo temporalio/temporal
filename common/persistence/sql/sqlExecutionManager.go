@@ -1090,7 +1090,7 @@ func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationT
 		ShardID:           m.shardID,
 		TaskID:            replicationTask.GetTaskId(),
 		Data:              blob.Data,
-		DataEncoding:      blob.Encoding.String(),
+		DataEncoding:      blob.EncodingType.String(),
 	}})
 
 	// Tasks are immutable. So it's fine if we already persisted it before.

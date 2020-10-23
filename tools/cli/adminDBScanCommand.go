@@ -517,7 +517,7 @@ func verifyFirstHistoryEvent(
 	if err != nil {
 		return VerificationResultCheckFailure
 	}
-	firstBatch, err := payloadSerializer.DeserializeBatchEvents(history.History[0])
+	firstBatch, err := payloadSerializer.DeserializeEvents(history.History[0])
 	if err != nil || len(firstBatch) == 0 {
 		checkFailureWriter.Add(&ExecutionCheckFailure{
 			ShardID:     shardID,
