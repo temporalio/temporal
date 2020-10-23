@@ -32,13 +32,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 )
 
-func validateProtoEncoding(protoEncodingStr string, expected enumspb.EncodingType) error {
-	if protoEncoding, ok := enumspb.EncodingType_value[protoEncodingStr]; !ok || enumspb.EncodingType(protoEncoding) != expected {
-		return fmt.Errorf("invalid encoding type: %v", protoEncodingStr)
+func validateEncoding(encodingStr string, expected enumspb.EncodingType) error {
+	if encoding, ok := enumspb.EncodingType_value[encodingStr]; !ok || enumspb.EncodingType(encoding) != expected {
+		return fmt.Errorf("encoding %s doesn't match expected encoding %v", encodingStr, expected)
 	}
 	return nil
 }
@@ -68,7 +67,7 @@ func proto3Encode(m proto.Marshaler) (DataBlob, error) {
 }
 
 func proto3Decode(b []byte, proto string, result proto.Unmarshaler) error {
-	if err := validateProtoEncoding(proto, enumspb.ENCODING_TYPE_PROTO3); err != nil {
+	if err := validateEncoding(proto, enumspb.ENCODING_TYPE_PROTO3); err != nil {
 		return err
 	}
 	return decodeErr(enumspb.ENCODING_TYPE_PROTO3, result.Unmarshal(b))
@@ -250,15 +249,6 @@ func ReplicationVersionsToBlob(info *persistenceblobs.ReplicationVersions) (Data
 
 func ReplicationVersionsFromBlob(b []byte, proto string) (*persistenceblobs.ReplicationVersions, error) {
 	result := &persistenceblobs.ReplicationVersions{}
-	return result, proto3Decode(b, proto, result)
-}
-
-func VersionHistoriesToBlob(info *historyspb.VersionHistories) (DataBlob, error) {
-	return proto3Encode(info)
-}
-
-func VersionHistoriesFromBlob(b []byte, proto string) (*historyspb.VersionHistories, error) {
-	result := &historyspb.VersionHistories{}
 	return result, proto3Decode(b, proto, result)
 }
 
