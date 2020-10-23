@@ -35,44 +35,6 @@ import (
 	"go.temporal.io/server/api/persistenceblobs/v1"
 )
 
-func validateEncoding(encodingStr string, expected enumspb.EncodingType) error {
-	if encoding, ok := enumspb.EncodingType_value[encodingStr]; !ok || enumspb.EncodingType(encoding) != expected {
-		return fmt.Errorf("encoding %s doesn't match expected encoding %v", encodingStr, expected)
-	}
-	return nil
-}
-
-func encodeErr(encoding enumspb.EncodingType, err error) error {
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("error serializing struct to blob using encoding - %v - : %v", encoding, err)
-}
-
-func decodeErr(encoding enumspb.EncodingType, err error) error {
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("error deserializing blob to blob using encoding - %v - : %v", encoding, err)
-}
-
-func proto3Encode(m proto.Marshaler) (DataBlob, error) {
-	blob := DataBlob{Encoding: enumspb.ENCODING_TYPE_PROTO3}
-	data, err := m.Marshal()
-	if err != nil {
-		return blob, encodeErr(enumspb.ENCODING_TYPE_PROTO3, err)
-	}
-	blob.Data = data
-	return blob, nil
-}
-
-func proto3Decode(b []byte, proto string, result proto.Unmarshaler) error {
-	if err := validateEncoding(proto, enumspb.ENCODING_TYPE_PROTO3); err != nil {
-		return err
-	}
-	return decodeErr(enumspb.ENCODING_TYPE_PROTO3, result.Unmarshal(b))
-}
-
 func ShardInfoToBlob(info *persistenceblobs.ShardInfo) (DataBlob, error) {
 	return proto3Encode(info)
 }
@@ -272,4 +234,25 @@ func (d *DataBlob) ToProto() *commonpb.DataBlob {
 		EncodingType: d.Encoding,
 		Data:         d.Data,
 	}
+}
+
+func proto3Encode(m proto.Marshaler) (DataBlob, error) {
+	blob := DataBlob{Encoding: enumspb.ENCODING_TYPE_PROTO3}
+	data, err := m.Marshal()
+	if err != nil {
+		return blob, fmt.Errorf("error serializing struct to blob using %v encoding: %w", enumspb.ENCODING_TYPE_PROTO3, err)
+	}
+	blob.Data = data
+	return blob, nil
+}
+
+func proto3Decode(b []byte, encoding string, result proto.Unmarshaler) error {
+	if e, ok := enumspb.EncodingType_value[encoding]; !ok || enumspb.EncodingType(e) != enumspb.ENCODING_TYPE_PROTO3 {
+		return fmt.Errorf("encoding %s doesn't match expected encoding %v", encoding, enumspb.ENCODING_TYPE_PROTO3)
+	}
+
+	if err := result.Unmarshal(b); err != nil {
+		return fmt.Errorf("error deserializing blob to blob using %v encoding: %w", enumspb.ENCODING_TYPE_PROTO3, err)
+	}
+	return nil
 }
