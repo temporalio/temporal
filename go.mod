@@ -57,6 +57,7 @@ require (
 	github.com/uber-go/tally v3.3.17+incompatible
 	github.com/uber/tchannel-go v1.19.0
 	github.com/urfave/cli v1.22.4
+	github.com/urfave/cli/v2 v2.2.0
 	github.com/valyala/fastjson v1.5.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.temporal.io/api v1.1.0

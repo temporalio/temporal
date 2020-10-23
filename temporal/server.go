@@ -105,6 +105,7 @@ func (s *Server) Start() error {
 	zapLogger := s.so.config.Log.NewZapLogger()
 	s.logger = loggerimpl.NewLogger(zapLogger)
 
+	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
 	s.logger.Debug(s.so.config.String())
 
 	err = s.validate()
