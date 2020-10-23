@@ -392,7 +392,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 
 	var serializedNewBufferedEvents *commonpb.DataBlob
 	if len(input.NewBufferedEvents) > 0 {
-		serializedNewBufferedEvents, err = m.serializer.SerializeBatchEvents(input.NewBufferedEvents, enumspb.ENCODING_TYPE_PROTO3)
+		serializedNewBufferedEvents, err = m.serializer.SerializeEvents(input.NewBufferedEvents, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return nil, err
 		}
