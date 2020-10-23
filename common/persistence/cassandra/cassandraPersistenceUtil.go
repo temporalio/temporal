@@ -36,7 +36,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/checksum"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -384,7 +383,7 @@ func createExecution(
 	executionInfo *persistenceblobs.WorkflowExecutionInfo,
 	executionState *persistenceblobs.WorkflowExecutionState,
 	nextEventID int64,
-	checksum checksum.Checksum,
+	checksum persistenceblobs.Checksum,
 	cqlNowTimestampMillis int64,
 ) error {
 
@@ -413,7 +412,7 @@ func createExecution(
 		return err
 	}
 
-	checksumDatablob, err := serialization.ChecksumToBlob(checksum.ToProto())
+	checksumDatablob, err := serialization.ChecksumToBlob(&checksum)
 	if err != nil {
 		return err
 	}
@@ -464,7 +463,7 @@ func updateExecution(
 	nextEventID int64,
 	cqlNowTimestampMillis int64,
 	condition int64,
-	checksum checksum.Checksum,
+	checksum persistenceblobs.Checksum,
 ) error {
 
 	// validate workflow state & close status
@@ -491,7 +490,7 @@ func updateExecution(
 		return err
 	}
 
-	checksumDatablob, err := serialization.ChecksumToBlob(checksum.ToProto())
+	checksumDatablob, err := serialization.ChecksumToBlob(&checksum)
 	if err != nil {
 		return err
 	}

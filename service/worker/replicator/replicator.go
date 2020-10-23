@@ -243,9 +243,13 @@ func isRetryableError(err error) bool {
 	switch err.(type) {
 	case *serviceerror.Internal,
 		*serviceerrors.ShardOwnershipLost,
-		*serviceerror.DeadlineExceeded,
 		*serviceerror.Unavailable:
 		return true
 	}
+
+	if common.IsContextDeadlineExceededErr(err) {
+		return true
+	}
+
 	return false
 }

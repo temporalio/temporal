@@ -27,32 +27,40 @@ package checksum
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash/crc32"
 
 	"github.com/gogo/protobuf/proto"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 )
+
+// ErrMismatch indicates a checksum verification failure due to
+// a derived checksum not being equal to expected checksum
+var ErrMismatch = errors.New("checksum mismatch error")
 
 // GenerateCRC32 generates an IEEE crc32 checksum on the
 // serilized byte array of the given thrift object. The
 // serialization proto used will be of type thriftRW
 func GenerateCRC32(
 	payload proto.Marshaler,
-	payloadVersion int,
-) (Checksum, error) {
+	payloadVersion int32,
+) (persistenceblobs.Checksum, error) {
 
 	payloadBytes, err := payload.Marshal()
 	if err != nil {
-		return Checksum{}, err
+		return persistenceblobs.Checksum{}, err
 	}
 
 	crc := crc32.ChecksumIEEE(payloadBytes)
 	checksum := make([]byte, 4)
 	binary.BigEndian.PutUint32(checksum, crc)
-	return Checksum{
+	return persistenceblobs.Checksum{
 		Value:   checksum,
 		Version: payloadVersion,
-		Flavor:  FlavorIEEECRC32OverProto3Binary,
+		Flavor:  enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY,
 	}, nil
 }
 
@@ -61,10 +69,10 @@ func GenerateCRC32(
 // Return ErrMismatch when checksums mismatch
 func Verify(
 	payload proto.Marshaler,
-	checksum Checksum,
+	checksum persistenceblobs.Checksum,
 ) error {
 
-	if !checksum.Flavor.IsValid() || checksum.Flavor != FlavorIEEECRC32OverProto3Binary {
+	if checksum.Flavor != enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY {
 		return fmt.Errorf("unknown checksum flavor %v", checksum.Flavor)
 	}
 

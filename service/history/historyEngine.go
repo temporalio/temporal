@@ -946,7 +946,7 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 					QueryRejected: matchingResp.GetQueryRejected(),
 				}}, nil
 		}
-		if _, ok := err.(*serviceerror.DeadlineExceeded); !ok {
+		if !common.IsContextDeadlineExceededErr(err) && !common.IsContextCanceledErr(err) {
 			e.logger.Error("query directly though matching on sticky failed, will not attempt query on non-sticky",
 				tag.WorkflowNamespace(queryRequest.GetNamespace()),
 				tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
