@@ -3360,7 +3360,7 @@ func (wh *WorkflowHandler) getDefaultScope(scope int) metrics.Scope {
 
 func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
 
-	if common.IsContextTimeoutErr(err) {
+	if common.IsContextTimeoutErr(err) || common.IsContextCanceledErr(err) {
 		scope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
 		return err
 	}

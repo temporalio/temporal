@@ -427,7 +427,7 @@ func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {
 	// Always update failure counter for all replicator errors
 	p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
 
-	if common.IsContextTimeoutErr(err) {
+	if common.IsContextTimeoutErr(err) || common.IsContextCanceledErr(err) {
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
 		return
 	}
