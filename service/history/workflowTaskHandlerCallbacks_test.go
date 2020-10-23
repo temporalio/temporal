@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -70,11 +69,12 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	s.queryRegistry = s.constructQueryRegistry(10)
 	s.mockMutableState = NewMockmutableState(s.controller)
 	s.mockMutableState.EXPECT().GetQueryRegistry().Return(s.queryRegistry)
-	workflowInfo := &persistence.WorkflowExecutionInfo{
-		WorkflowId:     testWorkflowID,
-		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: testRunID},
-	}
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(workflowInfo).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+		WorkflowId: testWorkflowID,
+	}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+		RunId: testRunID,
+	}).AnyTimes()
 }
 
 func (s *WorkflowTaskHandlerCallbackSuite) TearDownTest() {

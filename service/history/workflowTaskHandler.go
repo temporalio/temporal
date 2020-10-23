@@ -641,13 +641,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	executionInfo := handler.mutableState.GetExecutionInfo()
-
 	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateContinueAsNewWorkflowExecutionAttributes(
 				attr,
-				executionInfo,
+				handler.mutableState.GetExecutionInfo(),
 			)
 		},
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES,
@@ -673,7 +671,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 	handler.logger.Debug("!!!! Continued as new without timeout",
-		tag.WorkflowRunID(executionInfo.ExecutionState.RunId))
+		tag.WorkflowRunID(handler.mutableState.GetExecutionState().RunId))
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
@@ -692,7 +690,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	// Extract parentNamespace so it can be passed down to next run of workflow execution
 	var parentNamespace string
 	if handler.mutableState.HasParentExecution() {
-		parentNamespaceID := executionInfo.ParentNamespaceId
+		parentNamespaceID := handler.mutableState.GetExecutionInfo().ParentNamespaceId
 		parentNamespaceEntry, err := handler.namespaceCache.GetNamespaceByID(parentNamespaceID)
 		if err != nil {
 			return err
@@ -723,8 +721,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		metrics.CommandTypeChildWorkflowCounter,
 	)
 
-	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := executionInfo.NamespaceId
+	namespaceID := handler.mutableState.GetExecutionInfo().NamespaceId
 	parentNamespace := handler.namespaceEntry.GetInfo().GetName()
 	targetNamespaceID := namespaceID
 	targetNamespace := parentNamespace
@@ -744,7 +741,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 				targetNamespaceID,
 				targetNamespace,
 				attr,
-				executionInfo,
+				handler.mutableState.GetExecutionInfo(),
 			)
 		},
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES,

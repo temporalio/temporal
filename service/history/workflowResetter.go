@@ -199,7 +199,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 
 	weTimeout := timestamp.DurationValue(executionInfo.WorkflowExecutionTimeout)
 	if weTimeout > 0 {
-		executionInfo.WorkflowExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
+		executionInfo.RetryExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
 	}
 
 	baseLastEventVersion := resetMutableState.GetCurrentVersion()
@@ -280,7 +280,7 @@ func (r *workflowResetterImpl) persistToDB(
 	}
 
 	currentMutableState := currentWorkflow.getMutableState()
-	currentRunID := currentMutableState.GetExecutionInfo().GetRunId()
+	currentRunID := currentMutableState.GetExecutionState().GetRunId()
 	currentLastWriteVersion, err := currentMutableState.GetLastWriteVersion()
 	if err != nil {
 		return err

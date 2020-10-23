@@ -175,7 +175,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
 	executionInfo := msBuilder.GetExecutionInfo()
-	executionInfo.LastUpdatedTime = timestamp.TimeNowPtrUtc()
+	executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	executionInfo.StickyTaskQueue = stickyTl
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
@@ -212,7 +212,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		expectedResponse.PreviousStartedEventId = executionInfo.LastProcessedEvent
 	}
 	expectedResponse.ScheduledEventId = di.ScheduleID
-	expectedResponse.ScheduledTime = di.ScheduledTimestamp
+	expectedResponse.ScheduledTime = di.ScheduledTime
 	expectedResponse.StartedEventId = di.ScheduleID + 1
 	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1

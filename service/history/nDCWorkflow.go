@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/wss"
 )
 
 type (
@@ -272,7 +273,7 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 
 func (r *nDCWorkflowImpl) zombiefyWorkflow() error {
 
-	return r.mutableState.GetExecutionInfo().UpdateWorkflowStateStatus(
+	return wss.UpdateWorkflowStateStatus(r.mutableState.GetExecutionState(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)

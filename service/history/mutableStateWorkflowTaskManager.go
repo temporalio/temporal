@@ -131,16 +131,16 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskScheduledEven
 	}
 
 	workflowTask := &workflowTaskInfo{
-		Version:                    version,
-		ScheduleID:                 scheduleID,
-		StartedID:                  common.EmptyEventID,
-		RequestID:                  emptyUUID,
-		WorkflowTaskTimeout:        timestamp.DurationFromSeconds(int64(startToCloseTimeoutSeconds)),
-		TaskQueue:                  taskQueue,
-		Attempt:                    attempt,
-		ScheduledTimestamp:         scheduleTimestamp,
-		StartedTimestamp:           nil,
-		OriginalScheduledTimestamp: originalScheduledTimestamp,
+		Version:               version,
+		ScheduleID:            scheduleID,
+		StartedID:             common.EmptyEventID,
+		RequestID:             emptyUUID,
+		WorkflowTaskTimeout:   timestamp.DurationFromSeconds(int64(startToCloseTimeoutSeconds)),
+		TaskQueue:             taskQueue,
+		Attempt:               attempt,
+		ScheduledTime:         scheduleTimestamp,
+		StartedTime:           nil,
+		OriginalScheduledTime: originalScheduledTimestamp,
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
@@ -170,8 +170,8 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateTransientWorkflowTaskSche
 		WorkflowTaskTimeout: m.msb.GetExecutionInfo().DefaultWorkflowTaskTimeout,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: m.msb.GetExecutionInfo().TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Attempt:             m.msb.GetExecutionInfo().WorkflowTaskAttempt,
-		ScheduledTimestamp:  timestamp.TimePtr(m.msb.timeSource.Now()),
-		StartedTimestamp:    timestamp.UnixOrZeroTimePtr(0),
+		ScheduledTime:       timestamp.TimePtr(m.msb.timeSource.Now()),
+		StartedTime:         timestamp.UnixOrZeroTimePtr(0),
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
@@ -207,16 +207,16 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskStartedEvent(
 
 	// Update mutable workflow task state
 	workflowTask = &workflowTaskInfo{
-		Version:                    version,
-		ScheduleID:                 scheduleID,
-		StartedID:                  startedID,
-		RequestID:                  requestID,
-		WorkflowTaskTimeout:        workflowTask.WorkflowTaskTimeout,
-		Attempt:                    workflowTask.Attempt,
-		StartedTimestamp:           &timestamp,
-		ScheduledTimestamp:         workflowTask.ScheduledTimestamp,
-		TaskQueue:                  workflowTask.TaskQueue,
-		OriginalScheduledTimestamp: workflowTask.OriginalScheduledTimestamp,
+		Version:               version,
+		ScheduleID:            scheduleID,
+		StartedID:             startedID,
+		RequestID:             requestID,
+		WorkflowTaskTimeout:   workflowTask.WorkflowTaskTimeout,
+		Attempt:               workflowTask.Attempt,
+		StartedTime:           &timestamp,
+		ScheduledTime:         workflowTask.ScheduledTime,
+		TaskQueue:             workflowTask.TaskQueue,
+		OriginalScheduledTime: workflowTask.OriginalScheduledTime,
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
@@ -466,9 +466,9 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskCompletedEvent(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 		scheduledEvent := m.msb.hBuilder.AddTransientWorkflowTaskScheduledEvent(taskQueue, int32(workflowTask.WorkflowTaskTimeout.Seconds()),
-			workflowTask.Attempt, timestamp.TimeValue(workflowTask.ScheduledTimestamp))
+			workflowTask.Attempt, timestamp.TimeValue(workflowTask.ScheduledTime))
 		startedEvent := m.msb.hBuilder.AddTransientWorkflowTaskStartedEvent(scheduledEvent.GetEventId(), workflowTask.RequestID,
-			request.GetIdentity(), timestamp.TimeValue(workflowTask.StartedTimestamp))
+			request.GetIdentity(), timestamp.TimeValue(workflowTask.StartedTime))
 		startedEventID = startedEvent.GetEventId()
 	}
 	// Now write the completed event
@@ -567,19 +567,19 @@ func (m *mutableStateWorkflowTaskManagerImpl) FailWorkflowTask(
 	m.msb.ClearStickyness()
 
 	failWorkflowTaskInfo := &workflowTaskInfo{
-		Version:                    common.EmptyVersion,
-		ScheduleID:                 common.EmptyEventID,
-		StartedID:                  common.EmptyEventID,
-		RequestID:                  emptyUUID,
-		WorkflowTaskTimeout:        timestamp.DurationFromSeconds(0),
-		StartedTimestamp:           timestamp.UnixOrZeroTimePtr(0),
-		TaskQueue:                  nil,
-		OriginalScheduledTimestamp: timestamp.UnixOrZeroTimePtr(0),
-		Attempt:                    1,
+		Version:               common.EmptyVersion,
+		ScheduleID:            common.EmptyEventID,
+		StartedID:             common.EmptyEventID,
+		RequestID:             emptyUUID,
+		WorkflowTaskTimeout:   timestamp.DurationFromSeconds(0),
+		StartedTime:           timestamp.UnixOrZeroTimePtr(0),
+		TaskQueue:             nil,
+		OriginalScheduledTime: timestamp.UnixOrZeroTimePtr(0),
+		Attempt:               1,
 	}
 	if incrementAttempt {
 		failWorkflowTaskInfo.Attempt = m.msb.executionInfo.WorkflowTaskAttempt + 1
-		failWorkflowTaskInfo.ScheduledTimestamp = timestamp.TimePtr(m.msb.timeSource.Now().UTC())
+		failWorkflowTaskInfo.ScheduledTime = timestamp.TimePtr(m.msb.timeSource.Now().UTC())
 	}
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 }
@@ -593,12 +593,12 @@ func (m *mutableStateWorkflowTaskManagerImpl) DeleteWorkflowTask() {
 		RequestID:           emptyUUID,
 		WorkflowTaskTimeout: timestamp.DurationFromSeconds(0),
 		Attempt:             1,
-		StartedTimestamp:    timestamp.UnixOrZeroTimePtr(0),
-		ScheduledTimestamp:  timestamp.UnixOrZeroTimePtr(0),
+		StartedTime:         timestamp.UnixOrZeroTimePtr(0),
+		ScheduledTime:       timestamp.UnixOrZeroTimePtr(0),
 
 		TaskQueue: nil,
 		// Keep the last original scheduled timestamp, so that AddWorkflowTaskScheduledEventAsHeartbeat can continue with it.
-		OriginalScheduledTimestamp: m.getWorkflowTaskInfo().OriginalScheduledTimestamp,
+		OriginalScheduledTime: m.getWorkflowTaskInfo().OriginalScheduledTime,
 	}
 	m.UpdateWorkflowTask(resetWorkflowTaskInfo)
 }
@@ -613,9 +613,9 @@ func (m *mutableStateWorkflowTaskManagerImpl) UpdateWorkflowTask(
 	m.msb.executionInfo.WorkflowTaskRequestId = workflowTask.RequestID
 	m.msb.executionInfo.WorkflowTaskTimeout = workflowTask.WorkflowTaskTimeout
 	m.msb.executionInfo.WorkflowTaskAttempt = workflowTask.Attempt
-	m.msb.executionInfo.WorkflowTaskStartedTimestamp = workflowTask.StartedTimestamp
-	m.msb.executionInfo.WorkflowTaskScheduledTimestamp = workflowTask.ScheduledTimestamp
-	m.msb.executionInfo.WorkflowTaskOriginalScheduledTimestamp = workflowTask.OriginalScheduledTimestamp
+	m.msb.executionInfo.WorkflowTaskStartedTime = workflowTask.StartedTime
+	m.msb.executionInfo.WorkflowTaskScheduledTime = workflowTask.ScheduledTime
+	m.msb.executionInfo.WorkflowTaskOriginalScheduledTime = workflowTask.OriginalScheduledTime
 
 	// NOTE: do not update taskqueue in execution info
 
@@ -625,7 +625,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) UpdateWorkflowTask(
 		tag.WorkflowTaskRequestId(workflowTask.RequestID),
 		tag.WorkflowTaskTimeout(workflowTask.WorkflowTaskTimeout),
 		tag.Attempt(workflowTask.Attempt),
-		tag.WorkflowStartedTimestamp(workflowTask.StartedTimestamp))
+		tag.WorkflowStartedTimestamp(workflowTask.StartedTime))
 }
 
 func (m *mutableStateWorkflowTaskManagerImpl) HasPendingWorkflowTask() bool {
@@ -680,7 +680,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) CreateTransientWorkflowTaskEvents(
 	}
 	scheduledEvent := newWorkflowTaskScheduledEventWithInfo(
 		workflowTask.ScheduleID,
-		workflowTask.ScheduledTimestamp,
+		workflowTask.ScheduledTime,
 		taskqueue,
 		int32(workflowTask.WorkflowTaskTimeout.Seconds()),
 		workflowTask.Attempt,
@@ -688,7 +688,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) CreateTransientWorkflowTaskEvents(
 
 	startedEvent := newWorkflowTaskStartedEventWithInfo(
 		workflowTask.StartedID,
-		workflowTask.StartedTimestamp,
+		workflowTask.StartedTime,
 		workflowTask.ScheduleID,
 		workflowTask.RequestID,
 		identity,
@@ -708,16 +708,16 @@ func (m *mutableStateWorkflowTaskManagerImpl) getWorkflowTaskInfo() *workflowTas
 	}
 
 	return &workflowTaskInfo{
-		Version:                    m.msb.executionInfo.WorkflowTaskVersion,
-		ScheduleID:                 m.msb.executionInfo.WorkflowTaskScheduleId,
-		StartedID:                  m.msb.executionInfo.WorkflowTaskStartedId,
-		RequestID:                  m.msb.executionInfo.WorkflowTaskRequestId,
-		WorkflowTaskTimeout:        m.msb.executionInfo.WorkflowTaskTimeout,
-		Attempt:                    m.msb.executionInfo.WorkflowTaskAttempt,
-		StartedTimestamp:           m.msb.executionInfo.WorkflowTaskStartedTimestamp,
-		ScheduledTimestamp:         m.msb.executionInfo.WorkflowTaskScheduledTimestamp,
-		TaskQueue:                  taskQueue,
-		OriginalScheduledTimestamp: m.msb.executionInfo.WorkflowTaskOriginalScheduledTimestamp,
+		Version:               m.msb.executionInfo.WorkflowTaskVersion,
+		ScheduleID:            m.msb.executionInfo.WorkflowTaskScheduleId,
+		StartedID:             m.msb.executionInfo.WorkflowTaskStartedId,
+		RequestID:             m.msb.executionInfo.WorkflowTaskRequestId,
+		WorkflowTaskTimeout:   m.msb.executionInfo.WorkflowTaskTimeout,
+		Attempt:               m.msb.executionInfo.WorkflowTaskAttempt,
+		StartedTime:           m.msb.executionInfo.WorkflowTaskStartedTime,
+		ScheduledTime:         m.msb.executionInfo.WorkflowTaskScheduledTime,
+		TaskQueue:             taskQueue,
+		OriginalScheduledTime: m.msb.executionInfo.WorkflowTaskOriginalScheduledTime,
 	}
 }
 

@@ -36,11 +36,13 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -117,25 +119,27 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 	baseBranchLCAEventID := int64(1394)
 	baseBranchLastEventVersion := int64(400)
 	baseBranchLastEventID := int64(2333)
-	versionHistory := persistence.NewVersionHistory(baseBranchToken, []*persistence.VersionHistoryItem{
-		persistence.NewVersionHistoryItem(10, 0),
-		persistence.NewVersionHistoryItem(50, 100),
-		persistence.NewVersionHistoryItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
-		persistence.NewVersionHistoryItem(baseBranchLastEventID, baseBranchLastEventVersion),
+	versionHistory := versionhistory.New(baseBranchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewItem(10, 0),
+		versionhistory.NewItem(50, 100),
+		versionhistory.NewItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
+		versionhistory.NewItem(baseBranchLastEventID, baseBranchLastEventVersion),
 	})
-	versionHistories := persistence.NewVersionHistories(versionHistory)
+	versionHistories := versionhistory.NewVHS(versionHistory)
 
 	newBranchToken := []byte("some random new branch token")
-	newVersionHistory, err := versionHistory.DuplicateUntilLCAItem(
-		persistence.NewVersionHistoryItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
+	newVersionHistory, err := versionhistory.DuplicateUntilLCAItem(versionHistory,
+		versionhistory.NewItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
 	)
 	s.NoError(err)
 
-	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     s.workflowID,
-		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: s.runID},
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+		NamespaceId:      s.namespaceID,
+		WorkflowId:       s.workflowID,
+		VersionHistories: versionHistories,
+	}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+		RunId: s.runID,
 	}).AnyTimes()
 
 	shardId := s.mockShard.GetShardID()
@@ -154,37 +158,38 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 
 	newIndex, err := s.nDCBranchMgr.createNewBranch(context.Background(), baseBranchToken, baseBranchLCAEventID, newVersionHistory)
 	s.Nil(err)
-	s.Equal(1, newIndex)
+	s.Equal(int32(1), newIndex)
 
-	compareVersionHistory, err := versionHistory.DuplicateUntilLCAItem(
-		persistence.NewVersionHistoryItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
+	compareVersionHistory, err := versionhistory.DuplicateUntilLCAItem(
+		versionHistory,
+		versionhistory.NewItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
 	)
 	s.NoError(err)
-	s.NoError(compareVersionHistory.SetBranchToken(newBranchToken))
-	newVersionHistory, err = versionHistories.GetVersionHistory(newIndex)
+	s.NoError(versionhistory.SetBranchToken(compareVersionHistory, newBranchToken))
+	newVersionHistory, err = versionhistory.GetVersionHistory(versionHistories, newIndex)
 	s.NoError(err)
-	s.True(compareVersionHistory.Equals(newVersionHistory))
+	s.True(compareVersionHistory.Equal(newVersionHistory))
 }
 
 func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 
 	lastWriteVersion := int64(300)
-	versionHistory := persistence.NewVersionHistory([]byte("some random base branch token"), []*persistence.VersionHistoryItem{
-		persistence.NewVersionHistoryItem(10, 0),
-		persistence.NewVersionHistoryItem(50, 100),
-		persistence.NewVersionHistoryItem(100, 200),
-		persistence.NewVersionHistoryItem(150, 300),
+	versionHistory := versionhistory.New([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
+		versionhistory.NewItem(10, 0),
+		versionhistory.NewItem(50, 100),
+		versionhistory.NewItem(100, 200),
+		versionhistory.NewItem(150, 300),
 	})
-	versionHistories := persistence.NewVersionHistories(versionHistory)
+	versionHistories := versionhistory.NewVHS(versionHistory)
 
-	incomingVersionHistory := versionHistory.Duplicate()
-	err := incomingVersionHistory.AddOrUpdateItem(
-		persistence.NewVersionHistoryItem(200, 300),
+	incomingVersionHistory := versionhistory.Duplicate(versionHistory)
+	err := versionhistory.AddOrUpdateItem(
+		incomingVersionHistory,
+		versionhistory.NewItem(200, 300),
 	)
 	s.NoError(err)
 
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil).AnyTimes()
-	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastWriteVersion, true).Return(nil).Times(1)
@@ -193,8 +198,9 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 		StartedID:  2345,
 	}
 	s.mockMutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true).Times(1)
-	// GetExecutionInfo's return value is not used by this test
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).Times(1)
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+		VersionHistories: versionHistories,
+	}).AnyTimes()
 	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTask.ScheduleID,
 		workflowTask.StartedID,
@@ -220,21 +226,22 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 
 func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_NoMissingEventInBetween() {
 
-	versionHistory := persistence.NewVersionHistory([]byte("some random base branch token"), []*persistence.VersionHistoryItem{
-		persistence.NewVersionHistoryItem(10, 0),
-		persistence.NewVersionHistoryItem(50, 100),
-		persistence.NewVersionHistoryItem(100, 200),
-		persistence.NewVersionHistoryItem(150, 300),
+	versionHistory := versionhistory.New([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
+		versionhistory.NewItem(10, 0),
+		versionhistory.NewItem(50, 100),
+		versionhistory.NewItem(100, 200),
+		versionhistory.NewItem(150, 300),
 	})
-	versionHistories := persistence.NewVersionHistories(versionHistory)
+	versionHistories := versionhistory.NewVHS(versionHistory)
 
-	incomingVersionHistory := versionHistory.Duplicate()
-	err := incomingVersionHistory.AddOrUpdateItem(
-		persistence.NewVersionHistoryItem(200, 300),
+	incomingVersionHistory := versionhistory.Duplicate(versionHistory)
+	err := versionhistory.AddOrUpdateItem(
+		incomingVersionHistory,
+		versionhistory.NewItem(200, 300),
 	)
 	s.NoError(err)
 
-	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
 
 	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(
@@ -244,34 +251,36 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_NoMissing
 		300)
 	s.NoError(err)
 	s.True(doContinue)
-	s.Equal(0, index)
+	s.Equal(int32(0), index)
 }
 
 func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEventInBetween() {
 
-	versionHistory := persistence.NewVersionHistory([]byte("some random base branch token"), []*persistence.VersionHistoryItem{
-		persistence.NewVersionHistoryItem(10, 0),
-		persistence.NewVersionHistoryItem(50, 100),
-		persistence.NewVersionHistoryItem(100, 200),
-		persistence.NewVersionHistoryItem(150, 300),
+	versionHistory := versionhistory.New([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
+		versionhistory.NewItem(10, 0),
+		versionhistory.NewItem(50, 100),
+		versionhistory.NewItem(100, 200),
+		versionhistory.NewItem(150, 300),
 	})
-	versionHistories := persistence.NewVersionHistories(versionHistory)
+	versionHistories := versionhistory.NewVHS(versionHistory)
 
-	incomingVersionHistory := versionHistory.Duplicate()
-	incomingFirstEventVersionHistoryItem := persistence.NewVersionHistoryItem(200, 300)
-	err := incomingVersionHistory.AddOrUpdateItem(
+	incomingVersionHistory := versionhistory.Duplicate(versionHistory)
+	incomingFirstEventVersionHistoryItem := versionhistory.NewItem(200, 300)
+	err := versionhistory.AddOrUpdateItem(
+		incomingVersionHistory,
 		incomingFirstEventVersionHistoryItem,
 	)
 	s.NoError(err)
 
-	execution := &persistence.WorkflowExecutionInfo{
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     s.workflowID,
-		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: s.runID},
-	}
-	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+		NamespaceId:      s.namespaceID,
+		WorkflowId:       s.workflowID,
+		VersionHistories: versionHistories,
+	}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+		RunId: s.runID,
+	}).AnyTimes()
 
 	_, _, err = s.nDCBranchMgr.prepareVersionHistory(
 		context.Background(),
@@ -286,29 +295,31 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 	baseBranchLCAEventID := int64(85)
 	baseBranchLCAEventVersion := int64(200)
 
-	versionHistory := persistence.NewVersionHistory(baseBranchToken, []*persistence.VersionHistoryItem{
-		persistence.NewVersionHistoryItem(10, 0),
-		persistence.NewVersionHistoryItem(50, 100),
-		persistence.NewVersionHistoryItem(baseBranchLCAEventID+10, baseBranchLCAEventVersion),
-		persistence.NewVersionHistoryItem(150, 300),
+	versionHistory := versionhistory.New(baseBranchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewItem(10, 0),
+		versionhistory.NewItem(50, 100),
+		versionhistory.NewItem(baseBranchLCAEventID+10, baseBranchLCAEventVersion),
+		versionhistory.NewItem(150, 300),
 	})
-	versionHistories := persistence.NewVersionHistories(versionHistory)
+	versionHistories := versionhistory.NewVHS(versionHistory)
 
-	incomingVersionHistory := persistence.NewVersionHistory(nil, []*persistence.VersionHistoryItem{
-		persistence.NewVersionHistoryItem(10, 0),
-		persistence.NewVersionHistoryItem(50, 100),
-		persistence.NewVersionHistoryItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
-		persistence.NewVersionHistoryItem(200, 400),
+	incomingVersionHistory := versionhistory.New(nil, []*historyspb.VersionHistoryItem{
+		versionhistory.NewItem(10, 0),
+		versionhistory.NewItem(50, 100),
+		versionhistory.NewItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
+		versionhistory.NewItem(200, 400),
 	})
 
 	newBranchToken := []byte("some random new branch token")
 
-	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     s.workflowID,
-		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: s.runID},
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+		NamespaceId:      s.namespaceID,
+		WorkflowId:       s.workflowID,
+		VersionHistories: versionHistories,
+	}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+		RunId: s.runID,
 	}).AnyTimes()
 
 	shardId := s.mockShard.GetShardID()
@@ -333,7 +344,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 	)
 	s.NoError(err)
 	s.True(doContinue)
-	s.Equal(1, index)
+	s.Equal(int32(1), index)
 }
 
 func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_MissingEventInBetween() {
@@ -343,29 +354,30 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_Missin
 	baseBranchLastEventID := int64(150)
 	baseBranchLastEventVersion := int64(300)
 
-	versionHistory := persistence.NewVersionHistory(baseBranchToken, []*persistence.VersionHistoryItem{
-		persistence.NewVersionHistoryItem(10, 0),
-		persistence.NewVersionHistoryItem(50, 100),
-		persistence.NewVersionHistoryItem(baseBranchLCAEventID+10, baseBranchLCAEventVersion),
-		persistence.NewVersionHistoryItem(baseBranchLastEventID, baseBranchLastEventVersion),
+	versionHistory := versionhistory.New(baseBranchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewItem(10, 0),
+		versionhistory.NewItem(50, 100),
+		versionhistory.NewItem(baseBranchLCAEventID+10, baseBranchLCAEventVersion),
+		versionhistory.NewItem(baseBranchLastEventID, baseBranchLastEventVersion),
 	})
-	versionHistories := persistence.NewVersionHistories(versionHistory)
+	versionHistories := versionhistory.NewVHS(versionHistory)
 
-	incomingVersionHistory := persistence.NewVersionHistory(nil, []*persistence.VersionHistoryItem{
-		persistence.NewVersionHistoryItem(10, 0),
-		persistence.NewVersionHistoryItem(50, 100),
-		persistence.NewVersionHistoryItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
-		persistence.NewVersionHistoryItem(200, 400),
+	incomingVersionHistory := versionhistory.New(nil, []*historyspb.VersionHistoryItem{
+		versionhistory.NewItem(10, 0),
+		versionhistory.NewItem(50, 100),
+		versionhistory.NewItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
+		versionhistory.NewItem(200, 400),
 	})
 
-	execution := &persistence.WorkflowExecutionInfo{
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     s.workflowID,
-		ExecutionState: &persistenceblobs.WorkflowExecutionState{RunId: s.runID},
-	}
-	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+		NamespaceId:      s.namespaceID,
+		WorkflowId:       s.workflowID,
+		VersionHistories: versionHistories,
+	}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+		RunId: s.runID,
+	}).AnyTimes()
 
 	_, _, err := s.nDCBranchMgr.prepareVersionHistory(
 		context.Background(),

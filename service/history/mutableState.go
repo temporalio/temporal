@@ -58,13 +58,13 @@ type (
 		// Scheduled and Started timestamps are useful for transient workflow task: when transient workflow task finally completes,
 		// use these timestamp to create scheduled/started events.
 		// Also used for recording latency metrics
-		ScheduledTimestamp *time.Time
-		StartedTimestamp   *time.Time
-		// OriginalScheduledTimestamp is to record the first scheduled workflow task during workflow task heartbeat.
+		ScheduledTime *time.Time
+		StartedTime   *time.Time
+		// OriginalScheduledTime is to record the first scheduled workflow task during workflow task heartbeat.
 		// Client may heartbeat workflow task by RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true
-		// In this case, OriginalScheduledTimestamp won't change. Then when current time - OriginalScheduledTimestamp exceeds
+		// In this case, OriginalScheduledTime won't change. Then when current time - OriginalScheduledTime exceeds
 		// some threshold, server can interrupt the heartbeat by enforcing to timeout the workflow task.
-		OriginalScheduledTimestamp *time.Time
+		OriginalScheduledTime *time.Time
 	}
 
 	mutableState interface {
@@ -134,9 +134,9 @@ type (
 		GetNamespaceEntry() *cache.NamespaceCacheEntry
 		GetStartEvent() (*historypb.HistoryEvent, error)
 		GetCurrentBranchToken() ([]byte, error)
-		GetVersionHistories() *persistence.VersionHistories
 		GetCurrentVersion() int64
-		GetExecutionInfo() *persistence.WorkflowExecutionInfo
+		GetExecutionInfo() *persistenceblobs.WorkflowExecutionInfo
+		GetExecutionState() *persistenceblobs.WorkflowExecutionState
 		GetHistoryBuilder() *historyBuilder
 		GetInFlightWorkflowTask() (*workflowTaskInfo, bool)
 		GetPendingWorkflowTask() (*workflowTaskInfo, bool)
@@ -216,7 +216,7 @@ type (
 		SetCurrentBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *historyBuilder)
 		SetHistoryTree(treeID string) error
-		SetVersionHistories(*persistence.VersionHistories) error
+		SetNextEventID(nextEventID int64)
 		UpdateActivity(*persistenceblobs.ActivityInfo) error
 		UpdateActivityWithTimerHeartbeat(*persistenceblobs.ActivityInfo, time.Time) error
 		UpdateActivityProgress(ai *persistenceblobs.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)

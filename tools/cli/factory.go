@@ -134,18 +134,14 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 }
 
 func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
-	hostPort := c.GlobalString(FlagAddress)
-	if hostPort == "" {
-		hostPort = localHostPort
-	}
-	// Ignoring error as we'll fail to dial anyway, and that will produce a meaningful error
-	host, _, _ := net.SplitHostPort(hostPort)
 
 	certPath := c.GlobalString(FlagTLSCertPath)
 	keyPath := c.GlobalString(FlagTLSKeyPath)
 	caPath := c.GlobalString(FlagTLSCaPath)
 	hostNameVerification := c.GlobalBool(FlagTLSEnableHostVerification)
+	serverName := c.GlobalString(FlagTLSServerName)
 
+	var host string
 	var cert *tls.Certificate
 	var caPool *x509.CertPool
 
@@ -167,6 +163,19 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 	}
 	// If we are given arguments to verify either server or client, configure TLS
 	if caPool != nil || cert != nil {
+		if serverName != "" {
+			host = serverName
+			// If server name is provided, we enable host verification
+			// because that's the only reason for providing server name
+			hostNameVerification = true
+		} else {
+			hostPort := c.GlobalString(FlagAddress)
+			if hostPort == "" {
+				hostPort = localHostPort
+			}
+			// Ignoring error as we'll fail to dial anyway, and that will produce a meaningful error
+			host, _, _ = net.SplitHostPort(hostPort)
+		}
 		tlsConfig := auth.NewTLSConfigForServer(host, hostNameVerification)
 		if caPool != nil {
 			tlsConfig.RootCAs = caPool

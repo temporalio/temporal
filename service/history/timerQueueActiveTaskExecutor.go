@@ -395,7 +395,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		if ok {
 			t.logger.Info("Duplicate activity retry timer task",
 				tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(mutableState.GetExecutionInfo().GetRunId()),
+				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
 				tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
 				tag.WorkflowScheduleID(activityInfo.ScheduleId),
 				tag.Attempt(activityInfo.Attempt),
@@ -491,7 +491,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	retryState := enumspb.RETRY_STATE_TIMEOUT
 	continueAsNewInitiator := enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY
 
-	wfExpTime := timestamp.TimeValue(mutableState.GetExecutionInfo().WorkflowExpirationTime)
+	wfExpTime := timestamp.TimeValue(mutableState.GetExecutionInfo().RetryExpirationTime)
 	// Retry if WorkflowExpirationTime is not set or workflow is not expired.
 	if wfExpTime.IsZero() || wfExpTime.After(t.shard.GetTimeSource().Now()) {
 		backoffInterval, retryState = mutableState.GetRetryBackoffDuration(timeoutFailure)
@@ -550,13 +550,14 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 
 	newExecutionInfo := newMutableState.GetExecutionInfo()
+	newExecutionState := newMutableState.GetExecutionState()
 	return weContext.updateWorkflowExecutionWithNewAsActive(
 		t.shard.GetTimeSource().Now(),
 		newWorkflowExecutionContext(
 			newExecutionInfo.NamespaceId,
 			commonpb.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowId,
-				RunId:      newExecutionInfo.ExecutionState.RunId,
+				RunId:      newExecutionState.RunId,
 			},
 			t.shard,
 			t.shard.GetExecutionManager(),

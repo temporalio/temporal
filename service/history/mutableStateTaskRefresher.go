@@ -203,9 +203,9 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowClose(
 	taskGenerator mutableStateTaskGenerator,
 ) error {
 
-	executionInfo := mutableState.GetExecutionInfo()
+	executionState := mutableState.GetExecutionState()
 
-	if executionInfo.ExecutionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return taskGenerator.generateWorkflowCloseTasks(
 			now,
 		)
@@ -225,9 +225,9 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 		return err
 	}
 
-	executionInfo := mutableState.GetExecutionInfo()
+	executionState := mutableState.GetExecutionState()
 
-	if executionInfo.ExecutionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return taskGenerator.generateRecordWorkflowStartedTasks(
 			now,
 			startEvent,
@@ -275,6 +275,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForActivity(
 ) error {
 
 	executionInfo := mutableState.GetExecutionInfo()
+	executionState := mutableState.GetExecutionState()
 	pendingActivityInfos := mutableState.GetPendingActivityInfos()
 
 	currentBranchToken, err := mutableState.GetCurrentBranchToken()
@@ -301,7 +302,7 @@ Loop:
 		scheduleEvent, err := r.eventsCache.getEvent(
 			executionInfo.NamespaceId,
 			executionInfo.WorkflowId,
-			executionInfo.ExecutionState.RunId,
+			executionState.RunId,
 			activityInfo.ScheduledEventBatchId,
 			activityInfo.ScheduleId,
 			currentBranchToken,
@@ -365,6 +366,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForChildWorkflow(
 ) error {
 
 	executionInfo := mutableState.GetExecutionInfo()
+	executionState := mutableState.GetExecutionState()
 	pendingChildWorkflowInfos := mutableState.GetPendingChildExecutionInfos()
 
 	currentBranchToken, err := mutableState.GetCurrentBranchToken()
@@ -381,7 +383,7 @@ Loop:
 		scheduleEvent, err := r.eventsCache.getEvent(
 			executionInfo.NamespaceId,
 			executionInfo.WorkflowId,
-			executionInfo.ExecutionState.RunId,
+			executionState.RunId,
 			childWorkflowInfo.InitiatedEventBatchId,
 			childWorkflowInfo.InitiatedId,
 			currentBranchToken,
@@ -408,6 +410,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRequestCancelExternalWork
 ) error {
 
 	executionInfo := mutableState.GetExecutionInfo()
+	executionState := mutableState.GetExecutionState()
 	pendingRequestCancelInfos := mutableState.GetPendingRequestCancelExternalInfos()
 
 	currentBranchToken, err := mutableState.GetCurrentBranchToken()
@@ -419,7 +422,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRequestCancelExternalWork
 		initiateEvent, err := r.eventsCache.getEvent(
 			executionInfo.NamespaceId,
 			executionInfo.WorkflowId,
-			executionInfo.ExecutionState.RunId,
+			executionState.RunId,
 			requestCancelInfo.GetInitiatedEventBatchId(),
 			requestCancelInfo.GetInitiatedId(),
 			currentBranchToken,
@@ -446,6 +449,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 ) error {
 
 	executionInfo := mutableState.GetExecutionInfo()
+	executionState := mutableState.GetExecutionState()
 	pendingSignalInfos := mutableState.GetPendingSignalExternalInfos()
 
 	currentBranchToken, err := mutableState.GetCurrentBranchToken()
@@ -457,7 +461,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 		initiateEvent, err := r.eventsCache.getEvent(
 			executionInfo.NamespaceId,
 			executionInfo.WorkflowId,
-			executionInfo.ExecutionState.RunId,
+			executionState.RunId,
 			signalInfo.GetInitiatedEventBatchId(),
 			signalInfo.GetInitiatedId(),
 			currentBranchToken,

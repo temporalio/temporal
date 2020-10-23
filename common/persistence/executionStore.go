@@ -29,10 +29,12 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
 type (
@@ -87,7 +89,8 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 			SignalRequestedIDs:  response.State.SignalRequestedIDs,
 			Checksum:            response.State.Checksum,
 			ChildExecutionInfos: response.State.ChildExecutionInfos,
-			VersionHistories:    NewVersionHistoriesFromProto(response.State.VersionHistories),
+			ExecutionState:      response.State.ExecutionState,
+			NextEventID:         response.State.NextEventID,
 		},
 	}
 
@@ -95,7 +98,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	newResponse.State.ExecutionInfo, newResponse.State.ExecutionStats, err = m.DeserializeExecutionInfo(response.State.ExecutionInfo)
+	newResponse.State.ExecutionInfo, err = m.DeserializeExecutionInfo(response.State.ExecutionInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -106,64 +109,68 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 }
 
 func (m *executionManagerImpl) DeserializeExecutionInfo(
-	info *WorkflowExecutionInfo,
-) (*WorkflowExecutionInfo, *persistenceblobs.ExecutionStats, error) {
-	newInfo := &WorkflowExecutionInfo{
-		ExecutionState:                         info.ExecutionState,
-		CompletionEvent:                        info.CompletionEvent,
-		NamespaceId:                            info.NamespaceId,
-		WorkflowId:                             info.WorkflowId,
-		FirstExecutionRunId:                    info.FirstExecutionRunId,
-		ParentNamespaceId:                      info.ParentNamespaceId,
-		ParentWorkflowId:                       info.ParentWorkflowId,
-		ParentRunId:                            info.ParentRunId,
-		InitiatedId:                            info.InitiatedId,
-		CompletionEventBatchId:                 info.CompletionEventBatchId,
-		TaskQueue:                              info.TaskQueue,
-		WorkflowTypeName:                       info.WorkflowTypeName,
-		WorkflowRunTimeout:                     info.WorkflowRunTimeout,
-		WorkflowExecutionTimeout:               info.WorkflowExecutionTimeout,
-		DefaultWorkflowTaskTimeout:             info.DefaultWorkflowTaskTimeout,
-		LastFirstEventId:                       info.LastFirstEventId,
-		LastEventTaskId:                        info.LastEventTaskId,
-		NextEventId:                            info.NextEventId,
-		LastProcessedEvent:                     info.LastProcessedEvent,
-		StartTime:                              info.StartTime,
-		LastUpdatedTime:                        info.LastUpdatedTime,
-		SignalCount:                            info.SignalCount,
-		WorkflowTaskVersion:                    info.WorkflowTaskVersion,
-		WorkflowTaskScheduleId:                 info.WorkflowTaskScheduleId,
-		WorkflowTaskStartedId:                  info.WorkflowTaskStartedId,
-		WorkflowTaskRequestId:                  info.WorkflowTaskRequestId,
-		WorkflowTaskTimeout:                    info.WorkflowTaskTimeout,
-		WorkflowTaskAttempt:                    info.WorkflowTaskAttempt,
-		WorkflowTaskStartedTimestamp:           info.WorkflowTaskStartedTimestamp,
-		WorkflowTaskScheduledTimestamp:         info.WorkflowTaskScheduledTimestamp,
-		WorkflowTaskOriginalScheduledTimestamp: info.WorkflowTaskOriginalScheduledTimestamp,
-		CancelRequested:                        info.CancelRequested,
-		StickyTaskQueue:                        info.StickyTaskQueue,
-		StickyScheduleToStartTimeout:           info.StickyScheduleToStartTimeout,
-		Attempt:                                info.Attempt,
-		HasRetryPolicy:                         info.HasRetryPolicy,
-		RetryInitialInterval:                   info.RetryInitialInterval,
-		RetryBackoffCoefficient:                info.RetryBackoffCoefficient,
-		RetryMaximumInterval:                   info.RetryMaximumInterval,
-		WorkflowExpirationTime:                 info.WorkflowExpirationTime,
-		RetryMaximumAttempts:                   info.RetryMaximumAttempts,
-		RetryNonRetryableErrorTypes:            info.RetryNonRetryableErrorTypes,
-		EventBranchToken:                       info.EventBranchToken,
-		CronSchedule:                           info.CronSchedule,
-		AutoResetPoints:                        info.AutoResetPoints,
-		SearchAttributes:                       info.SearchAttributes,
-		Memo:                                   info.Memo,
-		ExecutionStats:                         info.ExecutionStats,
+	// TODO: info should be a blob
+	info *persistenceblobs.WorkflowExecutionInfo,
+) (*persistenceblobs.WorkflowExecutionInfo, error) {
+	newInfo := &persistenceblobs.WorkflowExecutionInfo{
+		CompletionEvent:                   info.CompletionEvent,
+		NamespaceId:                       info.NamespaceId,
+		WorkflowId:                        info.WorkflowId,
+		FirstExecutionRunId:               info.FirstExecutionRunId,
+		ParentNamespaceId:                 info.ParentNamespaceId,
+		ParentWorkflowId:                  info.ParentWorkflowId,
+		ParentRunId:                       info.ParentRunId,
+		InitiatedId:                       info.InitiatedId,
+		CompletionEventBatchId:            info.CompletionEventBatchId,
+		TaskQueue:                         info.TaskQueue,
+		WorkflowTypeName:                  info.WorkflowTypeName,
+		WorkflowRunTimeout:                info.WorkflowRunTimeout,
+		WorkflowExecutionTimeout:          info.WorkflowExecutionTimeout,
+		DefaultWorkflowTaskTimeout:        info.DefaultWorkflowTaskTimeout,
+		LastFirstEventId:                  info.LastFirstEventId,
+		LastEventTaskId:                   info.LastEventTaskId,
+		LastProcessedEvent:                info.LastProcessedEvent,
+		StartTime:                         info.StartTime,
+		LastUpdateTime:                    info.LastUpdateTime,
+		SignalCount:                       info.SignalCount,
+		WorkflowTaskVersion:               info.WorkflowTaskVersion,
+		WorkflowTaskScheduleId:            info.WorkflowTaskScheduleId,
+		WorkflowTaskStartedId:             info.WorkflowTaskStartedId,
+		WorkflowTaskRequestId:             info.WorkflowTaskRequestId,
+		WorkflowTaskTimeout:               info.WorkflowTaskTimeout,
+		WorkflowTaskAttempt:               info.WorkflowTaskAttempt,
+		WorkflowTaskStartedTime:           info.WorkflowTaskStartedTime,
+		WorkflowTaskScheduledTime:         info.WorkflowTaskScheduledTime,
+		WorkflowTaskOriginalScheduledTime: info.WorkflowTaskOriginalScheduledTime,
+		CancelRequested:                   info.CancelRequested,
+		StickyTaskQueue:                   info.StickyTaskQueue,
+		StickyScheduleToStartTimeout:      info.StickyScheduleToStartTimeout,
+		Attempt:                           info.Attempt,
+		HasRetryPolicy:                    info.HasRetryPolicy,
+		RetryInitialInterval:              info.RetryInitialInterval,
+		RetryBackoffCoefficient:           info.RetryBackoffCoefficient,
+		RetryMaximumInterval:              info.RetryMaximumInterval,
+		RetryExpirationTime:               info.RetryExpirationTime,
+		RetryMaximumAttempts:              info.RetryMaximumAttempts,
+		RetryNonRetryableErrorTypes:       info.RetryNonRetryableErrorTypes,
+		EventBranchToken:                  info.EventBranchToken,
+		CronSchedule:                      info.CronSchedule,
+		AutoResetPoints:                   info.AutoResetPoints,
+		SearchAttributes:                  info.SearchAttributes,
+		Memo:                              info.Memo,
+		ExecutionStats:                    info.ExecutionStats,
+		StartVersion:                      info.StartVersion,
+		HistorySize:                       info.HistorySize,
+		EventStoreVersion:                 info.EventStoreVersion,
+		CancelRequestId:                   info.CancelRequestId,
+		VersionHistories:                  info.VersionHistories,
 	}
 
 	if newInfo.AutoResetPoints == nil {
 		newInfo.AutoResetPoints = &workflowpb.ResetPoints{}
 	}
 
-	return newInfo, info.ExecutionStats, nil
+	return newInfo, nil
 }
 
 func (m *executionManagerImpl) DeserializeBufferedEvents(
@@ -218,65 +225,67 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 }
 
 func (m *executionManagerImpl) SerializeExecutionInfo(
-	info *WorkflowExecutionInfo,
-	stats *persistenceblobs.ExecutionStats,
-) (*WorkflowExecutionInfo, error) {
+	info *persistenceblobs.WorkflowExecutionInfo,
+	// TODO: return blob here
+) (*persistenceblobs.WorkflowExecutionInfo, error) {
 
 	if info == nil {
-		return &WorkflowExecutionInfo{}, nil
+		return &persistenceblobs.WorkflowExecutionInfo{}, nil
 	}
 
-	return &WorkflowExecutionInfo{
-		NamespaceId:                            info.NamespaceId,
-		WorkflowId:                             info.WorkflowId,
-		FirstExecutionRunId:                    info.FirstExecutionRunId,
-		ParentNamespaceId:                      info.ParentNamespaceId,
-		ParentWorkflowId:                       info.ParentWorkflowId,
-		ParentRunId:                            info.ParentRunId,
-		InitiatedId:                            info.InitiatedId,
-		CompletionEventBatchId:                 info.CompletionEventBatchId,
-		CompletionEvent:                        info.CompletionEvent,
-		TaskQueue:                              info.TaskQueue,
-		WorkflowTypeName:                       info.WorkflowTypeName,
-		WorkflowRunTimeout:                     info.WorkflowRunTimeout,
-		WorkflowExecutionTimeout:               info.WorkflowExecutionTimeout,
-		DefaultWorkflowTaskTimeout:             info.DefaultWorkflowTaskTimeout,
-		ExecutionState:                         info.ExecutionState,
-		LastFirstEventId:                       info.LastFirstEventId,
-		LastEventTaskId:                        info.LastEventTaskId,
-		NextEventId:                            info.NextEventId,
-		LastProcessedEvent:                     info.LastProcessedEvent,
-		StartTime:                              info.StartTime,
-		LastUpdatedTime:                        info.LastUpdatedTime,
-		SignalCount:                            info.SignalCount,
-		WorkflowTaskVersion:                    info.WorkflowTaskVersion,
-		WorkflowTaskScheduleId:                 info.WorkflowTaskScheduleId,
-		WorkflowTaskStartedId:                  info.WorkflowTaskStartedId,
-		WorkflowTaskRequestId:                  info.WorkflowTaskRequestId,
-		WorkflowTaskTimeout:                    info.WorkflowTaskTimeout,
-		WorkflowTaskAttempt:                    info.WorkflowTaskAttempt,
-		WorkflowTaskStartedTimestamp:           info.WorkflowTaskStartedTimestamp,
-		WorkflowTaskScheduledTimestamp:         info.WorkflowTaskScheduledTimestamp,
-		WorkflowTaskOriginalScheduledTimestamp: info.WorkflowTaskOriginalScheduledTimestamp,
-		CancelRequested:                        info.CancelRequested,
-		StickyTaskQueue:                        info.StickyTaskQueue,
-		StickyScheduleToStartTimeout:           info.StickyScheduleToStartTimeout,
-		AutoResetPoints:                        info.AutoResetPoints,
-		Attempt:                                info.Attempt,
-		HasRetryPolicy:                         info.HasRetryPolicy,
-		RetryInitialInterval:                   info.RetryInitialInterval,
-		RetryBackoffCoefficient:                info.RetryBackoffCoefficient,
-		RetryMaximumInterval:                   info.RetryMaximumInterval,
-		WorkflowExpirationTime:                 info.WorkflowExpirationTime,
-		RetryMaximumAttempts:                   info.RetryMaximumAttempts,
-		RetryNonRetryableErrorTypes:            info.RetryNonRetryableErrorTypes,
-		EventBranchToken:                       info.EventBranchToken,
-		CronSchedule:                           info.CronSchedule,
-		Memo:                                   info.Memo,
-		SearchAttributes:                       info.SearchAttributes,
+	return &persistenceblobs.WorkflowExecutionInfo{
+		NamespaceId:                       info.NamespaceId,
+		WorkflowId:                        info.WorkflowId,
+		FirstExecutionRunId:               info.FirstExecutionRunId,
+		ParentNamespaceId:                 info.ParentNamespaceId,
+		ParentWorkflowId:                  info.ParentWorkflowId,
+		ParentRunId:                       info.ParentRunId,
+		InitiatedId:                       info.InitiatedId,
+		CompletionEventBatchId:            info.CompletionEventBatchId,
+		CompletionEvent:                   info.CompletionEvent,
+		TaskQueue:                         info.TaskQueue,
+		WorkflowTypeName:                  info.WorkflowTypeName,
+		WorkflowRunTimeout:                info.WorkflowRunTimeout,
+		WorkflowExecutionTimeout:          info.WorkflowExecutionTimeout,
+		DefaultWorkflowTaskTimeout:        info.DefaultWorkflowTaskTimeout,
+		LastFirstEventId:                  info.LastFirstEventId,
+		LastEventTaskId:                   info.LastEventTaskId,
+		LastProcessedEvent:                info.LastProcessedEvent,
+		StartTime:                         info.StartTime,
+		LastUpdateTime:                    info.LastUpdateTime,
+		SignalCount:                       info.SignalCount,
+		WorkflowTaskVersion:               info.WorkflowTaskVersion,
+		WorkflowTaskScheduleId:            info.WorkflowTaskScheduleId,
+		WorkflowTaskStartedId:             info.WorkflowTaskStartedId,
+		WorkflowTaskRequestId:             info.WorkflowTaskRequestId,
+		WorkflowTaskTimeout:               info.WorkflowTaskTimeout,
+		WorkflowTaskAttempt:               info.WorkflowTaskAttempt,
+		WorkflowTaskStartedTime:           info.WorkflowTaskStartedTime,
+		WorkflowTaskScheduledTime:         info.WorkflowTaskScheduledTime,
+		WorkflowTaskOriginalScheduledTime: info.WorkflowTaskOriginalScheduledTime,
+		CancelRequested:                   info.CancelRequested,
+		StickyTaskQueue:                   info.StickyTaskQueue,
+		StickyScheduleToStartTimeout:      info.StickyScheduleToStartTimeout,
+		AutoResetPoints:                   info.AutoResetPoints,
+		Attempt:                           info.Attempt,
+		HasRetryPolicy:                    info.HasRetryPolicy,
+		RetryInitialInterval:              info.RetryInitialInterval,
+		RetryBackoffCoefficient:           info.RetryBackoffCoefficient,
+		RetryMaximumInterval:              info.RetryMaximumInterval,
+		RetryExpirationTime:               info.RetryExpirationTime,
+		RetryMaximumAttempts:              info.RetryMaximumAttempts,
+		RetryNonRetryableErrorTypes:       info.RetryNonRetryableErrorTypes,
+		EventBranchToken:                  info.EventBranchToken,
+		CronSchedule:                      info.CronSchedule,
+		Memo:                              info.Memo,
+		SearchAttributes:                  info.SearchAttributes,
 
-		// attributes which are not related to mutable state
-		ExecutionStats: stats,
+		ExecutionStats:    info.ExecutionStats,
+		VersionHistories:  info.VersionHistories,
+		CancelRequestId:   info.CancelRequestId,
+		EventStoreVersion: info.EventStoreVersion,
+		HistorySize:       info.HistorySize,
+		StartVersion:      info.StartVersion,
 	}, nil
 }
 
@@ -376,10 +385,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 	input *WorkflowMutation,
 ) (*InternalWorkflowMutation, error) {
 
-	serializedExecutionInfo, err := m.SerializeExecutionInfo(
-		input.ExecutionInfo,
-		input.ExecutionStats,
-	)
+	serializedExecutionInfo, err := m.SerializeExecutionInfo(input.ExecutionInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -392,19 +398,15 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		}
 	}
 
-	startVersion, err := getStartVersion(input.VersionHistories)
-	if err != nil {
-		return nil, err
-	}
-	lastWriteVersion, err := getLastWriteVersion(input.VersionHistories)
+	lastWriteVersion, err := getLastWriteVersion(input.ExecutionInfo.VersionHistories)
 	if err != nil {
 		return nil, err
 	}
 
 	return &InternalWorkflowMutation{
 		ExecutionInfo:    serializedExecutionInfo,
-		VersionHistories: input.VersionHistories.ToProto(),
-		StartVersion:     startVersion,
+		ExecutionState:   input.ExecutionState,
+		NextEventID:      input.NextEventID,
 		LastWriteVersion: lastWriteVersion,
 
 		UpsertActivityInfos:       input.UpsertActivityInfos,
@@ -435,27 +437,20 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 	input *WorkflowSnapshot,
 ) (*InternalWorkflowSnapshot, error) {
 
-	serializedExecutionInfo, err := m.SerializeExecutionInfo(
-		input.ExecutionInfo,
-		input.ExecutionStats,
-	)
+	serializedExecutionInfo, err := m.SerializeExecutionInfo(input.ExecutionInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	startVersion, err := getStartVersion(input.VersionHistories)
-	if err != nil {
-		return nil, err
-	}
-	lastWriteVersion, err := getLastWriteVersion(input.VersionHistories)
+	lastWriteVersion, err := getLastWriteVersion(input.ExecutionInfo.VersionHistories)
 	if err != nil {
 		return nil, err
 	}
 
 	return &InternalWorkflowSnapshot{
 		ExecutionInfo:    serializedExecutionInfo,
-		VersionHistories: input.VersionHistories.ToProto(),
-		StartVersion:     startVersion,
+		ExecutionState:   input.ExecutionState,
+		NextEventID:      input.NextEventID,
 		LastWriteVersion: lastWriteVersion,
 
 		ActivityInfos:       input.ActivityInfos,
@@ -474,29 +469,6 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 	}, nil
 }
 
-func (m *executionManagerImpl) SerializeVersionHistories(
-	versionHistories *VersionHistories,
-) (*serialization.DataBlob, error) {
-
-	if versionHistories == nil {
-		return nil, nil
-	}
-	return m.serializer.SerializeVersionHistories(versionHistories.ToProto(), enumspb.ENCODING_TYPE_PROTO3)
-}
-
-func (m *executionManagerImpl) DeserializeVersionHistories(
-	blob *serialization.DataBlob,
-) (*VersionHistories, error) {
-
-	if blob == nil {
-		return nil, nil
-	}
-	versionHistories, err := m.serializer.DeserializeVersionHistories(blob)
-	if err != nil {
-		return nil, err
-	}
-	return NewVersionHistoriesFromProto(versionHistories), nil
-}
 func (m *executionManagerImpl) DeleteWorkflowExecution(
 	request *DeleteWorkflowExecutionRequest,
 ) error {
@@ -523,14 +495,32 @@ func (m *executionManagerImpl) ListConcreteExecutions(
 		return nil, err
 	}
 	newResponse := &ListConcreteExecutionsResponse{
-		ExecutionInfos: make([]*WorkflowExecutionInfo, len(response.ExecutionInfos), len(response.ExecutionInfos)),
-		PageToken:      response.NextPageToken,
+		States:    make([]*WorkflowMutableState, len(response.States)),
+		PageToken: response.NextPageToken,
 	}
-	for i, info := range response.ExecutionInfos {
-		newResponse.ExecutionInfos[i], _, err = m.DeserializeExecutionInfo(info)
+	for i, s := range response.States {
+		state := &WorkflowMutableState{
+			ActivityInfos:       s.ActivityInfos,
+			TimerInfos:          s.TimerInfos,
+			RequestCancelInfos:  s.RequestCancelInfos,
+			SignalInfos:         s.SignalInfos,
+			SignalRequestedIDs:  s.SignalRequestedIDs,
+			Checksum:            s.Checksum,
+			ChildExecutionInfos: s.ChildExecutionInfos,
+			ExecutionState:      s.ExecutionState,
+			NextEventID:         s.NextEventID,
+		}
+
+		state.BufferedEvents, err = m.DeserializeBufferedEvents(s.BufferedEvents)
 		if err != nil {
 			return nil, err
 		}
+		state.ExecutionInfo, err = m.DeserializeExecutionInfo(s.ExecutionInfo)
+		if err != nil {
+			return nil, err
+		}
+
+		newResponse.States[i] = state
 	}
 	return newResponse, nil
 }
@@ -638,38 +628,19 @@ func (m *executionManagerImpl) Close() {
 	m.persistence.Close()
 }
 
-func getStartVersion(
-	versionHistories *VersionHistories,
-) (int64, error) {
-
-	if versionHistories == nil {
-		return common.EmptyVersion, nil
-	}
-
-	versionHistory, err := versionHistories.GetCurrentVersionHistory()
-	if err != nil {
-		return 0, err
-	}
-	versionHistoryItem, err := versionHistory.GetFirstItem()
-	if err != nil {
-		return 0, err
-	}
-	return versionHistoryItem.GetVersion(), nil
-}
-
 func getLastWriteVersion(
-	versionHistories *VersionHistories,
+	versionHistories *historyspb.VersionHistories,
 ) (int64, error) {
 
 	if versionHistories == nil {
 		return common.EmptyVersion, nil
 	}
 
-	versionHistory, err := versionHistories.GetCurrentVersionHistory()
+	versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {
 		return 0, err
 	}
-	versionHistoryItem, err := versionHistory.GetLastItem()
+	versionHistoryItem, err := versionhistory.GetLastItem(versionHistory)
 	if err != nil {
 		return 0, err
 	}

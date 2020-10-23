@@ -33,7 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	persistence "go.temporal.io/server/common/persistence"
+	history "go.temporal.io/server/api/history/v1"
 )
 
 // MocknDCBranchMgr is a mock of nDCBranchMgr interface.
@@ -60,11 +60,11 @@ func (m *MocknDCBranchMgr) EXPECT() *MocknDCBranchMgrMockRecorder {
 }
 
 // prepareVersionHistory mocks base method.
-func (m *MocknDCBranchMgr) prepareVersionHistory(ctx context.Context, incomingVersionHistory *persistence.VersionHistory, incomingFirstEventID, incomingFirstEventVersion int64) (bool, int, error) {
+func (m *MocknDCBranchMgr) prepareVersionHistory(ctx context.Context, incomingVersionHistory *history.VersionHistory, incomingFirstEventID, incomingFirstEventVersion int64) (bool, int32, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "prepareVersionHistory", ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
 	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(int)
+	ret1, _ := ret[1].(int32)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }

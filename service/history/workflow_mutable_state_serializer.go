@@ -135,7 +135,7 @@ func workflowMutableStateToJSON(wms *persistence.WorkflowMutableState) string {
 	sb.WriteString(fmt.Sprintf(`"ExecutionInfo":%s,`, jsonMarshal(wms.ExecutionInfo)))
 
 	// ExecutionStats
-	sb.WriteString(fmt.Sprintf(`"ExecutionStats":%s,`, jsonMarshal(wms.ExecutionStats)))
+	sb.WriteString(fmt.Sprintf(`"ExecutionStats":%s,`, jsonMarshal(wms.ExecutionInfo.ExecutionStats)))
 
 	// BufferedEvents
 	sb.WriteString(`"BufferedEvents":`)
@@ -151,7 +151,7 @@ func workflowMutableStateToJSON(wms *persistence.WorkflowMutableState) string {
 	sb.WriteString("],")
 
 	// VersionHistories
-	sb.WriteString(fmt.Sprintf(`"VersionHistories":%s,`, jsonMarshal(wms.VersionHistories)))
+	sb.WriteString(fmt.Sprintf(`"VersionHistories":%s,`, jsonMarshal(wms.ExecutionInfo.VersionHistories)))
 
 	// Checksum
 	sb.WriteString(fmt.Sprintf(`"Checksum":%s`, jsonMarshal(wms.Checksum)))

@@ -32,7 +32,9 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -235,11 +237,10 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	ctx := context.Background()
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
 	branchToken := []byte{1}
-	versionHistory := persistence.NewVersionHistory(branchToken, []*persistence.VersionHistoryItem{
-		persistence.NewVersionHistoryItem(int64(10), int64(100)),
+	versionHistory := versionhistory.New(branchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewItem(int64(10), int64(100)),
 	})
-	rawVersionHistories := persistence.NewVersionHistories(versionHistory)
-	versionHistories := rawVersionHistories.ToProto()
+	versionHistories := versionhistory.NewVHS(versionHistory)
 	mState := &historyservice.GetMutableStateResponse{
 		NextEventId:        11,
 		CurrentBranchToken: branchToken,
@@ -273,11 +274,10 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAnd
 	ctx := context.Background()
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
 	branchToken := []byte{1}
-	versionHistory := persistence.NewVersionHistory(branchToken, []*persistence.VersionHistoryItem{
-		persistence.NewVersionHistoryItem(int64(10), int64(100)),
+	versionHistory := versionhistory.New(branchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewItem(int64(10), int64(100)),
 	})
-	rawVersionHistories := persistence.NewVersionHistories(versionHistory)
-	versionHistories := rawVersionHistories.ToProto()
+	versionHistories := versionhistory.NewVHS(versionHistory)
 	mState := &historyservice.GetMutableStateResponse{
 		NextEventId:        11,
 		CurrentBranchToken: branchToken,
@@ -308,10 +308,10 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	inputStartVersion := int64(10)
 	inputEndEventID := int64(100)
 	inputEndVersion := int64(11)
-	firstItem := persistence.NewVersionHistoryItem(inputStartEventID, inputStartVersion)
-	endItem := persistence.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
-	versionHistory := persistence.NewVersionHistory([]byte{}, []*persistence.VersionHistoryItem{firstItem, endItem})
-	versionHistories := persistence.NewVersionHistories(versionHistory)
+	firstItem := versionhistory.NewItem(inputStartEventID, inputStartVersion)
+	endItem := versionhistory.NewItem(inputEndEventID, inputEndVersion)
+	versionHistory := versionhistory.New([]byte{}, []*historyspb.VersionHistoryItem{firstItem, endItem})
+	versionHistories := versionhistory.NewVHS(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: s.namespace,
 		Execution: &commonpb.WorkflowExecution{
@@ -341,10 +341,10 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	inputEndEventID := int64(100)
 	inputStartVersion := int64(10)
 	inputEndVersion := int64(11)
-	firstItem := persistence.NewVersionHistoryItem(inputStartEventID, inputStartVersion)
-	targetItem := persistence.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
-	versionHistory := persistence.NewVersionHistory([]byte{}, []*persistence.VersionHistoryItem{firstItem, targetItem})
-	versionHistories := persistence.NewVersionHistories(versionHistory)
+	firstItem := versionhistory.NewItem(inputStartEventID, inputStartVersion)
+	targetItem := versionhistory.NewItem(inputEndEventID, inputEndVersion)
+	versionHistory := versionhistory.New([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
+	versionHistories := versionhistory.NewVHS(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: s.namespace,
 		Execution: &commonpb.WorkflowExecution{
@@ -374,10 +374,10 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	inputEndEventID := int64(100)
 	inputStartVersion := int64(10)
 	inputEndVersion := int64(11)
-	firstItem := persistence.NewVersionHistoryItem(inputStartEventID, inputStartVersion)
-	targetItem := persistence.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
-	versionHistory := persistence.NewVersionHistory([]byte{}, []*persistence.VersionHistoryItem{firstItem, targetItem})
-	versionHistories := persistence.NewVersionHistories(versionHistory)
+	firstItem := versionhistory.NewItem(inputStartEventID, inputStartVersion)
+	targetItem := versionhistory.NewItem(inputEndEventID, inputEndVersion)
+	versionHistory := versionhistory.New([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
+	versionHistories := versionhistory.NewVHS(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: s.namespace,
 		Execution: &commonpb.WorkflowExecution{
@@ -407,14 +407,14 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	inputEndEventID := int64(100)
 	inputStartVersion := int64(10)
 	inputEndVersion := int64(101)
-	item1 := persistence.NewVersionHistoryItem(inputStartEventID, inputStartVersion)
-	item2 := persistence.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
-	versionHistory1 := persistence.NewVersionHistory([]byte{}, []*persistence.VersionHistoryItem{item1, item2})
-	item3 := persistence.NewVersionHistoryItem(int64(10), int64(20))
-	item4 := persistence.NewVersionHistoryItem(int64(20), int64(51))
-	versionHistory2 := persistence.NewVersionHistory([]byte{}, []*persistence.VersionHistoryItem{item1, item3, item4})
-	versionHistories := persistence.NewVersionHistories(versionHistory1)
-	_, _, err := versionHistories.AddVersionHistory(versionHistory2)
+	item1 := versionhistory.NewItem(inputStartEventID, inputStartVersion)
+	item2 := versionhistory.NewItem(inputEndEventID, inputEndVersion)
+	versionHistory1 := versionhistory.New([]byte{}, []*historyspb.VersionHistoryItem{item1, item2})
+	item3 := versionhistory.NewItem(int64(10), int64(20))
+	item4 := versionhistory.NewItem(int64(20), int64(51))
+	versionHistory2 := versionhistory.New([]byte{}, []*historyspb.VersionHistoryItem{item1, item3, item4})
+	versionHistories := versionhistory.NewVHS(versionHistory1)
+	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory2)
 	s.NoError(err)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: s.namespace,

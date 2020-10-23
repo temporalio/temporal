@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
 type (
@@ -563,14 +564,14 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 			heartbeatTime = activityInfo.LastHeartbeatUpdateTime
 
 			// Version history uses when replicate the sync activity task
-			versionHistories := mutableState.GetVersionHistories()
+			versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
 			var versionHistory *historyspb.VersionHistory
 			if versionHistories != nil {
-				rawVersionHistory, err := versionHistories.GetCurrentVersionHistory()
+				var err error
+				versionHistory, err = versionhistory.GetCurrentVersionHistory(versionHistories)
 				if err != nil {
 					return nil, err
 				}
-				versionHistory = rawVersionHistory.ToProto()
 			}
 
 			return &replicationspb.ReplicationTask{
@@ -712,13 +713,14 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 	version int64,
 ) ([]*historyspb.VersionHistoryItem, []byte, error) {
 
-	versionHistories := mutableState.GetVersionHistories()
+	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
 	if versionHistories == nil {
 		return nil, nil, serviceerror.NewInternal("replicatorQueueProcessor encounter workflow without version histories")
 	}
 
-	versionHistoryIndex, err := versionHistories.FindFirstVersionHistoryIndexByItem(
-		persistence.NewVersionHistoryItem(
+	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByItem(
+		versionHistories,
+		versionhistory.NewItem(
 			eventID,
 			version,
 		),
@@ -727,11 +729,11 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 		return nil, nil, err
 	}
 
-	versionHistory, err := versionHistories.GetVersionHistory(versionHistoryIndex)
+	versionHistory, err := versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
 	if err != nil {
 		return nil, nil, err
 	}
-	return versionHistory.ToProto().Items, versionHistory.GetBranchToken(), nil
+	return versionHistory.GetItems(), versionHistory.GetBranchToken(), nil
 }
 
 func (p *replicatorQueueProcessorImpl) processReplication(
@@ -793,5 +795,5 @@ func (p *replicatorQueueProcessorImpl) isNewRunNDCEnabled(
 	if err != nil {
 		return false, err
 	}
-	return mutableState.GetVersionHistories() != nil, nil
+	return mutableState.GetExecutionInfo().GetVersionHistories() != nil, nil
 }

@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -68,6 +69,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
@@ -1117,7 +1119,11 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedConflictOnUpdate() {
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
-	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
+	var updatedWorkflowMutation persistence.WorkflowMutation
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Run(func(args mock.Arguments) {
+		updateRequest := args[0].(*persistence.UpdateWorkflowExecutionRequest)
+		updatedWorkflowMutation = updateRequest.UpdateWorkflowMutation
+	}).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: testNamespaceID,
@@ -1128,8 +1134,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedConflictOnUpdate() {
 		},
 	})
 	s.Nil(err, s.printHistory(msBuilder))
-	s.Equal(int64(16), ms2.ExecutionInfo.NextEventId)
-	s.Equal(workflowTaskStartedEvent2.EventId, ms2.ExecutionInfo.LastProcessedEvent)
+	s.NotNil(updatedWorkflowMutation)
+	s.Equal(int64(16), updatedWorkflowMutation.NextEventID)
+	s.Equal(workflowTaskStartedEvent2.EventId, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent)
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	activity3Attributes := s.getActivityScheduledEvent(executionBuilder, 13).GetActivityTaskScheduledEventAttributes()
@@ -1283,7 +1290,11 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
-	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
+	var updatedWorkflowMutation persistence.WorkflowMutation
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Run(func(args mock.Arguments) {
+		updateRequest := args[0].(*persistence.UpdateWorkflowExecutionRequest)
+		updatedWorkflowMutation = updateRequest.UpdateWorkflowMutation
+	}).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: testNamespaceID,
@@ -1297,11 +1308,12 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("UnhandledCommand", err.Error())
 
-	s.Equal(int64(15), ms2.ExecutionInfo.NextEventId)
-	s.Equal(workflowTaskStartedEvent1.EventId, ms2.ExecutionInfo.LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.ExecutionState.State)
-	s.Equal(ms2.ExecutionInfo.NextEventId-1, ms2.ExecutionInfo.WorkflowTaskScheduleId)
-	s.Equal(int32(1), ms2.ExecutionInfo.Attempt)
+	s.NotNil(updatedWorkflowMutation)
+	s.Equal(int64(15), updatedWorkflowMutation.NextEventID)
+	s.Equal(workflowTaskStartedEvent1.EventId, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
+	s.Equal(updatedWorkflowMutation.NextEventID-1, updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduleId)
+	s.Equal(int32(1), updatedWorkflowMutation.ExecutionInfo.Attempt)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
@@ -1363,7 +1375,11 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
-	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
+	var updatedWorkflowMutation persistence.WorkflowMutation
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Run(func(args mock.Arguments) {
+		updateRequest := args[0].(*persistence.UpdateWorkflowExecutionRequest)
+		updatedWorkflowMutation = updateRequest.UpdateWorkflowMutation
+	}).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: testNamespaceID,
@@ -1377,11 +1393,12 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("UnhandledCommand", err.Error())
 
-	s.Equal(int64(15), ms2.ExecutionInfo.NextEventId)
-	s.Equal(workflowTaskStartedEvent1.EventId, ms2.ExecutionInfo.LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.ExecutionState.State)
-	s.Equal(ms2.ExecutionInfo.NextEventId-1, ms2.ExecutionInfo.WorkflowTaskScheduleId)
-	s.Equal(int32(1), ms2.ExecutionInfo.Attempt)
+	s.NotNil(updatedWorkflowMutation)
+	s.Equal(int64(15), updatedWorkflowMutation.NextEventID)
+	s.Equal(workflowTaskStartedEvent1.EventId, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
+	s.Equal(updatedWorkflowMutation.NextEventID-1, updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduleId)
+	s.Equal(int32(1), updatedWorkflowMutation.ExecutionInfo.Attempt)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedBadCommandAttributes() {
@@ -1550,7 +1567,11 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 		}
 
 		s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
-		s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
+		var updatedWorkflowMutation persistence.WorkflowMutation
+		s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Run(func(args mock.Arguments) {
+			updateRequest := args[0].(*persistence.UpdateWorkflowExecutionRequest)
+			updatedWorkflowMutation = updateRequest.UpdateWorkflowMutation
+		}).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 		_, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: testNamespaceID,
@@ -1564,9 +1585,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 		if !iVar.expectWorkflowTaskFail {
 			s.NoError(err, s.printHistory(msBuilder))
 			executionBuilder := s.getBuilder(testNamespaceID, we)
-			s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventId)
+			s.Equal(int64(6), executionBuilder.GetNextEventID())
 			s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 			s.False(executionBuilder.HasPendingWorkflowTask())
 
 			activity1Attributes := s.getActivityScheduledEvent(executionBuilder, int64(5)).GetActivityTaskScheduledEventAttributes()
@@ -1577,10 +1598,11 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 			s.Error(err)
 			s.IsType(&serviceerror.InvalidArgument{}, err)
 			s.True(strings.HasPrefix(err.Error(), "BadScheduleActivityAttributes"), err.Error())
-			s.Equal(int64(5), ms2.ExecutionInfo.NextEventId, iVar)
-			s.Equal(common.EmptyEventID, ms2.ExecutionInfo.LastProcessedEvent, iVar)
-			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.ExecutionState.State, iVar)
-			s.True(ms2.ExecutionInfo.WorkflowTaskScheduleId != common.EmptyEventID, iVar)
+			s.NotNil(updatedWorkflowMutation)
+			s.Equal(int64(5), updatedWorkflowMutation.NextEventID, iVar)
+			s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent, iVar)
+			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State, iVar)
+			s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduleId != common.EmptyEventID, iVar)
 		}
 		s.TearDownTest()
 		s.SetupTest()
@@ -1633,7 +1655,11 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
-	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
+	var updatedWorkflowMutation persistence.WorkflowMutation
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Run(func(args mock.Arguments) {
+		updateRequest := args[0].(*persistence.UpdateWorkflowExecutionRequest)
+		updatedWorkflowMutation = updateRequest.UpdateWorkflowMutation
+	}).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: namespaceID,
@@ -1648,10 +1674,11 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadBinary: binary test-bad-binary is already marked as bad deployment", err.Error())
 
-	s.Equal(int64(5), ms2.ExecutionInfo.NextEventId)
-	s.Equal(common.EmptyEventID, ms2.ExecutionInfo.LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.ExecutionState.State)
-	s.True(ms2.ExecutionInfo.WorkflowTaskScheduleId != common.EmptyEventID)
+	s.NotNil(updatedWorkflowMutation)
+	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
+	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
+	s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduleId != common.EmptyEventID)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWorkflowTask() {
@@ -1708,9 +1735,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWor
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(6), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 
 	activity1Attributes := s.getActivityScheduledEvent(executionBuilder, int64(5)).GetActivityTaskScheduledEventAttributes()
@@ -1746,9 +1773,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTime
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = timestamp.TimeNowPtrUtcAddDuration(-time.Hour)
+	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTime = timestamp.TimePtr(time.Now().UTC().Add(-time.Hour))
 
-	commands := []*commandpb.Command{}
+	var commands []*commandpb.Command
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -1790,9 +1817,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = timestamp.TimeNowPtrUtcAddDuration(-time.Minute)
+	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTime = timestamp.TimePtr(time.Now().UTC().Add(-time.Minute))
 
-	commands := []*commandpb.Command{}
+	var commands []*commandpb.Command
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -1834,9 +1861,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = nil
+	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTime = nil
 
-	commands := []*commandpb.Command{}
+	var commands []*commandpb.Command
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -1904,9 +1931,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowSuccess() 
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(6), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
 
@@ -1957,9 +1984,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowSuccess() {
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(6), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
 
@@ -2015,7 +2042,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowSucc
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(6), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 }
 
@@ -2071,7 +2098,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithAban
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(6), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(1, len(executionBuilder.GetPendingChildExecutionInfos()))
 	var childID int64
@@ -2135,7 +2162,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(6), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(1, len(executionBuilder.GetPendingChildExecutionInfos()))
 	var childID int64
@@ -2614,9 +2641,9 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(11), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(10))
@@ -2721,9 +2748,9 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(9), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(9), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(8))
@@ -2782,9 +2809,9 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(9), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(9), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(8))
@@ -3157,9 +3184,9 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(12), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(12), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(10))
@@ -3262,9 +3289,9 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	})
 	s.Nil(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(9), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(9), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(8))
@@ -3323,9 +3350,9 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	})
 	s.Nil(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(9), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(9), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(8))
@@ -3429,9 +3456,9 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	})
 	s.Nil(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(7), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(7), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
 
@@ -3574,9 +3601,9 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	})
 	s.Nil(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(10), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(9))
@@ -3635,9 +3662,9 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	})
 	s.Nil(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(10), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(9))
@@ -3783,7 +3810,11 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NotSchedule
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
-	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
+	var updatedWorkflowMutation persistence.WorkflowMutation
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Run(func(args mock.Arguments) {
+		updateRequest := args[0].(*persistence.UpdateWorkflowExecutionRequest)
+		updatedWorkflowMutation = updateRequest.UpdateWorkflowMutation
+	}).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: testNamespaceID,
@@ -3796,10 +3827,11 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NotSchedule
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadRequestCancelActivityAttributes: invalid history builder state for action: add-activitytask-cancel-requested-event", err.Error())
-	s.Equal(int64(5), ms2.ExecutionInfo.NextEventId)
-	s.Equal(common.EmptyEventID, ms2.ExecutionInfo.LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.ExecutionState.State)
-	s.True(ms2.ExecutionInfo.WorkflowTaskScheduleId != common.EmptyEventID)
+	s.NotNil(updatedWorkflowMutation)
+	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
+	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
+	s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduleId != common.EmptyEventID)
 }
 
 func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled() {
@@ -3856,13 +3888,13 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled()
 	s.Nil(err)
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(12), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(12), executionBuilder.GetNextEventID())
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.True(executionBuilder.HasPendingWorkflowTask())
-	di2, ok := executionBuilder.GetWorkflowTaskInfo(executionBuilder.GetExecutionInfo().NextEventId - 1)
+	di2, ok := executionBuilder.GetWorkflowTaskInfo(executionBuilder.GetNextEventID() - 1)
 	s.True(ok)
-	s.Equal(executionBuilder.GetExecutionInfo().NextEventId-1, di2.ScheduleID)
+	s.Equal(executionBuilder.GetNextEventID()-1, di2.ScheduleID)
 	s.Equal(int32(1), di2.Attempt)
 }
 
@@ -3921,9 +3953,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Started() {
 	s.Nil(err)
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(11), executionBuilder.GetNextEventID())
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
 
@@ -3989,9 +4021,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Completed()
 	s.Nil(err)
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(11), executionBuilder.GetNextEventID())
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
 
@@ -4050,9 +4082,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 	s.Nil(err)
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(11), executionBuilder.GetNextEventID())
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 
 	// Try recording activity heartbeat
@@ -4093,9 +4125,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 	s.Nil(err)
 
 	executionBuilder = s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(13), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(13), executionBuilder.GetNextEventID())
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.True(executionBuilder.HasPendingWorkflowTask())
 }
 
@@ -4154,9 +4186,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 	s.Nil(err)
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(11), executionBuilder.GetNextEventID())
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 
 	// Try recording activity heartbeat
@@ -4197,9 +4229,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 	s.Nil(err)
 
 	executionBuilder = s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(13), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(13), executionBuilder.GetNextEventID())
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.True(executionBuilder.HasPendingWorkflowTask())
 }
 
@@ -4282,9 +4314,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 	s.Nil(err)
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(11), executionBuilder.GetNextEventID())
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 	s.Len(qr.getCompletedIDs(), 2)
 	completed1, err := qr.getTerminationState(id1)
@@ -4341,9 +4373,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 	s.Nil(err)
 
 	executionBuilder = s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(13), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(13), executionBuilder.GetNextEventID())
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.True(executionBuilder.HasPendingWorkflowTask())
 }
 
@@ -4397,7 +4429,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	s.Nil(err)
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	// Try to add the same timer ID again.
 	di2 := addWorkflowTaskScheduledEvent(executionBuilder)
@@ -4422,7 +4454,11 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 			workflowTaskFailedEvent = true
 		}
 	}).Once()
-	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
+	var updatedWorkflowMutation persistence.WorkflowMutation
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Run(func(args mock.Arguments) {
+		updateRequest := args[0].(*persistence.UpdateWorkflowExecutionRequest)
+		updatedWorkflowMutation = updateRequest.UpdateWorkflowMutation
+	}).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err = s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: testNamespaceID,
@@ -4438,10 +4474,11 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 
 	s.True(workflowTaskFailedEvent)
 
-	s.Equal(int64(9), ms2.ExecutionInfo.NextEventId)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.ExecutionState.State)
-	s.Equal(ms2.ExecutionInfo.NextEventId, ms2.ExecutionInfo.WorkflowTaskScheduleId)
-	s.Equal(int32(2), ms2.ExecutionInfo.WorkflowTaskAttempt)
+	s.NotNil(updatedWorkflowMutation)
+	s.Equal(int64(9), updatedWorkflowMutation.NextEventID)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
+	s.Equal(updatedWorkflowMutation.NextEventID, updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduleId)
+	s.Equal(int32(2), updatedWorkflowMutation.ExecutionInfo.WorkflowTaskAttempt)
 }
 
 func (s *engineSuite) TestUserTimer_RespondWorkflowTaskCompleted() {
@@ -4497,9 +4534,9 @@ func (s *engineSuite) TestUserTimer_RespondWorkflowTaskCompleted() {
 	s.Nil(err)
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(10), executionBuilder.GetNextEventID())
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
 
@@ -4543,7 +4580,11 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
-	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
+	var updatedWorkflowMutation persistence.WorkflowMutation
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Run(func(args mock.Arguments) {
+		updateRequest := args[0].(*persistence.UpdateWorkflowExecutionRequest)
+		updatedWorkflowMutation = updateRequest.UpdateWorkflowMutation
+	}).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: testNamespaceID,
@@ -4557,10 +4598,11 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadCancelTimerAttributes: invalid history builder state for action: add-timer-canceled-event", err.Error())
 
-	s.Equal(int64(5), ms2.ExecutionInfo.NextEventId)
-	s.Equal(common.EmptyEventID, ms2.ExecutionInfo.LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.ExecutionState.State)
-	s.True(ms2.ExecutionInfo.WorkflowTaskScheduleId != common.EmptyEventID)
+	s.NotNil(updatedWorkflowMutation)
+	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
+	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
+	s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduleId != common.EmptyEventID)
 }
 
 func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() {
@@ -4624,9 +4666,9 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 	s.Nil(err)
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventId)
+	s.Equal(int64(10), executionBuilder.GetNextEventID())
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().GetExecutionState().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 	s.False(executionBuilder.HasBufferedEvents())
 }
@@ -4745,7 +4787,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 	addWorkflowExecutionStartedEvent(msBuilder, *we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
-	ms.ExecutionInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	ms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
@@ -4893,13 +4935,13 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 	addWorkflowExecutionStartedEvent(msBuilder, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 
 	ms := createMutableState(msBuilder)
-	ms.ExecutionInfo.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	ms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	ms.ExecutionInfo.LastProcessedEvent = 1
 	token, err := msBuilder.GetCurrentBranchToken()
 	s.NoError(err)
-	item := persistence.NewVersionHistoryItem(1, 1)
-	versionHistory := persistence.NewVersionHistory(token, []*persistence.VersionHistoryItem{item})
-	ms.VersionHistories = persistence.NewVersionHistories(versionHistory)
+	item := versionhistory.NewItem(1, 1)
+	versionHistory := versionhistory.New(token, []*historyspb.VersionHistoryItem{item})
+	ms.ExecutionInfo.VersionHistories = versionhistory.NewVHS(versionHistory)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: testRunID}
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
@@ -5221,7 +5263,9 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	builder := ms.(*mutableStateBuilder)
 	builder.FlushBufferedEvents() // nolint:errcheck
 	info := copyWorkflowExecutionInfo(builder.executionInfo)
-	stats := &persistenceblobs.ExecutionStats{}
+	state := copyWorkflowExecutionState(builder.executionState)
+	info.ExecutionStats = &persistenceblobs.ExecutionStats{}
+
 	activityInfos := make(map[int64]*persistenceblobs.ActivityInfo)
 	for id, info := range builder.pendingActivityInfoIDs {
 		activityInfos[id] = copyActivityInfo(info)
@@ -5244,7 +5288,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	}
 
 	// FlushBuffer will also be called within the CloseTransactionAsMutation
-	builder.CloseTransactionAsMutation(time.Now(), transactionPolicyActive)
+	_, _, _ = builder.CloseTransactionAsMutation(time.Now().UTC(), transactionPolicyActive)
 	var bufferedEvents []*historypb.HistoryEvent
 	if len(builder.bufferedEvents) > 0 {
 		bufferedEvents = append(bufferedEvents, builder.bufferedEvents...)
@@ -5252,77 +5296,84 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	if len(builder.updateBufferedEvents) > 0 {
 		bufferedEvents = append(bufferedEvents, builder.updateBufferedEvents...)
 	}
-	var versionHistories *persistence.VersionHistories
-	if builder.versionHistories != nil {
-		versionHistories = builder.versionHistories.Duplicate()
+	if builder.executionInfo.VersionHistories != nil {
+		info.VersionHistories = versionhistory.DuplicateVHS(builder.executionInfo.VersionHistories)
 	}
 
 	return &persistence.WorkflowMutableState{
 		ExecutionInfo:       info,
-		ExecutionStats:      stats,
+		ExecutionState:      state,
+		NextEventID:         builder.GetNextEventID(),
 		ActivityInfos:       activityInfos,
 		TimerInfos:          timerInfos,
 		BufferedEvents:      bufferedEvents,
 		SignalInfos:         signalInfos,
 		RequestCancelInfos:  cancellationInfos,
 		ChildExecutionInfos: childInfos,
-		VersionHistories:    versionHistories,
 	}
 }
 
-func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *persistence.WorkflowExecutionInfo {
-	return &persistence.WorkflowExecutionInfo{
-		NamespaceId:                  sourceInfo.NamespaceId,
-		WorkflowId:                   sourceInfo.WorkflowId,
-		FirstExecutionRunId:          sourceInfo.FirstExecutionRunId,
-		ParentNamespaceId:            sourceInfo.ParentNamespaceId,
-		ParentWorkflowId:             sourceInfo.ParentWorkflowId,
-		ParentRunId:                  sourceInfo.ParentRunId,
-		InitiatedId:                  sourceInfo.InitiatedId,
-		CompletionEventBatchId:       sourceInfo.CompletionEventBatchId,
-		CompletionEvent:              sourceInfo.CompletionEvent,
-		TaskQueue:                    sourceInfo.TaskQueue,
-		StickyTaskQueue:              sourceInfo.StickyTaskQueue,
-		StickyScheduleToStartTimeout: sourceInfo.StickyScheduleToStartTimeout,
-		WorkflowTypeName:             sourceInfo.WorkflowTypeName,
-		WorkflowRunTimeout:           sourceInfo.WorkflowRunTimeout,
-		DefaultWorkflowTaskTimeout:   sourceInfo.DefaultWorkflowTaskTimeout,
-		ExecutionState: &persistenceblobs.WorkflowExecutionState{
-			RunId:           sourceInfo.ExecutionState.RunId,
-			CreateRequestId: sourceInfo.ExecutionState.CreateRequestId,
-			State:           sourceInfo.ExecutionState.State,
-			Status:          sourceInfo.ExecutionState.Status,
-		},
-		LastFirstEventId:                       sourceInfo.LastFirstEventId,
-		LastEventTaskId:                        sourceInfo.LastEventTaskId,
-		NextEventId:                            sourceInfo.NextEventId,
-		LastProcessedEvent:                     sourceInfo.LastProcessedEvent,
-		StartTime:                              sourceInfo.StartTime,
-		LastUpdatedTime:                        sourceInfo.LastUpdatedTime,
-		SignalCount:                            sourceInfo.SignalCount,
-		WorkflowTaskVersion:                    sourceInfo.WorkflowTaskVersion,
-		WorkflowTaskScheduleId:                 sourceInfo.WorkflowTaskScheduleId,
-		WorkflowTaskStartedId:                  sourceInfo.WorkflowTaskStartedId,
-		WorkflowTaskRequestId:                  sourceInfo.WorkflowTaskRequestId,
-		WorkflowTaskTimeout:                    sourceInfo.WorkflowTaskTimeout,
-		WorkflowTaskAttempt:                    sourceInfo.WorkflowTaskAttempt,
-		WorkflowTaskStartedTimestamp:           sourceInfo.WorkflowTaskStartedTimestamp,
-		WorkflowTaskOriginalScheduledTimestamp: sourceInfo.WorkflowTaskOriginalScheduledTimestamp,
-		WorkflowTaskScheduledTimestamp:         sourceInfo.WorkflowTaskScheduledTimestamp,
-		CancelRequested:                        sourceInfo.CancelRequested,
-		CronSchedule:                           sourceInfo.CronSchedule,
-		AutoResetPoints:                        sourceInfo.AutoResetPoints,
-		Memo:                                   sourceInfo.Memo,
-		SearchAttributes:                       sourceInfo.SearchAttributes,
-		Attempt:                                sourceInfo.Attempt,
-		HasRetryPolicy:                         sourceInfo.HasRetryPolicy,
-		RetryInitialInterval:                   sourceInfo.RetryInitialInterval,
-		RetryBackoffCoefficient:                sourceInfo.RetryBackoffCoefficient,
-		RetryMaximumInterval:                   sourceInfo.RetryMaximumInterval,
-		WorkflowExpirationTime:                 sourceInfo.WorkflowExpirationTime,
-		RetryMaximumAttempts:                   sourceInfo.RetryMaximumAttempts,
-		RetryNonRetryableErrorTypes:            sourceInfo.RetryNonRetryableErrorTypes,
-		EventBranchToken:                       sourceInfo.EventBranchToken,
+func copyWorkflowExecutionState(sourceState *persistenceblobs.WorkflowExecutionState) *persistenceblobs.WorkflowExecutionState {
+	return &persistenceblobs.WorkflowExecutionState{
+		RunId:           sourceState.RunId,
+		CreateRequestId: sourceState.CreateRequestId,
+		State:           sourceState.State,
+		Status:          sourceState.Status,
+	}
+}
+func copyWorkflowExecutionInfo(sourceInfo *persistenceblobs.WorkflowExecutionInfo) *persistenceblobs.WorkflowExecutionInfo {
+	return &persistenceblobs.WorkflowExecutionInfo{
+		NamespaceId:                       sourceInfo.NamespaceId,
+		WorkflowId:                        sourceInfo.WorkflowId,
+		FirstExecutionRunId:               sourceInfo.FirstExecutionRunId,
+		ParentNamespaceId:                 sourceInfo.ParentNamespaceId,
+		ParentWorkflowId:                  sourceInfo.ParentWorkflowId,
+		ParentRunId:                       sourceInfo.ParentRunId,
+		InitiatedId:                       sourceInfo.InitiatedId,
+		CompletionEventBatchId:            sourceInfo.CompletionEventBatchId,
+		CompletionEvent:                   sourceInfo.CompletionEvent,
+		TaskQueue:                         sourceInfo.TaskQueue,
+		StickyTaskQueue:                   sourceInfo.StickyTaskQueue,
+		StickyScheduleToStartTimeout:      sourceInfo.StickyScheduleToStartTimeout,
+		WorkflowTypeName:                  sourceInfo.WorkflowTypeName,
+		WorkflowRunTimeout:                sourceInfo.WorkflowRunTimeout,
+		DefaultWorkflowTaskTimeout:        sourceInfo.DefaultWorkflowTaskTimeout,
+		LastFirstEventId:                  sourceInfo.LastFirstEventId,
+		LastEventTaskId:                   sourceInfo.LastEventTaskId,
+		LastProcessedEvent:                sourceInfo.LastProcessedEvent,
+		StartTime:                         sourceInfo.StartTime,
+		LastUpdateTime:                    sourceInfo.LastUpdateTime,
+		SignalCount:                       sourceInfo.SignalCount,
+		WorkflowTaskVersion:               sourceInfo.WorkflowTaskVersion,
+		WorkflowTaskScheduleId:            sourceInfo.WorkflowTaskScheduleId,
+		WorkflowTaskStartedId:             sourceInfo.WorkflowTaskStartedId,
+		WorkflowTaskRequestId:             sourceInfo.WorkflowTaskRequestId,
+		WorkflowTaskTimeout:               sourceInfo.WorkflowTaskTimeout,
+		WorkflowTaskAttempt:               sourceInfo.WorkflowTaskAttempt,
+		WorkflowTaskStartedTime:           sourceInfo.WorkflowTaskStartedTime,
+		WorkflowTaskOriginalScheduledTime: sourceInfo.WorkflowTaskOriginalScheduledTime,
+		WorkflowTaskScheduledTime:         sourceInfo.WorkflowTaskScheduledTime,
+		CancelRequested:                   sourceInfo.CancelRequested,
+		CronSchedule:                      sourceInfo.CronSchedule,
+		AutoResetPoints:                   sourceInfo.AutoResetPoints,
+		Memo:                              sourceInfo.Memo,
+		SearchAttributes:                  sourceInfo.SearchAttributes,
+		Attempt:                           sourceInfo.Attempt,
+		HasRetryPolicy:                    sourceInfo.HasRetryPolicy,
+		RetryInitialInterval:              sourceInfo.RetryInitialInterval,
+		RetryBackoffCoefficient:           sourceInfo.RetryBackoffCoefficient,
+		RetryMaximumInterval:              sourceInfo.RetryMaximumInterval,
+		RetryExpirationTime:               sourceInfo.RetryExpirationTime,
+		RetryMaximumAttempts:              sourceInfo.RetryMaximumAttempts,
+		RetryNonRetryableErrorTypes:       sourceInfo.RetryNonRetryableErrorTypes,
+		EventBranchToken:                  sourceInfo.EventBranchToken,
+		VersionHistories:                  sourceInfo.VersionHistories,
+		ExecutionStats:                    sourceInfo.ExecutionStats,
+		StartVersion:                      sourceInfo.StartVersion,
+		CancelRequestId:                   sourceInfo.CancelRequestId,
+		EventStoreVersion:                 sourceInfo.EventStoreVersion,
+		WorkflowExecutionTimeout:          sourceInfo.WorkflowExecutionTimeout,
+		HistorySize:                       sourceInfo.HistorySize,
 	}
 }
 
