@@ -341,7 +341,7 @@ Update_History_Loop:
 		if workflowTaskHeartbeating {
 			namespace := namespaceEntry.GetInfo().Name
 			timeout := handler.config.WorkflowTaskHeartbeatTimeout(namespace)
-			origSchedTime := timestamp.TimeValue(currentWorkflowTask.OriginalScheduledTimestamp)
+			origSchedTime := timestamp.TimeValue(currentWorkflowTask.OriginalScheduledTime)
 			if origSchedTime.UnixNano() > 0 && handler.timeSource.Now().After(origSchedTime.Add(timeout)) {
 				workflowTaskHeartbeatTimeout = true
 				scope := handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace))
@@ -457,7 +457,7 @@ Update_History_Loop:
 			if workflowTaskHeartbeating && !workflowTaskHeartbeatTimeout {
 				newWorkflowTask, err = msBuilder.AddWorkflowTaskScheduledEventAsHeartbeat(
 					request.GetReturnNewWorkflowTask(),
-					currentWorkflowTask.OriginalScheduledTimestamp,
+					currentWorkflowTask.OriginalScheduledTime,
 				)
 			} else {
 				newWorkflowTask, err = msBuilder.AddWorkflowTaskScheduledEvent(
@@ -488,13 +488,14 @@ Update_History_Loop:
 		var updateErr error
 		if continueAsNewBuilder != nil {
 			continueAsNewExecutionInfo := continueAsNewBuilder.GetExecutionInfo()
+			continueAsNewExecutionState := continueAsNewBuilder.GetExecutionState()
 			updateErr = weContext.updateWorkflowExecutionWithNewAsActive(
 				handler.shard.GetTimeSource().Now(),
 				newWorkflowExecutionContext(
 					continueAsNewExecutionInfo.NamespaceId,
 					commonpb.WorkflowExecution{
 						WorkflowId: continueAsNewExecutionInfo.WorkflowId,
-						RunId:      continueAsNewExecutionInfo.ExecutionState.RunId,
+						RunId:      continueAsNewExecutionState.RunId,
 					},
 					handler.shard,
 					handler.shard.GetExecutionManager(),
@@ -595,8 +596,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		Name: executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	response.ScheduledTime = workflowTask.ScheduledTimestamp
-	response.StartedTime = workflowTask.StartedTimestamp
+	response.ScheduledTime = workflowTask.ScheduledTime
+	response.StartedTime = workflowTask.StartedTime
 
 	if workflowTask.Attempt > 1 {
 		// This workflowTask is retried from mutable state
@@ -635,7 +636,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 	namespaceID := namespaceEntry.GetInfo().Id
 	namespace := namespaceEntry.GetInfo().Name
 	workflowID := msBuilder.GetExecutionInfo().WorkflowId
-	runID := msBuilder.GetExecutionInfo().GetRunId()
+	runID := msBuilder.GetExecutionState().GetRunId()
 
 	scope := handler.metricsClient.Scope(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,

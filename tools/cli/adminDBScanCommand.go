@@ -322,13 +322,15 @@ func scanShard(
 			return report
 		}
 		token = resp.NextPageToken
-		for _, e := range resp.ExecutionInfos {
+		for _, s := range resp.States {
 			if report.Scanned == nil {
 				report.Scanned = &ShardScanReportExecutionsScanned{}
 			}
 			report.Scanned.TotalExecutionsCount++
 			historyVerificationResult, history, historyBranch := verifyHistoryExists(
-				e,
+				s.ExecutionInfo,
+				s.ExecutionState,
+				s.NextEventID,
 				branchDecoder,
 				corruptedExecutionWriter,
 				checkFailureWriter,
@@ -354,7 +356,9 @@ func scanShard(
 			}
 
 			firstHistoryEventVerificationResult := verifyFirstHistoryEvent(
-				e,
+				s.ExecutionInfo,
+				s.ExecutionState,
+				s.NextEventID,
 				historyBranch,
 				corruptedExecutionWriter,
 				checkFailureWriter,
@@ -374,7 +378,9 @@ func scanShard(
 			}
 
 			currentExecutionVerificationResult := verifyCurrentExecution(
-				e,
+				s.ExecutionInfo,
+				s.ExecutionState,
+				s.NextEventID,
 				corruptedExecutionWriter,
 				checkFailureWriter,
 				shardID,
@@ -399,7 +405,9 @@ func scanShard(
 }
 
 func verifyHistoryExists(
-	execution *persistence.WorkflowExecutionInfo,
+	executionInfo *persistenceblobs.WorkflowExecutionInfo,
+	executionState *persistenceblobs.WorkflowExecutionState,
+	nextEventID int64,
 	branchDecoder *codec.JSONPBEncoder,
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
@@ -410,7 +418,7 @@ func verifyHistoryExists(
 	execStore persistence.ExecutionStore,
 ) (VerificationResult, *persistence.InternalReadHistoryBranchResponse, *persistenceblobs.HistoryBranch) {
 	var branch persistenceblobs.HistoryBranch
-	err := branchDecoder.Decode(execution.EventBranchToken, &branch)
+	err := branchDecoder.Decode(executionInfo.EventBranchToken, &branch)
 	byteBranch, err := byteKeyFromProto(&branch)
 	if err != nil {
 		return VerificationResultCheckFailure, nil, nil
@@ -418,9 +426,9 @@ func verifyHistoryExists(
 	if err != nil {
 		checkFailureWriter.Add(&ExecutionCheckFailure{
 			ShardID:     shardID,
-			NamespaceID: execution.NamespaceId,
-			WorkflowID:  execution.WorkflowId,
-			RunID:       execution.GetRunId(),
+			NamespaceID: executionInfo.NamespaceId,
+			WorkflowID:  executionInfo.WorkflowId,
+			RunID:       executionState.GetRunId(),
 			Note:        "failed to decode branch token",
 			Details:     err.Error(),
 		})
@@ -437,7 +445,7 @@ func verifyHistoryExists(
 	preconditionForDBCall(totalDBRequests, limiter)
 	history, err := historyStore.ReadHistoryBranch(readHistoryBranchReq)
 
-	ecf, stillExists := concreteExecutionStillExists(execution, shardID, execStore, limiter, totalDBRequests)
+	ecf, stillExists := concreteExecutionStillExists(executionInfo, executionState, shardID, execStore, limiter, totalDBRequests)
 	if ecf != nil {
 		checkFailureWriter.Add(ecf)
 		return VerificationResultCheckFailure, nil, nil
@@ -450,13 +458,13 @@ func verifyHistoryExists(
 		if err == gocql.ErrNotFound {
 			corruptedExecutionWriter.Add(&CorruptedExecution{
 				ShardID:     shardID,
-				NamespaceID: execution.NamespaceId,
-				WorkflowID:  execution.WorkflowId,
-				RunID:       execution.GetRunId(),
-				NextEventID: execution.NextEventId,
+				NamespaceID: executionInfo.NamespaceId,
+				WorkflowID:  executionInfo.WorkflowId,
+				RunID:       executionState.GetRunId(),
+				NextEventID: nextEventID,
 				TreeID:      byteBranch.GetTreeId(),
 				BranchID:    byteBranch.GetBranchId(),
-				CloseStatus: execution.ExecutionState.Status,
+				CloseStatus: executionState.Status,
 				CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 					CorruptionType: HistoryMissing,
 					Note:           "detected history missing based on gocql.ErrNotFound",
@@ -467,9 +475,9 @@ func verifyHistoryExists(
 		}
 		checkFailureWriter.Add(&ExecutionCheckFailure{
 			ShardID:     shardID,
-			NamespaceID: execution.NamespaceId,
-			WorkflowID:  execution.WorkflowId,
-			RunID:       execution.GetRunId(),
+			NamespaceID: executionInfo.NamespaceId,
+			WorkflowID:  executionInfo.WorkflowId,
+			RunID:       executionState.GetRunId(),
 			Note:        "failed to read history branch with error other than gocql.ErrNotFond",
 			Details:     err.Error(),
 		})
@@ -477,13 +485,13 @@ func verifyHistoryExists(
 	} else if history == nil || len(history.History) == 0 {
 		corruptedExecutionWriter.Add(&CorruptedExecution{
 			ShardID:     shardID,
-			NamespaceID: execution.NamespaceId,
-			WorkflowID:  execution.WorkflowId,
-			RunID:       execution.GetRunId(),
-			NextEventID: execution.NextEventId,
+			NamespaceID: executionInfo.NamespaceId,
+			WorkflowID:  executionInfo.WorkflowId,
+			RunID:       executionState.GetRunId(),
+			NextEventID: nextEventID,
 			TreeID:      byteBranch.GetTreeId(),
 			BranchID:    byteBranch.GetBranchId(),
-			CloseStatus: execution.ExecutionState.Status,
+			CloseStatus: executionState.Status,
 			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 				CorruptionType: HistoryMissing,
 				Note:           "got empty history",
@@ -495,7 +503,9 @@ func verifyHistoryExists(
 }
 
 func verifyFirstHistoryEvent(
-	execution *persistence.WorkflowExecutionInfo,
+	executionInfo *persistenceblobs.WorkflowExecutionInfo,
+	executionState *persistenceblobs.WorkflowExecutionState,
+	nextEventID int64,
 	branch *persistenceblobs.HistoryBranch,
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
@@ -511,9 +521,9 @@ func verifyFirstHistoryEvent(
 	if err != nil || len(firstBatch) == 0 {
 		checkFailureWriter.Add(&ExecutionCheckFailure{
 			ShardID:     shardID,
-			NamespaceID: execution.NamespaceId,
-			WorkflowID:  execution.WorkflowId,
-			RunID:       execution.GetRunId(),
+			NamespaceID: executionInfo.NamespaceId,
+			WorkflowID:  executionInfo.WorkflowId,
+			RunID:       executionState.GetRunId(),
 			Note:        "failed to deserialize batch events",
 			Details:     err.Error(),
 		})
@@ -521,13 +531,13 @@ func verifyFirstHistoryEvent(
 	} else if firstBatch[0].GetEventId() != common.FirstEventID {
 		corruptedExecutionWriter.Add(&CorruptedExecution{
 			ShardID:     shardID,
-			NamespaceID: execution.NamespaceId,
-			WorkflowID:  execution.WorkflowId,
-			RunID:       execution.GetRunId(),
-			NextEventID: execution.NextEventId,
+			NamespaceID: executionInfo.NamespaceId,
+			WorkflowID:  executionInfo.WorkflowId,
+			RunID:       executionState.GetRunId(),
+			NextEventID: nextEventID,
 			TreeID:      byteBranch.GetTreeId(),
 			BranchID:    byteBranch.GetBranchId(),
-			CloseStatus: execution.ExecutionState.Status,
+			CloseStatus: executionState.Status,
 			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 				CorruptionType: InvalidFirstEvent,
 				Note:           "got unexpected first eventID",
@@ -538,13 +548,13 @@ func verifyFirstHistoryEvent(
 	} else if firstBatch[0].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 		corruptedExecutionWriter.Add(&CorruptedExecution{
 			ShardID:     shardID,
-			NamespaceID: execution.NamespaceId,
-			WorkflowID:  execution.WorkflowId,
-			RunID:       execution.GetRunId(),
-			NextEventID: execution.NextEventId,
+			NamespaceID: executionInfo.NamespaceId,
+			WorkflowID:  executionInfo.WorkflowId,
+			RunID:       executionState.GetRunId(),
+			NextEventID: nextEventID,
 			TreeID:      byteBranch.GetTreeId(),
 			BranchID:    byteBranch.GetBranchId(),
-			CloseStatus: execution.ExecutionState.Status,
+			CloseStatus: executionState.Status,
 			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 				CorruptionType: InvalidFirstEvent,
 				Note:           "got unexpected first eventType",
@@ -557,7 +567,9 @@ func verifyFirstHistoryEvent(
 }
 
 func verifyCurrentExecution(
-	execution *persistence.WorkflowExecutionInfo,
+	executionInfo *persistenceblobs.WorkflowExecutionInfo,
+	executionState *persistenceblobs.WorkflowExecutionState,
+	nextEventID int64,
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
 	shardID int32,
@@ -570,17 +582,17 @@ func verifyCurrentExecution(
 	if err != nil {
 		return VerificationResultCheckFailure
 	}
-	if !executionOpen(execution) {
+	if !executionOpen(executionState) {
 		return VerificationResultNoCorruption
 	}
 	getCurrentExecutionRequest := &persistence.GetCurrentExecutionRequest{
-		NamespaceID: execution.NamespaceId,
-		WorkflowID:  execution.WorkflowId,
+		NamespaceID: executionInfo.NamespaceId,
+		WorkflowID:  executionInfo.WorkflowId,
 	}
 	preconditionForDBCall(totalDBRequests, limiter)
 	currentExecution, err := execStore.GetCurrentExecution(getCurrentExecutionRequest)
 
-	ecf, stillOpen := concreteExecutionStillOpen(execution, shardID, execStore, limiter, totalDBRequests)
+	ecf, stillOpen := concreteExecutionStillOpen(executionInfo, executionState, shardID, execStore, limiter, totalDBRequests)
 	if ecf != nil {
 		checkFailureWriter.Add(ecf)
 		return VerificationResultCheckFailure
@@ -594,13 +606,13 @@ func verifyCurrentExecution(
 		case *serviceerror.NotFound:
 			corruptedExecutionWriter.Add(&CorruptedExecution{
 				ShardID:     shardID,
-				NamespaceID: execution.NamespaceId,
-				WorkflowID:  execution.WorkflowId,
-				RunID:       execution.GetRunId(),
-				NextEventID: execution.NextEventId,
+				NamespaceID: executionInfo.NamespaceId,
+				WorkflowID:  executionInfo.WorkflowId,
+				RunID:       executionState.GetRunId(),
+				NextEventID: nextEventID,
 				TreeID:      byteBranch.GetTreeId(),
 				BranchID:    byteBranch.GetBranchId(),
-				CloseStatus: execution.ExecutionState.Status,
+				CloseStatus: executionState.Status,
 				CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 					CorruptionType: OpenExecutionInvalidCurrentExecution,
 					Note:           "execution is open without having a current execution",
@@ -611,24 +623,24 @@ func verifyCurrentExecution(
 		default:
 			checkFailureWriter.Add(&ExecutionCheckFailure{
 				ShardID:     shardID,
-				NamespaceID: execution.NamespaceId,
-				WorkflowID:  execution.WorkflowId,
-				RunID:       execution.GetRunId(),
+				NamespaceID: executionInfo.NamespaceId,
+				WorkflowID:  executionInfo.WorkflowId,
+				RunID:       executionState.GetRunId(),
 				Note:        "failed to access current execution but could not confirm that it does not exist",
 				Details:     err.Error(),
 			})
 			return VerificationResultCheckFailure
 		}
-	} else if currentExecution.RunID != execution.GetRunId() {
+	} else if currentExecution.RunID != executionState.GetRunId() {
 		corruptedExecutionWriter.Add(&CorruptedExecution{
 			ShardID:     shardID,
-			NamespaceID: execution.NamespaceId,
-			WorkflowID:  execution.WorkflowId,
-			RunID:       execution.GetRunId(),
-			NextEventID: execution.NextEventId,
+			NamespaceID: executionInfo.NamespaceId,
+			WorkflowID:  executionInfo.WorkflowId,
+			RunID:       executionState.GetRunId(),
+			NextEventID: nextEventID,
 			TreeID:      byteBranch.GetTreeId(),
 			BranchID:    byteBranch.GetBranchId(),
-			CloseStatus: execution.ExecutionState.Status,
+			CloseStatus: executionState.Status,
 			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 				CorruptionType: OpenExecutionInvalidCurrentExecution,
 				Note:           "found open execution for which there exists current execution pointing at a different concrete execution",
@@ -640,17 +652,18 @@ func verifyCurrentExecution(
 }
 
 func concreteExecutionStillExists(
-	execution *persistence.WorkflowExecutionInfo,
+	executionInfo *persistenceblobs.WorkflowExecutionInfo,
+	executionState *persistenceblobs.WorkflowExecutionState,
 	shardID int32,
 	execStore persistence.ExecutionStore,
 	limiter *quotas.DynamicRateLimiter,
 	totalDBRequests *int64,
 ) (*ExecutionCheckFailure, bool) {
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
-		NamespaceID: execution.NamespaceId,
+		NamespaceID: executionInfo.NamespaceId,
 		Execution: commonpb.WorkflowExecution{
-			WorkflowId: execution.WorkflowId,
-			RunId:      execution.GetRunId(),
+			WorkflowId: executionInfo.WorkflowId,
+			RunId:      executionState.GetRunId(),
 		},
 	}
 	preconditionForDBCall(totalDBRequests, limiter)
@@ -665,9 +678,9 @@ func concreteExecutionStillExists(
 	default:
 		return &ExecutionCheckFailure{
 			ShardID:     shardID,
-			NamespaceID: execution.NamespaceId,
-			WorkflowID:  execution.WorkflowId,
-			RunID:       execution.GetRunId(),
+			NamespaceID: executionInfo.NamespaceId,
+			WorkflowID:  executionInfo.WorkflowId,
+			RunID:       executionState.GetRunId(),
 			Note:        "failed to verify that concrete execution still exists",
 			Details:     err.Error(),
 		}, false
@@ -675,17 +688,18 @@ func concreteExecutionStillExists(
 }
 
 func concreteExecutionStillOpen(
-	execution *persistence.WorkflowExecutionInfo,
+	executionInfo *persistenceblobs.WorkflowExecutionInfo,
+	executionState *persistenceblobs.WorkflowExecutionState,
 	shardID int32,
 	execStore persistence.ExecutionStore,
 	limiter *quotas.DynamicRateLimiter,
 	totalDBRequests *int64,
 ) (*ExecutionCheckFailure, bool) {
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
-		NamespaceID: execution.NamespaceId,
+		NamespaceID: executionInfo.NamespaceId,
 		Execution: commonpb.WorkflowExecution{
-			WorkflowId: execution.WorkflowId,
-			RunId:      execution.GetRunId(),
+			WorkflowId: executionInfo.WorkflowId,
+			RunId:      executionState.GetRunId(),
 		},
 	}
 	preconditionForDBCall(totalDBRequests, limiter)
@@ -693,15 +707,15 @@ func concreteExecutionStillOpen(
 	if err != nil {
 		return &ExecutionCheckFailure{
 			ShardID:     shardID,
-			NamespaceID: execution.NamespaceId,
-			WorkflowID:  execution.WorkflowId,
-			RunID:       execution.GetRunId(),
+			NamespaceID: executionInfo.NamespaceId,
+			WorkflowID:  executionInfo.WorkflowId,
+			RunID:       executionState.GetRunId(),
 			Note:        "failed to access concrete execution to verify it is still open",
 			Details:     err.Error(),
 		}, false
 	}
 
-	return nil, executionOpen(ce.State.ExecutionInfo)
+	return nil, executionOpen(ce.State.ExecutionState)
 }
 
 func deleteEmptyFiles(files ...*os.File) {
@@ -846,6 +860,7 @@ func preconditionForDBCall(totalDBRequests *int64, limiter *quotas.DynamicRateLi
 	limiter.Wait(context.Background())
 }
 
-func executionOpen(execution *persistence.WorkflowExecutionInfo) bool {
-	return execution.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED || execution.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+func executionOpen(executionState *persistenceblobs.WorkflowExecutionState) bool {
+	return executionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+		executionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 }

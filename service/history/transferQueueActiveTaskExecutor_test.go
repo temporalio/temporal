@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/persistence/versionhistory"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -2122,10 +2123,10 @@ func (s *transferQueueActiveTaskExecutorSuite) createPersistenceMutableState(
 	lastEventVersion int64,
 ) *persistence.WorkflowMutableState {
 
-	if ms.GetVersionHistories() != nil {
-		currentVersionHistory, err := ms.GetVersionHistories().GetCurrentVersionHistory()
+	if ms.GetExecutionInfo().GetVersionHistories() != nil {
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())
 		s.NoError(err)
-		err = currentVersionHistory.AddOrUpdateItem(persistence.NewVersionHistoryItem(
+		err = versionhistory.AddOrUpdateItem(currentVersionHistory, versionhistory.NewItem(
 			lastEventID, lastEventVersion,
 		))
 		s.NoError(err)

@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -138,13 +137,14 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 ) (bool, error) {
 
 	executionInfo := c.mutableState.GetExecutionInfo()
+	executionState := c.mutableState.GetExecutionState()
 	err := common.CheckEventBlobSizeLimit(
 		payloadSize,
 		c.blobSizeLimitWarn,
 		c.blobSizeLimitError,
 		executionInfo.NamespaceId,
 		executionInfo.WorkflowId,
-		executionInfo.ExecutionState.RunId,
+		executionState.RunId,
 		c.metricsScope.Tagged(commandTypeTag),
 		c.logger,
 		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
@@ -461,7 +461,7 @@ func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 
 func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
-	executionInfo *persistence.WorkflowExecutionInfo,
+	executionInfo *persistenceblobs.WorkflowExecutionInfo,
 ) error {
 
 	if attributes == nil {
@@ -487,7 +487,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	// Reduce runTimeout if it is going to exceed WorkflowExpirationTime
 	// Note that this calculation can produce negative result
 	// handleCommandContinueAsNewWorkflow must handle negative runTimeout value
-	timeoutTime := timestamp.TimeValue(executionInfo.WorkflowExpirationTime)
+	timeoutTime := timestamp.TimeValue(executionInfo.RetryExpirationTime)
 	if !timeoutTime.IsZero() {
 		runTimeout := timestamp.RoundUp(timeoutTime.Sub(time.Now().UTC()))
 		if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) > 0 {
@@ -522,7 +522,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	targetNamespaceID string,
 	targetNamespace string,
 	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
-	parentInfo *persistence.WorkflowExecutionInfo,
+	parentInfo *persistenceblobs.WorkflowExecutionInfo,
 ) error {
 
 	if err := v.validateCrossNamespaceCall(

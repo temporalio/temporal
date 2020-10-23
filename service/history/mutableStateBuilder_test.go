@@ -39,6 +39,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
@@ -271,26 +272,26 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	activityID := "activity_id"
 	activityResult := payloads.EncodeString("activity_result")
 
-	info := &persistence.WorkflowExecutionInfo{
+	info := &persistenceblobs.WorkflowExecutionInfo{
 		NamespaceId:                namespaceID,
 		WorkflowId:                 we.GetWorkflowId(),
 		TaskQueue:                  tl,
 		WorkflowTypeName:           "wType",
 		WorkflowRunTimeout:         timestamp.DurationFromSeconds(200),
 		DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(100),
-		ExecutionState: &persistenceblobs.WorkflowExecutionState{
-			RunId:  we.GetRunId(),
-			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		},
-		NextEventId:            int64(8),
-		LastProcessedEvent:     int64(3),
-		LastUpdatedTime:        timestamp.TimeNowPtrUtc(),
-		WorkflowTaskVersion:    common.EmptyVersion,
-		WorkflowTaskScheduleId: common.EmptyEventID,
-		WorkflowTaskStartedId:  common.EmptyEventID,
-		WorkflowTaskTimeout:    timestamp.DurationFromSeconds(100),
-		WorkflowTaskAttempt:    1,
+		LastProcessedEvent:         int64(3),
+		LastUpdateTime:             timestamp.TimeNowPtrUtc(),
+		WorkflowTaskVersion:        common.EmptyVersion,
+		WorkflowTaskScheduleId:     common.EmptyEventID,
+		WorkflowTaskStartedId:      common.EmptyEventID,
+		WorkflowTaskTimeout:        timestamp.DurationFromSeconds(100),
+		WorkflowTaskAttempt:        1,
+	}
+
+	state := &persistenceblobs.WorkflowExecutionState{
+		RunId:  we.GetRunId(),
+		State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 
 	activityInfos := map[int64]*persistenceblobs.ActivityInfo{
@@ -332,6 +333,8 @@ func (s *mutableStateSuite) TestReorderEvents() {
 
 	dbState := &persistence.WorkflowMutableState{
 		ExecutionInfo:  info,
+		ExecutionState: state,
+		NextEventID:    int64(8),
 		ActivityInfos:  activityInfos,
 		BufferedEvents: bufferedEvents,
 	}
@@ -430,7 +433,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			// test checksum is invalidated
 			loadErrors = loadErrorsFunc()
 			s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
-				return float64((s.msBuilder.executionInfo.LastUpdatedTime.UnixNano() / int64(time.Second)) + 1)
+				return float64((s.msBuilder.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) + 1)
 			}
 			s.msBuilder.Load(dbState)
 			s.Equal(loadErrors, loadErrorsFunc())
@@ -460,13 +463,13 @@ func (s *mutableStateSuite) TestChecksumProbabilities() {
 func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
 	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 { return 0 }
 	s.False(s.msBuilder.shouldInvalidateCheckum())
-	s.msBuilder.executionInfo.LastUpdatedTime = timestamp.TimeNowPtrUtc()
+	s.msBuilder.executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
-		return float64((s.msBuilder.executionInfo.LastUpdatedTime.UnixNano() / int64(time.Second)) + 1)
+		return float64((s.msBuilder.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) + 1)
 	}
 	s.True(s.msBuilder.shouldInvalidateCheckum())
 	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
-		return float64((s.msBuilder.executionInfo.LastUpdatedTime.UnixNano() / int64(time.Second)) - 1)
+		return float64((s.msBuilder.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) - 1)
 	}
 	s.False(s.msBuilder.shouldInvalidateCheckum())
 }
@@ -723,26 +726,36 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 	tl := "testTaskQueue"
 	failoverVersion := int64(300)
 
-	info := &persistence.WorkflowExecutionInfo{
+	info := &persistenceblobs.WorkflowExecutionInfo{
 		NamespaceId:                namespaceID,
 		WorkflowId:                 we.GetWorkflowId(),
 		TaskQueue:                  tl,
 		WorkflowTypeName:           "wType",
 		WorkflowRunTimeout:         timestamp.DurationFromSeconds(200),
 		DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(100),
-		ExecutionState: &persistenceblobs.WorkflowExecutionState{
-			RunId:  we.GetRunId(),
-			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		LastProcessedEvent:         int64(99),
+		LastUpdateTime:             timestamp.TimeNowPtrUtc(),
+		WorkflowTaskVersion:        failoverVersion,
+		WorkflowTaskScheduleId:     common.EmptyEventID,
+		WorkflowTaskStartedId:      common.EmptyEventID,
+		WorkflowTaskTimeout:        timestamp.DurationFromSeconds(100),
+		WorkflowTaskAttempt:        1,
+		VersionHistories: &historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{
+				{
+					BranchToken: []byte("token#1"),
+					Items: []*historyspb.VersionHistoryItem{
+						{EventId: 1, Version: 300},
+					},
+				},
+			},
 		},
-		NextEventId:            int64(101),
-		LastProcessedEvent:     int64(99),
-		LastUpdatedTime:        timestamp.TimeNowPtrUtc(),
-		WorkflowTaskVersion:    failoverVersion,
-		WorkflowTaskScheduleId: common.EmptyEventID,
-		WorkflowTaskStartedId:  common.EmptyEventID,
-		WorkflowTaskTimeout:    timestamp.DurationFromSeconds(100),
-		WorkflowTaskAttempt:    1,
+	}
+
+	state := &persistenceblobs.WorkflowExecutionState{
+		RunId:  we.GetRunId(),
+		State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 
 	activityInfos := map[int64]*persistenceblobs.ActivityInfo{
@@ -810,25 +823,15 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		},
 	}
 
-	versionHistories := &persistence.VersionHistories{
-		Histories: []*persistence.VersionHistory{
-			{
-				BranchToken: []byte("token#1"),
-				Items: []*persistence.VersionHistoryItem{
-					{EventID: 1, Version: 300},
-				},
-			},
-		},
-	}
-
 	return &persistence.WorkflowMutableState{
 		ExecutionInfo:       info,
+		ExecutionState:      state,
+		NextEventID:         int64(101),
 		ActivityInfos:       activityInfos,
 		TimerInfos:          timerInfos,
 		ChildExecutionInfos: childInfos,
 		SignalInfos:         signalInfos,
 		SignalRequestedIDs:  signalRequestIDs,
 		BufferedEvents:      bufferedEvents,
-		VersionHistories:    versionHistories,
 	}
 }

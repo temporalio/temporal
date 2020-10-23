@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
@@ -257,7 +258,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 		switch err.(type) {
 		case nil:
 			// Sanity check to make only 3DC mutable state here
-			if mutableState.GetVersionHistories() == nil {
+			if mutableState.GetExecutionInfo().GetVersionHistories() == nil {
 				return serviceerror.NewInternal("The mutable state does not support 3DC.")
 			}
 
@@ -274,7 +275,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 				return err
 			}
 
-			if mutableState.GetVersionHistories().GetCurrentVersionHistoryIndex() == branchIndex {
+			if mutableState.GetExecutionInfo().GetVersionHistories().GetCurrentVersionHistoryIndex() == branchIndex {
 				return r.applyNonStartEventsToCurrentBranch(ctx, context, mutableState, isRebuilt, releaseFn, task)
 			}
 			return r.applyNonStartEventsToNoneCurrentBranch(ctx, context, mutableState, branchIndex, releaseFn, task)
@@ -354,7 +355,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareBranch(
 	context workflowExecutionContext,
 	mutableState mutableState,
 	task nDCReplicationTask,
-) (bool, int, error) {
+) (bool, int32, error) {
 
 	incomingVersionHistory := task.getVersionHistory()
 	branchMgr := r.newBranchMgr(context, mutableState, task.getLogger())
@@ -384,7 +385,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareMutableState(
 	ctx context.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
-	branchIndex int,
+	branchIndex int32,
 	task nDCReplicationTask,
 ) (mutableState, bool, error) {
 
@@ -442,11 +443,12 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 	var newWorkflow nDCWorkflow
 	if newMutableState != nil {
 		newExecutionInfo := newMutableState.GetExecutionInfo()
+		newExecutionState := newMutableState.GetExecutionState()
 		newContext := newWorkflowExecutionContext(
 			newExecutionInfo.NamespaceId,
 			commonpb.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowId,
-				RunId:      newExecutionInfo.ExecutionState.RunId,
+				RunId:      newExecutionState.RunId,
 			},
 			r.shard,
 			r.shard.GetExecutionManager(),
@@ -485,7 +487,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranch(
 	ctx context.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
-	branchIndex int,
+	branchIndex int32,
 	releaseFn releaseWorkflowExecutionFunc,
 	task nDCReplicationTask,
 ) error {
@@ -513,20 +515,20 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 	ctx context.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
-	branchIndex int,
+	branchIndex int32,
 	releaseFn releaseWorkflowExecutionFunc,
 	task nDCReplicationTask,
 ) error {
 
-	versionHistoryItem := persistence.NewVersionHistoryItem(
+	versionHistoryItem := versionhistory.NewItem(
 		task.getLastEvent().GetEventId(),
 		task.getLastEvent().GetVersion(),
 	)
-	versionHistory, err := mutableState.GetVersionHistories().GetVersionHistory(branchIndex)
+	versionHistory, err := versionhistory.GetVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories(), branchIndex)
 	if err != nil {
 		return err
 	}
-	if err = versionHistory.AddOrUpdateItem(versionHistoryItem); err != nil {
+	if err = versionhistory.AddOrUpdateItem(versionHistory, versionHistoryItem); err != nil {
 		return err
 	}
 

@@ -90,9 +90,10 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	}
 
 	targetExecutionInfo := targetWorkflow.getMutableState().GetExecutionInfo()
+	targetExecutionState := targetWorkflow.getMutableState().GetExecutionState()
 	namespaceID := targetExecutionInfo.NamespaceId
 	workflowID := targetExecutionInfo.WorkflowId
-	targetRunID := targetExecutionInfo.ExecutionState.RunId
+	targetRunID := targetExecutionState.RunId
 
 	// the target workflow is rebuilt
 	// we need to check the current workflow execution
@@ -276,11 +277,12 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		// sanity check if new workflow is already created
 		// since workflow resend can have already created the new workflow
 		newExecutionInfo := newWorkflow.getMutableState().GetExecutionInfo()
+		newExecutionState := newWorkflow.getMutableState().GetExecutionState()
 		newWorkflowExists, err := r.transactionMgr.checkWorkflowExists(
 			ctx,
 			newExecutionInfo.NamespaceId,
 			newExecutionInfo.WorkflowId,
-			newExecutionInfo.ExecutionState.RunId,
+			newExecutionState.RunId,
 		)
 		if err != nil {
 			return err
@@ -418,11 +420,12 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		// sanity check if new workflow is already created
 		// since workflow resend can have already created the new workflow
 		newExecutionInfo := newWorkflow.getMutableState().GetExecutionInfo()
+		newExecutionState := newWorkflow.getMutableState().GetExecutionState()
 		newWorkflowExists, err := r.transactionMgr.checkWorkflowExists(
 			ctx,
 			newExecutionInfo.NamespaceId,
 			newExecutionInfo.WorkflowId,
-			newExecutionInfo.ExecutionState.RunId,
+			newExecutionState.RunId,
 		)
 		if err != nil {
 			return err
