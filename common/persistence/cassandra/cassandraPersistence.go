@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cassandra"
-	checksum "go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -1173,7 +1172,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
 	}
-	state.Checksum = *checksum.FromProto(cs)
+	state.Checksum = *cs
 
 	return &p.InternalGetWorkflowExecutionResponse{State: state}, nil
 }

@@ -32,7 +32,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/persistence/serialization"
 )
 
@@ -212,7 +211,7 @@ type (
 		NextEventID         int64
 
 		BufferedEvents []*serialization.DataBlob
-		Checksum       checksum.Checksum
+		Checksum       persistenceblobs.Checksum
 	}
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
@@ -289,7 +288,7 @@ type (
 
 		Condition int64
 
-		Checksum checksum.Checksum
+		Checksum persistenceblobs.Checksum
 	}
 
 	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
@@ -312,7 +311,7 @@ type (
 
 		Condition int64
 
-		Checksum checksum.Checksum
+		Checksum persistenceblobs.Checksum
 	}
 
 	// InternalAppendHistoryEventsRequest is used to append new events to workflow execution history  for Persistence Interface
