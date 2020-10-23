@@ -489,7 +489,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		events := []*historypb.HistoryEvent{}
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == enumspb.ENCODING_TYPE_PROTO3)
-			blobEvents, err := serializer.DeserializeBatchEvents(&commonpb.DataBlob{
+			blobEvents, err := serializer.DeserializeEvents(&commonpb.DataBlob{
 				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 				Data:         blob.Data,
 			})

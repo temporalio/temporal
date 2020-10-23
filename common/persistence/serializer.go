@@ -34,7 +34,6 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 )
 
@@ -43,8 +42,8 @@ type (
 	// It will only be used inside persistence, so that serialize/deserialize is transparent for application
 	PayloadSerializer interface {
 		// serialize/deserialize history events
-		SerializeBatchEvents(batch []*historypb.HistoryEvent, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		DeserializeBatchEvents(data *commonpb.DataBlob) ([]*historypb.HistoryEvent, error)
+		SerializeEvents(batch []*historypb.HistoryEvent, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		DeserializeEvents(data *commonpb.DataBlob) ([]*historypb.HistoryEvent, error)
 
 		// serialize/deserialize a single history event
 		SerializeEvent(event *historypb.HistoryEvent, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
@@ -61,10 +60,6 @@ type (
 		// serialize/deserialize bad binaries
 		SerializeBadBinaries(event *namespacepb.BadBinaries, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		DeserializeBadBinaries(data *commonpb.DataBlob) (*namespacepb.BadBinaries, error)
-
-		// serialize/deserialize version histories
-		SerializeVersionHistories(histories *historyspb.VersionHistories, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		DeserializeVersionHistories(data *commonpb.DataBlob) (*historyspb.VersionHistories, error)
 
 		// serialize/deserialize mutable cluster metadata
 		SerializeClusterMetadata(icm *persistenceblobs.ClusterMetadata, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
@@ -94,11 +89,11 @@ func NewPayloadSerializer() PayloadSerializer {
 	return &serializerImpl{}
 }
 
-func (t *serializerImpl) SerializeBatchEvents(events []*historypb.HistoryEvent, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+func (t *serializerImpl) SerializeEvents(events []*historypb.HistoryEvent, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	return t.serialize(&historypb.History{Events: events}, encodingType)
 }
 
-func (t *serializerImpl) DeserializeBatchEvents(data *commonpb.DataBlob) ([]*historypb.HistoryEvent, error) {
+func (t *serializerImpl) DeserializeEvents(data *commonpb.DataBlob) ([]*historypb.HistoryEvent, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -113,7 +108,7 @@ func (t *serializerImpl) DeserializeBatchEvents(data *commonpb.DataBlob) ([]*his
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = events.Unmarshal(data.Data)
 	default:
-		return nil, NewDeserializationError("DeserializeBatchEvents invalid encoding")
+		return nil, NewDeserializationError("DeserializeEvents invalid encoding")
 	}
 	if err != nil {
 		return nil, err
@@ -254,44 +249,11 @@ func (t *serializerImpl) DeserializeVisibilityMemo(data *commonpb.DataBlob) (*co
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeVersionHistories(histories *historyspb.VersionHistories, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	if histories == nil {
-		return nil, nil
+func (t *serializerImpl) SerializeClusterMetadata(cm *persistenceblobs.ClusterMetadata, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+	if cm == nil {
+		cm = &persistenceblobs.ClusterMetadata{}
 	}
-	return t.serialize(histories, encodingType)
-}
-
-func (t *serializerImpl) DeserializeVersionHistories(data *commonpb.DataBlob) (*historyspb.VersionHistories, error) {
-	if data == nil {
-		return &historyspb.VersionHistories{}, nil
-	}
-	if len(data.Data) == 0 {
-		return &historyspb.VersionHistories{}, nil
-	}
-
-	memo := &historyspb.VersionHistories{}
-	var err error
-	switch data.EncodingType {
-	case enumspb.ENCODING_TYPE_PROTO3:
-		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
-		// Client API currently specifies encodingType on requests which span multiple of these objects
-		err = memo.Unmarshal(data.Data)
-	default:
-		return nil, NewDeserializationError("DeserializeVersionHistories invalid encoding")
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return memo, err
-}
-
-func (t *serializerImpl) SerializeClusterMetadata(icm *persistenceblobs.ClusterMetadata, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	if icm == nil {
-		icm = &persistenceblobs.ClusterMetadata{}
-	}
-	return t.serialize(icm, encodingType)
+	return t.serialize(cm, encodingType)
 }
 
 func (t *serializerImpl) DeserializeClusterMetadata(data *commonpb.DataBlob) (*persistenceblobs.ClusterMetadata, error) {
@@ -302,13 +264,13 @@ func (t *serializerImpl) DeserializeClusterMetadata(data *commonpb.DataBlob) (*p
 		return nil, nil
 	}
 
-	event := &persistenceblobs.ClusterMetadata{}
+	cm := &persistenceblobs.ClusterMetadata{}
 	var err error
 	switch data.EncodingType {
 	case enumspb.ENCODING_TYPE_PROTO3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
-		err = event.Unmarshal(data.Data)
+		err = cm.Unmarshal(data.Data)
 	default:
 		return nil, NewDeserializationError("DeserializeClusterMetadata invalid encoding")
 	}
@@ -317,7 +279,7 @@ func (t *serializerImpl) DeserializeClusterMetadata(data *commonpb.DataBlob) (*p
 		return nil, err
 	}
 
-	return event, err
+	return cm, err
 }
 
 func (t *serializerImpl) serialize(p proto.Marshaler, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {

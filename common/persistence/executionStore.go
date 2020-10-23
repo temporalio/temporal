@@ -185,7 +185,7 @@ func (m *executionManagerImpl) DeserializeBufferedEvents(
 			continue
 		}
 
-		history, err := m.serializer.DeserializeBatchEvents(b)
+		history, err := m.serializer.DeserializeEvents(b)
 		if err != nil {
 			return nil, err
 		}

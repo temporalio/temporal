@@ -378,7 +378,7 @@ func deserializeBlob(
 		return nil, nil
 	}
 
-	events, err := historySerializer.DeserializeBatchEvents(&commonpb.DataBlob{
+	events, err := historySerializer.DeserializeEvents(&commonpb.DataBlob{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         blob.Data,
 	})

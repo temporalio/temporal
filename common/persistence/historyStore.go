@@ -416,7 +416,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 	// first_event_id of the last batch
 	lastFirstEventID := common.EmptyEventID
 	for _, batch := range dataBlobs {
-		events, err := m.historySerializer.DeserializeBatchEvents(batch)
+		events, err := m.historySerializer.DeserializeEvents(batch)
 		if err != nil {
 			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID, err
 		}

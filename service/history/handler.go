@@ -1577,7 +1577,7 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
 	// deserialize history event object
-	historyEvents, err := h.GetPayloadSerializer().DeserializeBatchEvents(&commonpb.DataBlob{
+	historyEvents, err := h.GetPayloadSerializer().DeserializeEvents(&commonpb.DataBlob{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         request.GetRequest().GetEvents().GetData(),
 	})
