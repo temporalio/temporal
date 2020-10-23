@@ -165,6 +165,6 @@ func shardInfoToShardsRow(s persistenceblobs.ShardInfo) (*sqlplugin.ShardsRow, e
 		ShardID:      s.GetShardId(),
 		RangeID:      s.GetRangeId(),
 		Data:         blob.Data,
-		DataEncoding: blob.Encoding.String(),
+		DataEncoding: blob.EncodingType.String(),
 	}, nil
 }

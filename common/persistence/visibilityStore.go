@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/persistence/serialization"
 )
 
 type (
@@ -298,7 +297,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 	return convertedExecution
 }
 
-func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *commonpb.Memo, namespaceID, wID, rID string) *serialization.DataBlob {
+func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *commonpb.Memo, namespaceID, wID, rID string) *commonpb.DataBlob {
 	memo, err := v.serializer.SerializeVisibilityMemo(visibilityMemo, VisibilityEncoding)
 	if err != nil {
 		v.logger.WithTags(
@@ -309,7 +308,7 @@ func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *commonpb.Memo, nam
 			Error("Unable to encode visibility memo")
 	}
 	if memo == nil {
-		return &serialization.DataBlob{}
+		return &commonpb.DataBlob{}
 	}
 	return memo
 }

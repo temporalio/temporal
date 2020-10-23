@@ -78,7 +78,7 @@ func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveC
 		}
 		_, err = tx.SaveClusterMetadata(&sqlplugin.ClusterMetadataRow{
 			Data:         request.ClusterMetadata.Data,
-			DataEncoding: request.ClusterMetadata.Encoding.String(),
+			DataEncoding: request.ClusterMetadata.EncodingType.String(),
 			Version:      request.Version,
 		})
 		if err != nil {

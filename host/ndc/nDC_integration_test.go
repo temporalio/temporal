@@ -43,7 +43,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 
@@ -1640,7 +1639,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 	version int64,
 	workflowType string,
 	taskQueue string,
-) *serialization.DataBlob {
+) *commonpb.DataBlob {
 
 	// TODO temporary code to generate first event & version history
 	//  we should generate these as part of modeled based testing
@@ -1688,7 +1687,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 }
 
 func (s *nDCIntegrationTestSuite) toProtoDataBlob(
-	blob *serialization.DataBlob,
+	blob *commonpb.DataBlob,
 ) *commonpb.DataBlob {
 
 	if blob == nil {
@@ -1696,7 +1695,7 @@ func (s *nDCIntegrationTestSuite) toProtoDataBlob(
 	}
 
 	return &commonpb.DataBlob{
-		EncodingType: blob.Encoding,
+		EncodingType: blob.EncodingType,
 		Data:         blob.Data,
 	}
 }
@@ -1707,7 +1706,7 @@ func (s *nDCIntegrationTestSuite) generateEventBlobs(
 	workflowType string,
 	taskqueue string,
 	batch *historypb.History,
-) (*serialization.DataBlob, *serialization.DataBlob) {
+) (*commonpb.DataBlob, *commonpb.DataBlob) {
 	// TODO temporary code to generate next run first event
 	//  we should generate these as part of modeled based testing
 	lastEvent := batch.Events[len(batch.Events)-1]

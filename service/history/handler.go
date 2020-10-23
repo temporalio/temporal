@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
@@ -1578,9 +1577,9 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
 	// deserialize history event object
-	historyEvents, err := h.GetPayloadSerializer().DeserializeBatchEvents(&serialization.DataBlob{
-		Encoding: enumspb.ENCODING_TYPE_PROTO3,
-		Data:     request.GetRequest().GetEvents().GetData(),
+	historyEvents, err := h.GetPayloadSerializer().DeserializeBatchEvents(&commonpb.DataBlob{
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		Data:         request.GetRequest().GetEvents().GetData(),
 	})
 	if err != nil {
 		return nil, h.error(err, scope, namespaceID, workflowID)

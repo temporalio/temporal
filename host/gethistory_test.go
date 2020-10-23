@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -490,9 +489,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		events := []*historypb.HistoryEvent{}
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == enumspb.ENCODING_TYPE_PROTO3)
-			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
-				Encoding: enumspb.ENCODING_TYPE_PROTO3,
-				Data:     blob.Data,
+			blobEvents, err := serializer.DeserializeBatchEvents(&commonpb.DataBlob{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         blob.Data,
 			})
 			s.NoError(err)
 			events = append(events, blobEvents...)

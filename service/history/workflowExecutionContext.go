@@ -1163,7 +1163,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 		&adminservice.ReapplyEventsRequest{
 			Namespace:         namespaceEntry.GetInfo().Name,
 			WorkflowExecution: execution,
-			Events:            reapplyEventsDataBlob.ToProto(),
+			Events:            reapplyEventsDataBlob,
 		},
 	)
 

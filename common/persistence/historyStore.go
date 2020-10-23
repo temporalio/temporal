@@ -28,6 +28,7 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -287,7 +288,7 @@ func (m *historyV2ManagerImpl) GetAllHistoryTreeBranches(
 
 func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	request *ReadHistoryBranchRequest,
-) ([]*serialization.DataBlob, *historyV2PagingToken, int, log.Logger, error) {
+) ([]*commonpb.DataBlob, *historyV2PagingToken, int, log.Logger, error) {
 
 	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 	if err != nil {

@@ -417,14 +417,8 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	adh.GetMetricsClient().RecordTimer(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.HistorySize, time.Duration(size))
 	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
-	rawBlobs := rawHistoryResponse.HistoryEventBlobs
-	var blobs []*commonpb.DataBlob
-	for _, blob := range rawBlobs {
-		blobs = append(blobs, blob.ToProto())
-	}
-
 	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
-		HistoryBatches: blobs,
+		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
 		VersionHistory: targetVersionHistory,
 	}
 	if len(pageToken.PersistenceToken) == 0 {

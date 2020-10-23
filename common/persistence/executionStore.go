@@ -25,6 +25,7 @@
 package persistence
 
 import (
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -33,7 +34,6 @@ import (
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
@@ -174,7 +174,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 }
 
 func (m *executionManagerImpl) DeserializeBufferedEvents(
-	blobs []*serialization.DataBlob,
+	blobs []*commonpb.DataBlob,
 ) ([]*historypb.HistoryEvent, error) {
 
 	events := make([]*historypb.HistoryEvent, 0)
@@ -390,7 +390,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		return nil, err
 	}
 
-	var serializedNewBufferedEvents *serialization.DataBlob
+	var serializedNewBufferedEvents *commonpb.DataBlob
 	if len(input.NewBufferedEvents) > 0 {
 		serializedNewBufferedEvents, err = m.serializer.SerializeBatchEvents(input.NewBufferedEvents, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {

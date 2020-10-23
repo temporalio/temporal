@@ -65,7 +65,7 @@ func AdminShowWorkflow(c *cli.Context) {
 
 	session := connectToCassandra(c)
 	serializer := persistence.NewPayloadSerializer()
-	var history []*serialization.DataBlob
+	var history []*commonpb.DataBlob
 	if len(tid) != 0 {
 		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
