@@ -34,7 +34,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -193,61 +192,6 @@ type (
 		CurrentLevel time.Time
 		MaxLevel     time.Time
 		NamespaceIDs map[string]struct{}
-	}
-
-	// WorkflowExecutionInfo describes a workflow execution
-	WorkflowExecutionInfo struct {
-		ExecutionState                         *persistenceblobs.WorkflowExecutionState
-		NamespaceId                            string
-		WorkflowId                             string
-		FirstExecutionRunId                    string
-		ParentNamespaceId                      string
-		ParentWorkflowId                       string
-		ParentRunId                            string
-		InitiatedId                            int64
-		CompletionEventBatchId                 int64
-		CompletionEvent                        *historypb.HistoryEvent
-		TaskQueue                              string
-		WorkflowTypeName                       string
-		WorkflowRunTimeout                     *time.Duration
-		WorkflowExecutionTimeout               *time.Duration
-		DefaultWorkflowTaskTimeout             *time.Duration
-		LastFirstEventId                       int64
-		LastEventTaskId                        int64
-		NextEventId                            int64
-		LastProcessedEvent                     int64
-		StartTime                              *time.Time
-		LastUpdatedTime                        *time.Time
-		SignalCount                            int64
-		WorkflowTaskVersion                    int64
-		WorkflowTaskScheduleId                 int64
-		WorkflowTaskStartedId                  int64
-		WorkflowTaskRequestId                  string
-		WorkflowTaskTimeout                    *time.Duration
-		WorkflowTaskAttempt                    int32
-		WorkflowTaskStartedTimestamp           *time.Time
-		WorkflowTaskScheduledTimestamp         *time.Time
-		WorkflowTaskOriginalScheduledTimestamp *time.Time
-		CancelRequested                        bool
-		CancelRequestId                        string
-		StickyTaskQueue                        string
-		StickyScheduleToStartTimeout           *time.Duration
-		AutoResetPoints                        *workflowpb.ResetPoints
-		Memo                                   map[string]*commonpb.Payload
-		SearchAttributes                       map[string]*commonpb.Payload
-		// for retry
-		Attempt                     int32
-		HasRetryPolicy              bool
-		RetryInitialInterval        *time.Duration
-		RetryBackoffCoefficient     float64
-		RetryMaximumInterval        *time.Duration
-		WorkflowExpirationTime      *time.Time
-		RetryMaximumAttempts        int32
-		RetryNonRetryableErrorTypes []string
-		EventBranchToken            []byte
-		// Cron
-		CronSchedule   string
-		ExecutionStats *persistenceblobs.ExecutionStats
 	}
 
 	// ReplicationTaskInfoWrapper describes a replication task.
@@ -437,24 +381,6 @@ type (
 		ScheduledID         int64
 	}
 
-	// VersionHistoryItem contains the event id and the associated version
-	VersionHistoryItem struct {
-		EventID int64
-		Version int64
-	}
-
-	// VersionHistory provides operations on version history
-	VersionHistory struct {
-		BranchToken []byte
-		Items       []*VersionHistoryItem
-	}
-
-	// VersionHistories contains a set of VersionHistory
-	VersionHistories struct {
-		CurrentVersionHistoryIndex int
-		Histories                  []*VersionHistory
-	}
-
 	// WorkflowMutableState indicates workflow related state
 	WorkflowMutableState struct {
 		ActivityInfos       map[int64]*persistenceblobs.ActivityInfo
@@ -463,20 +389,11 @@ type (
 		RequestCancelInfos  map[int64]*persistenceblobs.RequestCancelInfo
 		SignalInfos         map[int64]*persistenceblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
-		ExecutionInfo       *WorkflowExecutionInfo
-		ExecutionStats      *persistenceblobs.ExecutionStats
+		ExecutionInfo       *persistenceblobs.WorkflowExecutionInfo
+		ExecutionState      *persistenceblobs.WorkflowExecutionState
+		NextEventID         int64
 		BufferedEvents      []*historypb.HistoryEvent
-		VersionHistories    *VersionHistories
 		Checksum            checksum.Checksum
-	}
-
-	// TimerInfo details - metadata about user timer info.
-	TimerInfo struct {
-		Version    int64
-		TimerID    string
-		StartedID  int64
-		ExpiryTime time.Time
-		TaskStatus int64
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
@@ -542,8 +459,8 @@ type (
 
 	// ListConcreteExecutionsResponse is response to ListConcreteExecutions
 	ListConcreteExecutionsResponse struct {
-		ExecutionInfos []*WorkflowExecutionInfo
-		PageToken      []byte
+		States    []*WorkflowMutableState
+		PageToken []byte
 	}
 
 	// GetCurrentExecutionResponse is the response to GetCurrentExecution
@@ -612,9 +529,9 @@ type (
 
 	// WorkflowMutation is used as generic workflow execution state mutation
 	WorkflowMutation struct {
-		ExecutionInfo    *WorkflowExecutionInfo
-		ExecutionStats   *persistenceblobs.ExecutionStats
-		VersionHistories *VersionHistories
+		ExecutionInfo  *persistenceblobs.WorkflowExecutionInfo
+		ExecutionState *persistenceblobs.WorkflowExecutionState
+		NextEventID    int64
 
 		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
 		DeleteActivityInfos       []int64
@@ -641,9 +558,9 @@ type (
 
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
 	WorkflowSnapshot struct {
-		ExecutionInfo    *WorkflowExecutionInfo
-		ExecutionStats   *persistenceblobs.ExecutionStats
-		VersionHistories *VersionHistories
+		ExecutionInfo  *persistenceblobs.WorkflowExecutionInfo
+		ExecutionState *persistenceblobs.WorkflowExecutionState
+		NextEventID    int64
 
 		ActivityInfos       []*persistenceblobs.ActivityInfo
 		TimerInfos          []*persistenceblobs.TimerInfo

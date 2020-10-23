@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
@@ -249,7 +250,8 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.ExecutionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
+	executionState := mutableState.GetExecutionState()
+	replyToParentWorkflow := mutableState.HasParentExecution() && executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
 	completionEvent, err := mutableState.GetCompletionEvent()
 	if err != nil {
 		return err
@@ -263,7 +265,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 
 	workflowTypeName := executionInfo.WorkflowTypeName
 	workflowCloseTime := wfCloseTime
-	workflowStatus := executionInfo.ExecutionState.Status
+	workflowStatus := executionState.Status
 	workflowHistoryLength := mutableState.GetNextEventID() - 1
 
 	startEvent, err := mutableState.GetStartEvent()
@@ -676,6 +678,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
+	executionState := mutableState.GetExecutionState()
 	runTimeout := executionInfo.WorkflowRunTimeout
 	wfTypeName := executionInfo.WorkflowTypeName
 
@@ -716,7 +719,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 		executionTimestamp.UnixNano(),
 		runTimeout,
 		task.GetTaskId(),
-		executionInfo.GetExecutionState().GetStatus(),
+		executionState.GetStatus(),
 		executionInfo.TaskQueue,
 		visibilityMemo,
 		searchAttr,
@@ -780,6 +783,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	}
 
 	executionInfo := currentMutableState.GetExecutionInfo()
+	executionState := currentMutableState.GetExecutionState()
 	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(executionInfo.NamespaceId)
 	if err != nil {
 		return err
@@ -800,7 +804,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	var baseContext workflowExecutionContext
 	var baseMutableState mutableState
 	var baseRelease releaseWorkflowExecutionFunc
-	if resetPoint.GetRunId() == executionInfo.ExecutionState.RunId {
+	if resetPoint.GetRunId() == executionState.RunId {
 		baseContext = currentContext
 		baseMutableState = currentMutableState
 		baseRelease = currentRelease
@@ -1263,16 +1267,16 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 
 	namespaceID := task.GetNamespaceId()
 	workflowID := task.GetWorkflowId()
-	baseRunID := baseMutableState.GetExecutionInfo().GetRunId()
+	baseRunID := baseMutableState.GetExecutionState().GetRunId()
 
 	resetRunID := uuid.New()
 	baseRebuildLastEventID := resetPoint.GetFirstWorkflowTaskCompletedId() - 1
-	baseVersionHistories := baseMutableState.GetVersionHistories()
-	baseCurrentVersionHistory, err := baseVersionHistories.GetCurrentVersionHistory()
+	baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
+	baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 	if err != nil {
 		return err
 	}
-	baseRebuildLastEventVersion, err := baseCurrentVersionHistory.GetEventVersion(baseRebuildLastEventID)
+	baseRebuildLastEventVersion, err := versionhistory.GetEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
 	if err != nil {
 		return err
 	}

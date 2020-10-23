@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -150,15 +151,15 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	if err := rebuiltMutableState.SetCurrentBranchToken(targetBranchToken); err != nil {
 		return nil, 0, err
 	}
-	currentVersionHistory, err := rebuiltMutableState.GetVersionHistories().GetCurrentVersionHistory()
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(rebuiltMutableState.GetExecutionInfo().GetVersionHistories())
 	if err != nil {
 		return nil, 0, err
 	}
-	lastItem, err := currentVersionHistory.GetLastItem()
+	lastItem, err := versionhistory.GetLastItem(currentVersionHistory)
 	if err != nil {
 		return nil, 0, err
 	}
-	if !lastItem.Equals(persistence.NewVersionHistoryItem(
+	if !lastItem.Equal(versionhistory.NewItem(
 		baseLastEventID,
 		baseLastEventVersion,
 	)) {

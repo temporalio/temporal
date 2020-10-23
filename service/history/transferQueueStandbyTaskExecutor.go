@@ -217,9 +217,10 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		wfCloseTime := timestamp.TimeValue(completionEvent.GetEventTime())
 
 		executionInfo := mutableState.GetExecutionInfo()
+		executionState := mutableState.GetExecutionState()
 		workflowTypeName := executionInfo.WorkflowTypeName
 		workflowCloseTime := wfCloseTime
-		workflowStatus := executionInfo.ExecutionState.Status
+		workflowStatus := executionState.Status
 		workflowHistoryLength := mutableState.GetNextEventID() - 1
 		startEvent, err := mutableState.GetStartEvent()
 		if err != nil {
@@ -425,6 +426,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
+	executionState := mutableState.GetExecutionState()
 	workflowTimeout := executionInfo.WorkflowRunTimeout
 	wfTypeName := executionInfo.WorkflowTypeName
 	startEvent, err := mutableState.GetStartEvent()
@@ -460,7 +462,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 		executionTimestamp.UnixNano(),
 		workflowTimeout,
 		transferTask.GetTaskId(),
-		executionInfo.GetExecutionState().GetStatus(),
+		executionState.GetStatus(),
 		executionInfo.TaskQueue,
 		visibilityMemo,
 		searchAttr,

@@ -61,7 +61,7 @@ func newServerOptions(opts []ServerOption) *serverOptions {
 func (so *serverOptions) validate() error {
 	for _, serviceName := range so.serviceNames {
 		if !isValidService(serviceName) {
-			return fmt.Errorf("invalid service %q in service list [%v]", serviceName, so.serviceNames)
+			return fmt.Errorf("invalid service %q in service list %v", serviceName, so.serviceNames)
 		}
 	}
 

@@ -64,6 +64,7 @@ import (
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -1064,9 +1065,9 @@ func (e *historyEngineImpl) getMutableState(
 		WorkflowStatus:                        workflowStatus,
 		IsStickyTaskQueueEnabled:              mutableState.IsStickyTaskQueueEnabled(),
 	}
-	versionHistories := mutableState.GetVersionHistories()
+	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
 	if versionHistories != nil {
-		retResp.VersionHistories = versionHistories.ToProto()
+		retResp.VersionHistories = versionHistories
 	}
 	return
 }
@@ -1111,9 +1112,9 @@ func (e *historyEngineImpl) DescribeMutableState(
 	response.DatabaseMutableState = workflowMutableStateToJSON(wms)
 
 	currentBranchToken := wms.ExecutionInfo.EventBranchToken
-	if wms.VersionHistories != nil {
+	if wms.ExecutionInfo.VersionHistories != nil {
 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
-		currentVersionHistory, err := wms.VersionHistories.GetCurrentVersionHistory()
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(wms.ExecutionInfo.VersionHistories)
 		if err != nil {
 			response.TreeId = err.Error()
 			return response, nil
@@ -1187,6 +1188,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		return nil, err1
 	}
 	executionInfo := mutableState.GetExecutionInfo()
+	executionState := mutableState.GetExecutionState()
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -1200,7 +1202,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: executionInfo.WorkflowId,
-				RunId:      executionInfo.ExecutionState.RunId,
+				RunId:      executionState.RunId,
 			},
 			Type:             &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
 			StartTime:        executionInfo.StartTime,
@@ -1208,7 +1210,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			AutoResetPoints:  executionInfo.AutoResetPoints,
 			Memo:             &commonpb.Memo{Fields: executionInfo.Memo},
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
-			Status:           executionInfo.ExecutionState.Status,
+			Status:           executionState.Status,
 		},
 	}
 
@@ -1229,9 +1231,9 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		}
 		result.WorkflowExecutionInfo.ParentNamespaceId = executionInfo.ParentNamespaceId
 	}
-	if executionInfo.ExecutionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if executionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// for closed workflow
-		result.WorkflowExecutionInfo.Status = executionInfo.ExecutionState.Status
+		result.WorkflowExecutionInfo.Status = executionState.Status
 		completionEvent, err := mutableState.GetCompletionEvent()
 		if err != nil {
 			return nil, err
@@ -2010,7 +2012,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			)
 		}
 
-		err = e.applyWorkflowIDReusePolicyForSigWithStart(prevMutableState.GetExecutionInfo(), namespaceID, execution, request.WorkflowIdReusePolicy)
+		err = e.applyWorkflowIDReusePolicyForSigWithStart(prevMutableState.GetExecutionState(), namespaceID, execution, request.WorkflowIdReusePolicy)
 		if err != nil {
 			return nil, err
 		}
@@ -2061,7 +2063,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	prevLastWriteVersion := int64(0)
 	if prevMutableState != nil {
 		createMode = persistence.CreateWorkflowModeWorkflowIDReuse
-		prevRunID = prevMutableState.GetExecutionInfo().GetRunId()
+		prevRunID = prevMutableState.GetExecutionState().GetRunId()
 		prevLastWriteVersion, err = prevMutableState.GetLastWriteVersion()
 		if err != nil {
 			return nil, err
@@ -2330,7 +2332,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	}
 
 	// dedup by requestID
-	if currentMutableState.GetExecutionInfo().GetExecutionState().CreateRequestId == request.GetRequestId() {
+	if currentMutableState.GetExecutionState().CreateRequestId == request.GetRequestId() {
 		e.logger.Info("Duplicated reset request",
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(currentRunID),
@@ -2342,12 +2344,12 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 
 	resetRunID := uuid.New()
 	baseRebuildLastEventID := request.GetWorkflowTaskFinishEventId() - 1
-	baseVersionHistories := baseMutableState.GetVersionHistories()
-	baseCurrentVersionHistory, err := baseVersionHistories.GetCurrentVersionHistory()
+	baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
+	baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 	if err != nil {
 		return nil, err
 	}
-	baseRebuildLastEventVersion, err := baseCurrentVersionHistory.GetEventVersion(baseRebuildLastEventID)
+	baseRebuildLastEventVersion, err := versionhistory.GetEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
 	if err != nil {
 		return nil, err
 	}
@@ -2758,16 +2760,16 @@ func setTaskInfo(
 
 // for startWorkflowExecution & signalWithStart to handle workflow reuse policy
 func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
-	prevExecutionInfo *persistence.WorkflowExecutionInfo,
+	prevExecutionState *persistenceblobs.WorkflowExecutionState,
 	namespaceID string,
 	execution commonpb.WorkflowExecution,
 	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
 ) error {
 
-	prevStartRequestID := prevExecutionInfo.GetExecutionState().CreateRequestId
-	prevRunID := prevExecutionInfo.ExecutionState.RunId
-	prevState := prevExecutionInfo.ExecutionState.State
-	prevStatus := prevExecutionInfo.ExecutionState.Status
+	prevStartRequestID := prevExecutionState.CreateRequestId
+	prevRunID := prevExecutionState.RunId
+	prevState := prevExecutionState.State
+	prevStatus := prevExecutionState.Status
 
 	return e.applyWorkflowIDReusePolicyHelper(
 		prevStartRequestID,
@@ -2935,7 +2937,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// need to reset target workflow (which is also the current workflow)
 				// to accept events to be reapplied
-				baseRunID := mutableState.GetExecutionInfo().GetRunId()
+				baseRunID := mutableState.GetExecutionState().GetRunId()
 				resetRunID := uuid.New()
 				baseRebuildLastEventID := mutableState.GetPreviousStartedEventID()
 
@@ -2950,12 +2952,12 @@ func (e *historyEngineImpl) ReapplyEvents(
 					return &updateWorkflowAction{noop: true}, nil
 				}
 
-				baseVersionHistories := mutableState.GetVersionHistories()
-				baseCurrentVersionHistory, err := baseVersionHistories.GetCurrentVersionHistory()
+				baseVersionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
+				baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 				if err != nil {
 					return nil, err
 				}
-				baseRebuildLastEventVersion, err := baseCurrentVersionHistory.GetEventVersion(baseRebuildLastEventID)
+				baseRebuildLastEventVersion, err := versionhistory.GetEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
 				if err != nil {
 					return nil, err
 				}

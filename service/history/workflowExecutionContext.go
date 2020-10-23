@@ -251,8 +251,8 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 
 		c.mutableState.Load(response.State)
 
-		c.stats = response.State.ExecutionStats
-		c.updateCondition = response.State.ExecutionInfo.NextEventId
+		c.stats = response.State.ExecutionInfo.ExecutionStats
+		c.updateCondition = response.State.NextEventID
 
 		// finally emit execution and session stats
 		emitWorkflowExecutionStats(
@@ -324,8 +324,8 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 
 		c.mutableState.Load(response.State)
 
-		c.stats = response.State.ExecutionStats
-		c.updateCondition = response.State.ExecutionInfo.NextEventId
+		c.stats = response.State.ExecutionInfo.ExecutionStats
+		c.updateCondition = response.State.NextEventID
 
 		// finally emit execution and session stats
 		emitWorkflowExecutionStats(
@@ -387,7 +387,7 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 
 	historySize += c.getHistorySize()
 	c.setHistorySize(historySize)
-	createRequest.NewWorkflowSnapshot.ExecutionStats = &persistenceblobs.ExecutionStats{
+	createRequest.NewWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{
 		HistorySize: historySize,
 	}
 
@@ -437,7 +437,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		resetHistorySize += eventsSize
 	}
 	c.setHistorySize(resetHistorySize)
-	resetWorkflow.ExecutionStats = &persistenceblobs.ExecutionStats{
+	resetWorkflow.ExecutionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{
 		HistorySize: resetHistorySize,
 	}
 
@@ -466,7 +466,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		}
 		newWorkflowSizeSize += eventsSize
 		newContext.setHistorySize(newWorkflowSizeSize)
-		newWorkflow.ExecutionStats = &persistenceblobs.ExecutionStats{
+		newWorkflow.ExecutionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
 		}
 	}
@@ -497,7 +497,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 			currentWorkflowSize += eventsSize
 		}
 		currentContext.setHistorySize(currentWorkflowSize)
-		currentWorkflow.ExecutionStats = &persistenceblobs.ExecutionStats{
+		currentWorkflow.ExecutionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{
 			HistorySize: currentWorkflowSize,
 		}
 	}
@@ -676,7 +676,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		currentWorkflowSize += eventsSize
 	}
 	c.setHistorySize(currentWorkflowSize)
-	currentWorkflow.ExecutionStats = &persistenceblobs.ExecutionStats{
+	currentWorkflow.ExecutionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{
 		HistorySize: currentWorkflowSize,
 	}
 
@@ -715,7 +715,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 			newWorkflowSizeSize += eventsSize
 			newContext.setHistorySize(newWorkflowSizeSize)
 		}
-		newWorkflow.ExecutionStats = &persistenceblobs.ExecutionStats{
+		newWorkflow.ExecutionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
 		}
 	}
@@ -748,7 +748,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	}
 
 	// TODO remove updateCondition in favor of condition in mutable state
-	c.updateCondition = currentWorkflow.ExecutionInfo.NextEventId
+	c.updateCondition = currentWorkflow.NextEventID
 
 	// for any change in the workflow, send a event
 	currentBranchToken, err := c.mutableState.GetCurrentBranchToken()
@@ -797,7 +797,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		resp.MutableStateUpdateSessionStats,
 	)
 	// emit workflow completion stats if any
-	if currentWorkflow.ExecutionInfo.ExecutionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if currentWorkflow.ExecutionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		if event, err := c.mutableState.GetCompletionEvent(); err == nil {
 			taskQueue := currentWorkflow.ExecutionInfo.TaskQueue
 			emitWorkflowCompletionStats(c.metricsClient, namespace, taskQueue, event)
@@ -823,7 +823,7 @@ func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
-	if currentWorkflowMutation.ExecutionInfo.GetExecutionState().Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
+	if currentWorkflowMutation.ExecutionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
 		return nil
 	} else if updateMode == persistence.UpdateWorkflowModeBypassCurrent && newWorkflowSnapshot == nil {
 		// update current workflow as zombie & continue as new without new zombie workflow
@@ -1217,11 +1217,10 @@ func (c *workflowExecutionContextImpl) enforceSizeCheck() (bool, error) {
 	}
 
 	if historySize > historySizeLimitWarn || historyCount > historyCountLimitWarn {
-		executionInfo := c.mutableState.GetExecutionInfo()
 		c.logger.Warn("history size exceeds warn limit.",
-			tag.WorkflowNamespaceID(executionInfo.NamespaceId),
-			tag.WorkflowID(executionInfo.WorkflowId),
-			tag.WorkflowRunID(executionInfo.ExecutionState.RunId),
+			tag.WorkflowNamespaceID(c.mutableState.GetExecutionInfo().NamespaceId),
+			tag.WorkflowID(c.mutableState.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(c.mutableState.GetExecutionState().RunId),
 			tag.WorkflowHistorySize(historySize),
 			tag.WorkflowEventCount(historyCount))
 	}

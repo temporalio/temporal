@@ -60,9 +60,8 @@ func (s *statsComputerSuite) SetupTest() {
 func (s *statsComputerSuite) createRequest() *InternalUpdateWorkflowExecutionRequest {
 	return &InternalUpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: InternalWorkflowMutation{
-			ExecutionInfo: &WorkflowExecutionInfo{
-				ExecutionState: &persistenceblobs.WorkflowExecutionState{},
-			},
+			ExecutionInfo:  &persistenceblobs.WorkflowExecutionInfo{},
+			ExecutionState: &persistenceblobs.WorkflowExecutionState{},
 		},
 	}
 }
@@ -83,7 +82,7 @@ func (s *statsComputerSuite) TestStatsWithStartedEvent() {
 
 	ms.UpdateWorkflowMutation.ExecutionInfo.NamespaceId = namespaceID
 	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowId = execution.GetWorkflowId()
-	ms.UpdateWorkflowMutation.ExecutionInfo.ExecutionState.RunId = execution.GetRunId()
+	ms.UpdateWorkflowMutation.ExecutionState.RunId = execution.GetRunId()
 	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowTypeName = workflowType.GetName()
 	ms.UpdateWorkflowMutation.ExecutionInfo.TaskQueue = taskQueue.GetName()
 

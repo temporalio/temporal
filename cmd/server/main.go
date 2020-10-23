@@ -26,11 +26,12 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path"
 	"strings"
 
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/headers"
@@ -52,51 +53,73 @@ func buildCLI() *cli.App {
 	app.Name = "temporal"
 	app.Usage = "Temporal server"
 	app.Version = headers.ServerVersion
-
+	app.ArgsUsage = " "
 	app.Flags = []cli.Flag{
-		cli.StringFlag{
-			Name:   "root, r",
-			Value:  ".",
-			Usage:  "root directory of execution environment",
-			EnvVar: config.EnvKeyRoot,
+		&cli.StringFlag{
+			Name:    "root",
+			Aliases: []string{"r"},
+			Value:   ".",
+			Usage:   "root directory of execution environment",
+			EnvVars: []string{config.EnvKeyRoot},
 		},
-		cli.StringFlag{
-			Name:   "config, c",
-			Value:  "config",
-			Usage:  "config dir path relative to root",
-			EnvVar: config.EnvKeyConfigDir,
+		&cli.StringFlag{
+			Name:    "config",
+			Aliases: []string{"c"},
+			Value:   "config",
+			Usage:   "config dir path relative to root",
+			EnvVars: []string{config.EnvKeyConfigDir},
 		},
-		cli.StringFlag{
-			Name:   "env, e",
-			Value:  "development",
-			Usage:  "runtime environment",
-			EnvVar: config.EnvKeyEnvironment,
+		&cli.StringFlag{
+			Name:    "env",
+			Aliases: []string{"e"},
+			Value:   "development",
+			Usage:   "runtime environment",
+			EnvVars: []string{config.EnvKeyEnvironment},
 		},
-		cli.StringFlag{
-			Name:   "zone, az",
-			Usage:  "availability zone",
-			EnvVar: config.EnvKeyAvailabilityZone,
+		&cli.StringFlag{
+			Name:    "zone",
+			Aliases: []string{"az"},
+			Usage:   "availability zone",
+			EnvVars: []string{config.EnvKeyAvailabilityZone},
 		},
 	}
 
-	allServicesStringSlice := cli.StringSlice(temporal.Services)
-	app.Commands = []cli.Command{
+	app.Commands = []*cli.Command{
 		{
-			Name:  "start",
-			Usage: "Start Temporal server",
+			Name:      "start",
+			Usage:     "Start Temporal server",
+			ArgsUsage: " ",
 			Flags: []cli.Flag{
-				cli.StringSliceFlag{
-					Name:  "services, s",
-					Value: &allServicesStringSlice,
-					Usage: "List of services to start",
+				&cli.StringFlag{
+					Name:    "services",
+					Aliases: []string{"s"},
+					Usage:   "comma separated list of services to start. Deprecated",
+					Hidden:  true,
+				},
+				&cli.StringSliceFlag{
+					Name:    "service",
+					Aliases: []string{"svc"},
+					Value:   cli.NewStringSlice(temporal.Services...),
+					Usage:   "service(s) to start",
 				},
 			},
+			Before: func(c *cli.Context) error {
+				if c.Args().Len() > 0 {
+					return cli.NewExitError("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
+				}
+				return nil
+			},
 			Action: func(c *cli.Context) error {
-				env := c.GlobalString("env")
-				zone := c.GlobalString("zone")
-				configDir := path.Join(c.GlobalString("root"), c.GlobalString("config"))
+				env := c.String("env")
+				zone := c.String("zone")
+				configDir := path.Join(c.String("root"), c.String("config"))
+				services := c.StringSlice("service")
 
-				services := splitServices(c.StringSlice("services"))
+				// For backward compatibility to support old flag format (i.e. `--services=frontend,history,matching`).
+				if c.IsSet("services") {
+					log.Println("WARNING: --services flag is deprecated. Specify multiply --service flags instead.")
+					services = strings.Split(c.String("services"), ",")
+				}
 
 				s := temporal.NewServer(
 					temporal.ForServices(services),
@@ -114,13 +137,4 @@ func buildCLI() *cli.App {
 		},
 	}
 	return app
-}
-
-// For backward compatiblity to support old flag format (i.e. `--services=frontend,history,matching`).
-func splitServices(services []string) []string {
-	var result []string
-	for _, service := range services {
-		result = append(result, strings.Split(service, ",")...)
-	}
-	return result
 }

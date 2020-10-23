@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -314,22 +315,22 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		RetryLastFailure:        activityLastFailure,
 		RetryLastWorkerIdentity: activityLastWorkerIdentity,
 	}, true).AnyTimes()
-	versionHistory := &persistence.VersionHistory{
+	versionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte{},
-		Items: []*persistence.VersionHistoryItem{
+		Items: []*historyspb.VersionHistoryItem{
 			{
-				EventID: scheduleID,
+				EventId: scheduleID,
 				Version: 333,
 			},
 		},
 	}
-	versionHistories := &persistence.VersionHistories{
+	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*persistence.VersionHistory{
+		Histories: []*historyspb.VersionHistory{
 			versionHistory,
 		},
 	}
-	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
 		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
@@ -361,7 +362,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 				Attempt:            activityAttempt,
 				LastFailure:        activityLastFailure,
 				LastWorkerIdentity: activityLastWorkerIdentity,
-				VersionHistory:     versionHistory.ToProto(),
+				VersionHistory:     versionHistory,
 			},
 		},
 	}).Return(nil).Once()
@@ -424,22 +425,22 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		RetryLastFailure:        activityLastFailure,
 		RetryLastWorkerIdentity: activityLastWorkerIdentity,
 	}, true).AnyTimes()
-	versionHistory := &persistence.VersionHistory{
+	versionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte{},
-		Items: []*persistence.VersionHistoryItem{
+		Items: []*historyspb.VersionHistoryItem{
 			{
-				EventID: scheduleID,
+				EventId: scheduleID,
 				Version: 333,
 			},
 		},
 	}
-	versionHistories := &persistence.VersionHistories{
+	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*persistence.VersionHistory{
+		Histories: []*historyspb.VersionHistory{
 			versionHistory,
 		},
 	}
-	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
 		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
@@ -470,7 +471,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 				Attempt:            activityAttempt,
 				LastFailure:        activityLastFailure,
 				LastWorkerIdentity: activityLastWorkerIdentity,
-				VersionHistory:     versionHistory.ToProto(),
+				VersionHistory:     versionHistory,
 			},
 		},
 	}).Return(nil).Once()

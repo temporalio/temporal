@@ -37,11 +37,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 
+	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -79,7 +79,7 @@ func (s *nDCEventReapplicationSuite) TearDownTest() {
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 	runID := uuid.New()
-	execution := &persistence.WorkflowExecutionInfo{
+	execution := &persistenceblobs.WorkflowExecutionInfo{
 		NamespaceId: uuid.New(),
 	}
 	event := &historypb.HistoryEvent{
@@ -140,7 +140,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	runID := uuid.New()
-	execution := &persistence.WorkflowExecutionInfo{
+	execution := &persistenceblobs.WorkflowExecutionInfo{
 		NamespaceId: uuid.New(),
 	}
 	event1 := &historypb.HistoryEvent{
@@ -189,7 +189,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	runID := uuid.New()
-	execution := &persistence.WorkflowExecutionInfo{
+	execution := &persistenceblobs.WorkflowExecutionInfo{
 		NamespaceId: uuid.New(),
 	}
 	event := &historypb.HistoryEvent{
