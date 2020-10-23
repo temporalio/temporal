@@ -1758,7 +1758,7 @@ func (h *Handler) updateErrorMetric(
 	err error,
 ) {
 
-	if err == context.DeadlineExceeded || err == context.Canceled {
+	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
 		return
 	}
@@ -1784,8 +1784,6 @@ func (h *Handler) updateErrorMetric(
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
 	case *serviceerrors.RetryTaskV2:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
-	case *serviceerror.DeadlineExceeded:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
 	case *serviceerror.Internal:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceFailures)
 		h.GetLogger().Error("Internal service error",

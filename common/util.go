@@ -252,18 +252,29 @@ func IsServiceNonRetryableError(err error) bool {
 		*serviceerror.InvalidArgument,
 		*serviceerror.NamespaceNotActive,
 		*serviceerror.WorkflowExecutionAlreadyStarted,
-		*serviceerror.DeadlineExceeded,
 		*serviceerror.CancellationAlreadyRequested:
+		return true
+	}
+
+	if IsContextDeadlineExceededErr(err) {
 		return true
 	}
 
 	return false
 }
 
-// IsDeadlineExceeded checks if the error is context timeout error
-func IsDeadlineExceeded(err error) bool {
+// IsContextDeadlineExceededErr checks if the error is context.DeadlineExceeded or serviceerror.DeadlineExceeded error
+func IsContextDeadlineExceededErr(err error) bool {
 	var deadlineExceededSvcErr *serviceerror.DeadlineExceeded
-	return errors.As(err, &deadlineExceededSvcErr) || errors.Is(err, context.DeadlineExceeded)
+	return errors.Is(err, context.DeadlineExceeded) ||
+		errors.As(err, &deadlineExceededSvcErr)
+}
+
+// IsContextCanceledErr checks if the error is context.Canceled or serviceerror.Canceled error
+func IsContextCanceledErr(err error) bool {
+	var canceledSvcErr *serviceerror.Canceled
+	return errors.Is(err, context.Canceled) ||
+		errors.As(err, &canceledSvcErr)
 }
 
 // IsWhitelistServiceTransientError checks if the error is a transient error.

@@ -526,6 +526,11 @@ func (p *ReplicationTaskProcessorImpl) updateFailureMetric(scope int, err error)
 	// Always update failure counter for all replicator errors
 	p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
 
+	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
+		p.metricsClient.IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
+		return
+	}
+
 	// Also update counter to distinguish between type of failures
 	switch err.(type) {
 	case *serviceerrors.ShardOwnershipLost:
@@ -542,8 +547,6 @@ func (p *ReplicationTaskProcessorImpl) updateFailureMetric(scope int, err error)
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
 	case *serviceerrors.RetryTask:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
-	case *serviceerror.DeadlineExceeded:
-		p.metricsClient.IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
 	}
 }
 
