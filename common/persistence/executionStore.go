@@ -81,16 +81,16 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 		return nil, err
 	}
 	newResponse := &GetWorkflowExecutionResponse{
-		State: &WorkflowMutableState{
+		State: &persistenceblobs.WorkflowMutableState{
 			ActivityInfos:       response.State.ActivityInfos,
 			TimerInfos:          response.State.TimerInfos,
 			RequestCancelInfos:  response.State.RequestCancelInfos,
 			SignalInfos:         response.State.SignalInfos,
-			SignalRequestedIDs:  response.State.SignalRequestedIDs,
+			SignalRequestedIds:  response.State.SignalRequestedIDs,
 			Checksum:            response.State.Checksum,
 			ChildExecutionInfos: response.State.ChildExecutionInfos,
 			ExecutionState:      response.State.ExecutionState,
-			NextEventID:         response.State.NextEventID,
+			NextEventId:         response.State.NextEventID,
 		},
 	}
 
@@ -495,20 +495,20 @@ func (m *executionManagerImpl) ListConcreteExecutions(
 		return nil, err
 	}
 	newResponse := &ListConcreteExecutionsResponse{
-		States:    make([]*WorkflowMutableState, len(response.States)),
+		States:    make([]*persistenceblobs.WorkflowMutableState, len(response.States)),
 		PageToken: response.NextPageToken,
 	}
 	for i, s := range response.States {
-		state := &WorkflowMutableState{
+		state := &persistenceblobs.WorkflowMutableState{
 			ActivityInfos:       s.ActivityInfos,
 			TimerInfos:          s.TimerInfos,
 			RequestCancelInfos:  s.RequestCancelInfos,
 			SignalInfos:         s.SignalInfos,
-			SignalRequestedIDs:  s.SignalRequestedIDs,
+			SignalRequestedIds:  s.SignalRequestedIDs,
 			Checksum:            s.Checksum,
 			ChildExecutionInfos: s.ChildExecutionInfos,
 			ExecutionState:      s.ExecutionState,
-			NextEventID:         s.NextEventID,
+			NextEventId:         s.NextEventID,
 		}
 
 		state.BufferedEvents, err = m.DeserializeBufferedEvents(s.BufferedEvents)

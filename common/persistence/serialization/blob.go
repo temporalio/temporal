@@ -32,6 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 )
@@ -262,13 +263,20 @@ func VersionHistoriesFromBlob(b []byte, proto string) (*historyspb.VersionHistor
 	return result, proto3Decode(b, proto, result)
 }
 
-func ChecksumToBlob(info *persistenceblobs.Checksum) (DataBlob, error) {
-	return proto3Encode(info)
+func ChecksumToBlob(checksum *persistenceblobs.Checksum) (DataBlob, error) {
+	if checksum == nil {
+		checksum = &persistenceblobs.Checksum{}
+	}
+	return proto3Encode(checksum)
 }
 
 func ChecksumFromBlob(b []byte, proto string) (*persistenceblobs.Checksum, error) {
 	result := &persistenceblobs.Checksum{}
-	return result, proto3Decode(b, proto, result)
+	err := proto3Decode(b, proto, result)
+	if err != nil || result.GetFlavor() == enumsspb.CHECKSUM_FLAVOR_UNSPECIFIED {
+		return nil, err
+	}
+	return result, nil
 }
 
 type DataBlob struct {

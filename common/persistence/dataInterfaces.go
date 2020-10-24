@@ -380,21 +380,6 @@ type (
 		ScheduledID         int64
 	}
 
-	// WorkflowMutableState indicates workflow related state
-	WorkflowMutableState struct {
-		ActivityInfos       map[int64]*persistenceblobs.ActivityInfo
-		TimerInfos          map[string]*persistenceblobs.TimerInfo
-		ChildExecutionInfos map[int64]*persistenceblobs.ChildExecutionInfo
-		RequestCancelInfos  map[int64]*persistenceblobs.RequestCancelInfo
-		SignalInfos         map[int64]*persistenceblobs.SignalInfo
-		SignalRequestedIDs  map[string]struct{}
-		ExecutionInfo       *persistenceblobs.WorkflowExecutionInfo
-		ExecutionState      *persistenceblobs.WorkflowExecutionState
-		NextEventID         int64
-		BufferedEvents      []*historypb.HistoryEvent
-		Checksum            persistenceblobs.Checksum
-	}
-
 	// CreateShardRequest is used to create a shard in executions table
 	CreateShardRequest struct {
 		ShardInfo *persistenceblobs.ShardInfo
@@ -438,9 +423,9 @@ type (
 		Execution   commonpb.WorkflowExecution
 	}
 
-	// GetWorkflowExecutionResponse is the response to GetworkflowExecutionRequest
+	// GetWorkflowExecutionResponse is the response to GetWorkflowExecutionRequest
 	GetWorkflowExecutionResponse struct {
-		State             *WorkflowMutableState
+		State             *persistenceblobs.WorkflowMutableState
 		MutableStateStats *MutableStateStats
 	}
 
@@ -458,7 +443,7 @@ type (
 
 	// ListConcreteExecutionsResponse is response to ListConcreteExecutions
 	ListConcreteExecutionsResponse struct {
-		States    []*WorkflowMutableState
+		States    []*persistenceblobs.WorkflowMutableState
 		PageToken []byte
 	}
 
@@ -552,7 +537,7 @@ type (
 		TimerTasks       []Task
 
 		Condition int64
-		Checksum  persistenceblobs.Checksum
+		Checksum  *persistenceblobs.Checksum
 	}
 
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
@@ -573,7 +558,7 @@ type (
 		TimerTasks       []Task
 
 		Condition int64
-		Checksum  persistenceblobs.Checksum
+		Checksum  *persistenceblobs.Checksum
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution

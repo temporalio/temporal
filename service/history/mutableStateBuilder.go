@@ -157,7 +157,7 @@ type (
 		// Load() and closeTransactionXXX methods. So when
 		// a transaction is in progress, this value will be
 		// wrong. This exist primarily for visibility via CLI
-		checksum persistenceblobs.Checksum
+		checksum *persistenceblobs.Checksum
 
 		taskGenerator       mutableStateTaskGenerator
 		workflowTaskManager mutableStateWorkflowTaskManager
@@ -260,18 +260,18 @@ func newMutableStateBuilderWithVersionHistories(
 	return s
 }
 
-func (e *mutableStateBuilder) CopyToPersistence() *persistence.WorkflowMutableState {
-	state := &persistence.WorkflowMutableState{}
+func (e *mutableStateBuilder) CopyToPersistence() *persistenceblobs.WorkflowMutableState {
+	state := &persistenceblobs.WorkflowMutableState{}
 
 	state.ActivityInfos = e.pendingActivityInfoIDs
 	state.TimerInfos = e.pendingTimerInfoIDs
 	state.ChildExecutionInfos = e.pendingChildExecutionInfoIDs
 	state.RequestCancelInfos = e.pendingRequestCancelInfoIDs
 	state.SignalInfos = e.pendingSignalInfoIDs
-	state.SignalRequestedIDs = e.pendingSignalRequestedIDs
+	state.SignalRequestedIds = convertStringSetToSlice(e.pendingSignalRequestedIDs)
 	state.ExecutionInfo = e.executionInfo
 	state.ExecutionState = e.executionState
-	state.NextEventID = e.nextEventID
+	state.NextEventId = e.nextEventID
 	state.BufferedEvents = e.bufferedEvents
 	state.Checksum = e.checksum
 
@@ -279,7 +279,7 @@ func (e *mutableStateBuilder) CopyToPersistence() *persistence.WorkflowMutableSt
 }
 
 func (e *mutableStateBuilder) Load(
-	state *persistence.WorkflowMutableState,
+	state *persistenceblobs.WorkflowMutableState,
 ) {
 
 	e.pendingActivityInfoIDs = state.ActivityInfos
@@ -298,23 +298,23 @@ func (e *mutableStateBuilder) Load(
 	e.pendingChildExecutionInfoIDs = state.ChildExecutionInfos
 	e.pendingRequestCancelInfoIDs = state.RequestCancelInfos
 	e.pendingSignalInfoIDs = state.SignalInfos
-	e.pendingSignalRequestedIDs = state.SignalRequestedIDs
+	e.pendingSignalRequestedIDs = convertStringSliceToSet(state.SignalRequestedIds)
 	e.executionInfo = state.ExecutionInfo
 	e.executionState = state.ExecutionState
-	e.nextEventID = state.NextEventID
+	e.nextEventID = state.NextEventId
 
 	e.bufferedEvents = state.BufferedEvents
 
 	e.currentVersion = common.EmptyVersion
 	e.hasBufferedEventsInDB = len(e.bufferedEvents) > 0
 	e.stateInDB = state.ExecutionState.State
-	e.nextEventIDInDB = state.NextEventID
+	e.nextEventIDInDB = state.NextEventId
 	e.checksum = state.Checksum
 
-	if len(state.Checksum.Value) > 0 {
+	if len(state.Checksum.GetValue()) > 0 {
 		switch {
 		case e.shouldInvalidateCheckum():
-			e.checksum = persistenceblobs.Checksum{}
+			e.checksum = nil
 			e.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumInvalidated)
 		case e.shouldVerifyChecksum():
 			if err := verifyMutableStateChecksum(e, state.Checksum); err != nil {
@@ -3894,7 +3894,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		DeleteRequestCancelInfo:   e.deleteRequestCancelInfo,
 		UpsertSignalInfos:         convertUpdateSignalInfos(e.updateSignalInfos),
 		DeleteSignalInfo:          e.deleteSignalInfo,
-		UpsertSignalRequestedIDs:  convertSignalRequestedIDs(e.updateSignalRequestedIDs),
+		UpsertSignalRequestedIDs:  convertStringSetToSlice(e.updateSignalRequestedIDs),
 		DeleteSignalRequestedID:   e.deleteSignalRequestedID,
 		NewBufferedEvents:         e.updateBufferedEvents,
 		ClearBufferedEvents:       e.clearBufferedEvents,
@@ -3974,7 +3974,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		ChildExecutionInfos: convertPendingChildExecutionInfos(e.pendingChildExecutionInfoIDs),
 		RequestCancelInfos:  convertPendingRequestCancelInfos(e.pendingRequestCancelInfoIDs),
 		SignalInfos:         convertPendingSignalInfos(e.pendingSignalInfoIDs),
-		SignalRequestedIDs:  convertSignalRequestedIDs(e.pendingSignalRequestedIDs),
+		SignalRequestedIDs:  convertStringSetToSlice(e.pendingSignalRequestedIDs),
 
 		TransferTasks:    e.insertTransferTasks,
 		ReplicationTasks: e.insertReplicationTasks,
@@ -4513,14 +4513,14 @@ func (e *mutableStateBuilder) increaseNextEventID() {
 	e.nextEventID++
 }
 
-func (e *mutableStateBuilder) generateChecksum() persistenceblobs.Checksum {
+func (e *mutableStateBuilder) generateChecksum() *persistenceblobs.Checksum {
 	if !e.shouldGenerateChecksum() {
-		return persistenceblobs.Checksum{}
+		return nil
 	}
 	csum, err := generateMutableStateChecksum(e)
 	if err != nil {
 		e.logWarn("error generating mutableState checksum", tag.Error(err))
-		return persistenceblobs.Checksum{}
+		return nil
 	}
 	return csum
 }

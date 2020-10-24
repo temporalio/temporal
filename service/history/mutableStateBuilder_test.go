@@ -330,10 +330,10 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		},
 	}
 
-	dbState := &persistence.WorkflowMutableState{
+	dbState := &persistenceblobs.WorkflowMutableState{
 		ExecutionInfo:  info,
 		ExecutionState: state,
-		NextEventID:    int64(8),
+		NextEventId:    int64(8),
 		ActivityInfos:  activityInfos,
 		BufferedEvents: bufferedEvents,
 	}
@@ -357,14 +357,14 @@ func (s *mutableStateSuite) TestChecksum() {
 	testCases := []struct {
 		name                 string
 		enableBufferedEvents bool
-		closeTxFunc          func(ms *mutableStateBuilder) (persistenceblobs.Checksum, error)
+		closeTxFunc          func(ms *mutableStateBuilder) (*persistenceblobs.Checksum, error)
 	}{
 		{
 			name: "closeTransactionAsSnapshot",
-			closeTxFunc: func(ms *mutableStateBuilder) (persistenceblobs.Checksum, error) {
+			closeTxFunc: func(ms *mutableStateBuilder) (*persistenceblobs.Checksum, error) {
 				snapshot, _, err := ms.CloseTransactionAsSnapshot(time.Now().UTC(), transactionPolicyPassive)
 				if err != nil {
-					return persistenceblobs.Checksum{}, err
+					return nil, err
 				}
 				return snapshot.Checksum, err
 			},
@@ -372,10 +372,10 @@ func (s *mutableStateSuite) TestChecksum() {
 		{
 			name:                 "closeTransactionAsMutation",
 			enableBufferedEvents: true,
-			closeTxFunc: func(ms *mutableStateBuilder) (persistenceblobs.Checksum, error) {
+			closeTxFunc: func(ms *mutableStateBuilder) (*persistenceblobs.Checksum, error) {
 				mutation, _, err := ms.CloseTransactionAsMutation(time.Now().UTC(), transactionPolicyPassive)
 				if err != nil {
-					return persistenceblobs.Checksum{}, err
+					return nil, err
 				}
 				return mutation.Checksum, err
 			},
@@ -436,7 +436,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			}
 			s.msBuilder.Load(dbState)
 			s.Equal(loadErrors, loadErrorsFunc())
-			s.EqualValues(persistenceblobs.Checksum{}, s.msBuilder.checksum)
+			s.Nil(s.msBuilder.checksum)
 
 			// revert the config value for the next test case
 			s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
@@ -716,7 +716,7 @@ func (s *mutableStateSuite) newNamespaceCacheEntry() *cache.NamespaceCacheEntry 
 	)
 }
 
-func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMutableState {
+func (s *mutableStateSuite) buildWorkflowMutableState() *persistenceblobs.WorkflowMutableState {
 	namespaceID := testNamespaceID
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -806,8 +806,8 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		},
 	}
 
-	signalRequestIDs := map[string]struct{}{
-		uuid.New(): {},
+	signalRequestIDs := []string{
+		uuid.New(),
 	}
 
 	bufferedEvents := []*historypb.HistoryEvent{
@@ -822,15 +822,15 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		},
 	}
 
-	return &persistence.WorkflowMutableState{
+	return &persistenceblobs.WorkflowMutableState{
 		ExecutionInfo:       info,
 		ExecutionState:      state,
-		NextEventID:         int64(101),
+		NextEventId:         int64(101),
 		ActivityInfos:       activityInfos,
 		TimerInfos:          timerInfos,
 		ChildExecutionInfos: childInfos,
 		SignalInfos:         signalInfos,
-		SignalRequestedIDs:  signalRequestIDs,
+		SignalRequestedIds:  signalRequestIDs,
 		BufferedEvents:      bufferedEvents,
 	}
 }

@@ -1153,10 +1153,10 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	}
 	state.SignalInfos = signalInfos
 
-	signalRequestedIDs := make(map[string]struct{})
 	sList := result["signal_requested"].([]gocql.UUID)
-	for _, v := range sList {
-		signalRequestedIDs[v.String()] = struct{}{}
+	signalRequestedIDs := make([]string, len(sList))
+	for i, v := range sList {
+		signalRequestedIDs[i] = v.String()
 	}
 	state.SignalRequestedIDs = signalRequestedIDs
 
@@ -1172,7 +1172,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
 	}
-	state.Checksum = *cs
+	state.Checksum = cs
 
 	return &p.InternalGetWorkflowExecutionResponse{State: state}, nil
 }

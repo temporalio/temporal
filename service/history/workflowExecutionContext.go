@@ -252,7 +252,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 		c.mutableState.Load(response.State)
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
-		c.updateCondition = response.State.NextEventID
+		c.updateCondition = response.State.NextEventId
 
 		// finally emit execution and session stats
 		emitWorkflowExecutionStats(
@@ -325,7 +325,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 		c.mutableState.Load(response.State)
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
-		c.updateCondition = response.State.NextEventID
+		c.updateCondition = response.State.NextEventId
 
 		// finally emit execution and session stats
 		emitWorkflowExecutionStats(

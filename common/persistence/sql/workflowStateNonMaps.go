@@ -83,7 +83,7 @@ func getSignalsRequested(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (map[string]struct{}, error) {
+) ([]string, error) {
 
 	rows, err := db.SelectFromSignalsRequestedSets(sqlplugin.SignalsRequestedSetsSelectFilter{
 		ShardID:     shardID,
@@ -94,9 +94,9 @@ func getSignalsRequested(
 	if err != nil && err != sql.ErrNoRows {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get signals requested. Error: %v", err))
 	}
-	var ret = make(map[string]struct{})
-	for _, s := range rows {
-		ret[s.SignalID] = struct{}{}
+	var ret = make([]string, len(rows))
+	for i, s := range rows {
+		ret[i] = s.SignalID
 	}
 	return ret, nil
 }

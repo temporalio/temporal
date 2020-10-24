@@ -1197,7 +1197,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
 	ms mutableState,
 	lastEventID int64,
 	lastEventVersion int64,
-) *persistence.WorkflowMutableState {
+) *persistenceblobs.WorkflowMutableState {
 
 	if ms.GetExecutionInfo().GetVersionHistories() != nil {
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())

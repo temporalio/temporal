@@ -205,13 +205,13 @@ type (
 		ChildExecutionInfos map[int64]*persistenceblobs.ChildExecutionInfo
 		RequestCancelInfos  map[int64]*persistenceblobs.RequestCancelInfo
 		SignalInfos         map[int64]*persistenceblobs.SignalInfo
-		SignalRequestedIDs  map[string]struct{}
+		SignalRequestedIDs  []string
 		ExecutionInfo       *persistenceblobs.WorkflowExecutionInfo
 		ExecutionState      *persistenceblobs.WorkflowExecutionState
 		NextEventID         int64
 
 		BufferedEvents []*serialization.DataBlob
-		Checksum       persistenceblobs.Checksum
+		Checksum       *persistenceblobs.Checksum
 	}
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
@@ -288,7 +288,7 @@ type (
 
 		Condition int64
 
-		Checksum persistenceblobs.Checksum
+		Checksum *persistenceblobs.Checksum
 	}
 
 	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
@@ -311,7 +311,7 @@ type (
 
 		Condition int64
 
-		Checksum persistenceblobs.Checksum
+		Checksum *persistenceblobs.Checksum
 	}
 
 	// InternalAppendHistoryEventsRequest is used to append new events to workflow execution history  for Persistence Interface

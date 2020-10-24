@@ -32,11 +32,10 @@ import (
 
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
-
-	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 )
 
-func workflowMutableStateToJSON(wms *persistence.WorkflowMutableState) string {
+func workflowMutableStateToJSON(wms *persistenceblobs.WorkflowMutableState) string {
 	// TODO: call @alexshtin before you dig!
 	// This is a _temporarry_ workaround to make JSON serialization work.
 	// This code will be removed soon and MutableState should be serialized to proto.
@@ -129,7 +128,7 @@ func workflowMutableStateToJSON(wms *persistence.WorkflowMutableState) string {
 	sb.WriteString("},")
 
 	// SignalRequestedIDs
-	sb.WriteString(fmt.Sprintf(`"SignalRequestedIds":%s,`, jsonMarshal(wms.SignalRequestedIDs)))
+	sb.WriteString(fmt.Sprintf(`"SignalRequestedIds":%s,`, jsonMarshal(wms.SignalRequestedIds)))
 
 	// ExecutionInfo
 	sb.WriteString(fmt.Sprintf(`"ExecutionInfo":%s,`, jsonMarshal(wms.ExecutionInfo)))

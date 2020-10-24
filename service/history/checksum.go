@@ -37,18 +37,18 @@ const (
 	mutableStateChecksumPayloadV1 = int32(1)
 )
 
-func generateMutableStateChecksum(ms mutableState) (persistenceblobs.Checksum, error) {
+func generateMutableStateChecksum(ms mutableState) (*persistenceblobs.Checksum, error) {
 	payload := newMutableStateChecksumPayload(ms)
 	csum, err := checksum.GenerateCRC32(payload, mutableStateChecksumPayloadV1)
 	if err != nil {
-		return persistenceblobs.Checksum{}, err
+		return nil, err
 	}
 	return csum, nil
 }
 
 func verifyMutableStateChecksum(
 	ms mutableState,
-	csum persistenceblobs.Checksum,
+	csum *persistenceblobs.Checksum,
 ) error {
 	if csum.Version != mutableStateChecksumPayloadV1 {
 		return fmt.Errorf("invalid checksum payload version %v", csum.Version)

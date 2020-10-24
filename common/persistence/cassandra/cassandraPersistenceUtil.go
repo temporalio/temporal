@@ -383,7 +383,7 @@ func createExecution(
 	executionInfo *persistenceblobs.WorkflowExecutionInfo,
 	executionState *persistenceblobs.WorkflowExecutionState,
 	nextEventID int64,
-	checksum persistenceblobs.Checksum,
+	checksum *persistenceblobs.Checksum,
 	cqlNowTimestampMillis int64,
 ) error {
 
@@ -412,7 +412,7 @@ func createExecution(
 		return err
 	}
 
-	checksumDatablob, err := serialization.ChecksumToBlob(&checksum)
+	checksumDatablob, err := serialization.ChecksumToBlob(checksum)
 	if err != nil {
 		return err
 	}
@@ -463,7 +463,7 @@ func updateExecution(
 	nextEventID int64,
 	cqlNowTimestampMillis int64,
 	condition int64,
-	checksum persistenceblobs.Checksum,
+	checksum *persistenceblobs.Checksum,
 ) error {
 
 	// validate workflow state & close status
@@ -490,7 +490,7 @@ func updateExecution(
 		return err
 	}
 
-	checksumDatablob, err := serialization.ChecksumToBlob(&checksum)
+	checksumDatablob, err := serialization.ChecksumToBlob(checksum)
 	if err != nil {
 		return err
 	}
