@@ -31,6 +31,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -779,7 +780,7 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 		defaultVisibilityTimestamp,
 		rowTypeShardTaskID,
 		data.Data,
-		data.Encoding.String(),
+		data.EncodingType.String(),
 		shardInfo.GetRangeId())
 
 	previous := make(map[string]interface{})
@@ -839,7 +840,7 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 
 	query := d.session.Query(templateUpdateShardQuery,
 		data.Data,
-		data.Encoding.String(),
+		data.EncodingType.String(),
 		shardInfo.GetRangeId(),
 		shardInfo.GetShardId(), // Where
 		rowTypeShard,
@@ -1161,7 +1162,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	state.SignalRequestedIDs = signalRequestedIDs
 
 	eList := result["buffered_events_list"].([]map[string]interface{})
-	bufferedEventsBlobs := make([]*serialization.DataBlob, 0, len(eList))
+	bufferedEventsBlobs := make([]*commonpb.DataBlob, 0, len(eList))
 	for _, v := range eList {
 		blob := createHistoryEventBatchBlob(v)
 		bufferedEventsBlobs = append(bufferedEventsBlobs, blob)
@@ -1281,9 +1282,9 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 				runID,
 				executionStateDatablob.Data,
-				executionStateDatablob.Encoding.String(),
+				executionStateDatablob.EncodingType.String(),
 				replicationVersions.Data,
-				replicationVersions.Encoding.String(),
+				replicationVersions.EncodingType.String(),
 				lastWriteVersion,
 				updateWorkflow.ExecutionState.State,
 				d.shardID,
@@ -1394,9 +1395,9 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 	batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 		newRunID,
 		stateDatablob.Data,
-		stateDatablob.Encoding.String(),
+		stateDatablob.EncodingType.String(),
 		replicationVersions.Data,
-		replicationVersions.Encoding.String(),
+		replicationVersions.EncodingType.String(),
 		lastWriteVersion,
 		request.NewWorkflowSnapshot.ExecutionState.State,
 		d.shardID,
@@ -1560,9 +1561,9 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 				runID,
 				executionStateDatablob.Data,
-				executionStateDatablob.Encoding.String(),
+				executionStateDatablob.EncodingType.String(),
 				replicationVersions.Data,
-				replicationVersions.Encoding.String(),
+				replicationVersions.EncodingType.String(),
 				lastWriteVersion,
 				state,
 				shardID,
@@ -1581,9 +1582,9 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 				runID,
 				executionStateDatablob.Data,
-				executionStateDatablob.Encoding.String(),
+				executionStateDatablob.EncodingType.String(),
 				replicationVersions.Data,
-				replicationVersions.Encoding.String(),
+				replicationVersions.EncodingType.String(),
 				lastWriteVersion,
 				state,
 				shardID,
@@ -2214,7 +2215,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 				taskQueueTaskID,
 				initialRangeID,
 				datablob.Data,
-				datablob.Encoding.String(),
+				datablob.EncodingType.String(),
 			)
 		} else if isThrottlingError(err) {
 			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("LeaseTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
@@ -2251,7 +2252,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 		query = d.session.Query(templateUpdateTaskQueueQuery,
 			rangeID+1,
 			datablob.Data,
-			datablob.Encoding.String(),
+			datablob.EncodingType.String(),
 			request.NamespaceID,
 			&request.TaskQueue,
 			request.TaskType,
@@ -2300,7 +2301,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 			taskQueueTaskID,
 			request.RangeID,
 			datablob.Data,
-			datablob.Encoding.String(),
+			datablob.EncodingType.String(),
 			stickyTaskQueueTTL,
 		)
 		err = query.Exec()
@@ -2320,7 +2321,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 	query := d.session.Query(templateUpdateTaskQueueQuery,
 		request.RangeID,
 		datablob.Data,
-		datablob.Encoding.String(),
+		datablob.EncodingType.String(),
 		tli.GetNamespaceId(),
 		&tli.Name,
 		tli.TaskType,
@@ -2405,7 +2406,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				rowTypeTask,
 				task.GetTaskId(),
 				datablob.Data,
-				datablob.Encoding.String())
+				datablob.EncodingType.String())
 		} else {
 			if ttl > maxCassandraTTL {
 				ttl = maxCassandraTTL
@@ -2418,7 +2419,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				rowTypeTask,
 				task.GetTaskId(),
 				datablob.Data,
-				datablob.Encoding.String(),
+				datablob.EncodingType.String(),
 				ttl)
 		}
 	}
@@ -2435,7 +2436,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 	batch.Query(templateUpdateTaskQueueQuery,
 		request.TaskQueueInfo.RangeID,
 		datablob.Data,
-		datablob.Encoding.String(),
+		datablob.EncodingType.String(),
 		namespaceID,
 		taskQueue,
 		taskQueueType,
@@ -2676,7 +2677,7 @@ func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplication
 		request.SourceClusterName,
 		rowTypeDLQRunID,
 		datablob.Data,
-		datablob.Encoding.String(),
+		datablob.EncodingType.String(),
 		defaultVisibilityTimestamp,
 		task.GetTaskId())
 

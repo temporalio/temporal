@@ -33,49 +33,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 )
 
-func validateProtoEncoding(protoEncodingStr string, expected enumspb.EncodingType) error {
-	if protoEncoding, ok := enumspb.EncodingType_value[protoEncodingStr]; !ok || enumspb.EncodingType(protoEncoding) != expected {
-		return fmt.Errorf("invalid encoding type: %v", protoEncodingStr)
-	}
-	return nil
-}
-
-func encodeErr(encoding enumspb.EncodingType, err error) error {
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("error serializing struct to blob using encoding - %v - : %v", encoding, err)
-}
-
-func decodeErr(encoding enumspb.EncodingType, err error) error {
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("error deserializing blob to blob using encoding - %v - : %v", encoding, err)
-}
-
-func proto3Encode(m proto.Marshaler) (DataBlob, error) {
-	blob := DataBlob{Encoding: enumspb.ENCODING_TYPE_PROTO3}
-	data, err := m.Marshal()
-	if err != nil {
-		return blob, encodeErr(enumspb.ENCODING_TYPE_PROTO3, err)
-	}
-	blob.Data = data
-	return blob, nil
-}
-
-func proto3Decode(b []byte, proto string, result proto.Unmarshaler) error {
-	if err := validateProtoEncoding(proto, enumspb.ENCODING_TYPE_PROTO3); err != nil {
-		return err
-	}
-	return decodeErr(enumspb.ENCODING_TYPE_PROTO3, result.Unmarshal(b))
-}
-
-func ShardInfoToBlob(info *persistenceblobs.ShardInfo) (DataBlob, error) {
+func ShardInfoToBlob(info *persistenceblobs.ShardInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -110,7 +71,7 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 	return shardInfo, nil
 }
 
-func NamespaceDetailToBlob(info *persistenceblobs.NamespaceDetail) (DataBlob, error) {
+func NamespaceDetailToBlob(info *persistenceblobs.NamespaceDetail) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -119,7 +80,7 @@ func NamespaceDetailFromBlob(b []byte, proto string) (*persistenceblobs.Namespac
 	return result, proto3Decode(b, proto, result)
 }
 
-func HistoryTreeInfoToBlob(info *persistenceblobs.HistoryTreeInfo) (DataBlob, error) {
+func HistoryTreeInfoToBlob(info *persistenceblobs.HistoryTreeInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -128,7 +89,7 @@ func HistoryTreeInfoFromBlob(b []byte, proto string) (*persistenceblobs.HistoryT
 	return result, proto3Decode(b, proto, result)
 }
 
-func HistoryBranchToBlob(info *persistenceblobs.HistoryBranch) (DataBlob, error) {
+func HistoryBranchToBlob(info *persistenceblobs.HistoryBranch) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -137,7 +98,7 @@ func HistoryBranchFromBlob(b []byte, proto string) (*persistenceblobs.HistoryBra
 	return result, proto3Decode(b, proto, result)
 }
 
-func WorkflowExecutionInfoToBlob(info *persistenceblobs.WorkflowExecutionInfo) (DataBlob, error) {
+func WorkflowExecutionInfoToBlob(info *persistenceblobs.WorkflowExecutionInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -146,7 +107,7 @@ func WorkflowExecutionInfoFromBlob(b []byte, proto string) (*persistenceblobs.Wo
 	return result, proto3Decode(b, proto, result)
 }
 
-func WorkflowExecutionStateToBlob(info *persistenceblobs.WorkflowExecutionState) (DataBlob, error) {
+func WorkflowExecutionStateToBlob(info *persistenceblobs.WorkflowExecutionState) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -155,7 +116,7 @@ func WorkflowExecutionStateFromBlob(b []byte, proto string) (*persistenceblobs.W
 	return result, proto3Decode(b, proto, result)
 }
 
-func ActivityInfoToBlob(info *persistenceblobs.ActivityInfo) (DataBlob, error) {
+func ActivityInfoToBlob(info *persistenceblobs.ActivityInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -164,7 +125,7 @@ func ActivityInfoFromBlob(b []byte, proto string) (*persistenceblobs.ActivityInf
 	return result, proto3Decode(b, proto, result)
 }
 
-func ChildExecutionInfoToBlob(info *persistenceblobs.ChildExecutionInfo) (DataBlob, error) {
+func ChildExecutionInfoToBlob(info *persistenceblobs.ChildExecutionInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -173,7 +134,7 @@ func ChildExecutionInfoFromBlob(b []byte, proto string) (*persistenceblobs.Child
 	return result, proto3Decode(b, proto, result)
 }
 
-func SignalInfoToBlob(info *persistenceblobs.SignalInfo) (DataBlob, error) {
+func SignalInfoToBlob(info *persistenceblobs.SignalInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -182,7 +143,7 @@ func SignalInfoFromBlob(b []byte, proto string) (*persistenceblobs.SignalInfo, e
 	return result, proto3Decode(b, proto, result)
 }
 
-func RequestCancelInfoToBlob(info *persistenceblobs.RequestCancelInfo) (DataBlob, error) {
+func RequestCancelInfoToBlob(info *persistenceblobs.RequestCancelInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -191,7 +152,7 @@ func RequestCancelInfoFromBlob(b []byte, proto string) (*persistenceblobs.Reques
 	return result, proto3Decode(b, proto, result)
 }
 
-func TimerInfoToBlob(info *persistenceblobs.TimerInfo) (DataBlob, error) {
+func TimerInfoToBlob(info *persistenceblobs.TimerInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -200,7 +161,7 @@ func TimerInfoFromBlob(b []byte, proto string) (*persistenceblobs.TimerInfo, err
 	return result, proto3Decode(b, proto, result)
 }
 
-func TaskInfoToBlob(info *persistenceblobs.AllocatedTaskInfo) (DataBlob, error) {
+func TaskInfoToBlob(info *persistenceblobs.AllocatedTaskInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -209,7 +170,7 @@ func TaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.AllocatedTaskIn
 	return result, proto3Decode(b, proto, result)
 }
 
-func TaskQueueInfoToBlob(info *persistenceblobs.TaskQueueInfo) (DataBlob, error) {
+func TaskQueueInfoToBlob(info *persistenceblobs.TaskQueueInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -218,7 +179,7 @@ func TaskQueueInfoFromBlob(b []byte, proto string) (*persistenceblobs.TaskQueueI
 	return result, proto3Decode(b, proto, result)
 }
 
-func TransferTaskInfoToBlob(info *persistenceblobs.TransferTaskInfo) (DataBlob, error) {
+func TransferTaskInfoToBlob(info *persistenceblobs.TransferTaskInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -227,7 +188,7 @@ func TransferTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.Transfe
 	return result, proto3Decode(b, proto, result)
 }
 
-func TimerTaskInfoToBlob(info *persistenceblobs.TimerTaskInfo) (DataBlob, error) {
+func TimerTaskInfoToBlob(info *persistenceblobs.TimerTaskInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -236,7 +197,7 @@ func TimerTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.TimerTaskI
 	return result, proto3Decode(b, proto, result)
 }
 
-func ReplicationTaskInfoToBlob(info *persistenceblobs.ReplicationTaskInfo) (DataBlob, error) {
+func ReplicationTaskInfoToBlob(info *persistenceblobs.ReplicationTaskInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -245,7 +206,7 @@ func ReplicationTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.Repl
 	return result, proto3Decode(b, proto, result)
 }
 
-func ReplicationVersionsToBlob(info *persistenceblobs.ReplicationVersions) (DataBlob, error) {
+func ReplicationVersionsToBlob(info *persistenceblobs.ReplicationVersions) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -254,16 +215,7 @@ func ReplicationVersionsFromBlob(b []byte, proto string) (*persistenceblobs.Repl
 	return result, proto3Decode(b, proto, result)
 }
 
-func VersionHistoriesToBlob(info *historyspb.VersionHistories) (DataBlob, error) {
-	return proto3Encode(info)
-}
-
-func VersionHistoriesFromBlob(b []byte, proto string) (*historyspb.VersionHistories, error) {
-	result := &historyspb.VersionHistories{}
-	return result, proto3Decode(b, proto, result)
-}
-
-func ChecksumToBlob(checksum *persistenceblobs.Checksum) (DataBlob, error) {
+func ChecksumToBlob(checksum *persistenceblobs.Checksum) (commonpb.DataBlob, error) {
 	if checksum == nil {
 		checksum = &persistenceblobs.Checksum{}
 	}
@@ -279,15 +231,23 @@ func ChecksumFromBlob(b []byte, proto string) (*persistenceblobs.Checksum, error
 	return result, nil
 }
 
-type DataBlob struct {
-	Encoding enumspb.EncodingType
-	Data     []byte
+func proto3Encode(m proto.Marshaler) (commonpb.DataBlob, error) {
+	blob := commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3}
+	data, err := m.Marshal()
+	if err != nil {
+		return blob, fmt.Errorf("error serializing struct to blob using %v encoding: %w", enumspb.ENCODING_TYPE_PROTO3, err)
+	}
+	blob.Data = data
+	return blob, nil
 }
 
-// ToProto convert data blob to proto representation
-func (d *DataBlob) ToProto() *commonpb.DataBlob {
-	return &commonpb.DataBlob{
-		EncodingType: d.Encoding,
-		Data:         d.Data,
+func proto3Decode(b []byte, encoding string, result proto.Unmarshaler) error {
+	if e, ok := enumspb.EncodingType_value[encoding]; !ok || enumspb.EncodingType(e) != enumspb.ENCODING_TYPE_PROTO3 {
+		return fmt.Errorf("encoding %s doesn't match expected encoding %v", encoding, enumspb.ENCODING_TYPE_PROTO3)
 	}
+
+	if err := result.Unmarshal(b); err != nil {
+		return fmt.Errorf("error deserializing blob using %v encoding: %w", enumspb.ENCODING_TYPE_PROTO3, err)
+	}
+	return nil
 }

@@ -28,6 +28,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -87,7 +88,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 		NodeID:       request.NodeID,
 		TxnID:        request.TransactionID,
 		Data:         request.Events.Data,
-		DataEncoding: request.Events.Encoding.String(),
+		DataEncoding: request.Events.EncodingType.String(),
 		ShardID:      request.ShardID,
 	}
 
@@ -108,7 +109,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 			TreeID:       treeIDBytes,
 			BranchID:     branchIDBytes,
 			Data:         blob.Data,
-			DataEncoding: blob.Encoding.String(),
+			DataEncoding: blob.EncodingType.String(),
 		}
 
 		return m.txExecute("AppendHistoryNodes", func(tx sqlplugin.Tx) error {
@@ -191,7 +192,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 		return &p.InternalReadHistoryBranchResponse{}, nil
 	}
 
-	history := make([]*serialization.DataBlob, 0, request.PageSize)
+	history := make([]*commonpb.DataBlob, 0, request.PageSize)
 
 	for _, row := range rows {
 		eventBlob := p.NewDataBlob(row.Data, row.DataEncoding)
@@ -228,7 +229,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 			lastTxnID = row.TxnID
 			lastNodeID = row.NodeID
 			history = append(history, eventBlob)
-			eventBlob = &serialization.DataBlob{}
+			eventBlob = &commonpb.DataBlob{}
 		}
 	}
 
@@ -352,7 +353,7 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 		TreeID:       treeIDBytes,
 		BranchID:     newBranchIdBytes,
 		Data:         blob.Data,
-		DataEncoding: blob.Encoding.String(),
+		DataEncoding: blob.EncodingType.String(),
 	}
 
 	result, err := m.db.InsertIntoHistoryTree(row)

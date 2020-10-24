@@ -30,6 +30,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -426,14 +427,14 @@ func createExecution(
 			runID,
 			rowTypeExecution,
 			executionDatablob.Data,
-			executionDatablob.Encoding.String(),
+			executionDatablob.EncodingType.String(),
 			executionStateDatablob.Data,
-			executionStateDatablob.Encoding.String(),
+			executionStateDatablob.EncodingType.String(),
 			nextEventID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
 			checksumDatablob.Data,
-			checksumDatablob.Encoding.String())
+			checksumDatablob.EncodingType.String())
 	} else {
 		// TODO also need to set the start / current / last write version
 		batch.Query(templateCreateWorkflowExecutionQuery,
@@ -443,14 +444,14 @@ func createExecution(
 			runID,
 			rowTypeExecution,
 			executionDatablob.Data,
-			executionDatablob.Encoding.String(),
+			executionDatablob.EncodingType.String(),
 			executionStateDatablob.Data,
-			executionStateDatablob.Encoding.String(),
+			executionStateDatablob.EncodingType.String(),
 			nextEventID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
 			checksumDatablob.Data,
-			checksumDatablob.Encoding.String())
+			checksumDatablob.EncodingType.String())
 	}
 	return nil
 }
@@ -499,12 +500,12 @@ func updateExecution(
 		// Updates will be called with null ReplicationState while the feature is disabled
 		batch.Query(templateUpdateWorkflowExecutionQuery,
 			executionDatablob.Data,
-			executionDatablob.Encoding.String(),
+			executionDatablob.EncodingType.String(),
 			executionStateDatablob.Data,
-			executionStateDatablob.Encoding.String(),
+			executionStateDatablob.EncodingType.String(),
 			nextEventID,
 			checksumDatablob.Data,
-			checksumDatablob.Encoding.String(),
+			checksumDatablob.EncodingType.String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -517,12 +518,12 @@ func updateExecution(
 		// TODO also need to set the start / current / last write version
 		batch.Query(templateUpdateWorkflowExecutionQuery,
 			executionDatablob.Data,
-			executionDatablob.Encoding.String(),
+			executionDatablob.EncodingType.String(),
 			executionStateDatablob.Data,
-			executionStateDatablob.Encoding.String(),
+			executionStateDatablob.EncodingType.String(),
 			nextEventID,
 			checksumDatablob.Data,
-			checksumDatablob.Encoding.String(),
+			checksumDatablob.EncodingType.String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -669,7 +670,7 @@ func createTransferTasks(
 			rowTypeTransferWorkflowID,
 			rowTypeTransferRunID,
 			datablob.Data,
-			datablob.Encoding.String(),
+			datablob.EncodingType.String(),
 			defaultVisibilityTimestamp,
 			task.GetTaskID())
 	}
@@ -738,7 +739,7 @@ func createReplicationTasks(
 			rowTypeReplicationWorkflowID,
 			rowTypeReplicationRunID,
 			datablob.Data,
-			datablob.Encoding.String(),
+			datablob.EncodingType.String(),
 			defaultVisibilityTimestamp,
 			task.GetTaskID())
 	}
@@ -823,7 +824,7 @@ func createTimerTasks(
 			rowTypeTimerWorkflowID,
 			rowTypeTimerRunID,
 			datablob.Data,
-			datablob.Encoding.String(),
+			datablob.EncodingType.String(),
 			dbTs,
 			task.GetTaskID())
 	}
@@ -873,9 +874,9 @@ func createOrUpdateCurrentExecution(
 		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 			runID,
 			executionStateDatablob.Data,
-			executionStateDatablob.Encoding.String(),
+			executionStateDatablob.EncodingType.String(),
 			replicationVersions.Data,
-			replicationVersions.Encoding.String(),
+			replicationVersions.EncodingType.String(),
 			lastWriteVersion,
 			state,
 			shardID,
@@ -891,9 +892,9 @@ func createOrUpdateCurrentExecution(
 		batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
 			runID,
 			executionStateDatablob.Data,
-			executionStateDatablob.Encoding.String(),
+			executionStateDatablob.EncodingType.String(),
 			replicationVersions.Data,
-			replicationVersions.Encoding.String(),
+			replicationVersions.EncodingType.String(),
 			lastWriteVersion,
 			state,
 			shardID,
@@ -918,9 +919,9 @@ func createOrUpdateCurrentExecution(
 			rowTypeExecutionTaskID,
 			runID,
 			executionStateDatablob.Data,
-			executionStateDatablob.Encoding.String(),
+			executionStateDatablob.EncodingType.String(),
 			replicationVersions.Data,
-			replicationVersions.Encoding.String(),
+			replicationVersions.EncodingType.String(),
 			lastWriteVersion,
 			state,
 		)
@@ -950,7 +951,7 @@ func updateActivityInfos(
 		batch.Query(templateUpdateActivityInfoQuery,
 			a.ScheduleId,
 			activityBlob.Data,
-			activityBlob.Encoding.String(),
+			activityBlob.EncodingType.String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1036,10 +1037,10 @@ func updateTimerInfos(
 		}
 
 		batch.Query(templateUpdateTimerInfoQuery,
-			a.GetTimerId(),             // timermap key
-			datablob.Data,              // timermap data
-			datablob.Encoding.String(), // timermap encoding
-			shardID,                    // where ...
+			a.GetTimerId(),                 // timermap key
+			datablob.Data,                  // timermap data
+			datablob.EncodingType.String(), // timermap encoding
+			shardID,                        // where ...
 			rowTypeExecution,
 			namespaceID,
 			workflowID,
@@ -1110,7 +1111,7 @@ func updateChildExecutionInfos(
 		batch.Query(templateUpdateChildExecutionInfoQuery,
 			c.InitiatedId,
 			datablob.Data,
-			datablob.Encoding.String(),
+			datablob.EncodingType.String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1180,7 +1181,7 @@ func updateRequestCancelInfos(
 		batch.Query(templateUpdateRequestCancelInfoQuery,
 			c.GetInitiatedId(),
 			datablob.Data,
-			datablob.Encoding.String(),
+			datablob.EncodingType.String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1254,7 +1255,7 @@ func updateSignalInfos(
 		batch.Query(templateUpdateSignalInfoQuery,
 			c.GetInitiatedId(),
 			datablob.Data,
-			datablob.Encoding.String(),
+			datablob.EncodingType.String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1366,7 +1367,7 @@ func resetSignalRequested(
 
 func updateBufferedEvents(
 	batch *gocql.Batch,
-	newBufferedEvents *serialization.DataBlob,
+	newBufferedEvents *commonpb.DataBlob,
 	clearBufferedEvents bool,
 	shardID int32,
 	namespaceID string,
@@ -1385,7 +1386,7 @@ func updateBufferedEvents(
 			rowTypeExecutionTaskID)
 	} else if newBufferedEvents != nil {
 		values := make(map[string]interface{})
-		values["encoding_type"] = newBufferedEvents.Encoding.String()
+		values["encoding_type"] = newBufferedEvents.EncodingType.String()
 		values["version"] = int64(0)
 		values["data"] = newBufferedEvents.Data
 		newEventValues := []map[string]interface{}{values}
@@ -1414,7 +1415,7 @@ func resetActivityInfoMap(
 		}
 
 		aMap[a.ScheduleId] = aBlob.Data
-		encoding = aBlob.Encoding
+		encoding = aBlob.EncodingType
 	}
 
 	return aMap, encoding, nil
@@ -1433,7 +1434,7 @@ func resetTimerInfoMap(
 			return nil, enumspb.ENCODING_TYPE_UNSPECIFIED, err
 		}
 
-		encoding = datablob.Encoding
+		encoding = datablob.EncodingType
 
 		tMap[t.GetTimerId()] = datablob.Data
 	}
@@ -1453,7 +1454,7 @@ func resetChildExecutionInfoMap(
 			return nil, enumspb.ENCODING_TYPE_UNSPECIFIED, p.NewSerializationError(fmt.Sprintf("failed to serialize child execution infos - Execution: %v", c.InitiatedId))
 		}
 		cMap[c.InitiatedId] = datablob.Data
-		encoding = datablob.Encoding
+		encoding = datablob.EncodingType
 	}
 
 	return cMap, encoding, nil
@@ -1472,7 +1473,7 @@ func resetRequestCancelInfoMap(
 			return nil, enumspb.ENCODING_TYPE_UNSPECIFIED, err
 		}
 
-		encoding = datablob.Encoding
+		encoding = datablob.EncodingType
 
 		rcMap[rc.GetInitiatedId()] = datablob.Data
 	}
@@ -1493,7 +1494,7 @@ func resetSignalInfoMap(
 			return nil, enumspb.ENCODING_TYPE_UNSPECIFIED, err
 		}
 
-		encoding = datablob.Encoding
+		encoding = datablob.EncodingType
 
 		sMap[s.GetInitiatedId()] = datablob.Data
 	}
@@ -1503,14 +1504,14 @@ func resetSignalInfoMap(
 
 func createHistoryEventBatchBlob(
 	result map[string]interface{},
-) *serialization.DataBlob {
-	eventBatch := &serialization.DataBlob{Encoding: enumspb.ENCODING_TYPE_UNSPECIFIED}
+) *commonpb.DataBlob {
+	eventBatch := &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_UNSPECIFIED}
 	for k, v := range result {
 		switch k {
 		case "encoding_type":
 			encodingStr := v.(string)
 			if encoding, ok := enumspb.EncodingType_value[encodingStr]; ok {
-				eventBatch.Encoding = enumspb.EncodingType(encoding)
+				eventBatch.EncodingType = enumspb.EncodingType(encoding)
 			}
 		case "data":
 			eventBatch.Data = v.([]byte)

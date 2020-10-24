@@ -32,7 +32,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common/persistence/serialization"
 )
 
 type (
@@ -210,7 +209,7 @@ type (
 		ExecutionState      *persistenceblobs.WorkflowExecutionState
 		NextEventID         int64
 
-		BufferedEvents []*serialization.DataBlob
+		BufferedEvents []*commonpb.DataBlob
 		Checksum       *persistenceblobs.Checksum
 	}
 
@@ -279,7 +278,7 @@ type (
 		DeleteSignalInfo          *int64
 		UpsertSignalRequestedIDs  []string
 		DeleteSignalRequestedID   string
-		NewBufferedEvents         *serialization.DataBlob
+		NewBufferedEvents         *commonpb.DataBlob
 		ClearBufferedEvents       bool
 
 		TransferTasks    []Task
@@ -322,7 +321,7 @@ type (
 		EventBatchVersion int64
 		RangeID           int64
 		TransactionID     int64
-		Events            *serialization.DataBlob
+		Events            *commonpb.DataBlob
 		Overwrite         bool
 	}
 
@@ -337,7 +336,7 @@ type (
 		// The first eventID becomes the nodeID to be appended
 		NodeID int64
 		// The events to be appended
-		Events *serialization.DataBlob
+		Events *commonpb.DataBlob
 		// Requested TransactionID for conditional update
 		TransactionID int64
 		// Used in sharded data stores to identify which shard to use
@@ -418,7 +417,7 @@ type (
 	// InternalReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
 	InternalReadHistoryBranchResponse struct {
 		// History events
-		History []*serialization.DataBlob
+		History []*commonpb.DataBlob
 		// Pagination token
 		NextPageToken []byte
 		// LastNodeID is the last known node ID attached to a history node
@@ -437,7 +436,7 @@ type (
 		CloseTime        time.Time
 		Status           enumspb.WorkflowExecutionStatus
 		HistoryLength    int64
-		Memo             *serialization.DataBlob
+		Memo             *commonpb.DataBlob
 		TaskQueue        string
 		SearchAttributes map[string]interface{}
 	}
@@ -465,7 +464,7 @@ type (
 		ExecutionTimestamp int64
 		RunTimeout         int64
 		TaskID             int64
-		Memo               *serialization.DataBlob
+		Memo               *commonpb.DataBlob
 		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
 	}
@@ -479,7 +478,7 @@ type (
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		TaskID             int64
-		Memo               *serialization.DataBlob
+		Memo               *commonpb.DataBlob
 		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
 		CloseTimestamp     int64
@@ -499,7 +498,7 @@ type (
 		Status             enumspb.WorkflowExecutionStatus
 		WorkflowTimeout    int64
 		TaskID             int64
-		Memo               *serialization.DataBlob
+		Memo               *commonpb.DataBlob
 		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
 	}
@@ -508,13 +507,13 @@ type (
 	InternalCreateNamespaceRequest struct {
 		ID        string
 		Name      string
-		Namespace *serialization.DataBlob
+		Namespace *commonpb.DataBlob
 		IsGlobal  bool
 	}
 
 	// InternalGetNamespaceResponse is the response for GetNamespace
 	InternalGetNamespaceResponse struct {
-		Namespace           *serialization.DataBlob
+		Namespace           *commonpb.DataBlob
 		IsGlobal            bool
 		NotificationVersion int64
 	}
@@ -523,7 +522,7 @@ type (
 	InternalUpdateNamespaceRequest struct {
 		Id                  string
 		Name                string
-		Namespace           *serialization.DataBlob
+		Namespace           *commonpb.DataBlob
 		NotificationVersion int64
 	}
 
@@ -537,13 +536,13 @@ type (
 	// These values can only be set a single time upon cluster initialization.
 	InternalInitializeImmutableClusterMetadataRequest struct {
 		// Serialized ImmutableCusterMetadata to persist.
-		ImmutableClusterMetadata *serialization.DataBlob
+		ImmutableClusterMetadata *commonpb.DataBlob
 	}
 
 	// InternalInitializeImmutableClusterMetadataResponse is a request of InitializeImmutableClusterMetadata
 	InternalInitializeImmutableClusterMetadataResponse struct {
 		// Serialized ImmutableCusterMetadata that is currently persisted.
-		PersistedImmutableMetadata *serialization.DataBlob
+		PersistedImmutableMetadata *commonpb.DataBlob
 		RequestApplied             bool
 	}
 
@@ -551,18 +550,18 @@ type (
 	// These values are set a single time upon cluster initialization.
 	InternalGetImmutableClusterMetadataResponse struct {
 		// Serialized ImmutableCusterMetadata.
-		ImmutableClusterMetadata *serialization.DataBlob
+		ImmutableClusterMetadata *commonpb.DataBlob
 	}
 
 	InternalGetClusterMetadataResponse struct {
 		// Serialized MutableCusterMetadata.
-		ClusterMetadata *serialization.DataBlob
+		ClusterMetadata *commonpb.DataBlob
 		Version         int64
 	}
 
 	InternalSaveClusterMetadataRequest struct {
 		// Serialized MutableCusterMetadata.
-		ClusterMetadata *serialization.DataBlob
+		ClusterMetadata *commonpb.DataBlob
 		Version         int64
 	}
 
@@ -574,7 +573,7 @@ type (
 )
 
 // NewDataBlob returns a new DataBlob
-func NewDataBlob(data []byte, encodingTypeStr string) *serialization.DataBlob {
+func NewDataBlob(data []byte, encodingTypeStr string) *commonpb.DataBlob {
 	if len(data) == 0 {
 		return nil
 	}
@@ -584,24 +583,24 @@ func NewDataBlob(data []byte, encodingTypeStr string) *serialization.DataBlob {
 		panic(fmt.Sprintf("Invalid incoding: \"%v\"", encodingTypeStr))
 	}
 
-	return &serialization.DataBlob{
-		Data:     data,
-		Encoding: enumspb.EncodingType(encodingType),
+	return &commonpb.DataBlob{
+		Data:         data,
+		EncodingType: enumspb.EncodingType(encodingType),
 	}
 }
 
 // FromDataBlob decodes a datablob into a (payload, encodingType) tuple
-func FromDataBlob(blob *serialization.DataBlob) ([]byte, string) {
+func FromDataBlob(blob *commonpb.DataBlob) ([]byte, string) {
 	if blob == nil || len(blob.Data) == 0 {
 		return nil, ""
 	}
-	return blob.Data, blob.Encoding.String()
+	return blob.Data, blob.EncodingType.String()
 }
 
 // NewDataBlobFromProto convert data blob from Proto representation
-func NewDataBlobFromProto(blob *commonpb.DataBlob) *serialization.DataBlob {
-	return &serialization.DataBlob{
-		Encoding: blob.GetEncodingType(),
-		Data:     blob.Data,
+func NewDataBlobFromProto(blob *commonpb.DataBlob) *commonpb.DataBlob {
+	return &commonpb.DataBlob{
+		EncodingType: blob.GetEncodingType(),
+		Data:         blob.Data,
 	}
 }

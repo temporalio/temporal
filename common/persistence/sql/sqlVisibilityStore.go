@@ -69,7 +69,7 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalR
 		WorkflowTypeName: request.WorkflowTypeName,
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING), // Underlying value (1) is hardcoded in SQL queries.
 		Memo:             request.Memo.Data,
-		Encoding:         request.Memo.Encoding.String(),
+		Encoding:         request.Memo.EncodingType.String(),
 	})
 
 	return err
@@ -88,7 +88,7 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRe
 		Status:           int32(request.Status),
 		HistoryLength:    &request.HistoryLength,
 		Memo:             request.Memo.Data,
-		Encoding:         request.Memo.Encoding.String(),
+		Encoding:         request.Memo.EncodingType.String(),
 	})
 	if err != nil {
 		return err

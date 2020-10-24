@@ -29,6 +29,7 @@ import (
 	"sort"
 
 	"github.com/gocql/gocql"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -131,13 +132,13 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 
 		batch := h.session.NewBatch(gocql.LoggedBatch)
 		batch.Query(v2templateInsertTree,
-			branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.Encoding.String())
+			branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.EncodingType.String())
 		batch.Query(v2templateUpsertData,
-			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding.String())
+			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
 		err = h.session.ExecuteBatch(batch)
 	} else {
 		query := h.session.Query(v2templateUpsertData,
-			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding.String())
+			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
 		err = query.Exec()
 	}
 
@@ -174,7 +175,7 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 	}
 	pagingToken := iter.PageState()
 
-	history := make([]*serialization.DataBlob, 0, request.PageSize)
+	history := make([]*commonpb.DataBlob, 0, request.PageSize)
 
 	for {
 		var data []byte
@@ -324,7 +325,7 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err))
 	}
-	query := h.session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.Encoding.String())
+	query := h.session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.EncodingType.String())
 	err = query.Exec()
 	if err != nil {
 		return nil, convertCommonErrors("ForkHistoryBranch", err)

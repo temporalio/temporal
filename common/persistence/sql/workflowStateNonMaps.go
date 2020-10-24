@@ -28,10 +28,10 @@ import (
 	"database/sql"
 	"fmt"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 )
@@ -122,7 +122,7 @@ func deleteSignalsRequestedSet(
 
 func updateBufferedEvents(
 	tx sqlplugin.Tx,
-	batch *serialization.DataBlob,
+	batch *commonpb.DataBlob,
 	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
@@ -138,7 +138,7 @@ func updateBufferedEvents(
 		WorkflowID:   workflowID,
 		RunID:        runID,
 		Data:         batch.Data,
-		DataEncoding: batch.Encoding.String(),
+		DataEncoding: batch.EncodingType.String(),
 	}
 
 	if _, err := tx.InsertIntoBufferedEvents([]sqlplugin.BufferedEventsRow{row}); err != nil {
@@ -153,7 +153,7 @@ func getBufferedEvents(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) ([]*serialization.DataBlob, error) {
+) ([]*commonpb.DataBlob, error) {
 
 	rows, err := db.SelectFromBufferedEvents(sqlplugin.BufferedEventsFilter{
 		ShardID:     shardID,
@@ -164,7 +164,7 @@ func getBufferedEvents(
 	if err != nil && err != sql.ErrNoRows {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("getBufferedEvents operation failed. Select failed: %v", err))
 	}
-	var result []*serialization.DataBlob
+	var result []*commonpb.DataBlob
 	for _, row := range rows {
 		result = append(result, p.NewDataBlob(row.Data, row.DataEncoding))
 	}

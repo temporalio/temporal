@@ -185,7 +185,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			request.WorkflowTypeName,
 			request.Memo.Data,
-			request.Memo.Encoding.String(),
+			request.Memo.EncodingType.String(),
 			request.TaskQueue,
 		)
 	} else {
@@ -198,7 +198,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			request.WorkflowTypeName,
 			request.Memo.Data,
-			request.Memo.Encoding.String(),
+			request.Memo.EncodingType.String(),
 			request.TaskQueue,
 			ttl,
 		)
@@ -248,7 +248,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			request.Status,
 			request.HistoryLength,
 			request.Memo.Data,
-			request.Memo.Encoding.String(),
+			request.Memo.EncodingType.String(),
 			request.TaskQueue,
 		)
 	} else {
@@ -264,7 +264,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			request.Status,
 			request.HistoryLength,
 			request.Memo.Data,
-			request.Memo.Encoding.String(),
+			request.Memo.EncodingType.String(),
 			request.TaskQueue,
 			retention,
 		)

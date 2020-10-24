@@ -28,6 +28,7 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -197,7 +198,7 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 	}
 
 	// nodeID will be the first eventID
-	blob, err := m.historySerializer.SerializeBatchEvents(request.Events, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := m.historySerializer.SerializeEvents(request.Events, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +288,7 @@ func (m *historyV2ManagerImpl) GetAllHistoryTreeBranches(
 
 func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	request *ReadHistoryBranchRequest,
-) ([]*serialization.DataBlob, *historyV2PagingToken, int, log.Logger, error) {
+) ([]*commonpb.DataBlob, *historyV2PagingToken, int, log.Logger, error) {
 
 	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 	if err != nil {
@@ -415,7 +416,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 	// first_event_id of the last batch
 	lastFirstEventID := common.EmptyEventID
 	for _, batch := range dataBlobs {
-		events, err := m.historySerializer.DeserializeBatchEvents(batch)
+		events, err := m.historySerializer.DeserializeEvents(batch)
 		if err != nil {
 			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID, err
 		}
