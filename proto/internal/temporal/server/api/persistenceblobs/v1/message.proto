@@ -368,3 +368,17 @@ message ReplicationVersions {
     google.protobuf.Int64Value start_version = 1;
     google.protobuf.Int64Value last_write_version = 2;
 }
+
+message WorkflowMutableState{
+    map<int64,ActivityInfo> activity_infos = 1;
+    map<string,TimerInfo> timer_infos = 2;
+    map<int64,ChildExecutionInfo> child_execution_infos = 3;
+    map<int64,RequestCancelInfo> request_cancel_infos = 4;
+    map<int64,SignalInfo> signal_infos = 5;
+    repeated string signal_requested_ids = 6;
+    WorkflowExecutionInfo execution_info = 7;
+    WorkflowExecutionState execution_state = 8;
+    int64 next_event_id = 9;
+    repeated temporal.api.history.v1.HistoryEvent buffered_events = 10;
+    Checksum checksum = 11;
+}

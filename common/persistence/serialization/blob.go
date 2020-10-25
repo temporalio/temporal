@@ -32,6 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 )
 
@@ -214,13 +215,22 @@ func ReplicationVersionsFromBlob(b []byte, proto string) (*persistenceblobs.Repl
 	return result, proto3Decode(b, proto, result)
 }
 
-func ChecksumToBlob(info *persistenceblobs.Checksum) (commonpb.DataBlob, error) {
-	return proto3Encode(info)
+func ChecksumToBlob(checksum *persistenceblobs.Checksum) (commonpb.DataBlob, error) {
+	// nil is replaced with empty object becayse it is not supported for "checksum" field in DB.
+	if checksum == nil {
+		checksum = &persistenceblobs.Checksum{}
+	}
+	return proto3Encode(checksum)
 }
 
 func ChecksumFromBlob(b []byte, proto string) (*persistenceblobs.Checksum, error) {
 	result := &persistenceblobs.Checksum{}
-	return result, proto3Decode(b, proto, result)
+	err := proto3Decode(b, proto, result)
+	if err != nil || result.GetFlavor() == enumsspb.CHECKSUM_FLAVOR_UNSPECIFIED {
+		// If result is an empty struct (Flavor is unspecified), replace it with nil, because everywhere in the code checksum is pointer type.
+		return nil, err
+	}
+	return result, nil
 }
 
 func proto3Encode(m proto.Marshaler) (commonpb.DataBlob, error) {

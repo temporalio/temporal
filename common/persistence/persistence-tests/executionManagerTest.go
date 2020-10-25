@@ -67,7 +67,7 @@ type (
 	}
 )
 
-var testWorkflowChecksum = persistenceblobs.Checksum{
+var testWorkflowChecksum = &persistenceblobs.Checksum{
 	Version: 22,
 	Flavor:  enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY,
 	Value:   []byte("test-checksum"),
@@ -92,21 +92,21 @@ func (s *ExecutionManagerSuite) SetupTest() {
 	s.ClearTasks()
 }
 
-func (s *ExecutionManagerSuite) newRandomChecksum() persistenceblobs.Checksum {
-	return persistenceblobs.Checksum{
+func (s *ExecutionManagerSuite) newRandomChecksum() *persistenceblobs.Checksum {
+	return &persistenceblobs.Checksum{
 		Flavor:  enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY,
 		Version: 22,
-		Value:   []byte(uuid.NewRandom()),
+		Value:   uuid.NewRandom(),
 	}
 }
 
-func (s *ExecutionManagerSuite) assertChecksumsEqual(expected persistenceblobs.Checksum, actual persistenceblobs.Checksum) {
-	if actual.Flavor != enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY {
+func (s *ExecutionManagerSuite) assertChecksumsEqual(expected *persistenceblobs.Checksum, actual *persistenceblobs.Checksum) {
+	if actual.GetFlavor() != enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY {
 		// not all stores support checksum persistence today
 		// if its not supported, assert that everything is zero'd out
-		expected = persistenceblobs.Checksum{}
+		expected = nil
 	}
-	s.EqualValues(expected, actual)
+	s.Equal(expected, actual)
 }
 
 // TestCreateWorkflowExecutionDeDup test
@@ -165,7 +165,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
-			NextEventID:    info.NextEventID,
+			NextEventID:    info.NextEventId,
 			Condition:      nextEventID,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
@@ -451,7 +451,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
-			NextEventID:    state.NextEventID,
+			NextEventID:    state.NextEventId,
 			Condition:      nextEventID,
 			Checksum:       csum,
 		},
@@ -474,7 +474,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 			UpdateWorkflowMutation: p.WorkflowMutation{
 				ExecutionInfo:  updatedInfo,
 				ExecutionState: updatedState,
-				NextEventID:    state.NextEventID,
+				NextEventID:    state.NextEventId,
 				Condition:      nextEventID,
 			},
 			RangeID: s.ShardInfo.GetRangeId(),
@@ -491,7 +491,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
-			NextEventID:    state.NextEventID,
+			NextEventID:    state.NextEventId,
 			Condition:      nextEventID,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
@@ -505,7 +505,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 			UpdateWorkflowMutation: p.WorkflowMutation{
 				ExecutionInfo:  updatedInfo,
 				ExecutionState: updatedState,
-				NextEventID:    state.NextEventID,
+				NextEventID:    state.NextEventId,
 				Condition:      nextEventID,
 			},
 			RangeID: s.ShardInfo.GetRangeId(),
@@ -542,7 +542,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
-			NextEventID:    state.NextEventID,
+			NextEventID:    state.NextEventId,
 			Condition:      nextEventID,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
@@ -563,7 +563,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 			UpdateWorkflowMutation: p.WorkflowMutation{
 				ExecutionInfo:  updatedInfo,
 				ExecutionState: updatedState,
-				NextEventID:    state.NextEventID,
+				NextEventID:    state.NextEventId,
 				Condition:      nextEventID,
 			},
 			RangeID: s.ShardInfo.GetRangeId(),
@@ -633,7 +633,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
-			NextEventID:    info.NextEventID,
+			NextEventID:    info.NextEventId,
 			Condition:      nextEventID,
 			Checksum:       csum,
 		},
@@ -650,7 +650,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
-			NextEventID:    info.NextEventID,
+			NextEventID:    info.NextEventId,
 			Condition:      nextEventID,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
@@ -663,7 +663,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 		WorkflowId: workflowID,
 		RunId:      uuid.New(),
 	}
-	csum = persistenceblobs.Checksum{} // set checksum to nil
+	csum = nil
 	req.NewWorkflowSnapshot.ExecutionInfo.WorkflowId = workflowExecutionRunning.GetWorkflowId()
 	req.NewWorkflowSnapshot.ExecutionState.RunId = workflowExecutionRunning.GetRunId()
 	req.Mode = p.CreateWorkflowModeWorkflowIDReuse
@@ -690,7 +690,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
-			NextEventID:    info.NextEventID,
+			NextEventID:    info.NextEventId,
 			Condition:      nextEventID,
 			Checksum:       csum,
 		},
@@ -819,7 +819,7 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
-			NextEventID:    info.NextEventID,
+			NextEventID:    info.NextEventId,
 			Condition:      nextEventID,
 			Checksum:       csum,
 			UpsertActivityInfos: []*persistenceblobs.ActivityInfo{
@@ -845,7 +845,7 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
-			NextEventID:    info.NextEventID,
+			NextEventID:    info.NextEventId,
 			Condition:      nextEventID,
 			Checksum:       csum,
 			UpsertActivityInfos: []*persistenceblobs.ActivityInfo{
@@ -973,7 +973,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionConcurrentCreate() {
 			continueAsNewNextEventID := int64(5)
 			continueAsNewInfo.LastProcessedEvent = int64(2)
 
-			err2 := s.ContinueAsNewExecution(continueAsNewInfo, continueAsNewState, continueAsNewNextEventID, state0.NextEventID, newExecution, int64(3), int64(2), nil)
+			err2 := s.ContinueAsNewExecution(continueAsNewInfo, continueAsNewState, continueAsNewNextEventID, state0.NextEventId, newExecution, int64(3), int64(2), nil)
 			if err2 != nil {
 				errCount := atomic.AddInt32(&numOfErr, 1)
 				if errCount > 1 {
@@ -1159,7 +1159,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.DefaultWorkflowTaskTimeout, info.DefaultWorkflowTaskTimeout)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, state.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state.ExecutionState.Status)
-	s.Equal(createReq.NewWorkflowSnapshot.NextEventID, state.NextEventID)
+	s.Equal(createReq.NewWorkflowSnapshot.NextEventID, state.NextEventId)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.LastProcessedEvent, info.LastProcessedEvent)
 	s.True(s.validateTimeRange(timestamp.TimeValue(info.LastUpdateTime), time.Hour))
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTaskVersion, info.WorkflowTaskVersion)
@@ -1213,7 +1213,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, state0.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state0.ExecutionState.Status)
 	s.Equal(int64(1), info0.LastFirstEventId)
-	s.Equal(int64(3), state0.NextEventID)
+	s.Equal(int64(3), state0.NextEventId)
 	s.Equal(int64(0), info0.LastProcessedEvent)
 	s.True(s.validateTimeRange(*info0.LastUpdateTime, time.Hour))
 	s.Equal(int64(0), info0.WorkflowTaskVersion)
@@ -1278,7 +1278,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, state1.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state1.ExecutionState.Status)
 	s.Equal(int64(3), info1.LastFirstEventId)
-	s.Equal(int64(5), state1.NextEventID)
+	s.Equal(int64(5), state1.NextEventId)
 	s.Equal(int64(2), info1.LastProcessedEvent)
 	s.True(s.validateTimeRange(*info1.LastUpdateTime, time.Hour))
 	s.Equal(int64(666), info1.WorkflowTaskVersion)
@@ -1311,7 +1311,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 
 	failedUpdateInfo := copyWorkflowExecutionInfo(updatedInfo)
 	failedUpdateState := copyWorkflowExecutionState(updatedState)
-	err4 := s.UpdateWorkflowExecution(failedUpdateInfo, failedUpdateState, state0.NextEventID, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil, nil)
+	err4 := s.UpdateWorkflowExecution(failedUpdateInfo, failedUpdateState, state0.NextEventId, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil, nil)
 	s.Error(err4, "expected non nil error.")
 	s.IsType(&p.ConditionFailedError{}, err4)
 	log.Errorf("Conditional update failed with error: %v", err4)
@@ -1329,7 +1329,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.EqualValues(13, int64(info2.DefaultWorkflowTaskTimeout.Seconds()))
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, state2.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state2.ExecutionState.Status)
-	s.Equal(int64(5), state2.NextEventID)
+	s.Equal(int64(5), state2.NextEventId)
 	s.Equal(int64(2), info2.LastProcessedEvent)
 	s.True(s.validateTimeRange(*info2.LastUpdateTime, time.Hour))
 	s.Equal(int64(666), info2.WorkflowTaskVersion)
@@ -1357,7 +1357,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.assertChecksumsEqual(testWorkflowChecksum, state2.Checksum)
 	log.Infof("Workflow execution last updated: %v", info2.LastUpdateTime)
 
-	err5 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, failedUpdateState, state0.NextEventID, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
+	err5 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, failedUpdateState, state0.NextEventId, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
 	s.Error(err5, "expected non nil error.")
 	s.IsType(&p.ShardOwnershipLostError{}, err5)
 	log.Errorf("Conditional update failed with error: %v", err5)
@@ -1375,7 +1375,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.EqualValues(13, int64(info3.DefaultWorkflowTaskTimeout.Seconds()))
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, state3.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state3.ExecutionState.Status)
-	s.Equal(int64(5), state3.NextEventID)
+	s.Equal(int64(5), state3.NextEventId)
 	s.Equal(int64(2), info3.LastProcessedEvent)
 	s.True(s.validateTimeRange(*info3.LastUpdateTime, time.Hour))
 	s.Equal(int64(666), info3.WorkflowTaskVersion)
@@ -1405,7 +1405,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	log.Infof("Workflow execution last updated: %v", info3.LastUpdateTime)
 
 	// update with incorrect rangeID and condition(next_event_id)
-	err7 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, failedUpdateState, state0.NextEventID, []int64{int64(5)}, nil, int64(12345), int64(3), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
+	err7 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, failedUpdateState, state0.NextEventId, []int64{int64(5)}, nil, int64(12345), int64(3), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
 	s.Error(err7, "expected non nil error.")
 	s.IsType(&p.ShardOwnershipLostError{}, err7)
 	log.Errorf("Conditional update failed with error: %v", err7)
@@ -1423,7 +1423,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.EqualValues(int64(13), info4.DefaultWorkflowTaskTimeout.Seconds())
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, state4.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state4.ExecutionState.Status)
-	s.Equal(int64(5), state4.NextEventID)
+	s.Equal(int64(5), state4.NextEventId)
 	s.Equal(int64(2), info4.LastProcessedEvent)
 	s.True(s.validateTimeRange(*info4.LastUpdateTime, time.Hour))
 	s.Equal(int64(666), info4.WorkflowTaskVersion)
@@ -1475,7 +1475,7 @@ func (s *ExecutionManagerSuite) TestDeleteWorkflow() {
 	s.EqualValues(13, int64(info0.DefaultWorkflowTaskTimeout.Seconds()))
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, state0.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state0.ExecutionState.Status)
-	s.Equal(int64(3), state0.NextEventID)
+	s.Equal(int64(3), state0.NextEventId)
 	s.Equal(int64(0), info0.LastProcessedEvent)
 	s.True(s.validateTimeRange(*info0.LastUpdateTime, time.Hour))
 	s.Equal(int64(2), info0.WorkflowTaskScheduleId)
@@ -1642,8 +1642,8 @@ func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  info0.ExecutionInfo,
 			ExecutionState: info0.ExecutionState,
-			NextEventID:    info0.NextEventID,
-			Condition:      info0.NextEventID,
+			NextEventID:    info0.NextEventId,
+			Condition:      info0.NextEventId,
 			Checksum:       testWorkflowChecksum,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
@@ -1832,7 +1832,7 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 		TargetChildWorkflowOnly: targetChildWorkflowOnly,
 		InitiatedID:             1,
 	}}
-	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo1, updatedState1, state1.NextEventID, int64(3), transferTasks, nil)
+	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo1, updatedState1, state1.NextEventId, int64(3), transferTasks, nil)
 	s.NoError(err)
 
 	tasks1, err := s.GetTransferTasks(1, false)
@@ -1867,7 +1867,7 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	updatedInfo2 := copyWorkflowExecutionInfo(info2)
 	updatedState2 := copyWorkflowExecutionState(state2.ExecutionState)
 
-	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo2, updatedState2, state2.NextEventID, int64(3), transferTasks, nil)
+	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo2, updatedState2, state2.NextEventId, int64(3), transferTasks, nil)
 	s.NoError(err)
 
 	tasks2, err := s.GetTransferTasks(1, false)
@@ -1932,7 +1932,7 @@ func (s *ExecutionManagerSuite) TestSignalTransferTaskTasks() {
 		TargetChildWorkflowOnly: targetChildWorkflowOnly,
 		InitiatedID:             1,
 	}}
-	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo1, updatedState1, state1.NextEventID, int64(3), transferTasks, nil)
+	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo1, updatedState1, state1.NextEventId, int64(3), transferTasks, nil)
 	s.NoError(err)
 
 	tasks1, err := s.GetTransferTasks(1, false)
@@ -1967,7 +1967,7 @@ func (s *ExecutionManagerSuite) TestSignalTransferTaskTasks() {
 	updatedInfo2 := copyWorkflowExecutionInfo(info2)
 	updatedState2 := copyWorkflowExecutionState(state2.ExecutionState)
 
-	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo2, updatedState2, state2.NextEventID, int64(3), transferTasks, nil)
+	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo2, updatedState2, state2.NextEventId, int64(3), transferTasks, nil)
 	s.NoError(err)
 
 	tasks2, err := s.GetTransferTasks(1, false)
@@ -2025,7 +2025,7 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 			ScheduledID: 99,
 		},
 	}
-	err = s.UpdateWorklowStateAndReplication(updatedInfo1, updatedState1, state1.NextEventID, int64(3), replicationTasks)
+	err = s.UpdateWorklowStateAndReplication(updatedInfo1, updatedState1, state1.NextEventId, int64(3), replicationTasks)
 	s.NoError(err)
 
 	respTasks, err := s.GetReplicationTasks(1, true)
@@ -2716,10 +2716,8 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalRequested() {
 	state, err1 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
 	s.NoError(err1)
 	s.NotNil(state, "expected valid state.")
-	s.Equal(1, len(state.SignalRequestedIDs))
-	ri, ok := state.SignalRequestedIDs[signalRequestedID]
-	s.True(ok)
-	s.NotNil(ri)
+	s.Equal(1, len(state.SignalRequestedIds))
+	s.Equal(signalRequestedID, state.SignalRequestedIds[0])
 
 	err2 = s.DeleteSignalsRequestedState(updatedInfo, updatedState, int64(5), int64(5), signalRequestedID)
 	s.NoError(err2)
@@ -2727,7 +2725,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalRequested() {
 	state, err2 = s.GetWorkflowMutableState(namespaceID, workflowExecution)
 	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
-	s.Equal(0, len(state.SignalRequestedIDs))
+	s.Equal(0, len(state.SignalRequestedIds))
 }
 
 // TestWorkflowMutableStateInfo test
@@ -2759,7 +2757,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateInfo() {
 	s.NoError(err1)
 	s.NotNil(state, "expected valid state.")
 	s.NotNil(state.ExecutionInfo, "expected valid MS Info state.")
-	s.Equal(updatedNextEventID, state.NextEventID)
+	s.Equal(updatedNextEventID, state.NextEventId)
 	s.Equal(updatedState.State, state.ExecutionState.State)
 }
 
@@ -2802,7 +2800,7 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 		},
 	}
 
-	err2 := s.ContinueAsNewExecution(continueAsNewInfo, continueAsNewState, continueAsNewNextEventID, state0.NextEventID, newWorkflowExecution, int64(3), int64(2), &testResetPoints)
+	err2 := s.ContinueAsNewExecution(continueAsNewInfo, continueAsNewState, continueAsNewNextEventID, state0.NextEventId, newWorkflowExecution, int64(3), int64(2), &testResetPoints)
 	s.NoError(err2)
 
 	prevExecutionState, err3 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
@@ -2810,7 +2808,7 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 	prevExecutionInfo := prevExecutionState.ExecutionInfo
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, prevExecutionState.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, prevExecutionState.ExecutionState.Status)
-	s.Equal(int64(5), prevExecutionState.NextEventID)
+	s.Equal(int64(5), prevExecutionState.NextEventId)
 	s.Equal(int64(2), prevExecutionInfo.LastProcessedEvent)
 	s.True(reflect.DeepEqual(prevExecutionInfo.AutoResetPoints, &workflowpb.ResetPoints{}))
 
@@ -2819,7 +2817,7 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 	newExecutionInfo := newExecutionState.ExecutionInfo
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, newExecutionState.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, newExecutionState.ExecutionState.Status)
-	s.Equal(int64(3), newExecutionState.NextEventID)
+	s.Equal(int64(3), newExecutionState.NextEventId)
 	s.Equal(common.EmptyEventID, newExecutionInfo.LastProcessedEvent)
 	s.Equal(int64(2), newExecutionInfo.WorkflowTaskScheduleId)
 	s.Equal(testResetPoints.String(), newExecutionInfo.AutoResetPoints.String())
@@ -2860,7 +2858,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 		NextEventID:  int64(3),
 		Version:      int64(9),
 	}}
-	err = s.UpdateWorklowStateAndReplication(updatedInfo1, updatedState1, state1.NextEventID, int64(3), replicationTasks)
+	err = s.UpdateWorklowStateAndReplication(updatedInfo1, updatedState1, state1.NextEventId, int64(3), replicationTasks)
 	s.NoError(err)
 
 	tasks1, err := s.GetReplicationTasks(1, false)
@@ -2925,7 +2923,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 	err = s.UpdateWorklowStateAndReplication(
 		updatedInfo1,
 		updatedState1,
-		state1.NextEventID,
+		state1.NextEventId,
 		int64(3),
 		replicationTasks,
 	)
