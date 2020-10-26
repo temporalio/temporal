@@ -3211,7 +3211,7 @@ func (wh *WorkflowHandler) getRawHistory(
 
 	for _, data := range resp.HistoryEventBlobs {
 		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: data.Encoding,
+			EncodingType: data.EncodingType,
 			Data:         data.Data,
 		})
 	}

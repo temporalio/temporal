@@ -133,7 +133,7 @@ func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRe
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		request.TaskID,
 		request.Memo.Data,
-		request.Memo.Encoding,
+		request.Memo.EncodingType,
 		request.SearchAttributes,
 	)
 	return v.producer.Publish(msg)
@@ -154,7 +154,7 @@ func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRec
 		request.TaskID,
 		request.Memo.Data,
 		request.TaskQueue,
-		request.Memo.Encoding,
+		request.Memo.EncodingType,
 		request.SearchAttributes,
 	)
 	return v.producer.Publish(msg)
@@ -173,7 +173,7 @@ func (v *esVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWor
 		request.Status,
 		request.TaskID,
 		request.Memo.Data,
-		request.Memo.Encoding,
+		request.Memo.EncodingType,
 		request.SearchAttributes,
 	)
 	return v.producer.Publish(msg)

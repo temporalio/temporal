@@ -93,7 +93,7 @@ func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCrea
 			Name:                request.Name,
 			ID:                  idBytes,
 			Data:                request.Namespace.Data,
-			DataEncoding:        request.Namespace.Encoding.String(),
+			DataEncoding:        request.Namespace.EncodingType.String(),
 			IsGlobal:            request.IsGlobal,
 			NotificationVersion: metadata.NotificationVersion,
 		}); err != nil {
@@ -182,7 +182,7 @@ func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpda
 			Name:                request.Name,
 			ID:                  idBytes,
 			Data:                request.Namespace.Data,
-			DataEncoding:        request.Namespace.Encoding.String(),
+			DataEncoding:        request.Namespace.EncodingType.String(),
 			NotificationVersion: request.NotificationVersion,
 		})
 		if err != nil {

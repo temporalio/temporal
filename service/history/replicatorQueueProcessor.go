@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
@@ -675,7 +674,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 	nextEventID int64,
 ) (*commonpb.DataBlob, error) {
 
-	var eventBatchBlobs []*serialization.DataBlob
+	var eventBatchBlobs []*commonpb.DataBlob
 	var pageToken []byte
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
@@ -704,7 +703,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 		return nil, serviceerror.NewInternal("replicatorQueueProcessor encounter more than 1 NDC raw event batch")
 	}
 
-	return eventBatchBlobs[0].ToProto(), nil
+	return eventBatchBlobs[0], nil
 }
 
 func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(

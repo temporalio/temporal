@@ -469,7 +469,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 		taskAttributes := replicationTask.GetHistoryTaskV2Attributes()
 
 		eventsDataBlob := persistence.NewDataBlobFromProto(taskAttributes.GetEvents())
-		events, err := p.historySerializer.DeserializeBatchEvents(eventsDataBlob)
+		events, err := p.historySerializer.DeserializeEvents(eventsDataBlob)
 		if err != nil {
 			return nil, err
 		}

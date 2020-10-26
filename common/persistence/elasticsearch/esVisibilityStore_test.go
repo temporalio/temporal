@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/mocks"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -155,7 +154,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 	// test empty request
 	request := &p.InternalRecordWorkflowExecutionStartedRequest{
-		Memo: &serialization.DataBlob{},
+		Memo: &commonpb.DataBlob{},
 	}
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexerspb.Message) bool {
 		s.Equal(enumsspb.MESSAGE_TYPE_INDEX, input.GetMessageType())
@@ -207,7 +206,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 	// test empty request
 	request := &p.InternalRecordWorkflowExecutionClosedRequest{
-		Memo: &serialization.DataBlob{},
+		Memo: &commonpb.DataBlob{},
 	}
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexerspb.Message) bool {
 		s.Equal(enumsspb.MESSAGE_TYPE_INDEX, input.GetMessageType())

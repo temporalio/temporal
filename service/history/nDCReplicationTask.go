@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -379,9 +378,9 @@ func deserializeBlob(
 		return nil, nil
 	}
 
-	events, err := historySerializer.DeserializeBatchEvents(&serialization.DataBlob{
-		Encoding: enumspb.ENCODING_TYPE_PROTO3,
-		Data:     blob.Data,
+	events, err := historySerializer.DeserializeEvents(&commonpb.DataBlob{
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		Data:         blob.Data,
 	})
 
 	return events, err
