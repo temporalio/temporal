@@ -761,10 +761,10 @@ func (mr *MockmutableStateMockRecorder) CheckResettable() *gomock.Call {
 }
 
 // CopyToPersistence mocks base method.
-func (m *MockmutableState) CopyToPersistence() *persistence.WorkflowMutableState {
+func (m *MockmutableState) CopyToPersistence() *persistenceblobs.WorkflowMutableState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CopyToPersistence")
-	ret0, _ := ret[0].(*persistence.WorkflowMutableState)
+	ret0, _ := ret[0].(*persistenceblobs.WorkflowMutableState)
 	return ret0
 }
 
@@ -1576,7 +1576,7 @@ func (mr *MockmutableStateMockRecorder) UpdateDuplicatedResource(resourceDedupKe
 }
 
 // Load mocks base method.
-func (m *MockmutableState) Load(arg0 *persistence.WorkflowMutableState) {
+func (m *MockmutableState) Load(arg0 *persistenceblobs.WorkflowMutableState) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Load", arg0)
 }

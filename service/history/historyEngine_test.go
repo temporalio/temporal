@@ -4746,8 +4746,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 	addWorkflowTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	// assume duplicate request id
-	ms.SignalRequestedIDs = make(map[string]struct{})
-	ms.SignalRequestedIDs[requestID] = struct{}{}
+	ms.SignalRequestedIds = []string{requestID}
 	ms.ExecutionInfo.NamespaceId = testNamespaceID
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
@@ -5259,7 +5258,7 @@ func newMutableStateBuilderWithVersionHistoriesForTest(shard ShardContext, event
 	return msBuilder
 }
 
-func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
+func createMutableState(ms mutableState) *persistenceblobs.WorkflowMutableState {
 	builder := ms.(*mutableStateBuilder)
 	builder.FlushBufferedEvents() // nolint:errcheck
 	info := copyWorkflowExecutionInfo(builder.executionInfo)
@@ -5300,10 +5299,10 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 		info.VersionHistories = versionhistory.DuplicateVHS(builder.executionInfo.VersionHistories)
 	}
 
-	return &persistence.WorkflowMutableState{
+	return &persistenceblobs.WorkflowMutableState{
 		ExecutionInfo:       info,
 		ExecutionState:      state,
-		NextEventID:         builder.GetNextEventID(),
+		NextEventId:         builder.GetNextEventID(),
 		ActivityInfos:       activityInfos,
 		TimerInfos:          timerInfos,
 		BufferedEvents:      bufferedEvents,

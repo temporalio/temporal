@@ -114,7 +114,7 @@ type (
 		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string) (*historypb.HistoryEvent, error)
 		ClearStickyness()
 		CheckResettable() error
-		CopyToPersistence() *persistence.WorkflowMutableState
+		CopyToPersistence() *persistenceblobs.WorkflowMutableState
 		RetryActivity(ai *persistenceblobs.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
 		CreateNewHistoryEvent(eventType enumspb.EventType) *historypb.HistoryEvent
 		CreateNewHistoryEventWithTime(eventType enumspb.EventType, time time.Time) *historypb.HistoryEvent
@@ -171,7 +171,7 @@ type (
 		IsWorkflowExecutionRunning() bool
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
-		Load(*persistence.WorkflowMutableState)
+		Load(*persistenceblobs.WorkflowMutableState)
 		ReplicateActivityInfo(*historyservice.SyncActivityRequest, bool) error
 		ReplicateActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error
 		ReplicateActivityTaskCanceledEvent(*historypb.HistoryEvent) error

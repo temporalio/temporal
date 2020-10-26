@@ -193,13 +193,23 @@ func convertUpdateSignalInfos(
 	return outputs
 }
 
-func convertSignalRequestedIDs(
+func convertStringSetToSlice(
 	inputs map[string]struct{},
 ) []string {
-
-	outputs := make([]string, 0, len(inputs))
+	outputs := make([]string, len(inputs))
+	i := 0
 	for item := range inputs {
-		outputs = append(outputs, item)
+		outputs[i] = item
+		i++
+	}
+	return outputs
+}
+func convertStringSliceToSet(
+	inputs []string,
+) map[string]struct{} {
+	outputs := make(map[string]struct{}, len(inputs))
+	for _, item := range inputs {
+		outputs[item] = struct{}{}
 	}
 	return outputs
 }

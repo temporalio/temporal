@@ -47,17 +47,17 @@ var ErrMismatch = errors.New("checksum mismatch error")
 func GenerateCRC32(
 	payload proto.Marshaler,
 	payloadVersion int32,
-) (persistenceblobs.Checksum, error) {
+) (*persistenceblobs.Checksum, error) {
 
 	payloadBytes, err := payload.Marshal()
 	if err != nil {
-		return persistenceblobs.Checksum{}, err
+		return nil, err
 	}
 
 	crc := crc32.ChecksumIEEE(payloadBytes)
 	checksum := make([]byte, 4)
 	binary.BigEndian.PutUint32(checksum, crc)
-	return persistenceblobs.Checksum{
+	return &persistenceblobs.Checksum{
 		Value:   checksum,
 		Version: payloadVersion,
 		Flavor:  enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY,
@@ -69,7 +69,7 @@ func GenerateCRC32(
 // Return ErrMismatch when checksums mismatch
 func Verify(
 	payload proto.Marshaler,
-	checksum persistenceblobs.Checksum,
+	checksum *persistenceblobs.Checksum,
 ) error {
 
 	if checksum.Flavor != enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY {
@@ -81,7 +81,7 @@ func Verify(
 		return err
 	}
 
-	if !bytes.Equal(expected.Value, checksum.Value) {
+	if !bytes.Equal(expected.GetValue(), checksum.GetValue()) {
 		return ErrMismatch
 	}
 
