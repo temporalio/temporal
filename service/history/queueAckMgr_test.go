@@ -28,7 +28,7 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
 
 	"github.com/golang/mock/gomock"
@@ -99,7 +99,7 @@ func (s *queueAckMgrSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&p.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId: 1,
 				RangeId: 1,
 				ClusterTimerAckLevel: map[string]*time.Time{
@@ -133,7 +133,7 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 	moreInput := false
 	taskID1 := int64(59)
 	tasksInput := []queueTaskInfo{
-		&persistenceblobs.TransferTaskInfo{
+		&persistencespb.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
 			RunId:       uuid.New(),
@@ -155,7 +155,7 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 	moreInput = true
 	taskID2 := int64(60)
 	tasksInput = []queueTaskInfo{
-		&persistenceblobs.TransferTaskInfo{
+		&persistencespb.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
 			RunId:       uuid.New(),
@@ -183,7 +183,7 @@ func (s *queueAckMgrSuite) TestReadCompleteTimerTasks() {
 	moreInput := false
 	taskID := int64(59)
 	tasksInput := []queueTaskInfo{
-		&persistenceblobs.TransferTaskInfo{
+		&persistencespb.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
 			RunId:       uuid.New(),
@@ -216,7 +216,7 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	taskID2 := int64(60)
 	taskID3 := int64(61)
 	tasksInput := []queueTaskInfo{
-		&persistenceblobs.TransferTaskInfo{
+		&persistencespb.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
 			RunId:       uuid.New(),
@@ -225,7 +225,7 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 			TaskType:    1,
 			ScheduleId:  28,
 		},
-		&persistenceblobs.TransferTaskInfo{
+		&persistencespb.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
 			RunId:       uuid.New(),
@@ -234,7 +234,7 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 			TaskType:    1,
 			ScheduleId:  28,
 		},
-		&persistenceblobs.TransferTaskInfo{
+		&persistencespb.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
 			RunId:       uuid.New(),
@@ -288,7 +288,7 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&p.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId: 1,
 				RangeId: 1,
 				ClusterTimerAckLevel: map[string]*time.Time{
@@ -322,7 +322,7 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 	moreInput := true
 	taskID1 := int64(59)
 	tasksInput := []queueTaskInfo{
-		&persistenceblobs.TransferTaskInfo{
+		&persistencespb.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
 			RunId:       uuid.New(),
@@ -345,7 +345,7 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 	moreInput = false
 	taskID2 := int64(60)
 	tasksInput = []queueTaskInfo{
-		&persistenceblobs.TransferTaskInfo{
+		&persistencespb.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
 			RunId:       uuid.New(),
@@ -375,7 +375,7 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 	taskID1 := int64(59)
 	taskID2 := int64(60)
 	tasksInput := []queueTaskInfo{
-		&persistenceblobs.TransferTaskInfo{
+		&persistencespb.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
 			RunId:       uuid.New(),
@@ -384,7 +384,7 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 			TaskType:    1,
 			ScheduleId:  28,
 		},
-		&persistenceblobs.TransferTaskInfo{
+		&persistencespb.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
 			RunId:       uuid.New(),

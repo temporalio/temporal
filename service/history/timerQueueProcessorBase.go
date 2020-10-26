@@ -31,7 +31,7 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
 
 	"go.temporal.io/server/common"
@@ -339,7 +339,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 	}
 }
 
-func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistenceblobs.TimerTaskInfo, error) {
+func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistencespb.TimerTaskInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), loadTimerTaskThrottleRetryDelay)
 	if err := t.rateLimiter.Wait(ctx); err != nil {
 		cancel()
@@ -420,7 +420,7 @@ func (t *timerQueueProcessorBase) retryTasks() {
 }
 
 func (t *timerQueueProcessorBase) complete(
-	timerTask *persistenceblobs.TimerTaskInfo,
+	timerTask *persistencespb.TimerTaskInfo,
 ) {
 	t.timerQueueAckMgr.completeTimerTask(timerTask)
 	atomic.AddUint64(&t.timerFiredCount, 1)

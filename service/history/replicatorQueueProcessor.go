@@ -35,7 +35,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -198,7 +198,7 @@ func (p *replicatorQueueProcessorImpl) queueShutdown() error {
 }
 
 func (p *replicatorQueueProcessorImpl) processSyncActivityTask(
-	task *persistenceblobs.ReplicationTaskInfo,
+	task *persistencespb.ReplicationTaskInfo,
 ) error {
 
 	replicationTask, err := p.generateSyncActivityTask(context.Background(), task)
@@ -210,7 +210,7 @@ func (p *replicatorQueueProcessorImpl) processSyncActivityTask(
 }
 
 func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(
-	task *persistenceblobs.ReplicationTaskInfo,
+	task *persistencespb.ReplicationTaskInfo,
 ) error {
 	replicationTask, err := p.toReplicationTask(context.Background(), &persistence.ReplicationTaskInfoWrapper{task})
 	if err != nil || replicationTask == nil {
@@ -233,7 +233,7 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(
 }
 
 func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(
-	task *persistenceblobs.ReplicationTaskInfo,
+	task *persistencespb.ReplicationTaskInfo,
 	replicationTask *replicationspb.ReplicationTask,
 ) *replicationspb.ReplicationTask {
 
@@ -470,7 +470,7 @@ func (p *replicatorQueueProcessorImpl) getTask(
 	taskInfo *replicationspb.ReplicationTaskInfo,
 ) (*replicationspb.ReplicationTask, error) {
 
-	task := &persistenceblobs.ReplicationTaskInfo{
+	task := &persistencespb.ReplicationTaskInfo{
 		NamespaceId:  taskInfo.GetNamespaceId(),
 		WorkflowId:   taskInfo.GetWorkflowId(),
 		RunId:        taskInfo.GetRunId(),
@@ -534,7 +534,7 @@ func (p *replicatorQueueProcessorImpl) toReplicationTask(
 
 func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 	ctx context.Context,
-	taskInfo *persistenceblobs.ReplicationTaskInfo,
+	taskInfo *persistencespb.ReplicationTaskInfo,
 ) (*replicationspb.ReplicationTask, error) {
 	namespaceID := taskInfo.GetNamespaceId()
 	runID := taskInfo.GetRunId()
@@ -600,7 +600,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 
 func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 	ctx context.Context,
-	task *persistenceblobs.ReplicationTaskInfo,
+	task *persistencespb.ReplicationTaskInfo,
 ) (*replicationspb.ReplicationTask, error) {
 	namespaceID := task.GetNamespaceId()
 	runID := task.GetRunId()

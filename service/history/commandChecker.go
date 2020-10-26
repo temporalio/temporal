@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
@@ -71,7 +71,7 @@ type (
 
 		completedID    int64
 		mutableState   mutableState
-		executionStats *persistenceblobs.ExecutionStats
+		executionStats *persistencespb.ExecutionStats
 		metricsScope   metrics.Scope
 		logger         log.Logger
 	}
@@ -111,7 +111,7 @@ func newWorkflowSizeChecker(
 	historyCountLimitError int,
 	completedID int64,
 	mutableState mutableState,
-	executionStats *persistenceblobs.ExecutionStats,
+	executionStats *persistencespb.ExecutionStats,
 	metricsScope metrics.Scope,
 	logger log.Logger,
 ) *workflowSizeChecker {
@@ -461,7 +461,7 @@ func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 
 func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
-	executionInfo *persistenceblobs.WorkflowExecutionInfo,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
 ) error {
 
 	if attributes == nil {
@@ -522,7 +522,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	targetNamespaceID string,
 	targetNamespace string,
 	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
-	parentInfo *persistenceblobs.WorkflowExecutionInfo,
+	parentInfo *persistencespb.WorkflowExecutionInfo,
 ) error {
 
 	if err := v.validateCrossNamespaceCall(

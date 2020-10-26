@@ -35,7 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
@@ -90,7 +90,7 @@ func (s *workflowResetterSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          0,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -163,7 +163,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	currentWorkflow.EXPECT().getContext().Return(currentContext).AnyTimes()
 	currentWorkflow.EXPECT().getMutableState().Return(currentMutableState).AnyTimes()
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
-	currentMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.currentRunID,
 	}).AnyTimes()
 
@@ -271,19 +271,19 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 
 	mutableState := NewMockmutableState(s.controller)
 
-	activity1 := &persistenceblobs.ActivityInfo{
+	activity1 := &persistencespb.ActivityInfo{
 		Version:              12,
 		ScheduleId:           123,
 		StartedId:            124,
 		LastHeartbeatDetails: payloads.EncodeString("some random activity 1 details"),
 		StartedIdentity:      "some random activity 1 started identity",
 	}
-	activity2 := &persistenceblobs.ActivityInfo{
+	activity2 := &persistencespb.ActivityInfo{
 		Version:    12,
 		ScheduleId: 456,
 		StartedId:  common.EmptyEventID,
 	}
-	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistenceblobs.ActivityInfo{
+	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{
 		activity1.ScheduleId: activity1,
 		activity2.ScheduleId: activity2,
 	}).AnyTimes()

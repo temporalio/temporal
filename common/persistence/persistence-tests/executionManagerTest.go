@@ -47,7 +47,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/failure"
@@ -67,7 +67,7 @@ type (
 	}
 )
 
-var testWorkflowChecksum = &persistenceblobs.Checksum{
+var testWorkflowChecksum = &persistencespb.Checksum{
 	Version: 22,
 	Flavor:  enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY,
 	Value:   []byte("test-checksum"),
@@ -92,15 +92,15 @@ func (s *ExecutionManagerSuite) SetupTest() {
 	s.ClearTasks()
 }
 
-func (s *ExecutionManagerSuite) newRandomChecksum() *persistenceblobs.Checksum {
-	return &persistenceblobs.Checksum{
+func (s *ExecutionManagerSuite) newRandomChecksum() *persistencespb.Checksum {
+	return &persistencespb.Checksum{
 		Flavor:  enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY,
 		Version: 22,
 		Value:   uuid.NewRandom(),
 	}
 }
 
-func (s *ExecutionManagerSuite) assertChecksumsEqual(expected *persistenceblobs.Checksum, actual *persistenceblobs.Checksum) {
+func (s *ExecutionManagerSuite) assertChecksumsEqual(expected *persistencespb.Checksum, actual *persistencespb.Checksum) {
 	if actual.GetFlavor() != enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY {
 		// not all stores support checksum persistence today
 		// if its not supported, assert that everything is zero'd out
@@ -128,7 +128,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
-			ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowID,
 				TaskQueue:                  taskqueue,
@@ -137,10 +137,10 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
-				ExecutionStats:             &persistenceblobs.ExecutionStats{},
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
 			NextEventID: nextEventID,
-			ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           runID,
 				CreateRequestId: uuid.New(),
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -202,7 +202,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
-			ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
 				TaskQueue:                  taskqueue,
 				WorkflowTypeName:           workflowType,
@@ -210,10 +210,10 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
-				ExecutionStats:             &persistenceblobs.ExecutionStats{},
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
 			NextEventID: nextEventID,
-			ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				CreateRequestId: uuid.New(),
 			},
 			Checksum: csum,
@@ -323,7 +323,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
-			ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowID,
 				TaskQueue:                  taskqueue,
@@ -331,10 +331,10 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastProcessedEvent:         lastProcessedEventID,
-				ExecutionStats:             &persistenceblobs.ExecutionStats{},
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
 			NextEventID: nextEventID,
-			ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           workflowExecutionZombie1.GetRunId(),
 				CreateRequestId: uuid.New(),
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
@@ -410,7 +410,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
-			ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowExecution.GetWorkflowId(),
 				TaskQueue:                  taskqueue,
@@ -419,10 +419,10 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
-				ExecutionStats:             &persistenceblobs.ExecutionStats{},
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
 			NextEventID: nextEventID,
-			ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           workflowExecution.GetRunId(),
 				CreateRequestId: uuid.New(),
 			},
@@ -592,7 +592,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	// create and update a workflow to make it completed
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
-			ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowExecution.GetWorkflowId(),
 				TaskQueue:                  taskqueue,
@@ -600,10 +600,10 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastProcessedEvent:         lastProcessedEventID,
-				ExecutionStats:             &persistenceblobs.ExecutionStats{},
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
 			NextEventID: nextEventID,
-			ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           workflowExecution.GetRunId(),
 				CreateRequestId: uuid.New(),
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
@@ -725,7 +725,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
-			ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowExecution.GetWorkflowId(),
 				TaskQueue:                  taskqueue,
@@ -734,10 +734,10 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
-				ExecutionStats:             &persistenceblobs.ExecutionStats{},
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
 			NextEventID: nextEventID,
-			ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           workflowExecution.GetRunId(),
 				CreateRequestId: uuid.New(),
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
@@ -779,7 +779,7 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 	// create and update a workflow to make it completed
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
-			ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowExecution.GetWorkflowId(),
 				TaskQueue:                  taskqueue,
@@ -788,10 +788,10 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
-				ExecutionStats:             &persistenceblobs.ExecutionStats{},
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
 			NextEventID: nextEventID,
-			ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           workflowExecution.GetRunId(),
 				CreateRequestId: uuid.New(),
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
@@ -822,7 +822,7 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 			NextEventID:    info.NextEventId,
 			Condition:      nextEventID,
 			Checksum:       csum,
-			UpsertActivityInfos: []*persistenceblobs.ActivityInfo{
+			UpsertActivityInfos: []*persistencespb.ActivityInfo{
 				{
 					Version:    0,
 					ScheduleId: 100,
@@ -848,7 +848,7 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 			NextEventID:    info.NextEventId,
 			Condition:      nextEventID,
 			Checksum:       csum,
-			UpsertActivityInfos: []*persistenceblobs.ActivityInfo{
+			UpsertActivityInfos: []*persistencespb.ActivityInfo{
 				{
 					Version:    0,
 					ScheduleId: 100,
@@ -906,7 +906,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 	// to check whether the existing running workflow has finished
 	_, err3 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
-			ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
 				WorkflowId:                 newExecution.GetWorkflowId(),
 				TaskQueue:                  taskqueue,
@@ -915,10 +915,10 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
-				ExecutionStats:             &persistenceblobs.ExecutionStats{},
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
 			NextEventID: nextEventID,
-			ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           newExecution.GetRunId(),
 				CreateRequestId: uuid.New(),
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
@@ -1015,7 +1015,7 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 
 	response, err2 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
-			ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowExecution.GetWorkflowId(),
 				TaskQueue:                  "queue1",
@@ -1027,9 +1027,9 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 				WorkflowTaskScheduleId:     int64(2),
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
-				ExecutionStats:             &persistenceblobs.ExecutionStats{},
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
-			ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           workflowExecution.GetRunId(),
 				CreateRequestId: uuid.New(),
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
@@ -1085,7 +1085,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 
 	createReq := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
-			ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                 uuid.New(),
 				WorkflowId:                  "get-workflow-test",
 				FirstExecutionRunId:         uuid.New(),
@@ -1116,12 +1116,12 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				AutoResetPoints:             &testResetPoints,
 				SearchAttributes:            testSearchAttr,
 				Memo:                        testMemo,
-				ExecutionStats: &persistenceblobs.ExecutionStats{
+				ExecutionStats: &persistencespb.ExecutionStats{
 					HistorySize: int64(rand.Int31()),
 				},
 			},
 			NextEventID: rand.Int63(),
-			ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           uuid.New(),
 				CreateRequestId: uuid.New(),
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
@@ -1528,13 +1528,13 @@ func (s *ExecutionManagerSuite) TestDeleteCurrentWorkflow() {
 	s.NoError(err4)
 	s.Equal(workflowExecution.GetRunId(), runID4)
 
-	fakeInfo := &persistenceblobs.WorkflowExecutionInfo{
+	fakeInfo := &persistencespb.WorkflowExecutionInfo{
 		NamespaceId: info0.ExecutionInfo.NamespaceId,
 		WorkflowId:  info0.ExecutionInfo.WorkflowId,
 	}
 
 	// test wrong run id with conditional delete
-	s.NoError(s.DeleteCurrentWorkflowExecution(fakeInfo, &persistenceblobs.WorkflowExecutionState{RunId: uuid.New()}))
+	s.NoError(s.DeleteCurrentWorkflowExecution(fakeInfo, &persistencespb.WorkflowExecutionState{RunId: uuid.New()}))
 
 	runID5, err5 := s.GetCurrentWorkflowRunID(namespaceID, workflowExecution.GetWorkflowId())
 	s.NoError(err5)
@@ -1883,14 +1883,14 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	s.NoError(err)
 }
 
-func (s *ExecutionManagerSuite) validateTransferTaskHighLevel(task1 *persistenceblobs.TransferTaskInfo, taskType enumsspb.TaskType, namespaceID string, workflowExecution commonpb.WorkflowExecution) {
+func (s *ExecutionManagerSuite) validateTransferTaskHighLevel(task1 *persistencespb.TransferTaskInfo, taskType enumsspb.TaskType, namespaceID string, workflowExecution commonpb.WorkflowExecution) {
 	s.EqualValues(taskType, task1.TaskType)
 	s.Equal(namespaceID, task1.GetNamespaceId())
 	s.Equal(workflowExecution.GetWorkflowId(), task1.GetWorkflowId())
 	s.Equal(workflowExecution.GetRunId(), task1.GetRunId())
 }
 
-func (s *ExecutionManagerSuite) validateTransferTaskTargetInfo(task2 *persistenceblobs.TransferTaskInfo, targetNamespaceID string, targetWorkflowID string, targetRunID string) {
+func (s *ExecutionManagerSuite) validateTransferTaskTargetInfo(task2 *persistencespb.TransferTaskInfo, targetNamespaceID string, targetWorkflowID string, targetRunID string) {
 	s.Equal(targetNamespaceID, task2.GetTargetNamespaceId())
 	s.Equal(targetWorkflowID, task2.GetTargetWorkflowId())
 	s.Equal(targetRunID, task2.GetTargetRunId())
@@ -2384,7 +2384,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	updatedInfo.LastProcessedEvent = int64(2)
 	currentTime := time.Now().UTC()
 
-	activityInfos := []*persistenceblobs.ActivityInfo{{
+	activityInfos := []*persistencespb.ActivityInfo{{
 		Version:                     7789,
 		ScheduleId:                  1,
 		ScheduledEventBatchId:       1,
@@ -2493,7 +2493,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 	updatedInfo.LastProcessedEvent = int64(2)
 	currentTime := timestamp.TimePtr(time.Date(2078, 8, 22, 12, 59, 59, 999999, time.UTC))
 	timerID := "id_1"
-	timerInfos := []*persistenceblobs.TimerInfo{{
+	timerInfos := []*persistencespb.TimerInfo{{
 		Version:    3345,
 		TimerId:    timerID,
 		ExpiryTime: currentTime,
@@ -2553,7 +2553,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateChildExecutions() {
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
 	updatedInfo.LastProcessedEvent = int64(2)
 	createRequestID := uuid.New()
-	childExecutionInfos := []*persistenceblobs.ChildExecutionInfo{{
+	childExecutionInfos := []*persistencespb.ChildExecutionInfo{{
 		Version:           1234,
 		InitiatedId:       1,
 		InitiatedEvent:    &historypb.HistoryEvent{EventId: 1},
@@ -2609,13 +2609,13 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateRequestCancel() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
 	updatedInfo.LastProcessedEvent = int64(2)
-	requestCancelInfo := &persistenceblobs.RequestCancelInfo{
+	requestCancelInfo := &persistencespb.RequestCancelInfo{
 		Version:               456,
 		InitiatedId:           2,
 		InitiatedEventBatchId: 1,
 		CancelRequestId:       uuid.New(),
 	}
-	err2 := s.UpsertRequestCancelState(updatedInfo, updatedState, int64(5), int64(3), []*persistenceblobs.RequestCancelInfo{requestCancelInfo})
+	err2 := s.UpsertRequestCancelState(updatedInfo, updatedState, int64(5), int64(3), []*persistencespb.RequestCancelInfo{requestCancelInfo})
 	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
@@ -2657,7 +2657,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalInfo() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
 	updatedInfo.LastProcessedEvent = int64(2)
-	signalInfo := &persistenceblobs.SignalInfo{
+	signalInfo := &persistencespb.SignalInfo{
 		Version:               123,
 		InitiatedId:           2,
 		InitiatedEventBatchId: 1,
@@ -2666,7 +2666,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalInfo() {
 		Input:                 payloads.EncodeString("test signal input"),
 		Control:               uuid.New(),
 	}
-	err2 := s.UpsertSignalInfoState(updatedInfo, updatedState, int64(5), int64(3), []*persistenceblobs.SignalInfo{signalInfo})
+	err2 := s.UpsertSignalInfoState(updatedInfo, updatedState, int64(5), int64(3), []*persistencespb.SignalInfo{signalInfo})
 	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
@@ -2971,7 +2971,7 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 	currentReplicationAck := int64(27)
 	currentClusterTransferAck := int64(21)
 	currentClusterTimerAck := timestampConvertor(time.Now().UTC().Add(-10 * time.Second))
-	shardInfo := &persistenceblobs.ShardInfo{
+	shardInfo := &persistencespb.ShardInfo{
 		ShardId:                 shardID,
 		Owner:                   "some random owner",
 		RangeId:                 rangeID,
@@ -3018,7 +3018,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	currentClusterTimerAck := timestampConvertor(time.Now().UTC().Add(-10 * time.Second))
 	alternativeClusterTimerAck := timestampConvertor(time.Now().UTC().Add(-20 * time.Second))
 	namespaceNotificationVersion := int64(8192)
-	shardInfo := &persistenceblobs.ShardInfo{
+	shardInfo := &persistencespb.ShardInfo{
 		ShardId:             shardID,
 		Owner:               "some random owner",
 		RangeId:             rangeID,
@@ -3061,7 +3061,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	currentClusterTimerAck = timestampConvertor(time.Now().UTC().Add(-100 * time.Second))
 	alternativeClusterTimerAck = timestampConvertor(time.Now().UTC().Add(-200 * time.Second))
 	namespaceNotificationVersion = int64(16384)
-	shardInfo = &persistenceblobs.ShardInfo{
+	shardInfo = &persistencespb.ShardInfo{
 		ShardId:             shardID,
 		Owner:               "some random owner",
 		RangeId:             int64(28),
@@ -3103,7 +3103,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 // TestReplicationDLQ test
 func (s *ExecutionManagerSuite) TestReplicationDLQ() {
 	sourceCluster := "test"
-	taskInfo := &persistenceblobs.ReplicationTaskInfo{
+	taskInfo := &persistencespb.ReplicationTaskInfo{
 		NamespaceId: uuid.New(),
 		WorkflowId:  uuid.New(),
 		RunId:       uuid.New(),
@@ -3121,14 +3121,14 @@ func (s *ExecutionManagerSuite) TestReplicationDLQ() {
 	s.NoError(err)
 	s.Len(resp.Tasks, 0)
 
-	taskInfo1 := &persistenceblobs.ReplicationTaskInfo{
+	taskInfo1 := &persistencespb.ReplicationTaskInfo{
 		NamespaceId: uuid.New(),
 		WorkflowId:  uuid.New(),
 		RunId:       uuid.New(),
 		TaskId:      1,
 		TaskType:    0,
 	}
-	taskInfo2 := &persistenceblobs.ReplicationTaskInfo{
+	taskInfo2 := &persistencespb.ReplicationTaskInfo{
 		NamespaceId: uuid.New(),
 		WorkflowId:  uuid.New(),
 		RunId:       uuid.New(),
@@ -3149,8 +3149,8 @@ func (s *ExecutionManagerSuite) TestReplicationDLQ() {
 	s.Len(resp.Tasks, 0)
 }
 
-func copyWorkflowExecutionInfo(sourceInfo *persistenceblobs.WorkflowExecutionInfo) *persistenceblobs.WorkflowExecutionInfo {
-	return &persistenceblobs.WorkflowExecutionInfo{
+func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo) *persistencespb.WorkflowExecutionInfo {
+	return &persistencespb.WorkflowExecutionInfo{
 		NamespaceId:                sourceInfo.NamespaceId,
 		WorkflowId:                 sourceInfo.WorkflowId,
 		ParentNamespaceId:          sourceInfo.ParentNamespaceId,
@@ -3172,14 +3172,14 @@ func copyWorkflowExecutionInfo(sourceInfo *persistenceblobs.WorkflowExecutionInf
 		WorkflowTaskTimeout:        sourceInfo.WorkflowTaskTimeout,
 		EventBranchToken:           sourceInfo.EventBranchToken,
 		AutoResetPoints:            sourceInfo.AutoResetPoints,
-		ExecutionStats: &persistenceblobs.ExecutionStats{
+		ExecutionStats: &persistencespb.ExecutionStats{
 			HistorySize: sourceInfo.ExecutionStats.HistorySize,
 		},
 	}
 }
 
-func copyWorkflowExecutionState(sourceState *persistenceblobs.WorkflowExecutionState) *persistenceblobs.WorkflowExecutionState {
-	return &persistenceblobs.WorkflowExecutionState{
+func copyWorkflowExecutionState(sourceState *persistencespb.WorkflowExecutionState) *persistencespb.WorkflowExecutionState {
+	return &persistencespb.WorkflowExecutionState{
 		RunId:           sourceState.RunId,
 		State:           sourceState.State,
 		Status:          sourceState.Status,

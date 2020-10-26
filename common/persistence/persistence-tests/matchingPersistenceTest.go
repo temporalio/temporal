@@ -37,7 +37,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -340,7 +340,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueue() {
 	_, ok := err.(*p.ConditionFailedError)
 	s.True(ok)
 
-	taskQueueInfo := &persistenceblobs.TaskQueueInfo{
+	taskQueueInfo := &persistencespb.TaskQueueInfo{
 		NamespaceId: namespaceID,
 		Name:        taskQueue,
 		TaskType:    enumspb.TASK_QUEUE_TYPE_ACTIVITY,
@@ -377,7 +377,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueueSticky() {
 	s.EqualValues(0, tli.Data.AckLevel)
 	s.EqualValues(enumspb.TASK_QUEUE_KIND_STICKY, tli.Data.Kind)
 
-	taskQueueInfo := &persistenceblobs.TaskQueueInfo{
+	taskQueueInfo := &persistencespb.TaskQueueInfo{
 		NamespaceId: namespaceID,
 		Name:        taskQueue,
 		TaskType:    enumspb.TASK_QUEUE_TYPE_WORKFLOW,

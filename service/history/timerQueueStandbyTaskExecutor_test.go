@@ -41,7 +41,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -120,7 +120,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          1,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -225,7 +225,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 	task := mutableState.insertTimerTasks[0]
 	protoTaskTime := task.(*persistence.UserTimerTask).GetVisibilityTimestamp()
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -301,7 +301,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 	task := mutableState.insertTimerTasks[0]
 	protoTaskTime := task.(*persistence.UserTimerTask).GetVisibilityTimestamp()
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -372,7 +372,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 	task := mutableState.insertTimerTasks[0]
 	protoTaskTime := task.(*persistence.UserTimerTask).GetVisibilityTimestamp()
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -443,7 +443,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 	task := mutableState.insertTimerTasks[0]
 	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp()
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -528,7 +528,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 	task := mutableState.insertTimerTasks[0]
 	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp()
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -602,7 +602,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbea
 	task := mutableState.insertTimerTasks[0]
 	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, task.(*persistence.ActivityTimeoutTask).TimeoutType)
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -679,7 +679,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 	s.True(modified)
 	protoTime := activityInfo2.LastHeartbeatUpdateTime.Add(-5 * time.Second)
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -706,7 +706,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 		input.UpdateWorkflowMutation.ExecutionInfo.LastEventTaskId = 0
 		mutableState.executionInfo.LastEventTaskId = 0
 		mutableState.executionInfo.WorkflowTaskOriginalScheduledTime = input.UpdateWorkflowMutation.ExecutionInfo.WorkflowTaskOriginalScheduledTime
-		mutableState.executionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{}
+		mutableState.executionInfo.ExecutionStats = &persistencespb.ExecutionStats{}
 
 		s.Equal(&persistence.UpdateWorkflowExecutionRequest{
 			UpdateWorkflowMutation: persistence.WorkflowMutation{
@@ -719,13 +719,13 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 				Condition:                 mutableState.GetNextEventID(),
 				UpsertActivityInfos:       input.UpdateWorkflowMutation.UpsertActivityInfos,
 				DeleteActivityInfos:       []int64{},
-				UpsertTimerInfos:          []*persistenceblobs.TimerInfo{},
+				UpsertTimerInfos:          []*persistencespb.TimerInfo{},
 				DeleteTimerInfos:          []string{},
-				UpsertChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
+				UpsertChildExecutionInfos: []*persistencespb.ChildExecutionInfo{},
 				DeleteChildExecutionInfo:  nil,
-				UpsertRequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
+				UpsertRequestCancelInfos:  []*persistencespb.RequestCancelInfo{},
 				DeleteRequestCancelInfo:   nil,
-				UpsertSignalInfos:         []*persistenceblobs.SignalInfo{},
+				UpsertSignalInfos:         []*persistencespb.SignalInfo{},
 				DeleteSignalInfo:          nil,
 				UpsertSignalRequestedIDs:  []string{},
 				DeleteSignalRequestedID:   "",
@@ -776,7 +776,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 
 	protoTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -824,7 +824,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Sche
 	workflowTaskScheduleID := int64(16384)
 
 	protoTaskTime := s.now
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -876,7 +876,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Succ
 
 	protoTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -928,7 +928,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 
 	protoTaskTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -995,7 +995,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Suc
 
 	protoTaskTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -1049,7 +1049,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 
 	protoTaskTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -1121,7 +1121,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 
 	protoTaskTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -1168,7 +1168,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessRetryTimeout() {
 
 	protoTaskTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -1189,7 +1189,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
 	ms mutableState,
 	lastEventID int64,
 	lastEventVersion int64,
-) *persistenceblobs.WorkflowMutableState {
+) *persistencespb.WorkflowMutableState {
 
 	if ms.GetExecutionInfo().GetVersionHistories() != nil {
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())

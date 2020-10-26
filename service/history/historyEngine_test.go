@@ -56,7 +56,7 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -119,20 +119,20 @@ var testWorkflowID = "random-workflow-id"
 var testRunID = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 
 var testLocalNamespaceEntry = cache.NewLocalNamespaceCacheEntryForTest(
-	&persistenceblobs.NamespaceInfo{Id: testNamespaceID, Name: testNamespace},
-	&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+	&persistencespb.NamespaceInfo{Id: testNamespaceID, Name: testNamespace},
+	&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 	cluster.TestCurrentClusterName,
 	nil,
 )
 
 var testGlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistenceblobs.NamespaceInfo{Id: testNamespaceID, Name: testNamespace},
-	&persistenceblobs.NamespaceConfig{
+	&persistencespb.NamespaceInfo{Id: testNamespaceID, Name: testNamespace},
+	&persistencespb.NamespaceConfig{
 		Retention:               timestamp.DurationFromDays(1),
 		VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
 		VisibilityArchivalUri:   "test:///visibility/archival",
 	},
-	&persistenceblobs.NamespaceReplicationConfig{
+	&persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
 		Clusters: []string{
 			cluster.TestCurrentClusterName,
@@ -144,9 +144,9 @@ var testGlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 )
 
 var testGlobalParentNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistenceblobs.NamespaceInfo{Id: testParentNamespaceID, Name: testParentNamespace},
-	&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-	&persistenceblobs.NamespaceReplicationConfig{
+	&persistencespb.NamespaceInfo{Id: testParentNamespaceID, Name: testParentNamespace},
+	&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+	&persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
 		Clusters: []string{
 			cluster.TestCurrentClusterName,
@@ -158,9 +158,9 @@ var testGlobalParentNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 )
 
 var testGlobalTargetNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistenceblobs.NamespaceInfo{Id: testTargetNamespaceID, Name: testTargetNamespace},
-	&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-	&persistenceblobs.NamespaceReplicationConfig{
+	&persistencespb.NamespaceInfo{Id: testTargetNamespaceID, Name: testTargetNamespace},
+	&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+	&persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
 		Clusters: []string{
 			cluster.TestCurrentClusterName,
@@ -172,9 +172,9 @@ var testGlobalTargetNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 )
 
 var testGlobalChildNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistenceblobs.NamespaceInfo{Id: testChildNamespaceID, Name: testChildNamespace},
-	&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-	&persistenceblobs.NamespaceReplicationConfig{
+	&persistencespb.NamespaceInfo{Id: testChildNamespaceID, Name: testChildNamespace},
+	&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+	&persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
 		Clusters: []string{
 			cluster.TestCurrentClusterName,
@@ -221,7 +221,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          1,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -1625,8 +1625,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: testNamespace},
-		&persistenceblobs.NamespaceConfig{
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: testNamespace},
+		&persistencespb.NamespaceConfig{
 			Retention: timestamp.DurationFromDays(2),
 			BadBinaries: &namespacepb.BadBinaries{
 				Binaries: map[string]*namespacepb.BadBinaryInfo{
@@ -5055,7 +5055,7 @@ func addActivityTaskScheduledEvent(
 	startToCloseTimeout time.Duration,
 	heartbeatTimeout time.Duration,
 ) (*historypb.HistoryEvent,
-	*persistenceblobs.ActivityInfo) {
+	*persistencespb.ActivityInfo) {
 
 	event, ai, _ := builder.AddActivityTaskScheduledEvent(workflowTaskCompletedID, &commandpb.ScheduleActivityTaskCommandAttributes{
 		ActivityId:             activityID,
@@ -5082,7 +5082,7 @@ func addActivityTaskScheduledEventWithRetry(
 	startToCloseTimeout time.Duration,
 	heartbeatTimeout time.Duration,
 	retryPolicy *commonpb.RetryPolicy,
-) (*historypb.HistoryEvent, *persistenceblobs.ActivityInfo) {
+) (*historypb.HistoryEvent, *persistencespb.ActivityInfo) {
 
 	event, ai, _ := builder.AddActivityTaskScheduledEvent(workflowTaskCompletedID, &commandpb.ScheduleActivityTaskCommandAttributes{
 		ActivityId:             activityID,
@@ -5121,7 +5121,7 @@ func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int6
 }
 
 func addTimerStartedEvent(builder mutableState, workflowTaskCompletedEventID int64, timerID string,
-	timeout time.Duration) (*historypb.HistoryEvent, *persistenceblobs.TimerInfo) {
+	timeout time.Duration) (*historypb.HistoryEvent, *persistencespb.TimerInfo) {
 	event, ti, _ := builder.AddTimerStartedEvent(workflowTaskCompletedEventID,
 		&commandpb.StartTimerCommandAttributes{
 			TimerId:            timerID,
@@ -5136,7 +5136,7 @@ func addTimerFiredEvent(mutableState mutableState, timerID string) *historypb.Hi
 }
 
 func addRequestCancelInitiatedEvent(builder mutableState, workflowTaskCompletedEventID int64,
-	cancelRequestID, namespace, workflowID, runID string) (*historypb.HistoryEvent, *persistenceblobs.RequestCancelInfo) {
+	cancelRequestID, namespace, workflowID, runID string) (*historypb.HistoryEvent, *persistencespb.RequestCancelInfo) {
 	event, rci, _ := builder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID,
 		cancelRequestID, &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
 			Namespace:  namespace,
@@ -5153,7 +5153,7 @@ func addCancelRequestedEvent(builder mutableState, initiatedID int64, namespace,
 }
 
 func addRequestSignalInitiatedEvent(builder mutableState, workflowTaskCompletedEventID int64,
-	signalRequestID, namespace, workflowID, runID, signalName string, input *commonpb.Payloads, control string) (*historypb.HistoryEvent, *persistenceblobs.SignalInfo) {
+	signalRequestID, namespace, workflowID, runID, signalName string, input *commonpb.Payloads, control string) (*historypb.HistoryEvent, *persistencespb.SignalInfo) {
 	event, si, _ := builder.AddSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, signalRequestID,
 		&commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 			Namespace: namespace,
@@ -5177,7 +5177,7 @@ func addSignaledEvent(builder mutableState, initiatedID int64, namespace, workfl
 func addStartChildWorkflowExecutionInitiatedEvent(builder mutableState, workflowTaskCompletedID int64,
 	createRequestID, namespace, workflowID, workflowType, taskQueue string, input *commonpb.Payloads,
 	executionTimeout, runTimeout, taskTimeout time.Duration) (*historypb.HistoryEvent,
-	*persistenceblobs.ChildExecutionInfo) {
+	*persistencespb.ChildExecutionInfo) {
 
 	event, cei, _ := builder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedID, createRequestID,
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -5258,30 +5258,30 @@ func newMutableStateBuilderWithVersionHistoriesForTest(shard ShardContext, event
 	return msBuilder
 }
 
-func createMutableState(ms mutableState) *persistenceblobs.WorkflowMutableState {
+func createMutableState(ms mutableState) *persistencespb.WorkflowMutableState {
 	builder := ms.(*mutableStateBuilder)
 	builder.FlushBufferedEvents() // nolint:errcheck
 	info := copyWorkflowExecutionInfo(builder.executionInfo)
 	state := copyWorkflowExecutionState(builder.executionState)
-	info.ExecutionStats = &persistenceblobs.ExecutionStats{}
+	info.ExecutionStats = &persistencespb.ExecutionStats{}
 
-	activityInfos := make(map[int64]*persistenceblobs.ActivityInfo)
+	activityInfos := make(map[int64]*persistencespb.ActivityInfo)
 	for id, info := range builder.pendingActivityInfoIDs {
 		activityInfos[id] = copyActivityInfo(info)
 	}
-	timerInfos := make(map[string]*persistenceblobs.TimerInfo)
+	timerInfos := make(map[string]*persistencespb.TimerInfo)
 	for id, info := range builder.pendingTimerInfoIDs {
 		timerInfos[id] = copyTimerInfo(info)
 	}
-	cancellationInfos := make(map[int64]*persistenceblobs.RequestCancelInfo)
+	cancellationInfos := make(map[int64]*persistencespb.RequestCancelInfo)
 	for id, info := range builder.pendingRequestCancelInfoIDs {
 		cancellationInfos[id] = copyCancellationInfo(info)
 	}
-	signalInfos := make(map[int64]*persistenceblobs.SignalInfo)
+	signalInfos := make(map[int64]*persistencespb.SignalInfo)
 	for id, info := range builder.pendingSignalInfoIDs {
 		signalInfos[id] = copySignalInfo(info)
 	}
-	childInfos := make(map[int64]*persistenceblobs.ChildExecutionInfo)
+	childInfos := make(map[int64]*persistencespb.ChildExecutionInfo)
 	for id, info := range builder.pendingChildExecutionInfoIDs {
 		childInfos[id] = copyChildInfo(info)
 	}
@@ -5299,7 +5299,7 @@ func createMutableState(ms mutableState) *persistenceblobs.WorkflowMutableState 
 		info.VersionHistories = versionhistory.DuplicateVHS(builder.executionInfo.VersionHistories)
 	}
 
-	return &persistenceblobs.WorkflowMutableState{
+	return &persistencespb.WorkflowMutableState{
 		ExecutionInfo:       info,
 		ExecutionState:      state,
 		NextEventId:         builder.GetNextEventID(),
@@ -5312,16 +5312,16 @@ func createMutableState(ms mutableState) *persistenceblobs.WorkflowMutableState 
 	}
 }
 
-func copyWorkflowExecutionState(sourceState *persistenceblobs.WorkflowExecutionState) *persistenceblobs.WorkflowExecutionState {
-	return &persistenceblobs.WorkflowExecutionState{
+func copyWorkflowExecutionState(sourceState *persistencespb.WorkflowExecutionState) *persistencespb.WorkflowExecutionState {
+	return &persistencespb.WorkflowExecutionState{
 		RunId:           sourceState.RunId,
 		CreateRequestId: sourceState.CreateRequestId,
 		State:           sourceState.State,
 		Status:          sourceState.Status,
 	}
 }
-func copyWorkflowExecutionInfo(sourceInfo *persistenceblobs.WorkflowExecutionInfo) *persistenceblobs.WorkflowExecutionInfo {
-	return &persistenceblobs.WorkflowExecutionInfo{
+func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo) *persistencespb.WorkflowExecutionInfo {
+	return &persistencespb.WorkflowExecutionInfo{
 		NamespaceId:                       sourceInfo.NamespaceId,
 		WorkflowId:                        sourceInfo.WorkflowId,
 		FirstExecutionRunId:               sourceInfo.FirstExecutionRunId,
@@ -5394,8 +5394,8 @@ func copyHistoryEvent(source *historypb.HistoryEvent) *historypb.HistoryEvent {
 	return result
 }
 
-func copyActivityInfo(sourceInfo *persistenceblobs.ActivityInfo) *persistenceblobs.ActivityInfo {
-	return &persistenceblobs.ActivityInfo{
+func copyActivityInfo(sourceInfo *persistencespb.ActivityInfo) *persistencespb.ActivityInfo {
+	return &persistencespb.ActivityInfo{
 		Version:                     sourceInfo.Version,
 		ScheduleId:                  sourceInfo.ScheduleId,
 		ScheduledEventBatchId:       sourceInfo.ScheduledEventBatchId,
@@ -5431,8 +5431,8 @@ func copyActivityInfo(sourceInfo *persistenceblobs.ActivityInfo) *persistenceblo
 	}
 }
 
-func copyTimerInfo(sourceInfo *persistenceblobs.TimerInfo) *persistenceblobs.TimerInfo {
-	return &persistenceblobs.TimerInfo{
+func copyTimerInfo(sourceInfo *persistencespb.TimerInfo) *persistencespb.TimerInfo {
+	return &persistencespb.TimerInfo{
 		Version:    sourceInfo.GetVersion(),
 		TimerId:    sourceInfo.GetTimerId(),
 		StartedId:  sourceInfo.GetStartedId(),
@@ -5441,16 +5441,16 @@ func copyTimerInfo(sourceInfo *persistenceblobs.TimerInfo) *persistenceblobs.Tim
 	}
 }
 
-func copyCancellationInfo(sourceInfo *persistenceblobs.RequestCancelInfo) *persistenceblobs.RequestCancelInfo {
-	return &persistenceblobs.RequestCancelInfo{
+func copyCancellationInfo(sourceInfo *persistencespb.RequestCancelInfo) *persistencespb.RequestCancelInfo {
+	return &persistencespb.RequestCancelInfo{
 		Version:         sourceInfo.Version,
 		InitiatedId:     sourceInfo.GetInitiatedId(),
 		CancelRequestId: sourceInfo.GetCancelRequestId(),
 	}
 }
 
-func copySignalInfo(sourceInfo *persistenceblobs.SignalInfo) *persistenceblobs.SignalInfo {
-	result := &persistenceblobs.SignalInfo{
+func copySignalInfo(sourceInfo *persistencespb.SignalInfo) *persistencespb.SignalInfo {
+	result := &persistencespb.SignalInfo{
 		Version:     sourceInfo.GetVersion(),
 		InitiatedId: sourceInfo.GetInitiatedId(),
 		RequestId:   sourceInfo.GetRequestId(),
@@ -5461,8 +5461,8 @@ func copySignalInfo(sourceInfo *persistenceblobs.SignalInfo) *persistenceblobs.S
 	return result
 }
 
-func copyChildInfo(sourceInfo *persistenceblobs.ChildExecutionInfo) *persistenceblobs.ChildExecutionInfo {
-	return &persistenceblobs.ChildExecutionInfo{
+func copyChildInfo(sourceInfo *persistencespb.ChildExecutionInfo) *persistencespb.ChildExecutionInfo {
+	return &persistencespb.ChildExecutionInfo{
 		Version:               sourceInfo.Version,
 		InitiatedId:           sourceInfo.InitiatedId,
 		InitiatedEventBatchId: sourceInfo.InitiatedEventBatchId,

@@ -25,7 +25,7 @@
 package history
 
 import (
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -45,10 +45,10 @@ func (policy transactionPolicy) ptr() *transactionPolicy {
 // always use make(type, 0, len(input))
 
 func convertPendingActivityInfos(
-	inputs map[int64]*persistenceblobs.ActivityInfo,
-) []*persistenceblobs.ActivityInfo {
+	inputs map[int64]*persistencespb.ActivityInfo,
+) []*persistencespb.ActivityInfo {
 
-	outputs := make([]*persistenceblobs.ActivityInfo, 0, len(inputs))
+	outputs := make([]*persistencespb.ActivityInfo, 0, len(inputs))
 	for _, item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -56,10 +56,10 @@ func convertPendingActivityInfos(
 }
 
 func convertUpdateActivityInfos(
-	inputs map[*persistenceblobs.ActivityInfo]struct{},
-) []*persistenceblobs.ActivityInfo {
+	inputs map[*persistencespb.ActivityInfo]struct{},
+) []*persistencespb.ActivityInfo {
 
-	outputs := make([]*persistenceblobs.ActivityInfo, 0, len(inputs))
+	outputs := make([]*persistencespb.ActivityInfo, 0, len(inputs))
 	for item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -78,7 +78,7 @@ func convertDeleteActivityInfos(
 }
 
 func convertSyncActivityInfos(
-	activityInfos map[int64]*persistenceblobs.ActivityInfo,
+	activityInfos map[int64]*persistencespb.ActivityInfo,
 	inputs map[int64]struct{},
 ) []persistence.Task {
 	outputs := make([]persistence.Task, 0, len(inputs))
@@ -95,10 +95,10 @@ func convertSyncActivityInfos(
 }
 
 func convertPendingTimerInfos(
-	inputs map[string]*persistenceblobs.TimerInfo,
-) []*persistenceblobs.TimerInfo {
+	inputs map[string]*persistencespb.TimerInfo,
+) []*persistencespb.TimerInfo {
 
-	outputs := make([]*persistenceblobs.TimerInfo, 0, len(inputs))
+	outputs := make([]*persistencespb.TimerInfo, 0, len(inputs))
 	for _, item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -106,10 +106,10 @@ func convertPendingTimerInfos(
 }
 
 func convertUpdateTimerInfos(
-	inputs map[*persistenceblobs.TimerInfo]struct{},
-) []*persistenceblobs.TimerInfo {
+	inputs map[*persistencespb.TimerInfo]struct{},
+) []*persistencespb.TimerInfo {
 
-	outputs := make([]*persistenceblobs.TimerInfo, 0, len(inputs))
+	outputs := make([]*persistencespb.TimerInfo, 0, len(inputs))
 	for item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -128,10 +128,10 @@ func convertDeleteTimerInfos(
 }
 
 func convertPendingChildExecutionInfos(
-	inputs map[int64]*persistenceblobs.ChildExecutionInfo,
-) []*persistenceblobs.ChildExecutionInfo {
+	inputs map[int64]*persistencespb.ChildExecutionInfo,
+) []*persistencespb.ChildExecutionInfo {
 
-	outputs := make([]*persistenceblobs.ChildExecutionInfo, 0, len(inputs))
+	outputs := make([]*persistencespb.ChildExecutionInfo, 0, len(inputs))
 	for _, item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -139,10 +139,10 @@ func convertPendingChildExecutionInfos(
 }
 
 func convertUpdateChildExecutionInfos(
-	inputs map[*persistenceblobs.ChildExecutionInfo]struct{},
-) []*persistenceblobs.ChildExecutionInfo {
+	inputs map[*persistencespb.ChildExecutionInfo]struct{},
+) []*persistencespb.ChildExecutionInfo {
 
-	outputs := make([]*persistenceblobs.ChildExecutionInfo, 0, len(inputs))
+	outputs := make([]*persistencespb.ChildExecutionInfo, 0, len(inputs))
 	for item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -150,10 +150,10 @@ func convertUpdateChildExecutionInfos(
 }
 
 func convertPendingRequestCancelInfos(
-	inputs map[int64]*persistenceblobs.RequestCancelInfo,
-) []*persistenceblobs.RequestCancelInfo {
+	inputs map[int64]*persistencespb.RequestCancelInfo,
+) []*persistencespb.RequestCancelInfo {
 
-	outputs := make([]*persistenceblobs.RequestCancelInfo, 0, len(inputs))
+	outputs := make([]*persistencespb.RequestCancelInfo, 0, len(inputs))
 	for _, item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -161,10 +161,10 @@ func convertPendingRequestCancelInfos(
 }
 
 func convertUpdateRequestCancelInfos(
-	inputs map[*persistenceblobs.RequestCancelInfo]struct{},
-) []*persistenceblobs.RequestCancelInfo {
+	inputs map[*persistencespb.RequestCancelInfo]struct{},
+) []*persistencespb.RequestCancelInfo {
 
-	outputs := make([]*persistenceblobs.RequestCancelInfo, 0, len(inputs))
+	outputs := make([]*persistencespb.RequestCancelInfo, 0, len(inputs))
 	for item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -172,10 +172,10 @@ func convertUpdateRequestCancelInfos(
 }
 
 func convertPendingSignalInfos(
-	inputs map[int64]*persistenceblobs.SignalInfo,
-) []*persistenceblobs.SignalInfo {
+	inputs map[int64]*persistencespb.SignalInfo,
+) []*persistencespb.SignalInfo {
 
-	outputs := make([]*persistenceblobs.SignalInfo, 0, len(inputs))
+	outputs := make([]*persistencespb.SignalInfo, 0, len(inputs))
 	for _, item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -183,10 +183,10 @@ func convertPendingSignalInfos(
 }
 
 func convertUpdateSignalInfos(
-	inputs map[*persistenceblobs.SignalInfo]struct{},
-) []*persistenceblobs.SignalInfo {
+	inputs map[*persistencespb.SignalInfo]struct{},
+) []*persistencespb.SignalInfo {
 
-	outputs := make([]*persistenceblobs.SignalInfo, 0, len(inputs))
+	outputs := make([]*persistencespb.SignalInfo, 0, len(inputs))
 	for item := range inputs {
 		outputs = append(outputs, item)
 	}

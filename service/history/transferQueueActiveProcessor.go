@@ -27,7 +27,7 @@ package history
 import (
 	"github.com/pborman/uuid"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common/collection"
@@ -84,7 +84,7 @@ func newTransferQueueActiveProcessor(
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ClusterName(currentClusterName))
 	transferTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
-		task, ok := taskInfo.(*persistenceblobs.TransferTaskInfo)
+		task, ok := taskInfo.(*persistencespb.TransferTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
@@ -210,7 +210,7 @@ func newTransferQueueFailoverProcessor(
 	)
 
 	transferTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
-		task, ok := taskInfo.(*persistenceblobs.TransferTaskInfo)
+		task, ok := taskInfo.(*persistencespb.TransferTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}

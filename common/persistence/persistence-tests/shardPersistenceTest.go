@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -163,8 +163,8 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	s.EqualTimes(*updatedTimerAckLevel, *info1timerAckLevelTime)
 }
 
-func copyShardInfo(sourceInfo *persistenceblobs.ShardInfo) *persistenceblobs.ShardInfo {
-	return &persistenceblobs.ShardInfo{
+func copyShardInfo(sourceInfo *persistencespb.ShardInfo) *persistencespb.ShardInfo {
+	return &persistencespb.ShardInfo{
 		ShardId:             sourceInfo.GetShardId(),
 		Owner:               sourceInfo.Owner,
 		RangeId:             sourceInfo.GetRangeId(),

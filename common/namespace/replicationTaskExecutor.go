@@ -32,7 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -112,8 +112,8 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 	}
 
 	request := &persistence.CreateNamespaceRequest{
-		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
 				Id:          task.GetId(),
 				Name:        task.Info.GetName(),
 				State:       task.Info.GetState(),
@@ -121,14 +121,14 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 				Owner:       task.Info.GetOwnerEmail(),
 				Data:        task.Info.Data,
 			},
-			Config: &persistenceblobs.NamespaceConfig{
+			Config: &persistencespb.NamespaceConfig{
 				Retention:               task.Config.GetWorkflowExecutionRetentionTtl(),
 				HistoryArchivalState:    task.Config.GetHistoryArchivalState(),
 				HistoryArchivalUri:      task.Config.GetHistoryArchivalUri(),
 				VisibilityArchivalState: task.Config.GetVisibilityArchivalState(),
 				VisibilityArchivalUri:   task.Config.GetVisibilityArchivalUri(),
 			},
-			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
 				Clusters:          h.convertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters),
 			},
@@ -224,7 +224,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 
 	if resp.Namespace.ConfigVersion < task.GetConfigVersion() {
 		recordUpdated = true
-		request.Namespace.Info = &persistenceblobs.NamespaceInfo{
+		request.Namespace.Info = &persistencespb.NamespaceInfo{
 			Id:          task.GetId(),
 			Name:        task.Info.GetName(),
 			State:       task.Info.GetState(),
@@ -232,7 +232,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 			Owner:       task.Info.GetOwnerEmail(),
 			Data:        task.Info.Data,
 		}
-		request.Namespace.Config = &persistenceblobs.NamespaceConfig{
+		request.Namespace.Config = &persistencespb.NamespaceConfig{
 			Retention:               task.Config.GetWorkflowExecutionRetentionTtl(),
 			HistoryArchivalState:    task.Config.GetHistoryArchivalState(),
 			HistoryArchivalUri:      task.Config.GetHistoryArchivalUri(),

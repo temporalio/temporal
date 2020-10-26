@@ -30,7 +30,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -156,7 +156,7 @@ func readLockShard(tx sqlplugin.Tx, shardID int32, oldRangeID int64) error {
 	return nil
 }
 
-func shardInfoToShardsRow(s persistenceblobs.ShardInfo) (*sqlplugin.ShardsRow, error) {
+func shardInfoToShardsRow(s persistencespb.ShardInfo) (*sqlplugin.ShardsRow, error) {
 	blob, err := serialization.ShardInfoToBlob(&s)
 	if err != nil {
 		return nil, err

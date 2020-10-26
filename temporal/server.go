@@ -34,7 +34,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -374,7 +374,7 @@ func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collec
 
 	applied, err := clusterMetadataManager.SaveClusterMetadata(
 		&persistence.SaveClusterMetadataRequest{
-			ClusterMetadata: persistenceblobs.ClusterMetadata{
+			ClusterMetadata: persistencespb.ClusterMetadata{
 				HistoryShardCount: s.so.config.Persistence.NumHistoryShards,
 				ClusterName:       s.so.config.ClusterMetadata.CurrentClusterName,
 				ClusterId:         uuid.New(),

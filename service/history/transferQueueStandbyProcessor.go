@@ -25,7 +25,7 @@
 package history
 
 import (
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
@@ -82,7 +82,7 @@ func newTransferQueueStandbyProcessor(
 	logger = logger.WithTags(tag.ClusterName(clusterName))
 
 	transferTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
-		task, ok := taskInfo.(*persistenceblobs.TransferTaskInfo)
+		task, ok := taskInfo.(*persistencespb.TransferTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}

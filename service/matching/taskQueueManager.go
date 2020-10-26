@@ -40,7 +40,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
@@ -62,7 +62,7 @@ const (
 type (
 	addTaskParams struct {
 		execution     *commonpb.WorkflowExecution
-		taskInfo      *persistenceblobs.TaskInfo
+		taskInfo      *persistencespb.TaskInfo
 		source        enumsspb.TaskSource
 		forwardedFrom string
 	}
@@ -400,7 +400,7 @@ func (c *taskQueueManagerImpl) String() string {
 // here. As part of completion:
 //   - task is deleted from the database when err is nil
 //   - new task is created and current task is deleted when err is not nil
-func (c *taskQueueManagerImpl) completeTask(task *persistenceblobs.AllocatedTaskInfo, err error) {
+func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo, err error) {
 	if err != nil {
 		// failed to start the task.
 		// We cannot just remove it from persistence because then it will be lost.
@@ -499,7 +499,7 @@ func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskP
 	childCtx, cancel := c.newChildContext(ctx, maxSyncMatchWaitTime, time.Second)
 
 	// Mocking out TaskId for syncmatch as it hasn't been allocated yet
-	fakeTaskIdWrapper := &persistenceblobs.AllocatedTaskInfo{
+	fakeTaskIdWrapper := &persistencespb.AllocatedTaskInfo{
 		Data:   params.taskInfo,
 		TaskId: syncMatchTaskId,
 	}

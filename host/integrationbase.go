@@ -40,7 +40,7 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
@@ -219,13 +219,13 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 	s.archivalNamespace = s.randomizeStr("integration-archival-enabled-namespace")
 	currentClusterName := s.testCluster.testBase.ClusterMetadata.GetCurrentClusterName()
 	namespaceRequest := &persistence.CreateNamespaceRequest{
-		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
 				Id:    uuid.New(),
 				Name:  s.archivalNamespace,
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
 			},
-			Config: &persistenceblobs.NamespaceConfig{
+			Config: &persistencespb.NamespaceConfig{
 				Retention:               timestamp.DurationFromDays(0),
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_ENABLED,
 				HistoryArchivalUri:      s.testCluster.archiverBase.historyURI,
@@ -233,7 +233,7 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 				VisibilityArchivalUri:   s.testCluster.archiverBase.visibilityURI,
 				BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 			},
-			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: currentClusterName,
 				Clusters: []string{
 					currentClusterName,

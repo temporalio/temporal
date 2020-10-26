@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -83,7 +83,7 @@ func (b *historyBuilder) HasTransientEvents() bool {
 // originalRunID is the runID when the WorkflowExecutionStarted event is written
 // firstRunID is the very first runID along the chain of ContinueAsNew and Reset
 func (b *historyBuilder) AddWorkflowExecutionStartedEvent(request *historyservice.StartWorkflowExecutionRequest,
-	previousExecution *persistenceblobs.WorkflowExecutionInfo, previousExecutionState *persistenceblobs.WorkflowExecutionState, firstRunID, originalRunID string) *historypb.HistoryEvent {
+	previousExecution *persistencespb.WorkflowExecutionInfo, previousExecutionState *persistencespb.WorkflowExecutionState, firstRunID, originalRunID string) *historypb.HistoryEvent {
 	event := b.newWorkflowExecutionStartedEvent(request, previousExecution, previousExecutionState, firstRunID, originalRunID)
 
 	return b.addEventToHistory(event)
@@ -452,7 +452,7 @@ func (b *historyBuilder) addTransientEvent(event *historypb.HistoryEvent) *histo
 }
 
 func (b *historyBuilder) newWorkflowExecutionStartedEvent(
-	startRequest *historyservice.StartWorkflowExecutionRequest, previousExecution *persistenceblobs.WorkflowExecutionInfo, previousExecutionState *persistenceblobs.WorkflowExecutionState, firstRunID, originalRunID string) *historypb.HistoryEvent {
+	startRequest *historyservice.StartWorkflowExecutionRequest, previousExecution *persistencespb.WorkflowExecutionInfo, previousExecutionState *persistencespb.WorkflowExecutionState, firstRunID, originalRunID string) *historypb.HistoryEvent {
 	prevRunID := previousExecutionState.GetRunId()
 	resetPoints := previousExecution.GetAutoResetPoints()
 	request := startRequest.StartRequest

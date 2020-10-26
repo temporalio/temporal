@@ -31,7 +31,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -76,7 +76,7 @@ func (t *transferQueueStandbyTaskExecutor) execute(
 	shouldProcessTask bool,
 ) error {
 
-	transferTask, ok := taskInfo.(*persistenceblobs.TransferTaskInfo)
+	transferTask, ok := taskInfo.(*persistencespb.TransferTaskInfo)
 	if !ok {
 		return errUnexpectedQueueTask
 	}
@@ -114,7 +114,7 @@ func (t *transferQueueStandbyTaskExecutor) execute(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processActivityTask(
-	transferTask *persistenceblobs.TransferTaskInfo,
+	transferTask *persistencespb.TransferTaskInfo,
 ) error {
 
 	processTaskIfClosed := false
@@ -153,7 +153,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
-	transferTask *persistenceblobs.TransferTaskInfo,
+	transferTask *persistencespb.TransferTaskInfo,
 ) error {
 
 	processTaskIfClosed := false
@@ -199,7 +199,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
-	transferTask *persistenceblobs.TransferTaskInfo,
+	transferTask *persistencespb.TransferTaskInfo,
 ) error {
 
 	processTaskIfClosed := true
@@ -268,7 +268,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
-	transferTask *persistenceblobs.TransferTaskInfo,
+	transferTask *persistencespb.TransferTaskInfo,
 ) error {
 
 	processTaskIfClosed := false
@@ -303,7 +303,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
-	transferTask *persistenceblobs.TransferTaskInfo,
+	transferTask *persistencespb.TransferTaskInfo,
 ) error {
 
 	processTaskIfClosed := false
@@ -338,7 +338,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
-	transferTask *persistenceblobs.TransferTaskInfo,
+	transferTask *persistencespb.TransferTaskInfo,
 ) error {
 
 	processTaskIfClosed := false
@@ -377,7 +377,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStarted(
-	transferTask *persistenceblobs.TransferTaskInfo,
+	transferTask *persistencespb.TransferTaskInfo,
 ) error {
 
 	processTaskIfClosed := false
@@ -392,7 +392,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStarted(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processUpsertWorkflowSearchAttributes(
-	transferTask *persistenceblobs.TransferTaskInfo,
+	transferTask *persistencespb.TransferTaskInfo,
 ) error {
 
 	processTaskIfClosed := false
@@ -407,7 +407,7 @@ func (t *transferQueueStandbyTaskExecutor) processUpsertWorkflowSearchAttributes
 }
 
 func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertHelper(
-	transferTask *persistenceblobs.TransferTaskInfo,
+	transferTask *persistencespb.TransferTaskInfo,
 	mutableState mutableState,
 	isRecordStart bool,
 ) error {
@@ -477,7 +477,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	postActionFn standbyPostActionFn,
 ) (retError error) {
 
-	transferTask := taskInfo.(*persistenceblobs.TransferTaskInfo)
+	transferTask := taskInfo.(*persistencespb.TransferTaskInfo)
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
 		t.getNamespaceIDAndWorkflowExecution(transferTask),
 	)
@@ -524,7 +524,7 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 	pushActivityInfo := postActionInfo.(*pushActivityTaskToMatchingInfo)
 	timeout := common.MinInt64(int64(pushActivityInfo.activityTaskScheduleToStartTimeout), common.MaxTaskTimeoutSeconds)
 	return t.transferQueueTaskExecutorBase.pushActivity(
-		task.(*persistenceblobs.TransferTaskInfo),
+		task.(*persistencespb.TransferTaskInfo),
 		timestamp.DurationFromSeconds(timeout),
 	)
 }
@@ -542,7 +542,7 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 	pushwtInfo := postActionInfo.(*pushWorkflowTaskToMatchingInfo)
 	timeout := common.MinInt64(pushwtInfo.workflowTaskScheduleToStartTimeout, common.MaxTaskTimeoutSeconds)
 	return t.transferQueueTaskExecutorBase.pushWorkflowTask(
-		task.(*persistenceblobs.TransferTaskInfo),
+		task.(*persistencespb.TransferTaskInfo),
 		&pushwtInfo.taskqueue,
 		timestamp.DurationFromSeconds(timeout),
 	)
@@ -558,7 +558,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return nil
 	}
 
-	transferTask := taskInfo.(*persistenceblobs.TransferTaskInfo)
+	transferTask := taskInfo.(*persistencespb.TransferTaskInfo)
 	resendInfo := postActionInfo.(*historyResendInfo)
 
 	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientRequests)

@@ -46,7 +46,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservicemock/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -963,8 +963,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_NamespaceCacheEntr
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
-		&persistenceblobs.NamespaceConfig{
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{
 			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:      "",
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
@@ -983,8 +983,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty()
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
-		&persistenceblobs.NamespaceConfig{
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{
 			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_ENABLED,
 			HistoryArchivalUri:      "uri without scheme",
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
@@ -1003,8 +1003,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
-		&persistenceblobs.NamespaceConfig{
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{
 			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_ENABLED,
 			HistoryArchivalUri:      testHistoryArchivalURI,
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
@@ -1118,7 +1118,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceCache
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceNotConfiguredForArchival() {
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
 		nil,
-		&persistenceblobs.NamespaceConfig{
+		&persistencespb.NamespaceConfig{
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 		},
 		"",
@@ -1135,8 +1135,8 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceNotCo
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
-		&persistenceblobs.NamespaceConfig{
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:   "uri without scheme",
 		},
@@ -1154,8 +1154,8 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Success() {
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
-		&persistenceblobs.NamespaceConfig{
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
 			VisibilityArchivalUri:   testVisibilityArchivalURI,
 		},
@@ -1405,8 +1405,8 @@ func updateRequest(
 
 func persistenceGetNamespaceResponse(historyArchivalState, visibilityArchivalState *namespace.ArchivalState) *persistence.GetNamespaceResponse {
 	return &persistence.GetNamespaceResponse{
-		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
 				Id:          testNamespaceID,
 				Name:        "test-name",
 				State:       0,
@@ -1414,14 +1414,14 @@ func persistenceGetNamespaceResponse(historyArchivalState, visibilityArchivalSta
 				Owner:       "test-owner-email",
 				Data:        make(map[string]string),
 			},
-			Config: &persistenceblobs.NamespaceConfig{
+			Config: &persistencespb.NamespaceConfig{
 				Retention:               timestamp.DurationFromDays(1),
 				HistoryArchivalState:    historyArchivalState.State,
 				HistoryArchivalUri:      historyArchivalState.URI,
 				VisibilityArchivalState: visibilityArchivalState.State,
 				VisibilityArchivalUri:   visibilityArchivalState.URI,
 			},
-			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,

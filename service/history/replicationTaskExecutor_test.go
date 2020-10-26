@@ -40,7 +40,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cache"
@@ -105,7 +105,7 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 	s.mockShard = &shardContextImpl{
 		shardID:  0,
 		Resource: s.mockResource,
-		shardInfo: &persistence.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{
+		shardInfo: &persistence.ShardInfoWithFailover{ShardInfo: &persistencespb.ShardInfo{
 			ShardId:                0,
 			RangeId:                1,
 			ReplicationAckLevel:    0,
@@ -147,7 +147,7 @@ func (s *replicationTaskExecutorSuite) TestFilterTask() {
 		Return(cache.NewGlobalNamespaceCacheEntryForTest(
 			nil,
 			nil,
-			&persistenceblobs.NamespaceReplicationConfig{
+			&persistencespb.NamespaceReplicationConfig{
 				Clusters: []string{
 					"active",
 				}},

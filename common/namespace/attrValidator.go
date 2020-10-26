@@ -31,7 +31,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 )
 
@@ -55,7 +55,7 @@ func newAttrValidator(
 	}
 }
 
-func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistenceblobs.NamespaceConfig) error {
+func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistencespb.NamespaceConfig) error {
 	if config.Retention != nil && *config.Retention < time.Hour*24*time.Duration(d.minRetentionDays) {
 		return errInvalidRetentionPeriod
 	}
@@ -69,7 +69,7 @@ func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistenceblobs.Nam
 }
 
 func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForLocalNamespace(
-	replicationConfig *persistenceblobs.NamespaceReplicationConfig,
+	replicationConfig *persistencespb.NamespaceReplicationConfig,
 ) error {
 
 	activeCluster := replicationConfig.ActiveClusterName
@@ -96,7 +96,7 @@ func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForLocalNamespace(
 }
 
 func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForGlobalNamespace(
-	replicationConfig *persistenceblobs.NamespaceReplicationConfig,
+	replicationConfig *persistencespb.NamespaceReplicationConfig,
 ) error {
 
 	activeCluster := replicationConfig.ActiveClusterName

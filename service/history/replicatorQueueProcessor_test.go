@@ -38,7 +38,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
@@ -94,7 +94,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          0,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -131,7 +131,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	runID := uuid.New()
 	scheduleID := int64(144)
 	taskID := int64(1444)
-	task := &persistenceblobs.ReplicationTaskInfo{
+	task := &persistencespb.ReplicationTaskInfo{
 		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
@@ -148,9 +148,9 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
@@ -174,7 +174,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
-	task := &persistenceblobs.ReplicationTaskInfo{
+	task := &persistencespb.ReplicationTaskInfo{
 		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
@@ -196,9 +196,9 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
@@ -222,7 +222,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
-	task := &persistenceblobs.ReplicationTaskInfo{
+	task := &persistencespb.ReplicationTaskInfo{
 		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
@@ -246,9 +246,9 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
@@ -272,7 +272,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
-	task := &persistenceblobs.ReplicationTaskInfo{
+	task := &persistencespb.ReplicationTaskInfo{
 		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
@@ -303,7 +303,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	activityLastWorkerIdentity := "some random worker identity"
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistenceblobs.ActivityInfo{
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistencespb.ActivityInfo{
 		Version:                 activityVersion,
 		ScheduleId:              activityScheduleID,
 		ScheduledTime:           &activityScheduledTime,
@@ -330,11 +330,11 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 			versionHistory,
 		},
 	}
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
@@ -380,7 +380,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
-	task := &persistenceblobs.ReplicationTaskInfo{
+	task := &persistencespb.ReplicationTaskInfo{
 		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
@@ -413,7 +413,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	activityLastWorkerIdentity := "some random worker identity"
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistenceblobs.ActivityInfo{
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistencespb.ActivityInfo{
 		Version:                 activityVersion,
 		ScheduleId:              activityScheduleID,
 		ScheduledTime:           activityScheduledTime,
@@ -440,11 +440,11 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 			versionHistory,
 		},
 	}
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,

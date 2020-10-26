@@ -33,7 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
@@ -1185,7 +1185,7 @@ func acquireShard(
 
 		// EntityNotExistsError error
 		shardInfo = &persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId: int32(shardItem.shardID),
 			},
 		}
@@ -1278,7 +1278,7 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 		clusterReplicationLevel[k] = v
 	}
 	shardInfoCopy := &persistence.ShardInfoWithFailover{
-		ShardInfo: &persistenceblobs.ShardInfo{
+		ShardInfo: &persistencespb.ShardInfo{
 			ShardId:                      shardInfo.GetShardId(),
 			Owner:                        shardInfo.Owner,
 			RangeId:                      shardInfo.GetRangeId(),

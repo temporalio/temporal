@@ -34,7 +34,7 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/mocks"
@@ -93,7 +93,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	clusters := []string{clusterActive, clusterStandby}
 
 	namespaceOperation := enumsspb.NAMESPACE_OPERATION_CREATE
-	info := &persistenceblobs.NamespaceInfo{
+	info := &persistencespb.NamespaceInfo{
 		Id:          id,
 		Name:        name,
 		State:       enumspb.NAMESPACE_STATE_REGISTERED,
@@ -101,7 +101,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		Owner:       ownerEmail,
 		Data:        data,
 	}
-	config := &persistenceblobs.NamespaceConfig{
+	config := &persistencespb.NamespaceConfig{
 		Retention:               &retention,
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
@@ -109,7 +109,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		VisibilityArchivalUri:   visibilityArchivalURI,
 		BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}
-	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
 	}
@@ -168,7 +168,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	clusters := []string{clusterActive, clusterStandby}
 
 	namespaceOperation := enumsspb.NAMESPACE_OPERATION_CREATE
-	info := &persistenceblobs.NamespaceInfo{
+	info := &persistencespb.NamespaceInfo{
 		Id:          id,
 		Name:        name,
 		State:       enumspb.NAMESPACE_STATE_REGISTERED,
@@ -176,7 +176,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		Owner:       ownerEmail,
 		Data:        data,
 	}
-	config := &persistenceblobs.NamespaceConfig{
+	config := &persistencespb.NamespaceConfig{
 		Retention:               &retention,
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
@@ -184,7 +184,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		VisibilityArchivalUri:   visibilityArchivalURI,
 		BadBinaries:             &namespacepb.BadBinaries{},
 	}
-	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
 	}
@@ -214,7 +214,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	clusters := []string{clusterActive, clusterStandby}
 
 	namespaceOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
-	info := &persistenceblobs.NamespaceInfo{
+	info := &persistencespb.NamespaceInfo{
 		Id:          id,
 		Name:        name,
 		State:       enumspb.NAMESPACE_STATE_DEPRECATED,
@@ -222,7 +222,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		Owner:       ownerEmail,
 		Data:        data,
 	}
-	config := &persistenceblobs.NamespaceConfig{
+	config := &persistencespb.NamespaceConfig{
 		Retention:               &retention,
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
@@ -230,7 +230,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		VisibilityArchivalUri:   visibilityArchivalURI,
 		BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}
-	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
 	}
@@ -288,7 +288,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 	clusters := []string{clusterActive, clusterStandby}
 
 	namespaceOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
-	info := &persistenceblobs.NamespaceInfo{
+	info := &persistencespb.NamespaceInfo{
 		Id:          id,
 		Name:        name,
 		State:       enumspb.NAMESPACE_STATE_DEPRECATED,
@@ -296,14 +296,14 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		Owner:       ownerEmail,
 		Data:        data,
 	}
-	config := &persistenceblobs.NamespaceConfig{
+	config := &persistencespb.NamespaceConfig{
 		Retention:               &retention,
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
 		VisibilityArchivalUri:   visibilityArchivalURI,
 	}
-	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
 	}

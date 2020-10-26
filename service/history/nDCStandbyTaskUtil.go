@@ -29,7 +29,7 @@ import (
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -67,7 +67,7 @@ func standbyTransferTaskPostActionTaskDiscarded(
 		return nil
 	}
 
-	transferTask := taskInfo.(*persistenceblobs.TransferTaskInfo)
+	transferTask := taskInfo.(*persistencespb.TransferTaskInfo)
 	logger.Error("Discarding standby transfer task due to task being pending for too long.",
 		tag.WorkflowID(transferTask.GetWorkflowId()),
 		tag.WorkflowRunID(transferTask.GetRunId()),
@@ -90,7 +90,7 @@ func standbyTimerTaskPostActionTaskDiscarded(
 		return nil
 	}
 
-	timerTask := taskInfo.(*persistenceblobs.TimerTaskInfo)
+	timerTask := taskInfo.(*persistencespb.TimerTaskInfo)
 	logger.Error("Discarding standby timer task due to task being pending for too long.",
 		tag.WorkflowID(timerTask.GetWorkflowId()),
 		tag.WorkflowRunID(timerTask.GetRunId()),
