@@ -30,7 +30,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -72,7 +72,7 @@ func verifyTaskVersion(
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTransferTask(
 	context workflowExecutionContext,
-	transferTask *persistenceblobs.TransferTaskInfo,
+	transferTask *persistencespb.TransferTaskInfo,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (mutableState, error) {
@@ -117,7 +117,7 @@ func loadMutableStateForTransferTask(
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTimerTask(
 	context workflowExecutionContext,
-	timerTask *persistenceblobs.TimerTaskInfo,
+	timerTask *persistencespb.TimerTaskInfo,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (mutableState, error) {
@@ -175,11 +175,11 @@ func initializeLoggerForTask(
 	)
 
 	switch task := task.(type) {
-	case *persistenceblobs.TimerTaskInfo:
+	case *persistencespb.TimerTaskInfo:
 		taskLogger = taskLogger.WithTags(
 			tag.WorkflowTimeoutType(task.TimeoutType),
 		)
-	case *persistenceblobs.TransferTaskInfo:
+	case *persistencespb.TransferTaskInfo:
 		// noop
 	case *persistence.ReplicationTaskInfoWrapper:
 		// noop

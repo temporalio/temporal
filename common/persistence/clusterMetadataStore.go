@@ -28,12 +28,10 @@ import (
 	"errors"
 	"fmt"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
-
-	enumspb "go.temporal.io/api/enums/v1"
-
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 )
 
@@ -145,7 +143,7 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(request *SaveClusterMet
 }
 
 // immutableFieldsChanged returns true if any of immutable fields changed.
-func immutableFieldsChanged(old persistenceblobs.ClusterMetadata, cur persistenceblobs.ClusterMetadata) bool {
+func immutableFieldsChanged(old persistencespb.ClusterMetadata, cur persistencespb.ClusterMetadata) bool {
 	return (old.ClusterName != "" && old.ClusterName != cur.ClusterName) ||
 		(old.ClusterId != "" && old.ClusterId != cur.ClusterId) ||
 		(old.HistoryShardCount != 0 && old.HistoryShardCount != cur.HistoryShardCount)

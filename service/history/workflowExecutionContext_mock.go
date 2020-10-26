@@ -35,8 +35,8 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/api/common/v1"
-	persistenceblobs "go.temporal.io/server/api/persistenceblobs/v1"
-	persistence "go.temporal.io/server/common/persistence"
+	persistence "go.temporal.io/server/api/persistence/v1"
+	persistence0 "go.temporal.io/server/common/persistence"
 )
 
 // MockworkflowExecutionContext is a mock of workflowExecutionContext interface.
@@ -135,10 +135,10 @@ func (mr *MockworkflowExecutionContextMockRecorder) loadWorkflowExecutionForRepl
 }
 
 // loadExecutionStats mocks base method.
-func (m *MockworkflowExecutionContext) loadExecutionStats() (*persistenceblobs.ExecutionStats, error) {
+func (m *MockworkflowExecutionContext) loadExecutionStats() (*persistence.ExecutionStats, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "loadExecutionStats")
-	ret0, _ := ret[0].(*persistenceblobs.ExecutionStats)
+	ret0, _ := ret[0].(*persistence.ExecutionStats)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -214,7 +214,7 @@ func (mr *MockworkflowExecutionContextMockRecorder) setHistorySize(size interfac
 }
 
 // reapplyEvents mocks base method.
-func (m *MockworkflowExecutionContext) reapplyEvents(eventBatches []*persistence.WorkflowEvents) error {
+func (m *MockworkflowExecutionContext) reapplyEvents(eventBatches []*persistence0.WorkflowEvents) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "reapplyEvents", eventBatches)
 	ret0, _ := ret[0].(error)
@@ -228,7 +228,7 @@ func (mr *MockworkflowExecutionContextMockRecorder) reapplyEvents(eventBatches i
 }
 
 // persistFirstWorkflowEvents mocks base method.
-func (m *MockworkflowExecutionContext) persistFirstWorkflowEvents(workflowEvents *persistence.WorkflowEvents) (int64, error) {
+func (m *MockworkflowExecutionContext) persistFirstWorkflowEvents(workflowEvents *persistence0.WorkflowEvents) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "persistFirstWorkflowEvents", workflowEvents)
 	ret0, _ := ret[0].(int64)
@@ -243,7 +243,7 @@ func (mr *MockworkflowExecutionContextMockRecorder) persistFirstWorkflowEvents(w
 }
 
 // persistNonFirstWorkflowEvents mocks base method.
-func (m *MockworkflowExecutionContext) persistNonFirstWorkflowEvents(workflowEvents *persistence.WorkflowEvents) (int64, error) {
+func (m *MockworkflowExecutionContext) persistNonFirstWorkflowEvents(workflowEvents *persistence0.WorkflowEvents) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "persistNonFirstWorkflowEvents", workflowEvents)
 	ret0, _ := ret[0].(int64)
@@ -258,7 +258,7 @@ func (mr *MockworkflowExecutionContextMockRecorder) persistNonFirstWorkflowEvent
 }
 
 // createWorkflowExecution mocks base method.
-func (m *MockworkflowExecutionContext) createWorkflowExecution(newWorkflow *persistence.WorkflowSnapshot, historySize int64, now time.Time, createMode persistence.CreateWorkflowMode, prevRunID string, prevLastWriteVersion int64) error {
+func (m *MockworkflowExecutionContext) createWorkflowExecution(newWorkflow *persistence0.WorkflowSnapshot, historySize int64, now time.Time, createMode persistence0.CreateWorkflowMode, prevRunID string, prevLastWriteVersion int64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "createWorkflowExecution", newWorkflow, historySize, now, createMode, prevRunID, prevLastWriteVersion)
 	ret0, _ := ret[0].(error)
@@ -272,7 +272,7 @@ func (mr *MockworkflowExecutionContextMockRecorder) createWorkflowExecution(newW
 }
 
 // conflictResolveWorkflowExecution mocks base method.
-func (m *MockworkflowExecutionContext) conflictResolveWorkflowExecution(now time.Time, conflictResolveMode persistence.ConflictResolveWorkflowMode, resetMutableState mutableState, newContext workflowExecutionContext, newMutableState mutableState, currentContext workflowExecutionContext, currentMutableState mutableState, currentTransactionPolicy *transactionPolicy) error {
+func (m *MockworkflowExecutionContext) conflictResolveWorkflowExecution(now time.Time, conflictResolveMode persistence0.ConflictResolveWorkflowMode, resetMutableState mutableState, newContext workflowExecutionContext, newMutableState mutableState, currentContext workflowExecutionContext, currentMutableState mutableState, currentTransactionPolicy *transactionPolicy) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "conflictResolveWorkflowExecution", now, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy)
 	ret0, _ := ret[0].(error)
@@ -342,7 +342,7 @@ func (mr *MockworkflowExecutionContextMockRecorder) updateWorkflowExecutionWithN
 }
 
 // updateWorkflowExecutionWithNew mocks base method.
-func (m *MockworkflowExecutionContext) updateWorkflowExecutionWithNew(now time.Time, updateMode persistence.UpdateWorkflowMode, newContext workflowExecutionContext, newMutableState mutableState, currentWorkflowTransactionPolicy transactionPolicy, newWorkflowTransactionPolicy *transactionPolicy) error {
+func (m *MockworkflowExecutionContext) updateWorkflowExecutionWithNew(now time.Time, updateMode persistence0.UpdateWorkflowMode, newContext workflowExecutionContext, newMutableState mutableState, currentWorkflowTransactionPolicy transactionPolicy, newWorkflowTransactionPolicy *transactionPolicy) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "updateWorkflowExecutionWithNew", now, updateMode, newContext, newMutableState, currentWorkflowTransactionPolicy, newWorkflowTransactionPolicy)
 	ret0, _ := ret[0].(error)

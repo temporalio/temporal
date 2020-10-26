@@ -41,7 +41,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
@@ -94,7 +94,7 @@ func (t *transferQueueActiveTaskExecutor) execute(
 	shouldProcessTask bool,
 ) error {
 
-	task, ok := taskInfo.(*persistenceblobs.TransferTaskInfo)
+	task, ok := taskInfo.(*persistencespb.TransferTaskInfo)
 	if !ok {
 		return errUnexpectedQueueTask
 	}
@@ -128,7 +128,7 @@ func (t *transferQueueActiveTaskExecutor) execute(
 }
 
 func (t *transferQueueActiveTaskExecutor) processActivityTask(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -165,7 +165,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -221,7 +221,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 }
 
 func (t *transferQueueActiveTaskExecutor) processCloseExecution(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -333,7 +333,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 }
 
 func (t *transferQueueActiveTaskExecutor) processCancelExecution(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -417,7 +417,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 }
 
 func (t *transferQueueActiveTaskExecutor) processSignalExecution(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -526,7 +526,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 }
 
 func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -630,21 +630,21 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 }
 
 func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStarted(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
 	return t.processRecordWorkflowStartedOrUpsertHelper(task, true)
 }
 
 func (t *transferQueueActiveTaskExecutor) processUpsertWorkflowSearchAttributes(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
 	return t.processRecordWorkflowStartedOrUpsertHelper(task, false)
 }
 
 func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHelper(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	recordStart bool,
 ) (retError error) {
 
@@ -727,7 +727,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 }
 
 func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
 	currentContext, currentRelease, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -844,7 +844,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 }
 
 func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	context workflowExecutionContext,
 	initiatedAttributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 	runID string,
@@ -879,7 +879,7 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 }
 
 func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	context workflowExecutionContext,
 	initiatedAttributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 ) error {
@@ -930,7 +930,7 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionCompleted(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	context workflowExecutionContext,
 	targetNamespace string,
 	targetWorkflowID string,
@@ -967,7 +967,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 }
 
 func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	context workflowExecutionContext,
 	targetNamespace string,
 	targetWorkflowID string,
@@ -1006,7 +1006,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	context workflowExecutionContext,
 	targetNamespace string,
 	targetWorkflowID string,
@@ -1045,7 +1045,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 }
 
 func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	context workflowExecutionContext,
 	targetNamespace string,
 	targetWorkflowID string,
@@ -1112,9 +1112,9 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetry(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	targetNamespace string,
-	requestCancelInfo *persistenceblobs.RequestCancelInfo,
+	requestCancelInfo *persistencespb.RequestCancelInfo,
 ) error {
 
 	request := &historyservice.RequestCancelWorkflowExecutionRequest{
@@ -1156,9 +1156,9 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 }
 
 func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	targetNamespace string,
-	signalInfo *persistenceblobs.SignalInfo,
+	signalInfo *persistencespb.SignalInfo,
 ) error {
 
 	request := &historyservice.SignalWorkflowExecutionRequest{
@@ -1194,10 +1194,10 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 }
 
 func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	namespace string,
 	targetNamespace string,
-	childInfo *persistenceblobs.ChildExecutionInfo,
+	childInfo *persistencespb.ChildExecutionInfo,
 	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 ) (string, error) {
 	request := common.CreateHistoryStartWorkflowRequest(
@@ -1250,7 +1250,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 }
 
 func (t *transferQueueActiveTaskExecutor) resetWorkflow(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	namespace string,
 	reason string,
 	resetPoint *workflowpb.ResetPointInfo,
@@ -1327,7 +1327,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	namespaceID string,
 	namespace string,
-	childInfos map[int64]*persistenceblobs.ChildExecutionInfo,
+	childInfos map[int64]*persistencespb.ChildExecutionInfo,
 ) error {
 
 	if len(childInfos) == 0 {
@@ -1383,7 +1383,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	namespaceID string,
 	namespace string,
-	childInfo *persistenceblobs.ChildExecutionInfo,
+	childInfo *persistencespb.ChildExecutionInfo,
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)

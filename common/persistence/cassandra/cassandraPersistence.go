@@ -35,7 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/convert"
@@ -1094,7 +1094,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
 	}
 
-	activityInfos := make(map[int64]*persistenceblobs.ActivityInfo)
+	activityInfos := make(map[int64]*persistencespb.ActivityInfo)
 	aMap := result["activity_map"].(map[int64][]byte)
 	aMapEncoding := result["activity_map_encoding"].(string)
 	for key, value := range aMap {
@@ -1106,7 +1106,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	}
 	state.ActivityInfos = activityInfos
 
-	timerInfos := make(map[string]*persistenceblobs.TimerInfo)
+	timerInfos := make(map[string]*persistencespb.TimerInfo)
 	tMapEncoding := result["timer_map_encoding"].(string)
 	tMap := result["timer_map"].(map[string][]byte)
 	for key, value := range tMap {
@@ -1118,7 +1118,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	}
 	state.TimerInfos = timerInfos
 
-	childExecutionInfos := make(map[int64]*persistenceblobs.ChildExecutionInfo)
+	childExecutionInfos := make(map[int64]*persistencespb.ChildExecutionInfo)
 	cMap := result["child_executions_map"].(map[int64][]byte)
 	cMapEncoding := result["child_executions_map_encoding"].(string)
 	for key, value := range cMap {
@@ -1130,7 +1130,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	}
 	state.ChildExecutionInfos = childExecutionInfos
 
-	requestCancelInfos := make(map[int64]*persistenceblobs.RequestCancelInfo)
+	requestCancelInfos := make(map[int64]*persistencespb.RequestCancelInfo)
 	rMapEncoding := result["request_cancel_map_encoding"].(string)
 	rMap := result["request_cancel_map"].(map[int64][]byte)
 	for key, value := range rMap {
@@ -1142,7 +1142,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	}
 	state.RequestCancelInfos = requestCancelInfos
 
-	signalInfos := make(map[int64]*persistenceblobs.SignalInfo)
+	signalInfos := make(map[int64]*persistencespb.SignalInfo)
 	sMapEncoding := result["signal_map_encoding"].(string)
 	sMap := result["signal_map"].(map[int64][]byte)
 	for key, value := range sMap {
@@ -1178,7 +1178,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	return &p.InternalGetWorkflowExecutionResponse{State: state}, nil
 }
 
-func protoExecutionStateFromRow(result map[string]interface{}) (*persistenceblobs.WorkflowExecutionState, error) {
+func protoExecutionStateFromRow(result map[string]interface{}) (*persistencespb.WorkflowExecutionState, error) {
 	state, ok := result["execution_state"].([]byte)
 	if !ok {
 		return nil, newPersistedTypeMismatchError("execution_state", "", state, result)
@@ -1258,7 +1258,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			lastWriteVersion := updateWorkflow.LastWriteVersion
 
 			// TODO: just use updateWorkflow.ExecutionState here
-			executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
+			executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistencespb.WorkflowExecutionState{
 				RunId:           runID,
 				CreateRequestId: updateWorkflow.ExecutionState.CreateRequestId,
 				State:           updateWorkflow.ExecutionState.State,
@@ -1270,7 +1270,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			}
 
 			replicationVersions, err := serialization.ReplicationVersionsToBlob(
-				&persistenceblobs.ReplicationVersions{
+				&persistencespb.ReplicationVersions{
 					StartVersion:     &types.Int64Value{Value: startVersion},
 					LastWriteVersion: &types.Int64Value{Value: lastWriteVersion},
 				})
@@ -1373,7 +1373,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 	startVersion := request.NewWorkflowSnapshot.ExecutionInfo.StartVersion
 	lastWriteVersion := request.NewWorkflowSnapshot.LastWriteVersion
 
-	stateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
+	stateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistencespb.WorkflowExecutionState{
 		CreateRequestId: request.NewWorkflowSnapshot.ExecutionState.CreateRequestId,
 		State:           request.NewWorkflowSnapshot.ExecutionState.State,
 		Status:          request.NewWorkflowSnapshot.ExecutionState.Status,
@@ -1384,7 +1384,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 	}
 
 	replicationVersions, err := serialization.ReplicationVersionsToBlob(
-		&persistenceblobs.ReplicationVersions{
+		&persistencespb.ReplicationVersions{
 			StartVersion:     &types.Int64Value{Value: startVersion},
 			LastWriteVersion: &types.Int64Value{Value: lastWriteVersion},
 		})
@@ -1535,7 +1535,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 		state := executionState.State
 		status := executionState.Status
 
-		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
+		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistencespb.WorkflowExecutionState{
 			RunId:           runID,
 			CreateRequestId: createRequestID,
 			State:           state,
@@ -1543,7 +1543,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 		})
 
 		replicationVersions, err := serialization.ReplicationVersionsToBlob(
-			&persistenceblobs.ReplicationVersions{
+			&persistencespb.ReplicationVersions{
 				StartVersion:     &types.Int64Value{Value: executionInfo.StartVersion},
 				LastWriteVersion: &types.Int64Value{Value: lastWriteVersion},
 			})
@@ -2190,7 +2190,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 	if err != nil {
 		if err == gocql.ErrNotFound { // First time task queue is used
 			tl = &p.PersistedTaskQueueInfo{
-				Data: &persistenceblobs.TaskQueueInfo{
+				Data: &persistencespb.TaskQueueInfo{
 					NamespaceId:    request.NamespaceID,
 					Name:           request.TaskQueue,
 					TaskType:       request.TaskType,
@@ -2377,8 +2377,8 @@ func (d *cassandraPersistence) DeleteTaskQueue(request *p.DeleteTaskQueueRequest
 	return nil
 }
 
-func MintAllocatedTaskInfo(taskID *int64, info *persistenceblobs.TaskInfo) *persistenceblobs.AllocatedTaskInfo {
-	return &persistenceblobs.AllocatedTaskInfo{
+func MintAllocatedTaskInfo(taskID *int64, info *persistencespb.TaskInfo) *persistencespb.AllocatedTaskInfo {
+	return &persistencespb.AllocatedTaskInfo{
 		Data:   info,
 		TaskId: *taskID,
 	}
@@ -2464,7 +2464,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 	return &p.CreateTasksResponse{}, nil
 }
 
-func GetTaskTTL(task *persistenceblobs.TaskInfo) int64 {
+func GetTaskTTL(task *persistencespb.TaskInfo) int64 {
 	var ttl int64 = 0
 	if task.ExpiryTime != nil {
 		expiryTtl := convert.Int64Ceil(time.Until(timestamp.TimeValue(task.ExpiryTime)).Seconds())
@@ -2790,7 +2790,7 @@ func mutableStateFromRow(result map[string]interface{}) (*p.InternalWorkflowMuta
 	return mutableState, nil
 }
 
-func ProtoReplicationVersionsFromResultMap(result map[string]interface{}) (*persistenceblobs.ReplicationVersions, error) {
+func ProtoReplicationVersionsFromResultMap(result map[string]interface{}) (*persistencespb.ReplicationVersions, error) {
 	if replMeta, replMetaIsPresent := result["replication_metadata"].([]byte); !replMetaIsPresent || len(replMeta) == 0 {
 		return nil, nil
 	}

@@ -39,7 +39,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -86,15 +86,15 @@ func (s *ExecutionManagerSuiteForEventsV2) SetupTest() {
 	s.ClearTasks()
 }
 
-func (s *ExecutionManagerSuiteForEventsV2) newRandomChecksum() *persistenceblobs.Checksum {
-	return &persistenceblobs.Checksum{
+func (s *ExecutionManagerSuiteForEventsV2) newRandomChecksum() *persistencespb.Checksum {
+	return &persistencespb.Checksum{
 		Flavor:  enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY,
 		Version: 22,
 		Value:   uuid.NewRandom(),
 	}
 }
 
-func (s *ExecutionManagerSuiteForEventsV2) assertChecksumsEqual(expected *persistenceblobs.Checksum, actual *persistenceblobs.Checksum) {
+func (s *ExecutionManagerSuiteForEventsV2) assertChecksumsEqual(expected *persistencespb.Checksum, actual *persistencespb.Checksum) {
 	if actual.GetFlavor() != enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY {
 		// not all stores support checksum persistence today
 		// if its not supported, assert that everything is zero'd out
@@ -116,7 +116,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 
 	_, err0 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
-			ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowExecution.GetWorkflowId(),
 				TaskQueue:                  "taskQueue",
@@ -128,10 +128,10 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
 				EventBranchToken:           []byte("branchToken1"),
-				ExecutionStats:             &persistenceblobs.ExecutionStats{},
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
 			NextEventID: 3,
-			ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           workflowExecution.GetRunId(),
 				CreateRequestId: uuid.New(),
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
@@ -166,7 +166,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	updatedInfo.LastProcessedEvent = int64(2)
 	currentTime := timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC))
 	timerID := "id_1"
-	timerInfos := []*persistenceblobs.TimerInfo{{
+	timerInfos := []*persistencespb.TimerInfo{{
 		Version:    3345,
 		TimerId:    timerID,
 		ExpiryTime: currentTime,
@@ -220,7 +220,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 	_, err0 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		RangeID: s.ShardInfo.GetRangeId(),
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
-			ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
 				WorkflowId:                 workflowExecution.GetWorkflowId(),
 				TaskQueue:                  "taskQueue",
@@ -233,9 +233,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
 				EventBranchToken:           nil,
 				VersionHistories:           versionHistories,
-				ExecutionStats:             &persistenceblobs.ExecutionStats{},
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
-			ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           workflowExecution.GetRunId(),
 				CreateRequestId: uuid.New(),
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
@@ -270,7 +270,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 	updatedInfo.LastProcessedEvent = int64(2)
 	currentTime := timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC))
 	timerID := "id_1"
-	timerInfos := []*persistenceblobs.TimerInfo{{
+	timerInfos := []*persistencespb.TimerInfo{{
 		Version:    3345,
 		TimerId:    timerID,
 		ExpiryTime: currentTime,
@@ -345,7 +345,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 			DeleteTimerInfos:    nil,
 		},
 		NewWorkflowSnapshot: &p.WorkflowSnapshot{
-			ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                updatedInfo.NamespaceId,
 				WorkflowId:                 newWorkflowExecution.GetWorkflowId(),
 				TaskQueue:                  updatedInfo.TaskQueue,
@@ -357,9 +357,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
 				EventBranchToken:           []byte("branchToken1"),
-				ExecutionStats:             &persistenceblobs.ExecutionStats{},
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
-			ExecutionState: &persistenceblobs.WorkflowExecutionState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           newWorkflowExecution.GetRunId(),
 				CreateRequestId: uuid.New(),
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
@@ -478,7 +478,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		},
 	}
 
-	insertTimerInfos := []*persistenceblobs.TimerInfo{{
+	insertTimerInfos := []*persistencespb.TimerInfo{{
 		Version:    100,
 		TimerId:    "id101",
 		ExpiryTime: &currentTime,
@@ -486,7 +486,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		StartedId:  103,
 	}}
 
-	insertActivityInfos := []*persistenceblobs.ActivityInfo{{
+	insertActivityInfos := []*persistencespb.ActivityInfo{{
 		Version:        110,
 		ScheduleId:     111,
 		StartedId:      112,
@@ -494,7 +494,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		ScheduledEvent: &historypb.HistoryEvent{EventId: 1},
 	}}
 
-	insertRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{{
+	insertRequestCancelInfos := []*persistencespb.RequestCancelInfo{{
 		Version:         120,
 		InitiatedId:     121,
 		CancelRequestId: uuid.New(),

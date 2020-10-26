@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/persistence"
@@ -83,14 +83,14 @@ func (s *timerSequenceSuite) TearDownTest() {
 func (s *timerSequenceSuite) TestCreateNextUserTimer_AlreadyCreated() {
 	now := timestamp.TimeNowPtrUtc()
 	timer1Expiry := timestamp.TimePtr(now.Add(100))
-	timerInfo := &persistenceblobs.TimerInfo{
+	timerInfo := &persistencespb.TimerInfo{
 		Version:    123,
 		TimerId:    "some random timer ID",
 		StartedId:  456,
 		ExpiryTime: timer1Expiry,
 		TaskStatus: timerTaskStatusCreated,
 	}
-	timerInfos := map[string]*persistenceblobs.TimerInfo{timerInfo.TimerId: timerInfo}
+	timerInfos := map[string]*persistencespb.TimerInfo{timerInfo.TimerId: timerInfo}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
 
 	modified, err := s.timerSequence.createNextUserTimer()
@@ -102,14 +102,14 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated() {
 	now := timestamp.TimeNowPtrUtc()
 	now = timestamp.TimePtr(now.Add(100))
 	currentVersion := int64(999)
-	timerInfo := &persistenceblobs.TimerInfo{
+	timerInfo := &persistencespb.TimerInfo{
 		Version:    123,
 		TimerId:    "some random timer ID",
 		StartedId:  456,
 		ExpiryTime: now,
 		TaskStatus: timerTaskStatusNone,
 	}
-	timerInfos := map[string]*persistenceblobs.TimerInfo{timerInfo.TimerId: timerInfo}
+	timerInfos := map[string]*persistencespb.TimerInfo{timerInfo.TimerId: timerInfo}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
 	s.mockMutableState.EXPECT().GetUserTimerInfoByEventID(timerInfo.StartedId).Return(timerInfo, true).Times(1)
 
@@ -131,7 +131,7 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated() {
 
 func (s *timerSequenceSuite) TestCreateNextActivityTimer_AlreadyCreated() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -146,7 +146,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_AlreadyCreated() {
 		TimerTaskStatus:         timerTaskStatusCreatedScheduleToClose | timerTaskStatusCreatedScheduleToStart,
 		Attempt:                 12,
 	}
-	activityInfos := map[int64]*persistenceblobs.ActivityInfo{activityInfo.ScheduleId: activityInfo}
+	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
 
 	modified, err := s.timerSequence.createNextActivityTimer()
@@ -157,7 +157,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_AlreadyCreated() {
 func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated() {
 	now := time.Now().UTC()
 	currentVersion := int64(999)
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -172,7 +172,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated() {
 		TimerTaskStatus:         timerTaskStatusNone,
 		Attempt:                 12,
 	}
-	activityInfos := map[int64]*persistenceblobs.ActivityInfo{activityInfo.ScheduleId: activityInfo}
+	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
 	s.mockMutableState.EXPECT().GetActivityInfo(activityInfo.ScheduleId).Return(activityInfo, true).Times(1)
 
@@ -197,7 +197,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated() {
 func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer() {
 	now := time.Now().UTC()
 	currentVersion := int64(999)
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -212,7 +212,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer() {
 		TimerTaskStatus:         timerTaskStatusNone,
 		Attempt:                 12,
 	}
-	activityInfos := map[int64]*persistenceblobs.ActivityInfo{activityInfo.ScheduleId: activityInfo}
+	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
 	s.mockMutableState.EXPECT().GetActivityInfo(activityInfo.ScheduleId).Return(activityInfo, true).Times(1)
 
@@ -237,7 +237,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer() {
 }
 
 func (s *timerSequenceSuite) TestLoadAndSortUserTimers_None() {
-	timerInfos := map[string]*persistenceblobs.TimerInfo{}
+	timerInfos := map[string]*persistencespb.TimerInfo{}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortUserTimers()
@@ -247,14 +247,14 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_None() {
 func (s *timerSequenceSuite) TestLoadAndSortUserTimers_One() {
 	now := timestamp.TimeNowPtrUtc()
 	timer1Expiry := timestamp.TimePtr(now.Add(100))
-	timerInfo := &persistenceblobs.TimerInfo{
+	timerInfo := &persistencespb.TimerInfo{
 		Version:    123,
 		TimerId:    "some random timer ID",
 		StartedId:  456,
 		ExpiryTime: timer1Expiry,
 		TaskStatus: timerTaskStatusCreated,
 	}
-	timerInfos := map[string]*persistenceblobs.TimerInfo{timerInfo.TimerId: timerInfo}
+	timerInfos := map[string]*persistencespb.TimerInfo{timerInfo.TimerId: timerInfo}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortUserTimers()
@@ -271,21 +271,21 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_Multiple() {
 	now := timestamp.TimeNowPtrUtc()
 	timer1Expiry := timestamp.TimePtr(now.Add(100))
 	timer2Expiry := timestamp.TimePtr(now.Add(200))
-	timerInfo1 := &persistenceblobs.TimerInfo{
+	timerInfo1 := &persistencespb.TimerInfo{
 		Version:    123,
 		TimerId:    "some random timer ID",
 		StartedId:  456,
 		ExpiryTime: timer1Expiry,
 		TaskStatus: timerTaskStatusCreated,
 	}
-	timerInfo2 := &persistenceblobs.TimerInfo{
+	timerInfo2 := &persistencespb.TimerInfo{
 		Version:    1234,
 		TimerId:    "other random timer ID",
 		StartedId:  4567,
 		ExpiryTime: timestamp.TimePtr(now.Add(200)),
 		TaskStatus: timerTaskStatusNone,
 	}
-	timerInfos := map[string]*persistenceblobs.TimerInfo{
+	timerInfos := map[string]*persistencespb.TimerInfo{
 		timerInfo1.TimerId: timerInfo1,
 		timerInfo2.TimerId: timerInfo2,
 	}
@@ -311,7 +311,7 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_Multiple() {
 }
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_None() {
-	activityInfos := map[int64]*persistenceblobs.ActivityInfo{}
+	activityInfos := map[int64]*persistencespb.ActivityInfo{}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
@@ -319,7 +319,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_None() {
 }
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_NotScheduled() {
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              common.EmptyEventID,
 		ScheduledTime:           timestamp.TimePtr(time.Time{}),
@@ -333,7 +333,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_NotScheduled() {
 		LastHeartbeatUpdateTime: timestamp.TimePtr(time.Time{}),
 		TimerTaskStatus:         timerTaskStatusNone,
 	}
-	activityInfos := map[int64]*persistenceblobs.ActivityInfo{activityInfo.ScheduleId: activityInfo}
+	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
@@ -342,7 +342,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_NotScheduled() {
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_NotStarted() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -357,7 +357,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_NotStar
 		TimerTaskStatus:         timerTaskStatusCreatedScheduleToClose | timerTaskStatusCreatedScheduleToStart,
 		Attempt:                 12,
 	}
-	activityInfos := map[int64]*persistenceblobs.ActivityInfo{activityInfo.ScheduleId: activityInfo}
+	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
@@ -381,7 +381,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_NotStar
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started_WithHeartbeatTimeout() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -396,7 +396,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		TimerTaskStatus:         timerTaskStatusCreatedScheduleToClose | timerTaskStatusCreatedStartToClose | timerTaskStatusCreatedHeartbeat,
 		Attempt:                 12,
 	}
-	activityInfos := map[int64]*persistenceblobs.ActivityInfo{activityInfo.ScheduleId: activityInfo}
+	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
@@ -427,7 +427,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started_WithoutHeartbeatTimeout() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -442,7 +442,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		TimerTaskStatus:         timerTaskStatusCreatedScheduleToClose | timerTaskStatusCreatedStartToClose,
 		Attempt:                 12,
 	}
-	activityInfos := map[int64]*persistenceblobs.ActivityInfo{activityInfo.ScheduleId: activityInfo}
+	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
@@ -466,7 +466,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started_Heartbeated_WithHeartbeatTimeout() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -481,7 +481,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		TimerTaskStatus:         timerTaskStatusCreatedScheduleToClose | timerTaskStatusCreatedStartToClose | timerTaskStatusCreatedHeartbeat,
 		Attempt:                 12,
 	}
-	activityInfos := map[int64]*persistenceblobs.ActivityInfo{activityInfo.ScheduleId: activityInfo}
+	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
@@ -512,7 +512,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started_Heartbeated_WithoutHeartbeatTimeout() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -527,7 +527,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		TimerTaskStatus:         timerTaskStatusCreatedScheduleToClose | timerTaskStatusCreatedStartToClose,
 		Attempt:                 12,
 	}
-	activityInfos := map[int64]*persistenceblobs.ActivityInfo{activityInfo.ScheduleId: activityInfo}
+	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
@@ -551,7 +551,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 	now := time.Now().UTC()
-	activityInfo1 := &persistenceblobs.ActivityInfo{
+	activityInfo1 := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -566,7 +566,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 		TimerTaskStatus:         timerTaskStatusNone,
 		Attempt:                 12,
 	}
-	activityInfo2 := &persistenceblobs.ActivityInfo{
+	activityInfo2 := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              2345,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -581,7 +581,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 		TimerTaskStatus:         timerTaskStatusNone,
 		Attempt:                 21,
 	}
-	activityInfos := map[int64]*persistenceblobs.ActivityInfo{
+	activityInfos := map[int64]*persistencespb.ActivityInfo{
 		activityInfo1.ScheduleId: activityInfo1,
 		activityInfo2.ScheduleId: activityInfo2,
 	}
@@ -623,7 +623,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 func (s *timerSequenceSuite) TestGetUserTimerTimeout() {
 	now := timestamp.TimeNowPtrUtc()
 	timer1Expiry := timestamp.TimePtr(now.Add(100))
-	timerInfo := &persistenceblobs.TimerInfo{
+	timerInfo := &persistencespb.TimerInfo{
 		Version:    123,
 		TimerId:    "some random timer ID",
 		StartedId:  456,
@@ -650,7 +650,7 @@ func (s *timerSequenceSuite) TestGetUserTimerTimeout() {
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_NotScheduled() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              common.EmptyEventID,
 		ScheduledTime:           timestamp.TimePtr(time.Time{}),
@@ -672,7 +672,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_NotScheduled(
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_Scheduled_NotStarted() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -707,7 +707,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_Scheduled_Not
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_Scheduled_Started() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -733,7 +733,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_Scheduled_Sta
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_NotScheduled() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              common.EmptyEventID,
 		ScheduledTime:           timestamp.TimePtr(time.Time{}),
@@ -755,7 +755,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_NotScheduled(
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_Scheduled() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -790,7 +790,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_Scheduled() {
 
 func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_NotStarted() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -812,7 +812,7 @@ func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_NotStarted() {
 
 func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_Started() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -847,7 +847,7 @@ func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_Started() {
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_NotStarted() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -869,7 +869,7 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_NotSt
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Started_NoHeartbeat() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -904,7 +904,7 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Start
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Started_Heartbeated() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -939,7 +939,7 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Start
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_NotStarted() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -961,7 +961,7 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_No
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_Started_NoHeartbeat() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),
@@ -987,7 +987,7 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_St
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_Started_Heartbeated() {
 	now := time.Now().UTC()
-	activityInfo := &persistenceblobs.ActivityInfo{
+	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
 		ScheduledTime:           timestamp.TimePtr(now),

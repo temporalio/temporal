@@ -30,7 +30,7 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
 
 	"go.temporal.io/server/common/log"
@@ -207,7 +207,7 @@ func (t *timerQueueAckMgrImpl) getFinishedChan() <-chan struct{} {
 	return t.finishedChan
 }
 
-func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistenceblobs.TimerTaskInfo, *persistenceblobs.TimerTaskInfo, bool, error) {
+func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistencespb.TimerTaskInfo, *persistencespb.TimerTaskInfo, bool, error) {
 	if t.maxQueryLevel == t.minQueryLevel {
 		t.maxQueryLevel = t.shard.UpdateTimerMaxReadLevel(t.clusterName)
 	}
@@ -215,7 +215,7 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistenceblobs.TimerTaskIn
 	maxQueryLevel := t.maxQueryLevel
 	pageToken := t.pageToken
 
-	var tasks []*persistenceblobs.TimerTaskInfo
+	var tasks []*persistencespb.TimerTaskInfo
 	morePage := false
 	var err error
 	if minQueryLevel.Before(maxQueryLevel) {
@@ -238,8 +238,8 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistenceblobs.TimerTaskIn
 	// We also get a look ahead task but it doesn't move the read level, this is for timer
 	// to wait on it instead of doing queries.
 
-	var lookAheadTask *persistenceblobs.TimerTaskInfo
-	filteredTasks := []*persistenceblobs.TimerTaskInfo{}
+	var lookAheadTask *persistencespb.TimerTaskInfo
+	filteredTasks := []*persistencespb.TimerTaskInfo{}
 
 TaskFilterLoop:
 	for _, task := range tasks {
@@ -295,11 +295,11 @@ TaskFilterLoop:
 }
 
 // read lookAheadTask from s.GetTimerMaxReadLevel to poll interval from there.
-func (t *timerQueueAckMgrImpl) readLookAheadTask() (*persistenceblobs.TimerTaskInfo, error) {
+func (t *timerQueueAckMgrImpl) readLookAheadTask() (*persistencespb.TimerTaskInfo, error) {
 	minQueryLevel := t.maxQueryLevel
 	maxQueryLevel := maximumTime
 
-	var tasks []*persistenceblobs.TimerTaskInfo
+	var tasks []*persistencespb.TimerTaskInfo
 	var err error
 	tasks, _, err = t.getTimerTasks(minQueryLevel, maxQueryLevel, 1, nil)
 	if err != nil {
@@ -311,7 +311,7 @@ func (t *timerQueueAckMgrImpl) readLookAheadTask() (*persistenceblobs.TimerTaskI
 	return nil, nil
 }
 
-func (t *timerQueueAckMgrImpl) completeTimerTask(task *persistenceblobs.TimerTaskInfo) {
+func (t *timerQueueAckMgrImpl) completeTimerTask(task *persistencespb.TimerTaskInfo) {
 	timerKey := &timerKey{VisibilityTimestamp: timestamp.TimeValue(task.GetVisibilityTime()), TaskID: task.GetTaskId()}
 	t.Lock()
 	defer t.Unlock()
@@ -394,7 +394,7 @@ MoveAckLevelLoop:
 
 // this function does not take cluster name as parameter, due to we only have one timer queue on Cassandra
 // all timer tasks are in this queue and filter will be applied.
-func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestamp time.Time, batchSize int, pageToken []byte) ([]*persistenceblobs.TimerTaskInfo, []byte, error) {
+func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestamp time.Time, batchSize int, pageToken []byte) ([]*persistencespb.TimerTaskInfo, []byte, error) {
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp:  minTimestamp,
 		MaxTimestamp:  maxTimestamp,

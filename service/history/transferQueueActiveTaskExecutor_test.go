@@ -50,7 +50,7 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -154,7 +154,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          1,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -265,7 +265,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 	activityType := "some random activity type"
 	event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		TargetNamespaceId: testTargetNamespaceID,
@@ -320,7 +320,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 	activityType := "some random activity type"
 	event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		TargetNamespaceId: s.targetNamespaceID,
@@ -376,7 +376,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_FirstWork
 	taskID := int64(59)
 	di := addWorkflowTaskScheduledEvent(mutableState)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:     s.version,
 		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
@@ -433,7 +433,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_NonFirstW
 	taskID := int64(59)
 	di = addWorkflowTaskScheduledEvent(mutableState)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:     s.version,
 		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
@@ -493,7 +493,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 	taskID := int64(59)
 	di = addWorkflowTaskScheduledEvent(mutableState)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:     s.version,
 		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
@@ -556,7 +556,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_WorkflowT
 	taskID := int64(59)
 	di = addWorkflowTaskScheduledEvent(mutableState)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:     s.version,
 		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
@@ -606,7 +606,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Duplicati
 	di.StartedID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:     s.version,
 		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
@@ -671,7 +671,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:     s.version,
 		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
@@ -731,7 +731,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:     s.version,
 		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
@@ -864,7 +864,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:     s.version,
 		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
@@ -956,7 +956,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:     s.version,
 		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
@@ -1047,7 +1047,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:     s.version,
 		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
@@ -1105,7 +1105,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 	taskID := int64(59)
 	event, rci := addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -1168,7 +1168,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 	taskID := int64(59)
 	event, rci := addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -1231,7 +1231,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 	taskID := int64(59)
 	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -1298,7 +1298,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 	event, si := addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
 		testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, signalInput, signalControl)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -1374,7 +1374,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 	event, si := addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
 		testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, signalInput, signalControl)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -1441,7 +1441,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 	event, _ = addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
 		testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, signalInput, signalControl)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -1506,7 +1506,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
 		s.childNamespace, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -1596,7 +1596,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 		1*time.Second,
 	)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -1678,7 +1678,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		1*time.Second,
 	)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -1765,7 +1765,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 		1*time.Second,
 	)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -1828,7 +1828,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedT
 	taskID := int64(59)
 	di := addWorkflowTaskScheduledEvent(mutableState)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:     s.version,
 		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
@@ -1876,7 +1876,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAt
 	taskID := int64(59)
 	di := addWorkflowTaskScheduledEvent(mutableState)
 
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:     s.version,
 		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
@@ -1911,8 +1911,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestCopySearchAttributes() {
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
-	task *persistenceblobs.TransferTaskInfo,
-	ai *persistenceblobs.ActivityInfo,
+	task *persistencespb.TransferTaskInfo,
+	ai *persistencespb.ActivityInfo,
 ) *matchingservice.AddActivityTaskRequest {
 	return &matchingservice.AddActivityTaskRequest{
 		NamespaceId:       task.GetTargetNamespaceId(),
@@ -1931,7 +1931,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	mutableState mutableState,
 ) *matchingservice.AddWorkflowTaskRequest {
 
@@ -1962,7 +1962,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStartedRequest(
 	namespace string,
 	startEvent *historypb.HistoryEvent,
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	mutableState mutableState,
 	backoffSeconds time.Duration,
 ) *persistence.RecordWorkflowExecutionStartedRequest {
@@ -1988,8 +1988,8 @@ func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStar
 
 func (s *transferQueueActiveTaskExecutorSuite) createRequestCancelWorkflowExecutionRequest(
 	targetNamespace string,
-	task *persistenceblobs.TransferTaskInfo,
-	rci *persistenceblobs.RequestCancelInfo,
+	task *persistencespb.TransferTaskInfo,
+	rci *persistencespb.RequestCancelInfo,
 ) *historyservice.RequestCancelWorkflowExecutionRequest {
 
 	sourceExecution := commonpb.WorkflowExecution{
@@ -2018,8 +2018,8 @@ func (s *transferQueueActiveTaskExecutorSuite) createRequestCancelWorkflowExecut
 
 func (s *transferQueueActiveTaskExecutorSuite) createSignalWorkflowExecutionRequest(
 	targetNamespace string,
-	task *persistenceblobs.TransferTaskInfo,
-	si *persistenceblobs.SignalInfo,
+	task *persistencespb.TransferTaskInfo,
+	si *persistencespb.SignalInfo,
 ) *historyservice.SignalWorkflowExecutionRequest {
 
 	sourceExecution := commonpb.WorkflowExecution{
@@ -2050,9 +2050,9 @@ func (s *transferQueueActiveTaskExecutorSuite) createSignalWorkflowExecutionRequ
 func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionRequest(
 	namespace string,
 	childNamespace string,
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	mutableState mutableState,
-	ci *persistenceblobs.ChildExecutionInfo,
+	ci *persistencespb.ChildExecutionInfo,
 ) *historyservice.StartWorkflowExecutionRequest {
 
 	event, err := mutableState.GetChildExecutionInitiatedEvent(task.GetScheduleId())
@@ -2094,7 +2094,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttributesRequest(
 	namespace string,
 	startEvent *historypb.HistoryEvent,
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	mutableState mutableState,
 ) *persistence.UpsertWorkflowExecutionRequest {
 
@@ -2121,7 +2121,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createPersistenceMutableState(
 	ms mutableState,
 	lastEventID int64,
 	lastEventVersion int64,
-) *persistenceblobs.WorkflowMutableState {
+) *persistencespb.WorkflowMutableState {
 
 	if ms.GetExecutionInfo().GetVersionHistories() != nil {
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())

@@ -20,35 +20,39 @@
 
 syntax = "proto3";
 
-package temporal.server.api.persistenceblobs.v1;
-option go_package = "go.temporal.io/server/api/persistenceblobs/v1;persistenceblobs";
+package temporal.server.api.persistence.v1;
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "google/protobuf/timestamp.proto";
 
 import "dependencies/gogoproto/gogo.proto";
 
-// branch column
-message HistoryTreeInfo {
-    HistoryBranch branch_info = 1;
-    // For fork operation to prevent race condition of leaking event data when forking branches fail. Also can be used for clean up leaked data.
-    google.protobuf.Timestamp fork_time = 2 [(gogoproto.stdtime) = true];
-    // For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
-    string info = 3;
+import "temporal/api/enums/v1/task_queue.proto";
+
+import "temporal/server/api/enums/v1/task.proto";
+
+// task column
+message AllocatedTaskInfo {
+    TaskInfo data = 1;
+    int64 task_id = 2;
 }
 
-// For history persistence to serialize/deserialize branch details.
-message HistoryBranch {
-    string tree_id = 1;
-    string branch_id = 2;
-    repeated HistoryBranchRange ancestors = 3;
+message TaskInfo {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    int64 schedule_id = 4;
+    google.protobuf.Timestamp create_time = 5 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
 }
 
-// HistoryBranchRange represents a piece of range for a branch.
-message HistoryBranchRange {
-    // BranchId of original branch forked from.
-    string branch_id = 1;
-    // Beginning node for the range, inclusive.
-    int64 begin_node_id = 2;
-    // Ending node for the range, exclusive.
-    int64 end_node_id = 3;
+// task_queue column
+message TaskQueueInfo {
+    string namespace_id = 1;
+    string name = 2;
+    temporal.api.enums.v1.TaskQueueType task_type = 3;
+    temporal.api.enums.v1.TaskQueueKind kind = 4;
+    int64 ack_level = 5;
+    google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_update_time = 7 [(gogoproto.stdtime) = true];
 }

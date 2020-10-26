@@ -29,7 +29,7 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -151,20 +151,20 @@ func (m *metadataManagerImpl) ListNamespaces(request *ListNamespacesRequest) (*L
 
 func (m *metadataManagerImpl) InitializeSystemNamespaces(currentClusterName string) error {
 	_, err := m.CreateNamespace(&CreateNamespaceRequest{
-		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
 				Id:          common.SystemNamespaceID,
 				Name:        common.SystemLocalNamespace,
 				State:       enumspb.NAMESPACE_STATE_REGISTERED,
 				Description: "Temporal internal system namespace",
 				Owner:       "temporal-core@temporal.io",
 			},
-			Config: &persistenceblobs.NamespaceConfig{
+			Config: &persistencespb.NamespaceConfig{
 				Retention:               timestamp.DurationPtr(common.SystemNamespaceRetentionDays),
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 			},
-			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: currentClusterName,
 				Clusters:          GetOrUseDefaultClusters(currentClusterName, nil),
 			},

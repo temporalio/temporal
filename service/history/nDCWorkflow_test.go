@@ -38,7 +38,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 )
@@ -88,12 +88,12 @@ func (s *nDCWorkflowSuite) TestGetMethods() {
 	lastEventTaskID := int64(144)
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
 		LastEventTaskId: lastEventTaskID,
 	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 	}).AnyTimes()
 
@@ -201,12 +201,12 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Error() {
 	lastEventTaskID := int64(144)
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
 		LastEventTaskId: lastEventTaskID,
 	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 	}).AnyTimes()
 
@@ -214,12 +214,12 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Error() {
 	incomingLastEventTaskID := int64(144)
 	incomingLastEventVersion := lastEventVersion - 1
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
-	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
 		LastEventTaskId: incomingLastEventTaskID,
 	}).AnyTimes()
-	incomingMockMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	incomingMockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: incomingRunID,
 	}).AnyTimes()
 
@@ -233,12 +233,12 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().GetNextEventID().Return(lastEventID + 1).AnyTimes()
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
 		LastEventTaskId: lastEventTaskID,
 	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 	}).AnyTimes()
 	nDCWorkflow := newNDCWorkflow(
@@ -264,12 +264,12 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 		noopReleaseFn,
 	)
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
-	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
 		LastEventTaskId: incomingLastEventTaskID,
 	}).AnyTimes()
-	incomingMockMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	incomingMockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: incomingRunID,
 	}).AnyTimes()
 
@@ -316,12 +316,12 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	lastEventTaskID := int64(144)
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
-	executionInfo := &persistenceblobs.WorkflowExecutionInfo{
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
 		LastEventTaskId: lastEventTaskID,
 	}
-	executionState := &persistenceblobs.WorkflowExecutionState{
+	executionState := &persistencespb.WorkflowExecutionState{
 		RunId:  s.runID,
 		State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -351,12 +351,12 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		noopReleaseFn,
 	)
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
-	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
 		LastEventTaskId: incomingLastEventTaskID,
 	}).AnyTimes()
-	incomingMockMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	incomingMockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: incomingRunID,
 	}).AnyTimes()
 

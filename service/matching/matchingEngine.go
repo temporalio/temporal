@@ -41,7 +41,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
@@ -246,7 +246,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
 	now := timestamp.TimePtr(time.Now().UTC())
 	expiry := now.Add(timestamp.DurationValue(addRequest.GetScheduleToStartTimeout()))
-	taskInfo := &persistenceblobs.TaskInfo{
+	taskInfo := &persistencespb.TaskInfo{
 		NamespaceId: namespaceID,
 		RunId:       addRequest.Execution.GetRunId(),
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
@@ -292,7 +292,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 
 	now := timestamp.TimePtr(time.Now().UTC())
 	expiry := now.Add(timestamp.DurationValue(addRequest.GetScheduleToStartTimeout()))
-	taskInfo := &persistenceblobs.TaskInfo{
+	taskInfo := &persistencespb.TaskInfo{
 		NamespaceId: sourceNamespaceID,
 		RunId:       runID,
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),

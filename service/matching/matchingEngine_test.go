@@ -52,7 +52,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
@@ -1802,7 +1802,7 @@ func (m *testTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueRequ
 
 	return &persistence.LeaseTaskQueueResponse{
 		TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
-			Data: &persistenceblobs.TaskQueueInfo{
+			Data: &persistencespb.TaskQueueInfo{
 				AckLevel:    tlm.ackLevel,
 				NamespaceId: request.NamespaceID,
 				Name:        request.TaskQueue,
@@ -1910,7 +1910,7 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 
 	// Then insert all tasks if no errors
 	for _, task := range request.Tasks {
-		tlm.tasks.Put(task.GetTaskId(), &persistenceblobs.AllocatedTaskInfo{
+		tlm.tasks.Put(task.GetTaskId(), &persistencespb.AllocatedTaskInfo{
 			Data:   task.Data,
 			TaskId: task.GetTaskId(),
 		})
@@ -1931,7 +1931,7 @@ func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persi
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(request.NamespaceID, request.TaskQueue, request.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
-	var tasks []*persistenceblobs.AllocatedTaskInfo
+	var tasks []*persistencespb.AllocatedTaskInfo
 
 	it := tlm.tasks.Iterator()
 	for it.Next() {
@@ -1942,7 +1942,7 @@ func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persi
 		if taskID > *request.MaxReadLevel {
 			break
 		}
-		tasks = append(tasks, it.Value().(*persistenceblobs.AllocatedTaskInfo))
+		tasks = append(tasks, it.Value().(*persistencespb.AllocatedTaskInfo))
 	}
 	return &persistence.GetTasksResponse{
 		Tasks: tasks,

@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -115,7 +115,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          1,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -227,7 +227,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Fire() {
 	task := mutableState.insertTimerTasks[0]
 	protoTaskTime := task.(*persistence.UserTimerTask).GetVisibilityTimestamp()
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -301,7 +301,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Noop() {
 	task := mutableState.insertTimerTasks[0]
 	protoTaskTime := task.(*persistence.UserTimerTask).GetVisibilityTimestamp()
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -381,7 +381,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 	task := mutableState.insertTimerTasks[0]
 	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp()
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -464,7 +464,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 	task := mutableState.insertTimerTasks[0]
 	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp()
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -555,7 +555,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	task := mutableState.insertTimerTasks[0]
 	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp()
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -646,7 +646,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	task := mutableState.insertTimerTasks[0]
 	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp()
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -736,7 +736,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	task := mutableState.insertTimerTasks[0]
 	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp()
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -826,7 +826,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 	task := mutableState.insertTimerTasks[0]
 	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, task.(*persistence.ActivityTimeoutTask).TimeoutType)
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -876,7 +876,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 
 	protoTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -934,7 +934,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Noop() {
 
 	protoTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -981,7 +981,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Fire() {
 
 	protoTaskTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt:     1,
 		Version:             s.version,
 		NamespaceId:         s.namespaceID,
@@ -1041,7 +1041,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Noop() {
 
 	protoTaskTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt:     1,
 		Version:             s.version,
 		NamespaceId:         s.namespaceID,
@@ -1121,7 +1121,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 
 	protoTaskTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      execution.GetWorkflowId(),
@@ -1214,7 +1214,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Noop() {
 
 	protoTaskTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      execution.GetWorkflowId(),
@@ -1267,7 +1267,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Fire() {
 
 	protoTaskTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -1332,7 +1332,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Re
 
 	protoTaskTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -1394,7 +1394,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Cr
 
 	protoTaskTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		Version:         s.version,
 		NamespaceId:     s.namespaceID,
@@ -1455,7 +1455,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_WorkflowExpired(
 
 	protoTaskTime := s.now
 	s.NoError(err)
-	timerTask := &persistenceblobs.TimerTaskInfo{
+	timerTask := &persistencespb.TimerTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
 		WorkflowId:     execution.GetWorkflowId(),
@@ -1483,7 +1483,7 @@ func (s *timerQueueActiveTaskExecutorSuite) createPersistenceMutableState(
 	ms mutableState,
 	lastEventID int64,
 	lastEventVersion int64,
-) *persistenceblobs.WorkflowMutableState {
+) *persistencespb.WorkflowMutableState {
 
 	if ms.GetExecutionInfo().GetVersionHistories() != nil {
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())

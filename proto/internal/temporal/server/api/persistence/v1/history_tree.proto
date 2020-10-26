@@ -1,0 +1,54 @@
+// Copyright (c) 2020 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.persistence.v1;
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+
+import "google/protobuf/timestamp.proto";
+
+import "dependencies/gogoproto/gogo.proto";
+
+// branch column
+message HistoryTreeInfo {
+    HistoryBranch branch_info = 1;
+    // For fork operation to prevent race condition of leaking event data when forking branches fail. Also can be used for clean up leaked data.
+    google.protobuf.Timestamp fork_time = 2 [(gogoproto.stdtime) = true];
+    // For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
+    string info = 3;
+}
+
+// For history persistence to serialize/deserialize branch details.
+message HistoryBranch {
+    string tree_id = 1;
+    string branch_id = 2;
+    repeated HistoryBranchRange ancestors = 3;
+}
+
+// HistoryBranchRange represents a piece of range for a branch.
+message HistoryBranchRange {
+    // BranchId of original branch forked from.
+    string branch_id = 1;
+    // Beginning node for the range, inclusive.
+    int64 begin_node_id = 2;
+    // Ending node for the range, exclusive.
+    int64 end_node_id = 3;
+}

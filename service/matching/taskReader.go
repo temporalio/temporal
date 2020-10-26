@@ -30,7 +30,7 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -40,8 +40,8 @@ import (
 
 type (
 	taskReader struct {
-		taskBuffer chan *persistenceblobs.AllocatedTaskInfo // tasks loaded from persistence
-		notifyC    chan struct{}                            // Used as signal to notify pump of new tasks
+		taskBuffer chan *persistencespb.AllocatedTaskInfo // tasks loaded from persistence
+		notifyC    chan struct{}                          // Used as signal to notify pump of new tasks
 		tlMgr      *taskQueueManagerImpl
 		// The cancel objects are to cancel the ratelimiter Wait in dispatchBufferedTasks. The ideal
 		// approach is to use request-scoped contexts and use a unique one for each call to Wait. However
@@ -66,7 +66,7 @@ func newTaskReader(tlMgr *taskQueueManagerImpl) *taskReader {
 		dispatcherShutdownC: make(chan struct{}),
 		// we always dequeue the head of the buffer and try to dispatch it to a poller
 		// so allocate one less than desired target buffer size
-		taskBuffer: make(chan *persistenceblobs.AllocatedTaskInfo, tlMgr.config.GetTasksBatchSize()-1),
+		taskBuffer: make(chan *persistencespb.AllocatedTaskInfo, tlMgr.config.GetTasksBatchSize()-1),
 	}
 }
 
@@ -187,7 +187,7 @@ getTasksPumpLoop:
 	checkIdleTaskQueueTimer.Stop()
 }
 
-func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistenceblobs.AllocatedTaskInfo, error) {
+func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistencespb.AllocatedTaskInfo, error) {
 	response, err := tr.tlMgr.executeWithRetry(func() (interface{}, error) {
 		return tr.tlMgr.db.GetTasks(readLevel, maxReadLevel, tr.tlMgr.config.GetTasksBatchSize())
 	})
@@ -200,8 +200,8 @@ func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64)
 // Returns a batch of tasks from persistence starting form current read level.
 // Also return a number that can be used to update readLevel
 // Also return a bool to indicate whether read is finished
-func (tr *taskReader) getTaskBatch() ([]*persistenceblobs.AllocatedTaskInfo, int64, bool, error) {
-	var tasks []*persistenceblobs.AllocatedTaskInfo
+func (tr *taskReader) getTaskBatch() ([]*persistencespb.AllocatedTaskInfo, int64, bool, error) {
+	var tasks []*persistencespb.AllocatedTaskInfo
 	readLevel := tr.tlMgr.taskAckManager.getReadLevel()
 	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
 
@@ -234,7 +234,7 @@ func (tr *taskReader) handleIdleTimeout() {
 	tr.tlMgr.Stop()
 }
 
-func (tr *taskReader) addTasksToBuffer(tasks []*persistenceblobs.AllocatedTaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
+func (tr *taskReader) addTasksToBuffer(tasks []*persistencespb.AllocatedTaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
 	for _, t := range tasks {
 		if taskqueue.IsTaskExpired(t) {
 			tr.scope().IncCounter(metrics.ExpiredTasksPerTaskQueueCounter)
@@ -251,7 +251,7 @@ func (tr *taskReader) addTasksToBuffer(tasks []*persistenceblobs.AllocatedTaskIn
 }
 
 func (tr *taskReader) addSingleTaskToBuffer(
-	task *persistenceblobs.AllocatedTaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
+	task *persistencespb.AllocatedTaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
 	tr.tlMgr.taskAckManager.addTask(task.GetTaskId())
 	for {
 		select {

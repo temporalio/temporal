@@ -30,7 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -107,7 +107,7 @@ func (db *taskQueueDB) UpdateState(ackLevel int64) error {
 	db.Lock()
 	defer db.Unlock()
 	_, err := db.store.UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
-		TaskQueueInfo: &persistenceblobs.TaskQueueInfo{
+		TaskQueueInfo: &persistencespb.TaskQueueInfo{
 			NamespaceId: db.namespaceID,
 			Name:        db.taskQueueName,
 			TaskType:    db.taskType,
@@ -123,13 +123,13 @@ func (db *taskQueueDB) UpdateState(ackLevel int64) error {
 }
 
 // CreateTasks creates a batch of given tasks for this task queue
-func (db *taskQueueDB) CreateTasks(tasks []*persistenceblobs.AllocatedTaskInfo) (*persistence.CreateTasksResponse, error) {
+func (db *taskQueueDB) CreateTasks(tasks []*persistencespb.AllocatedTaskInfo) (*persistence.CreateTasksResponse, error) {
 	db.Lock()
 	defer db.Unlock()
 	return db.store.CreateTasks(
 		&persistence.CreateTasksRequest{
 			TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
-				Data: &persistenceblobs.TaskQueueInfo{
+				Data: &persistencespb.TaskQueueInfo{
 					NamespaceId: db.namespaceID,
 					Name:        db.taskQueueName,
 					TaskType:    db.taskType,

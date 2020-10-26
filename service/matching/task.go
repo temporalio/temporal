@@ -29,14 +29,14 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 type (
 	// genericTaskInfo contains the info for an activity or workflow task
 	genericTaskInfo struct {
-		*persistenceblobs.AllocatedTaskInfo
-		completionFunc func(*persistenceblobs.AllocatedTaskInfo, error)
+		*persistencespb.AllocatedTaskInfo
+		completionFunc func(*persistencespb.AllocatedTaskInfo, error)
 	}
 	// queryTaskInfo contains the info for a query task
 	queryTaskInfo struct {
@@ -65,8 +65,8 @@ type (
 )
 
 func newInternalTask(
-	info *persistenceblobs.AllocatedTaskInfo,
-	completionFunc func(*persistenceblobs.AllocatedTaskInfo, error),
+	info *persistencespb.AllocatedTaskInfo,
+	completionFunc func(*persistencespb.AllocatedTaskInfo, error),
 	source enumsspb.TaskSource,
 	forwardedFrom string,
 	forSyncMatch bool,

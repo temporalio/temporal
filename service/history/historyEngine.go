@@ -47,7 +47,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client/admin"
@@ -1121,7 +1121,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 		}
 		currentBranchToken = currentVersionHistory.GetBranchToken()
 	}
-	branchInfo := persistenceblobs.HistoryBranch{}
+	branchInfo := persistencespb.HistoryBranch{}
 	err = branchInfo.Unmarshal(currentBranchToken)
 	if err != nil {
 		response.TreeId = err.Error()
@@ -2760,7 +2760,7 @@ func setTaskInfo(
 
 // for startWorkflowExecution & signalWithStart to handle workflow reuse policy
 func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
-	prevExecutionState *persistenceblobs.WorkflowExecutionState,
+	prevExecutionState *persistencespb.WorkflowExecutionState,
 	namespaceID string,
 	execution commonpb.WorkflowExecution,
 	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,

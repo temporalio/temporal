@@ -35,7 +35,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -89,7 +89,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          10,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -149,7 +149,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	rebuiltHistorySize := int64(9999)
 	newBranchToken := []byte("other random branch token")
 
-	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
 	mockBaseWorkflowReleaseFnCalled := false
 	mockBaseWorkflowReleaseFn := func(err error) {
@@ -225,7 +225,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 	incomingFirstEventID := baseEventID + 12
 	incomingFirstEventVersion := baseVersion + 3
 
-	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
 	mockBaseWorkflowReleaseFn := func(err error) {
 	}

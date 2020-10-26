@@ -40,7 +40,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/convert"
 	p "go.temporal.io/server/common/persistence"
@@ -723,7 +723,7 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 }
 
 // persistence helper
-func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*persistenceblobs.HistoryBranch {
+func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*persistencespb.HistoryBranch {
 	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
 		BranchToken: br,
 		ShardID:     convert.Int32Ptr(s.ShardInfo.GetShardId()),
@@ -732,7 +732,7 @@ func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*persistenceblo
 	return resp.Branches
 }
 
-func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistenceblobs.HistoryBranch {
+func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistencespb.HistoryBranch {
 	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
 		TreeID:  treeID,
 		ShardID: convert.Int32Ptr(s.ShardInfo.GetShardId()),

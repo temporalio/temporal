@@ -36,8 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
-
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
@@ -55,7 +54,7 @@ func TestDeliverBufferTasks(t *testing.T) {
 		func(tlm *taskQueueManagerImpl) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
-			tlm.taskReader.taskBuffer <- &persistenceblobs.AllocatedTaskInfo{}
+			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
 			_, err := tlm.matcher.ratelimit(context.Background()) // consume the token
 			assert.NoError(t, err)
 			tlm.taskReader.cancelFunc()
@@ -80,7 +79,7 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	defer controller.Finish()
 
 	tlm := createTestTaskQueueManager(controller)
-	tlm.taskReader.taskBuffer <- &persistenceblobs.AllocatedTaskInfo{}
+	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -105,16 +104,16 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	require.Equal(t, int64(0), tlm.taskAckManager.getReadLevel())
 
 	// Add all expired tasks
-	tasks := []*persistenceblobs.AllocatedTaskInfo{
+	tasks := []*persistencespb.AllocatedTaskInfo{
 		{
-			Data: &persistenceblobs.TaskInfo{
+			Data: &persistencespb.TaskInfo{
 				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
 				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
 			},
 			TaskId: 11,
 		},
 		{
-			Data: &persistenceblobs.TaskInfo{
+			Data: &persistencespb.TaskInfo{
 				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
 				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
 			},
@@ -127,16 +126,16 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	require.Equal(t, int64(12), tlm.taskAckManager.getReadLevel())
 
 	// Now add a mix of valid and expired tasks
-	require.True(t, tlm.taskReader.addTasksToBuffer([]*persistenceblobs.AllocatedTaskInfo{
+	require.True(t, tlm.taskReader.addTasksToBuffer([]*persistencespb.AllocatedTaskInfo{
 		{
-			Data: &persistenceblobs.TaskInfo{
+			Data: &persistencespb.TaskInfo{
 				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
 				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
 			},
 			TaskId: 13,
 		},
 		{
-			Data: &persistenceblobs.TaskInfo{
+			Data: &persistencespb.TaskInfo{
 				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
 				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
 			},

@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -79,7 +79,7 @@ func (s *nDCConflictResolverSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          10,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -129,12 +129,12 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 	s.NoError(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
 	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 	}).AnyTimes()
 
@@ -145,7 +145,7 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 	)
 	mockRebuildMutableState := NewMockmutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
-		&persistenceblobs.WorkflowExecutionInfo{
+		&persistencespb.WorkflowExecutionInfo{
 			VersionHistories: versionhistory.NewVHS(
 				versionhistory.New(
 					branchToken1,
@@ -186,7 +186,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_NoRebuild() {
 		[]*historyspb.VersionHistoryItem{versionHistoryItem},
 	)
 	versionHistories := versionhistory.NewVHS(versionHistory)
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
 	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.prepareMutableState(context.Background(), 0, version)
 	s.NoError(err)
@@ -225,12 +225,12 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	s.Nil(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
 	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 	}).AnyTimes()
 
@@ -241,7 +241,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	)
 	mockRebuildMutableState := NewMockmutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
-		&persistenceblobs.WorkflowExecutionInfo{
+		&persistencespb.WorkflowExecutionInfo{
 			VersionHistories: versionhistory.NewVHS(
 				versionhistory.New(
 					branchToken1,

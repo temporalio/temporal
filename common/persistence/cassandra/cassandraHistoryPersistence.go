@@ -32,7 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -120,7 +120,7 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 	var err error
 	if request.IsNewBranch {
 		h.sortAncestors(branchInfo.Ancestors)
-		treeInfoDataBlob, err := serialization.HistoryTreeInfoToBlob(&persistenceblobs.HistoryTreeInfo{
+		treeInfoDataBlob, err := serialization.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
 			BranchInfo: branchInfo,
 			ForkTime:   timestamp.TimeNowPtrUtc(),
 			Info:       request.Info,
@@ -274,14 +274,14 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 ) (*p.InternalForkHistoryBranchResponse, error) {
 
 	forkB := request.ForkBranchInfo
-	newAncestors := make([]*persistenceblobs.HistoryBranchRange, 0, len(forkB.Ancestors)+1)
+	newAncestors := make([]*persistencespb.HistoryBranchRange, 0, len(forkB.Ancestors)+1)
 
 	beginNodeID := p.GetBeginNodeID(forkB)
 	if beginNodeID >= request.ForkNodeID {
 		// this is the case that new branch's ancestors doesn't include the forking branch
 		for _, br := range forkB.Ancestors {
 			if br.GetEndNodeId() >= request.ForkNodeID {
-				newAncestors = append(newAncestors, &persistenceblobs.HistoryBranchRange{
+				newAncestors = append(newAncestors, &persistencespb.HistoryBranchRange{
 					BranchId:    br.GetBranchId(),
 					BeginNodeId: br.GetBeginNodeId(),
 					EndNodeId:   request.ForkNodeID,
@@ -294,15 +294,15 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 	} else {
 		// this is the case the new branch will inherit all ancestors from forking branch
 		newAncestors = forkB.Ancestors
-		newAncestors = append(newAncestors, &persistenceblobs.HistoryBranchRange{
+		newAncestors = append(newAncestors, &persistencespb.HistoryBranchRange{
 			BranchId:    forkB.GetBranchId(),
 			BeginNodeId: beginNodeID,
 			EndNodeId:   request.ForkNodeID,
 		})
 	}
 
-	hti := &persistenceblobs.HistoryTreeInfo{
-		BranchInfo: &persistenceblobs.HistoryBranch{
+	hti := &persistencespb.HistoryTreeInfo{
+		BranchInfo: &persistencespb.HistoryBranch{
 			TreeId:    forkB.TreeId,
 			BranchId:  request.NewBranchID,
 			Ancestors: newAncestors,
@@ -346,7 +346,7 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 
 	brsToDelete := branch.Ancestors
 	beginNodeID := p.GetBeginNodeID(branch)
-	brsToDelete = append(brsToDelete, &persistenceblobs.HistoryBranchRange{
+	brsToDelete = append(brsToDelete, &persistencespb.HistoryBranchRange{
 		BranchId:    branch.GetBranchId(),
 		BeginNodeId: beginNodeID,
 	})
@@ -464,7 +464,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 	query := h.session.Query(v2templateReadAllBranches, treeID)
 
 	pagingToken := []byte{}
-	branches := make([]*persistenceblobs.HistoryBranch, 0)
+	branches := make([]*persistencespb.HistoryBranch, 0)
 
 	var iter *gocql.Iter
 	for {
@@ -505,7 +505,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 }
 
 func (h *cassandraHistoryV2Persistence) sortAncestors(
-	ans []*persistenceblobs.HistoryBranchRange,
+	ans []*persistencespb.HistoryBranchRange,
 ) {
 	if len(ans) > 0 {
 		// sort ans based onf EndNodeID so that we can set BeginNodeID

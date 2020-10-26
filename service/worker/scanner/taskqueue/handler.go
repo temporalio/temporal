@@ -29,7 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -143,7 +143,7 @@ func (s *Scavenger) deleteHandlerLog(key *p.TaskQueueKey, state *taskQueueState,
 	}
 }
 
-func IsTaskExpired(t *persistenceblobs.AllocatedTaskInfo) bool {
+func IsTaskExpired(t *persistencespb.AllocatedTaskInfo) bool {
 	tExpiry := timestamp.TimeValue(t.Data.ExpiryTime)
 	tEpoch := time.Unix(0, 0).UTC()
 	tNow := time.Now().UTC()

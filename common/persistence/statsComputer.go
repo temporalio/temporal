@@ -24,7 +24,7 @@
 
 package persistence
 
-import "go.temporal.io/server/api/persistenceblobs/v1"
+import persistencespb "go.temporal.io/server/api/persistence/v1"
 
 type (
 	// statsComputer is to computing struct sizes after serialization
@@ -186,7 +186,7 @@ func (sc *statsComputer) computeMutableStateUpdateStats(req *InternalUpdateWorkf
 	}
 }
 
-func computeExecutionInfoSize(executionInfo *persistenceblobs.WorkflowExecutionInfo) int {
+func computeExecutionInfoSize(executionInfo *persistencespb.WorkflowExecutionInfo) int {
 	if executionInfo == nil {
 		return 0
 	}
@@ -199,7 +199,7 @@ func computeExecutionInfoSize(executionInfo *persistenceblobs.WorkflowExecutionI
 	return size
 }
 
-func computeActivityInfoSize(ai *persistenceblobs.ActivityInfo) int {
+func computeActivityInfoSize(ai *persistencespb.ActivityInfo) int {
 	if ai == nil {
 		return 0
 	}
@@ -218,7 +218,7 @@ func computeActivityInfoSize(ai *persistenceblobs.ActivityInfo) int {
 	return size
 }
 
-func computeTimerInfoSize(ti *persistenceblobs.TimerInfo) int {
+func computeTimerInfoSize(ti *persistencespb.TimerInfo) int {
 	if ti == nil {
 		return 0
 	}
@@ -228,7 +228,7 @@ func computeTimerInfoSize(ti *persistenceblobs.TimerInfo) int {
 	return size
 }
 
-func computeChildInfoSize(ci *persistenceblobs.ChildExecutionInfo) int {
+func computeChildInfoSize(ci *persistencespb.ChildExecutionInfo) int {
 	if ci == nil {
 		return 0
 	}
@@ -242,7 +242,7 @@ func computeChildInfoSize(ci *persistenceblobs.ChildExecutionInfo) int {
 	return size
 }
 
-func computeSignalInfoSize(si *persistenceblobs.SignalInfo) int {
+func computeSignalInfoSize(si *persistencespb.SignalInfo) int {
 	if si == nil {
 		return 0
 	}

@@ -20,8 +20,8 @@
 
 syntax = "proto3";
 
-package temporal.server.api.persistenceblobs.v1;
-option go_package = "go.temporal.io/server/api/persistenceblobs/v1;persistenceblobs";
+package temporal.server.api.persistence.v1;
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "temporal/api/version/v1/message.proto";
 

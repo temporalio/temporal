@@ -32,7 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/failure"
@@ -151,7 +151,7 @@ func Test_NextRetry(t *testing.T) {
 	identity := "some-worker-identity"
 
 	// no retry without retry policy
-	ai := &persistenceblobs.ActivityInfo{
+	ai := &persistencespb.ActivityInfo{
 		ScheduleToStartTimeout:      timestamp.DurationFromSeconds(5),
 		ScheduleToCloseTimeout:      timestamp.DurationFromSeconds(30),
 		StartToCloseTimeout:         timestamp.DurationFromSeconds(25),

@@ -40,7 +40,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
@@ -90,7 +90,7 @@ func (s *mutableStateSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          0,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -271,7 +271,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	activityID := "activity_id"
 	activityResult := payloads.EncodeString("activity_result")
 
-	info := &persistenceblobs.WorkflowExecutionInfo{
+	info := &persistencespb.WorkflowExecutionInfo{
 		NamespaceId:                namespaceID,
 		WorkflowId:                 we.GetWorkflowId(),
 		TaskQueue:                  tl,
@@ -287,13 +287,13 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		WorkflowTaskAttempt:        1,
 	}
 
-	state := &persistenceblobs.WorkflowExecutionState{
+	state := &persistencespb.WorkflowExecutionState{
 		RunId:  we.GetRunId(),
 		State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 
-	activityInfos := map[int64]*persistenceblobs.ActivityInfo{
+	activityInfos := map[int64]*persistencespb.ActivityInfo{
 		5: {
 			Version:                int64(1),
 			ScheduleId:             int64(5),
@@ -330,7 +330,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		},
 	}
 
-	dbState := &persistenceblobs.WorkflowMutableState{
+	dbState := &persistencespb.WorkflowMutableState{
 		ExecutionInfo:  info,
 		ExecutionState: state,
 		NextEventId:    int64(8),
@@ -357,11 +357,11 @@ func (s *mutableStateSuite) TestChecksum() {
 	testCases := []struct {
 		name                 string
 		enableBufferedEvents bool
-		closeTxFunc          func(ms *mutableStateBuilder) (*persistenceblobs.Checksum, error)
+		closeTxFunc          func(ms *mutableStateBuilder) (*persistencespb.Checksum, error)
 	}{
 		{
 			name: "closeTransactionAsSnapshot",
-			closeTxFunc: func(ms *mutableStateBuilder) (*persistenceblobs.Checksum, error) {
+			closeTxFunc: func(ms *mutableStateBuilder) (*persistencespb.Checksum, error) {
 				snapshot, _, err := ms.CloseTransactionAsSnapshot(time.Now().UTC(), transactionPolicyPassive)
 				if err != nil {
 					return nil, err
@@ -372,7 +372,7 @@ func (s *mutableStateSuite) TestChecksum() {
 		{
 			name:                 "closeTransactionAsMutation",
 			enableBufferedEvents: true,
-			closeTxFunc: func(ms *mutableStateBuilder) (*persistenceblobs.Checksum, error) {
+			closeTxFunc: func(ms *mutableStateBuilder) (*persistencespb.Checksum, error) {
 				mutation, _, err := ms.CloseTransactionAsMutation(time.Now().UTC(), transactionPolicyPassive)
 				if err != nil {
 					return nil, err
@@ -707,16 +707,16 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 
 func (s *mutableStateSuite) newNamespaceCacheEntry() *cache.NamespaceCacheEntry {
 	return cache.NewNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Name: "mutableStateTest"},
-		&persistenceblobs.NamespaceConfig{},
+		&persistencespb.NamespaceInfo{Name: "mutableStateTest"},
+		&persistencespb.NamespaceConfig{},
 		true,
-		&persistenceblobs.NamespaceReplicationConfig{},
+		&persistencespb.NamespaceReplicationConfig{},
 		1,
 		nil,
 	)
 }
 
-func (s *mutableStateSuite) buildWorkflowMutableState() *persistenceblobs.WorkflowMutableState {
+func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.WorkflowMutableState {
 	namespaceID := testNamespaceID
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -725,7 +725,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistenceblobs.Workfl
 	tl := "testTaskQueue"
 	failoverVersion := int64(300)
 
-	info := &persistenceblobs.WorkflowExecutionInfo{
+	info := &persistencespb.WorkflowExecutionInfo{
 		NamespaceId:                namespaceID,
 		WorkflowId:                 we.GetWorkflowId(),
 		TaskQueue:                  tl,
@@ -751,13 +751,13 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistenceblobs.Workfl
 		},
 	}
 
-	state := &persistenceblobs.WorkflowExecutionState{
+	state := &persistencespb.WorkflowExecutionState{
 		RunId:  we.GetRunId(),
 		State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 
-	activityInfos := map[int64]*persistenceblobs.ActivityInfo{
+	activityInfos := map[int64]*persistencespb.ActivityInfo{
 		5: {
 			Version:                failoverVersion,
 			ScheduleId:             int64(90),
@@ -773,7 +773,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistenceblobs.Workfl
 	}
 
 	expiryTime := timestamp.TimeNowPtrUtcAddDuration(time.Hour)
-	timerInfos := map[string]*persistenceblobs.TimerInfo{
+	timerInfos := map[string]*persistencespb.TimerInfo{
 		"25": {
 			Version:    failoverVersion,
 			TimerId:    "25",
@@ -782,7 +782,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistenceblobs.Workfl
 		},
 	}
 
-	childInfos := map[int64]*persistenceblobs.ChildExecutionInfo{
+	childInfos := map[int64]*persistencespb.ChildExecutionInfo{
 		80: {
 			Version:               failoverVersion,
 			InitiatedId:           80,
@@ -795,7 +795,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistenceblobs.Workfl
 		},
 	}
 
-	signalInfos := map[int64]*persistenceblobs.SignalInfo{
+	signalInfos := map[int64]*persistencespb.SignalInfo{
 		75: {
 			Version:               failoverVersion,
 			InitiatedId:           75,
@@ -822,7 +822,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistenceblobs.Workfl
 		},
 	}
 
-	return &persistenceblobs.WorkflowMutableState{
+	return &persistencespb.WorkflowMutableState{
 		ExecutionInfo:       info,
 		ExecutionState:      state,
 		NextEventId:         int64(101),

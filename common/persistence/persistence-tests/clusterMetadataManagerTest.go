@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	versionpb "go.temporal.io/api/version/v1"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 )
@@ -293,7 +293,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	// First commit, this should be persisted
 	initialResp, err := s.ClusterMetadataManager.SaveClusterMetadata(
 		&p.SaveClusterMetadataRequest{
-			ClusterMetadata: persistenceblobs.ClusterMetadata{
+			ClusterMetadata: persistencespb.ClusterMetadata{
 				ClusterName:       clusterNameToPersist,
 				HistoryShardCount: historyShardsToPersist,
 				ClusterId:         clusterIdToPersist,
@@ -317,7 +317,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	// Attempt to overwrite with new values
 	var wrongClusterName = "overWriteClusterName"
 	secondResp, err := s.ClusterMetadataManager.SaveClusterMetadata(&p.SaveClusterMetadataRequest{
-		ClusterMetadata: persistenceblobs.ClusterMetadata{
+		ClusterMetadata: persistencespb.ClusterMetadata{
 			ClusterName:       wrongClusterName,
 			HistoryShardCount: int32(77),
 		}})

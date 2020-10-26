@@ -33,7 +33,7 @@ import (
 
 	"go.temporal.io/server/common/convert"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
@@ -123,7 +123,7 @@ func (s *shardControllerSuite) TestAcquireShardSuccess() {
 			s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(s.mockHistoryEngine).Once()
 			s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 				&persistence.GetShardResponse{
-					ShardInfo: &persistenceblobs.ShardInfo{
+					ShardInfo: &persistencespb.ShardInfo{
 						ShardId:             shardID,
 						Owner:               s.hostInfo.Identity(),
 						RangeId:             5,
@@ -142,7 +142,7 @@ func (s *shardControllerSuite) TestAcquireShardSuccess() {
 					},
 				}, nil).Once()
 			s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
-				ShardInfo: &persistenceblobs.ShardInfo{
+				ShardInfo: &persistencespb.ShardInfo{
 					ShardId:             shardID,
 					Owner:               s.hostInfo.Identity(),
 					RangeId:             6,
@@ -203,7 +203,7 @@ func (s *shardControllerSuite) TestAcquireShardsConcurrently() {
 			s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(s.mockHistoryEngine).Once()
 			s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 				&persistence.GetShardResponse{
-					ShardInfo: &persistenceblobs.ShardInfo{
+					ShardInfo: &persistencespb.ShardInfo{
 						ShardId:             shardID,
 						Owner:               s.hostInfo.Identity(),
 						RangeId:             5,
@@ -222,7 +222,7 @@ func (s *shardControllerSuite) TestAcquireShardsConcurrently() {
 					},
 				}, nil).Once()
 			s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
-				ShardInfo: &persistenceblobs.ShardInfo{
+				ShardInfo: &persistencespb.ShardInfo{
 					ShardId:             shardID,
 					Owner:               s.hostInfo.Identity(),
 					RangeId:             6,
@@ -290,7 +290,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 		s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(s.mockHistoryEngine).Once()
 		s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 			&persistence.GetShardResponse{
-				ShardInfo: &persistenceblobs.ShardInfo{
+				ShardInfo: &persistencespb.ShardInfo{
 					ShardId:             shardID,
 					Owner:               s.hostInfo.Identity(),
 					RangeId:             5,
@@ -309,7 +309,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 				},
 			}, nil).Once()
 		s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:             shardID,
 				Owner:               s.hostInfo.Identity(),
 				RangeId:             6,
@@ -362,7 +362,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 		s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(s.mockHistoryEngine).Once()
 		s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 			&persistence.GetShardResponse{
-				ShardInfo: &persistenceblobs.ShardInfo{
+				ShardInfo: &persistencespb.ShardInfo{
 					ShardId:             shardID,
 					Owner:               s.hostInfo.Identity(),
 					RangeId:             5,
@@ -381,7 +381,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 				},
 			}, nil).Once()
 		s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:             shardID,
 				Owner:               s.hostInfo.Identity(),
 				RangeId:             6,
@@ -569,7 +569,7 @@ func (s *shardControllerSuite) setupMocksForAcquireShard(shardID int32, mockEngi
 	s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(mockEngine).Once()
 	s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: int32(shardID)}).Return(
 		&persistence.GetShardResponse{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:             int32(shardID),
 				Owner:               s.hostInfo.Identity(),
 				RangeId:             currentRangeID,
@@ -588,7 +588,7 @@ func (s *shardControllerSuite) setupMocksForAcquireShard(shardID int32, mockEngi
 			},
 		}, nil).Once()
 	s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
-		ShardInfo: &persistenceblobs.ShardInfo{
+		ShardInfo: &persistencespb.ShardInfo{
 			ShardId:             int32(shardID),
 			Owner:               s.hostInfo.Identity(),
 			RangeId:             newRangeID,

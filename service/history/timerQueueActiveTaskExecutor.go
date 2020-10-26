@@ -36,7 +36,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/failure"
@@ -78,7 +78,7 @@ func (t *timerQueueActiveTaskExecutor) execute(
 	taskInfo queueTaskInfo,
 	shouldProcessTask bool,
 ) error {
-	timerTask, ok := taskInfo.(*persistenceblobs.TimerTaskInfo)
+	timerTask, ok := taskInfo.(*persistencespb.TimerTaskInfo)
 	if !ok {
 		return errUnexpectedQueueTask
 	}
@@ -108,7 +108,7 @@ func (t *timerQueueActiveTaskExecutor) execute(
 }
 
 func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
-	task *persistenceblobs.TimerTaskInfo,
+	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -160,7 +160,7 @@ Loop:
 }
 
 func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
-	task *persistenceblobs.TimerTaskInfo,
+	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -262,7 +262,7 @@ Loop:
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
-	task *persistenceblobs.TimerTaskInfo,
+	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -334,7 +334,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
-	task *persistenceblobs.TimerTaskInfo,
+	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -369,7 +369,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 }
 
 func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
-	task *persistenceblobs.TimerTaskInfo,
+	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -456,7 +456,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
-	task *persistenceblobs.TimerTaskInfo,
+	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(

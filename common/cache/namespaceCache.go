@@ -39,7 +39,7 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -136,9 +136,9 @@ type (
 	NamespaceCacheEntry struct {
 		clusterMetadata cluster.Metadata
 		sync.RWMutex
-		info                        *persistenceblobs.NamespaceInfo
-		config                      *persistenceblobs.NamespaceConfig
-		replicationConfig           *persistenceblobs.NamespaceReplicationConfig
+		info                        *persistencespb.NamespaceInfo
+		config                      *persistencespb.NamespaceConfig
+		replicationConfig           *persistencespb.NamespaceReplicationConfig
 		configVersion               int64
 		failoverVersion             int64
 		isGlobalNamespace           bool
@@ -195,9 +195,9 @@ func newNamespaceCacheEntry(
 
 // NewGlobalNamespaceCacheEntryForTest returns an entry with test data
 func NewGlobalNamespaceCacheEntryForTest(
-	info *persistenceblobs.NamespaceInfo,
-	config *persistenceblobs.NamespaceConfig,
-	repConfig *persistenceblobs.NamespaceReplicationConfig,
+	info *persistencespb.NamespaceInfo,
+	config *persistencespb.NamespaceConfig,
+	repConfig *persistencespb.NamespaceReplicationConfig,
 	failoverVersion int64,
 	clusterMetadata cluster.Metadata,
 ) *NamespaceCacheEntry {
@@ -214,8 +214,8 @@ func NewGlobalNamespaceCacheEntryForTest(
 
 // NewLocalNamespaceCacheEntryForTest returns an entry with test data
 func NewLocalNamespaceCacheEntryForTest(
-	info *persistenceblobs.NamespaceInfo,
-	config *persistenceblobs.NamespaceConfig,
+	info *persistencespb.NamespaceInfo,
+	config *persistencespb.NamespaceConfig,
 	targetCluster string,
 	clusterMetadata cluster.Metadata,
 ) *NamespaceCacheEntry {
@@ -224,7 +224,7 @@ func NewLocalNamespaceCacheEntryForTest(
 		info:              info,
 		config:            config,
 		isGlobalNamespace: false,
-		replicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+		replicationConfig: &persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: targetCluster,
 			Clusters:          []string{targetCluster},
 		},
@@ -235,10 +235,10 @@ func NewLocalNamespaceCacheEntryForTest(
 
 // NewNamespaceCacheEntryForTest returns an entry with test data
 func NewNamespaceCacheEntryForTest(
-	info *persistenceblobs.NamespaceInfo,
-	config *persistenceblobs.NamespaceConfig,
+	info *persistencespb.NamespaceInfo,
+	config *persistencespb.NamespaceConfig,
 	isGlobalNamespace bool,
-	repConfig *persistenceblobs.NamespaceReplicationConfig,
+	repConfig *persistencespb.NamespaceReplicationConfig,
 	failoverVersion int64,
 	clusterMetadata cluster.Metadata,
 ) *NamespaceCacheEntry {
@@ -715,17 +715,17 @@ func (c *namespaceCache) buildEntryFromRecord(
 func (entry *NamespaceCacheEntry) duplicate() *NamespaceCacheEntry {
 	// this is a deep copy
 	result := newNamespaceCacheEntry(entry.clusterMetadata)
-	result.info = proto.Clone(entry.info).(*persistenceblobs.NamespaceInfo)
+	result.info = proto.Clone(entry.info).(*persistencespb.NamespaceInfo)
 	if result.info.Data == nil {
 		result.info.Data = make(map[string]string, 0)
 	}
 
-	result.config = proto.Clone(entry.config).(*persistenceblobs.NamespaceConfig)
+	result.config = proto.Clone(entry.config).(*persistencespb.NamespaceConfig)
 	if result.config.BadBinaries == nil || result.config.BadBinaries.Binaries == nil {
 		result.config.BadBinaries.Binaries = make(map[string]*namespacepb.BadBinaryInfo, 0)
 	}
 
-	result.replicationConfig = proto.Clone(entry.replicationConfig).(*persistenceblobs.NamespaceReplicationConfig)
+	result.replicationConfig = proto.Clone(entry.replicationConfig).(*persistencespb.NamespaceReplicationConfig)
 	result.configVersion = entry.configVersion
 	result.failoverVersion = entry.failoverVersion
 	result.isGlobalNamespace = entry.isGlobalNamespace
@@ -736,17 +736,17 @@ func (entry *NamespaceCacheEntry) duplicate() *NamespaceCacheEntry {
 }
 
 // GetInfo return the namespace info
-func (entry *NamespaceCacheEntry) GetInfo() *persistenceblobs.NamespaceInfo {
+func (entry *NamespaceCacheEntry) GetInfo() *persistencespb.NamespaceInfo {
 	return entry.info
 }
 
 // GetConfig return the namespace config
-func (entry *NamespaceCacheEntry) GetConfig() *persistenceblobs.NamespaceConfig {
+func (entry *NamespaceCacheEntry) GetConfig() *persistencespb.NamespaceConfig {
 	return entry.config
 }
 
 // GetReplicationConfig return the namespace replication config
-func (entry *NamespaceCacheEntry) GetReplicationConfig() *persistenceblobs.NamespaceReplicationConfig {
+func (entry *NamespaceCacheEntry) GetReplicationConfig() *persistencespb.NamespaceReplicationConfig {
 	return entry.replicationConfig
 }
 
@@ -827,7 +827,7 @@ func CreateNamespaceCacheEntry(
 	namespace string,
 ) *NamespaceCacheEntry {
 
-	return &NamespaceCacheEntry{info: &persistenceblobs.NamespaceInfo{Name: namespace}}
+	return &NamespaceCacheEntry{info: &persistencespb.NamespaceInfo{Name: namespace}}
 }
 
 // SampleRetentionKey is key to specify sample retention

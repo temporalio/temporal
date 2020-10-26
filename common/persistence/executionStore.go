@@ -31,7 +31,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -81,7 +81,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 		return nil, err
 	}
 	newResponse := &GetWorkflowExecutionResponse{
-		State: &persistenceblobs.WorkflowMutableState{
+		State: &persistencespb.WorkflowMutableState{
 			ActivityInfos:       response.State.ActivityInfos,
 			TimerInfos:          response.State.TimerInfos,
 			RequestCancelInfos:  response.State.RequestCancelInfos,
@@ -110,9 +110,9 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 
 func (m *executionManagerImpl) DeserializeExecutionInfo(
 	// TODO: info should be a blob
-	info *persistenceblobs.WorkflowExecutionInfo,
-) (*persistenceblobs.WorkflowExecutionInfo, error) {
-	newInfo := &persistenceblobs.WorkflowExecutionInfo{
+	info *persistencespb.WorkflowExecutionInfo,
+) (*persistencespb.WorkflowExecutionInfo, error) {
+	newInfo := &persistencespb.WorkflowExecutionInfo{
 		CompletionEvent:                   info.CompletionEvent,
 		NamespaceId:                       info.NamespaceId,
 		WorkflowId:                        info.WorkflowId,
@@ -225,15 +225,15 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 }
 
 func (m *executionManagerImpl) SerializeExecutionInfo(
-	info *persistenceblobs.WorkflowExecutionInfo,
+	info *persistencespb.WorkflowExecutionInfo,
 	// TODO: return blob here
-) (*persistenceblobs.WorkflowExecutionInfo, error) {
+) (*persistencespb.WorkflowExecutionInfo, error) {
 
 	if info == nil {
-		return &persistenceblobs.WorkflowExecutionInfo{}, nil
+		return &persistencespb.WorkflowExecutionInfo{}, nil
 	}
 
-	return &persistenceblobs.WorkflowExecutionInfo{
+	return &persistencespb.WorkflowExecutionInfo{
 		NamespaceId:                       info.NamespaceId,
 		WorkflowId:                        info.WorkflowId,
 		FirstExecutionRunId:               info.FirstExecutionRunId,
@@ -495,11 +495,11 @@ func (m *executionManagerImpl) ListConcreteExecutions(
 		return nil, err
 	}
 	newResponse := &ListConcreteExecutionsResponse{
-		States:    make([]*persistenceblobs.WorkflowMutableState, len(response.States)),
+		States:    make([]*persistencespb.WorkflowMutableState, len(response.States)),
 		PageToken: response.NextPageToken,
 	}
 	for i, s := range response.States {
-		state := &persistenceblobs.WorkflowMutableState{
+		state := &persistencespb.WorkflowMutableState{
 			ActivityInfos:       s.ActivityInfos,
 			TimerInfos:          s.TimerInfos,
 			RequestCancelInfos:  s.RequestCancelInfos,

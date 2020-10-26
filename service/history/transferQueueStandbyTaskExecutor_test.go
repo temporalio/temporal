@@ -42,7 +42,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -116,7 +116,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
@@ -212,7 +212,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
 
 	now := timestamp.TimeNowPtrUtc()
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
 		WorkflowId:     execution.GetWorkflowId(),
@@ -269,7 +269,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_
 
 	now := timestamp.TimeNowPtrUtc()
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
 		WorkflowId:     execution.GetWorkflowId(),
@@ -329,7 +329,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
 
 	now := timestamp.TimeNowPtrUtc()
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
 		WorkflowId:     execution.GetWorkflowId(),
@@ -382,7 +382,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 	di := addWorkflowTaskScheduledEvent(mutableState)
 
 	now := timestamp.TimeNowPtrUtc()
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
 		WorkflowId:     execution.GetWorkflowId(),
@@ -432,7 +432,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending_
 
 	now := timestamp.TimeNowPtrUtc()
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
 		WorkflowId:     execution.GetWorkflowId(),
@@ -482,7 +482,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	di := addWorkflowTaskScheduledEvent(mutableState)
 
 	now := timestamp.TimeNowPtrUtc()
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
 		WorkflowId:     execution.GetWorkflowId(),
@@ -539,7 +539,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	di = addWorkflowTaskScheduledEvent(mutableState)
 
 	now := timestamp.TimeNowPtrUtc()
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
 		WorkflowId:     execution.GetWorkflowId(),
@@ -596,7 +596,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
 
 	now := timestamp.TimeNowPtrUtc()
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
 		WorkflowId:     execution.GetWorkflowId(),
@@ -658,7 +658,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	nextEventID := event.GetEventId()
 
 	now := timestamp.TimeNowPtrUtc()
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -737,7 +737,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
 
 	now := timestamp.TimeNowPtrUtc()
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -806,7 +806,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 	nextEventID := event.GetEventId()
 
 	now := timestamp.TimeNowPtrUtc()
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -887,7 +887,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 		testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, nil, "")
 
 	now := timestamp.TimeNowPtrUtc()
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -954,7 +954,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	nextEventID := event.GetEventId()
 
 	now := timestamp.TimeNowPtrUtc()
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -1034,7 +1034,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 		testChildNamespace, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second)
 
 	now := timestamp.TimeNowPtrUtc()
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:           s.version,
 		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
@@ -1092,7 +1092,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 	di := addWorkflowTaskScheduledEvent(mutableState)
 
 	now := timestamp.TimeNowPtrUtc()
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
 		WorkflowId:     execution.GetWorkflowId(),
@@ -1157,7 +1157,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 	di := addWorkflowTaskScheduledEvent(mutableState)
 
 	now := timestamp.TimeNowPtrUtc()
-	transferTask := &persistenceblobs.TransferTaskInfo{
+	transferTask := &persistencespb.TransferTaskInfo{
 		Version:        s.version,
 		NamespaceId:    s.namespaceID,
 		WorkflowId:     execution.GetWorkflowId(),
@@ -1197,7 +1197,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
 	ms mutableState,
 	lastEventID int64,
 	lastEventVersion int64,
-) *persistenceblobs.WorkflowMutableState {
+) *persistencespb.WorkflowMutableState {
 
 	if ms.GetExecutionInfo().GetVersionHistories() != nil {
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())

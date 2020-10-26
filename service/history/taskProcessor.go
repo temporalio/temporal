@@ -31,7 +31,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
@@ -278,7 +278,7 @@ func (t *taskProcessor) handleTaskError(
 		return nil
 	}
 
-	if transferTask, ok := task.task.(*persistenceblobs.TransferTaskInfo); ok &&
+	if transferTask, ok := task.task.(*persistencespb.TransferTaskInfo); ok &&
 		transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION &&
 		err == ErrMissingWorkflowStartEvent &&
 		t.config.EnableDropStuckTaskByNamespaceID(task.task.GetNamespaceId()) { // use namespaceID here to avoid accessing namespaceCache

@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/failure"
@@ -82,7 +82,7 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          0,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -94,7 +94,7 @@ func (s *historyBuilderSuite) SetupTest() {
 
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.namespaceID = testNamespaceID
-	s.namespaceEntry = cache.NewLocalNamespaceCacheEntryForTest(&persistenceblobs.NamespaceInfo{Id: s.namespaceID}, &persistenceblobs.NamespaceConfig{}, "", nil)
+	s.namespaceEntry = cache.NewLocalNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{Id: s.namespaceID}, &persistencespb.NamespaceConfig{}, "", nil)
 
 	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
 	s.mockEventsCache = s.mockShard.mockEventsCache
@@ -841,7 +841,7 @@ func (s *historyBuilderSuite) addWorkflowTaskCompletedEvent(scheduleID, startedI
 
 func (s *historyBuilderSuite) addActivityTaskScheduledEvent(workflowTaskCompletedID int64, activityID, activityType,
 	taskQueue string, input *commonpb.Payloads, timeout, queueTimeout, hearbeatTimeout time.Duration, retryPolicy *commonpb.RetryPolicy, namespace string) (*historypb.HistoryEvent,
-	*persistenceblobs.ActivityInfo) {
+	*persistencespb.ActivityInfo) {
 	event, ai, err := s.msBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedID,
 		&commandpb.ScheduleActivityTaskCommandAttributes{
 			ActivityId:             activityID,

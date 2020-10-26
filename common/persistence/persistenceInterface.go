@@ -30,8 +30,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 type (
@@ -199,18 +198,18 @@ type (
 
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
 	InternalWorkflowMutableState struct {
-		ActivityInfos       map[int64]*persistenceblobs.ActivityInfo
-		TimerInfos          map[string]*persistenceblobs.TimerInfo
-		ChildExecutionInfos map[int64]*persistenceblobs.ChildExecutionInfo
-		RequestCancelInfos  map[int64]*persistenceblobs.RequestCancelInfo
-		SignalInfos         map[int64]*persistenceblobs.SignalInfo
+		ActivityInfos       map[int64]*persistencespb.ActivityInfo
+		TimerInfos          map[string]*persistencespb.TimerInfo
+		ChildExecutionInfos map[int64]*persistencespb.ChildExecutionInfo
+		RequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
+		SignalInfos         map[int64]*persistencespb.SignalInfo
 		SignalRequestedIDs  []string
-		ExecutionInfo       *persistenceblobs.WorkflowExecutionInfo
-		ExecutionState      *persistenceblobs.WorkflowExecutionState
+		ExecutionInfo       *persistencespb.WorkflowExecutionInfo
+		ExecutionState      *persistencespb.WorkflowExecutionState
 		NextEventID         int64
 
 		BufferedEvents []*commonpb.DataBlob
-		Checksum       *persistenceblobs.Checksum
+		Checksum       *persistencespb.Checksum
 	}
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
@@ -261,20 +260,20 @@ type (
 
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
 	InternalWorkflowMutation struct {
-		ExecutionInfo    *persistenceblobs.WorkflowExecutionInfo
-		ExecutionState   *persistenceblobs.WorkflowExecutionState
+		ExecutionInfo    *persistencespb.WorkflowExecutionInfo
+		ExecutionState   *persistencespb.WorkflowExecutionState
 		NextEventID      int64
 		LastWriteVersion int64
 
-		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
+		UpsertActivityInfos       []*persistencespb.ActivityInfo
 		DeleteActivityInfos       []int64
-		UpsertTimerInfos          []*persistenceblobs.TimerInfo
+		UpsertTimerInfos          []*persistencespb.TimerInfo
 		DeleteTimerInfos          []string
-		UpsertChildExecutionInfos []*persistenceblobs.ChildExecutionInfo
+		UpsertChildExecutionInfos []*persistencespb.ChildExecutionInfo
 		DeleteChildExecutionInfo  *int64
-		UpsertRequestCancelInfos  []*persistenceblobs.RequestCancelInfo
+		UpsertRequestCancelInfos  []*persistencespb.RequestCancelInfo
 		DeleteRequestCancelInfo   *int64
-		UpsertSignalInfos         []*persistenceblobs.SignalInfo
+		UpsertSignalInfos         []*persistencespb.SignalInfo
 		DeleteSignalInfo          *int64
 		UpsertSignalRequestedIDs  []string
 		DeleteSignalRequestedID   string
@@ -287,21 +286,21 @@ type (
 
 		Condition int64
 
-		Checksum *persistenceblobs.Checksum
+		Checksum *persistencespb.Checksum
 	}
 
 	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
 	InternalWorkflowSnapshot struct {
-		ExecutionInfo    *persistenceblobs.WorkflowExecutionInfo
-		ExecutionState   *persistenceblobs.WorkflowExecutionState
+		ExecutionInfo    *persistencespb.WorkflowExecutionInfo
+		ExecutionState   *persistencespb.WorkflowExecutionState
 		LastWriteVersion int64
 		NextEventID      int64
 
-		ActivityInfos       []*persistenceblobs.ActivityInfo
-		TimerInfos          []*persistenceblobs.TimerInfo
-		ChildExecutionInfos []*persistenceblobs.ChildExecutionInfo
-		RequestCancelInfos  []*persistenceblobs.RequestCancelInfo
-		SignalInfos         []*persistenceblobs.SignalInfo
+		ActivityInfos       []*persistencespb.ActivityInfo
+		TimerInfos          []*persistencespb.TimerInfo
+		ChildExecutionInfos []*persistencespb.ChildExecutionInfo
+		RequestCancelInfos  []*persistencespb.RequestCancelInfo
+		SignalInfos         []*persistencespb.SignalInfo
 		SignalRequestedIDs  []string
 
 		TransferTasks    []Task
@@ -310,7 +309,7 @@ type (
 
 		Condition int64
 
-		Checksum *persistenceblobs.Checksum
+		Checksum *persistencespb.Checksum
 	}
 
 	// InternalAppendHistoryEventsRequest is used to append new events to workflow execution history  for Persistence Interface
@@ -332,7 +331,7 @@ type (
 		// The info for clean up data in background
 		Info string
 		// The branch to be appended
-		BranchInfo *persistenceblobs.HistoryBranch
+		BranchInfo *persistencespb.HistoryBranch
 		// The first eventID becomes the nodeID to be appended
 		NodeID int64
 		// The events to be appended
@@ -357,7 +356,7 @@ type (
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {
 		// The base branch to fork from
-		ForkBranchInfo *persistenceblobs.HistoryBranch
+		ForkBranchInfo *persistencespb.HistoryBranch
 		// The nodeID to fork from, the new branch will start from ( inclusive ), the base branch will stop at(exclusive)
 		ForkNodeID int64
 		// branchID of the new branch
@@ -371,13 +370,13 @@ type (
 	// InternalForkHistoryBranchResponse is the response to ForkHistoryBranchRequest
 	InternalForkHistoryBranchResponse struct {
 		// branchInfo to represent the new branch
-		NewBranchInfo *persistenceblobs.HistoryBranch
+		NewBranchInfo *persistencespb.HistoryBranch
 	}
 
 	// InternalDeleteHistoryBranchRequest is used to remove a history branch
 	InternalDeleteHistoryBranchRequest struct {
 		// branch to be deleted
-		BranchInfo *persistenceblobs.HistoryBranch
+		BranchInfo *persistencespb.HistoryBranch
 		// Used in sharded data stores to identify which shard to use
 		ShardID int32
 	}
@@ -407,7 +406,7 @@ type (
 	// InternalCompleteForkBranchRequest is used to update some tree/branch meta data for forking
 	InternalCompleteForkBranchRequest struct {
 		// branch to be updated
-		BranchInfo persistenceblobs.HistoryBranch
+		BranchInfo persistencespb.HistoryBranch
 		// whether fork is successful
 		Success bool
 		// Used in sharded data stores to identify which shard to use

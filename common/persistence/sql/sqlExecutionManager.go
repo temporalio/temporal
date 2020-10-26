@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -715,7 +715,7 @@ func (m *sqlExecutionManager) GetTransferTasks(
 			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTransferTasks operation failed. Select failed. Error: %v", err))
 		}
 	}
-	resp := &p.GetTransferTasksResponse{Tasks: make([]*persistenceblobs.TransferTaskInfo, len(rows))}
+	resp := &p.GetTransferTasksResponse{Tasks: make([]*persistencespb.TransferTaskInfo, len(rows))}
 	for i, row := range rows {
 		info, err := serialization.TransferTaskInfoFromBlob(row.Data, row.DataEncoding)
 		if err != nil {
@@ -826,7 +826,7 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 		return &p.GetReplicationTasksResponse{}, nil
 	}
 
-	var tasks = make([]*persistenceblobs.ReplicationTaskInfo, len(rows))
+	var tasks = make([]*persistencespb.ReplicationTaskInfo, len(rows))
 	for i, row := range rows {
 		info, err := serialization.ReplicationTaskInfoFromBlob(row.Data, row.DataEncoding)
 		if err != nil {
@@ -854,7 +854,7 @@ func (m *sqlExecutionManager) populateGetReplicationDLQTasksResponse(
 		return &p.GetReplicationTasksResponse{}, nil
 	}
 
-	var tasks = make([]*persistenceblobs.ReplicationTaskInfo, len(rows))
+	var tasks = make([]*persistencespb.ReplicationTaskInfo, len(rows))
 	for i, row := range rows {
 		info, err := serialization.ReplicationTaskInfoFromBlob(row.Data, row.DataEncoding)
 		if err != nil {
@@ -1017,7 +1017,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks operation failed. Select failed. Error: %v", err))
 	}
 
-	resp := &p.GetTimerIndexTasksResponse{Timers: make([]*persistenceblobs.TimerTaskInfo, len(rows))}
+	resp := &p.GetTimerIndexTasksResponse{Timers: make([]*persistencespb.TimerTaskInfo, len(rows))}
 	for i, row := range rows {
 		info, err := serialization.TimerTaskInfoFromBlob(row.Data, row.DataEncoding)
 		if err != nil {

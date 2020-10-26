@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -79,11 +79,11 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Dup() 
 	mutableState := NewMockmutableState(s.controller)
 	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
 	}).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: runID,
 	}).AnyTimes()
 
@@ -114,11 +114,11 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 	workflowSnapshot := &persistence.WorkflowSnapshot{}
 	workflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
 	workflowHistorySize := int64(12345)
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
 	}).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: runID,
 	}).AnyTimes()
 	mutableState.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(
@@ -176,11 +176,11 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{}
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
 	targetWorkflowHistorySize := int64(12345)
-	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
 	}).AnyTimes()
-	targetMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(
@@ -192,11 +192,11 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
-	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
 	}).AnyTimes()
-	currentMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: currentRunID,
 	}).AnyTimes()
 	currentWorkflow.EXPECT().getVectorClock().Return(currentLastWriteVersion, int64(0), nil)
@@ -244,18 +244,18 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 		},
 	}
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
 	targetWorkflowHistorySize := int64(12345)
-	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
 	}).AnyTimes()
-	targetMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(
@@ -312,18 +312,18 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionInfo: &persistenceblobs.WorkflowExecutionInfo{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 		},
 	}
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
 	targetWorkflowHistorySize := int64(12345)
-	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
 	}).AnyTimes()
-	targetMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(
@@ -383,11 +383,11 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Suppre
 	currentWorkflow.EXPECT().getMutableState().Return(currentMutableState).AnyTimes()
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
-	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
 	}).AnyTimes()
-	targetMutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
 

@@ -35,7 +35,7 @@ import (
 	"github.com/uber-go/tally"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -82,7 +82,7 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          0,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -121,7 +121,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
 		s.notificationChan,
 		&taskInfo{
 			processor: s.mockProcessor,
-			task: &persistenceblobs.TimerTaskInfo{
+			task: &persistencespb.TimerTaskInfo{
 				ScheduleAttempt: 1},
 			attempt: 1,
 		},
@@ -129,7 +129,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{
+	task := newTaskInfo(s.mockProcessor, &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: timestamp.TimeNowPtrUtc()}, s.logger)
 	var taskFilterErr taskFilter = func(task queueTaskInfo) (bool, error) {
 		return false, errors.New("some random error")
@@ -149,7 +149,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoEr
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{
+	task := newTaskInfo(s.mockProcessor, &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: timestamp.TimeNowPtrUtc()}, s.logger)
 	task.shouldProcessTask = false
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
@@ -166,7 +166,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr()
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{
+	task := newTaskInfo(s.mockProcessor, &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: timestamp.TimeNowPtrUtc()}, s.logger)
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return true, nil
@@ -183,7 +183,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() 
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessErrNoErr() {
 	err := errors.New("some random err")
-	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{
+	task := newTaskInfo(s.mockProcessor, &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: timestamp.TimeNowPtrUtc()}, s.logger)
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return true, nil

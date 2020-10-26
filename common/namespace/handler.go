@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -200,7 +200,7 @@ func (d *HandlerImpl) RegisterNamespace(
 		}
 	}
 
-	info := &persistenceblobs.NamespaceInfo{
+	info := &persistencespb.NamespaceInfo{
 		Id:          uuid.New(),
 		Name:        registerRequest.GetName(),
 		State:       enumspb.NAMESPACE_STATE_REGISTERED,
@@ -208,7 +208,7 @@ func (d *HandlerImpl) RegisterNamespace(
 		Description: registerRequest.GetDescription(),
 		Data:        registerRequest.Data,
 	}
-	config := &persistenceblobs.NamespaceConfig{
+	config := &persistencespb.NamespaceConfig{
 		Retention:               registerRequest.GetWorkflowExecutionRetentionPeriod(),
 		HistoryArchivalState:    nextHistoryArchivalState.State,
 		HistoryArchivalUri:      nextHistoryArchivalState.URI,
@@ -216,7 +216,7 @@ func (d *HandlerImpl) RegisterNamespace(
 		VisibilityArchivalUri:   nextVisibilityArchivalState.URI,
 		BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}
-	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: activeClusterName,
 		Clusters:          clusters,
 	}
@@ -245,7 +245,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	}
 
 	namespaceRequest := &persistence.CreateNamespaceRequest{
-		Namespace: &persistenceblobs.NamespaceDetail{
+		Namespace: &persistencespb.NamespaceDetail{
 			Info:              info,
 			Config:            config,
 			ReplicationConfig: replicationConfig,
@@ -535,7 +535,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		}
 
 		updateReq := &persistence.UpdateNamespaceRequest{
-			Namespace: &persistenceblobs.NamespaceDetail{
+			Namespace: &persistencespb.NamespaceDetail{
 				Info:                        info,
 				Config:                      config,
 				ReplicationConfig:           replicationConfig,
@@ -605,7 +605,7 @@ func (d *HandlerImpl) DeprecateNamespace(
 	getResponse.Namespace.ConfigVersion = getResponse.Namespace.ConfigVersion + 1
 	getResponse.Namespace.Info.State = enumspb.NAMESPACE_STATE_DEPRECATED
 	updateReq := &persistence.UpdateNamespaceRequest{
-		Namespace: &persistenceblobs.NamespaceDetail{
+		Namespace: &persistencespb.NamespaceDetail{
 			Info:                        getResponse.Namespace.Info,
 			Config:                      getResponse.Namespace.Config,
 			ReplicationConfig:           getResponse.Namespace.ReplicationConfig,
@@ -624,9 +624,9 @@ func (d *HandlerImpl) DeprecateNamespace(
 
 func (d *HandlerImpl) createResponse(
 	ctx context.Context,
-	info *persistenceblobs.NamespaceInfo,
-	config *persistenceblobs.NamespaceConfig,
-	replicationConfig *persistenceblobs.NamespaceReplicationConfig,
+	info *persistencespb.NamespaceInfo,
+	config *persistencespb.NamespaceConfig,
+	replicationConfig *persistencespb.NamespaceReplicationConfig,
 ) (*namespacepb.NamespaceInfo, *namespacepb.NamespaceConfig, *replicationpb.NamespaceReplicationConfig) {
 
 	infoResult := &namespacepb.NamespaceInfo{

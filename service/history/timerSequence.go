@@ -34,7 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/persistence"
@@ -235,7 +235,7 @@ func (t *timerSequenceImpl) loadAndSortActivityTimers() []timerSequenceID {
 }
 
 func (t *timerSequenceImpl) getUserTimerTimeout(
-	timerInfo *persistenceblobs.TimerInfo,
+	timerInfo *persistencespb.TimerInfo,
 ) *timerSequenceID {
 
 	expiryTime := timerInfo.ExpiryTime
@@ -250,7 +250,7 @@ func (t *timerSequenceImpl) getUserTimerTimeout(
 }
 
 func (t *timerSequenceImpl) getActivityScheduleToStartTimeout(
-	activityInfo *persistenceblobs.ActivityInfo,
+	activityInfo *persistencespb.ActivityInfo,
 ) *timerSequenceID {
 
 	// activity is not scheduled yet, probably due to retry & backoff
@@ -275,7 +275,7 @@ func (t *timerSequenceImpl) getActivityScheduleToStartTimeout(
 }
 
 func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
-	activityInfo *persistenceblobs.ActivityInfo,
+	activityInfo *persistencespb.ActivityInfo,
 ) *timerSequenceID {
 
 	// activity is not scheduled yet, probably due to retry & backoff
@@ -295,7 +295,7 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 }
 
 func (t *timerSequenceImpl) getActivityStartToCloseTimeout(
-	activityInfo *persistenceblobs.ActivityInfo,
+	activityInfo *persistencespb.ActivityInfo,
 ) *timerSequenceID {
 
 	// activity is not scheduled yet, probably due to retry & backoff
@@ -320,7 +320,7 @@ func (t *timerSequenceImpl) getActivityStartToCloseTimeout(
 }
 
 func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
-	activityInfo *persistenceblobs.ActivityInfo,
+	activityInfo *persistencespb.ActivityInfo,
 ) *timerSequenceID {
 
 	// activity is not scheduled yet, probably due to retry & backoff

@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -87,7 +87,7 @@ func (s *attrValidatorSuite) TestValidateConfigRetentionPeriod() {
 	}
 	for _, tc := range testCases {
 		actualErr := s.validator.validateNamespaceConfig(
-			&persistenceblobs.NamespaceConfig{Retention: tc.retentionPeriod},
+			&persistencespb.NamespaceConfig{Retention: tc.retentionPeriod},
 		)
 		s.Equal(tc.expectedErr, actualErr)
 	}
@@ -117,7 +117,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForLocalNames
 	)
 
 	err := s.validator.validateNamespaceReplicationConfigForLocalNamespace(
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestAlternativeClusterName,
@@ -127,7 +127,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForLocalNames
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateNamespaceReplicationConfigForLocalNamespace(
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
@@ -138,7 +138,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForLocalNames
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateNamespaceReplicationConfigForLocalNamespace(
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
@@ -149,7 +149,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForLocalNames
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateNamespaceReplicationConfigForLocalNamespace(
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
@@ -168,7 +168,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForGlobalName
 	)
 
 	err := s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
@@ -178,7 +178,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForGlobalName
 	s.NoError(err)
 
 	err = s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestAlternativeClusterName,
@@ -188,7 +188,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForGlobalName
 	s.NoError(err)
 
 	err = s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
@@ -199,7 +199,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForGlobalName
 	s.NoError(err)
 
 	err = s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,

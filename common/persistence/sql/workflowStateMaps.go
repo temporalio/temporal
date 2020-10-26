@@ -30,7 +30,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
@@ -38,7 +38,7 @@ import (
 
 func updateActivityInfos(
 	tx sqlplugin.Tx,
-	activityInfos []*persistenceblobs.ActivityInfo,
+	activityInfos []*persistencespb.ActivityInfo,
 	deleteInfos []int64,
 	shardID int32,
 	namespaceID primitives.UUID,
@@ -101,7 +101,7 @@ func getActivityInfoMap(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (map[int64]*persistenceblobs.ActivityInfo, error) {
+) (map[int64]*persistencespb.ActivityInfo, error) {
 
 	rows, err := db.SelectFromActivityInfoMaps(sqlplugin.ActivityInfoMapsSelectFilter{
 		ShardID:     shardID,
@@ -113,7 +113,7 @@ func getActivityInfoMap(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get activity info. Error: %v", err))
 	}
 
-	ret := make(map[int64]*persistenceblobs.ActivityInfo)
+	ret := make(map[int64]*persistencespb.ActivityInfo)
 	for _, v := range rows {
 		decoded, err := serialization.ActivityInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {
@@ -146,7 +146,7 @@ func deleteActivityInfoMap(
 
 func updateTimerInfos(
 	tx sqlplugin.Tx,
-	timerInfos []*persistenceblobs.TimerInfo,
+	timerInfos []*persistencespb.TimerInfo,
 	deleteInfos []string,
 	shardID int32,
 	namespaceID primitives.UUID,
@@ -205,7 +205,7 @@ func getTimerInfoMap(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (map[string]*persistenceblobs.TimerInfo, error) {
+) (map[string]*persistencespb.TimerInfo, error) {
 
 	rows, err := db.SelectFromTimerInfoMaps(sqlplugin.TimerInfoMapsSelectFilter{
 		ShardID:     shardID,
@@ -216,7 +216,7 @@ func getTimerInfoMap(
 	if err != nil && err != sql.ErrNoRows {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get timer info. Error: %v", err))
 	}
-	ret := make(map[string]*persistenceblobs.TimerInfo)
+	ret := make(map[string]*persistencespb.TimerInfo)
 	for _, v := range rows {
 		info, err := serialization.TimerInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {
@@ -249,7 +249,7 @@ func deleteTimerInfoMap(
 
 func updateChildExecutionInfos(
 	tx sqlplugin.Tx,
-	childExecutionInfos []*persistenceblobs.ChildExecutionInfo,
+	childExecutionInfos []*persistencespb.ChildExecutionInfo,
 	deleteInfos *int64,
 	shardID int32,
 	namespaceID primitives.UUID,
@@ -299,7 +299,7 @@ func getChildExecutionInfoMap(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (map[int64]*persistenceblobs.ChildExecutionInfo, error) {
+) (map[int64]*persistencespb.ChildExecutionInfo, error) {
 
 	rows, err := db.SelectFromChildExecutionInfoMaps(sqlplugin.ChildExecutionInfoMapsSelectFilter{
 		ShardID:     shardID,
@@ -311,7 +311,7 @@ func getChildExecutionInfoMap(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get timer info. Error: %v", err))
 	}
 
-	ret := make(map[int64]*persistenceblobs.ChildExecutionInfo)
+	ret := make(map[int64]*persistencespb.ChildExecutionInfo)
 	for _, v := range rows {
 		rowInfo, err := serialization.ChildExecutionInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {
@@ -344,7 +344,7 @@ func deleteChildExecutionInfoMap(
 
 func updateRequestCancelInfos(
 	tx sqlplugin.Tx,
-	requestCancelInfos []*persistenceblobs.RequestCancelInfo,
+	requestCancelInfos []*persistencespb.RequestCancelInfo,
 	deleteInfo *int64,
 	shardID int32,
 	namespaceID primitives.UUID,
@@ -403,7 +403,7 @@ func getRequestCancelInfoMap(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (map[int64]*persistenceblobs.RequestCancelInfo, error) {
+) (map[int64]*persistencespb.RequestCancelInfo, error) {
 
 	rows, err := db.SelectFromRequestCancelInfoMaps(sqlplugin.RequestCancelInfoMapsSelectFilter{
 		ShardID:     shardID,
@@ -415,13 +415,13 @@ func getRequestCancelInfoMap(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get request cancel info. Error: %v", err))
 	}
 
-	ret := make(map[int64]*persistenceblobs.RequestCancelInfo)
+	ret := make(map[int64]*persistencespb.RequestCancelInfo)
 	for _, v := range rows {
 		rowInfo, err := serialization.RequestCancelInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
-		ret[v.InitiatedID] = &persistenceblobs.RequestCancelInfo{
+		ret[v.InitiatedID] = &persistencespb.RequestCancelInfo{
 			Version:               rowInfo.GetVersion(),
 			InitiatedId:           v.InitiatedID,
 			InitiatedEventBatchId: rowInfo.GetInitiatedEventBatchId(),
@@ -453,7 +453,7 @@ func deleteRequestCancelInfoMap(
 
 func updateSignalInfos(
 	tx sqlplugin.Tx,
-	signalInfos []*persistenceblobs.SignalInfo,
+	signalInfos []*persistencespb.SignalInfo,
 	deleteInfo *int64,
 	shardID int32,
 	namespaceID primitives.UUID,
@@ -512,7 +512,7 @@ func getSignalInfoMap(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (map[int64]*persistenceblobs.SignalInfo, error) {
+) (map[int64]*persistencespb.SignalInfo, error) {
 
 	rows, err := db.SelectFromSignalInfoMaps(sqlplugin.SignalInfoMapsSelectFilter{
 		ShardID:     shardID,
@@ -524,7 +524,7 @@ func getSignalInfoMap(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get signal info. Error: %v", err))
 	}
 
-	ret := make(map[int64]*persistenceblobs.SignalInfo)
+	ret := make(map[int64]*persistencespb.SignalInfo)
 	for _, v := range rows {
 		rowInfo, err := serialization.SignalInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {

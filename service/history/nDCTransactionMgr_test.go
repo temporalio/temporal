@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -87,7 +87,7 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          10,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -167,7 +167,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(true).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{RunId: runID}).Times(1)
+	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: runID}).Times(1)
 	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyActive, (*transactionPolicy)(nil),
@@ -211,12 +211,12 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      namespaceID,
 		WorkflowId:       workflowID,
 		VersionHistories: histories,
 	}).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: runID,
 	}).AnyTimes()
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
@@ -314,11 +314,11 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Cl
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
 	}).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: runID,
 	}).AnyTimes()
 
@@ -371,11 +371,11 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
 	}).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: runID,
 	}).AnyTimes()
 
@@ -427,11 +427,11 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
 	}).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistenceblobs.WorkflowExecutionState{
+	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: runID,
 	}).AnyTimes()
 

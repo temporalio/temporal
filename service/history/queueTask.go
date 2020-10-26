@@ -30,7 +30,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -167,7 +167,7 @@ func newQueueTaskBase(
 func (t *timerQueueTask) Ack() {
 	t.queueTaskBase.Ack()
 
-	timerTask, ok := t.queueTaskInfo.(*persistenceblobs.TimerTaskInfo)
+	timerTask, ok := t.queueTaskInfo.(*persistencespb.TimerTaskInfo)
 	if !ok {
 		return
 	}

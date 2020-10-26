@@ -39,12 +39,12 @@ import (
 
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cache"
@@ -108,7 +108,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.mockShard = &shardContextImpl{
 		shardID:                   0,
 		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{RangeId: 1, TransferAckLevel: 0}},
+		shardInfo:                 &persistence.ShardInfoWithFailover{ShardInfo: &persistencespb.ShardInfo{RangeId: 1, TransferAckLevel: 0}},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
 		config:                    NewDynamicConfigForTest(),
@@ -184,7 +184,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		SourceClusterName: "standby",
-		TaskInfo: &persistenceblobs.ReplicationTaskInfo{
+		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
@@ -223,7 +223,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		SourceClusterName: "standby",
-		TaskInfo: &persistenceblobs.ReplicationTaskInfo{
+		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId:  namespaceID,
 			WorkflowId:   workflowID,
 			RunId:        runID,

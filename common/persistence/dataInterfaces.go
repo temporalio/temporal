@@ -36,7 +36,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 )
@@ -170,7 +170,7 @@ type (
 
 	// ShardInfoWithFailover describes a shard
 	ShardInfoWithFailover struct {
-		*persistenceblobs.ShardInfo
+		*persistencespb.ShardInfo
 		TransferFailoverLevels map[string]TransferFailoverLevel // uuid -> TransferFailoverLevel
 		TimerFailoverLevels    map[string]TimerFailoverLevel    // uuid -> TimerFailoverLevel
 	}
@@ -195,7 +195,7 @@ type (
 
 	// ReplicationTaskInfoWrapper describes a replication task.
 	ReplicationTaskInfoWrapper struct {
-		*persistenceblobs.ReplicationTaskInfo
+		*persistencespb.ReplicationTaskInfo
 	}
 
 	// Task is the generic interface for workflow tasks
@@ -382,7 +382,7 @@ type (
 
 	// CreateShardRequest is used to create a shard in executions table
 	CreateShardRequest struct {
-		ShardInfo *persistenceblobs.ShardInfo
+		ShardInfo *persistencespb.ShardInfo
 	}
 
 	// GetShardRequest is used to get shard information
@@ -392,12 +392,12 @@ type (
 
 	// GetShardResponse is the response to GetShard
 	GetShardResponse struct {
-		ShardInfo *persistenceblobs.ShardInfo
+		ShardInfo *persistencespb.ShardInfo
 	}
 
 	// UpdateShardRequest  is used to update shard information
 	UpdateShardRequest struct {
-		ShardInfo       *persistenceblobs.ShardInfo
+		ShardInfo       *persistencespb.ShardInfo
 		PreviousRangeID int64
 	}
 
@@ -425,7 +425,7 @@ type (
 
 	// GetWorkflowExecutionResponse is the response to GetWorkflowExecutionRequest
 	GetWorkflowExecutionResponse struct {
-		State             *persistenceblobs.WorkflowMutableState
+		State             *persistencespb.WorkflowMutableState
 		MutableStateStats *MutableStateStats
 	}
 
@@ -443,7 +443,7 @@ type (
 
 	// ListConcreteExecutionsResponse is response to ListConcreteExecutions
 	ListConcreteExecutionsResponse struct {
-		States    []*persistenceblobs.WorkflowMutableState
+		States    []*persistencespb.WorkflowMutableState
 		PageToken []byte
 	}
 
@@ -513,19 +513,19 @@ type (
 
 	// WorkflowMutation is used as generic workflow execution state mutation
 	WorkflowMutation struct {
-		ExecutionInfo  *persistenceblobs.WorkflowExecutionInfo
-		ExecutionState *persistenceblobs.WorkflowExecutionState
+		ExecutionInfo  *persistencespb.WorkflowExecutionInfo
+		ExecutionState *persistencespb.WorkflowExecutionState
 		NextEventID    int64
 
-		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
+		UpsertActivityInfos       []*persistencespb.ActivityInfo
 		DeleteActivityInfos       []int64
-		UpsertTimerInfos          []*persistenceblobs.TimerInfo
+		UpsertTimerInfos          []*persistencespb.TimerInfo
 		DeleteTimerInfos          []string
-		UpsertChildExecutionInfos []*persistenceblobs.ChildExecutionInfo
+		UpsertChildExecutionInfos []*persistencespb.ChildExecutionInfo
 		DeleteChildExecutionInfo  *int64
-		UpsertRequestCancelInfos  []*persistenceblobs.RequestCancelInfo
+		UpsertRequestCancelInfos  []*persistencespb.RequestCancelInfo
 		DeleteRequestCancelInfo   *int64
-		UpsertSignalInfos         []*persistenceblobs.SignalInfo
+		UpsertSignalInfos         []*persistencespb.SignalInfo
 		DeleteSignalInfo          *int64
 		UpsertSignalRequestedIDs  []string
 		DeleteSignalRequestedID   string
@@ -537,20 +537,20 @@ type (
 		TimerTasks       []Task
 
 		Condition int64
-		Checksum  *persistenceblobs.Checksum
+		Checksum  *persistencespb.Checksum
 	}
 
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
 	WorkflowSnapshot struct {
-		ExecutionInfo  *persistenceblobs.WorkflowExecutionInfo
-		ExecutionState *persistenceblobs.WorkflowExecutionState
+		ExecutionInfo  *persistencespb.WorkflowExecutionInfo
+		ExecutionState *persistencespb.WorkflowExecutionState
 		NextEventID    int64
 
-		ActivityInfos       []*persistenceblobs.ActivityInfo
-		TimerInfos          []*persistenceblobs.TimerInfo
-		ChildExecutionInfos []*persistenceblobs.ChildExecutionInfo
-		RequestCancelInfos  []*persistenceblobs.RequestCancelInfo
-		SignalInfos         []*persistenceblobs.SignalInfo
+		ActivityInfos       []*persistencespb.ActivityInfo
+		TimerInfos          []*persistencespb.TimerInfo
+		ChildExecutionInfos []*persistencespb.ChildExecutionInfo
+		RequestCancelInfos  []*persistencespb.RequestCancelInfo
+		SignalInfos         []*persistencespb.SignalInfo
 		SignalRequestedIDs  []string
 
 		TransferTasks    []Task
@@ -558,7 +558,7 @@ type (
 		TimerTasks       []Task
 
 		Condition int64
-		Checksum  *persistenceblobs.Checksum
+		Checksum  *persistencespb.Checksum
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
@@ -583,7 +583,7 @@ type (
 
 	// GetTransferTaskResponse is the response to GetTransferTask
 	GetTransferTaskResponse struct {
-		TransferTaskInfo *persistenceblobs.TransferTaskInfo
+		TransferTaskInfo *persistencespb.TransferTaskInfo
 	}
 
 	// GetTransferTasksRequest is used to read tasks from the transfer task queue
@@ -596,7 +596,7 @@ type (
 
 	// GetTransferTasksResponse is the response to GetTransferTasksRequest
 	GetTransferTasksResponse struct {
-		Tasks         []*persistenceblobs.TransferTaskInfo
+		Tasks         []*persistencespb.TransferTaskInfo
 		NextPageToken []byte
 	}
 
@@ -608,7 +608,7 @@ type (
 
 	// GetReplicationTaskResponse is the response to GetReplicationTask
 	GetReplicationTaskResponse struct {
-		ReplicationTaskInfo *persistenceblobs.ReplicationTaskInfo
+		ReplicationTaskInfo *persistencespb.ReplicationTaskInfo
 	}
 
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
@@ -621,7 +621,7 @@ type (
 
 	// GetReplicationTasksResponse is the response to GetReplicationTask
 	GetReplicationTasksResponse struct {
-		Tasks         []*persistenceblobs.ReplicationTaskInfo
+		Tasks         []*persistencespb.ReplicationTaskInfo
 		NextPageToken []byte
 	}
 
@@ -649,7 +649,7 @@ type (
 	// PutReplicationTaskToDLQRequest is used to put a replication task to dlq
 	PutReplicationTaskToDLQRequest struct {
 		SourceClusterName string
-		TaskInfo          *persistenceblobs.ReplicationTaskInfo
+		TaskInfo          *persistencespb.ReplicationTaskInfo
 	}
 
 	// GetReplicationTasksFromDLQRequest is used to get replication tasks from dlq
@@ -703,7 +703,7 @@ type (
 	// UpdateTaskQueueRequest is used to update task queue implementation information
 	UpdateTaskQueueRequest struct {
 		RangeID       int64
-		TaskQueueInfo *persistenceblobs.TaskQueueInfo
+		TaskQueueInfo *persistencespb.TaskQueueInfo
 	}
 
 	// UpdateTaskQueueResponse is the response to UpdateTaskQueue
@@ -731,7 +731,7 @@ type (
 	// CreateTasksRequest is used to create a new task for a workflow execution
 	CreateTasksRequest struct {
 		TaskQueueInfo *PersistedTaskQueueInfo
-		Tasks         []*persistenceblobs.AllocatedTaskInfo
+		Tasks         []*persistencespb.AllocatedTaskInfo
 	}
 
 	// CreateTasksResponse is the response to CreateTasksRequest
@@ -739,7 +739,7 @@ type (
 	}
 
 	PersistedTaskQueueInfo struct {
-		Data    *persistenceblobs.TaskQueueInfo
+		Data    *persistencespb.TaskQueueInfo
 		RangeID int64
 	}
 
@@ -755,7 +755,7 @@ type (
 
 	// GetTasksResponse is the response to GetTasksRequests
 	GetTasksResponse struct {
-		Tasks []*persistenceblobs.AllocatedTaskInfo
+		Tasks []*persistencespb.AllocatedTaskInfo
 	}
 
 	// CompleteTaskRequest is used to complete a task
@@ -782,7 +782,7 @@ type (
 
 	// GetTimerTaskResponse is the response to GetTimerTask
 	GetTimerTaskResponse struct {
-		TimerTaskInfo *persistenceblobs.TimerTaskInfo
+		TimerTaskInfo *persistencespb.TimerTaskInfo
 	}
 
 	// GetTimerIndexTasksRequest is the request for GetTimerIndexTasks
@@ -796,13 +796,13 @@ type (
 
 	// GetTimerIndexTasksResponse is the response for GetTimerIndexTasks
 	GetTimerIndexTasksResponse struct {
-		Timers        []*persistenceblobs.TimerTaskInfo
+		Timers        []*persistencespb.TimerTaskInfo
 		NextPageToken []byte
 	}
 
 	// CreateNamespaceRequest is used to create the namespace
 	CreateNamespaceRequest struct {
-		Namespace         *persistenceblobs.NamespaceDetail
+		Namespace         *persistencespb.NamespaceDetail
 		IsGlobalNamespace bool
 	}
 
@@ -819,14 +819,14 @@ type (
 
 	// GetNamespaceResponse is the response for GetNamespace
 	GetNamespaceResponse struct {
-		Namespace           *persistenceblobs.NamespaceDetail
+		Namespace           *persistencespb.NamespaceDetail
 		IsGlobalNamespace   bool
 		NotificationVersion int64
 	}
 
 	// UpdateNamespaceRequest is used to update namespace
 	UpdateNamespaceRequest struct {
-		Namespace           *persistenceblobs.NamespaceDetail
+		Namespace           *persistencespb.NamespaceDetail
 		NotificationVersion int64
 	}
 
@@ -1051,7 +1051,7 @@ type (
 	// GetHistoryTreeResponse is a response to GetHistoryTreeRequest
 	GetHistoryTreeResponse struct {
 		// all branches of a tree
-		Branches []*persistenceblobs.HistoryBranch
+		Branches []*persistencespb.HistoryBranch
 	}
 
 	// GetAllHistoryTreeBranchesRequest is a request of GetAllHistoryTreeBranches
@@ -1072,12 +1072,12 @@ type (
 
 	// GetClusterMetadataResponse is the response to GetClusterMetadata
 	GetClusterMetadataResponse struct {
-		persistenceblobs.ClusterMetadata
+		persistencespb.ClusterMetadata
 		Version int64
 	}
 
 	SaveClusterMetadataRequest struct {
-		persistenceblobs.ClusterMetadata
+		persistencespb.ClusterMetadata
 		Version int64
 	}
 
@@ -1949,10 +1949,10 @@ func UnixNanoToDBTimestamp(timestamp int64) int64 {
 // NewHistoryBranchToken return a new branch token
 func NewHistoryBranchToken(treeID string) ([]byte, error) {
 	branchID := primitives.NewUUID().String()
-	bi := &persistenceblobs.HistoryBranch{
+	bi := &persistencespb.HistoryBranch{
 		TreeId:    treeID,
 		BranchId:  branchID,
-		Ancestors: []*persistenceblobs.HistoryBranchRange{},
+		Ancestors: []*persistencespb.HistoryBranchRange{},
 	}
 	datablob, err := serialization.HistoryBranchToBlob(bi)
 	if err != nil {
@@ -1964,10 +1964,10 @@ func NewHistoryBranchToken(treeID string) ([]byte, error) {
 
 // NewHistoryBranchTokenByBranchID return a new branch token with treeID/branchID
 func NewHistoryBranchTokenByBranchID(treeID, branchID string) ([]byte, error) {
-	bi := &persistenceblobs.HistoryBranch{
+	bi := &persistencespb.HistoryBranch{
 		TreeId:    treeID,
 		BranchId:  branchID,
-		Ancestors: []*persistenceblobs.HistoryBranchRange{},
+		Ancestors: []*persistencespb.HistoryBranchRange{},
 	}
 	datablob, err := serialization.HistoryBranchToBlob(bi)
 	if err != nil {

@@ -37,9 +37,9 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	m "go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -86,7 +86,7 @@ func newTransferQueueTaskExecutorBase(
 }
 
 func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 ) (string, commonpb.WorkflowExecution) {
 
 	return task.GetNamespaceId(), commonpb.WorkflowExecution{
@@ -96,7 +96,7 @@ func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 }
 
 func (t *transferQueueTaskExecutorBase) pushActivity(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	activityScheduleToStartTimeout *time.Duration,
 ) error {
 
@@ -126,7 +126,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 }
 
 func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
-	task *persistenceblobs.TransferTaskInfo,
+	task *persistencespb.TransferTaskInfo,
 	taskqueue *taskqueuepb.TaskQueue,
 	workflowTaskScheduleToStartTimeout *time.Duration,
 ) error {

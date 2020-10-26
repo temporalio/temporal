@@ -27,7 +27,7 @@ package history
 import (
 	"time"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -70,7 +70,7 @@ func newTimerQueueStandbyProcessor(
 	}
 	logger = logger.WithTags(tag.ClusterName(clusterName))
 	timerTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
-		timer, ok := taskInfo.(*persistenceblobs.TimerTaskInfo)
+		timer, ok := taskInfo.(*persistencespb.TimerTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
@@ -193,7 +193,7 @@ func (t *timerQueueStandbyProcessorImpl) notifyNewTimers(
 func (t *timerQueueStandbyProcessorImpl) complete(
 	taskInfo *taskInfo,
 ) {
-	timerTask, ok := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
+	timerTask, ok := taskInfo.task.(*persistencespb.TimerTaskInfo)
 	if !ok {
 		return
 	}

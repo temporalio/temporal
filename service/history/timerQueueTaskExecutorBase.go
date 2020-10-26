@@ -30,7 +30,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
@@ -70,7 +70,7 @@ func newTimerQueueTaskExecutorBase(
 }
 
 func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
-	task *persistenceblobs.TimerTaskInfo,
+	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(t.getNamespaceIDAndWorkflowExecution(task))
@@ -115,7 +115,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 }
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflow(
-	task *persistenceblobs.TimerTaskInfo,
+	task *persistencespb.TimerTaskInfo,
 	context workflowExecutionContext,
 	msBuilder mutableState,
 ) error {
@@ -142,7 +142,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 }
 
 func (t *timerQueueTaskExecutorBase) archiveWorkflow(
-	task *persistenceblobs.TimerTaskInfo,
+	task *persistencespb.TimerTaskInfo,
 	workflowContext workflowExecutionContext,
 	msBuilder mutableState,
 	namespaceCacheEntry *cache.NamespaceCacheEntry,
@@ -209,7 +209,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 }
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflowExecution(
-	task *persistenceblobs.TimerTaskInfo,
+	task *persistencespb.TimerTaskInfo,
 ) error {
 
 	op := func() error {
@@ -223,7 +223,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowExecution(
 }
 
 func (t *timerQueueTaskExecutorBase) deleteCurrentWorkflowExecution(
-	task *persistenceblobs.TimerTaskInfo,
+	task *persistencespb.TimerTaskInfo,
 ) error {
 
 	op := func() error {
@@ -237,7 +237,7 @@ func (t *timerQueueTaskExecutorBase) deleteCurrentWorkflowExecution(
 }
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
-	task *persistenceblobs.TimerTaskInfo,
+	task *persistencespb.TimerTaskInfo,
 	msBuilder mutableState,
 ) error {
 
@@ -256,7 +256,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
 }
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
-	task *persistenceblobs.TimerTaskInfo,
+	task *persistencespb.TimerTaskInfo,
 ) error {
 
 	op := func() error {
@@ -273,7 +273,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 }
 
 func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
-	task *persistenceblobs.TimerTaskInfo,
+	task *persistencespb.TimerTaskInfo,
 ) (string, commonpb.WorkflowExecution) {
 
 	return task.GetNamespaceId(), commonpb.WorkflowExecution{

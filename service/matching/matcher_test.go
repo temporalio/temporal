@@ -41,7 +41,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
@@ -390,7 +390,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	}()
 
 	taskCompleted := false
-	completionFunc := func(*persistenceblobs.AllocatedTaskInfo, error) {
+	completionFunc := func(*persistencespb.AllocatedTaskInfo, error) {
 		taskCompleted = true
 	}
 
@@ -476,8 +476,8 @@ func (t *MatcherTestSuite) TestRemotePollForQuery() {
 
 func (t *MatcherTestSuite) newNamespaceCache() cache.NamespaceCache {
 	entry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
-		&persistenceblobs.NamespaceConfig{},
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{},
 		"",
 		nil)
 	dc := cache.NewMockNamespaceCache(t.controller)
@@ -485,12 +485,12 @@ func (t *MatcherTestSuite) newNamespaceCache() cache.NamespaceCache {
 	return dc
 }
 
-func randomTaskInfo() *persistenceblobs.AllocatedTaskInfo {
+func randomTaskInfo() *persistencespb.AllocatedTaskInfo {
 	rt1 := time.Date(rand.Intn(9999), time.Month(rand.Intn(12)+1), rand.Intn(28)+1, rand.Intn(24)+1, rand.Intn(60), rand.Intn(60), rand.Intn(1e9), time.UTC)
 	rt2 := time.Date(rand.Intn(5000)+3000, time.Month(rand.Intn(12)+1), rand.Intn(28)+1, rand.Intn(24)+1, rand.Intn(60), rand.Intn(60), rand.Intn(1e9), time.UTC)
 
-	return &persistenceblobs.AllocatedTaskInfo{
-		Data: &persistenceblobs.TaskInfo{
+	return &persistencespb.AllocatedTaskInfo{
+		Data: &persistencespb.TaskInfo{
 			NamespaceId: uuid.New(),
 			WorkflowId:  uuid.New(),
 			RunId:       uuid.New(),
