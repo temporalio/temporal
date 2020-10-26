@@ -43,6 +43,7 @@ import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 import "temporal/server/api/namespace/v1/message.proto";
 import "temporal/server/api/replication/v1/message.proto";
+import "temporal/server/api/persistenceblobs/v1/message.proto";
 
 // TODO: remove these dependencies
 import "temporal/api/workflowservice/v1/request_response.proto";
@@ -371,8 +372,8 @@ message DescribeMutableStateRequest {
 }
 
 message DescribeMutableStateResponse {
-    string cache_mutable_state = 1;
-    string database_mutable_state = 2;
+    temporal.server.api.persistenceblobs.v1.WorkflowMutableState cache_mutable_state = 1;
+    temporal.server.api.persistenceblobs.v1.WorkflowMutableState database_mutable_state = 2;
     string tree_id = 3;
     string branch_id = 4;
 }

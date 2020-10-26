@@ -29,7 +29,7 @@ import "temporal/server/api/adminservice/v1/request_response.proto";
 service AdminService {
 
     // DescribeWorkflowExecution returns information about the internal states of workflow execution.
-    rpc DescribeWorkflowExecution (DescribeWorkflowExecutionRequest) returns (DescribeWorkflowExecutionResponse) {
+    rpc DescribeMutableState (DescribeMutableStateRequest) returns (DescribeMutableStateResponse) {
     }
 
     // DescribeHistoryHost returns information about the internal states of a history host

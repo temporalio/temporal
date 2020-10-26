@@ -36,17 +36,18 @@ import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/namespace/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/replication/v1/message.proto";
+import "temporal/server/api/persistenceblobs/v1/message.proto";
 
-message DescribeWorkflowExecutionRequest {
+message DescribeMutableStateRequest {
     string namespace = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
 }
 
-message DescribeWorkflowExecutionResponse {
+message DescribeMutableStateResponse {
     string shard_id = 1;
     string history_addr = 2;
-    string cache_mutable_state = 3;
-    string database_mutable_state = 4;
+    temporal.server.api.persistenceblobs.v1.WorkflowMutableState cache_mutable_state = 3;
+    temporal.server.api.persistenceblobs.v1.WorkflowMutableState database_mutable_state = 4;
     string tree_id = 5;
     string branch_id = 6;
 }
