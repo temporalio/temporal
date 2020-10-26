@@ -290,9 +290,8 @@ func (s *Service) Start() {
 	if s.params.Authorizer != nil {
 		s.handler = NewAccessControlledHandlerImpl(s.handler, s.params.Authorizer)
 	}
-	workflowNilCheckHandler := NewWorkflowNilCheckHandler(s.handler)
 
-	workflowservice.RegisterWorkflowServiceServer(s.server, workflowNilCheckHandler)
+	workflowservice.RegisterWorkflowServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.handler)
 
 	s.adminHandler = NewAdminHandler(s, s.params, s.config)
