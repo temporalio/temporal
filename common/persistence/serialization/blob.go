@@ -216,7 +216,7 @@ func ReplicationVersionsFromBlob(b []byte, proto string) (*persistenceblobs.Repl
 }
 
 func ChecksumToBlob(checksum *persistenceblobs.Checksum) (commonpb.DataBlob, error) {
-	// nil is replaced with empty object becayse it is not supported for "checksum" field in DB.
+	// nil is replaced with empty object because it is not supported for "checksum" field in DB.
 	if checksum == nil {
 		checksum = &persistenceblobs.Checksum{}
 	}

@@ -8,6 +8,7 @@
 
 - included_paths:
     - '**/message.proto'
+    - '**/persistenceblobs/v1/*.proto'
   disabled_rules:
     - 'core::0122::name-suffix'
     - 'core::0123::resource-annotation'
