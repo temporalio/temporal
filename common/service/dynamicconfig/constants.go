@@ -870,7 +870,7 @@ func NamespaceIDFilter(namespaceID string) FilterOption {
 // TaskTypeFilter filters by task type
 func TaskTypeFilter(taskType enumspb.TaskQueueType) FilterOption {
 	return func(filterMap map[Filter]interface{}) {
-		filterMap[TaskType] = int(taskType)
+		filterMap[TaskType] = enumspb.TaskQueueType_name[int32(taskType)]
 	}
 }
 
