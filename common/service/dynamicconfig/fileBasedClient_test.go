@@ -148,6 +148,17 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilteredByWorkflowTaskQueueInfo()
 	s.Equal(expectedValue, v)
 }
 
+func (s *fileBasedClientSuite) TestGetIntValue_FilteredByNoTaskTypeQueueInfo() {
+	expectedValue := 1003
+	filters := map[Filter]interface{}{
+		Namespace:     "global-samples-namespace",
+		TaskQueueName: "test-tq",
+	}
+	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, 0)
+	s.NoError(err)
+	s.Equal(expectedValue, v)
+}
+
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByActivityTaskQueueInfo() {
 	expectedValue := 1002
 	filters := map[Filter]interface{}{
