@@ -150,7 +150,7 @@ func (task *UpdateTask) execCQLStmts(ver string, stmts []string) error {
 		log.Println(rmspaceRegex.ReplaceAllString(stmt, " "))
 		e := task.db.Exec(stmt)
 		if e != nil {
-			return fmt.Errorf("error executing CQL statement:%v", e)
+			return fmt.Errorf("error executing statement:%v", e)
 		}
 	}
 	log.Printf("---- Done ----\n")
