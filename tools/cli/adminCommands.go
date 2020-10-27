@@ -125,34 +125,37 @@ func AdminDescribeWorkflow(c *cli.Context) {
 	resp := describeMutableState(c)
 
 	if resp != nil {
-		fmt.Println(colorMagenta("Cache mutable state:"))
+		fmt.Println(colorGreen("Cache mutable state:"))
 		if resp.GetCacheMutableState() != nil {
 			prettyPrintJSONObject(resp.GetCacheMutableState())
 		}
-		fmt.Println(colorMagenta("Database mutable state:"))
+		fmt.Println(colorGreen("Database mutable state:"))
 		prettyPrintJSONObject(resp.GetDatabaseMutableState())
-		fmt.Println()
-		fmt.Printf("History service address: %s\n", resp.GetHistoryAddr())
-		fmt.Printf("Shard Id: %s\n", resp.GetShardId())
 
+		fmt.Println(colorGreen("Current branch token:"))
 		currentBranchTokenBytes := resp.GetDatabaseMutableState().GetExecutionInfo().GetEventBranchToken()
 		if versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories(); versionHistories != nil {
 			// if VersionHistories is set, then all branch infos are stored in VersionHistories
 			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 			if err != nil {
-				ErrorAndExit("Unable to get current version history", err)
+				fmt.Println(colorRed("Unable to get current version history:"), err)
+			} else {
+				currentBranchTokenBytes = currentVersionHistory.GetBranchToken()
 			}
-			currentBranchTokenBytes = currentVersionHistory.GetBranchToken()
 		}
 
-		currentBranchToken := persistencespb.HistoryBranch{}
-		err := currentBranchToken.Unmarshal(currentBranchTokenBytes)
-		if err != nil {
-			ErrorAndExit("Unable to unmarshal current branch token", err)
+		if len(currentBranchTokenBytes) > 0 {
+			currentBranchToken := persistencespb.HistoryBranch{}
+			err := currentBranchToken.Unmarshal(currentBranchTokenBytes)
+			if err != nil {
+				fmt.Println(colorRed("Unable to unmarshal current branch token:"), err)
+			} else {
+				prettyPrintJSONObject(currentBranchToken)
+			}
 		}
 
-		fmt.Println("Current branch token:")
-		prettyPrintJSONObject(currentBranchToken)
+		fmt.Printf("History service address: %s\n", resp.GetHistoryAddr())
+		fmt.Printf("Shard Id: %s\n", resp.GetShardId())
 	}
 }
 
