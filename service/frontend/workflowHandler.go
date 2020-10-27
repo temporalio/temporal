@@ -835,7 +835,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return err
 	}
 
-	nilResponse := &workflowservice.PollWorkflowTaskQueueResponse{}
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
@@ -854,7 +853,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		}
 
 		// Must be cancellation error.  Doesn't matter what we return here.  Client already went away.
-		return nilResponse, nil
+		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 	}
 
 	tagsForErrorLog = append(tagsForErrorLog, []tag.Tag{tag.WorkflowID(
@@ -863,9 +862,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	resp, err := wh.createPollWorkflowTaskQueueResponse(ctx, scope, namespaceID, matchingResp, matchingResp.GetBranchToken())
 	if err != nil {
 		return nil, wh.error(err, scope, tagsForErrorLog...)
-	}
-	if resp == nil {
-		resp = nilResponse
 	}
 	return resp, nil
 }
