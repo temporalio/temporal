@@ -26,15 +26,12 @@ package persistencetests
 
 import (
 	"math/rand"
-	"os"
 	"reflect"
 	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	historypb "go.temporal.io/api/history/v1"
@@ -80,9 +77,6 @@ func isConditionFail(err error) bool {
 
 // SetupSuite implementation
 func (s *HistoryV2PersistenceSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 // SetupTest implementation

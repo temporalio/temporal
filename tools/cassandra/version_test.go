@@ -34,7 +34,6 @@ import (
 	"testing"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -128,7 +127,7 @@ func (s *VersionTestSuite) createKeyspace(keyspace string) func() {
 
 	err = client.createKeyspace(keyspace)
 	if err != nil {
-		log.Fatalf("error creating keyspace, err=%v", err)
+		s.Fail("error creating keyspace, err=%v", err)
 	}
 	return func() {
 		s.NoError(client.dropKeyspace(keyspace))
