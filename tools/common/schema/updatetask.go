@@ -128,7 +128,7 @@ func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) erro
 
 	for _, cs := range updates {
 
-		err := task.execCQLStmts(cs.version, cs.cqlStmts)
+		err := task.execStmts(cs.version, cs.cqlStmts)
 		if err != nil {
 			return err
 		}
@@ -144,7 +144,7 @@ func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) erro
 	return nil
 }
 
-func (task *UpdateTask) execCQLStmts(ver string, stmts []string) error {
+func (task *UpdateTask) execStmts(ver string, stmts []string) error {
 	log.Printf("---- Executing updates for version %v ----\n", ver)
 	for _, stmt := range stmts {
 		log.Println(rmspaceRegex.ReplaceAllString(stmt, " "))
