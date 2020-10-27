@@ -1099,7 +1099,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 
 	if cacheHit && cacheCtx.(*workflowExecutionContextImpl).mutableState != nil {
 		msb := cacheCtx.(*workflowExecutionContextImpl).mutableState
-		response.CacheMutableState = msb.CopyToPersistence()
+		response.CacheMutableState = msb.CopyToProto()
 	}
 
 	msb, err := dbCtx.loadWorkflowExecution()
@@ -1107,7 +1107,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 		return nil, err
 	}
 
-	response.DatabaseMutableState = msb.CopyToPersistence()
+	response.DatabaseMutableState = msb.CopyToProto()
 	return response, nil
 }
 
