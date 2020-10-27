@@ -761,7 +761,7 @@ func (mr *MockmutableStateMockRecorder) CheckResettable() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckResettable", reflect.TypeOf((*MockmutableState)(nil).CheckResettable))
 }
 
-// CopyToPersistence mocks base method.
+// CopyToProto mocks base method.
 func (m *MockmutableState) CopyToProto() *persistence.WorkflowMutableState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CopyToProto")
@@ -769,8 +769,8 @@ func (m *MockmutableState) CopyToProto() *persistence.WorkflowMutableState {
 	return ret0
 }
 
-// CopyToPersistence indicates an expected call of CopyToPersistence.
-func (mr *MockmutableStateMockRecorder) CopyToPersistence() *gomock.Call {
+// CopyToProto indicates an expected call of CopyToProto.
+func (mr *MockmutableStateMockRecorder) CopyToProto() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyToProto", reflect.TypeOf((*MockmutableState)(nil).CopyToProto))
 }

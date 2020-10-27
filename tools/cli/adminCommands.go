@@ -213,10 +213,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	rid := c.String(FlagRunID)
 
 	resp := describeMutableState(c)
-	// TODO: this is temporary solution for JSON version of WorkflowMutableState.
-	// Proper refactoring is required here: resp.GetDatabaseMutableState() should return proto object.
-	ms := resp.GetDatabaseMutableState()
-	namespaceID := ms.GetExecutionInfo().GetNamespaceId()
+	namespaceID := resp.GetDatabaseMutableState().GetExecutionInfo().GetNamespaceId()
 	skipError := c.Bool(FlagSkipErrorMode)
 	session := connectToCassandra(c)
 	shardID := resp.GetShardId()
@@ -226,13 +223,13 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	}
 	shardIDInt32 := int32(shardIDInt)
 	var branchTokens [][]byte
-	if ms.GetExecutionInfo().GetVersionHistories() != nil {
+	if versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories(); versionHistories != nil {
 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
-		for _, historyItem := range ms.GetExecutionInfo().GetVersionHistories().GetHistories() {
+		for _, historyItem := range versionHistories.GetHistories() {
 			branchTokens = append(branchTokens, historyItem.GetBranchToken())
 		}
 	} else {
-		branchTokens = append(branchTokens, ms.GetExecutionInfo().GetEventBranchToken())
+		branchTokens = append(branchTokens, resp.GetDatabaseMutableState().GetExecutionInfo().GetEventBranchToken())
 	}
 
 	for _, branchToken := range branchTokens {
