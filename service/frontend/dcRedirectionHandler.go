@@ -536,10 +536,6 @@ func (handler *DCRedirectionHandlerImpl) PollWorkflowTaskQueue(
 		}
 		return err
 	})
-
-	if resp == nil && err == nil {
-		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
-	}
 	return resp, err
 }
 
