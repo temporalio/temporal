@@ -1097,8 +1097,8 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
-		if err != nil {
+		errCancel := wh.cancelOutstandingPoll(ctx, err, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
+		if errCancel != nil {
 			// For all other errors log an error and return it back to client.
 			ctxTimeout := "not-set"
 			ctxDeadline, ok := ctx.Deadline()
@@ -1108,16 +1108,11 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 			wh.GetLogger().Error("PollActivityTaskQueue failed.",
 				tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
 				tag.Value(ctxTimeout),
-				tag.Error(err))
-			return nil, wh.error(err, scope)
+				tag.Error(errCancel))
+			return nil, wh.error(errCancel, scope)
 		}
+		return nil, wh.error(err, scope)
 	}
-
-	nilResponse := &workflowservice.PollActivityTaskQueueResponse{}
-	if matchingResponse == nil {
-		return nilResponse, nil
-	}
-
 	return &workflowservice.PollActivityTaskQueueResponse{
 		TaskToken:                   matchingResponse.TaskToken,
 		WorkflowExecution:           matchingResponse.WorkflowExecution,
