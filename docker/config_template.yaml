@@ -168,11 +168,13 @@ global:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
                 rootCaData:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA "" }}
+
+{{- $temporalGrpcPort := default .Env.FRONTEND_GRPC_PORT "7233" -}}
 services:
     frontend:
         rpc:
-            grpcPort: 7233
-            membershipPort: 6933
+            grpcPort: {{ $temporalGrpcPort }}
+            membershipPort: {{ default .Env.FRONTEND_MEMBERSHIP_PORT "6933" }}
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
         {{- if .Env.STATSD_ENDPOINT }}
         metrics:
@@ -188,8 +190,8 @@ services:
 
     matching:
         rpc:
-            grpcPort: 7235
-            membershipPort: 6935
+            grpcPort: {{ default .Env.MATCHING_GRPC_PORT "7235" }}
+            membershipPort: {{ default .Env.MATCHING_MEMBERSHIP_PORT "6935" }}
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
         {{- if .Env.STATSD_ENDPOINT }}
         metrics:
@@ -205,8 +207,8 @@ services:
 
     history:
         rpc:
-            grpcPort: 7234
-            membershipPort: 6934
+            grpcPort: {{ default .Env.HISTORY_GRPC_PORT "7234" }}
+            membershipPort: {{ default .Env.HISTORY_MEMBERSHIP_PORT "6934" }}
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
         {{- if .Env.STATSD_ENDPOINT }}
         metrics:
@@ -222,8 +224,8 @@ services:
 
     worker:
         rpc:
-            grpcPort: 7239
-            membershipPort: 6939
+            grpcPort: {{ default .Env.WORKER_GRPC_PORT "7239" }}
+            membershipPort: {{ default .Env.WORKER_MEMBERSHIP_PORT "6939" }}
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
         {{- if .Env.STATSD_ENDPOINT }}
         metrics:
@@ -247,7 +249,7 @@ clusterMetadata:
             enabled: true
             initialFailoverVersion: 1
             rpcName: "frontend"
-            rpcAddress: "127.0.0.1:7233"
+            rpcAddress: {{ (print "127.0.0.1:" $temporalGrpcPort) }}
 
 dcRedirectionPolicy:
     policy: "noop"
@@ -296,7 +298,7 @@ kafka:
             dlq-topic: temporal-visibility-dev-dlq
 
 {{ $publicIp := default .Env.BIND_ON_IP "127.0.0.1" -}}
-{{- $defaultPublicHostPost := (print $publicIp ":7233") -}}
+{{- $defaultPublicHostPost := (print $publicIp ":" $temporalGrpcPort) -}}
 publicClient:
     hostPort: {{ default .Env.PUBLIC_FRONTEND_ADDRESS $defaultPublicHostPost }}
 
