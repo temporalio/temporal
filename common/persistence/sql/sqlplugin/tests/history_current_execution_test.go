@@ -47,13 +47,6 @@ type (
 	}
 )
 
-const (
-	testHistoryCurrentExecutionWorkflowID = "random workflow ID"
-
-	testHistoryCurrentExecutionEncoding      = "random encoding"
-	testHistoryCurrentExecutionStateEncoding = "random encoding"
-)
-
 var (
 	testHistoryExecutionStates = []enumsspb.WorkflowExecutionState{
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,

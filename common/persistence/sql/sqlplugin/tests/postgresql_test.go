@@ -73,6 +73,23 @@ func TestPostgreSQLNamespaceSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestPostgreSQLQueueMessageSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create PostgreSQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newQueueMessageSuite(t, store)
+	suite.Run(t, s)
+}
+
 func TestPostgreSQLMatchingTaskSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)

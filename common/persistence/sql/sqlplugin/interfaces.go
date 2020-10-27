@@ -42,7 +42,7 @@ type (
 		ClusterMetadata
 		Namespace
 		Visibility
-		Queue
+		QueueMessage
 
 		MatchingTask
 		MatchingTaskQueue

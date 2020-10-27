@@ -1438,10 +1438,10 @@ func isMessageIDConflictError(err error) bool {
 // GetReplicationMessages is a utility method to get messages from the queue
 func (s *TestBase) GetReplicationMessages(
 	lastMessageID int64,
-	maxCount int,
+	pageSize int,
 ) ([]*replicationspb.ReplicationTask, int64, error) {
 
-	return s.NamespaceReplicationQueue.GetReplicationMessages(lastMessageID, maxCount)
+	return s.NamespaceReplicationQueue.GetReplicationMessages(lastMessageID, pageSize)
 }
 
 // UpdateAckLevel updates replication queue ack level

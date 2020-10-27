@@ -33,22 +33,44 @@ import (
 )
 
 const (
-	templateEnqueueMessageQuery            = `INSERT INTO queue (queue_type, message_id, message_payload) VALUES(:queue_type, :message_id, :message_payload)`
+	templateEnqueueMessageQuery      = `INSERT INTO queue (queue_type, message_id, message_payload) VALUES(:queue_type, :message_id, :message_payload)`
+	templateGetMessageQuery          = `SELECT message_id, message_payload FROM queue WHERE queue_type = $1 and message_id = $2`
+	templateGetMessagesQuery         = `SELECT message_id, message_payload FROM queue WHERE queue_type = $1 and message_id > $2 and message_id <= $3 ORDER BY message_id ASC LIMIT $4`
+	templateDeleteMessageQuery       = `DELETE FROM queue WHERE queue_type = $1 and message_id = $2`
+	templateRangeDeleteMessagesQuery = `DELETE FROM queue WHERE queue_type = $1 and message_id > $2 and message_id <= $3`
+
 	templateGetLastMessageIDQuery          = `SELECT message_id FROM queue WHERE message_id >= (SELECT message_id FROM queue WHERE queue_type=$1 ORDER BY message_id DESC LIMIT 1) FOR UPDATE`
-	templateGetMessagesQuery               = `SELECT message_id, message_payload FROM queue WHERE queue_type = $1 and message_id > $2 ORDER BY message_id ASC LIMIT $3`
-	templateGetMessagesBetweenQuery        = `SELECT message_id, message_payload FROM queue WHERE queue_type = $1 and messageid > $2 and message_id <= $3 ORDER BY message_id ASC LIMIT $4`
-	templateDeleteMessageQuery             = `DELETE FROM queue WHERE queue_type = $1 and message_id = $2`
-	templateDeleteMessagesBeforeQuery      = `DELETE FROM queue WHERE queue_type = $1 and message_id < $2`
-	templateRangeDeleteMessagesQuery       = `DELETE FROM queue WHERE queue_type = $1 and message_id > $2 and message_id <= $3`
 	templateGetQueueMetadataQuery          = `SELECT data from queue_metadata WHERE queue_type = $1`
 	templateGetQueueMetadataForUpdateQuery = templateGetQueueMetadataQuery + ` FOR UPDATE`
 	templateInsertQueueMetadataQuery       = `INSERT INTO queue_metadata (queue_type, data) VALUES(:queue_type, :data)`
 	templateUpdateQueueMetadataQuery       = `UPDATE queue_metadata SET data = $1 WHERE queue_type = $2`
 )
 
-// InsertIntoQueue inserts a new row into queue table
-func (pdb *db) InsertIntoQueue(row *sqlplugin.QueueRow) (sql.Result, error) {
+// InsertIntoMessages inserts a new row into queue table
+func (pdb *db) InsertIntoMessages(row []sqlplugin.QueueRow) (sql.Result, error) {
 	return pdb.conn.NamedExec(templateEnqueueMessageQuery, row)
+}
+
+func (pdb *db) SelectFromMessages(filter sqlplugin.QueueMessagesFilter) ([]sqlplugin.QueueRow, error) {
+	var rows []sqlplugin.QueueRow
+	err := pdb.conn.Select(&rows, templateGetMessageQuery, filter.QueueType, filter.MessageID)
+	return rows, err
+}
+
+func (pdb *db) RangeSelectFromMessages(filter sqlplugin.QueueMessagesRangeFilter) ([]sqlplugin.QueueRow, error) {
+	var rows []sqlplugin.QueueRow
+	err := pdb.conn.Select(&rows, templateGetMessagesQuery, filter.QueueType, filter.MinMessageID, filter.MaxMessageID, filter.PageSize)
+	return rows, err
+}
+
+// DeleteFromMessages deletes message with a messageID from the queue
+func (pdb *db) DeleteFromMessages(filter sqlplugin.QueueMessagesFilter) (sql.Result, error) {
+	return pdb.conn.Exec(templateDeleteMessageQuery, filter.QueueType, filter.MessageID)
+}
+
+// RangeDeleteFromMessages deletes messages before messageID from the queue
+func (pdb *db) RangeDeleteFromMessages(filter sqlplugin.QueueMessagesRangeFilter) (sql.Result, error) {
+	return pdb.conn.Exec(templateRangeDeleteMessagesQuery, filter.QueueType, filter.MinMessageID, filter.MaxMessageID)
 }
 
 // GetLastEnqueuedMessageIDForUpdate returns the last enqueued message ID
@@ -56,35 +78,6 @@ func (pdb *db) GetLastEnqueuedMessageIDForUpdate(queueType persistence.QueueType
 	var lastMessageID int64
 	err := pdb.conn.Get(&lastMessageID, templateGetLastMessageIDQuery, queueType)
 	return lastMessageID, err
-}
-
-// GetMessagesFromQueue retrieves messages from the queue
-func (pdb *db) GetMessagesFromQueue(queueType persistence.QueueType, lastMessageID int64, maxRows int) ([]sqlplugin.QueueRow, error) {
-	var rows []sqlplugin.QueueRow
-	err := pdb.conn.Select(&rows, templateGetMessagesQuery, queueType, lastMessageID, maxRows)
-	return rows, err
-}
-
-// GetMessagesBetween retrieves messages from the queue
-func (pdb *db) GetMessagesBetween(queueType persistence.QueueType, firstMessageID int64, lastMessageID int64, maxRows int) ([]sqlplugin.QueueRow, error) {
-	var rows []sqlplugin.QueueRow
-	err := pdb.conn.Select(&rows, templateGetMessagesBetweenQuery, queueType, firstMessageID, lastMessageID, maxRows)
-	return rows, err
-}
-
-// DeleteMessagesBefore deletes messages before messageID from the queue
-func (pdb *db) DeleteMessagesBefore(queueType persistence.QueueType, messageID int64) (sql.Result, error) {
-	return pdb.conn.Exec(templateDeleteMessagesBeforeQuery, queueType, messageID)
-}
-
-// RangeDeleteMessages deletes messages before messageID from the queue
-func (pdb *db) RangeDeleteMessages(queueType persistence.QueueType, exclusiveBeginMessageID int64, inclusiveEndMessageID int64) (sql.Result, error) {
-	return pdb.conn.Exec(templateRangeDeleteMessagesQuery, queueType, exclusiveBeginMessageID, inclusiveEndMessageID)
-}
-
-// DeleteMessage deletes message with a messageID from the queue
-func (pdb *db) DeleteMessage(queueType persistence.QueueType, messageID int64) (sql.Result, error) {
-	return pdb.conn.Exec(templateDeleteMessageQuery, queueType, messageID)
 }
 
 // InsertAckLevel inserts ack level

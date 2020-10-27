@@ -73,6 +73,23 @@ func TestMySQLNamespaceSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestMySQLQueueMessageSuite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(cfg)
+	SetupMySQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(cfg)
+	}()
+
+	s := newQueueMessageSuite(t, store)
+	suite.Run(t, s)
+}
+
 func TestMySQLMatchingTaskSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(cfg)

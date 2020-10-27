@@ -26,8 +26,15 @@ package sqlplugin
 
 import (
 	"database/sql"
+	"math"
 
 	"go.temporal.io/server/common/persistence"
+)
+
+const (
+	EmptyMessageID = int64(-1)
+	MinMessageID   = EmptyMessageID + 1
+	MaxMessageID   = math.MaxInt64
 )
 
 type (
@@ -38,20 +45,35 @@ type (
 		MessagePayload []byte
 	}
 
+	// QueueMessagesFilter
+	QueueMessagesFilter struct {
+		QueueType persistence.QueueType
+		MessageID int64
+	}
+
+	// QueueMessagesRangeFilter
+	QueueMessagesRangeFilter struct {
+		QueueType    persistence.QueueType
+		MinMessageID int64
+		MaxMessageID int64
+		PageSize     int
+	}
+
 	// QueueMetadataRow represents a row in queue_metadata table
 	QueueMetadataRow struct {
 		QueueType persistence.QueueType
 		Data      []byte
 	}
 
-	Queue interface {
-		InsertIntoQueue(row *QueueRow) (sql.Result, error)
+	QueueMessage interface {
+		InsertIntoMessages(row []QueueRow) (sql.Result, error)
+		SelectFromMessages(filter QueueMessagesFilter) ([]QueueRow, error)
+		RangeSelectFromMessages(filter QueueMessagesRangeFilter) ([]QueueRow, error)
+		DeleteFromMessages(filter QueueMessagesFilter) (sql.Result, error)
+		RangeDeleteFromMessages(filter QueueMessagesRangeFilter) (sql.Result, error)
+
 		GetLastEnqueuedMessageIDForUpdate(queueType persistence.QueueType) (int64, error)
-		GetMessagesFromQueue(queueType persistence.QueueType, lastMessageID int64, maxRows int) ([]QueueRow, error)
-		GetMessagesBetween(queueType persistence.QueueType, firstMessageID int64, lastMessageID int64, maxRows int) ([]QueueRow, error)
-		DeleteMessagesBefore(queueType persistence.QueueType, messageID int64) (sql.Result, error)
-		RangeDeleteMessages(queueType persistence.QueueType, exclusiveBeginMessageID int64, inclusiveEndMessageID int64) (sql.Result, error)
-		DeleteMessage(queueType persistence.QueueType, messageID int64) (sql.Result, error)
+
 		InsertAckLevel(queueType persistence.QueueType, messageID int64, clusterName string) error
 		UpdateAckLevels(queueType persistence.QueueType, clusterAckLevels map[string]int64) error
 		GetAckLevels(queueType persistence.QueueType, forUpdate bool) (map[string]int64, error)
