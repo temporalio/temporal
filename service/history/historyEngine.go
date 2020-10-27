@@ -1099,38 +1099,15 @@ func (e *historyEngineImpl) DescribeMutableState(
 
 	if cacheHit && cacheCtx.(*workflowExecutionContextImpl).mutableState != nil {
 		msb := cacheCtx.(*workflowExecutionContextImpl).mutableState
-		wms := msb.CopyToPersistence()
-		response.CacheMutableState = workflowMutableStateToJSON(wms)
+		response.CacheMutableState = msb.CopyToPersistence()
 	}
 
 	msb, err := dbCtx.loadWorkflowExecution()
 	if err != nil {
-		response.DatabaseMutableState = err.Error()
-		return response, nil
-	}
-	wms := msb.CopyToPersistence()
-	response.DatabaseMutableState = workflowMutableStateToJSON(wms)
-
-	currentBranchToken := wms.ExecutionInfo.EventBranchToken
-	if wms.ExecutionInfo.VersionHistories != nil {
-		// if VersionHistories is set, then all branch infos are stored in VersionHistories
-		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(wms.ExecutionInfo.VersionHistories)
-		if err != nil {
-			response.TreeId = err.Error()
-			return response, nil
-		}
-		currentBranchToken = currentVersionHistory.GetBranchToken()
-	}
-	branchInfo := persistencespb.HistoryBranch{}
-	err = branchInfo.Unmarshal(currentBranchToken)
-	if err != nil {
-		response.TreeId = err.Error()
-		return response, nil
+		return nil, err
 	}
 
-	response.TreeId = branchInfo.TreeId
-	response.BranchId = branchInfo.BranchId
-
+	response.DatabaseMutableState = msb.CopyToPersistence()
 	return response, nil
 }
 

@@ -188,8 +188,8 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 	return &adminservice.AddSearchAttributeResponse{}, nil
 }
 
-// DescribeWorkflowExecution returns information about the specified workflow execution.
-func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request *adminservice.DescribeWorkflowExecutionRequest) (_ *adminservice.DescribeWorkflowExecutionResponse, retError error) {
+// DescribeMutableState returns information about the specified workflow execution.
+func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *adminservice.DescribeMutableStateRequest) (_ *adminservice.DescribeMutableStateResponse, retError error) {
 	defer log.CapturePanic(adh.GetLogger(), &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminDescribeWorkflowExecutionScope)
@@ -214,21 +214,21 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 	}
 
 	historyAddr := historyHost.GetAddress()
-	resp2, err := adh.GetHistoryClient().DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+	historyResponse, err := adh.GetHistoryClient().DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
 		NamespaceId: namespaceID,
 		Execution:   request.Execution,
 	})
 
 	if err != nil {
-		return &adminservice.DescribeWorkflowExecutionResponse{}, err
+		return nil, err
 	}
-	return &adminservice.DescribeWorkflowExecutionResponse{
+	return &adminservice.DescribeMutableStateResponse{
 		ShardId:              shardIDStr,
 		HistoryAddr:          historyAddr,
-		DatabaseMutableState: resp2.GetDatabaseMutableState(),
-		CacheMutableState:    resp2.GetCacheMutableState(),
-		TreeId:               resp2.GetTreeId(),
-		BranchId:             resp2.GetBranchId(),
+		DatabaseMutableState: historyResponse.GetDatabaseMutableState(),
+		CacheMutableState:    historyResponse.GetCacheMutableState(),
+		// TreeId:               historyResponse.GetTreeId(),
+		// BranchId:             historyResponse.GetBranchId(),
 	}, err
 }
 

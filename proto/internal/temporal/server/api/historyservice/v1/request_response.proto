@@ -374,11 +374,9 @@ message DescribeMutableStateRequest {
 message DescribeMutableStateResponse {
     temporal.server.api.persistence.v1.WorkflowMutableState cache_mutable_state = 1;
     temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 2;
-    string tree_id = 3;
-    string branch_id = 4;
 }
 
-//At least one of the parameters needs to be provided
+// At least one of the parameters needs to be provided.
 message DescribeHistoryHostRequest {
     //ip:port
     string host_address = 1;

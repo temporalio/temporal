@@ -54,11 +54,11 @@ func NewAdminNilCheckHandler(
 	return handler
 }
 
-// DescribeWorkflowExecution ...
-func (adh *AdminNilCheckHandler) DescribeWorkflowExecution(ctx context.Context, request *adminservice.DescribeWorkflowExecutionRequest) (_ *adminservice.DescribeWorkflowExecutionResponse, retError error) {
-	resp, err := adh.parentHandler.DescribeWorkflowExecution(ctx, request)
+// DescribeMutableState ...
+func (adh *AdminNilCheckHandler) DescribeMutableState(ctx context.Context, request *adminservice.DescribeMutableStateRequest) (_ *adminservice.DescribeMutableStateResponse, retError error) {
+	resp, err := adh.parentHandler.DescribeMutableState(ctx, request)
 	if resp == nil && err == nil {
-		resp = &adminservice.DescribeWorkflowExecutionResponse{}
+		resp = &adminservice.DescribeMutableStateResponse{}
 	}
 	return resp, err
 }

@@ -120,20 +120,20 @@ func (c *metricClient) CloseShard(
 	return resp, err
 }
 
-func (c *metricClient) DescribeWorkflowExecution(
+func (c *metricClient) DescribeMutableState(
 	ctx context.Context,
-	request *adminservice.DescribeWorkflowExecutionRequest,
+	request *adminservice.DescribeMutableStateRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.DescribeWorkflowExecutionResponse, error) {
+) (*adminservice.DescribeMutableStateResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.AdminClientDescribeWorkflowExecutionScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.AdminClientDescribeWorkflowMutableStateScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.AdminClientDescribeWorkflowExecutionScope, metrics.ClientLatency)
-	resp, err := c.client.DescribeWorkflowExecution(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientDescribeWorkflowMutableStateScope, metrics.ClientLatency)
+	resp, err := c.client.DescribeMutableState(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientDescribeWorkflowExecutionScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.AdminClientDescribeWorkflowMutableStateScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
