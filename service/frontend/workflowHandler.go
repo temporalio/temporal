@@ -1117,8 +1117,9 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		}
 	}
 
+	nilResponse := &workflowservice.PollActivityTaskQueueResponse{}
 	if matchingResponse == nil {
-		return nil, nil
+		return nilResponse, nil
 	}
 
 	return &workflowservice.PollActivityTaskQueueResponse{
