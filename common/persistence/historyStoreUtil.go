@@ -28,8 +28,7 @@ import (
 	"fmt"
 
 	historypb "go.temporal.io/api/history/v1"
-
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 // ReadFullPageV2Events reads a full page of history events from HistoryManager. Due to storage format of V2 History
@@ -77,7 +76,7 @@ func ReadFullPageV2EventsByBatch(historyV2Mgr HistoryManager, req *ReadHistoryBr
 }
 
 // GetBeginNodeID gets node id from last ancestor
-func GetBeginNodeID(bi *persistenceblobs.HistoryBranch) int64 {
+func GetBeginNodeID(bi *persistencespb.HistoryBranch) int64 {
 	if len(bi.Ancestors) == 0 {
 		// root branch
 		return 1

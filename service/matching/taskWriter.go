@@ -31,7 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -45,7 +45,7 @@ type (
 
 	writeTaskRequest struct {
 		execution  *commonpb.WorkflowExecution
-		taskInfo   *persistenceblobs.TaskInfo
+		taskInfo   *persistencespb.TaskInfo
 		responseCh chan<- *writeTaskResponse
 	}
 
@@ -100,7 +100,7 @@ func (w *taskWriter) isStopped() bool {
 }
 
 func (w *taskWriter) appendTask(execution *commonpb.WorkflowExecution,
-	taskInfo *persistenceblobs.TaskInfo) (*persistence.CreateTasksResponse, error) {
+	taskInfo *persistencespb.TaskInfo) (*persistence.CreateTasksResponse, error) {
 
 	if w.isStopped() {
 		return nil, errShutdown
@@ -168,9 +168,9 @@ writerLoop:
 					continue writerLoop
 				}
 
-				var tasks []*persistenceblobs.AllocatedTaskInfo
+				var tasks []*persistencespb.AllocatedTaskInfo
 				for i, req := range reqs {
-					tasks = append(tasks, &persistenceblobs.AllocatedTaskInfo{
+					tasks = append(tasks, &persistencespb.AllocatedTaskInfo{
 						TaskId: taskIDs[i],
 						Data:   req.taskInfo,
 					})

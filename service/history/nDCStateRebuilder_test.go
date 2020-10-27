@@ -39,7 +39,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
@@ -90,7 +90,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          10,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -308,9 +308,9 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	}, nil).Once()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: targetNamespaceID, Name: targetNamespace},
-		&persistenceblobs.NamespaceConfig{},
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceInfo{Id: targetNamespaceID, Name: targetNamespace},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,

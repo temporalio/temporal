@@ -37,7 +37,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -455,7 +455,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 		taskAttributes := replicationTask.GetSyncActivityTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
-			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
+			TaskInfo: &persistencespb.ReplicationTaskInfo{
 				NamespaceId: taskAttributes.GetNamespaceId(),
 				WorkflowId:  taskAttributes.GetWorkflowId(),
 				RunId:       taskAttributes.GetRunId(),
@@ -481,7 +481,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
-			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
+			TaskInfo: &persistencespb.ReplicationTaskInfo{
 				NamespaceId:  taskAttributes.GetNamespaceId(),
 				WorkflowId:   taskAttributes.GetWorkflowId(),
 				RunId:        taskAttributes.GetRunId(),

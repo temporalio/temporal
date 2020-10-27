@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
@@ -193,7 +193,7 @@ type (
 	}
 )
 
-func byteKeyFromProto(p *persistenceblobs.HistoryBranch) (*historyBranchByteKey, error) {
+func byteKeyFromProto(p *persistencespb.HistoryBranch) (*historyBranchByteKey, error) {
 	branchBytes, err := primitives.ParseUUID(p.BranchId)
 	if err != nil {
 		return nil, err
@@ -405,8 +405,8 @@ func scanShard(
 }
 
 func verifyHistoryExists(
-	executionInfo *persistenceblobs.WorkflowExecutionInfo,
-	executionState *persistenceblobs.WorkflowExecutionState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
 	branchDecoder *codec.JSONPBEncoder,
 	corruptedExecutionWriter BufferedWriter,
@@ -416,8 +416,8 @@ func verifyHistoryExists(
 	historyStore persistence.HistoryStore,
 	totalDBRequests *int64,
 	execStore persistence.ExecutionStore,
-) (VerificationResult, *persistence.InternalReadHistoryBranchResponse, *persistenceblobs.HistoryBranch) {
-	var branch persistenceblobs.HistoryBranch
+) (VerificationResult, *persistence.InternalReadHistoryBranchResponse, *persistencespb.HistoryBranch) {
+	var branch persistencespb.HistoryBranch
 	err := branchDecoder.Decode(executionInfo.EventBranchToken, &branch)
 	byteBranch, err := byteKeyFromProto(&branch)
 	if err != nil {
@@ -503,10 +503,10 @@ func verifyHistoryExists(
 }
 
 func verifyFirstHistoryEvent(
-	executionInfo *persistenceblobs.WorkflowExecutionInfo,
-	executionState *persistenceblobs.WorkflowExecutionState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
-	branch *persistenceblobs.HistoryBranch,
+	branch *persistencespb.HistoryBranch,
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
 	shardID int32,
@@ -567,13 +567,13 @@ func verifyFirstHistoryEvent(
 }
 
 func verifyCurrentExecution(
-	executionInfo *persistenceblobs.WorkflowExecutionInfo,
-	executionState *persistenceblobs.WorkflowExecutionState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
 	shardID int32,
-	branch *persistenceblobs.HistoryBranch,
+	branch *persistencespb.HistoryBranch,
 	execStore persistence.ExecutionStore,
 	limiter *quotas.DynamicRateLimiter,
 	totalDBRequests *int64,
@@ -652,8 +652,8 @@ func verifyCurrentExecution(
 }
 
 func concreteExecutionStillExists(
-	executionInfo *persistenceblobs.WorkflowExecutionInfo,
-	executionState *persistenceblobs.WorkflowExecutionState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
 	shardID int32,
 	execStore persistence.ExecutionStore,
 	limiter *quotas.DynamicRateLimiter,
@@ -688,8 +688,8 @@ func concreteExecutionStillExists(
 }
 
 func concreteExecutionStillOpen(
-	executionInfo *persistenceblobs.WorkflowExecutionInfo,
-	executionState *persistenceblobs.WorkflowExecutionState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
 	shardID int32,
 	execStore persistence.ExecutionStore,
 	limiter *quotas.DynamicRateLimiter,
@@ -860,7 +860,7 @@ func preconditionForDBCall(totalDBRequests *int64, limiter *quotas.DynamicRateLi
 	limiter.Wait(context.Background())
 }
 
-func executionOpen(executionState *persistenceblobs.WorkflowExecutionState) bool {
+func executionOpen(executionState *persistencespb.WorkflowExecutionState) bool {
 	return executionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
 		executionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 }

@@ -30,12 +30,11 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 
 	"github.com/gogo/protobuf/types"
-
-	"go.temporal.io/server/api/persistenceblobs/v1"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -118,7 +117,7 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId: 1,
 				RangeId: 1,
 				ClusterTimerAckLevel: map[string]*time.Time{
@@ -187,7 +186,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistenceblobs.TimerTaskInfo{
+		Timers: []*persistencespb.TimerTaskInfo{
 			{
 				NamespaceId:     TestNamespaceId,
 				WorkflowId:      "some random workflow ID",
@@ -224,7 +223,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistenceblobs.TimerTaskInfo{
+		Timers: []*persistencespb.TimerTaskInfo{
 			{
 				NamespaceId:     TestNamespaceId,
 				WorkflowId:      "some random workflow ID",
@@ -260,7 +259,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
-	timer := &persistenceblobs.TimerTaskInfo{
+	timer := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
@@ -272,7 +271,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 		EventId:         int64(28),
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistenceblobs.TimerTaskInfo{timer},
+		Timers:        []*persistencespb.TimerTaskInfo{timer},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -280,7 +279,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(&persistence.GetTimerIndexTasksResponse{}, nil).Once()
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistenceblobs.TimerTaskInfo{timer}, filteredTasks)
+	s.Equal([]*persistencespb.TimerTaskInfo{timer}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.False(moreTasks)
 
@@ -303,7 +302,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
-	timer := &persistenceblobs.TimerTaskInfo{
+	timer := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
@@ -317,7 +316,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistenceblobs.TimerTaskInfo{timer},
+		Timers:        []*persistencespb.TimerTaskInfo{timer},
 		NextPageToken: []byte("some random next page token"),
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -325,7 +324,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistenceblobs.TimerTaskInfo{timer}, filteredTasks)
+	s.Equal([]*persistencespb.TimerTaskInfo{timer}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.True(moreTasks)
 	timerSequenceID := timerKeyFromTimePtr(timer.VisibilityTime, timer.GetTaskId())
@@ -349,7 +348,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
-	timer := &persistenceblobs.TimerTaskInfo{
+	timer := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
@@ -362,14 +361,14 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistenceblobs.TimerTaskInfo{timer},
+		Timers:        []*persistencespb.TimerTaskInfo{timer},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(response, nil).Once()
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistenceblobs.TimerTaskInfo{}, filteredTasks)
+	s.Equal([]*persistencespb.TimerTaskInfo{}, filteredTasks)
 	s.Equal(timer, lookAheadTask)
 	s.False(moreTasks)
 
@@ -396,7 +395,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
-	timer := &persistenceblobs.TimerTaskInfo{
+	timer := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
@@ -410,14 +409,14 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistenceblobs.TimerTaskInfo{timer},
+		Timers:        []*persistencespb.TimerTaskInfo{timer},
 		NextPageToken: []byte("some random next page token"),
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(response, nil).Once()
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistenceblobs.TimerTaskInfo{}, filteredTasks)
+	s.Equal([]*persistencespb.TimerTaskInfo{}, filteredTasks)
 	s.Equal(timer, lookAheadTask)
 	s.False(moreTasks)
 
@@ -430,7 +429,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 
 func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	// create 3 timers, timer1 < timer2 < timer3 < now
-	timer1 := &persistenceblobs.TimerTaskInfo{
+	timer1 := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
@@ -441,7 +440,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(28),
 	}
-	timer2 := &persistenceblobs.TimerTaskInfo{
+	timer2 := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
@@ -452,7 +451,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(29),
 	}
-	timer3 := &persistenceblobs.TimerTaskInfo{
+	timer3 := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
@@ -464,7 +463,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		EventId:         int64(30),
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistenceblobs.TimerTaskInfo{timer1, timer2, timer3},
+		Timers:        []*persistencespb.TimerTaskInfo{timer1, timer2, timer3},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -472,7 +471,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(&persistence.GetTimerIndexTasksResponse{}, nil).Once()
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistenceblobs.TimerTaskInfo{timer1, timer2, timer3}, filteredTasks)
+	s.Equal([]*persistencespb.TimerTaskInfo{timer1, timer2, timer3}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.False(moreTasks)
 
@@ -508,7 +507,7 @@ func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 	s.timerQueueAckMgr.minQueryLevel = level
 	s.timerQueueAckMgr.maxQueryLevel = s.timerQueueAckMgr.minQueryLevel
 
-	timer := &persistenceblobs.TimerTaskInfo{
+	timer := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
@@ -522,7 +521,7 @@ func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistenceblobs.TimerTaskInfo{timer},
+		Timers:        []*persistencespb.TimerTaskInfo{timer},
 		NextPageToken: []byte("some random next page token"),
 	}
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(response, nil).Once()
@@ -550,7 +549,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId: 1,
 				RangeId: 1,
 				ClusterTimerAckLevel: map[string]*time.Time{
@@ -627,7 +626,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	s.Empty(token)
 	s.Equal(s.maxLevel, maxQueryLevel)
 
-	timer1 := &persistenceblobs.TimerTaskInfo{
+	timer1 := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
@@ -639,7 +638,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 		EventId:         int64(28),
 	}
 
-	timer2 := &persistenceblobs.TimerTaskInfo{
+	timer2 := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
@@ -652,7 +651,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistenceblobs.TimerTaskInfo{timer1, timer2},
+		Timers:        []*persistencespb.TimerTaskInfo{timer1, timer2},
 		NextPageToken: []byte("some random next page token"),
 	}
 
@@ -660,7 +659,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
 	timers, lookAheadTimer, more, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistenceblobs.TimerTaskInfo{timer1, timer2}, timers)
+	s.Equal([]*persistencespb.TimerTaskInfo{timer1, timer2}, timers)
 	s.Nil(lookAheadTimer)
 	s.True(more)
 	s.Equal(ackLevel, s.timerQueueFailoverAckMgr.ackLevel)
@@ -683,7 +682,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_NoNextPage() {
 	s.Equal(s.maxLevel, maxQueryLevel)
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistenceblobs.TimerTaskInfo{},
+		Timers:        []*persistencespb.TimerTaskInfo{},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -692,7 +691,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_NoNextPage() {
 	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
 	timers, lookAheadTimer, more, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistenceblobs.TimerTaskInfo{}, timers)
+	s.Equal([]*persistencespb.TimerTaskInfo{}, timers)
 	s.Nil(lookAheadTimer)
 	s.False(more)
 
@@ -731,7 +730,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.timerQueueFailoverAckMgr.ackLevel = timerKey{VisibilityTimestamp: from}
 
 	// create 3 timers, timer1 < timer2 < timer3 < now
-	timer1 := &persistenceblobs.TimerTaskInfo{
+	timer1 := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
@@ -742,7 +741,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(28),
 	}
-	timer2 := &persistenceblobs.TimerTaskInfo{
+	timer2 := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
@@ -753,7 +752,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(29),
 	}
-	timer3 := &persistenceblobs.TimerTaskInfo{
+	timer3 := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		NamespaceId:     TestNamespaceId,
 		WorkflowId:      "some random workflow ID",
@@ -765,14 +764,14 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		EventId:         int64(30),
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistenceblobs.TimerTaskInfo{timer1, timer2, timer3},
+		Timers:        []*persistencespb.TimerTaskInfo{timer1, timer2, timer3},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(response, nil).Once()
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistenceblobs.TimerTaskInfo{timer1, timer2, timer3}, filteredTasks)
+	s.Equal([]*persistencespb.TimerTaskInfo{timer1, timer2, timer3}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.False(moreTasks)
 

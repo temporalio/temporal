@@ -29,7 +29,7 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -41,8 +41,8 @@ import (
 type (
 	// Replicator is the interface which can replicate the namespace
 	Replicator interface {
-		HandleTransmissionTask(namespaceOperation enumsspb.NamespaceOperation, info *persistenceblobs.NamespaceInfo,
-			config *persistenceblobs.NamespaceConfig, replicationConfig *persistenceblobs.NamespaceReplicationConfig,
+		HandleTransmissionTask(namespaceOperation enumsspb.NamespaceOperation, info *persistencespb.NamespaceInfo,
+			config *persistencespb.NamespaceConfig, replicationConfig *persistencespb.NamespaceReplicationConfig,
 			configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error
 	}
 
@@ -62,7 +62,7 @@ func NewNamespaceReplicator(replicationMessageSink messaging.Producer, logger lo
 
 // HandleTransmissionTask handle transmission of the namespace replication task
 func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(namespaceOperation enumsspb.NamespaceOperation,
-	info *persistenceblobs.NamespaceInfo, config *persistenceblobs.NamespaceConfig, replicationConfig *persistenceblobs.NamespaceReplicationConfig,
+	info *persistencespb.NamespaceInfo, config *persistencespb.NamespaceConfig, replicationConfig *persistencespb.NamespaceReplicationConfig,
 	configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error {
 
 	if !isGlobalNamespaceEnabled {

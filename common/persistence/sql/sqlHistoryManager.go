@@ -31,7 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -93,7 +93,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 	}
 
 	if request.IsNewBranch {
-		treeInfo := &persistenceblobs.HistoryTreeInfo{
+		treeInfo := &persistencespb.HistoryTreeInfo{
 			BranchInfo: branchInfo,
 			Info:       request.Info,
 			ForkTime:   timestamp.TimeNowPtrUtc(),
@@ -297,14 +297,14 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 	forkB := request.ForkBranchInfo
 	treeID := forkB.TreeId
 
-	newAncestors := make([]*persistenceblobs.HistoryBranchRange, 0, len(forkB.Ancestors)+1)
+	newAncestors := make([]*persistencespb.HistoryBranchRange, 0, len(forkB.Ancestors)+1)
 
 	beginNodeID := p.GetBeginNodeID(forkB)
 	if beginNodeID >= request.ForkNodeID {
 		// this is the case that new branch's ancestors doesn't include the forking branch
 		for _, br := range forkB.Ancestors {
 			if br.GetEndNodeId() >= request.ForkNodeID {
-				newAncestors = append(newAncestors, &persistenceblobs.HistoryBranchRange{
+				newAncestors = append(newAncestors, &persistencespb.HistoryBranchRange{
 					BranchId:    br.GetBranchId(),
 					BeginNodeId: br.GetBeginNodeId(),
 					EndNodeId:   request.ForkNodeID,
@@ -317,15 +317,15 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 	} else {
 		// this is the case the new branch will inherit all ancestors from forking branch
 		newAncestors = forkB.Ancestors
-		newAncestors = append(newAncestors, &persistenceblobs.HistoryBranchRange{
+		newAncestors = append(newAncestors, &persistencespb.HistoryBranchRange{
 			BranchId:    forkB.BranchId,
 			BeginNodeId: beginNodeID,
 			EndNodeId:   request.ForkNodeID,
 		})
 	}
 
-	treeInfo := &persistenceblobs.HistoryTreeInfo{
-		BranchInfo: &persistenceblobs.HistoryBranch{
+	treeInfo := &persistencespb.HistoryTreeInfo{
+		BranchInfo: &persistencespb.HistoryBranch{
 			TreeId:    treeID,
 			BranchId:  request.NewBranchID,
 			Ancestors: newAncestors,
@@ -390,7 +390,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 
 	brsToDelete := branch.Ancestors
 	beginNodeID := p.GetBeginNodeID(branch)
-	brsToDelete = append(brsToDelete, &persistenceblobs.HistoryBranchRange{
+	brsToDelete = append(brsToDelete, &persistencespb.HistoryBranchRange{
 		BranchId:    branch.BranchId,
 		BeginNodeId: beginNodeID,
 	})
@@ -474,7 +474,7 @@ func (m *sqlHistoryV2Manager) GetHistoryTree(
 		return nil, err
 	}
 
-	branches := make([]*persistenceblobs.HistoryBranch, 0)
+	branches := make([]*persistencespb.HistoryBranch, 0)
 
 	rows, err := m.db.SelectFromHistoryTree(sqlplugin.HistoryTreeSelectFilter{
 		TreeID:  treeID,

@@ -42,7 +42,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
@@ -103,9 +103,9 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.namespaceID = uuid.New()
 	s.namespace = "some random namespace name"
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
-		&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-		&persistenceblobs.NamespaceReplicationConfig{
+		&persistencespb.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,

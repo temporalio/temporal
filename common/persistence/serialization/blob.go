@@ -33,15 +33,15 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
-func ShardInfoToBlob(info *persistenceblobs.ShardInfo) (commonpb.DataBlob, error) {
+func ShardInfoToBlob(info *persistencespb.ShardInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistenceblobs.ShardInfo, error) {
-	shardInfo := &persistenceblobs.ShardInfo{}
+func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistencespb.ShardInfo, error) {
+	shardInfo := &persistencespb.ShardInfo{}
 	err := proto3Decode(b, proto, shardInfo)
 
 	if err != nil {
@@ -71,160 +71,160 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 	return shardInfo, nil
 }
 
-func NamespaceDetailToBlob(info *persistenceblobs.NamespaceDetail) (commonpb.DataBlob, error) {
+func NamespaceDetailToBlob(info *persistencespb.NamespaceDetail) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func NamespaceDetailFromBlob(b []byte, proto string) (*persistenceblobs.NamespaceDetail, error) {
-	result := &persistenceblobs.NamespaceDetail{}
+func NamespaceDetailFromBlob(b []byte, proto string) (*persistencespb.NamespaceDetail, error) {
+	result := &persistencespb.NamespaceDetail{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func HistoryTreeInfoToBlob(info *persistenceblobs.HistoryTreeInfo) (commonpb.DataBlob, error) {
+func HistoryTreeInfoToBlob(info *persistencespb.HistoryTreeInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func HistoryTreeInfoFromBlob(b []byte, proto string) (*persistenceblobs.HistoryTreeInfo, error) {
-	result := &persistenceblobs.HistoryTreeInfo{}
+func HistoryTreeInfoFromBlob(b []byte, proto string) (*persistencespb.HistoryTreeInfo, error) {
+	result := &persistencespb.HistoryTreeInfo{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func HistoryBranchToBlob(info *persistenceblobs.HistoryBranch) (commonpb.DataBlob, error) {
+func HistoryBranchToBlob(info *persistencespb.HistoryBranch) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func HistoryBranchFromBlob(b []byte, proto string) (*persistenceblobs.HistoryBranch, error) {
-	result := &persistenceblobs.HistoryBranch{}
+func HistoryBranchFromBlob(b []byte, proto string) (*persistencespb.HistoryBranch, error) {
+	result := &persistencespb.HistoryBranch{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func WorkflowExecutionInfoToBlob(info *persistenceblobs.WorkflowExecutionInfo) (commonpb.DataBlob, error) {
+func WorkflowExecutionInfoToBlob(info *persistencespb.WorkflowExecutionInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func WorkflowExecutionInfoFromBlob(b []byte, proto string) (*persistenceblobs.WorkflowExecutionInfo, error) {
-	result := &persistenceblobs.WorkflowExecutionInfo{}
+func WorkflowExecutionInfoFromBlob(b []byte, proto string) (*persistencespb.WorkflowExecutionInfo, error) {
+	result := &persistencespb.WorkflowExecutionInfo{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func WorkflowExecutionStateToBlob(info *persistenceblobs.WorkflowExecutionState) (commonpb.DataBlob, error) {
+func WorkflowExecutionStateToBlob(info *persistencespb.WorkflowExecutionState) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func WorkflowExecutionStateFromBlob(b []byte, proto string) (*persistenceblobs.WorkflowExecutionState, error) {
-	result := &persistenceblobs.WorkflowExecutionState{}
+func WorkflowExecutionStateFromBlob(b []byte, proto string) (*persistencespb.WorkflowExecutionState, error) {
+	result := &persistencespb.WorkflowExecutionState{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func ActivityInfoToBlob(info *persistenceblobs.ActivityInfo) (commonpb.DataBlob, error) {
+func ActivityInfoToBlob(info *persistencespb.ActivityInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func ActivityInfoFromBlob(b []byte, proto string) (*persistenceblobs.ActivityInfo, error) {
-	result := &persistenceblobs.ActivityInfo{}
+func ActivityInfoFromBlob(b []byte, proto string) (*persistencespb.ActivityInfo, error) {
+	result := &persistencespb.ActivityInfo{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func ChildExecutionInfoToBlob(info *persistenceblobs.ChildExecutionInfo) (commonpb.DataBlob, error) {
+func ChildExecutionInfoToBlob(info *persistencespb.ChildExecutionInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func ChildExecutionInfoFromBlob(b []byte, proto string) (*persistenceblobs.ChildExecutionInfo, error) {
-	result := &persistenceblobs.ChildExecutionInfo{}
+func ChildExecutionInfoFromBlob(b []byte, proto string) (*persistencespb.ChildExecutionInfo, error) {
+	result := &persistencespb.ChildExecutionInfo{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func SignalInfoToBlob(info *persistenceblobs.SignalInfo) (commonpb.DataBlob, error) {
+func SignalInfoToBlob(info *persistencespb.SignalInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func SignalInfoFromBlob(b []byte, proto string) (*persistenceblobs.SignalInfo, error) {
-	result := &persistenceblobs.SignalInfo{}
+func SignalInfoFromBlob(b []byte, proto string) (*persistencespb.SignalInfo, error) {
+	result := &persistencespb.SignalInfo{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func RequestCancelInfoToBlob(info *persistenceblobs.RequestCancelInfo) (commonpb.DataBlob, error) {
+func RequestCancelInfoToBlob(info *persistencespb.RequestCancelInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func RequestCancelInfoFromBlob(b []byte, proto string) (*persistenceblobs.RequestCancelInfo, error) {
-	result := &persistenceblobs.RequestCancelInfo{}
+func RequestCancelInfoFromBlob(b []byte, proto string) (*persistencespb.RequestCancelInfo, error) {
+	result := &persistencespb.RequestCancelInfo{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func TimerInfoToBlob(info *persistenceblobs.TimerInfo) (commonpb.DataBlob, error) {
+func TimerInfoToBlob(info *persistencespb.TimerInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func TimerInfoFromBlob(b []byte, proto string) (*persistenceblobs.TimerInfo, error) {
-	result := &persistenceblobs.TimerInfo{}
+func TimerInfoFromBlob(b []byte, proto string) (*persistencespb.TimerInfo, error) {
+	result := &persistencespb.TimerInfo{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func TaskInfoToBlob(info *persistenceblobs.AllocatedTaskInfo) (commonpb.DataBlob, error) {
+func TaskInfoToBlob(info *persistencespb.AllocatedTaskInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func TaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.AllocatedTaskInfo, error) {
-	result := &persistenceblobs.AllocatedTaskInfo{}
+func TaskInfoFromBlob(b []byte, proto string) (*persistencespb.AllocatedTaskInfo, error) {
+	result := &persistencespb.AllocatedTaskInfo{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func TaskQueueInfoToBlob(info *persistenceblobs.TaskQueueInfo) (commonpb.DataBlob, error) {
+func TaskQueueInfoToBlob(info *persistencespb.TaskQueueInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func TaskQueueInfoFromBlob(b []byte, proto string) (*persistenceblobs.TaskQueueInfo, error) {
-	result := &persistenceblobs.TaskQueueInfo{}
+func TaskQueueInfoFromBlob(b []byte, proto string) (*persistencespb.TaskQueueInfo, error) {
+	result := &persistencespb.TaskQueueInfo{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func TransferTaskInfoToBlob(info *persistenceblobs.TransferTaskInfo) (commonpb.DataBlob, error) {
+func TransferTaskInfoToBlob(info *persistencespb.TransferTaskInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func TransferTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.TransferTaskInfo, error) {
-	result := &persistenceblobs.TransferTaskInfo{}
+func TransferTaskInfoFromBlob(b []byte, proto string) (*persistencespb.TransferTaskInfo, error) {
+	result := &persistencespb.TransferTaskInfo{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func TimerTaskInfoToBlob(info *persistenceblobs.TimerTaskInfo) (commonpb.DataBlob, error) {
+func TimerTaskInfoToBlob(info *persistencespb.TimerTaskInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func TimerTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.TimerTaskInfo, error) {
-	result := &persistenceblobs.TimerTaskInfo{}
+func TimerTaskInfoFromBlob(b []byte, proto string) (*persistencespb.TimerTaskInfo, error) {
+	result := &persistencespb.TimerTaskInfo{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func ReplicationTaskInfoToBlob(info *persistenceblobs.ReplicationTaskInfo) (commonpb.DataBlob, error) {
+func ReplicationTaskInfoToBlob(info *persistencespb.ReplicationTaskInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func ReplicationTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.ReplicationTaskInfo, error) {
-	result := &persistenceblobs.ReplicationTaskInfo{}
+func ReplicationTaskInfoFromBlob(b []byte, proto string) (*persistencespb.ReplicationTaskInfo, error) {
+	result := &persistencespb.ReplicationTaskInfo{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func ReplicationVersionsToBlob(info *persistenceblobs.ReplicationVersions) (commonpb.DataBlob, error) {
+func ReplicationVersionsToBlob(info *persistencespb.ReplicationVersions) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func ReplicationVersionsFromBlob(b []byte, proto string) (*persistenceblobs.ReplicationVersions, error) {
-	result := &persistenceblobs.ReplicationVersions{}
+func ReplicationVersionsFromBlob(b []byte, proto string) (*persistencespb.ReplicationVersions, error) {
+	result := &persistencespb.ReplicationVersions{}
 	return result, proto3Decode(b, proto, result)
 }
 
-func ChecksumToBlob(checksum *persistenceblobs.Checksum) (commonpb.DataBlob, error) {
-	// nil is replaced with empty object becayse it is not supported for "checksum" field in DB.
+func ChecksumToBlob(checksum *persistencespb.Checksum) (commonpb.DataBlob, error) {
+	// nil is replaced with empty object because it is not supported for "checksum" field in DB.
 	if checksum == nil {
-		checksum = &persistenceblobs.Checksum{}
+		checksum = &persistencespb.Checksum{}
 	}
 	return proto3Encode(checksum)
 }
 
-func ChecksumFromBlob(b []byte, proto string) (*persistenceblobs.Checksum, error) {
-	result := &persistenceblobs.Checksum{}
+func ChecksumFromBlob(b []byte, proto string) (*persistencespb.Checksum, error) {
+	result := &persistencespb.Checksum{}
 	err := proto3Decode(b, proto, result)
 	if err != nil || result.GetFlavor() == enumsspb.CHECKSUM_FLAVOR_UNSPECIFIED {
 		// If result is an empty struct (Flavor is unspecified), replace it with nil, because everywhere in the code checksum is pointer type.

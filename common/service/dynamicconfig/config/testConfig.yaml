@@ -33,6 +33,16 @@ testGetIntPropertyKey:
 - value: 1000.1
   constraints:
     namespace: global-samples-namespace
+- value: 1001
+  constraints:
+    namespace: global-samples-namespace
+    taskQueueName: test-tq
+    taskType: "Workflow"
+- value: 1002
+  constraints:
+    namespace: global-samples-namespace
+    taskQueueName: test-tq
+    taskType: "Activity"
 testGetMapPropertyKey:
 - value:
     key1: "1"

@@ -31,7 +31,7 @@ import (
 
 	"github.com/pborman/uuid"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -42,7 +42,7 @@ type (
 		workflowID  string
 		runID       string
 		nextTaskID  int64
-		tasks       []*persistenceblobs.AllocatedTaskInfo
+		tasks       []*persistencespb.AllocatedTaskInfo
 	}
 	mockTaskQueueTable struct {
 		sync.Mutex
@@ -60,7 +60,7 @@ func newMockTaskTable() *mockTaskTable {
 
 func (tbl *mockTaskQueueTable) generate(name string, idle bool) {
 	tq := p.PersistedTaskQueueInfo{
-		Data: &persistenceblobs.TaskQueueInfo{
+		Data: &persistencespb.TaskQueueInfo{
 			NamespaceId:    uuid.New(),
 			Name:           name,
 			LastUpdateTime: timestamp.TimeNowPtrUtc(),
@@ -118,8 +118,8 @@ func (tbl *mockTaskQueueTable) get(name string) *p.PersistedTaskQueueInfo {
 func (tbl *mockTaskTable) generate(count int, expired bool) {
 	for i := 0; i < count; i++ {
 		exp := time.Now().UTC().Add(time.Hour)
-		ti := &persistenceblobs.AllocatedTaskInfo{
-			Data: &persistenceblobs.TaskInfo{
+		ti := &persistencespb.AllocatedTaskInfo{
+			Data: &persistencespb.TaskInfo{
 				NamespaceId: tbl.namespaceID,
 				WorkflowId:  tbl.workflowID,
 				RunId:       tbl.runID,
@@ -136,7 +136,7 @@ func (tbl *mockTaskTable) generate(count int, expired bool) {
 	}
 }
 
-func (tbl *mockTaskTable) get(count int) []*persistenceblobs.AllocatedTaskInfo {
+func (tbl *mockTaskTable) get(count int) []*persistencespb.AllocatedTaskInfo {
 	if len(tbl.tasks) >= count {
 		return tbl.tasks[:count]
 	}

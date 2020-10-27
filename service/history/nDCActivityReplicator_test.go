@@ -40,7 +40,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -105,7 +105,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          1,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -173,9 +173,9 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
-			&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistenceblobs.NamespaceReplicationConfig{
+			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+			&persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
@@ -244,14 +244,14 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_WorkflowClos
 			},
 		},
 	}
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: localVersionHistories}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: localVersionHistories}).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
-			&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistenceblobs.NamespaceReplicationConfig{
+			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+			&persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
@@ -324,12 +324,12 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingVers
 			},
 		},
 	}
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: localVersionHistories}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: localVersionHistories}).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
-			&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistenceblobs.NamespaceReplicationConfig{
+			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+			&persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
@@ -398,12 +398,12 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 			},
 		},
 	}
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: localVersionHistories}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: localVersionHistories}).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
-			&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistenceblobs.NamespaceReplicationConfig{
+			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+			&persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
@@ -487,12 +487,12 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 			},
 		},
 	}
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: localVersionHistories}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: localVersionHistories}).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
-			&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistenceblobs.NamespaceReplicationConfig{
+			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+			&persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
@@ -572,14 +572,14 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 			},
 		},
 	}
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: localVersionHistories}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: localVersionHistories}).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
-			&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistenceblobs.NamespaceReplicationConfig{
+			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+			&persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
@@ -648,15 +648,15 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_LocalVersion
 			},
 		},
 	}
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistenceblobs.WorkflowExecutionInfo{VersionHistories: localVersionHistories}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: localVersionHistories}).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().
 		Return(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
-			&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistenceblobs.NamespaceReplicationConfig{
+			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+			&persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,

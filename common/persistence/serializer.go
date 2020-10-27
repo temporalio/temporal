@@ -34,7 +34,7 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 type (
@@ -62,8 +62,8 @@ type (
 		DeserializeBadBinaries(data *commonpb.DataBlob) (*namespacepb.BadBinaries, error)
 
 		// serialize/deserialize mutable cluster metadata
-		SerializeClusterMetadata(icm *persistenceblobs.ClusterMetadata, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		DeserializeClusterMetadata(data *commonpb.DataBlob) (*persistenceblobs.ClusterMetadata, error)
+		SerializeClusterMetadata(icm *persistencespb.ClusterMetadata, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		DeserializeClusterMetadata(data *commonpb.DataBlob) (*persistencespb.ClusterMetadata, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -249,14 +249,14 @@ func (t *serializerImpl) DeserializeVisibilityMemo(data *commonpb.DataBlob) (*co
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeClusterMetadata(cm *persistenceblobs.ClusterMetadata, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+func (t *serializerImpl) SerializeClusterMetadata(cm *persistencespb.ClusterMetadata, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	if cm == nil {
-		cm = &persistenceblobs.ClusterMetadata{}
+		cm = &persistencespb.ClusterMetadata{}
 	}
 	return t.serialize(cm, encodingType)
 }
 
-func (t *serializerImpl) DeserializeClusterMetadata(data *commonpb.DataBlob) (*persistenceblobs.ClusterMetadata, error) {
+func (t *serializerImpl) DeserializeClusterMetadata(data *commonpb.DataBlob) (*persistencespb.ClusterMetadata, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -264,7 +264,7 @@ func (t *serializerImpl) DeserializeClusterMetadata(data *commonpb.DataBlob) (*p
 		return nil, nil
 	}
 
-	cm := &persistenceblobs.ClusterMetadata{}
+	cm := &persistencespb.ClusterMetadata{}
 	var err error
 	switch data.EncodingType {
 	case enumspb.ENCODING_TYPE_PROTO3:

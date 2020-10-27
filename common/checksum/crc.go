@@ -34,7 +34,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 // ErrMismatch indicates a checksum verification failure due to
@@ -47,7 +47,7 @@ var ErrMismatch = errors.New("checksum mismatch error")
 func GenerateCRC32(
 	payload proto.Marshaler,
 	payloadVersion int32,
-) (*persistenceblobs.Checksum, error) {
+) (*persistencespb.Checksum, error) {
 
 	payloadBytes, err := payload.Marshal()
 	if err != nil {
@@ -57,7 +57,7 @@ func GenerateCRC32(
 	crc := crc32.ChecksumIEEE(payloadBytes)
 	checksum := make([]byte, 4)
 	binary.BigEndian.PutUint32(checksum, crc)
-	return &persistenceblobs.Checksum{
+	return &persistencespb.Checksum{
 		Value:   checksum,
 		Version: payloadVersion,
 		Flavor:  enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY,
@@ -69,7 +69,7 @@ func GenerateCRC32(
 // Return ErrMismatch when checksums mismatch
 func Verify(
 	payload proto.Marshaler,
-	checksum *persistenceblobs.Checksum,
+	checksum *persistencespb.Checksum,
 ) error {
 
 	if checksum.Flavor != enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY {

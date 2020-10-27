@@ -43,7 +43,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -94,29 +94,29 @@ var (
 
 type (
 	mutableStateBuilder struct {
-		pendingActivityTimerHeartbeats map[int64]time.Time                         // Schedule Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
-		pendingActivityInfoIDs         map[int64]*persistenceblobs.ActivityInfo    // Schedule Event ID -> Activity Info.
-		pendingActivityIDToEventID     map[string]int64                            // Activity ID -> Schedule Event ID of the activity.
-		updateActivityInfos            map[*persistenceblobs.ActivityInfo]struct{} // Modified activities from last update.
-		deleteActivityInfos            map[int64]struct{}                          // Deleted activities from last update.
-		syncActivityTasks              map[int64]struct{}                          // Activity to be sync to remote
+		pendingActivityTimerHeartbeats map[int64]time.Time                       // Schedule Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
+		pendingActivityInfoIDs         map[int64]*persistencespb.ActivityInfo    // Schedule Event ID -> Activity Info.
+		pendingActivityIDToEventID     map[string]int64                          // Activity ID -> Schedule Event ID of the activity.
+		updateActivityInfos            map[*persistencespb.ActivityInfo]struct{} // Modified activities from last update.
+		deleteActivityInfos            map[int64]struct{}                        // Deleted activities from last update.
+		syncActivityTasks              map[int64]struct{}                        // Activity to be sync to remote
 
-		pendingTimerInfoIDs     map[string]*persistenceblobs.TimerInfo   // User Timer ID -> Timer Info.
-		pendingTimerEventIDToID map[int64]string                         // User Timer Start Event ID -> User Timer ID.
-		updateTimerInfos        map[*persistenceblobs.TimerInfo]struct{} // Modified timers from last update.
-		deleteTimerInfos        map[string]struct{}                      // Deleted timers from last update.
+		pendingTimerInfoIDs     map[string]*persistencespb.TimerInfo   // User Timer ID -> Timer Info.
+		pendingTimerEventIDToID map[int64]string                       // User Timer Start Event ID -> User Timer ID.
+		updateTimerInfos        map[*persistencespb.TimerInfo]struct{} // Modified timers from last update.
+		deleteTimerInfos        map[string]struct{}                    // Deleted timers from last update.
 
-		pendingChildExecutionInfoIDs map[int64]*persistenceblobs.ChildExecutionInfo    // Initiated Event ID -> Child Execution Info
-		updateChildExecutionInfos    map[*persistenceblobs.ChildExecutionInfo]struct{} // Modified ChildExecution Infos since last update
-		deleteChildExecutionInfo     *int64                                            // Deleted ChildExecution Info since last update
+		pendingChildExecutionInfoIDs map[int64]*persistencespb.ChildExecutionInfo    // Initiated Event ID -> Child Execution Info
+		updateChildExecutionInfos    map[*persistencespb.ChildExecutionInfo]struct{} // Modified ChildExecution Infos since last update
+		deleteChildExecutionInfo     *int64                                          // Deleted ChildExecution Info since last update
 
-		pendingRequestCancelInfoIDs map[int64]*persistenceblobs.RequestCancelInfo    // Initiated Event ID -> RequestCancelInfo
-		updateRequestCancelInfos    map[*persistenceblobs.RequestCancelInfo]struct{} // Modified RequestCancel Infos since last update, for persistence update
-		deleteRequestCancelInfo     *int64                                           // Deleted RequestCancel Info since last update, for persistence update
+		pendingRequestCancelInfoIDs map[int64]*persistencespb.RequestCancelInfo    // Initiated Event ID -> RequestCancelInfo
+		updateRequestCancelInfos    map[*persistencespb.RequestCancelInfo]struct{} // Modified RequestCancel Infos since last update, for persistence update
+		deleteRequestCancelInfo     *int64                                         // Deleted RequestCancel Info since last update, for persistence update
 
-		pendingSignalInfoIDs map[int64]*persistenceblobs.SignalInfo    // Initiated Event ID -> SignalInfo
-		updateSignalInfos    map[*persistenceblobs.SignalInfo]struct{} // Modified SignalInfo since last update
-		deleteSignalInfo     *int64                                    // Deleted SignalInfo since last update
+		pendingSignalInfoIDs map[int64]*persistencespb.SignalInfo    // Initiated Event ID -> SignalInfo
+		updateSignalInfos    map[*persistencespb.SignalInfo]struct{} // Modified SignalInfo since last update
+		deleteSignalInfo     *int64                                  // Deleted SignalInfo since last update
 
 		pendingSignalRequestedIDs map[string]struct{} // Set of signaled requestIds
 		updateSignalRequestedIDs  map[string]struct{} // Set of signaled requestIds since last update
@@ -126,8 +126,8 @@ type (
 		updateBufferedEvents []*historypb.HistoryEvent // buffered history events that needs to be persisted
 		clearBufferedEvents  bool                      // delete buffered events from persistence
 
-		executionInfo  *persistenceblobs.WorkflowExecutionInfo // Workflow mutable state info.
-		executionState *persistenceblobs.WorkflowExecutionState
+		executionInfo  *persistencespb.WorkflowExecutionInfo // Workflow mutable state info.
+		executionState *persistencespb.WorkflowExecutionState
 		nextEventID    int64
 
 		hBuilder *historyBuilder
@@ -157,7 +157,7 @@ type (
 		// Load() and closeTransactionXXX methods. So when
 		// a transaction is in progress, this value will be
 		// wrong. This exist primarily for visibility via CLI
-		checksum *persistenceblobs.Checksum
+		checksum *persistencespb.Checksum
 
 		taskGenerator       mutableStateTaskGenerator
 		workflowTaskManager mutableStateWorkflowTaskManager
@@ -182,28 +182,28 @@ func newMutableStateBuilder(
 	namespaceEntry *cache.NamespaceCacheEntry,
 ) *mutableStateBuilder {
 	s := &mutableStateBuilder{
-		updateActivityInfos:            make(map[*persistenceblobs.ActivityInfo]struct{}),
+		updateActivityInfos:            make(map[*persistencespb.ActivityInfo]struct{}),
 		pendingActivityTimerHeartbeats: make(map[int64]time.Time),
-		pendingActivityInfoIDs:         make(map[int64]*persistenceblobs.ActivityInfo),
+		pendingActivityInfoIDs:         make(map[int64]*persistencespb.ActivityInfo),
 		pendingActivityIDToEventID:     make(map[string]int64),
 		deleteActivityInfos:            make(map[int64]struct{}),
 		syncActivityTasks:              make(map[int64]struct{}),
 
-		pendingTimerInfoIDs:     make(map[string]*persistenceblobs.TimerInfo),
+		pendingTimerInfoIDs:     make(map[string]*persistencespb.TimerInfo),
 		pendingTimerEventIDToID: make(map[int64]string),
-		updateTimerInfos:        make(map[*persistenceblobs.TimerInfo]struct{}),
+		updateTimerInfos:        make(map[*persistencespb.TimerInfo]struct{}),
 		deleteTimerInfos:        make(map[string]struct{}),
 
-		updateChildExecutionInfos:    make(map[*persistenceblobs.ChildExecutionInfo]struct{}),
-		pendingChildExecutionInfoIDs: make(map[int64]*persistenceblobs.ChildExecutionInfo),
+		updateChildExecutionInfos:    make(map[*persistencespb.ChildExecutionInfo]struct{}),
+		pendingChildExecutionInfoIDs: make(map[int64]*persistencespb.ChildExecutionInfo),
 		deleteChildExecutionInfo:     nil,
 
-		updateRequestCancelInfos:    make(map[*persistenceblobs.RequestCancelInfo]struct{}),
-		pendingRequestCancelInfoIDs: make(map[int64]*persistenceblobs.RequestCancelInfo),
+		updateRequestCancelInfos:    make(map[*persistencespb.RequestCancelInfo]struct{}),
+		pendingRequestCancelInfoIDs: make(map[int64]*persistencespb.RequestCancelInfo),
 		deleteRequestCancelInfo:     nil,
 
-		updateSignalInfos:    make(map[*persistenceblobs.SignalInfo]struct{}),
-		pendingSignalInfoIDs: make(map[int64]*persistenceblobs.SignalInfo),
+		updateSignalInfos:    make(map[*persistencespb.SignalInfo]struct{}),
+		pendingSignalInfoIDs: make(map[int64]*persistencespb.SignalInfo),
 		deleteSignalInfo:     nil,
 
 		updateSignalRequestedIDs:  make(map[string]struct{}),
@@ -227,7 +227,7 @@ func newMutableStateBuilder(
 		logger:          logger,
 		metricsClient:   shard.GetMetricsClient(),
 	}
-	s.executionInfo = &persistenceblobs.WorkflowExecutionInfo{
+	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
 		WorkflowTaskVersion:    common.EmptyVersion,
 		WorkflowTaskScheduleId: common.EmptyEventID,
 		WorkflowTaskStartedId:  common.EmptyEventID,
@@ -238,7 +238,7 @@ func newMutableStateBuilder(
 		LastProcessedEvent: common.EmptyEventID,
 	}
 	s.nextEventID = common.FirstEventID
-	s.executionState = &persistenceblobs.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+	s.executionState = &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
 
 	s.hBuilder = newHistoryBuilder(s, logger)
@@ -260,8 +260,8 @@ func newMutableStateBuilderWithVersionHistories(
 	return s
 }
 
-func (e *mutableStateBuilder) CopyToPersistence() *persistenceblobs.WorkflowMutableState {
-	state := &persistenceblobs.WorkflowMutableState{}
+func (e *mutableStateBuilder) CopyToPersistence() *persistencespb.WorkflowMutableState {
+	state := &persistencespb.WorkflowMutableState{}
 
 	state.ActivityInfos = e.pendingActivityInfoIDs
 	state.TimerInfos = e.pendingTimerInfoIDs
@@ -279,7 +279,7 @@ func (e *mutableStateBuilder) CopyToPersistence() *persistenceblobs.WorkflowMuta
 }
 
 func (e *mutableStateBuilder) Load(
-	state *persistenceblobs.WorkflowMutableState,
+	state *persistencespb.WorkflowMutableState,
 ) {
 
 	e.pendingActivityInfoIDs = state.ActivityInfos
@@ -380,11 +380,11 @@ func (e *mutableStateBuilder) SetHistoryBuilder(hBuilder *historyBuilder) {
 	e.hBuilder = hBuilder
 }
 
-func (e *mutableStateBuilder) GetExecutionInfo() *persistenceblobs.WorkflowExecutionInfo {
+func (e *mutableStateBuilder) GetExecutionInfo() *persistencespb.WorkflowExecutionInfo {
 	return e.executionInfo
 }
 
-func (e *mutableStateBuilder) GetExecutionState() *persistenceblobs.WorkflowExecutionState {
+func (e *mutableStateBuilder) GetExecutionState() *persistencespb.WorkflowExecutionState {
 	return e.executionState
 }
 
@@ -952,7 +952,7 @@ func (e *mutableStateBuilder) GetActivityScheduledEvent(
 // GetActivityInfo gives details about an activity that is currently in progress.
 func (e *mutableStateBuilder) GetActivityInfo(
 	scheduleEventID int64,
-) (*persistenceblobs.ActivityInfo, bool) {
+) (*persistencespb.ActivityInfo, bool) {
 
 	ai, ok := e.pendingActivityInfoIDs[scheduleEventID]
 	return ai, ok
@@ -961,7 +961,7 @@ func (e *mutableStateBuilder) GetActivityInfo(
 // GetActivityInfo gives details about an activity that is currently in progress.
 func (e *mutableStateBuilder) GetActivityInfoWithTimerHeartbeat(
 	scheduleEventID int64,
-) (*persistenceblobs.ActivityInfo, time.Time, bool) {
+) (*persistencespb.ActivityInfo, time.Time, bool) {
 	ai, ok := e.pendingActivityInfoIDs[scheduleEventID]
 	timerVis, ok := e.pendingActivityTimerHeartbeats[scheduleEventID]
 
@@ -971,7 +971,7 @@ func (e *mutableStateBuilder) GetActivityInfoWithTimerHeartbeat(
 // GetActivityByActivityID gives details about an activity that is currently in progress.
 func (e *mutableStateBuilder) GetActivityByActivityID(
 	activityID string,
-) (*persistenceblobs.ActivityInfo, bool) {
+) (*persistencespb.ActivityInfo, bool) {
 
 	eventID, ok := e.pendingActivityIDToEventID[activityID]
 	if !ok {
@@ -983,7 +983,7 @@ func (e *mutableStateBuilder) GetActivityByActivityID(
 // GetChildExecutionInfo gives details about a child execution that is currently in progress.
 func (e *mutableStateBuilder) GetChildExecutionInfo(
 	initiatedEventID int64,
-) (*persistenceblobs.ChildExecutionInfo, bool) {
+) (*persistencespb.ChildExecutionInfo, bool) {
 
 	ci, ok := e.pendingChildExecutionInfoIDs[initiatedEventID]
 	return ci, ok
@@ -1024,7 +1024,7 @@ func (e *mutableStateBuilder) GetChildExecutionInitiatedEvent(
 // GetRequestCancelInfo gives details about a request cancellation that is currently in progress.
 func (e *mutableStateBuilder) GetRequestCancelInfo(
 	initiatedEventID int64,
-) (*persistenceblobs.RequestCancelInfo, bool) {
+) (*persistencespb.RequestCancelInfo, bool) {
 
 	ri, ok := e.pendingRequestCancelInfoIDs[initiatedEventID]
 	return ri, ok
@@ -1073,7 +1073,7 @@ func (e *mutableStateBuilder) GetCronBackoffDuration() (time.Duration, error) {
 // GetSignalInfo get details about a signal request that is currently in progress.
 func (e *mutableStateBuilder) GetSignalInfo(
 	initiatedEventID int64,
-) (*persistenceblobs.SignalInfo, bool) {
+) (*persistencespb.SignalInfo, bool) {
 
 	ri, ok := e.pendingSignalInfoIDs[initiatedEventID]
 	return ri, ok
@@ -1218,7 +1218,7 @@ func (e *mutableStateBuilder) HasParentExecution() bool {
 }
 
 func (e *mutableStateBuilder) UpdateActivityProgress(
-	ai *persistenceblobs.ActivityInfo,
+	ai *persistencespb.ActivityInfo,
 	request *workflowservice.RecordActivityTaskHeartbeatRequest,
 ) {
 	ai.Version = e.GetCurrentVersion()
@@ -1267,7 +1267,7 @@ func (e *mutableStateBuilder) ReplicateActivityInfo(
 
 // UpdateActivity updates an activity
 func (e *mutableStateBuilder) UpdateActivity(
-	ai *persistenceblobs.ActivityInfo,
+	ai *persistencespb.ActivityInfo,
 ) error {
 
 	if _, ok := e.pendingActivityInfoIDs[ai.ScheduleId]; !ok {
@@ -1285,7 +1285,7 @@ func (e *mutableStateBuilder) UpdateActivity(
 
 // UpdateActivity updates an activity
 func (e *mutableStateBuilder) UpdateActivityWithTimerHeartbeat(
-	ai *persistenceblobs.ActivityInfo,
+	ai *persistencespb.ActivityInfo,
 	timerTimeoutVisibility time.Time,
 ) error {
 
@@ -1333,7 +1333,7 @@ func (e *mutableStateBuilder) DeleteActivity(
 // GetUserTimerInfo gives details about a user timer.
 func (e *mutableStateBuilder) GetUserTimerInfo(
 	timerID string,
-) (*persistenceblobs.TimerInfo, bool) {
+) (*persistencespb.TimerInfo, bool) {
 
 	timerInfo, ok := e.pendingTimerInfoIDs[timerID]
 	return timerInfo, ok
@@ -1342,7 +1342,7 @@ func (e *mutableStateBuilder) GetUserTimerInfo(
 // GetUserTimerInfoByEventID gives details about a user timer.
 func (e *mutableStateBuilder) GetUserTimerInfoByEventID(
 	startEventID int64,
-) (*persistenceblobs.TimerInfo, bool) {
+) (*persistencespb.TimerInfo, bool) {
 
 	timerID, ok := e.pendingTimerEventIDToID[startEventID]
 	if !ok {
@@ -1353,7 +1353,7 @@ func (e *mutableStateBuilder) GetUserTimerInfoByEventID(
 
 // UpdateUserTimer updates the user timer in progress.
 func (e *mutableStateBuilder) UpdateUserTimer(
-	ti *persistenceblobs.TimerInfo,
+	ti *persistencespb.TimerInfo,
 ) error {
 
 	timerID, ok := e.pendingTimerEventIDToID[ti.GetStartedId()]
@@ -1442,23 +1442,23 @@ func (e *mutableStateBuilder) GetWorkflowTaskInfo(
 	return e.workflowTaskManager.GetWorkflowTaskInfo(scheduleEventID)
 }
 
-func (e *mutableStateBuilder) GetPendingActivityInfos() map[int64]*persistenceblobs.ActivityInfo {
+func (e *mutableStateBuilder) GetPendingActivityInfos() map[int64]*persistencespb.ActivityInfo {
 	return e.pendingActivityInfoIDs
 }
 
-func (e *mutableStateBuilder) GetPendingTimerInfos() map[string]*persistenceblobs.TimerInfo {
+func (e *mutableStateBuilder) GetPendingTimerInfos() map[string]*persistencespb.TimerInfo {
 	return e.pendingTimerInfoIDs
 }
 
-func (e *mutableStateBuilder) GetPendingChildExecutionInfos() map[int64]*persistenceblobs.ChildExecutionInfo {
+func (e *mutableStateBuilder) GetPendingChildExecutionInfos() map[int64]*persistencespb.ChildExecutionInfo {
 	return e.pendingChildExecutionInfoIDs
 }
 
-func (e *mutableStateBuilder) GetPendingRequestCancelExternalInfos() map[int64]*persistenceblobs.RequestCancelInfo {
+func (e *mutableStateBuilder) GetPendingRequestCancelExternalInfos() map[int64]*persistencespb.RequestCancelInfo {
 	return e.pendingRequestCancelInfoIDs
 }
 
-func (e *mutableStateBuilder) GetPendingSignalExternalInfos() map[int64]*persistenceblobs.SignalInfo {
+func (e *mutableStateBuilder) GetPendingSignalExternalInfos() map[int64]*persistencespb.SignalInfo {
 	return e.pendingSignalInfoIDs
 }
 
@@ -2076,7 +2076,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowTaskFailedEvent() error {
 func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(
 	workflowTaskCompletedEventID int64,
 	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
-) (*historypb.HistoryEvent, *persistenceblobs.ActivityInfo, error) {
+) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error) {
 
 	opTag := tag.WorkflowActionActivityTaskScheduled
 	if err := e.checkMutability(opTag); err != nil {
@@ -2116,7 +2116,7 @@ func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(
 func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
-) (*persistenceblobs.ActivityInfo, error) {
+) (*persistencespb.ActivityInfo, error) {
 
 	attributes := event.GetActivityTaskScheduledEventAttributes()
 	targetNamespaceID := e.executionInfo.NamespaceId
@@ -2131,7 +2131,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 	scheduleEventID := event.GetEventId()
 	scheduleToCloseTimeout := attributes.GetScheduleToCloseTimeout()
 
-	ai := &persistenceblobs.ActivityInfo{
+	ai := &persistencespb.ActivityInfo{
 		Version:                 event.GetVersion(),
 		ScheduleId:              scheduleEventID,
 		ScheduledEventBatchId:   firstEventID,
@@ -2188,7 +2188,7 @@ func (e *mutableStateBuilder) addTransientActivityStartedEvent(
 }
 
 func (e *mutableStateBuilder) AddActivityTaskStartedEvent(
-	ai *persistenceblobs.ActivityInfo,
+	ai *persistencespb.ActivityInfo,
 	scheduleEventID int64,
 	requestID string,
 	identity string,
@@ -2385,7 +2385,7 @@ func (e *mutableStateBuilder) AddActivityTaskCancelRequestedEvent(
 	workflowTaskCompletedEventID int64,
 	scheduleID int64,
 	identity string,
-) (*historypb.HistoryEvent, *persistenceblobs.ActivityInfo, error) {
+) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error) {
 
 	opTag := tag.WorkflowActionActivityTaskCancelRequested
 	if err := e.checkMutability(opTag); err != nil {
@@ -2713,7 +2713,7 @@ func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionInitiated
 	workflowTaskCompletedEventID int64,
 	cancelRequestID string,
 	request *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
-) (*historypb.HistoryEvent, *persistenceblobs.RequestCancelInfo, error) {
+) (*historypb.HistoryEvent, *persistencespb.RequestCancelInfo, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowCancelInitiated
 	if err := e.checkMutability(opTag); err != nil {
@@ -2739,11 +2739,11 @@ func (e *mutableStateBuilder) ReplicateRequestCancelExternalWorkflowExecutionIni
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 	cancelRequestID string,
-) (*persistenceblobs.RequestCancelInfo, error) {
+) (*persistencespb.RequestCancelInfo, error) {
 
 	// TODO: Evaluate if we need cancelRequestID also part of history event
 	initiatedEventID := event.GetEventId()
-	rci := &persistenceblobs.RequestCancelInfo{
+	rci := &persistencespb.RequestCancelInfo{
 		Version:               event.GetVersion(),
 		InitiatedEventBatchId: firstEventID,
 		InitiatedId:           initiatedEventID,
@@ -2837,7 +2837,7 @@ func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	signalRequestID string,
 	request *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
-) (*historypb.HistoryEvent, *persistenceblobs.SignalInfo, error) {
+) (*historypb.HistoryEvent, *persistencespb.SignalInfo, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowSignalInitiated
 	if err := e.checkMutability(opTag); err != nil {
@@ -2863,12 +2863,12 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionInitiatedE
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 	signalRequestID string,
-) (*persistenceblobs.SignalInfo, error) {
+) (*persistencespb.SignalInfo, error) {
 
 	// TODO: Consider also writing signalRequestID to history event
 	initiatedEventID := event.GetEventId()
 	attributes := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
-	si := &persistenceblobs.SignalInfo{
+	si := &persistencespb.SignalInfo{
 		Version:               event.GetVersion(),
 		InitiatedEventBatchId: firstEventID,
 		InitiatedId:           initiatedEventID,
@@ -3010,7 +3010,7 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionFailedEven
 func (e *mutableStateBuilder) AddTimerStartedEvent(
 	workflowTaskCompletedEventID int64,
 	request *commandpb.StartTimerCommandAttributes,
-) (*historypb.HistoryEvent, *persistenceblobs.TimerInfo, error) {
+) (*historypb.HistoryEvent, *persistencespb.TimerInfo, error) {
 
 	opTag := tag.WorkflowActionTimerStarted
 	if err := e.checkMutability(opTag); err != nil {
@@ -3037,7 +3037,7 @@ func (e *mutableStateBuilder) AddTimerStartedEvent(
 
 func (e *mutableStateBuilder) ReplicateTimerStartedEvent(
 	event *historypb.HistoryEvent,
-) (*persistenceblobs.TimerInfo, error) {
+) (*persistencespb.TimerInfo, error) {
 
 	attributes := event.GetTimerStartedEventAttributes()
 	timerID := attributes.GetTimerId()
@@ -3046,7 +3046,7 @@ func (e *mutableStateBuilder) ReplicateTimerStartedEvent(
 	// TODO: Time skew need to be taken in to account.
 	expiryTime := timestamp.TimeValue(event.GetEventTime()).Add(startToFireTimeout) // should use the event time, not now
 
-	ti := &persistenceblobs.TimerInfo{
+	ti := &persistencespb.TimerInfo{
 		Version:    event.GetVersion(),
 		TimerId:    timerID,
 		ExpiryTime: &expiryTime,
@@ -3358,7 +3358,7 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	createRequestID string,
 	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
-) (*historypb.HistoryEvent, *persistenceblobs.ChildExecutionInfo, error) {
+) (*historypb.HistoryEvent, *persistencespb.ChildExecutionInfo, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowInitiated
 	if err := e.checkMutability(opTag); err != nil {
@@ -3388,11 +3388,11 @@ func (e *mutableStateBuilder) ReplicateStartChildWorkflowExecutionInitiatedEvent
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 	createRequestID string,
-) (*persistenceblobs.ChildExecutionInfo, error) {
+) (*persistencespb.ChildExecutionInfo, error) {
 
 	initiatedEventID := event.GetEventId()
 	attributes := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-	ci := &persistenceblobs.ChildExecutionInfo{
+	ci := &persistencespb.ChildExecutionInfo{
 		Version:               event.GetVersion(),
 		InitiatedId:           initiatedEventID,
 		InitiatedEventBatchId: firstEventID,
@@ -3709,7 +3709,7 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionTimedOutEvent(
 }
 
 func (e *mutableStateBuilder) RetryActivity(
-	ai *persistenceblobs.ActivityInfo,
+	ai *persistencespb.ActivityInfo,
 	failure *failurepb.Failure,
 ) (enumspb.RetryState, error) {
 
@@ -4055,20 +4055,20 @@ func (e *mutableStateBuilder) cleanupTransaction(
 	// Clear all updates to prepare for the next session
 	e.hBuilder = newHistoryBuilder(e, e.logger)
 
-	e.updateActivityInfos = make(map[*persistenceblobs.ActivityInfo]struct{})
+	e.updateActivityInfos = make(map[*persistencespb.ActivityInfo]struct{})
 	e.deleteActivityInfos = make(map[int64]struct{})
 	e.syncActivityTasks = make(map[int64]struct{})
 
-	e.updateTimerInfos = make(map[*persistenceblobs.TimerInfo]struct{})
+	e.updateTimerInfos = make(map[*persistencespb.TimerInfo]struct{})
 	e.deleteTimerInfos = make(map[string]struct{})
 
-	e.updateChildExecutionInfos = make(map[*persistenceblobs.ChildExecutionInfo]struct{})
+	e.updateChildExecutionInfos = make(map[*persistencespb.ChildExecutionInfo]struct{})
 	e.deleteChildExecutionInfo = nil
 
-	e.updateRequestCancelInfos = make(map[*persistenceblobs.RequestCancelInfo]struct{})
+	e.updateRequestCancelInfos = make(map[*persistencespb.RequestCancelInfo]struct{})
 	e.deleteRequestCancelInfo = nil
 
-	e.updateSignalInfos = make(map[*persistenceblobs.SignalInfo]struct{})
+	e.updateSignalInfos = make(map[*persistencespb.SignalInfo]struct{})
 	e.deleteSignalInfo = nil
 
 	e.updateSignalRequestedIDs = make(map[string]struct{})
@@ -4513,7 +4513,7 @@ func (e *mutableStateBuilder) increaseNextEventID() {
 	e.nextEventID++
 }
 
-func (e *mutableStateBuilder) generateChecksum() *persistenceblobs.Checksum {
+func (e *mutableStateBuilder) generateChecksum() *persistencespb.Checksum {
 	if !e.shouldGenerateChecksum() {
 		return nil
 	}

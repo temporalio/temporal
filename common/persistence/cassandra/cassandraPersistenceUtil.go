@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -381,10 +381,10 @@ func applyWorkflowSnapshotBatchAsNew(
 func createExecution(
 	batch *gocql.Batch,
 	shardID int32,
-	executionInfo *persistenceblobs.WorkflowExecutionInfo,
-	executionState *persistenceblobs.WorkflowExecutionState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
-	checksum *persistenceblobs.Checksum,
+	checksum *persistencespb.Checksum,
 	cqlNowTimestampMillis int64,
 ) error {
 
@@ -459,12 +459,12 @@ func createExecution(
 func updateExecution(
 	batch *gocql.Batch,
 	shardID int32,
-	executionInfo *persistenceblobs.WorkflowExecutionInfo,
-	executionState *persistenceblobs.WorkflowExecutionState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
 	cqlNowTimestampMillis int64,
 	condition int64,
-	checksum *persistenceblobs.Checksum,
+	checksum *persistencespb.Checksum,
 ) error {
 
 	// validate workflow state & close status
@@ -642,7 +642,7 @@ func createTransferTasks(
 		}
 
 		// todo ~~~ come back for record visibility
-		p := &persistenceblobs.TransferTaskInfo{
+		p := &persistencespb.TransferTaskInfo{
 			NamespaceId:             namespaceID,
 			WorkflowId:              workflowID,
 			RunId:                   runID,
@@ -712,7 +712,7 @@ func createReplicationTasks(
 			return serviceerror.NewInternal(fmt.Sprintf("Unknow replication type: %v", task.GetType()))
 		}
 
-		datablob, err := serialization.ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
+		datablob, err := serialization.ReplicationTaskInfoToBlob(&persistencespb.ReplicationTaskInfo{
 			NamespaceId:             namespaceID,
 			WorkflowId:              workflowID,
 			RunId:                   runID,
@@ -799,7 +799,7 @@ func createTimerTasks(
 		goTs := task.GetVisibilityTimestamp()
 		dbTs := p.UnixNanoToDBTimestamp(goTs.UnixNano())
 
-		datablob, err := serialization.TimerTaskInfoToBlob(&persistenceblobs.TimerTaskInfo{
+		datablob, err := serialization.TimerTaskInfoToBlob(&persistencespb.TimerTaskInfo{
 			NamespaceId:         namespaceID,
 			WorkflowId:          workflowID,
 			RunId:               runID,
@@ -848,7 +848,7 @@ func createOrUpdateCurrentExecution(
 	previousLastWriteVersion int64,
 ) error {
 
-	executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
+	executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistencespb.WorkflowExecutionState{
 		RunId:           runID,
 		CreateRequestId: createRequestID,
 		State:           state,
@@ -860,7 +860,7 @@ func createOrUpdateCurrentExecution(
 	}
 
 	replicationVersions, err := serialization.ReplicationVersionsToBlob(
-		&persistenceblobs.ReplicationVersions{
+		&persistencespb.ReplicationVersions{
 			StartVersion:     &types.Int64Value{Value: startVersion},
 			LastWriteVersion: &types.Int64Value{Value: startVersion},
 		})
@@ -934,7 +934,7 @@ func createOrUpdateCurrentExecution(
 
 func updateActivityInfos(
 	batch *gocql.Batch,
-	activityInfos []*persistenceblobs.ActivityInfo,
+	activityInfos []*persistencespb.ActivityInfo,
 	deleteInfos []int64,
 	shardID int32,
 	namespaceID string,
@@ -996,7 +996,7 @@ func deleteBufferedEvents(
 
 func resetActivityInfos(
 	batch *gocql.Batch,
-	activityInfos []*persistenceblobs.ActivityInfo,
+	activityInfos []*persistencespb.ActivityInfo,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1023,7 +1023,7 @@ func resetActivityInfos(
 
 func updateTimerInfos(
 	batch *gocql.Batch,
-	timerInfos []*persistenceblobs.TimerInfo,
+	timerInfos []*persistencespb.TimerInfo,
 	deleteInfos []string,
 	shardID int32,
 	namespaceID string,
@@ -1066,7 +1066,7 @@ func updateTimerInfos(
 
 func resetTimerInfos(
 	batch *gocql.Batch,
-	timerInfos []*persistenceblobs.TimerInfo,
+	timerInfos []*persistencespb.TimerInfo,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1094,7 +1094,7 @@ func resetTimerInfos(
 
 func updateChildExecutionInfos(
 	batch *gocql.Batch,
-	childExecutionInfos []*persistenceblobs.ChildExecutionInfo,
+	childExecutionInfos []*persistencespb.ChildExecutionInfo,
 	deleteInfo *int64,
 	shardID int32,
 	namespaceID string,
@@ -1138,7 +1138,7 @@ func updateChildExecutionInfos(
 
 func resetChildExecutionInfos(
 	batch *gocql.Batch,
-	childExecutionInfos []*persistenceblobs.ChildExecutionInfo,
+	childExecutionInfos []*persistencespb.ChildExecutionInfo,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1164,7 +1164,7 @@ func resetChildExecutionInfos(
 
 func updateRequestCancelInfos(
 	batch *gocql.Batch,
-	requestCancelInfos []*persistenceblobs.RequestCancelInfo,
+	requestCancelInfos []*persistencespb.RequestCancelInfo,
 	deleteInfo *int64,
 	shardID int32,
 	namespaceID string,
@@ -1209,7 +1209,7 @@ func updateRequestCancelInfos(
 
 func resetRequestCancelInfos(
 	batch *gocql.Batch,
-	requestCancelInfos []*persistenceblobs.RequestCancelInfo,
+	requestCancelInfos []*persistencespb.RequestCancelInfo,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1238,7 +1238,7 @@ func resetRequestCancelInfos(
 
 func updateSignalInfos(
 	batch *gocql.Batch,
-	signalInfos []*persistenceblobs.SignalInfo,
+	signalInfos []*persistencespb.SignalInfo,
 	deleteInfo *int64,
 	shardID int32,
 	namespaceID string,
@@ -1283,7 +1283,7 @@ func updateSignalInfos(
 
 func resetSignalInfos(
 	batch *gocql.Batch,
-	signalInfos []*persistenceblobs.SignalInfo,
+	signalInfos []*persistencespb.SignalInfo,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1403,7 +1403,7 @@ func updateBufferedEvents(
 }
 
 func resetActivityInfoMap(
-	activityInfos []*persistenceblobs.ActivityInfo,
+	activityInfos []*persistencespb.ActivityInfo,
 ) (map[int64][]byte, enumspb.EncodingType, error) {
 
 	encoding := enumspb.ENCODING_TYPE_UNSPECIFIED
@@ -1422,7 +1422,7 @@ func resetActivityInfoMap(
 }
 
 func resetTimerInfoMap(
-	timerInfos []*persistenceblobs.TimerInfo,
+	timerInfos []*persistencespb.TimerInfo,
 ) (map[string][]byte, enumspb.EncodingType, error) {
 
 	tMap := make(map[string][]byte)
@@ -1443,7 +1443,7 @@ func resetTimerInfoMap(
 }
 
 func resetChildExecutionInfoMap(
-	childExecutionInfos []*persistenceblobs.ChildExecutionInfo,
+	childExecutionInfos []*persistencespb.ChildExecutionInfo,
 ) (map[int64][]byte, enumspb.EncodingType, error) {
 
 	cMap := make(map[int64][]byte)
@@ -1461,7 +1461,7 @@ func resetChildExecutionInfoMap(
 }
 
 func resetRequestCancelInfoMap(
-	requestCancelInfos []*persistenceblobs.RequestCancelInfo,
+	requestCancelInfos []*persistencespb.RequestCancelInfo,
 ) (map[int64][]byte, enumspb.EncodingType, error) {
 
 	rcMap := make(map[int64][]byte)
@@ -1482,7 +1482,7 @@ func resetRequestCancelInfoMap(
 }
 
 func resetSignalInfoMap(
-	signalInfos []*persistenceblobs.SignalInfo,
+	signalInfos []*persistencespb.SignalInfo,
 ) (map[int64][]byte, enumspb.EncodingType, error) {
 
 	sMap := make(map[int64][]byte)

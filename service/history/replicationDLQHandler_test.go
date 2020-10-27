@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
@@ -98,7 +98,7 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 	s.mockShard = &shardContextImpl{
 		shardID:  0,
 		Resource: s.mockResource,
-		shardInfo: &persistence.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{
+		shardInfo: &persistence.ShardInfoWithFailover{ShardInfo: &persistencespb.ShardInfo{
 			ShardId:                0,
 			RangeId:                1,
 			ReplicationDlqAckLevel: map[string]int64{"test": -1},
@@ -135,8 +135,8 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	pageToken := []byte{}
 
 	resp := &persistence.GetReplicationTasksFromDLQResponse{
-		Tasks: []*persistenceblobs.ReplicationTaskInfo{
-			&persistenceblobs.ReplicationTaskInfo{
+		Tasks: []*persistencespb.ReplicationTaskInfo{
+			&persistencespb.ReplicationTaskInfo{
 				NamespaceId: uuid.New(),
 				WorkflowId:  uuid.New(),
 				RunId:       uuid.New(),
@@ -186,7 +186,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages_OK() {
 	pageToken := []byte{}
 
 	resp := &persistence.GetReplicationTasksFromDLQResponse{
-		Tasks: []*persistenceblobs.ReplicationTaskInfo{
+		Tasks: []*persistencespb.ReplicationTaskInfo{
 			{
 				NamespaceId: uuid.New(),
 				WorkflowId:  uuid.New(),

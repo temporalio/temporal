@@ -38,7 +38,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -62,7 +62,7 @@ type (
 
 		loadWorkflowExecution() (mutableState, error)
 		loadWorkflowExecutionForReplication(incomingVersion int64) (mutableState, error)
-		loadExecutionStats() (*persistenceblobs.ExecutionStats, error)
+		loadExecutionStats() (*persistencespb.ExecutionStats, error)
 		clear()
 
 		lock(ctx context.Context) error
@@ -141,7 +141,7 @@ type (
 
 		mutex           locks.Mutex
 		mutableState    mutableState
-		stats           *persistenceblobs.ExecutionStats
+		stats           *persistencespb.ExecutionStats
 		updateCondition int64
 	}
 )
@@ -170,7 +170,7 @@ func newWorkflowExecutionContext(
 		timeSource:        shard.GetTimeSource(),
 		config:            shard.GetConfig(),
 		mutex:             locks.NewMutex(),
-		stats: &persistenceblobs.ExecutionStats{
+		stats: &persistencespb.ExecutionStats{
 			HistorySize: 0,
 		},
 	}
@@ -187,7 +187,7 @@ func (c *workflowExecutionContextImpl) unlock() {
 func (c *workflowExecutionContextImpl) clear() {
 	c.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.WorkflowContextCleared)
 	c.mutableState = nil
-	c.stats = &persistenceblobs.ExecutionStats{
+	c.stats = &persistencespb.ExecutionStats{
 		HistorySize: 0,
 	}
 }
@@ -216,7 +216,7 @@ func (c *workflowExecutionContextImpl) setHistorySize(size int64) {
 	c.stats.HistorySize = size
 }
 
-func (c *workflowExecutionContextImpl) loadExecutionStats() (*persistenceblobs.ExecutionStats, error) {
+func (c *workflowExecutionContextImpl) loadExecutionStats() (*persistencespb.ExecutionStats, error) {
 	_, err := c.loadWorkflowExecution()
 	if err != nil {
 		return nil, err
@@ -387,7 +387,7 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 
 	historySize += c.getHistorySize()
 	c.setHistorySize(historySize)
-	createRequest.NewWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{
+	createRequest.NewWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
 		HistorySize: historySize,
 	}
 
@@ -437,7 +437,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		resetHistorySize += eventsSize
 	}
 	c.setHistorySize(resetHistorySize)
-	resetWorkflow.ExecutionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{
+	resetWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
 		HistorySize: resetHistorySize,
 	}
 
@@ -466,7 +466,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		}
 		newWorkflowSizeSize += eventsSize
 		newContext.setHistorySize(newWorkflowSizeSize)
-		newWorkflow.ExecutionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{
+		newWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
 		}
 	}
@@ -497,7 +497,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 			currentWorkflowSize += eventsSize
 		}
 		currentContext.setHistorySize(currentWorkflowSize)
-		currentWorkflow.ExecutionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{
+		currentWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
 			HistorySize: currentWorkflowSize,
 		}
 	}
@@ -676,7 +676,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		currentWorkflowSize += eventsSize
 	}
 	c.setHistorySize(currentWorkflowSize)
-	currentWorkflow.ExecutionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{
+	currentWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
 		HistorySize: currentWorkflowSize,
 	}
 
@@ -715,7 +715,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 			newWorkflowSizeSize += eventsSize
 			newContext.setHistorySize(newWorkflowSizeSize)
 		}
-		newWorkflow.ExecutionInfo.ExecutionStats = &persistenceblobs.ExecutionStats{
+		newWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
 		}
 	}

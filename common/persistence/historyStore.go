@@ -33,7 +33,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -323,7 +323,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	if len(branch.Ancestors) > 0 {
 		beginNodeID = branch.Ancestors[len(branch.Ancestors)-1].GetEndNodeId()
 	}
-	allBRs = append(allBRs, &persistenceblobs.HistoryBranchRange{
+	allBRs = append(allBRs, &persistencespb.HistoryBranchRange{
 		BranchId:    branchID,
 		BeginNodeId: beginNodeID,
 		EndNodeId:   request.MaxEventID,

@@ -40,7 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -501,8 +501,8 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	isGlobalNamespace := true
 
 	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
-		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
 				Id:          uuid.New(),
 				Name:        namespace,
 				State:       enumspb.NAMESPACE_STATE_REGISTERED,
@@ -510,14 +510,14 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 				Owner:       email,
 				Data:        data,
 			},
-			Config: &persistenceblobs.NamespaceConfig{
+			Config: &persistencespb.NamespaceConfig{
 				Retention:               &retention,
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				HistoryArchivalUri:      "",
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 				VisibilityArchivalUri:   "",
 			},
-			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: activeClusterName,
 				Clusters:          clusters,
 			},
@@ -560,8 +560,8 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	isGlobalNamespace := true
 
 	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
-		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
 				Id:          uuid.New(),
 				Name:        namespace,
 				State:       enumspb.NAMESPACE_STATE_REGISTERED,
@@ -569,14 +569,14 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 				Owner:       "",
 				Data:        map[string]string{},
 			},
-			Config: &persistenceblobs.NamespaceConfig{
+			Config: &persistencespb.NamespaceConfig{
 				Retention:               timestamp.DurationFromDays(0),
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				HistoryArchivalUri:      "",
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 				VisibilityArchivalUri:   "",
 			},
-			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: activeClusterName,
 				Clusters:          clustersDB,
 			},
@@ -637,8 +637,8 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	isGlobalNamespace := true
 
 	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
-		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
 				Id:          uuid.New(),
 				Name:        namespace,
 				State:       enumspb.NAMESPACE_STATE_REGISTERED,
@@ -646,14 +646,14 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 				Owner:       email,
 				Data:        data,
 			},
-			Config: &persistenceblobs.NamespaceConfig{
+			Config: &persistencespb.NamespaceConfig{
 				Retention:               &retention,
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				HistoryArchivalUri:      "",
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 				VisibilityArchivalUri:   "",
 			},
-			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: prevActiveClusterName,
 				Clusters:          clustersDB,
 			},

@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
@@ -87,7 +87,7 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistenceblobs.ShardInfo{
+			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:          0,
 				RangeId:          1,
 				TransferAckLevel: 0,
@@ -127,7 +127,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TearDownTest() {
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
-	task := &persistenceblobs.TimerTaskInfo{
+	task := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		TaskId:          12345,
 		VisibilityTime:  timestamp.TimeNowPtrUtc(),
@@ -150,7 +150,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFailed() {
-	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistenceblobs.ExecutionStats{
+	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistencespb.ExecutionStats{
 		HistorySize: 1024,
 	}, nil).Times(1)
 	s.mockWorkflowExecutionContext.EXPECT().clear().Times(1)
@@ -169,14 +169,14 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 		HistoryArchivedInline: false,
 	}, nil)
 
-	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistenceblobs.NamespaceInfo{}, &persistenceblobs.NamespaceConfig{}, false, nil, 0, nil)
-	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistenceblobs.TimerTaskInfo{
+	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0, nil)
+	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
 	s.NoError(err)
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
-	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistenceblobs.ExecutionStats{
+	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistencespb.ExecutionStats{
 		HistorySize: 1024 * 1024 * 1024,
 	}, nil).Times(1)
 
@@ -188,8 +188,8 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
 		return req.CallerService == common.HistoryServiceName && !req.AttemptArchiveInline && req.ArchiveRequest.Targets[0] == archiver.ArchiveTargetHistory
 	})).Return(nil, errors.New("failed to send signal"))
 
-	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistenceblobs.NamespaceInfo{}, &persistenceblobs.NamespaceConfig{}, false, nil, 0, nil)
-	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistenceblobs.TimerTaskInfo{
+	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0, nil)
+	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
 	s.Error(err)
 }

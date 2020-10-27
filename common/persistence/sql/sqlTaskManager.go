@@ -36,7 +36,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -78,7 +78,7 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 	if err != nil {
 		if err == sql.ErrNoRows {
 			namespaceID := request.NamespaceID
-			tqInfo := &persistenceblobs.TaskQueueInfo{
+			tqInfo := &persistencespb.TaskQueueInfo{
 				NamespaceId:    namespaceID,
 				Name:           request.TaskQueue,
 				TaskType:       request.TaskType,
@@ -451,7 +451,7 @@ func (m *sqlTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persis
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks operation failed. Failed to get rows. Error: %v", err))
 	}
 
-	var tasks = make([]*persistenceblobs.AllocatedTaskInfo, len(rows))
+	var tasks = make([]*persistencespb.AllocatedTaskInfo, len(rows))
 	for i, v := range rows {
 		info, err := serialization.TaskInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {

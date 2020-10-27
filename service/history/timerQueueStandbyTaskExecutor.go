@@ -32,7 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -78,7 +78,7 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 	shouldProcessTask bool,
 ) error {
 
-	timerTask, ok := taskInfo.(*persistenceblobs.TimerTaskInfo)
+	timerTask, ok := taskInfo.(*persistencespb.TimerTaskInfo)
 	if !ok {
 		return errUnexpectedQueueTask
 	}
@@ -113,7 +113,7 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
-	timerTask *persistenceblobs.TimerTaskInfo,
+	timerTask *persistencespb.TimerTaskInfo,
 ) error {
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
@@ -158,7 +158,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
-	timerTask *persistenceblobs.TimerTaskInfo,
+	timerTask *persistencespb.TimerTaskInfo,
 ) error {
 
 	// activity heartbeat timer task is a special snowflake.
@@ -261,7 +261,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
-	timerTask *persistenceblobs.TimerTaskInfo,
+	timerTask *persistencespb.TimerTaskInfo,
 ) error {
 
 	// workflow task schedule to start timer task is a special snowflake.
@@ -301,7 +301,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
-	timerTask *persistenceblobs.TimerTaskInfo,
+	timerTask *persistencespb.TimerTaskInfo,
 ) error {
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
@@ -340,7 +340,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
-	timerTask *persistenceblobs.TimerTaskInfo,
+	timerTask *persistencespb.TimerTaskInfo,
 ) error {
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
@@ -391,7 +391,7 @@ func (t *timerQueueStandbyTaskExecutor) getTimerSequence(
 }
 
 func (t *timerQueueStandbyTaskExecutor) processTimer(
-	timerTask *persistenceblobs.TimerTaskInfo,
+	timerTask *persistencespb.TimerTaskInfo,
 	actionFn standbyActionFn,
 	postActionFn standbyPostActionFn,
 ) (retError error) {
@@ -442,7 +442,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return nil
 	}
 
-	timerTask := taskInfo.(*persistenceblobs.TimerTaskInfo)
+	timerTask := taskInfo.(*persistencespb.TimerTaskInfo)
 	resendInfo := postActionInfo.(*historyResendInfo)
 
 	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientRequests)

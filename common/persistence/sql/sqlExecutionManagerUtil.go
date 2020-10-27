@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistenceblobs/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -650,7 +650,7 @@ func createTransferTasks(
 
 	transferTasksRows := make([]sqlplugin.TransferTasksRow, len(transferTasks))
 	for i, task := range transferTasks {
-		info := &persistenceblobs.TransferTaskInfo{
+		info := &persistencespb.TransferTaskInfo{
 			NamespaceId:       namespaceID,
 			WorkflowId:        workflowID,
 			RunId:             runID,
@@ -780,7 +780,7 @@ func createReplicationTasks(
 			return serviceerror.NewInternal(fmt.Sprintf("Unknown replication task: %v", task.GetType()))
 		}
 
-		blob, err := serialization.ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
+		blob, err := serialization.ReplicationTaskInfoToBlob(&persistencespb.ReplicationTaskInfo{
 			TaskId:                  task.GetTaskID(),
 			NamespaceId:             namespaceID,
 			WorkflowId:              workflowID,
@@ -834,7 +834,7 @@ func createTimerTasks(
 		timerTasksRows := make([]sqlplugin.TimerTasksRow, len(timerTasks))
 
 		for i, task := range timerTasks {
-			info := &persistenceblobs.TimerTaskInfo{}
+			info := &persistencespb.TimerTaskInfo{}
 			switch t := task.(type) {
 			case *p.WorkflowTaskTimeoutTask:
 				info.EventId = t.EventID
@@ -1028,8 +1028,8 @@ func updateCurrentExecution(
 }
 
 func buildExecutionRow(
-	executionInfo *persistenceblobs.WorkflowExecutionInfo,
-	executionState *persistenceblobs.WorkflowExecutionState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
 	lastWriteVersion int64,
 	shardID int32,
@@ -1071,8 +1071,8 @@ func buildExecutionRow(
 
 func (m *sqlExecutionManager) createExecution(
 	tx sqlplugin.Tx,
-	executionInfo *persistenceblobs.WorkflowExecutionInfo,
-	executionState *persistenceblobs.WorkflowExecutionState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
 	lastWriteVersion int64,
 	shardID int32,
@@ -1126,8 +1126,8 @@ func (m *sqlExecutionManager) createExecution(
 
 func updateExecution(
 	tx sqlplugin.Tx,
-	executionInfo *persistenceblobs.WorkflowExecutionInfo,
-	executionState *persistenceblobs.WorkflowExecutionState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
 	lastWriteVersion int64,
 	shardID int32,
