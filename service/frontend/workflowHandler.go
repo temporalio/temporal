@@ -865,7 +865,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
 	if resp == nil {
-		return nilResponse, nil
+		resp = nilResponse
 	}
 	return resp, nil
 }
