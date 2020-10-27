@@ -249,7 +249,9 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 			namespaceEntry,
 		)
 
-		c.mutableState.Load(response.State)
+		if err := c.mutableState.Load(response.State); err != nil {
+			return nil, err
+		}
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
 		c.updateCondition = response.State.NextEventId
@@ -322,7 +324,9 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 			namespaceEntry,
 		)
 
-		c.mutableState.Load(response.State)
+		if err := c.mutableState.Load(response.State); err != nil {
+			return nil, err
+		}
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
 		c.updateCondition = response.State.NextEventId
