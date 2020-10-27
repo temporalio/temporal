@@ -122,44 +122,13 @@ func AdminShowWorkflow(c *cli.Context) {
 
 // AdminDescribeWorkflow describe a new workflow execution for admin
 func AdminDescribeWorkflow(c *cli.Context) {
-	// identJSON := func(s string) string {
-	// 	if s == "" {
-	// 		return "<empty>"
-	// 	}
-	//
-	// 	var data interface{}
-	// 	err := json.Unmarshal([]byte(s), &data)
-	// 	if err != nil {
-	// 		return s
-	// 	}
-	//
-	// 	b, err := json.MarshalIndent(data, "", "  ")
-	// 	if err != nil {
-	// 		return s
-	// 	}
-	// 	return string(b)
-	// }
-	//
 	resp := describeMutableState(c)
-	// fmt.Printf("Cache Mutable State:\n%s\n", identJSON(resp.GetCacheMutableState()))
-	// fmt.Printf("Database Mutable State:\n%s\n", identJSON(resp.GetDatabaseMutableState()))
-	//
-	// output := struct {
-	// 	TreeID      string
-	// 	BranchID    string
-	// 	ShardID     string
-	// 	HistoryAddr string
-	// }{
-	// 	resp.GetTreeId(),
-	// 	resp.GetBranchId(),
-	// 	resp.GetShardId(),
-	// 	resp.GetHistoryAddr(),
-	// }
-	// prettyPrintJSONObject(output)
 
 	if resp != nil {
 		fmt.Println(colorMagenta("Cache mutable state:"))
-		prettyPrintJSONObject(resp.GetCacheMutableState())
+		if resp.GetCacheMutableState() != nil {
+			prettyPrintJSONObject(resp.GetCacheMutableState())
+		}
 		fmt.Println(colorMagenta("Database mutable state:"))
 		prettyPrintJSONObject(resp.GetDatabaseMutableState())
 		fmt.Println()

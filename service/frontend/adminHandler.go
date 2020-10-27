@@ -227,8 +227,6 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		HistoryAddr:          historyAddr,
 		DatabaseMutableState: historyResponse.GetDatabaseMutableState(),
 		CacheMutableState:    historyResponse.GetCacheMutableState(),
-		// TreeId:               historyResponse.GetTreeId(),
-		// BranchId:             historyResponse.GetBranchId(),
 	}, err
 }
 
