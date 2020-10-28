@@ -287,7 +287,7 @@ func (r *ringpopServiceResolver) getReachableMembers() ([]string, error) {
 				return nil, err
 			}
 		} else {
-			r.logger.Warn("unable to find roleport label for ringpop member. using local container's port", tag.Service(r.service))
+			r.logger.Warn("unable to find roleport label for ringpop member. using local service's port", tag.Service(r.service))
 		}
 
 		hostPort, err := replaceServicePort(member.Address, servicePort)
