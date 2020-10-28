@@ -25,8 +25,6 @@
 package clitest
 
 import (
-	log "github.com/sirupsen/logrus"
-
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/tools/common/schema/test"
 	"go.temporal.io/server/tools/sql"
@@ -69,7 +67,7 @@ func NewSetupSchemaTestSuite(
 func (s *SetupSchemaTestSuite) SetupSuite() {
 	conn, err := newTestConn("", s.host, s.port, s.pluginName)
 	if err != nil {
-		log.Fatalf("error creating sql connection:%v", err)
+		s.Fail("error creating sql connection:%v", err)
 	}
 	s.conn = conn
 	s.SetupSuiteBase(conn, s.pluginName)

@@ -27,6 +27,7 @@ package membership
 import (
 	"errors"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -47,7 +48,13 @@ import (
 const (
 	// RoleKey label is set by every single service as soon as it bootstraps its
 	// ringpop instance. The data for this key is the service name
-	RoleKey                = "serviceName"
+	RoleKey = "serviceName"
+
+	// RolePort label is set by every single service as soon as it bootstraps its
+	// ringpop instance. The data for this key represents the TCP port through which
+	// the service can be accessed.
+	RolePort = "servicePort"
+
 	minRefreshInternal     = time.Second * 4
 	defaultRefreshInterval = time.Second * 10
 	replicaPoints          = 100
@@ -156,11 +163,7 @@ func (r *ringpopServiceResolver) Lookup(
 		return nil, ErrInsufficientHosts
 	}
 
-	serviceAddress, err := replaceServicePort(addr, r.port)
-	if err != nil {
-		return nil, err
-	}
-	return NewHostInfo(serviceAddress, r.getLabelsMap()), nil
+	return NewHostInfo(addr, r.getLabelsMap()), nil
 }
 
 func (r *ringpopServiceResolver) AddListener(
@@ -241,7 +244,7 @@ func (r *ringpopServiceResolver) refreshWithBackoff() error {
 }
 
 func (r *ringpopServiceResolver) refreshNoLock() error {
-	addrs, err := r.rp.GetReachableMembers(swim.MemberWithLabelAndValue(RoleKey, r.service))
+	addrs, err := r.getReachableMembers()
 	if err != nil {
 		return err
 	}
@@ -262,6 +265,40 @@ func (r *ringpopServiceResolver) refreshNoLock() error {
 	r.ringValue.Store(ring)
 	r.logger.Info("Current reachable members", tag.Addresses(addrs))
 	return nil
+}
+
+func (r *ringpopServiceResolver) getReachableMembers() ([]string, error) {
+	members, err := r.rp.GetReachableMemberObjects(swim.MemberWithLabelAndValue(RoleKey, r.service))
+	if err != nil {
+		return nil, err
+	}
+
+	var hostPorts []string
+	for _, member := range members {
+		servicePort := r.port
+
+		// Each temporal service in the ring should advertise which port it has its gRPC listener
+		// on via a RingPop label. If we cannot find the label, we will assume that that the
+		// temporal service is listening on the same port that this node is listening on.
+		servicePortLabel, ok := member.Label(RolePort)
+		if ok {
+			servicePort, err = strconv.Atoi(servicePortLabel)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			r.logger.Debug("unable to find roleport label for ringpop member. using local service's port", tag.Service(r.service))
+		}
+
+		hostPort, err := replaceServicePort(member.Address, servicePort)
+		if err != nil {
+			return nil, err
+		}
+
+		hostPorts = append(hostPorts, hostPort)
+	}
+
+	return hostPorts, nil
 }
 
 func (r *ringpopServiceResolver) emitEvent(

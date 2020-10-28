@@ -26,17 +26,14 @@ package persistencetests
 
 import (
 	"fmt"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -60,9 +57,6 @@ type (
 
 // SetupSuite implementation
 func (m *MetadataPersistenceSuiteV2) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 // SetupTest implementation

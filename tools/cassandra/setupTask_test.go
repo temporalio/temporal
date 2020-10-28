@@ -25,10 +25,10 @@
 package cassandra
 
 import (
+	"log"
 	"os"
 	"testing"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/environment"
