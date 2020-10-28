@@ -126,8 +126,12 @@ func (rpo *ringpopMonitor) Start() {
 		rpo.logger.Fatal("unable to get ring pop labels", tag.Error(err))
 	}
 
+	if err = labels.Set(RolePort, strconv.Itoa(rpo.services[rpo.serviceName])); err != nil {
+		rpo.logger.Fatal("unable to set ring pop ServicePort label", tag.Error(err))
+	}
+
 	if err = labels.Set(RoleKey, rpo.serviceName); err != nil {
-		rpo.logger.Fatal("unable to set ring pop labels", tag.Error(err))
+		rpo.logger.Fatal("unable to set ring pop ServiceRole label", tag.Error(err))
 	}
 
 	for _, ring := range rpo.rings {
