@@ -28,6 +28,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -70,7 +71,7 @@ func newQueue(
 }
 
 func (q *sqlQueue) EnqueueMessage(
-	messagePayload []byte,
+	blob commonpb.DataBlob,
 ) error {
 
 	err := q.txExecute("EnqueueMessage", func(tx sqlplugin.Tx) error {
@@ -78,12 +79,12 @@ func (q *sqlQueue) EnqueueMessage(
 		switch err {
 		case nil:
 			_, err = tx.InsertIntoMessages([]sqlplugin.QueueMessageRow{
-				newQueueRow(q.queueType, lastMessageID+1, messagePayload),
+				newQueueRow(q.queueType, lastMessageID+1, blob),
 			})
 			return err
 		case sql.ErrNoRows:
 			_, err = tx.InsertIntoMessages([]sqlplugin.QueueMessageRow{
-				newQueueRow(q.queueType, sqlplugin.EmptyMessageID+1, messagePayload),
+				newQueueRow(q.queueType, sqlplugin.EmptyMessageID+1, blob),
 			})
 			return err
 		default:
@@ -113,7 +114,12 @@ func (q *sqlQueue) ReadMessages(
 
 	var messages []*persistence.QueueMessage
 	for _, row := range rows {
-		messages = append(messages, &persistence.QueueMessage{ID: row.MessageID, Payload: row.MessagePayload})
+		messages = append(messages, &persistence.QueueMessage{
+			QueueType: q.queueType,
+			ID:        row.MessageID,
+			Data:      row.MessagePayload,
+			Encoding:  row.MessageEncoding,
+		})
 	}
 	return messages, nil
 }
@@ -121,10 +127,15 @@ func (q *sqlQueue) ReadMessages(
 func newQueueRow(
 	queueType persistence.QueueType,
 	messageID int64,
-	payload []byte,
+	blob commonpb.DataBlob,
 ) sqlplugin.QueueMessageRow {
 
-	return sqlplugin.QueueMessageRow{QueueType: queueType, MessageID: messageID, MessagePayload: payload}
+	return sqlplugin.QueueMessageRow{
+		QueueType:       queueType,
+		MessageID:       messageID,
+		MessagePayload:  blob.Data,
+		MessageEncoding: blob.EncodingType.String(),
+	}
 }
 
 func (q *sqlQueue) DeleteMessagesBefore(
@@ -219,7 +230,7 @@ func (q *sqlQueue) GetAckLevels() (map[string]int64, error) {
 }
 
 func (q *sqlQueue) EnqueueMessageToDLQ(
-	messagePayload []byte,
+	blob commonpb.DataBlob,
 ) (int64, error) {
 
 	var lastMessageID int64
@@ -229,12 +240,12 @@ func (q *sqlQueue) EnqueueMessageToDLQ(
 		switch err {
 		case nil:
 			_, err = tx.InsertIntoMessages([]sqlplugin.QueueMessageRow{
-				newQueueRow(q.getDLQTypeFromQueueType(), lastMessageID+1, messagePayload),
+				newQueueRow(q.getDLQTypeFromQueueType(), lastMessageID+1, blob),
 			})
 			return err
 		case sql.ErrNoRows:
 			_, err = tx.InsertIntoMessages([]sqlplugin.QueueMessageRow{
-				newQueueRow(q.getDLQTypeFromQueueType(), sqlplugin.EmptyMessageID+1, messagePayload),
+				newQueueRow(q.getDLQTypeFromQueueType(), sqlplugin.EmptyMessageID+1, blob),
 			})
 			return err
 		default:
@@ -274,7 +285,12 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 
 	var messages []*persistence.QueueMessage
 	for _, row := range rows {
-		messages = append(messages, &persistence.QueueMessage{ID: row.MessageID, Payload: row.MessagePayload})
+		messages = append(messages, &persistence.QueueMessage{
+			QueueType: q.getDLQTypeFromQueueType(),
+			ID:        row.MessageID,
+			Data:      row.MessagePayload,
+			Encoding:  row.MessageEncoding,
+		})
 	}
 
 	var newPagingToken []byte

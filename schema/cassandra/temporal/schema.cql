@@ -75,14 +75,14 @@ CREATE TABLE history_tree (
 
 -- Stores activity or workflow tasks
 CREATE TABLE tasks (
-  namespace_id          uuid,
+  namespace_id        uuid,
   task_queue_name     text,
   task_queue_type     int, -- enum TaskQueueType {ActivityTask, WorkflowTask}
-  type               int, -- enum rowType {Task, TaskQueue}
-  task_id            bigint,  -- unique identifier for tasks, monotonically increasing
-  range_id           bigint, -- Used to ensure that only one process can write to the table
-  task               blob,
-  task_encoding      text,
+  type                int, -- enum rowType {Task, TaskQueue}
+  task_id             bigint,  -- unique identifier for tasks, monotonically increasing
+  range_id            bigint, -- Used to ensure that only one process can write to the table
+  task                blob,
+  task_encoding       text,
   task_queue          blob,
   task_queue_encoding text,
   PRIMARY KEY ((namespace_id, task_queue_name, task_queue_type), type, task_id)
@@ -115,12 +115,24 @@ CREATE TABLE namespaces (
 
 CREATE TABLE queue_metadata (
   queue_type        int,
-  cluster_ack_level map<text, bigint>,
+  cluster_ack_level map<text, bigint>, -- TODO remove once migration is finished
+  data              blob,
+  data_encoding     text,
   version           bigint,
 PRIMARY KEY (queue_type)
 )  WITH COMPACTION = {
      'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
    };
+
+CREATE TABLE queue (
+  queue_type       int,
+  message_id       bigint,
+  message_payload  blob,
+  message_encoding text,
+  PRIMARY KEY  (queue_type, message_id)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+  };
 
 CREATE TABLE cluster_metadata (
   metadata_partition      int,
@@ -133,15 +145,6 @@ CREATE TABLE cluster_metadata (
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
     };
-
-CREATE TABLE queue (
-  queue_type      int,
-  message_id      bigint,
-  message_payload blob,
-  PRIMARY KEY  (queue_type, message_id)
-) WITH COMPACTION = {
-    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-  };
 
 CREATE TABLE cluster_membership
 (

@@ -29,12 +29,16 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -43,16 +47,17 @@ const (
 )
 
 const (
-	templateEnqueueMessageQuery       = `INSERT INTO queue (queue_type, message_id, message_payload) VALUES(?, ?, ?) IF NOT EXISTS`
+	templateEnqueueMessageQuery       = `INSERT INTO queue (queue_type, message_id, message_payload, message_encoding) VALUES(?, ?, ?, ?) IF NOT EXISTS`
 	templateGetLastMessageIDQuery     = `SELECT message_id FROM queue WHERE queue_type=? ORDER BY message_id DESC LIMIT 1`
-	templateGetMessagesQuery          = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? LIMIT ?`
-	templateGetMessagesFromDLQQuery   = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
+	templateGetMessagesQuery          = `SELECT message_id, message_payload, message_encoding FROM queue WHERE queue_type = ? and message_id > ? LIMIT ?`
+	templateGetMessagesFromDLQQuery   = `SELECT message_id, message_payload, message_encoding FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
 	templateDeleteMessagesBeforeQuery = `DELETE FROM queue WHERE queue_type = ? and message_id < ?`
 	templateDeleteMessagesQuery       = `DELETE FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
 	templateDeleteMessageQuery        = `DELETE FROM queue WHERE queue_type = ? and message_id = ?`
-	templateGetQueueMetadataQuery     = `SELECT cluster_ack_level, version FROM queue_metadata WHERE queue_type = ?`
-	templateInsertQueueMetadataQuery  = `INSERT INTO queue_metadata (queue_type, cluster_ack_level, version) VALUES(?, ?, ?) IF NOT EXISTS`
-	templateUpdateQueueMetadataQuery  = `UPDATE queue_metadata SET cluster_ack_level = ?, version = ? WHERE queue_type = ? IF version = ?`
+
+	templateGetQueueMetadataQuery    = `SELECT cluster_ack_level, data, data_encoding, version FROM queue_metadata WHERE queue_type = ?`
+	templateInsertQueueMetadataQuery = `INSERT INTO queue_metadata (queue_type, cluster_ack_level, data, data_encoding, version) VALUES(?, ?, ?, ?, ?) IF NOT EXISTS`
+	templateUpdateQueueMetadataQuery = `UPDATE queue_metadata SET cluster_ack_level = ?, data = ?, data_encoding = ?, version = ? WHERE queue_type = ? IF version = ?`
 )
 
 type (
@@ -69,7 +74,7 @@ type (
 	queueMetadata struct {
 		clusterAckLevels map[string]int64
 		// version is used for CAS operation.
-		version int
+		version int64
 	}
 )
 
@@ -102,51 +107,30 @@ func newQueue(
 		logger:         logger,
 		queueType:      queueType,
 	}
-	if err := queue.createQueueMetadataEntryIfNotExist(); err != nil {
-		return nil, fmt.Errorf("check and create queue metadata entry: %w", err)
+	if err := queue.initializeQueueMetadata(); err != nil {
+		return nil, err
+	}
+	if err := queue.initializeDLQMetadata(); err != nil {
+		return nil, err
 	}
 
 	return queue, nil
 }
 
-func (q *cassandraQueue) createQueueMetadataEntryIfNotExist() error {
-	queueMetadata, err := q.getQueueMetadata(q.queueType)
-	if err != nil {
-		return err
-	}
-
-	if queueMetadata == nil {
-		if err := q.insertInitialQueueMetadataRecord(q.queueType); err != nil {
-			return err
-		}
-	}
-
-	dlqMetadata, err := q.getQueueMetadata(q.getDLQTypeFromQueueType())
-	if err != nil {
-		return err
-	}
-
-	if dlqMetadata == nil {
-		return q.insertInitialQueueMetadataRecord(q.getDLQTypeFromQueueType())
-	}
-
-	return nil
-}
-
 func (q *cassandraQueue) EnqueueMessage(
-	messagePayload []byte,
+	blob commonpb.DataBlob,
 ) error {
 	lastMessageID, err := q.getLastMessageID(q.queueType)
 	if err != nil {
 		return err
 	}
 
-	_, err = q.tryEnqueue(q.queueType, lastMessageID+1, messagePayload)
+	_, err = q.tryEnqueue(q.queueType, lastMessageID+1, blob)
 	return err
 }
 
 func (q *cassandraQueue) EnqueueMessageToDLQ(
-	messagePayload []byte,
+	blob commonpb.DataBlob,
 ) (int64, error) {
 	// Use negative queue type as the dlq type
 	lastMessageID, err := q.getLastMessageID(q.getDLQTypeFromQueueType())
@@ -155,15 +139,15 @@ func (q *cassandraQueue) EnqueueMessageToDLQ(
 	}
 
 	// Use negative queue type as the dlq type
-	return q.tryEnqueue(q.getDLQTypeFromQueueType(), lastMessageID+1, messagePayload)
+	return q.tryEnqueue(q.getDLQTypeFromQueueType(), lastMessageID+1, blob)
 }
 
 func (q *cassandraQueue) tryEnqueue(
 	queueType persistence.QueueType,
 	messageID int64,
-	messagePayload []byte,
+	blob commonpb.DataBlob,
 ) (int64, error) {
-	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, messagePayload)
+	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String())
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
@@ -219,9 +203,8 @@ func (q *cassandraQueue) ReadMessages(
 	var result []*persistence.QueueMessage
 	message := make(map[string]interface{})
 	for iter.MapScan(message) {
-		payload := getMessagePayload(message)
-		id := getMessageID(message)
-		result = append(result, &persistence.QueueMessage{ID: id, Payload: payload})
+		queueMessage := convertQueueMessage(message)
+		result = append(result, queueMessage)
 		message = make(map[string]interface{})
 	}
 
@@ -254,9 +237,8 @@ func (q *cassandraQueue) ReadMessagesFromDLQ(
 	var result []*persistence.QueueMessage
 	message := make(map[string]interface{})
 	for iter.MapScan(message) {
-		payload := getMessagePayload(message)
-		id := getMessageID(message)
-		result = append(result, &persistence.QueueMessage{ID: id, Payload: payload})
+		queueMessage := convertQueueMessage(message)
+		result = append(result, queueMessage)
 		message = make(map[string]interface{})
 	}
 
@@ -268,20 +250,6 @@ func (q *cassandraQueue) ReadMessagesFromDLQ(
 	}
 
 	return result, newPageToken, nil
-}
-
-func getMessagePayload(
-	message map[string]interface{},
-) []byte {
-
-	return message["message_payload"].([]byte)
-}
-
-func getMessageID(
-	message map[string]interface{},
-) int64 {
-
-	return message["message_id"].(int64)
 }
 
 func (q *cassandraQueue) DeleteMessagesBefore(
@@ -322,21 +290,6 @@ func (q *cassandraQueue) RangeDeleteMessagesFromDLQ(
 	return nil
 }
 
-func (q *cassandraQueue) insertInitialQueueMetadataRecord(
-	queueType persistence.QueueType,
-) error {
-
-	version := 0
-	clusterAckLevels := map[string]int64{}
-	query := q.session.Query(templateInsertQueueMetadataQuery, queueType, clusterAckLevels, version)
-	_, err := query.ScanCAS(nil, nil, nil)
-	if err != nil {
-		return fmt.Errorf("failed to insert initial queue metadata record: %v, Type: %v", err, queueType)
-	}
-	// it's ok if the query is not applied, which means that the record exists already.
-	return nil
-}
-
 func (q *cassandraQueue) UpdateAckLevel(
 	messageID int64,
 	clusterName string,
@@ -373,28 +326,46 @@ func (q *cassandraQueue) GetDLQAckLevels() (map[string]int64, error) {
 	return queueMetadata.clusterAckLevels, nil
 }
 
+func (q *cassandraQueue) insertInitialQueueMetadataRecord(
+	queueType persistence.QueueType,
+) error {
+
+	version := 0
+	clusterAckLevels := map[string]int64{}
+	blob, err := serialization.QueueMetadataToBlob(&persistencespb.QueueMetadata{
+		ClusterAckLevels: clusterAckLevels,
+	})
+	if err != nil {
+		return err
+	}
+
+	query := q.session.Query(templateInsertQueueMetadataQuery,
+		queueType,
+		clusterAckLevels,
+		blob.Data,
+		blob.EncodingType.String(),
+		version,
+	)
+	_, err = query.MapScanCAS(make(map[string]interface{}))
+	if err != nil {
+		return fmt.Errorf("failed to insert initial queue metadata record: %v, Type: %v", err, queueType)
+	}
+	// it's ok if the query is not applied, which means that the record exists already.
+	return nil
+}
+
 func (q *cassandraQueue) getQueueMetadata(
 	queueType persistence.QueueType,
 ) (*queueMetadata, error) {
 
 	query := q.session.Query(templateGetQueueMetadataQuery, queueType)
-	var ackLevels map[string]int64
-	var version int
-	err := query.Scan(&ackLevels, &version)
+	message := make(map[string]interface{})
+	err := query.MapScan(message)
 	if err != nil {
-		if err == gocql.ErrNotFound {
-			return nil, nil
-		}
-
-		return nil, fmt.Errorf("failed to get queue metadata: %v", err)
+		return nil, err
 	}
 
-	// if record exist but ackLevels is empty, we initialize the map
-	if ackLevels == nil {
-		ackLevels = make(map[string]int64)
-	}
-
-	return &queueMetadata{clusterAckLevels: ackLevels, version: version}, nil
+	return convertQueueMetadata(message)
 }
 
 func (q *cassandraQueue) updateQueueMetadata(
@@ -402,13 +373,22 @@ func (q *cassandraQueue) updateQueueMetadata(
 	queueType persistence.QueueType,
 ) error {
 
+	blob, err := serialization.QueueMetadataToBlob(&persistencespb.QueueMetadata{
+		ClusterAckLevels: metadata.clusterAckLevels,
+	})
+	if err != nil {
+		return err
+	}
+
 	query := q.session.Query(templateUpdateQueueMetadataQuery,
 		metadata.clusterAckLevels,
+		blob.Data,
+		blob.EncodingType.String(),
 		metadata.version,
 		queueType,
 		metadata.version-1,
 	)
-	applied, err := query.ScanCAS(nil)
+	applied, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err))
 	}
@@ -417,10 +397,6 @@ func (q *cassandraQueue) updateQueueMetadata(
 	}
 
 	return nil
-}
-
-func (q *cassandraQueue) getDLQTypeFromQueueType() persistence.QueueType {
-	return -q.queueType
 }
 
 func (q *cassandraQueue) updateAckLevel(
@@ -454,4 +430,80 @@ func (q *cassandraQueue) Close() {
 	if q.session != nil {
 		q.session.Close()
 	}
+}
+
+func (q *cassandraQueue) getDLQTypeFromQueueType() persistence.QueueType {
+	return -q.queueType
+}
+
+func (q *cassandraQueue) initializeQueueMetadata() error {
+	_, err := q.getQueueMetadata(q.queueType)
+	switch err {
+	case nil:
+		return nil
+	case gocql.ErrNotFound:
+		return q.insertInitialQueueMetadataRecord(q.queueType)
+	default:
+		return err
+	}
+}
+
+func (q *cassandraQueue) initializeDLQMetadata() error {
+	_, err := q.getQueueMetadata(q.getDLQTypeFromQueueType())
+	switch err {
+	case nil:
+		return nil
+	case gocql.ErrNotFound:
+		return q.insertInitialQueueMetadataRecord(q.getDLQTypeFromQueueType())
+	default:
+		return err
+	}
+}
+
+func convertQueueMessage(
+	message map[string]interface{},
+) *persistence.QueueMessage {
+
+	id := message["message_id"].(int64)
+	data := message["message_payload"].([]byte)
+	encoding := message["message_encoding"].(string)
+	if encoding == "" {
+		encoding = enumspb.ENCODING_TYPE_PROTO3.String()
+	}
+	return &persistence.QueueMessage{
+		ID:       id,
+		Data:     data,
+		Encoding: encoding,
+	}
+}
+
+func convertQueueMetadata(
+	message map[string]interface{},
+) (*queueMetadata, error) {
+
+	metadata := &queueMetadata{
+		version: message["version"].(int64),
+	}
+
+	_, ok := message["cluster_ack_level"]
+	if ok {
+		clusterAckLevel := message["cluster_ack_level"].(map[string]int64)
+		metadata.clusterAckLevels = clusterAckLevel
+	} else {
+		data := message["data"].([]byte)
+		encoding := message["data_encoding"].(string)
+
+		clusterAckLevels, err := serialization.QueueMetadataFromBlob(data, encoding)
+		if err != nil {
+			return nil, err
+		}
+
+		metadata.clusterAckLevels = clusterAckLevels.ClusterAckLevels
+	}
+
+	if metadata.clusterAckLevels == nil {
+		metadata.clusterAckLevels = make(map[string]int64)
+	}
+
+	return metadata, nil
 }

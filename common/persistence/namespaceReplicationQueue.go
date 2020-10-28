@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 const (
@@ -82,13 +83,15 @@ type (
 	NamespaceReplicationQueue interface {
 		common.Daemon
 		Publish(message interface{}) error
-		PublishToDLQ(message interface{}) error
 		GetReplicationMessages(lastMessageID int64, maxCount int) ([]*replicationspb.ReplicationTask, int64, error)
 		UpdateAckLevel(lastProcessedMessageID int64, clusterName string) error
 		GetAckLevels() (map[string]int64, error)
+
+		PublishToDLQ(message interface{}) error
 		GetMessagesFromDLQ(firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*replicationspb.ReplicationTask, []byte, error)
 		UpdateDLQAckLevel(lastProcessedMessageID int64) error
 		GetDLQAckLevel() (int64, error)
+
 		RangeDeleteMessagesFromDLQ(firstMessageID int64, lastMessageID int64) error
 		DeleteMessageFromDLQ(messageID int64) error
 	}
@@ -114,11 +117,11 @@ func (q *namespaceReplicationQueueImpl) Publish(message interface{}) error {
 		return errors.New("wrong message type")
 	}
 
-	bytes, err := task.Marshal()
+	blob, err := serialization.ReplicationTaskToBlob(task)
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
 	}
-	return q.queue.EnqueueMessage(bytes)
+	return q.queue.EnqueueMessage(blob)
 }
 
 func (q *namespaceReplicationQueueImpl) PublishToDLQ(message interface{}) error {
@@ -127,11 +130,11 @@ func (q *namespaceReplicationQueueImpl) PublishToDLQ(message interface{}) error 
 		return errors.New("wrong message type")
 	}
 
-	bytes, err := task.Marshal()
+	blob, err := serialization.ReplicationTaskToBlob(task)
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
 	}
-	messageID, err := q.queue.EnqueueMessageToDLQ(bytes)
+	messageID, err := q.queue.EnqueueMessageToDLQ(blob)
 	if err != nil {
 		return err
 	}
@@ -155,10 +158,9 @@ func (q *namespaceReplicationQueueImpl) GetReplicationMessages(
 		return nil, lastMessageID, err
 	}
 
-	var replicationTasks []*replicationspb.ReplicationTask
+	replicationTasks := make([]*replicationspb.ReplicationTask, 0, len(messages))
 	for _, message := range messages {
-		replicationTask := &replicationspb.ReplicationTask{}
-		err := replicationTask.Unmarshal(message.Payload)
+		replicationTask, err := serialization.ReplicationTaskFromBlob(message.Data, message.Encoding)
 		if err != nil {
 			return nil, lastMessageID, fmt.Errorf("failed to decode task: %v", err)
 		}
@@ -206,8 +208,7 @@ func (q *namespaceReplicationQueueImpl) GetMessagesFromDLQ(
 
 	var replicationTasks []*replicationspb.ReplicationTask
 	for _, message := range messages {
-		replicationTask := &replicationspb.ReplicationTask{}
-		err := replicationTask.Unmarshal(message.Payload)
+		replicationTask, err := serialization.ReplicationTaskFromBlob(message.Data, message.Encoding)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to decode dlq task: %v", err)
 		}
