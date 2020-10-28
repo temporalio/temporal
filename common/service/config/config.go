@@ -77,7 +77,7 @@ type (
 		// RPC is the rpc configuration
 		RPC RPC `yaml:"rpc"`
 		// Deprecated. Use Metrics in global section instead.
-		Metrics *Metrics `yaml:"metrics"`
+		Metrics Metrics `yaml:"metrics"`
 	}
 
 	// PProf contains the config items for the pprof utility
