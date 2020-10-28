@@ -181,7 +181,7 @@ func (s *historyShardSuite) TestInsertUpdateSelect() {
 	s.Equal(&shard, row)
 }
 
-func (s *historyShardSuite) TestSelectReadLock() {
+func (s *historyShardSuite) TestInsertReadLock() {
 	shardID := rand.Int31()
 	rangeID := int64(rand.Int31())
 
@@ -202,7 +202,7 @@ func (s *historyShardSuite) TestSelectReadLock() {
 	s.Equal(rangeID, shardRange)
 }
 
-func (s *historyShardSuite) TestSelectWriteLock() {
+func (s *historyShardSuite) TestInsertWriteLock() {
 	shardID := rand.Int31()
 	rangeID := int64(rand.Int31())
 

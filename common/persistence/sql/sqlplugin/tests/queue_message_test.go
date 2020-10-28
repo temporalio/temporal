@@ -37,11 +37,11 @@ import (
 )
 
 const (
-	testQueueEncoding = "random encoding"
+	testQueueMessageEncoding = "random encoding"
 )
 
 var (
-	testQueueData = []byte("random queue data")
+	testQueueMessageData = []byte("random queue data")
 )
 
 type (
@@ -83,8 +83,8 @@ func (s *queueMessageSuite) TestInsert_Single_Success() {
 	queueType := persistence.NamespaceReplicationQueueType
 	messageID := rand.Int63()
 
-	message := s.newRandomQueueRow(queueType, messageID)
-	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueRow{message})
+	message := s.newRandomQueueMessageRow(queueType, messageID)
+	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -95,10 +95,10 @@ func (s *queueMessageSuite) TestInsert_Multiple_Success() {
 	queueType := persistence.NamespaceReplicationQueueType
 	messageID := rand.Int63()
 
-	message1 := s.newRandomQueueRow(queueType, messageID)
+	message1 := s.newRandomQueueMessageRow(queueType, messageID)
 	messageID++
-	message2 := s.newRandomQueueRow(queueType, messageID)
-	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueRow{message1, message2})
+	message2 := s.newRandomQueueMessageRow(queueType, messageID)
+	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message1, message2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -109,15 +109,15 @@ func (s *queueMessageSuite) TestInsert_Single_Fail_Duplicate() {
 	queueType := persistence.NamespaceReplicationQueueType
 	messageID := rand.Int63()
 
-	message := s.newRandomQueueRow(queueType, messageID)
-	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueRow{message})
+	message := s.newRandomQueueMessageRow(queueType, messageID)
+	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	message = s.newRandomQueueRow(queueType, messageID)
-	_, err = s.store.InsertIntoMessages([]sqlplugin.QueueRow{message})
+	message = s.newRandomQueueMessageRow(queueType, messageID)
+	_, err = s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message})
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -125,19 +125,19 @@ func (s *queueMessageSuite) TestInsert_Multiple_Fail_Duplicate() {
 	queueType := persistence.NamespaceReplicationQueueType
 	messageID := rand.Int63()
 
-	message1 := s.newRandomQueueRow(queueType, messageID)
+	message1 := s.newRandomQueueMessageRow(queueType, messageID)
 	messageID++
-	message2 := s.newRandomQueueRow(queueType, messageID)
-	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueRow{message1, message2})
+	message2 := s.newRandomQueueMessageRow(queueType, messageID)
+	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message1, message2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(2, int(rowsAffected))
 
-	message2 = s.newRandomQueueRow(queueType, messageID)
+	message2 = s.newRandomQueueMessageRow(queueType, messageID)
 	messageID++
-	message3 := s.newRandomQueueRow(queueType, messageID)
-	_, err = s.store.InsertIntoMessages([]sqlplugin.QueueRow{message2, message3})
+	message3 := s.newRandomQueueMessageRow(queueType, messageID)
+	_, err = s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message2, message3})
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -145,8 +145,8 @@ func (s *queueMessageSuite) TestInsertSelect() {
 	queueType := persistence.NamespaceReplicationQueueType
 	messageID := rand.Int63()
 
-	message := s.newRandomQueueRow(queueType, messageID)
-	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueRow{message})
+	message := s.newRandomQueueMessageRow(queueType, messageID)
+	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -161,7 +161,7 @@ func (s *queueMessageSuite) TestInsertSelect() {
 	for index := range rows {
 		rows[index].QueueType = queueType
 	}
-	s.Equal([]sqlplugin.QueueRow{message}, rows)
+	s.Equal([]sqlplugin.QueueMessageRow{message}, rows)
 }
 
 func (s *queueMessageSuite) TestInsertSelect_Multiple() {
@@ -172,9 +172,9 @@ func (s *queueMessageSuite) TestInsertSelect_Multiple() {
 	messageID := minMessageID + 1
 	maxMessageID := messageID + int64(numMessages)
 
-	var messages []sqlplugin.QueueRow
+	var messages []sqlplugin.QueueMessageRow
 	for i := 0; i < numMessages; i++ {
-		message := s.newRandomQueueRow(queueType, messageID)
+		message := s.newRandomQueueMessageRow(queueType, messageID)
 		messageID++
 		messages = append(messages, message)
 	}
@@ -217,7 +217,7 @@ func (s *queueMessageSuite) TestDeleteSelect_Single() {
 	for index := range rows {
 		rows[index].QueueType = queueType
 	}
-	s.Equal([]sqlplugin.QueueRow(nil), rows)
+	s.Equal([]sqlplugin.QueueMessageRow(nil), rows)
 }
 
 func (s *queueMessageSuite) TestDeleteSelect_Multiple() {
@@ -245,15 +245,15 @@ func (s *queueMessageSuite) TestDeleteSelect_Multiple() {
 	for index := range rows {
 		rows[index].QueueType = queueType
 	}
-	s.Equal([]sqlplugin.QueueRow(nil), rows)
+	s.Equal([]sqlplugin.QueueMessageRow(nil), rows)
 }
 
 func (s *queueMessageSuite) TestInsertDeleteSelect_Single() {
 	queueType := persistence.NamespaceReplicationQueueType
 	messageID := rand.Int63()
 
-	message := s.newRandomQueueRow(queueType, messageID)
-	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueRow{message})
+	message := s.newRandomQueueMessageRow(queueType, messageID)
+	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -274,7 +274,7 @@ func (s *queueMessageSuite) TestInsertDeleteSelect_Single() {
 	for index := range rows {
 		rows[index].QueueType = queueType
 	}
-	s.Equal([]sqlplugin.QueueRow(nil), rows)
+	s.Equal([]sqlplugin.QueueMessageRow(nil), rows)
 }
 
 func (s *queueMessageSuite) TestInsertDeleteSelect_Multiple() {
@@ -286,9 +286,9 @@ func (s *queueMessageSuite) TestInsertDeleteSelect_Multiple() {
 	messageID := minMessageID + 1
 	maxMessageID := messageID + int64(numMessages)
 
-	var messages []sqlplugin.QueueRow
+	var messages []sqlplugin.QueueMessageRow
 	for i := 0; i < numMessages; i++ {
-		message := s.newRandomQueueRow(queueType, messageID)
+		message := s.newRandomQueueMessageRow(queueType, messageID)
 		messageID++
 		messages = append(messages, message)
 	}
@@ -316,16 +316,17 @@ func (s *queueMessageSuite) TestInsertDeleteSelect_Multiple() {
 	for index := range rows {
 		rows[index].QueueType = queueType
 	}
-	s.Equal([]sqlplugin.QueueRow(nil), rows)
+	s.Equal([]sqlplugin.QueueMessageRow(nil), rows)
 }
 
-func (s *queueMessageSuite) newRandomQueueRow(
+func (s *queueMessageSuite) newRandomQueueMessageRow(
 	queueType persistence.QueueType,
 	messageID int64,
-) sqlplugin.QueueRow {
-	return sqlplugin.QueueRow{
-		QueueType:      queueType,
-		MessageID:      messageID,
-		MessagePayload: shuffle.Bytes(testQueueData),
+) sqlplugin.QueueMessageRow {
+	return sqlplugin.QueueMessageRow{
+		QueueType:       queueType,
+		MessageID:       messageID,
+		MessagePayload:  shuffle.Bytes(testQueueMessageData),
+		MessageEncoding: testQueueMessageEncoding,
 	}
 }
