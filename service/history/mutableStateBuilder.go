@@ -280,7 +280,7 @@ func (e *mutableStateBuilder) CopyToPersistence() *persistencespb.WorkflowMutabl
 
 func (e *mutableStateBuilder) Load(
 	state *persistencespb.WorkflowMutableState,
-) {
+) error {
 
 	e.pendingActivityInfoIDs = state.ActivityInfos
 	for _, activityInfo := range state.ActivityInfos {
@@ -302,6 +302,25 @@ func (e *mutableStateBuilder) Load(
 	e.executionInfo = state.ExecutionInfo
 	e.executionState = state.ExecutionState
 	e.nextEventID = state.NextEventId
+
+	// back fill version history for local namespace workflows
+	if e.executionInfo.VersionHistories == nil {
+		e.executionInfo.VersionHistories = versionhistory.NewVHS(&historyspb.VersionHistory{})
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
+		if err != nil {
+			return err
+		}
+		if err := versionhistory.AddOrUpdateItem(currentVersionHistory, versionhistory.NewItem(
+			e.nextEventID-1, common.EmptyVersion,
+		)); err != nil {
+			return err
+		}
+		err = versionhistory.SetBranchToken(currentVersionHistory, e.executionInfo.EventBranchToken)
+		if err != nil {
+			return err
+		}
+		e.executionInfo.EventBranchToken = nil
+	}
 
 	e.bufferedEvents = state.BufferedEvents
 
@@ -326,6 +345,7 @@ func (e *mutableStateBuilder) Load(
 			}
 		}
 	}
+	return nil
 }
 
 func (e *mutableStateBuilder) GetCurrentBranchToken() ([]byte, error) {
