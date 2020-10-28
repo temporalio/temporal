@@ -172,7 +172,7 @@ global:
     metrics:
         statsd:
             hostPort: {{ .Env.STATSD_ENDPOINT }}
-            prefix: "frontend"
+            prefix: "temporal"
     {{- else if .Env.PROMETHEUS_ENDPOINT }}
     metrics:
         prometheus:
@@ -180,7 +180,7 @@ global:
             listenAddress: {{ .Env.PROMETHEUS_ENDPOINT }}
     {{- end }}
 
-{{- $temporalGrpcPort := default .Env.FRONTEND_GRPC_PORT "7233" -}}
+{{- $temporalGrpcPort := default .Env.FRONTEND_GRPC_PORT "7233" }}
 services:
     frontend:
         rpc:
