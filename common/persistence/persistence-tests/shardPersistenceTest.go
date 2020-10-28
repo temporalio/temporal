@@ -25,10 +25,10 @@
 package persistencetests
 
 import (
+	"log"
 	"os"
 	"testing"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 
@@ -73,7 +73,7 @@ func (s *ShardPersistenceSuite) TestCreateShard() {
 	err1 := s.CreateShard(19, "test_create_shard2", 124)
 	s.NotNil(err1, "expected non nil error.")
 	s.IsType(&p.ShardAlreadyExistError{}, err1)
-	log.Infof("CreateShard failed with error: %v", err1)
+	log.Printf("CreateShard failed with error: %v", err1)
 }
 
 // TestGetShard test
@@ -95,7 +95,7 @@ func (s *ShardPersistenceSuite) TestGetShard() {
 	_, err2 := s.GetShard(4766)
 	s.NotNil(err2)
 	s.IsType(&serviceerror.NotFound{}, err2)
-	log.Infof("GetShard failed with error: %v", err2)
+	log.Printf("GetShard failed with error: %v", err2)
 }
 
 // TestUpdateShard test
@@ -148,7 +148,7 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	err4 := s.UpdateShard(failedUpdateInfo, shardInfo.GetRangeId())
 	s.NotNil(err4)
 	s.IsType(&p.ShardOwnershipLostError{}, err4)
-	log.Infof("Update shard failed with error: %v", err4)
+	log.Printf("Update shard failed with error: %v", err4)
 
 	info2, err5 := s.GetShard(shardID)
 	s.Nil(err5)

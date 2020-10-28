@@ -37,7 +37,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -138,7 +137,6 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 	we2, err2 := s.engine.StartWorkflowExecution(NewContext(), newRequest)
 	s.NotNil(err2)
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err2)
-	log.Errorf("Unable to start workflow execution: %v", err2)
 	s.Nil(we2)
 }
 
