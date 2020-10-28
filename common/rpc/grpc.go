@@ -46,6 +46,9 @@ const (
 
 	// MaxBackoffDelay is a maximum interval between reconnect attempts.
 	MaxBackoffDelay = 10 * time.Second
+
+	// minConnectTimeout is the minimum amount of time we are willing to give a connection to complete.
+	minConnectTimeout = 20 * time.Second
 )
 
 // Dial creates a client connection to the given target with default options.
@@ -65,7 +68,8 @@ func Dial(hostName string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
 	// https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md.
 	// Default MaxDelay is 120 seconds which is too high.
 	var cp = grpc.ConnectParams{
-		Backoff: backoff.DefaultConfig,
+		Backoff:           backoff.DefaultConfig,
+		MinConnectTimeout: minConnectTimeout,
 	}
 	cp.Backoff.MaxDelay = MaxBackoffDelay
 
