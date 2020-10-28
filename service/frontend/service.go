@@ -295,9 +295,7 @@ func (s *Service) Start() {
 	healthpb.RegisterHealthServer(s.server, s.handler)
 
 	s.adminHandler = NewAdminHandler(s, s.params, s.config)
-	adminNilCheckHandler := NewAdminNilCheckHandler(s.adminHandler)
-
-	adminservice.RegisterAdminServiceServer(s.server, adminNilCheckHandler)
+	adminservice.RegisterAdminServiceServer(s.server, s.adminHandler)
 	s.versionChecker = NewVersionChecker(s, s.params, s.config)
 
 	// must start resource first
