@@ -17,6 +17,10 @@ global:
     maxJoinDuration: 30s
   pprof:
     port: 8936
+  metrics:
+    statsd:
+      hostPort: "127.0.0.1:8125"
+      prefix: "temporal_standby"
 
 services:
   frontend:
@@ -24,40 +28,24 @@ services:
       grpcPort: 8233
       membershipPort: 8933
       bindOnLocalHost: true
-    metrics:
-      statsd:
-        hostPort: "127.0.0.1:8125"
-        prefix: "temporal_standby"
 
   matching:
     rpc:
       grpcPort: 8235
       membershipPort: 8935
       bindOnLocalHost: true
-    metrics:
-      statsd:
-        hostPort: "127.0.0.1:8125"
-        prefix: "temporal_standby"
 
   history:
     rpc:
       grpcPort: 8234
       membershipPort: 8934
       bindOnLocalHost: true
-    metrics:
-      statsd:
-        hostPort: "127.0.0.1:8125"
-        prefix: "temporal_standby"
 
   worker:
     rpc:
       grpcPort: 8240
       membershipPort: 8940
       bindOnLocalHost: true
-    metrics:
-      statsd:
-        hostPort: "127.0.0.1:8125"
-        prefix: "temporal_standby"
 
 clusterMetadata:
   enableGlobalNamespace: true

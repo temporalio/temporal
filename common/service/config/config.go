@@ -76,7 +76,7 @@ type (
 	Service struct {
 		// RPC is the rpc configuration
 		RPC RPC `yaml:"rpc"`
-		// Metrics is the metrics subsystem configuration
+		// Deprecated. Use Metrics in global section instead.
 		Metrics Metrics `yaml:"metrics"`
 	}
 
@@ -108,6 +108,8 @@ type (
 		PProf PProf `yaml:"pprof"`
 		// TLS controls the communication encryption configuration
 		TLS RootTLS `yaml:"tls"`
+		// Metrics is the metrics subsystem configuration
+		Metrics *Metrics `yaml:"metrics"`
 	}
 
 	// RootTLS contains all TLS settings for the Temporal server
@@ -373,8 +375,7 @@ type (
 		Statsd *Statsd `yaml:"statsd"`
 		// Prometheus is the configuration for prometheus reporter
 		Prometheus *prometheus.Configuration `yaml:"prometheus"`
-		// Tags is the set of key-value pairs to be reported
-		// as part of every metric
+		// Tags is the set of key-value pairs to be reported as part of every metric
 		Tags map[string]string `yaml:"tags"`
 		// Prefix sets the prefix to all outgoing metrics
 		Prefix string `yaml:"prefix"`
