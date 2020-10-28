@@ -168,6 +168,17 @@ global:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
                 rootCaData:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA "" }}
+    {{- if .Env.STATSD_ENDPOINT }}
+    metrics:
+        statsd:
+            hostPort: {{ .Env.STATSD_ENDPOINT }}
+            prefix: "frontend"
+    {{- else if .Env.PROMETHEUS_ENDPOINT }}
+    metrics:
+        prometheus:
+            timerType: {{ default .Env.PROMETHEUS_TIMER_TYPE "histogram" }}
+            listenAddress: {{ .Env.PROMETHEUS_ENDPOINT }}
+    {{- end }}
 
 {{- $temporalGrpcPort := default .Env.FRONTEND_GRPC_PORT "7233" -}}
 services:
@@ -176,68 +187,24 @@ services:
             grpcPort: {{ $temporalGrpcPort }}
             membershipPort: {{ default .Env.FRONTEND_MEMBERSHIP_PORT "6933" }}
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
-        {{- if .Env.STATSD_ENDPOINT }}
-        metrics:
-            statsd:
-                hostPort: {{ .Env.STATSD_ENDPOINT }}
-                prefix: "frontend"
-        {{- else if .Env.PROMETHEUS_ENDPOINT }}
-        metrics:
-            prometheus:
-                timerType: {{ default .Env.PROMETHEUS_TIMER_TYPE "histogram" }}
-                listenAddress: {{ .Env.PROMETHEUS_ENDPOINT }}
-        {{- end }}
 
     matching:
         rpc:
             grpcPort: {{ default .Env.MATCHING_GRPC_PORT "7235" }}
             membershipPort: {{ default .Env.MATCHING_MEMBERSHIP_PORT "6935" }}
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
-        {{- if .Env.STATSD_ENDPOINT }}
-        metrics:
-            statsd:
-                hostPort: {{ .Env.STATSD_ENDPOINT }}
-                prefix: "matching"
-        {{- else if .Env.PROMETHEUS_ENDPOINT }}
-        metrics:
-            prometheus:
-                timerType: {{ default .Env.PROMETHEUS_TIMER_TYPE "histogram" }}
-                listenAddress: {{ .Env.PROMETHEUS_ENDPOINT }}
-        {{- end }}
 
     history:
         rpc:
             grpcPort: {{ default .Env.HISTORY_GRPC_PORT "7234" }}
             membershipPort: {{ default .Env.HISTORY_MEMBERSHIP_PORT "6934" }}
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
-        {{- if .Env.STATSD_ENDPOINT }}
-        metrics:
-            statsd:
-                hostPort: {{ .Env.STATSD_ENDPOINT }}
-                prefix: "history"
-        {{- else if .Env.PROMETHEUS_ENDPOINT }}
-        metrics:
-            prometheus:
-                timerType: {{ default .Env.PROMETHEUS_TIMER_TYPE "histogram" }}
-                listenAddress: {{ .Env.PROMETHEUS_ENDPOINT }}
-        {{- end }}
 
     worker:
         rpc:
             grpcPort: {{ default .Env.WORKER_GRPC_PORT "7239" }}
             membershipPort: {{ default .Env.WORKER_MEMBERSHIP_PORT "6939" }}
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
-        {{- if .Env.STATSD_ENDPOINT }}
-        metrics:
-            statsd:
-                hostPort: {{ .Env.STATSD_ENDPOINT }}
-                prefix: "worker"
-        {{- else if .Env.PROMETHEUS_ENDPOINT }}
-        metrics:
-            prometheus:
-                timerType: {{ default .Env.PROMETHEUS_TIMER_TYPE "histogram" }}
-                listenAddress: {{ .Env.PROMETHEUS_ENDPOINT }}
-        {{- end }}
 
 clusterMetadata:
     enableGlobalNamespace: false
