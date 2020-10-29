@@ -39,12 +39,14 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
+
 	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
 	timerQueueTaskExecutorBase struct {
-		shard          ShardContext
+		shard          shard.Context
 		historyService *historyEngineImpl
 		cache          *historyCache
 		logger         log.Logger
@@ -54,7 +56,7 @@ type (
 )
 
 func newTimerQueueTaskExecutorBase(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	logger log.Logger,
 	metricsClient metrics.Client,

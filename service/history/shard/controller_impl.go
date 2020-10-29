@@ -22,9 +22,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package shard
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -47,8 +48,13 @@ const (
 	shardControllerMembershipUpdateListenerName = "ShardController"
 )
 
+var (
+	// ErrMaxAttemptsExceeded is exported temporarily for integration test
+	ErrMaxAttemptsExceeded = errors.New("maximum attempts exceeded to update history")
+)
+
 type (
-	shardController struct {
+	ControllerImpl struct {
 		resource.Resource
 
 		membershipUpdateCh chan *membership.ChangedEvent
@@ -89,13 +95,13 @@ const (
 	historyShardsItemStatusStopped
 )
 
-func newShardController(
+func NewController(
 	resource resource.Resource,
 	factory EngineFactory,
 	config *configs.Config,
-) *shardController {
+) *ControllerImpl {
 	hostIdentity := resource.GetHostInfo().Identity()
-	return &shardController{
+	return &ControllerImpl{
 		Resource:           resource,
 		status:             common.DaemonStatusInitialized,
 		membershipUpdateCh: make(chan *membership.ChangedEvent, 10),
@@ -132,7 +138,7 @@ func newHistoryShardsItem(
 	return shardItem, nil
 }
 
-func (c *shardController) Start() {
+func (c *ControllerImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&c.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
@@ -149,7 +155,7 @@ func (c *shardController) Start() {
 	c.logger.Info("", tag.LifeCycleStarted)
 }
 
-func (c *shardController) Stop() {
+func (c *ControllerImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(&c.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
@@ -169,20 +175,24 @@ func (c *shardController) Stop() {
 }
 
 // PrepareToStop starts the graceful shutdown process for controller
-func (c *shardController) PrepareToStop() {
+func (c *ControllerImpl) PrepareToStop() {
 	atomic.StoreInt32(&c.shuttingDown, 1)
 }
 
-func (c *shardController) isShuttingDown() bool {
+func (c *ControllerImpl) Status() int32 {
+	return atomic.LoadInt32(&c.status)
+}
+
+func (c *ControllerImpl) isShuttingDown() bool {
 	return atomic.LoadInt32(&c.shuttingDown) != 0
 }
 
-func (c *shardController) GetEngine(namespaceID, workflowID string) (Engine, error) {
+func (c *ControllerImpl) GetEngine(namespaceID, workflowID string) (Engine, error) {
 	shardID := c.config.GetShardID(namespaceID, workflowID)
-	return c.getEngineForShard(shardID)
+	return c.GetEngineForShard(shardID)
 }
 
-func (c *shardController) getEngineForShard(shardID int32) (Engine, error) {
+func (c *ControllerImpl) GetEngineForShard(shardID int32) (Engine, error) {
 	sw := c.metricsScope.StartTimer(metrics.GetEngineForShardLatency)
 	defer sw.Stop()
 	item, err := c.getOrCreateHistoryShardItem(shardID)
@@ -192,7 +202,7 @@ func (c *shardController) getEngineForShard(shardID int32) (Engine, error) {
 	return item.getOrCreateEngine(c.shardClosedCallback)
 }
 
-func (c *shardController) removeEngineForShard(shardID int32, shardItem *historyShardsItem) {
+func (c *ControllerImpl) RemoveEngineForShard(shardID int32, shardItem *historyShardsItem) {
 	sw := c.metricsScope.StartTimer(metrics.RemoveEngineForShardLatency)
 	defer sw.Stop()
 	currentShardItem, _ := c.removeHistoryShardItem(shardID, shardItem)
@@ -209,13 +219,13 @@ func (c *shardController) removeEngineForShard(shardID int32, shardItem *history
 	}
 }
 
-func (c *shardController) shardClosedCallback(shardID int32, shardItem *historyShardsItem) {
+func (c *ControllerImpl) shardClosedCallback(shardID int32, shardItem *historyShardsItem) {
 	c.metricsScope.IncCounter(metrics.ShardClosedCounter)
 	c.logger.Info("", tag.LifeCycleStopping, tag.ComponentShard, tag.ShardID(shardID))
-	c.removeEngineForShard(shardID, shardItem)
+	c.RemoveEngineForShard(shardID, shardItem)
 }
 
-func (c *shardController) getOrCreateHistoryShardItem(shardID int32) (*historyShardsItem, error) {
+func (c *ControllerImpl) getOrCreateHistoryShardItem(shardID int32) (*historyShardsItem, error) {
 	c.RLock()
 	if item, ok := c.historyShards[shardID]; ok {
 		if item.isValid() {
@@ -237,7 +247,7 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int32) (*historySh
 	}
 
 	if c.isShuttingDown() || atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
-		return nil, fmt.Errorf("shardController for host '%v' shutting down", c.GetHostInfo().Identity())
+		return nil, fmt.Errorf("ControllerImpl for host '%v' shutting down", c.GetHostInfo().Identity())
 	}
 	info, err := c.GetHistoryServiceResolver().Lookup(convert.Int32ToString(shardID))
 	if err != nil {
@@ -264,7 +274,7 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int32) (*historySh
 	return nil, serviceerrors.NewShardOwnershipLost(c.GetHostInfo().Identity(), info.GetAddress())
 }
 
-func (c *shardController) removeHistoryShardItem(shardID int32, shardItem *historyShardsItem) (*historyShardsItem, error) {
+func (c *ControllerImpl) removeHistoryShardItem(shardID int32, shardItem *historyShardsItem) (*historyShardsItem, error) {
 	nShards := 0
 	c.Lock()
 	defer c.Unlock()
@@ -289,13 +299,13 @@ func (c *shardController) removeHistoryShardItem(shardID int32, shardItem *histo
 }
 
 // shardManagementPump is the main event loop for
-// shardController. It is responsible for acquiring /
+// ControllerImpl. It is responsible for acquiring /
 // releasing shards in response to any event that can
 // change the shard ownership. These events are
 //   a. Ring membership change
 //   b. Periodic ticker
 //   c. ShardOwnershipLostError and subsequent ShardClosedEvents from engine
-func (c *shardController) shardManagementPump() {
+func (c *ControllerImpl) shardManagementPump() {
 
 	defer c.shutdownWG.Done()
 
@@ -322,7 +332,7 @@ func (c *shardController) shardManagementPump() {
 	}
 }
 
-func (c *shardController) acquireShards() {
+func (c *ControllerImpl) acquireShards() {
 	c.metricsScope.IncCounter(metrics.AcquireShardsCounter)
 	sw := c.metricsScope.StartTimer(metrics.AcquireShardsLatency)
 	defer sw.Stop()
@@ -344,7 +354,7 @@ func (c *shardController) acquireShards() {
 					c.logger.Error("Error looking up host for shardID", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
 				} else {
 					if info.Identity() == c.GetHostInfo().Identity() {
-						_, err1 := c.getEngineForShard(shardID)
+						_, err1 := c.GetEngineForShard(shardID)
 						if err1 != nil {
 							c.metricsScope.IncCounter(metrics.GetEngineForShardErrorCounter)
 							c.logger.Error("Unable to create history shard engine", tag.Error(err1), tag.OperationFailed, tag.ShardID(shardID))
@@ -365,10 +375,10 @@ func (c *shardController) acquireShards() {
 	// Wait until all shards are processed.
 	wg.Wait()
 
-	c.metricsScope.UpdateGauge(metrics.NumShardsGauge, float64(c.numShards()))
+	c.metricsScope.UpdateGauge(metrics.NumShardsGauge, float64(c.NumShards()))
 }
 
-func (c *shardController) doShutdown() {
+func (c *ControllerImpl) doShutdown() {
 	c.logger.Info("", tag.LifeCycleStopping)
 	c.Lock()
 	defer c.Unlock()
@@ -378,7 +388,7 @@ func (c *shardController) doShutdown() {
 	c.historyShards = nil
 }
 
-func (c *shardController) numShards() int {
+func (c *ControllerImpl) NumShards() int {
 	nShards := 0
 	c.RLock()
 	nShards = len(c.historyShards)
@@ -386,7 +396,7 @@ func (c *shardController) numShards() int {
 	return nShards
 }
 
-func (c *shardController) shardIDs() []int32 {
+func (c *ControllerImpl) ShardIDs() []int32 {
 	c.RLock()
 	ids := []int32{}
 	for id := range c.historyShards {
@@ -484,7 +494,7 @@ func (i *historyShardsItem) String() string {
 	return fmt.Sprintf("%p", i)
 }
 
-func isShardOwnershipLostError(err error) bool {
+func IsShardOwnershipLostError(err error) bool {
 	switch err.(type) {
 	case *persistence.ShardOwnershipLostError:
 		return true

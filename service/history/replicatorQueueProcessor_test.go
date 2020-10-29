@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -57,7 +58,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockShard           *shardContextTest
+		mockShard           *shard.ContextTest
 		mockNamespaceCache  *cache.MockNamespaceCache
 		mockMutableState    *MockmutableState
 		mockClusterMetadata *cluster.MockMetadata
@@ -91,7 +92,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockMutableState = NewMockmutableState(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -103,10 +104,10 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	)
 
 	s.mockProducer = &mocks.KafkaProducer{}
-	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 

@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -43,7 +44,7 @@ type (
 	// for the shard when all preceding tasks are acknowledged.
 	queueAckMgrImpl struct {
 		isFailover    bool
-		shard         ShardContext
+		shard         shard.Context
 		options       *QueueProcessorOptions
 		processor     processor
 		logger        log.Logger
@@ -62,7 +63,7 @@ const (
 	warnPendingTasks = 2000
 )
 
-func newQueueAckMgr(shard ShardContext, options *QueueProcessorOptions, processor processor, ackLevel int64, logger log.Logger) *queueAckMgrImpl {
+func newQueueAckMgr(shard shard.Context, options *QueueProcessorOptions, processor processor, ackLevel int64, logger log.Logger) *queueAckMgrImpl {
 
 	return &queueAckMgrImpl{
 		isFailover:       false,
@@ -78,7 +79,7 @@ func newQueueAckMgr(shard ShardContext, options *QueueProcessorOptions, processo
 	}
 }
 
-func newQueueFailoverAckMgr(shard ShardContext, options *QueueProcessorOptions, processor processor, ackLevel int64, logger log.Logger) *queueAckMgrImpl {
+func newQueueFailoverAckMgr(shard shard.Context, options *QueueProcessorOptions, processor processor, ackLevel int64, logger log.Logger) *queueAckMgrImpl {
 
 	return &queueAckMgrImpl{
 		isFailover:       true,

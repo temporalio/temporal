@@ -76,6 +76,7 @@ import (
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -84,7 +85,7 @@ type (
 		*require.Assertions
 
 		controller               *gomock.Controller
-		mockShard                *shardContextTest
+		mockShard                *shard.ContextTest
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
@@ -221,7 +222,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -241,15 +242,15 @@ func (s *engineSuite) SetupTest() {
 		s.mockShard.GetLogger(),
 		s.mockShard.GetMetricsClient(),
 	)
-	s.mockShard.eventsCache = s.eventsCache
+	s.mockShard.EventsCache = s.eventsCache
 
-	s.mockMatchingClient = s.mockShard.resource.MatchingClient
-	s.mockHistoryClient = s.mockShard.resource.HistoryClient
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
-	s.mockShardManager = s.mockShard.resource.ShardMgr
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
+	s.mockMatchingClient = s.mockShard.Resource.MatchingClient
+	s.mockHistoryClient = s.mockShard.Resource.HistoryClient
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockShardManager = s.mockShard.Resource.ShardMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
@@ -259,7 +260,7 @@ func (s *engineSuite) SetupTest() {
 
 	eventNitifier := events.NewNotifier(
 		clock.NewRealTimeSource(),
-		s.mockShard.resource.MetricsClient,
+		s.mockShard.Resource.MetricsClient,
 		func(namespaceID, workflowID string) int32 {
 			key := namespaceID + "_" + workflowID
 			return int32(len(key))
@@ -5252,7 +5253,7 @@ func addFailWorkflowEvent(
 }
 
 func newMutableStateBuilderWithEventV2(
-	shard ShardContext,
+	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
 	runID string,
@@ -5265,7 +5266,7 @@ func newMutableStateBuilderWithEventV2(
 }
 
 func newMutableStateBuilderWithVersionHistoriesForTest(
-	shard ShardContext,
+	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
 	version int64,

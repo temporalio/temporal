@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/shard"
 )
 
 var (
@@ -67,13 +68,13 @@ type (
 
 	replicationDLQHandlerImpl struct {
 		taskExecutors map[string]replicationTaskExecutor
-		shard         ShardContext
+		shard         shard.Context
 		logger        log.Logger
 	}
 )
 
 func newReplicationDLQHandler(
-	shard ShardContext,
+	shard shard.Context,
 	taskExecutors map[string]replicationTaskExecutor,
 ) replicationDLQHandler {
 

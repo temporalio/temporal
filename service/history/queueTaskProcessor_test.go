@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/task"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -50,7 +51,7 @@ type (
 		*require.Assertions
 
 		controller           *gomock.Controller
-		mockShard            *shardContextTest
+		mockShard            *shard.ContextTest
 		mockPriorityAssigner *MocktaskPriorityAssigner
 
 		metricsClient metrics.Client
@@ -73,7 +74,7 @@ func (s *queueTaskProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -169,7 +170,7 @@ func (s *queueTaskProcessorSuite) TestStopShardProcessor() {
 
 func (s *queueTaskProcessorSuite) TestStop() {
 	for i := 0; i != 10; i++ {
-		mockShard := newTestShardContext(
+		mockShard := shard.NewTestContext(
 			s.controller,
 			&persistence.ShardInfoWithFailover{
 				ShardInfo: &persistencespb.ShardInfo{
