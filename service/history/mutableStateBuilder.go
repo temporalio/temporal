@@ -261,7 +261,7 @@ func newMutableStateBuilderWithVersionHistories(
 	return s
 }
 
-func (e *mutableStateBuilder) CopyToProto() *persistencespb.WorkflowMutableState {
+func (e *mutableStateBuilder) ToProto() *persistencespb.WorkflowMutableState {
 	return &persistencespb.WorkflowMutableState{
 		ActivityInfos:       e.pendingActivityInfoIDs,
 		TimerInfos:          e.pendingTimerInfoIDs,

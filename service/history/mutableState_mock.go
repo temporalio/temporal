@@ -29,9 +29,6 @@
 package history
 
 import (
-	reflect "reflect"
-	time "time"
-
 	gomock "github.com/golang/mock/gomock"
 	command "go.temporal.io/api/command/v1"
 	common "go.temporal.io/api/common/v1"
@@ -40,13 +37,14 @@ import (
 	history "go.temporal.io/api/history/v1"
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
-
 	enums0 "go.temporal.io/server/api/enums/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	cache "go.temporal.io/server/common/cache"
 	definition "go.temporal.io/server/common/definition"
 	persistence0 "go.temporal.io/server/common/persistence"
+	reflect "reflect"
+	time "time"
 )
 
 // MockmutableState is a mock of mutableState interface.
@@ -762,18 +760,18 @@ func (mr *MockmutableStateMockRecorder) CheckResettable() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckResettable", reflect.TypeOf((*MockmutableState)(nil).CheckResettable))
 }
 
-// CopyToProto mocks base method.
-func (m *MockmutableState) CopyToProto() *persistence.WorkflowMutableState {
+// ToProto mocks base method.
+func (m *MockmutableState) ToProto() *persistence.WorkflowMutableState {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CopyToProto")
+	ret := m.ctrl.Call(m, "ToProto")
 	ret0, _ := ret[0].(*persistence.WorkflowMutableState)
 	return ret0
 }
 
-// CopyToProto indicates an expected call of CopyToProto.
-func (mr *MockmutableStateMockRecorder) CopyToProto() *gomock.Call {
+// ToProto indicates an expected call of ToProto.
+func (mr *MockmutableStateMockRecorder) ToProto() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyToProto", reflect.TypeOf((*MockmutableState)(nil).CopyToProto))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToProto", reflect.TypeOf((*MockmutableState)(nil).ToProto))
 }
 
 // RetryActivity mocks base method.
