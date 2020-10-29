@@ -413,7 +413,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	item4 := versionhistory.NewItem(int64(20), int64(51))
 	versionHistory2 := versionhistory.New([]byte{}, []*historyspb.VersionHistoryItem{item1, item3, item4})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory1)
-	_, _, err := versionhistory.AddTo(versionHistories, versionHistory2)
+	_, _, err := versionhistory.Add(versionHistories, versionHistory2)
 	s.NoError(err)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: s.namespace,

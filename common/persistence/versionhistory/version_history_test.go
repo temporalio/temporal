@@ -523,17 +523,17 @@ func (s *versionHistoriesSuite) TestAddGetVersionHistory() {
 	histories := NewVersionHistories(versionHistory1)
 	s.Equal(int32(0), histories.CurrentVersionHistoryIndex)
 
-	currentBranchChanged, newVersionHistoryIndex, err := AddTo(histories, versionHistory2)
+	currentBranchChanged, newVersionHistoryIndex, err := Add(histories, versionHistory2)
 	s.Nil(err)
 	s.True(currentBranchChanged)
 	s.Equal(int32(1), newVersionHistoryIndex)
 	s.Equal(int32(1), histories.CurrentVersionHistoryIndex)
 
-	resultVersionHistory1, err := GetAt(histories, 0)
+	resultVersionHistory1, err := Get(histories, 0)
 	s.Nil(err)
 	s.Equal(versionHistory1, resultVersionHistory1)
 
-	resultVersionHistory2, err := GetAt(histories, 1)
+	resultVersionHistory2, err := Get(histories, 1)
 	s.Nil(err)
 	s.Equal(versionHistory2, resultVersionHistory2)
 }
@@ -553,7 +553,7 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_LargerEven
 	})
 
 	histories := NewVersionHistories(versionHistory1)
-	_, _, err := AddTo(histories, versionHistory2)
+	_, _, err := Add(histories, versionHistory2)
 	s.Nil(err)
 
 	versionHistoryIncoming := New([]byte("branch token incoming"), []*historyspb.VersionHistoryItem{
@@ -583,7 +583,7 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_SameEventI
 	})
 
 	histories := NewVersionHistories(versionHistory1)
-	_, _, err := AddTo(histories, versionHistory2)
+	_, _, err := Add(histories, versionHistory2)
 	s.Nil(err)
 
 	versionHistoryIncoming := New([]byte("branch token incoming"), []*historyspb.VersionHistoryItem{
@@ -613,18 +613,18 @@ func (s *versionHistoriesSuite) TestFindFirstVersionHistoryIndexByItem() {
 	})
 
 	histories := NewVersionHistories(versionHistory1)
-	_, _, err := AddTo(histories, versionHistory2)
+	_, _, err := Add(histories, versionHistory2)
 	s.Nil(err)
 
-	index, err := FindFirstIndexByItem(histories, NewItem(8, 10))
+	index, err := FindItemFirstIndex(histories, NewItem(8, 10))
 	s.NoError(err)
 	s.Equal(int32(1), index)
 
-	index, err = FindFirstIndexByItem(histories, NewItem(4, 4))
+	index, err = FindItemFirstIndex(histories, NewItem(4, 4))
 	s.NoError(err)
 	s.Equal(int32(0), index)
 
-	_, err = FindFirstIndexByItem(histories, NewItem(41, 4))
+	_, err = FindItemFirstIndex(histories, NewItem(41, 4))
 	s.Error(err)
 }
 
@@ -645,7 +645,7 @@ func (s *versionHistoriesSuite) TestCurrentVersionHistoryIndexIsInReplay() {
 	histories := NewVersionHistories(versionHistory1)
 	s.Equal(int32(0), histories.CurrentVersionHistoryIndex)
 
-	currentBranchChanged, newVersionHistoryIndex, err := AddTo(histories, versionHistory2)
+	currentBranchChanged, newVersionHistoryIndex, err := Add(histories, versionHistory2)
 	s.Nil(err)
 	s.True(currentBranchChanged)
 	s.Equal(int32(1), newVersionHistoryIndex)

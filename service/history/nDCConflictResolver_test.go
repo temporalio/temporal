@@ -126,7 +126,7 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID1, version)},
 	)
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
-	_, _, err := versionhistory.AddTo(versionHistories, versionHistory1)
+	_, _, err := versionhistory.Add(versionHistories, versionHistory1)
 	s.NoError(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
@@ -222,7 +222,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	)
 
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
-	_, _, err := versionhistory.AddTo(versionHistories, versionHistory1)
+	_, _, err := versionhistory.Add(versionHistories, versionHistory1)
 	s.Nil(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()

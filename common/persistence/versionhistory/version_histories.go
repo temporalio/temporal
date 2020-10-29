@@ -30,7 +30,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 )
 
-// NewVersionHistories create a new version histories
+// NewVersionHistories create a new instance of VersionHistories.
 func NewVersionHistories(versionHistory *historyspb.VersionHistory) *historyspb.VersionHistories {
 	if versionHistory == nil {
 		panic("version history cannot be null")
@@ -42,7 +42,7 @@ func NewVersionHistories(versionHistory *historyspb.VersionHistory) *historyspb.
 	}
 }
 
-// CopyVersionHistories duplicate VersionHistories
+// Copy VersionHistories.
 func CopyVersionHistories(h *historyspb.VersionHistories) *historyspb.VersionHistories {
 	var histories []*historyspb.VersionHistory
 	for _, history := range h.Histories {
@@ -55,17 +55,17 @@ func CopyVersionHistories(h *historyspb.VersionHistories) *historyspb.VersionHis
 	}
 }
 
-// GetAt get the version history according to index provided
-func GetAt(h *historyspb.VersionHistories, branchIndex int32) (*historyspb.VersionHistory, error) {
-	if branchIndex < 0 || branchIndex >= int32(len(h.Histories)) {
-		return nil, serviceerror.NewInvalidArgument("invalid branch index.")
+// Get the VersionHistory according to index provided.
+func Get(h *historyspb.VersionHistories, index int32) (*historyspb.VersionHistory, error) {
+	if index < 0 || index >= int32(len(h.Histories)) {
+		return nil, serviceerror.NewInvalidArgument("invalid index.")
 	}
 
-	return h.Histories[branchIndex], nil
+	return h.Histories[index], nil
 }
 
-// AddTo add a version history and return the whether current branch is changed
-func AddTo(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (bool, int32, error) {
+// Add a VersionHistory and return the whether current branch is changed.
+func Add(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (bool, int32, error) {
 	if v == nil {
 		return false, 0, serviceerror.NewInvalidArgument("version histories is null.")
 	}
@@ -76,7 +76,7 @@ func AddTo(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (bool, 
 		return false, 0, err
 	}
 
-	currentVersionHistory, err := GetAt(h, h.CurrentVersionHistoryIndex)
+	currentVersionHistory, err := Get(h, h.CurrentVersionHistoryIndex)
 	if err != nil {
 		return false, 0, err
 	}
@@ -113,7 +113,7 @@ func AddTo(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (bool, 
 	return currentBranchChanged, newVersionHistoryIndex, nil
 }
 
-// FindLCAIndexAndItem finds the lowest common ancestor version history index along with corresponding item.
+// FindLCAIndexAndItem finds the lowest common ancestor VersionHistory index and corresponding item.
 func FindLCAIndexAndItem(h *historyspb.VersionHistories, incomingHistory *historyspb.VersionHistory) (int32, *historyspb.VersionHistoryItem, error) {
 	var versionHistoryIndex int32
 	var versionHistoryLength int32
@@ -140,18 +140,17 @@ func FindLCAIndexAndItem(h *historyspb.VersionHistories, incomingHistory *histor
 	return versionHistoryIndex, versionHistoryItem, nil
 }
 
-// FindFirstIndexByItem find the first version history index which contains the given version history item
-func FindFirstIndexByItem(h *historyspb.VersionHistories, item *historyspb.VersionHistoryItem) (int32, error) {
-	for index, localHistory := range h.Histories {
-		if ContainsItem(localHistory, item) {
+// FindItemFirstIndex find the first VersionHistory index which contains the given version history item.
+func FindItemFirstIndex(h *historyspb.VersionHistories, item *historyspb.VersionHistoryItem) (int32, error) {
+	for index, history := range h.Histories {
+		if ContainsItem(history, item) {
 			return int32(index), nil
 		}
 	}
 	return 0, serviceerror.NewInvalidArgument("version histories does not contains given item.")
 }
 
-// IsRebuilt returns true if the current branch index's last write version is not the largest
-// among all branches' last write version
+// IsRebuilt returns true if the current branch index's last write version is not the largest among all branches' last write version.
 func IsRebuilt(h *historyspb.VersionHistories) (bool, error) {
 	currentVersionHistory, err := GetCurrent(h)
 	if err != nil {
@@ -176,7 +175,7 @@ func IsRebuilt(h *historyspb.VersionHistories) (bool, error) {
 	return false, nil
 }
 
-// SetCurrentIndex set the current branch index
+// SetCurrentIndex set the current VersionHistory index.
 func SetCurrentIndex(h *historyspb.VersionHistories, currentVersionHistoryIndex int32) error {
 	if currentVersionHistoryIndex < 0 || currentVersionHistoryIndex >= int32(len(h.Histories)) {
 		return serviceerror.NewInvalidArgument("invalid current version history index.")
@@ -186,7 +185,7 @@ func SetCurrentIndex(h *historyspb.VersionHistories, currentVersionHistoryIndex 
 	return nil
 }
 
-// GetCurrent get the current version history
+// GetCurrent get the current VersionHistory.
 func GetCurrent(h *historyspb.VersionHistories) (*historyspb.VersionHistory, error) {
-	return GetAt(h, h.GetCurrentVersionHistoryIndex())
+	return Get(h, h.GetCurrentVersionHistoryIndex())
 }

@@ -167,7 +167,7 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 	)
 	s.NoError(err)
 	versionhistory.SetBranchToken(compareVersionHistory, newBranchToken)
-	newVersionHistory, err = versionhistory.GetAt(versionHistories, newIndex)
+	newVersionHistory, err = versionhistory.Get(versionHistories, newIndex)
 	s.NoError(err)
 	s.True(compareVersionHistory.Equal(newVersionHistory))
 }

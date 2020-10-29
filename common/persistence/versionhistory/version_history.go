@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/server/common"
 )
 
-// New create a new version history
+// New create a new instance of VersionHistory.
 func New(branchToken []byte, items []*historyspb.VersionHistoryItem) *historyspb.VersionHistory {
 	return &historyspb.VersionHistory{
 		BranchToken: branchToken,
@@ -41,7 +41,7 @@ func New(branchToken []byte, items []*historyspb.VersionHistoryItem) *historyspb
 	}
 }
 
-// Copy VersionHistory
+// Copy VersionHistory.
 func Copy(v *historyspb.VersionHistory) *historyspb.VersionHistory {
 	token := make([]byte, len(v.BranchToken))
 	copy(token, v.BranchToken)
@@ -55,7 +55,7 @@ func Copy(v *historyspb.VersionHistory) *historyspb.VersionHistory {
 	return New(token, items)
 }
 
-// CopyUntilLCAItem duplicate the version history up until LCA item
+// CopyUntilLCAItem returns copy of VersionHistory up until LCA item.
 func CopyUntilLCAItem(v *historyspb.VersionHistory, lcaItem *historyspb.VersionHistoryItem) (*historyspb.VersionHistory, error) {
 	versionHistory := &historyspb.VersionHistory{}
 	notFoundErr := serviceerror.NewInvalidArgument("version history does not contains the LCA item.")
@@ -79,13 +79,13 @@ func CopyUntilLCAItem(v *historyspb.VersionHistory, lcaItem *historyspb.VersionH
 	return nil, notFoundErr
 }
 
-// SetBranchToken the overwrite the branch token
+// SetBranchToken sets the branch token.
 func SetBranchToken(v *historyspb.VersionHistory, branchToken []byte) {
 	v.BranchToken = make([]byte, len(branchToken))
 	copy(v.BranchToken, branchToken)
 }
 
-// AddOrUpdateItem updates the versionHistory slice
+// AddOrUpdateItem updates the VersionHistory with new VersionHistoryItem.
 func AddOrUpdateItem(v *historyspb.VersionHistory, item *historyspb.VersionHistoryItem) error {
 	if len(v.Items) == 0 {
 		itemCopy := *item
@@ -114,7 +114,7 @@ func AddOrUpdateItem(v *historyspb.VersionHistory, item *historyspb.VersionHisto
 	return nil
 }
 
-// ContainsItem check whether given version history item is included
+// ContainsItem check whether VersionHistory has given VersionHistoryItem.
 func ContainsItem(v *historyspb.VersionHistory, item *historyspb.VersionHistoryItem) bool {
 	prevEventID := common.FirstEventID - 1
 	for _, currentItem := range v.Items {
@@ -130,7 +130,7 @@ func ContainsItem(v *historyspb.VersionHistory, item *historyspb.VersionHistoryI
 	return false
 }
 
-// FindLCAItem returns the lowest common ancestor version history item
+// FindLCAItem returns the lowest common ancestor VersionHistoryItem.
 func FindLCAItem(v *historyspb.VersionHistory, remote *historyspb.VersionHistory) (*historyspb.VersionHistoryItem, error) {
 	localIndex := len(v.Items) - 1
 	remoteIndex := len(remote.Items) - 1
@@ -155,7 +155,7 @@ func FindLCAItem(v *historyspb.VersionHistory, remote *historyspb.VersionHistory
 	return nil, serviceerror.NewInvalidArgument("version history is malformed. No joint point found.")
 }
 
-// IsLCAAppendable checks if a LCA version history item is appendable
+// IsLCAAppendable checks if a LCA VersionHistoryItem is appendable.
 func IsLCAAppendable(v *historyspb.VersionHistory, item *historyspb.VersionHistoryItem) bool {
 	if len(v.Items) == 0 {
 		panic("version history not initialized")
@@ -167,7 +167,7 @@ func IsLCAAppendable(v *historyspb.VersionHistory, item *historyspb.VersionHisto
 	return *v.Items[len(v.Items)-1] == *item
 }
 
-// GetFirstItem return the first version history item
+// GetFirstItem return the first VersionHistoryItem.
 func GetFirstItem(v *historyspb.VersionHistory) (*historyspb.VersionHistoryItem, error) {
 	if len(v.Items) == 0 {
 		return nil, serviceerror.NewInvalidArgument("version history is empty.")
@@ -175,7 +175,7 @@ func GetFirstItem(v *historyspb.VersionHistory) (*historyspb.VersionHistoryItem,
 	return v.Items[0], nil
 }
 
-// GetLastItem return the last version history item
+// GetLastItem return the last VersionHistoryItem.
 func GetLastItem(v *historyspb.VersionHistory) (*historyspb.VersionHistoryItem, error) {
 	if len(v.Items) == 0 {
 		return nil, serviceerror.NewInvalidArgument("version history is empty.")
@@ -183,7 +183,7 @@ func GetLastItem(v *historyspb.VersionHistory) (*historyspb.VersionHistoryItem, 
 	return v.Items[len(v.Items)-1], nil
 }
 
-// GetEventVersion return the corresponding event version of an event ID
+// GetEventVersion return the corresponding event version of an event ID.
 func GetEventVersion(v *historyspb.VersionHistory, eventID int64) (int64, error) {
 	lastItem, err := GetLastItem(v)
 	if err != nil {
