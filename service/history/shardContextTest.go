@@ -33,13 +33,14 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/service/history/events"
 )
 
 type shardContextTest struct {
 	*shardContextImpl
 
 	resource        *resource.Test
-	mockEventsCache *MockeventsCache
+	mockEventsCache *events.MockCache
 }
 
 var _ ShardContext = (*shardContextTest)(nil)
@@ -50,7 +51,7 @@ func newTestShardContext(
 	config *Config,
 ) *shardContextTest {
 	resource := resource.NewTest(ctrl, metrics.History)
-	eventsCache := NewMockeventsCache(ctrl)
+	eventsCache := events.NewMockCache(ctrl)
 	shard := &shardContextImpl{
 		Resource:                  resource,
 		shardID:                   shardInfo.GetShardId(),

@@ -524,8 +524,7 @@ func (s *Service) Start() {
 	}
 	opts = append(opts, grpc.UnaryInterceptor(rpc.Interceptor))
 	s.server = grpc.NewServer(opts...)
-	nilCheckHandler := NewNilCheckHandler(s.handler)
-	historyservice.RegisterHistoryServiceServer(s.server, nilCheckHandler)
+	historyservice.RegisterHistoryServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.handler)
 
 	listener := s.GetGRPCListener()

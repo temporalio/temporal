@@ -26,16 +26,12 @@ package persistencetests
 
 import (
 	"fmt"
-	"os"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	enumspb "go.temporal.io/api/enums/v1"
-
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
@@ -59,9 +55,6 @@ const TimePrecision = 2 * time.Millisecond
 
 // SetupSuite implementation
 func (s *MatchingPersistenceSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 // TearDownSuite implementation

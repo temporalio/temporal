@@ -536,7 +536,6 @@ func (handler *DCRedirectionHandlerImpl) PollWorkflowTaskQueue(
 		}
 		return err
 	})
-
 	return resp, err
 }
 

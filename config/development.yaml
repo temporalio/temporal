@@ -17,6 +17,10 @@ global:
     broadcastAddress: "127.0.0.1"
   pprof:
     port: 7936
+  metrics:
+    statsd:
+      hostPort: "127.0.0.1:8125"
+      prefix: "temporal"
 
 services:
   frontend:
@@ -24,40 +28,24 @@ services:
       grpcPort: 7233
       membershipPort: 6933
       bindOnLocalHost: true
-    metrics:
-      statsd:
-        hostPort: "127.0.0.1:8125"
-        prefix: "temporal"
 
   matching:
     rpc:
       grpcPort: 7235
       membershipPort: 6935
       bindOnLocalHost: true
-    metrics:
-      statsd:
-        hostPort: "127.0.0.1:8125"
-        prefix: "temporal"
 
   history:
     rpc:
       grpcPort: 7234
       membershipPort: 6934
       bindOnLocalHost: true
-    metrics:
-      statsd:
-        hostPort: "127.0.0.1:8125"
-        prefix: "temporal"
 
   worker:
     rpc:
       grpcPort: 7239
       membershipPort: 6939
       bindOnLocalHost: true
-    metrics:
-      statsd:
-        hostPort: "127.0.0.1:8125"
-        prefix: "temporal"
 
 clusterMetadata:
   enableGlobalNamespace: false

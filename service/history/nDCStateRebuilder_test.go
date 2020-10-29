@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/events"
 )
 
 type (
@@ -60,7 +61,7 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shardContextTest
-		mockEventsCache     *MockeventsCache
+		mockEventsCache     *events.MockCache
 		mockTaskRefresher   *MockmutableStateTaskRefresher
 		mockNamespaceCache  *cache.MockNamespaceCache
 		mockClusterMetadata *cluster.MockMetadata
@@ -103,7 +104,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.mockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
 

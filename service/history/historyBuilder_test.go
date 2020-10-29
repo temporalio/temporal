@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/events"
 )
 
 type (
@@ -59,7 +60,7 @@ type (
 
 		controller         *gomock.Controller
 		mockShard          *shardContextTest
-		mockEventsCache    *MockeventsCache
+		mockEventsCache    *events.MockCache
 		mockNamespaceCache *cache.MockNamespaceCache
 
 		namespaceID    string
@@ -100,7 +101,7 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.mockEventsCache = s.mockShard.mockEventsCache
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(s.namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(s.namespaceEntry, nil).AnyTimes()
-	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
 		s.logger, testLocalNamespaceEntry)

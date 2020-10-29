@@ -25,12 +25,9 @@
 package persistencetests
 
 import (
-	"os"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -55,9 +52,6 @@ type (
 
 // SetupSuite implementation
 func (s *VisibilityPersistenceSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 // SetupTest implementation

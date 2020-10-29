@@ -26,11 +26,8 @@ package persistencetests
 
 import (
 	"fmt"
-	"os"
 	"sync"
-	"testing"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -50,9 +47,6 @@ type (
 
 // SetupSuite implementation
 func (s *QueuePersistenceSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 // SetupTest implementation

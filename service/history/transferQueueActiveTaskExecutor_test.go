@@ -30,6 +30,7 @@ import (
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/events"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -161,7 +162,16 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 			}},
 		NewDynamicConfigForTest(),
 	)
-	s.mockShard.eventsCache = newEventsCache(s.mockShard)
+	s.mockShard.eventsCache = events.NewEventsCache(
+		convert.Int32Ptr(s.mockShard.GetShardID()),
+		s.mockShard.GetConfig().EventsCacheInitialSize(),
+		s.mockShard.GetConfig().EventsCacheMaxSize(),
+		s.mockShard.GetConfig().EventsCacheTTL(),
+		s.mockShard.GetHistoryManager(),
+		false,
+		s.mockShard.GetLogger(),
+		s.mockShard.GetMetricsClient(),
+	)
 	s.mockShard.resource.TimeSource = s.timeSource
 
 	s.mockParentClosePolicyClient = &parentclosepolicy.ClientMock{}
@@ -192,20 +202,20 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 
 	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName:   s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
-		shard:                s.mockShard,
-		clusterMetadata:      s.mockClusterMetadata,
-		historyV2Mgr:         s.mockHistoryV2Mgr,
-		executionManager:     s.mockExecutionMgr,
-		historyCache:         historyCache,
-		logger:               s.logger,
-		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
-		metricsClient:        s.mockShard.GetMetricsClient(),
-		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
-		txProcessor:          s.mockTxProcessor,
-		replicatorProcessor:  s.mockReplicationProcessor,
-		timerProcessor:       s.mockTimerProcessor,
-		archivalClient:       s.mockArchivalClient,
+		currentClusterName:  s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		shard:               s.mockShard,
+		clusterMetadata:     s.mockClusterMetadata,
+		historyV2Mgr:        s.mockHistoryV2Mgr,
+		executionManager:    s.mockExecutionMgr,
+		historyCache:        historyCache,
+		logger:              s.logger,
+		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
+		metricsClient:       s.mockShard.GetMetricsClient(),
+		eventNotifier:       events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
+		txProcessor:         s.mockTxProcessor,
+		replicatorProcessor: s.mockReplicationProcessor,
+		timerProcessor:      s.mockTimerProcessor,
+		archivalClient:      s.mockArchivalClient,
 	}
 	s.mockShard.SetEngine(h)
 

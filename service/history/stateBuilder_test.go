@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/events"
 )
 
 type (
@@ -57,7 +58,7 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shardContextTest
-		mockEventsCache     *MockeventsCache
+		mockEventsCache     *events.MockCache
 		mockNamespaceCache  *cache.MockNamespaceCache
 		mockTaskGenerator   *MockmutableStateTaskGenerator
 		mockMutableState    *MockmutableState
@@ -109,7 +110,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.mockEventsCache = s.mockShard.mockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
-	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionhistory.NewVHS(&historyspb.VersionHistory{})}).AnyTimes()
