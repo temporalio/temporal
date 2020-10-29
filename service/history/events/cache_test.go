@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package events
 
 import (
 	"errors"
@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
@@ -51,7 +52,7 @@ type (
 
 		mockEventsV2Mgr *mocks.HistoryV2Manager
 
-		cache *eventsCacheImpl
+		cache *CacheImpl
 	}
 )
 
@@ -82,10 +83,18 @@ func (s *eventsCacheSuite) TearDownTest() {
 	s.mockEventsV2Mgr.AssertExpectations(s.T())
 }
 
-func (s *eventsCacheSuite) newTestEventsCache() *eventsCacheImpl {
+func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
 	shardId := int32(10)
-	return newEventsCacheWithOptions(16, 32, time.Minute, s.mockEventsV2Mgr, false, s.logger,
-		metrics.NewClient(tally.NoopScope, metrics.History), &shardId)
+	return NewEventsCache(
+		convert.Int32Ptr(shardId),
+		16,
+		32,
+		time.Minute,
+		s.mockEventsV2Mgr,
+		false,
+		s.logger,
+		metrics.NewClient(tally.NoopScope, metrics.History),
+	)
 }
 
 func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
@@ -99,8 +108,8 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
 	}
 
-	s.cache.putEvent(namespaceID, workflowID, runID, eventID, event)
-	actualEvent, err := s.cache.getEvent(namespaceID, workflowID, runID, eventID, eventID, nil)
+	s.cache.PutEvent(namespaceID, workflowID, runID, eventID, event)
+	actualEvent, err := s.cache.GetEvent(namespaceID, workflowID, runID, eventID, eventID, nil)
 	s.Nil(err)
 	s.Equal(event, actualEvent)
 }
@@ -154,8 +163,8 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		LastFirstEventID: event1.GetEventId(),
 	}, nil)
 
-	s.cache.putEvent(namespaceID, workflowID, runID, event2.GetEventId(), event2)
-	actualEvent, err := s.cache.getEvent(namespaceID, workflowID, runID, event1.GetEventId(), event6.GetEventId(),
+	s.cache.PutEvent(namespaceID, workflowID, runID, event2.GetEventId(), event2)
+	actualEvent, err := s.cache.GetEvent(namespaceID, workflowID, runID, event1.GetEventId(), event6.GetEventId(),
 		[]byte("store_token"))
 	s.Nil(err)
 	s.Equal(event6, actualEvent)
@@ -177,7 +186,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 		ShardID:       &shardId,
 	}).Return(nil, expectedErr)
 
-	actualEvent, err := s.cache.getEvent(namespaceID, workflowID, runID, int64(11), int64(14),
+	actualEvent, err := s.cache.GetEvent(namespaceID, workflowID, runID, int64(11), int64(14),
 		[]byte("store_token"))
 	s.Nil(actualEvent)
 	s.Equal(expectedErr, err)
@@ -212,10 +221,10 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		LastFirstEventID: event2.GetEventId(),
 	}, nil)
 
-	s.cache.putEvent(namespaceID, workflowID, runID, event1.GetEventId(), event1)
-	s.cache.putEvent(namespaceID, workflowID, runID, event2.GetEventId(), event2)
+	s.cache.PutEvent(namespaceID, workflowID, runID, event1.GetEventId(), event1)
+	s.cache.PutEvent(namespaceID, workflowID, runID, event2.GetEventId(), event2)
 	s.cache.disabled = true
-	actualEvent, err := s.cache.getEvent(namespaceID, workflowID, runID, event2.GetEventId(), event2.GetEventId(),
+	actualEvent, err := s.cache.GetEvent(namespaceID, workflowID, runID, event2.GetEventId(), event2.GetEventId(),
 		[]byte("store_token"))
 	s.Nil(err)
 	s.Equal(event2, actualEvent)

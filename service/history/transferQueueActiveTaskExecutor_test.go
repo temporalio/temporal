@@ -30,6 +30,7 @@ import (
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/events"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -161,7 +162,16 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 			}},
 		NewDynamicConfigForTest(),
 	)
-	s.mockShard.eventsCache = newEventsCache(s.mockShard)
+	s.mockShard.eventsCache = events.NewEventsCache(
+		convert.Int32Ptr(s.mockShard.GetShardID()),
+		s.mockShard.GetConfig().EventsCacheInitialSize(),
+		s.mockShard.GetConfig().EventsCacheMaxSize(),
+		s.mockShard.GetConfig().EventsCacheTTL(),
+		s.mockShard.GetHistoryManager(),
+		false,
+		s.mockShard.GetLogger(),
+		s.mockShard.GetMetricsClient(),
+	)
 	s.mockShard.resource.TimeSource = s.timeSource
 
 	s.mockParentClosePolicyClient = &parentclosepolicy.ClientMock{}

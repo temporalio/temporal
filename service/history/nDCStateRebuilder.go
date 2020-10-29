@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/events"
 )
 
 type (
@@ -66,7 +67,7 @@ type (
 	nDCStateRebuilderImpl struct {
 		shard           ShardContext
 		namespaceCache  cache.NamespaceCache
-		eventsCache     eventsCache
+		eventsCache     events.Cache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryManager
 		taskRefresher   mutableStateTaskRefresher

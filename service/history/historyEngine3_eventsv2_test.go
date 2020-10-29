@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/events"
 )
 
 type (
@@ -67,7 +68,7 @@ type (
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
-		mockEventsCache          *MockeventsCache
+		mockEventsCache          *events.MockCache
 		mockNamespaceCache       *cache.MockNamespaceCache
 		mockClusterMetadata      *cluster.MockMetadata
 
@@ -122,7 +123,7 @@ func (s *engine3Suite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
 
