@@ -262,22 +262,20 @@ func newMutableStateBuilderWithVersionHistories(
 	return s
 }
 
-func (e *mutableStateBuilder) CopyToPersistence() *persistencespb.WorkflowMutableState {
-	state := &persistencespb.WorkflowMutableState{}
-
-	state.ActivityInfos = e.pendingActivityInfoIDs
-	state.TimerInfos = e.pendingTimerInfoIDs
-	state.ChildExecutionInfos = e.pendingChildExecutionInfoIDs
-	state.RequestCancelInfos = e.pendingRequestCancelInfoIDs
-	state.SignalInfos = e.pendingSignalInfoIDs
-	state.SignalRequestedIds = convertStringSetToSlice(e.pendingSignalRequestedIDs)
-	state.ExecutionInfo = e.executionInfo
-	state.ExecutionState = e.executionState
-	state.NextEventId = e.nextEventID
-	state.BufferedEvents = e.bufferedEvents
-	state.Checksum = e.checksum
-
-	return state
+func (e *mutableStateBuilder) ToProto() *persistencespb.WorkflowMutableState {
+	return &persistencespb.WorkflowMutableState{
+		ActivityInfos:       e.pendingActivityInfoIDs,
+		TimerInfos:          e.pendingTimerInfoIDs,
+		ChildExecutionInfos: e.pendingChildExecutionInfoIDs,
+		RequestCancelInfos:  e.pendingRequestCancelInfoIDs,
+		SignalInfos:         e.pendingSignalInfoIDs,
+		SignalRequestedIds:  convertStringSetToSlice(e.pendingSignalRequestedIDs),
+		ExecutionInfo:       e.executionInfo,
+		ExecutionState:      e.executionState,
+		NextEventId:         e.nextEventID,
+		BufferedEvents:      e.bufferedEvents,
+		Checksum:            e.checksum,
+	}
 }
 
 func (e *mutableStateBuilder) Load(
