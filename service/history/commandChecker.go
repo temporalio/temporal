@@ -47,12 +47,13 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
 	commandAttrValidator struct {
 		namespaceCache                  cache.NamespaceCache
-		config                          *Config
+		config                          *configs.Config
 		maxIDLengthLimit                int
 		searchAttributesValidator       *validator.SearchAttributesValidator
 		getDefaultActivityRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
@@ -83,7 +84,7 @@ const (
 
 func newCommandAttrValidator(
 	namespaceCache cache.NamespaceCache,
-	config *Config,
+	config *configs.Config,
 	logger log.Logger,
 ) *commandAttrValidator {
 	return &commandAttrValidator{

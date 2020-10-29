@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -57,7 +58,7 @@ type (
 
 		mockResource     *resource.Test
 		mockShard        ShardContext
-		config           *Config
+		config           *configs.Config
 		mockClientBean   *client.MockBean
 		adminClient      *adminservicemock.MockAdminServiceClient
 		clusterMetadata  *cluster.MockMetadata

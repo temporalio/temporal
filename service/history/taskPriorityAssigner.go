@@ -27,7 +27,6 @@
 package history
 
 import (
-	"strconv"
 	"sync"
 
 	"go.temporal.io/api/serviceerror"
@@ -37,6 +36,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -49,7 +49,7 @@ type (
 
 		currentClusterName string
 		namespaceCache     cache.NamespaceCache
-		config             *Config
+		config             *configs.Config
 		logger             log.Logger
 		scope              metrics.Scope
 		rateLimiters       map[string]quotas.Limiter
@@ -58,34 +58,12 @@ type (
 
 var _ taskPriorityAssigner = (*taskPriorityAssignerImpl)(nil)
 
-const (
-	numBitsPerLevel = 3
-)
-
-const (
-	taskHighPriorityClass = iota << numBitsPerLevel
-	taskDefaultPriorityClass
-	taskLowPriorityClass
-)
-
-const (
-	taskHighPrioritySubclass = iota
-	taskDefaultPrioritySubclass
-	taskLowPrioritySubclass
-)
-
-var defaultTaskPriorityWeight = map[int]int{
-	getTaskPriority(taskHighPriorityClass, taskDefaultPrioritySubclass):    200,
-	getTaskPriority(taskDefaultPriorityClass, taskDefaultPrioritySubclass): 100,
-	getTaskPriority(taskLowPriorityClass, taskDefaultPrioritySubclass):     50,
-}
-
 func newTaskPriorityAssigner(
 	currentClusterName string,
 	namespaceCache cache.NamespaceCache,
 	logger log.Logger,
 	metricClient metrics.Client,
-	config *Config,
+	config *configs.Config,
 ) *taskPriorityAssignerImpl {
 	return &taskPriorityAssignerImpl{
 		currentClusterName: currentClusterName,
@@ -101,7 +79,7 @@ func (a *taskPriorityAssignerImpl) Assign(
 	task queueTask,
 ) error {
 	if task.GetQueueType() == replicationQueueType {
-		task.SetPriority(getTaskPriority(taskLowPriorityClass, taskDefaultPrioritySubclass))
+		task.SetPriority(configs.GetTaskPriority(configs.TaskLowPriorityClass, configs.TaskDefaultPrioritySubclass))
 		return nil
 	}
 
@@ -112,12 +90,12 @@ func (a *taskPriorityAssignerImpl) Assign(
 	}
 
 	if !active {
-		task.SetPriority(getTaskPriority(taskLowPriorityClass, taskDefaultPrioritySubclass))
+		task.SetPriority(configs.GetTaskPriority(configs.TaskLowPriorityClass, configs.TaskDefaultPrioritySubclass))
 		return nil
 	}
 
 	if !a.getRateLimiter(namespace).Allow() {
-		task.SetPriority(getTaskPriority(taskDefaultPriorityClass, taskDefaultPrioritySubclass))
+		task.SetPriority(configs.GetTaskPriority(configs.TaskDefaultPriorityClass, configs.TaskDefaultPrioritySubclass))
 		taggedScope := a.scope.Tagged(metrics.NamespaceTag(namespace))
 		if task.GetQueueType() == transferQueueType {
 			taggedScope.IncCounter(metrics.TransferTaskThrottledCounter)
@@ -127,7 +105,7 @@ func (a *taskPriorityAssignerImpl) Assign(
 		return nil
 	}
 
-	task.SetPriority(getTaskPriority(taskHighPriorityClass, taskDefaultPrioritySubclass))
+	task.SetPriority(configs.GetTaskPriority(configs.TaskHighPriorityClass, configs.TaskDefaultPrioritySubclass))
 	return nil
 }
 
@@ -180,20 +158,4 @@ func (a *taskPriorityAssignerImpl) getRateLimiter(
 
 	a.rateLimiters[namespace] = limiter
 	return limiter
-}
-
-func getTaskPriority(
-	class, subClass int,
-) int {
-	return class | subClass
-}
-
-func convertWeightsToDynamicConfigValue(
-	weights map[int]int,
-) map[string]interface{} {
-	weightsForDC := make(map[string]interface{})
-	for priority, weight := range weights {
-		weightsForDC[strconv.Itoa(priority)] = weight
-	}
-	return weightsForDC
 }

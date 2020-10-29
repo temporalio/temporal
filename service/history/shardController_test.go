@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/service/history/configs"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 
@@ -67,7 +68,7 @@ type (
 		mockShardManager  *mmocks.ShardManager
 		mockEngineFactory *MockHistoryEngineFactory
 
-		config          *Config
+		config          *configs.Config
 		logger          log.Logger
 		shardController *shardController
 	}

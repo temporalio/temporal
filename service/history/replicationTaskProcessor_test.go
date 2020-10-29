@@ -42,6 +42,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/service/history/configs"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -65,7 +66,7 @@ type (
 		mockResource            *resource.Test
 		mockShard               ShardContext
 		mockEngine              *MockEngine
-		config                  *Config
+		config                  *configs.Config
 		historyClient           *historyservicemock.MockHistoryServiceClient
 		replicationTaskFetcher  *MockReplicationTaskFetcher
 		mockNamespaceCache      *cache.MockNamespaceCache

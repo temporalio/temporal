@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 )
 
@@ -58,7 +59,7 @@ type (
 		GetHistoryManager() persistence.HistoryManager
 		GetNamespaceCache() cache.NamespaceCache
 		GetClusterMetadata() cluster.Metadata
-		GetConfig() *Config
+		GetConfig() *configs.Config
 		GetEventsCache() events.Cache
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger
@@ -126,7 +127,7 @@ type (
 		eventsCache      events.Cache
 		closeCallback    func(int32, *historyShardsItem)
 		closed           int32
-		config           *Config
+		config           *configs.Config
 		logger           log.Logger
 		throttledLogger  log.Logger
 		engine           Engine
@@ -835,7 +836,7 @@ func (s *shardContextImpl) AppendHistoryV2Events(
 	return size, err0
 }
 
-func (s *shardContextImpl) GetConfig() *Config {
+func (s *shardContextImpl) GetConfig() *configs.Config {
 	return s.config
 }
 

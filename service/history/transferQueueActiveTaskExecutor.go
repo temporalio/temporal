@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
 
@@ -69,7 +70,7 @@ func newTransferQueueActiveTaskExecutor(
 	historyService *historyEngineImpl,
 	logger log.Logger,
 	metricsClient metrics.Client,
-	config *Config,
+	config *configs.Config,
 ) queueTaskExecutor {
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(

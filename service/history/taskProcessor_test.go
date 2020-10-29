@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -87,7 +88,7 @@ func (s *taskProcessorSuite) SetupTest() {
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
-		NewDynamicConfigForTest(),
+		configs.NewDynamicConfigForTest(),
 	)
 
 	s.mockProcessor = &MockTimerProcessor{}

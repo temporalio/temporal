@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/configs"
 )
 
 const (
@@ -73,7 +74,7 @@ type (
 		shard                   ShardContext
 		historyEngine           Engine
 		historySerializer       persistence.PayloadSerializer
-		config                  *Config
+		config                  *configs.Config
 		metricsClient           metrics.Client
 		logger                  log.Logger
 		replicationTaskExecutor replicationTaskExecutor
@@ -107,7 +108,7 @@ type (
 func NewReplicationTaskProcessor(
 	shard ShardContext,
 	historyEngine Engine,
-	config *Config,
+	config *configs.Config,
 	metricsClient metrics.Client,
 	replicationTaskFetcher ReplicationTaskFetcher,
 	replicationTaskExecutor replicationTaskExecutor,

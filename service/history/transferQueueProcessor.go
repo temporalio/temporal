@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/configs"
 )
 
 var (
@@ -64,7 +65,7 @@ type (
 		currentClusterName       string
 		shard                    ShardContext
 		taskAllocator            taskAllocator
-		config                   *Config
+		config                   *configs.Config
 		metricsClient            metrics.Client
 		historyService           *historyEngineImpl
 		visibilityMgr            persistence.VisibilityManager

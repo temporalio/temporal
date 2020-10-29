@@ -32,6 +32,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -60,7 +61,7 @@ type (
 		executionMgr        persistence.ExecutionManager
 		logger              log.Logger
 		metricsClient       metrics.Client
-		config              *Config
+		config              *configs.Config
 		timeNow             timeNow
 		updateTimerAckLevel updateTimerAckLevel
 		timerQueueShutdown  timerQueueShutdown

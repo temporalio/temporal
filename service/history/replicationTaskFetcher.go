@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
 	serviceConfig "go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/service/history/configs"
 )
 
 const (
@@ -57,7 +58,7 @@ type (
 		status         int32
 		currentCluster string
 		sourceCluster  string
-		config         *Config
+		config         *configs.Config
 		logger         log.Logger
 		remotePeer     admin.Client
 		rateLimiter    *quotas.DynamicRateLimiter
@@ -91,7 +92,7 @@ type (
 // NewReplicationTaskFetchers creates an instance of ReplicationTaskFetchers with given configs.
 func NewReplicationTaskFetchers(
 	logger log.Logger,
-	config *Config,
+	config *configs.Config,
 	consumerConfig *serviceConfig.ReplicationConsumerConfig,
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
@@ -160,7 +161,7 @@ func newReplicationTaskFetcher(
 	logger log.Logger,
 	sourceCluster string,
 	currentCluster string,
-	config *Config,
+	config *configs.Config,
 	sourceFrontend admin.Client,
 ) *ReplicationTaskFetcherImpl {
 
