@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -68,7 +69,7 @@ type (
 		cache         *historyCache
 		shutdownCh    chan struct{}
 		tasksCh       chan *taskInfo
-		config        *Config
+		config        *configs.Config
 		logger        log.Logger
 		metricsClient metrics.Client
 		timeSource    clock.TimeSource

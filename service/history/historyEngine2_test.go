@@ -49,6 +49,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -83,7 +84,7 @@ type (
 		mockExecutionMgr *mocks.ExecutionManager
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
 
-		config *Config
+		config *configs.Config
 		logger log.Logger
 	}
 )
@@ -94,7 +95,7 @@ func TestEngine2Suite(t *testing.T) {
 }
 
 func (s *engine2Suite) SetupSuite() {
-	s.config = NewDynamicConfigForTest()
+	s.config = configs.NewDynamicConfigForTest()
 }
 
 func (s *engine2Suite) TearDownSuite() {

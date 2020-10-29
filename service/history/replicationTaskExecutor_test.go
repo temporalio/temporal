@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -63,7 +64,7 @@ type (
 		mockResource       *resource.Test
 		mockShard          ShardContext
 		mockEngine         *MockEngine
-		config             *Config
+		config             *configs.Config
 		historyClient      *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *cache.MockNamespaceCache
 		mockClientBean     *client.MockBean

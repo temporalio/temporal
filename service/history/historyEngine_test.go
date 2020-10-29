@@ -74,6 +74,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 )
 
@@ -100,7 +101,7 @@ type (
 		mockShardManager  *mocks.ShardManager
 
 		eventsCache events.Cache
-		config      *Config
+		config      *configs.Config
 	}
 )
 
@@ -187,9 +188,9 @@ var testGlobalChildNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 	nil,
 )
 
-func NewDynamicConfigForTest() *Config {
+func NewDynamicConfigForTest() *configs.Config {
 	dc := dynamicconfig.NewNopCollection()
-	config := NewConfig(dc, 1, false)
+	config := configs.NewConfig(dc, 1, false)
 	// reduce the duration of long poll to increase test speed
 	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
 	return config
@@ -201,7 +202,7 @@ func TestEngineSuite(t *testing.T) {
 }
 
 func (s *engineSuite) SetupSuite() {
-	s.config = NewDynamicConfigForTest()
+	s.config = configs.NewDynamicConfigForTest()
 }
 
 func (s *engineSuite) TearDownSuite() {
@@ -277,7 +278,7 @@ func (s *engineSuite) SetupTest() {
 		metricsClient:       s.mockShard.GetMetricsClient(),
 		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
 		eventNotifier:       eventNitifier,
-		config:              NewDynamicConfigForTest(),
+		config:              configs.NewDynamicConfigForTest(),
 		txProcessor:         s.mockTxProcessor,
 		replicatorProcessor: s.mockReplicationProcessor,
 		timerProcessor:      s.mockTimerProcessor,
@@ -5048,7 +5049,7 @@ func addWorkflowTaskStartedEventWithRequestID(builder mutableState, scheduleID i
 func addWorkflowTaskCompletedEvent(builder mutableState, scheduleID, startedID int64, identity string) *historypb.HistoryEvent {
 	event, _ := builder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: identity,
-	}, defaultHistoryMaxAutoResetPoints)
+	}, configs.DefaultHistoryMaxAutoResetPoints)
 
 	builder.FlushBufferedEvents() // nolint:errcheck
 

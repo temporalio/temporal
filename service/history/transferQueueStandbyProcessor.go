@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -43,7 +44,7 @@ type (
 
 		clusterName        string
 		shard              ShardContext
-		config             *Config
+		config             *configs.Config
 		transferTaskFilter taskFilter
 		logger             log.Logger
 		metricsClient      metrics.Client

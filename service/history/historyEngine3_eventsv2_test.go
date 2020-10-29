@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 )
 
@@ -76,7 +77,7 @@ type (
 		mockExecutionMgr *mocks.ExecutionManager
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
 
-		config *Config
+		config *configs.Config
 		logger log.Logger
 	}
 )

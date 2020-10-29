@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 
 	"github.com/pborman/uuid"
@@ -67,7 +68,7 @@ type (
 		controller              *shardController
 		tokenSerializer         common.TaskTokenSerializer
 		startWG                 sync.WaitGroup
-		config                  *Config
+		config                  *configs.Config
 		eventNotifier           events.Notifier
 		publisher               messaging.Producer
 		rateLimiter             quotas.Limiter
@@ -102,7 +103,7 @@ var (
 // NewHandler creates a thrift handler for the history service
 func NewHandler(
 	resource resource.Resource,
-	config *Config,
+	config *configs.Config,
 ) *Handler {
 	handler := &Handler{
 		Resource:        resource,

@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type workflowContext interface {
@@ -229,7 +230,7 @@ func terminateWorkflow(
 	return err
 }
 
-func getWorkflowExecutionTimeout(namespace string, requestedTimeout time.Duration, serviceConfig *Config) time.Duration {
+func getWorkflowExecutionTimeout(namespace string, requestedTimeout time.Duration, serviceConfig *configs.Config) time.Duration {
 	return common.GetWorkflowExecutionTimeout(
 		namespace,
 		requestedTimeout,
@@ -238,7 +239,7 @@ func getWorkflowExecutionTimeout(namespace string, requestedTimeout time.Duratio
 	)
 }
 
-func getWorkflowRunTimeout(namespace string, requestedTimeout, executionTimeout time.Duration, serviceConfig *Config) time.Duration {
+func getWorkflowRunTimeout(namespace string, requestedTimeout, executionTimeout time.Duration, serviceConfig *configs.Config) time.Duration {
 	return common.GetWorkflowRunTimeout(
 		namespace,
 		requestedTimeout,

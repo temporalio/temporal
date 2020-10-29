@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/common/service/config"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -147,7 +148,7 @@ type (
 		metricsClient             metrics.Client
 		logger                    log.Logger
 		throttledLogger           log.Logger
-		config                    *Config
+		config                    *configs.Config
 		archivalClient            archiver.Client
 		workflowResetter          workflowResetter
 		queueTaskProcessor        queueTaskProcessor
@@ -219,7 +220,7 @@ func NewEngineWithShardContext(
 	publicClient sdkclient.Client,
 	eventNotifier events.Notifier,
 	publisher messaging.Producer,
-	config *Config,
+	config *configs.Config,
 	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matching.Client,
 	queueTaskProcessor queueTaskProcessor,
