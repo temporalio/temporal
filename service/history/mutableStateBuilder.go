@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/wss"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/events"
 )
 
 const (
@@ -165,7 +166,7 @@ type (
 
 		shard           ShardContext
 		clusterMetadata cluster.Metadata
-		eventsCache     eventsCache
+		eventsCache     events.Cache
 		config          *Config
 		timeSource      clock.TimeSource
 		logger          log.Logger
@@ -177,7 +178,7 @@ var _ mutableState = (*mutableStateBuilder)(nil)
 
 func newMutableStateBuilder(
 	shard ShardContext,
-	eventsCache eventsCache,
+	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *cache.NamespaceCacheEntry,
 ) *mutableStateBuilder {
@@ -250,7 +251,7 @@ func newMutableStateBuilder(
 
 func newMutableStateBuilderWithVersionHistories(
 	shard ShardContext,
-	eventsCache eventsCache,
+	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *cache.NamespaceCacheEntry,
 ) *mutableStateBuilder {
@@ -952,7 +953,7 @@ func (e *mutableStateBuilder) GetActivityScheduledEvent(
 	if err != nil {
 		return nil, err
 	}
-	scheduledEvent, err := e.eventsCache.getEvent(
+	scheduledEvent, err := e.eventsCache.GetEvent(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
 		e.executionState.RunId,
@@ -1024,7 +1025,7 @@ func (e *mutableStateBuilder) GetChildExecutionInitiatedEvent(
 	if err != nil {
 		return nil, err
 	}
-	initiatedEvent, err := e.eventsCache.getEvent(
+	initiatedEvent, err := e.eventsCache.GetEvent(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
 		e.executionState.RunId,
@@ -1113,7 +1114,7 @@ func (e *mutableStateBuilder) GetCompletionEvent() (*historypb.HistoryEvent, err
 	// Completion EventID is always one less than NextEventID after workflow is completed
 	completionEventID := e.nextEventID - 1
 	firstEventID := e.executionInfo.CompletionEventBatchId
-	completionEvent, err := e.eventsCache.getEvent(
+	completionEvent, err := e.eventsCache.GetEvent(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
 		e.executionState.RunId,
@@ -1139,7 +1140,7 @@ func (e *mutableStateBuilder) GetStartEvent() (*historypb.HistoryEvent, error) {
 		return nil, err
 	}
 
-	startEvent, err := e.eventsCache.getEvent(
+	startEvent, err := e.eventsCache.GetEvent(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
 		e.executionState.RunId,
@@ -1224,7 +1225,7 @@ func (e *mutableStateBuilder) writeEventToCache(
 	// load it from database
 	// For completion event: store it within events cache so we can communicate the result to parent execution
 	// during the processing of DeleteTransferTask without loading this event from database
-	e.eventsCache.putEvent(
+	e.eventsCache.PutEvent(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
 		e.executionState.RunId,
@@ -2114,7 +2115,7 @@ func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(
 	event := e.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, attributes)
 
 	// Write the event to cache only on active cluster for processing on activity started or retried
-	e.eventsCache.putEvent(
+	e.eventsCache.PutEvent(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
 		e.executionState.RunId,
@@ -3387,7 +3388,7 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 
 	event := e.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, attributes)
 	// Write the event to cache only on active cluster
-	e.eventsCache.putEvent(e.executionInfo.NamespaceId, e.executionInfo.WorkflowId, e.executionState.RunId,
+	e.eventsCache.PutEvent(e.executionInfo.NamespaceId, e.executionInfo.WorkflowId, e.executionState.RunId,
 		event.GetEventId(), event)
 
 	ci, err := e.ReplicateStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event, createRequestID)

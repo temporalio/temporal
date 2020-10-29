@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/service/history/events"
 )
 
 type (
@@ -58,7 +59,7 @@ type (
 		GetNamespaceCache() cache.NamespaceCache
 		GetClusterMetadata() cluster.Metadata
 		GetConfig() *Config
-		GetEventsCache() eventsCache
+		GetEventsCache() events.Cache
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger
 		GetMetricsClient() metrics.Client
@@ -122,7 +123,7 @@ type (
 		shardID          int32
 		rangeID          int64
 		executionManager persistence.ExecutionManager
-		eventsCache      eventsCache
+		eventsCache      events.Cache
 		closeCallback    func(int32, *historyShardsItem)
 		closed           int32
 		config           *Config
@@ -842,7 +843,7 @@ func (s *shardContextImpl) PreviousShardOwnerWasDifferent() bool {
 	return s.previousShardOwnerWasDifferent
 }
 
-func (s *shardContextImpl) GetEventsCache() eventsCache {
+func (s *shardContextImpl) GetEventsCache() events.Cache {
 	return s.eventsCache
 }
 
@@ -1244,7 +1245,16 @@ func acquireShard(
 		throttledLogger:                shardItem.throttledLogger,
 		previousShardOwnerWasDifferent: ownershipChanged,
 	}
-	shardContext.eventsCache = newEventsCache(shardContext)
+	shardContext.eventsCache = events.NewEventsCache(
+		convert.Int32Ptr(shardContext.GetShardID()),
+		shardContext.GetConfig().EventsCacheInitialSize(),
+		shardContext.GetConfig().EventsCacheMaxSize(),
+		shardContext.GetConfig().EventsCacheTTL(),
+		shardContext.GetHistoryManager(),
+		false,
+		shardContext.GetLogger(),
+		shardContext.GetMetricsClient(),
+	)
 
 	err1 := shardContext.renewRangeLocked(true)
 	if err1 != nil {
