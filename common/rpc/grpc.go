@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/gogo/status"
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
@@ -93,4 +94,9 @@ func errorInterceptor(ctx context.Context, method string, req, reply interface{}
 func versionHeadersInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 	ctx = headers.PropagateVersions(ctx)
 	return invoker(ctx, method, req, reply, cc, opts...)
+}
+
+func ServiceErrorInterceptor(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	resp, err := handler(ctx, req)
+	return resp, serviceerror.ToStatus(err).Err()
 }

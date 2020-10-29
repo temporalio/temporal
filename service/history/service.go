@@ -135,7 +135,9 @@ func (s *Service) Start() {
 	if err != nil {
 		logger.Fatal("creating grpc server options failed", tag.Error(err))
 	}
-	opts = append(opts, grpc.UnaryInterceptor(rpc.Interceptor))
+	opts = append(
+		opts,
+		grpc.ChainUnaryInterceptor(rpc.ServiceErrorInterceptor))
 	s.server = grpc.NewServer(opts...)
 	historyservice.RegisterHistoryServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.handler)
