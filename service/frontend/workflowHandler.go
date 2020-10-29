@@ -849,7 +849,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 				tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
 				tag.Value(ctxTimeout),
 				tag.Error(errCancel))
-			return nil, wh.error(errCancel, scope)
 		}
 		return nil, wh.error(err, scope)
 	}
@@ -1107,7 +1106,6 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 				tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
 				tag.Value(ctxTimeout),
 				tag.Error(errCancel))
-			return nil, wh.error(errCancel, scope)
 		}
 		return nil, wh.error(err, scope)
 	}
