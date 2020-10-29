@@ -50,6 +50,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -353,7 +354,7 @@ func (s *cliAppSuite) TestCancelWorkflow() {
 
 func (s *cliAppSuite) TestCancelWorkflow_Failed() {
 	s.sdkClient.On("CancelWorkflow", mock.Anything, mock.Anything, mock.Anything).Return(serviceerror.NewInvalidArgument("faked error")).Once()
-	//s.frontendClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
+	// s.frontendClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
 	errorCode := s.RunErrorExitCode([]string{"", "--ns", cliTestNamespace, "workflow", "cancel", "-w", "wid"})
 	s.Equal(1, errorCode)
 	s.sdkClient.AssertExpectations(s.T())
@@ -521,20 +522,29 @@ var describeTaskQueueResponse = &workflowservice.DescribeTaskQueueResponse{
 	},
 }
 
-func (s *cliAppSuite) TestAdminDescribeWorkflow() {
-	resp := &adminservice.DescribeWorkflowExecutionResponse{
-		ShardId:              "test-shard-id",
-		HistoryAddr:          "ip:port",
-		DatabaseMutableState: `{"ExecutionInfo":{"EventBranchToken":"ChBNWvyipehOuYvioA1u+suwEhDyawZ9XsdN6Liiof+Novu5"}}`,
+func (s *cliAppSuite) TestAdminDescribeMutableState() {
+	resp := &adminservice.DescribeMutableStateResponse{
+		ShardId:     "test-shard-id",
+		HistoryAddr: "ip:port",
+		DatabaseMutableState: &persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				EventBranchToken: []byte{10, 3, 113, 119, 101, 18, 3, 97, 115, 100},
+			},
+		},
+		CacheMutableState: &persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				EventBranchToken: []byte{10, 3, 113, 119, 101, 18, 3, 97, 115, 100},
+			},
+		},
 	}
 
-	s.serverAdminClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.serverAdminClient.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).Return(resp, nil)
 	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "admin", "wf", "describe", "-w", "test-wf-id"})
 	s.Nil(err)
 }
 
 func (s *cliAppSuite) TestAdminDescribeWorkflow_Failed() {
-	s.serverAdminClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
+	s.serverAdminClient.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
 	errorCode := s.RunErrorExitCode([]string{"", "--ns", cliTestNamespace, "admin", "wf", "describe", "-w", "test-wf-id"})
 	s.Equal(1, errorCode)
 }
