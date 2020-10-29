@@ -28,12 +28,11 @@ import (
 	"fmt"
 
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/common"
 )
 
 // NewItem create a new version history item
 func NewItem(eventID int64, version int64) *historyspb.VersionHistoryItem {
-	if eventID < common.FirstEventID || version < common.EmptyVersion {
+	if eventID < 0 || version < 0 {
 		panic(fmt.Sprintf("invalid version history item event ID: %v, version: %v", eventID, version))
 	}
 
