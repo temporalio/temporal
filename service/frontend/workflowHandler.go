@@ -851,8 +851,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 				tag.Error(errCancel))
 			return nil, wh.error(errCancel, scope)
 		}
-
-		return nil, err
+		return nil, wh.error(err, scope)
 	}
 
 	tagsForErrorLog = append(tagsForErrorLog, []tag.Tag{tag.WorkflowID(
