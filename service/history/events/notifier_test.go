@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package events
 
 import (
 	"sync"
@@ -42,31 +42,31 @@ import (
 )
 
 type (
-	historyEventNotifierSuite struct {
+	notifierSuite struct {
 		suite.Suite
 		*require.Assertions
 
-		historyEventNotifier *historyEventNotifierImpl
+		notifier *NotifierImpl
 	}
 )
 
 func TestHistoryEventNotifierSuite(t *testing.T) {
-	s := new(historyEventNotifierSuite)
+	s := new(notifierSuite)
 	suite.Run(t, s)
 }
 
-func (s *historyEventNotifierSuite) SetupSuite() {
+func (s *notifierSuite) SetupSuite() {
 
 }
 
-func (s *historyEventNotifierSuite) TearDownSuite() {
+func (s *notifierSuite) TearDownSuite() {
 
 }
 
-func (s *historyEventNotifierSuite) SetupTest() {
+func (s *notifierSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.historyEventNotifier = newHistoryEventNotifier(
+	s.notifier = NewNotifier(
 		clock.NewRealTimeSource(),
 		metrics.NewClient(tally.NoopScope, metrics.History),
 		func(namespaceID, workflowID string) int32 {
@@ -74,14 +74,14 @@ func (s *historyEventNotifierSuite) SetupTest() {
 			return int32(len(key))
 		},
 	)
-	s.historyEventNotifier.Start()
+	s.notifier.Start()
 }
 
-func (s *historyEventNotifierSuite) TearDownTest() {
-	s.historyEventNotifier.Stop()
+func (s *notifierSuite) TearDownTest() {
+	s.notifier.Stop()
 }
 
-func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
+func (s *notifierSuite) TestSingleSubscriberWatchingEvents() {
 	namespaceID := "namespace ID"
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "workflow ID",
@@ -93,15 +93,15 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	workflowState := enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
 	workflowStatus := enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	branchToken := make([]byte, 0)
-	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
+	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
 	timerChan := time.NewTimer(time.Second * 2).C
 
-	subscriberID, channel, err := s.historyEventNotifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
+	subscriberID, channel, err := s.notifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
 	s.Nil(err)
 
 	go func() {
 		<-timerChan
-		s.historyEventNotifier.NotifyNewHistoryEvent(historyEvent)
+		s.notifier.NotifyNewHistoryEvent(historyEvent)
 	}()
 
 	select {
@@ -109,11 +109,11 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 		s.Equal(historyEvent, msg)
 	}
 
-	err = s.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
+	err = s.notifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
 	s.Nil(err)
 }
 
-func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
+func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
 	namespaceID := "namespace ID"
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "workflow ID",
@@ -126,7 +126,7 @@ func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	workflowState := enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
 	workflowStatus := enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	branchToken := make([]byte, 0)
-	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
+	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
 	timerChan := time.NewTimer(time.Second * 5).C
 
 	subscriberCount := 100
@@ -134,7 +134,7 @@ func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	waitGroup.Add(subscriberCount)
 
 	watchFunc := func() {
-		subscriberID, channel, err := s.historyEventNotifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
+		subscriberID, channel, err := s.notifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
 		s.Nil(err)
 
 		timeourChan := time.NewTimer(time.Second * 10).C
@@ -145,7 +145,7 @@ func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 		case <-timeourChan:
 			s.Fail("subscribe to new events timeout")
 		}
-		err = s.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
+		err = s.notifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
 		s.Nil(err)
 		waitGroup.Done()
 	}
@@ -155,6 +155,6 @@ func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	}
 
 	<-timerChan
-	s.historyEventNotifier.NotifyNewHistoryEvent(historyEvent)
+	s.notifier.NotifyNewHistoryEvent(historyEvent)
 	waitGroup.Wait()
 }

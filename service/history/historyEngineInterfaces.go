@@ -32,7 +32,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/task"
 )
@@ -126,13 +125,6 @@ type (
 		getAckLevel() timerKey
 		getReadLevel() timerKey
 		updateAckLevel() error
-	}
-
-	historyEventNotifier interface {
-		common.Daemon
-		NotifyNewHistoryEvent(event *historyEventNotification)
-		WatchHistoryEvent(identifier definition.WorkflowIdentifier) (string, chan *historyEventNotification, error)
-		UnwatchHistoryEvent(identifier definition.WorkflowIdentifier, subscriberID string) error
 	}
 
 	queueType int

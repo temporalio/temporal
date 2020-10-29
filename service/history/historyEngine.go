@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/common/service/config"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -120,7 +121,7 @@ type (
 		MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error)
 		RefreshWorkflowTasks(ctx context.Context, namespaceUUID string, execution commonpb.WorkflowExecution) error
 
-		NotifyNewHistoryEvent(event *historyEventNotification)
+		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTransferTasks(tasks []persistence.Task)
 		NotifyNewReplicationTasks(tasks []persistence.Task)
 		NotifyNewTimerTasks(tasks []persistence.Task)
@@ -140,7 +141,7 @@ type (
 		nDCReplicator             nDCHistoryReplicator
 		nDCActivityReplicator     nDCActivityReplicator
 		replicatorProcessor       ReplicatorQueueProcessor
-		historyEventNotifier      historyEventNotifier
+		eventNotifier             events.Notifier
 		tokenSerializer           common.TaskTokenSerializer
 		historyCache              *historyCache
 		metricsClient             metrics.Client
@@ -216,7 +217,7 @@ func NewEngineWithShardContext(
 	matching matching.Client,
 	historyClient history.Client,
 	publicClient sdkclient.Client,
-	historyEventNotifier historyEventNotifier,
+	eventNotifier events.Notifier,
 	publisher messaging.Producer,
 	config *Config,
 	replicationTaskFetchers ReplicationTaskFetchers,
@@ -230,20 +231,20 @@ func NewEngineWithShardContext(
 	historyV2Manager := shard.GetHistoryManager()
 	historyCache := newHistoryCache(shard)
 	historyEngImpl := &historyEngineImpl{
-		currentClusterName:   currentClusterName,
-		shard:                shard,
-		clusterMetadata:      shard.GetClusterMetadata(),
-		timeSource:           shard.GetTimeSource(),
-		historyV2Mgr:         historyV2Manager,
-		executionManager:     executionManager,
-		visibilityMgr:        visibilityMgr,
-		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
-		historyCache:         historyCache,
-		logger:               logger.WithTags(tag.ComponentHistoryEngine),
-		throttledLogger:      shard.GetThrottledLogger().WithTags(tag.ComponentHistoryEngine),
-		metricsClient:        shard.GetMetricsClient(),
-		historyEventNotifier: historyEventNotifier,
-		config:               config,
+		currentClusterName: currentClusterName,
+		shard:              shard,
+		clusterMetadata:    shard.GetClusterMetadata(),
+		timeSource:         shard.GetTimeSource(),
+		historyV2Mgr:       historyV2Manager,
+		executionManager:   executionManager,
+		visibilityMgr:      visibilityMgr,
+		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		historyCache:       historyCache,
+		logger:             logger.WithTags(tag.ComponentHistoryEngine),
+		throttledLogger:    shard.GetThrottledLogger().WithTags(tag.ComponentHistoryEngine),
+		metricsClient:      shard.GetMetricsClient(),
+		eventNotifier:      eventNotifier,
+		config:             config,
 		archivalClient: archiver.NewClient(
 			shard.GetMetricsClient(),
 			logger,
@@ -742,11 +743,11 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 	// if caller decide to long poll on workflow execution
 	// and the event ID we are looking for is smaller than current next event ID
 	if expectedNextEventID >= response.GetNextEventId() && response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		subscriberID, channel, err := e.historyEventNotifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
+		subscriberID, channel, err := e.eventNotifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
 		if err != nil {
 			return nil, err
 		}
-		defer e.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID) // nolint:errcheck
+		defer e.eventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID) // nolint:errcheck
 		// check again in case the next event ID is updated
 		response, err = e.getMutableState(ctx, namespaceID, execution)
 		if err != nil {
@@ -769,13 +770,13 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		for {
 			select {
 			case event := <-channel:
-				response.LastFirstEventId = event.lastFirstEventID
-				response.NextEventId = event.nextEventID
-				response.PreviousStartedEventId = event.previousStartedEventID
-				response.WorkflowState = event.workflowState
-				response.WorkflowStatus = event.workflowStatus
-				if !bytes.Equal(request.CurrentBranchToken, event.currentBranchToken) {
-					return nil, serviceerrors.NewCurrentBranchChanged(event.currentBranchToken, request.CurrentBranchToken)
+				response.LastFirstEventId = event.LastFirstEventID
+				response.NextEventId = event.NextEventID
+				response.PreviousStartedEventId = event.PreviousStartedEventID
+				response.WorkflowState = event.WorkflowState
+				response.WorkflowStatus = event.WorkflowStatus
+				if !bytes.Equal(request.CurrentBranchToken, event.CurrentBranchToken) {
+					return nil, serviceerrors.NewCurrentBranchChanged(event.CurrentBranchToken, request.CurrentBranchToken)
 				}
 				if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 					return response, nil
@@ -2544,10 +2545,10 @@ func (e *historyEngineImpl) failWorkflowTask(
 }
 
 func (e *historyEngineImpl) NotifyNewHistoryEvent(
-	event *historyEventNotification,
+	notification *events.Notification,
 ) {
 
-	e.historyEventNotifier.NotifyNewHistoryEvent(event)
+	e.eventNotifier.NotifyNewHistoryEvent(notification)
 }
 
 func (e *historyEngineImpl) NotifyNewTransferTasks(
