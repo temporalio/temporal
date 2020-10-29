@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/service/history/events"
 )
 
 const (
@@ -537,7 +538,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 
 	workflowState, workflowStatus := resetMutableState.GetWorkflowStateStatus()
 	// Current branch changed and notify the watchers
-	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
+	c.engine.NotifyNewHistoryEvent(events.NewNotification(
 		c.namespaceID,
 		&c.workflowExecution,
 		resetMutableState.GetLastFirstEventID(),
@@ -760,7 +761,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		return err
 	}
 	workflowState, workflowStatus := c.mutableState.GetWorkflowStateStatus()
-	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
+	c.engine.NotifyNewHistoryEvent(events.NewNotification(
 		c.namespaceID,
 		&c.workflowExecution,
 		c.mutableState.GetLastFirstEventID(),

@@ -141,22 +141,22 @@ func (s *engine2Suite) SetupTest() {
 
 	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName:   s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
-		shard:                s.mockShard,
-		clusterMetadata:      s.mockClusterMetadata,
-		executionManager:     s.mockExecutionMgr,
-		historyV2Mgr:         s.mockHistoryV2Mgr,
-		historyCache:         historyCache,
-		logger:               s.logger,
-		throttledLogger:      s.logger,
-		metricsClient:        metrics.NewClient(tally.NoopScope, metrics.History),
-		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
-		config:               s.config,
-		timeSource:           s.mockShard.GetTimeSource(),
-		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
-		txProcessor:          s.mockTxProcessor,
-		replicatorProcessor:  s.mockReplicationProcessor,
-		timerProcessor:       s.mockTimerProcessor,
+		currentClusterName:  s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
+		shard:               s.mockShard,
+		clusterMetadata:     s.mockClusterMetadata,
+		executionManager:    s.mockExecutionMgr,
+		historyV2Mgr:        s.mockHistoryV2Mgr,
+		historyCache:        historyCache,
+		logger:              s.logger,
+		throttledLogger:     s.logger,
+		metricsClient:       metrics.NewClient(tally.NoopScope, metrics.History),
+		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
+		config:              s.config,
+		timeSource:          s.mockShard.GetTimeSource(),
+		eventNotifier:       events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
+		txProcessor:         s.mockTxProcessor,
+		replicatorProcessor: s.mockReplicationProcessor,
+		timerProcessor:      s.mockTimerProcessor,
 	}
 	s.mockShard.SetEngine(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)

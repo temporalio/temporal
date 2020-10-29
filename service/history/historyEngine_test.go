@@ -256,7 +256,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testLocalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(testNamespace).Return(testLocalNamespaceEntry, nil).AnyTimes()
 
-	historyEventNotifier := newHistoryEventNotifier(
+	eventNitifier := events.NewNotifier(
 		clock.NewRealTimeSource(),
 		s.mockShard.resource.MetricsClient,
 		func(namespaceID, workflowID string) int32 {
@@ -267,27 +267,27 @@ func (s *engineSuite) SetupTest() {
 
 	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName:   s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
-		shard:                s.mockShard,
-		clusterMetadata:      s.mockClusterMetadata,
-		executionManager:     s.mockExecutionMgr,
-		historyV2Mgr:         s.mockHistoryV2Mgr,
-		historyCache:         historyCache,
-		logger:               s.mockShard.GetLogger(),
-		metricsClient:        s.mockShard.GetMetricsClient(),
-		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
-		historyEventNotifier: historyEventNotifier,
-		config:               NewDynamicConfigForTest(),
-		txProcessor:          s.mockTxProcessor,
-		replicatorProcessor:  s.mockReplicationProcessor,
-		timerProcessor:       s.mockTimerProcessor,
-		eventsReapplier:      s.mockEventsReapplier,
-		workflowResetter:     s.mockWorkflowResetter,
+		currentClusterName:  s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
+		shard:               s.mockShard,
+		clusterMetadata:     s.mockClusterMetadata,
+		executionManager:    s.mockExecutionMgr,
+		historyV2Mgr:        s.mockHistoryV2Mgr,
+		historyCache:        historyCache,
+		logger:              s.mockShard.GetLogger(),
+		metricsClient:       s.mockShard.GetMetricsClient(),
+		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
+		eventNotifier:       eventNitifier,
+		config:              NewDynamicConfigForTest(),
+		txProcessor:         s.mockTxProcessor,
+		replicatorProcessor: s.mockReplicationProcessor,
+		timerProcessor:      s.mockTimerProcessor,
+		eventsReapplier:     s.mockEventsReapplier,
+		workflowResetter:    s.mockWorkflowResetter,
 	}
 	s.mockShard.SetEngine(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
 
-	h.historyEventNotifier.Start()
+	h.eventNotifier.Start()
 
 	s.mockHistoryEngine = h
 }
@@ -295,7 +295,7 @@ func (s *engineSuite) SetupTest() {
 func (s *engineSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.Finish(s.T())
-	s.mockHistoryEngine.historyEventNotifier.Stop()
+	s.mockHistoryEngine.eventNotifier.Stop()
 }
 
 func (s *engineSuite) TestGetMutableStateSync() {
@@ -461,7 +461,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			WorkflowId: execution.WorkflowId,
 			RunId:      execution.RunId,
 		}
-		s.mockHistoryEngine.historyEventNotifier.NotifyNewHistoryEvent(newHistoryEventNotification(
+		s.mockHistoryEngine.eventNotifier.NotifyNewHistoryEvent(events.NewNotification(
 			"testNamespaceID",
 			newExecution,
 			int64(1),

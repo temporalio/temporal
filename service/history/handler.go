@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/service/history/events"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -67,7 +68,7 @@ type (
 		tokenSerializer         common.TaskTokenSerializer
 		startWG                 sync.WaitGroup
 		config                  *Config
-		historyEventNotifier    historyEventNotifier
+		eventNotifier           events.Notifier
 		publisher               messaging.Producer
 		rateLimiter             quotas.Limiter
 		replicationTaskFetchers ReplicationTaskFetchers
@@ -187,9 +188,9 @@ func (h *Handler) Start() {
 		h,
 		h.config,
 	)
-	h.historyEventNotifier = newHistoryEventNotifier(h.GetTimeSource(), h.GetMetricsClient(), h.config.GetShardID)
+	h.eventNotifier = events.NewNotifier(h.GetTimeSource(), h.GetMetricsClient(), h.config.GetShardID)
 	// events notifier must starts before controller
-	h.historyEventNotifier.Start()
+	h.eventNotifier.Start()
 	h.controller.Start()
 
 	h.startWG.Done()
@@ -203,7 +204,7 @@ func (h *Handler) Stop() {
 		h.queueTaskProcessor.Stop()
 	}
 	h.controller.Stop()
-	h.historyEventNotifier.Stop()
+	h.eventNotifier.Stop()
 }
 
 // PrepareToStop starts graceful traffic drain in preparation for shutdown
@@ -225,7 +226,7 @@ func (h *Handler) CreateEngine(
 		h.GetMatchingClient(),
 		h.GetHistoryClient(),
 		h.GetSDKClient(),
-		h.historyEventNotifier,
+		h.eventNotifier,
 		h.publisher,
 		h.config,
 		h.replicationTaskFetchers,
