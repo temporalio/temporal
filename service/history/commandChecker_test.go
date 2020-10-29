@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -83,7 +84,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
-	config := &Config{
+	config := &configs.Config{
 		MaxIDLengthLimit:                  dynamicconfig.GetIntPropertyFn(1000),
 		ValidSearchAttributes:             dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
 		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFilteredByNamespace(100),

@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -62,7 +63,7 @@ type (
 		metricsClient  metrics.Client
 		matchingClient matching.Client
 		visibilityMgr  persistence.VisibilityManager
-		config         *Config
+		config         *configs.Config
 	}
 )
 
@@ -71,7 +72,7 @@ func newTransferQueueTaskExecutorBase(
 	historyService *historyEngineImpl,
 	logger log.Logger,
 	metricsClient metrics.Client,
-	config *Config,
+	config *configs.Config,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
 		shard:          shard,

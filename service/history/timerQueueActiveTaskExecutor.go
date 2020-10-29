@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -60,7 +61,7 @@ func newTimerQueueActiveTaskExecutor(
 	queueProcessor *timerQueueActiveProcessorImpl,
 	logger log.Logger,
 	metricsClient metrics.Client,
-	config *Config,
+	config *configs.Config,
 ) queueTaskExecutor {
 	return &timerQueueActiveTaskExecutor{
 		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(

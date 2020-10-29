@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -71,7 +72,7 @@ type (
 		logger         log.Logger
 		namespaceCache cache.NamespaceCache
 		metricsClient  metrics.Client
-		config         *Config
+		config         *configs.Config
 	}
 
 	workflowTaskFailedError struct {
@@ -92,7 +93,7 @@ func newWorkflowTaskHandler(
 	logger log.Logger,
 	namespaceCache cache.NamespaceCache,
 	metricsClient metrics.Client,
-	config *Config,
+	config *configs.Config,
 ) *workflowTaskHandlerImpl {
 
 	return &workflowTaskHandlerImpl{

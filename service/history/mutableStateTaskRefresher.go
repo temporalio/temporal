@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 )
 
@@ -49,7 +50,7 @@ type (
 	}
 
 	mutableStateTaskRefresherImpl struct {
-		config         *Config
+		config         *configs.Config
 		namespaceCache cache.NamespaceCache
 		eventsCache    events.Cache
 		logger         log.Logger
@@ -57,7 +58,7 @@ type (
 )
 
 func newMutableStateTaskRefresher(
-	config *Config,
+	config *configs.Config,
 	namespaceCache cache.NamespaceCache,
 	eventsCache events.Cache,
 	logger log.Logger,

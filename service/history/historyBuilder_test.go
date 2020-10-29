@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 )
 
@@ -834,7 +835,7 @@ func (s *historyBuilderSuite) addWorkflowTaskStartedEvent(scheduleID int64,
 func (s *historyBuilderSuite) addWorkflowTaskCompletedEvent(scheduleID, startedID int64, identity string) *historypb.HistoryEvent {
 	event, err := s.msBuilder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: identity,
-	}, defaultHistoryMaxAutoResetPoints)
+	}, configs.DefaultHistoryMaxAutoResetPoints)
 	s.Nil(err)
 
 	return event

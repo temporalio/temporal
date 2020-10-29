@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 )
 
@@ -138,7 +139,7 @@ type (
 		logger            log.Logger
 		metricsClient     metrics.Client
 		timeSource        clock.TimeSource
-		config            *Config
+		config            *configs.Config
 
 		mutex           locks.Mutex
 		mutableState    mutableState

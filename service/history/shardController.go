@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/service/history/configs"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -58,7 +59,7 @@ type (
 		shutdownCh         chan struct{}
 		logger             log.Logger
 		throttledLogger    log.Logger
-		config             *Config
+		config             *configs.Config
 		metricsScope       metrics.Scope
 
 		sync.RWMutex
@@ -71,7 +72,7 @@ type (
 		resource.Resource
 
 		shardID         int32
-		config          *Config
+		config          *configs.Config
 		logger          log.Logger
 		throttledLogger log.Logger
 		engineFactory   EngineFactory
@@ -91,7 +92,7 @@ const (
 func newShardController(
 	resource resource.Resource,
 	factory EngineFactory,
-	config *Config,
+	config *configs.Config,
 ) *shardController {
 	hostIdentity := resource.GetHostInfo().Identity()
 	return &shardController{
@@ -112,7 +113,7 @@ func newHistoryShardsItem(
 	resource resource.Resource,
 	shardID int32,
 	factory EngineFactory,
-	config *Config,
+	config *configs.Config,
 ) (*historyShardsItem, error) {
 
 	hostIdentity := resource.GetHostInfo().Identity()

@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 )
 
@@ -113,7 +114,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
-	config := NewDynamicConfigForTest()
+	config := configs.NewDynamicConfigForTest()
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{

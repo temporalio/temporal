@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/wss"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 )
 
@@ -167,7 +168,7 @@ type (
 		shard           ShardContext
 		clusterMetadata cluster.Metadata
 		eventsCache     events.Cache
-		config          *Config
+		config          *configs.Config
 		timeSource      clock.TimeSource
 		logger          log.Logger
 		metricsClient   metrics.Client
