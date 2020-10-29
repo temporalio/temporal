@@ -331,7 +331,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 		}
 
 		baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
-		baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
+		baseCurrentVersionHistory, err := versionhistory.GetCurrent(baseVersionHistories)
 		if err != nil {
 			return 0, transactionPolicyActive, err
 		}

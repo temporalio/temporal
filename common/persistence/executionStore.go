@@ -636,7 +636,7 @@ func getLastWriteVersion(
 		return common.EmptyVersion, nil
 	}
 
-	versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+	versionHistory, err := versionhistory.GetCurrent(versionHistories)
 	if err != nil {
 		return 0, err
 	}

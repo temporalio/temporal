@@ -1500,7 +1500,7 @@ func (s *timerQueueActiveTaskExecutorSuite) createPersistenceMutableState(
 ) *persistencespb.WorkflowMutableState {
 
 	if ms.GetExecutionInfo().GetVersionHistories() != nil {
-		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())
+		currentVersionHistory, err := versionhistory.GetCurrent(ms.GetExecutionInfo().GetVersionHistories())
 		s.NoError(err)
 		err = versionhistory.AddOrUpdateItem(currentVersionHistory, versionhistory.NewItem(
 			lastEventID, lastEventVersion,

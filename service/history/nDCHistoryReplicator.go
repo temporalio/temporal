@@ -525,7 +525,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 		task.getLastEvent().GetEventId(),
 		task.getLastEvent().GetVersion(),
 	)
-	versionHistory, err := versionhistory.GetVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories(), branchIndex)
+	versionHistory, err := versionhistory.GetAt(mutableState.GetExecutionInfo().GetVersionHistories(), branchIndex)
 	if err != nil {
 		return err
 	}

@@ -259,7 +259,7 @@ func newMutableStateBuilderWithVersionHistories(
 ) *mutableStateBuilder {
 
 	s := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry)
-	s.executionInfo.VersionHistories = versionhistory.NewVHS(&historyspb.VersionHistory{})
+	s.executionInfo.VersionHistories = versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
 	return s
 }
 
@@ -306,8 +306,8 @@ func (e *mutableStateBuilder) Load(
 
 	// back fill version history for local namespace workflows
 	if e.executionInfo.VersionHistories == nil {
-		e.executionInfo.VersionHistories = versionhistory.NewVHS(&historyspb.VersionHistory{})
-		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
+		e.executionInfo.VersionHistories = versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
+		currentVersionHistory, err := versionhistory.GetCurrent(e.executionInfo.VersionHistories)
 		if err != nil {
 			return err
 		}
@@ -316,10 +316,7 @@ func (e *mutableStateBuilder) Load(
 		)); err != nil {
 			return err
 		}
-		err = versionhistory.SetBranchToken(currentVersionHistory, e.executionInfo.EventBranchToken)
-		if err != nil {
-			return err
-		}
+		versionhistory.SetBranchToken(currentVersionHistory, e.executionInfo.EventBranchToken)
 		e.executionInfo.EventBranchToken = nil
 	}
 
@@ -351,7 +348,7 @@ func (e *mutableStateBuilder) Load(
 
 func (e *mutableStateBuilder) GetCurrentBranchToken() ([]byte, error) {
 	if e.executionInfo.VersionHistories != nil {
-		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
+		currentVersionHistory, err := versionhistory.GetCurrent(e.executionInfo.VersionHistories)
 		if err != nil {
 			return nil, err
 		}
@@ -382,11 +379,12 @@ func (e *mutableStateBuilder) SetCurrentBranchToken(
 		return nil
 	}
 
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
+	currentVersionHistory, err := versionhistory.GetCurrent(e.executionInfo.VersionHistories)
 	if err != nil {
 		return err
 	}
-	return versionhistory.SetBranchToken(currentVersionHistory, branchToken)
+	versionhistory.SetBranchToken(currentVersionHistory, branchToken)
+	return nil
 }
 
 func (e *mutableStateBuilder) SetNextEventID(nextEventID int64) {
@@ -500,12 +498,12 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 	}
 
 	if e.executionInfo.VersionHistories != nil {
-		versionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
+		versionHistory, err := versionhistory.GetCurrent(e.executionInfo.VersionHistories)
 		if err != nil {
 			return err
 		}
 
-		if !versionhistory.IsEmpty(versionHistory) {
+		if len(versionHistory.GetItems()) > 0 {
 			// this make sure current version >= last write version
 			versionHistoryItem, err := versionhistory.GetLastItem(versionHistory)
 			if err != nil {
@@ -540,7 +538,7 @@ func (e *mutableStateBuilder) GetCurrentVersion() int64 {
 func (e *mutableStateBuilder) GetStartVersion() (int64, error) {
 
 	if e.executionInfo.VersionHistories != nil {
-		versionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
+		versionHistory, err := versionhistory.GetCurrent(e.executionInfo.VersionHistories)
 		if err != nil {
 			return 0, err
 		}
@@ -557,7 +555,7 @@ func (e *mutableStateBuilder) GetStartVersion() (int64, error) {
 func (e *mutableStateBuilder) GetLastWriteVersion() (int64, error) {
 
 	if e.executionInfo.VersionHistories != nil {
-		versionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
+		versionHistory, err := versionhistory.GetCurrent(e.executionInfo.VersionHistories)
 		if err != nil {
 			return 0, err
 		}
@@ -4240,7 +4238,7 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 	e.GetExecutionInfo().LastEventTaskId = lastEvent.GetTaskId()
 
 	if e.executionInfo.VersionHistories != nil {
-		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
+		currentVersionHistory, err := versionhistory.GetCurrent(e.executionInfo.VersionHistories)
 		if err != nil {
 			return err
 		}

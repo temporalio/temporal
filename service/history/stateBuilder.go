@@ -118,7 +118,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 			versionHistories := b.mutableState.GetExecutionInfo().GetVersionHistories()
-			versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+			versionHistory, err := versionhistory.GetCurrent(versionHistories)
 			if err != nil {
 				return nil, err
 			}

@@ -103,7 +103,7 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 	}
 
 	localVersionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
-	versionHistory, err := versionhistory.GetVersionHistory(localVersionHistories, versionHistoryIndex)
+	versionHistory, err := versionhistory.GetAt(localVersionHistories, versionHistoryIndex)
 	if err != nil {
 		return false, 0, err
 	}
@@ -122,7 +122,7 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 		return doContinue, versionHistoryIndex, nil
 	}
 
-	newVersionHistory, err := versionhistory.DuplicateUntilLCAItem(versionHistory, lcaVersionHistoryItem)
+	newVersionHistory, err := versionhistory.CopyUntilLCAItem(versionHistory, lcaVersionHistoryItem)
 	if err != nil {
 		return false, 0, err
 	}
@@ -158,7 +158,7 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 
 	localVersionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 
-	versionHistoryIndex, lcaVersionHistoryItem, err := versionhistory.FindLCAVersionHistoryIndexAndItem(
+	versionHistoryIndex, lcaVersionHistoryItem, err := versionhistory.FindLCAIndexAndItem(
 		localVersionHistories,
 		incomingVersionHistory,
 	)
@@ -194,7 +194,7 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 	r.mutableState = targetWorkflow.getMutableState()
 
 	localVersionHistories = r.mutableState.GetExecutionInfo().GetVersionHistories()
-	return versionhistory.FindLCAVersionHistoryIndexAndItem(localVersionHistories, incomingVersionHistory)
+	return versionhistory.FindLCAIndexAndItem(localVersionHistories, incomingVersionHistory)
 }
 
 func (r *nDCBranchMgrImpl) verifyEventsOrder(
@@ -253,10 +253,9 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 		return 0, err
 	}
 
-	if err := versionhistory.SetBranchToken(newVersionHistory, resp.NewBranchToken); err != nil {
-		return 0, err
-	}
-	branchChanged, newIndex, err := versionhistory.AddVersionHistory(
+	versionhistory.SetBranchToken(newVersionHistory, resp.NewBranchToken)
+
+	branchChanged, newIndex, err := versionhistory.AddTo(
 		r.mutableState.GetExecutionInfo().GetVersionHistories(),
 		newVersionHistory,
 	)

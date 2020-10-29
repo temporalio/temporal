@@ -1274,7 +1274,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	resetRunID := uuid.New()
 	baseRebuildLastEventID := resetPoint.GetFirstWorkflowTaskCompletedId() - 1
 	baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
-	baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
+	baseCurrentVersionHistory, err := versionhistory.GetCurrent(baseVersionHistories)
 	if err != nil {
 		return err
 	}

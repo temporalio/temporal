@@ -923,7 +923,7 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 	versionHistories *historyspb.VersionHistories,
 ) (*historyspb.VersionHistory, error) {
 
-	targetBranch, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+	targetBranch, err := versionhistory.GetCurrent(versionHistories)
 	if err != nil {
 		return nil, err
 	}
@@ -959,12 +959,12 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 		// this is a special case, target branch remains the same
 	} else {
 		endItem := versionhistory.NewItem(request.GetEndEventId(), request.GetEndEventVersion())
-		idx, err := versionhistory.FindFirstVersionHistoryIndexByItem(versionHistories, endItem)
+		idx, err := versionhistory.FindFirstIndexByItem(versionHistories, endItem)
 		if err != nil {
 			return nil, err
 		}
 
-		targetBranch, err = versionhistory.GetVersionHistory(versionHistories, idx)
+		targetBranch, err = versionhistory.GetAt(versionHistories, idx)
 		if err != nil {
 			return nil, err
 		}
@@ -978,11 +978,11 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 		// this is a special case, start event is on the same branch as target branch
 	} else {
 		if !versionhistory.ContainsItem(targetBranch, startItem) {
-			idx, err := versionhistory.FindFirstVersionHistoryIndexByItem(versionHistories, startItem)
+			idx, err := versionhistory.FindFirstIndexByItem(versionHistories, startItem)
 			if err != nil {
 				return nil, err
 			}
-			startBranch, err := versionhistory.GetVersionHistory(versionHistories, idx)
+			startBranch, err := versionhistory.GetAt(versionHistories, idx)
 			if err != nil {
 				return nil, err
 			}

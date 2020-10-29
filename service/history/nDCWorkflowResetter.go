@@ -176,7 +176,7 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 	}()
 
 	baseVersionHistories := baseWorkflow.getMutableState().GetExecutionInfo().GetVersionHistories()
-	index, err := versionhistory.FindFirstVersionHistoryIndexByItem(
+	index, err := versionhistory.FindFirstIndexByItem(
 		baseVersionHistories,
 		versionhistory.NewItem(baseLastEventID, baseLastEventVersion),
 	)
@@ -196,7 +196,7 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 		)
 	}
 
-	baseVersionHistory, err := versionhistory.GetVersionHistory(baseVersionHistories, index)
+	baseVersionHistory, err := versionhistory.GetAt(baseVersionHistories, index)
 	if err != nil {
 		return nil, err
 	}

@@ -568,7 +568,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 			var versionHistory *historyspb.VersionHistory
 			if versionHistories != nil {
 				var err error
-				versionHistory, err = versionhistory.GetCurrentVersionHistory(versionHistories)
+				versionHistory, err = versionhistory.GetCurrent(versionHistories)
 				if err != nil {
 					return nil, err
 				}
@@ -718,7 +718,7 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 		return nil, nil, serviceerror.NewInternal("replicatorQueueProcessor encounter workflow without version histories")
 	}
 
-	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByItem(
+	versionHistoryIndex, err := versionhistory.FindFirstIndexByItem(
 		versionHistories,
 		versionhistory.NewItem(
 			eventID,
@@ -729,7 +729,7 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 		return nil, nil, err
 	}
 
-	versionHistory, err := versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
+	versionHistory, err := versionhistory.GetAt(versionHistories, versionHistoryIndex)
 	if err != nil {
 		return nil, nil, err
 	}

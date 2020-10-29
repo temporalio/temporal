@@ -140,7 +140,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		branchToken,
 		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID, version)},
 	)
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
 	baseEventID := lastEventID - 100
 	baseVersion := version
@@ -220,7 +220,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 		branchToken,
 		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID, version)},
 	)
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	baseEventID := lastEventID + 100
 	baseVersion := version
 	incomingFirstEventID := baseEventID + 12

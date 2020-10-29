@@ -156,7 +156,7 @@ func getHistoryResendInfo(
 	mutableState mutableState,
 ) (*historyResendInfo, error) {
 
-	currentBranch, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())
+	currentBranch, err := versionhistory.GetCurrent(mutableState.GetExecutionInfo().GetVersionHistories())
 	if err != nil {
 		return nil, err
 	}

@@ -125,8 +125,8 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 		branchToken1,
 		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID1, version)},
 	)
-	versionHistories := versionhistory.NewVHS(versionHistory0)
-	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
+	_, _, err := versionhistory.AddTo(versionHistories, versionHistory1)
 	s.NoError(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
@@ -147,7 +147,7 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 	mockRebuildMutableState := NewMockmutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
 		&persistencespb.WorkflowExecutionInfo{
-			VersionHistories: versionhistory.NewVHS(
+			VersionHistories: versionhistory.NewVersionHistories(
 				versionhistory.New(
 					branchToken1,
 					[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID1, version)},
@@ -186,7 +186,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_NoRebuild() {
 		branchToken,
 		[]*historyspb.VersionHistoryItem{versionHistoryItem},
 	)
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
 	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.prepareMutableState(context.Background(), 0, version)
@@ -221,8 +221,8 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 		[]*historyspb.VersionHistoryItem{versionHistoryItem1},
 	)
 
-	versionHistories := versionhistory.NewVHS(versionHistory0)
-	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
+	_, _, err := versionhistory.AddTo(versionHistories, versionHistory1)
 	s.Nil(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
@@ -243,7 +243,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	mockRebuildMutableState := NewMockmutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
 		&persistencespb.WorkflowExecutionInfo{
-			VersionHistories: versionhistory.NewVHS(
+			VersionHistories: versionhistory.NewVersionHistories(
 				versionhistory.New(
 					branchToken1,
 					[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID1, version)},

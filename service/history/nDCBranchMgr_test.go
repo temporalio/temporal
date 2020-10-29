@@ -126,10 +126,10 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 		versionhistory.NewItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
 		versionhistory.NewItem(baseBranchLastEventID, baseBranchLastEventVersion),
 	})
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
 	newBranchToken := []byte("some random new branch token")
-	newVersionHistory, err := versionhistory.DuplicateUntilLCAItem(versionHistory,
+	newVersionHistory, err := versionhistory.CopyUntilLCAItem(versionHistory,
 		versionhistory.NewItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
 	)
 	s.NoError(err)
@@ -161,13 +161,13 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 	s.Nil(err)
 	s.Equal(int32(1), newIndex)
 
-	compareVersionHistory, err := versionhistory.DuplicateUntilLCAItem(
+	compareVersionHistory, err := versionhistory.CopyUntilLCAItem(
 		versionHistory,
 		versionhistory.NewItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
 	)
 	s.NoError(err)
-	s.NoError(versionhistory.SetBranchToken(compareVersionHistory, newBranchToken))
-	newVersionHistory, err = versionhistory.GetVersionHistory(versionHistories, newIndex)
+	versionhistory.SetBranchToken(compareVersionHistory, newBranchToken)
+	newVersionHistory, err = versionhistory.GetAt(versionHistories, newIndex)
 	s.NoError(err)
 	s.True(compareVersionHistory.Equal(newVersionHistory))
 }
@@ -181,9 +181,9 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 		versionhistory.NewItem(100, 200),
 		versionhistory.NewItem(150, 300),
 	})
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
-	incomingVersionHistory := versionhistory.Duplicate(versionHistory)
+	incomingVersionHistory := versionhistory.Copy(versionHistory)
 	err := versionhistory.AddOrUpdateItem(
 		incomingVersionHistory,
 		versionhistory.NewItem(200, 300),
@@ -233,9 +233,9 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_NoMissing
 		versionhistory.NewItem(100, 200),
 		versionhistory.NewItem(150, 300),
 	})
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
-	incomingVersionHistory := versionhistory.Duplicate(versionHistory)
+	incomingVersionHistory := versionhistory.Copy(versionHistory)
 	err := versionhistory.AddOrUpdateItem(
 		incomingVersionHistory,
 		versionhistory.NewItem(200, 300),
@@ -263,9 +263,9 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEv
 		versionhistory.NewItem(100, 200),
 		versionhistory.NewItem(150, 300),
 	})
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
-	incomingVersionHistory := versionhistory.Duplicate(versionHistory)
+	incomingVersionHistory := versionhistory.Copy(versionHistory)
 	incomingFirstEventVersionHistoryItem := versionhistory.NewItem(200, 300)
 	err := versionhistory.AddOrUpdateItem(
 		incomingVersionHistory,
@@ -302,7 +302,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 		versionhistory.NewItem(baseBranchLCAEventID+10, baseBranchLCAEventVersion),
 		versionhistory.NewItem(150, 300),
 	})
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
 	incomingVersionHistory := versionhistory.New(nil, []*historyspb.VersionHistoryItem{
 		versionhistory.NewItem(10, 0),
@@ -361,7 +361,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_Missin
 		versionhistory.NewItem(baseBranchLCAEventID+10, baseBranchLCAEventVersion),
 		versionhistory.NewItem(baseBranchLastEventID, baseBranchLastEventVersion),
 	})
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
 	incomingVersionHistory := versionhistory.New(nil, []*historyspb.VersionHistoryItem{
 		versionhistory.NewItem(10, 0),
