@@ -99,8 +99,8 @@ func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
 
 func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 	namespaceID := "events-cache-hit-success-namespace"
-	workflowID := "events-cache-hit-success-workflow-ID"
-	runID := "events-cache-hit-success-run-ID"
+	workflowID := "events-cache-hit-success-workflow-id"
+	runID := "events-cache-hit-success-run-id"
 	eventID := int64(23)
 	event := &historypb.HistoryEvent{
 		EventId:    eventID,
@@ -116,8 +116,8 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 
 func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	namespaceID := "events-cache-miss-multi-events-batch-v2-success-namespace"
-	workflowID := "events-cache-miss-multi-events-batch-v2-success-workflow-ID"
-	runID := "events-cache-miss-multi-events-batch-v2-success-run-ID"
+	workflowID := "events-cache-miss-multi-events-batch-v2-success-workflow-id"
+	runID := "events-cache-miss-multi-events-batch-v2-success-run-id"
 	event1 := &historypb.HistoryEvent{
 		EventId:    11,
 		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
@@ -172,8 +172,8 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 
 func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 	namespaceID := "events-cache-miss-failure-namespace"
-	workflowID := "events-cache-miss-failure-workflow-ID"
-	runID := "events-cache-miss-failure-run-ID"
+	workflowID := "events-cache-miss-failure-workflow-id"
+	runID := "events-cache-miss-failure-run-id"
 
 	shardId := int32(10)
 	expectedErr := errors.New("persistence call failed")
@@ -194,8 +194,8 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 
 func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	namespaceID := "events-cache-disable-success-namespace"
-	workflowID := "events-cache-disable-success-workflow-ID"
-	runID := "events-cache-disable-success-run-ID"
+	workflowID := "events-cache-disable-success-workflow-id"
+	runID := "events-cache-disable-success-run-id"
 	event1 := &historypb.HistoryEvent{
 		EventId:    23,
 		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
