@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/shard"
 )
 
 const identityHistoryService = "history-service"
@@ -46,7 +47,7 @@ type (
 		queueAckMgr
 
 		currentClusterName string
-		shard              ShardContext
+		shard              shard.Context
 		transferTaskFilter taskFilter
 		logger             log.Logger
 		metricsClient      metrics.Client
@@ -55,7 +56,7 @@ type (
 )
 
 func newTransferQueueActiveProcessor(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,
@@ -171,7 +172,7 @@ func newTransferQueueActiveProcessor(
 }
 
 func newTransferQueueFailoverProcessor(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,

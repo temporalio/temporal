@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/shard"
 )
 
 const (
@@ -58,7 +59,7 @@ type (
 	}
 
 	nDCWorkflowResetterImpl struct {
-		shard          ShardContext
+		shard          shard.Context
 		transactionMgr nDCTransactionMgr
 		historyV2Mgr   persistence.HistoryManager
 		stateRebuilder nDCStateRebuilder
@@ -76,7 +77,7 @@ type (
 var _ nDCWorkflowResetter = (*nDCWorkflowResetterImpl)(nil)
 
 func newNDCWorkflowResetter(
-	shard ShardContext,
+	shard shard.Context,
 	transactionMgr nDCTransactionMgr,
 	namespaceID string,
 	workflowID string,

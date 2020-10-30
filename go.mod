@@ -28,7 +28,7 @@ require (
 	github.com/google/uuid v1.1.2
 	github.com/iancoleman/strcase v0.0.0-20191112232945-16388991a334
 	github.com/jcmturner/gokrb5/v8 v8.3.0 // indirect
-	github.com/jmoiron/sqlx v1.2.0
+	github.com/jmoiron/sqlx v1.2.1-0.20200615141059-0794cb1f47ee
 	github.com/jonboulle/clockwork v0.1.0
 	github.com/klauspost/compress v1.10.8 // indirect
 	github.com/lib/pq v1.6.0
@@ -69,12 +69,9 @@ require (
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e
 	golang.org/x/tools v0.0.0-20200609164405-eb789aa7ce50 // indirect
 	google.golang.org/api v0.26.0
-	google.golang.org/grpc v1.33.0
+	google.golang.org/grpc v1.33.1
 	google.golang.org/grpc/examples v0.0.0-20200625174016-7a808837ae92
 	gopkg.in/validator.v2 v2.0.0-20200605151824-2b28d334fa05
 	gopkg.in/yaml.v2 v2.3.0
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776 // indirect
 )
-
-// TODO https://github.com/uber/cadence/issues/2863
-replace github.com/jmoiron/sqlx v1.2.0 => github.com/longquanzheng/sqlx v0.0.0-20191125235044-053e6130695c

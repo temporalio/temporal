@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -50,7 +51,7 @@ type (
 		*require.Assertions
 
 		controller                   *gomock.Controller
-		mockShard                    *shardContextTest
+		mockShard                    *shard.ContextTest
 		mockWorkflowExecutionContext *MockworkflowExecutionContext
 		mockMutableState             *MockmutableState
 
@@ -84,7 +85,7 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 	s.mockMutableState = NewMockmutableState(s.controller)
 
 	config := NewDynamicConfigForTest()
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -95,9 +96,9 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		config,
 	)
 
-	s.mockExecutionManager = s.mockShard.resource.ExecutionMgr
-	s.mockVisibilityManager = s.mockShard.resource.VisibilityMgr
-	s.mockHistoryV2Manager = s.mockShard.resource.HistoryMgr
+	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
+	s.mockVisibilityManager = s.mockShard.Resource.VisibilityMgr
+	s.mockHistoryV2Manager = s.mockShard.Resource.HistoryMgr
 	s.mockArchivalClient = &archiver.ClientMock{}
 
 	logger := s.mockShard.GetLogger()

@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -56,7 +57,7 @@ type (
 	}
 
 	stateBuilderImpl struct {
-		shard           ShardContext
+		shard           shard.Context
 		clusterMetadata cluster.Metadata
 		namespaceCache  cache.NamespaceCache
 		logger          log.Logger
@@ -74,7 +75,7 @@ const (
 var _ stateBuilder = (*stateBuilderImpl)(nil)
 
 func newStateBuilder(
-	shard ShardContext,
+	shard shard.Context,
 	logger log.Logger,
 	mutableState mutableState,
 	taskGeneratorProvider taskGeneratorProvider,

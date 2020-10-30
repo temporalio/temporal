@@ -51,7 +51,9 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -60,7 +62,8 @@ type (
 		*require.Assertions
 
 		controller      *gomock.Controller
-		mockShard       *shardContextTest
+		mockConfig      *configs.Config
+		mockShard       *shard.ContextTest
 		mockEventsCache *events.MockCache
 
 		msBuilder *mutableStateBuilder
@@ -88,7 +91,8 @@ func (s *mutableStateSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockEventsCache = events.NewMockCache(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockConfig = NewDynamicConfigForTest()
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -96,14 +100,14 @@ func (s *mutableStateSuite) SetupTest() {
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
-		NewDynamicConfigForTest(),
+		s.mockConfig,
 	)
 	// set the checksum probabilities to 100% for exercising during test
-	s.mockShard.config.MutableStateChecksumGenProbability = func(namespace string) int { return 100 }
-	s.mockShard.config.MutableStateChecksumVerifyProbability = func(namespace string) int { return 100 }
-	s.mockShard.eventsCache = s.mockEventsCache
+	s.mockConfig.MutableStateChecksumGenProbability = func(namespace string) int { return 100 }
+	s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return 100 }
+	s.mockShard.EventsCache = s.mockEventsCache
 
-	s.testScope = s.mockShard.resource.MetricsScope.(tally.TestScope)
+	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
 
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry)
@@ -432,7 +436,7 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// test checksum is invalidated
 			loadErrors = loadErrorsFunc()
-			s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
+			s.mockConfig.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
 				return float64((s.msBuilder.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) + 1)
 			}
 			s.msBuilder.Load(dbState)
@@ -440,7 +444,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			s.Nil(s.msBuilder.checksum)
 
 			// revert the config value for the next test case
-			s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
+			s.mockConfig.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
 				return float64(0)
 			}
 		})
@@ -449,8 +453,8 @@ func (s *mutableStateSuite) TestChecksum() {
 
 func (s *mutableStateSuite) TestChecksumProbabilities() {
 	for _, prob := range []int{0, 100} {
-		s.mockShard.config.MutableStateChecksumGenProbability = func(namespace string) int { return prob }
-		s.mockShard.config.MutableStateChecksumVerifyProbability = func(namespace string) int { return prob }
+		s.mockConfig.MutableStateChecksumGenProbability = func(namespace string) int { return prob }
+		s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return prob }
 		for i := 0; i < 100; i++ {
 			shouldGenerate := s.msBuilder.shouldGenerateChecksum()
 			shouldVerify := s.msBuilder.shouldVerifyChecksum()
@@ -461,14 +465,14 @@ func (s *mutableStateSuite) TestChecksumProbabilities() {
 }
 
 func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
-	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 { return 0 }
+	s.mockConfig.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 { return 0 }
 	s.False(s.msBuilder.shouldInvalidateCheckum())
 	s.msBuilder.executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
-	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
+	s.mockConfig.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
 		return float64((s.msBuilder.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) + 1)
 	}
 	s.True(s.msBuilder.shouldInvalidateCheckum())
-	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
+	s.mockConfig.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
 		return float64((s.msBuilder.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) - 1)
 	}
 	s.False(s.msBuilder.shouldInvalidateCheckum())

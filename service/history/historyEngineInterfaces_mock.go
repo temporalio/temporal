@@ -29,12 +29,13 @@
 package history
 
 import (
-	reflect "reflect"
+	"reflect"
 	"time"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 
-	task "go.temporal.io/server/common/task"
+	"go.temporal.io/server/common/task"
+	"go.temporal.io/server/service/history/shard"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 )
@@ -402,10 +403,10 @@ func (mr *MockqueueTaskMockRecorder) GetQueueType() *gomock.Call {
 }
 
 // GetShard mocks base method
-func (m *MockqueueTask) GetShard() ShardContext {
+func (m *MockqueueTask) GetShard() shard.Context {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetShard")
-	ret0, _ := ret[0].(ShardContext)
+	ret0, _ := ret[0].(shard.Context)
 	return ret0
 }
 
@@ -500,7 +501,7 @@ func (mr *MockqueueTaskProcessorMockRecorder) Stop() *gomock.Call {
 }
 
 // StopShardProcessor mocks base method
-func (m *MockqueueTaskProcessor) StopShardProcessor(arg0 ShardContext) {
+func (m *MockqueueTaskProcessor) StopShardProcessor(arg0 shard.Context) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "StopShardProcessor", arg0)
 }

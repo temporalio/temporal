@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
 
@@ -66,7 +67,7 @@ type (
 )
 
 func newTransferQueueActiveTaskExecutor(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	logger log.Logger,
 	metricsClient metrics.Client,
