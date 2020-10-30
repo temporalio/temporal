@@ -38,13 +38,24 @@ var (
 	errUnauthorized = serviceerror.NewPermissionDenied("Request unauthorized.")
 )
 
-func (a *interceptor) Interceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+var namespaceAPIs = map[string]bool{
+	"RegisterNamespace":  true,
+	"DescribeNamespace":  true,
+	"UpdateNamespace":    true,
+	"DeprecateNamespace": true,
+}
+
+func (a *interceptor) Interceptor(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 
-	var ns string
-	rwns, ok := req.(RequestWithNamespace)
+	var namespace string
+	requestWithNamespace, ok := req.(RequestWithNamespace)
 	if ok {
-		ns = rwns.GetNamespace()
+		namespace = requestWithNamespace.GetNamespace()
 	}
 
 	apiName := info.FullMethod
@@ -53,18 +64,18 @@ func (a *interceptor) Interceptor(ctx context.Context, req interface{}, info *gr
 		apiName = apiName[index+1:]
 	}
 
-	if ns == "" && isNamespaceOp(apiName) {
-		rwn, ok := req.(RequestWithName)
+	if namespace == "" && isNamespaceOp(apiName) {
+		namespaceOp, ok := req.(RequestWithName)
 		if ok {
-			ns = rwn.GetName()
+			namespace = namespaceOp.GetName()
 		}
 	}
 
-	scope := a.getMetricsScope(metrics.NumAuthorizationScopes, ns)
+	scope := a.getMetricsScope(metrics.NumAuthorizationScopes, namespace)
 	sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
 	defer sw.Stop()
 
-	result, err := a.authorizer.Authorize(ctx, &Attributes{Namespace: ns, APIName: apiName})
+	result, err := a.authorizer.Authorize(ctx, &Attributes{Namespace: namespace, APIName: apiName})
 	if err != nil {
 		scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
 		return nil, err
@@ -78,10 +89,8 @@ func (a *interceptor) Interceptor(ctx context.Context, req interface{}, info *gr
 
 // checks if this is one of the four namespace operations
 func isNamespaceOp(api string) bool {
-	return api == "RegisterNamespace" ||
-		api == "DescribeNamespace" ||
-		api == "UpdateNamespace" ||
-		api == "DeprecateNamespace"
+	_, ok := namespaceAPIs[api]
+	return ok
 }
 
 type interceptor struct {
