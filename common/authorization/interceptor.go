@@ -38,11 +38,11 @@ var (
 	errUnauthorized = serviceerror.NewPermissionDenied("Request unauthorized.")
 )
 
-var namespaceAPIs = map[string]bool{
-	"RegisterNamespace":  true,
-	"DescribeNamespace":  true,
-	"UpdateNamespace":    true,
-	"DeprecateNamespace": true,
+var namespaceAPIs = map[string]struct{}{
+	"RegisterNamespace":  {},
+	"DescribeNamespace":  {},
+	"UpdateNamespace":    {},
+	"DeprecateNamespace": {},
 }
 
 func (a *interceptor) Interceptor(
@@ -53,7 +53,7 @@ func (a *interceptor) Interceptor(
 ) (interface{}, error) {
 
 	var namespace string
-	requestWithNamespace, ok := req.(RequestWithNamespace)
+	requestWithNamespace, ok := req.(requestWithNamespace)
 	if ok {
 		namespace = requestWithNamespace.GetNamespace()
 	}
@@ -65,7 +65,7 @@ func (a *interceptor) Interceptor(
 	}
 
 	if namespace == "" && isNamespaceOp(apiName) {
-		namespaceOp, ok := req.(RequestWithName)
+		namespaceOp, ok := req.(requestWithName)
 		if ok {
 			namespace = namespaceOp.GetName()
 		}
