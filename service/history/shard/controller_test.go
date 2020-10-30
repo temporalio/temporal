@@ -53,6 +53,10 @@ import (
 )
 
 type (
+	contextMatcher struct {
+		shardID int32
+	}
+
 	controllerSuite struct {
 		suite.Suite
 		*require.Assertions
@@ -565,7 +569,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 	// s.mockResource.ExecutionMgr.On("Close").Return()
 	mockEngine.EXPECT().Start().Times(1)
 	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
-	s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(mockEngine).Times(1)
+	s.mockEngineFactory.EXPECT().CreateEngine(newContextMatcher(shardID)).Return(mockEngine).Times(1)
 	s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: int32(shardID)}).Return(
 		&persistence.GetShardResponse{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -607,4 +611,21 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 		},
 		PreviousRangeID: currentRangeID,
 	}).Return(nil).Once()
+}
+
+func newContextMatcher(shardID int32) *contextMatcher {
+	return &contextMatcher{shardID: shardID}
+}
+
+func (m *contextMatcher) Matches(x interface{}) bool {
+	context, ok := x.(Context)
+	if !ok {
+		return false
+	}
+	return m.shardID == context.GetShardID()
+}
+
+func (m *contextMatcher) String() string {
+	// noop, not used
+	return ""
 }
