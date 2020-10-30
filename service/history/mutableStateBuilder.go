@@ -57,8 +57,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/executionstate"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/persistence/wss"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -3824,7 +3824,7 @@ func (e *mutableStateBuilder) UpdateWorkflowStateStatus(
 	status enumspb.WorkflowExecutionStatus,
 ) error {
 
-	return wss.UpdateWorkflowStateStatus(e.executionState, state, status)
+	return executionstate.SetStateStatus(e.executionState, state, status)
 }
 
 func (e *mutableStateBuilder) StartTransaction(
