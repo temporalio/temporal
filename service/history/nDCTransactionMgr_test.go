@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -54,7 +55,7 @@ type (
 		*require.Assertions
 
 		controller           *gomock.Controller
-		mockShard            *shardContextTest
+		mockShard            *shard.ContextTest
 		mockCreateMgr        *MocknDCTransactionMgrForNewWorkflow
 		mockUpdateMgr        *MocknDCTransactionMgrForExistingWorkflow
 		mockEventsReapplier  *MocknDCEventsReapplier
@@ -84,7 +85,7 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 	s.mockEventsReapplier = NewMocknDCEventsReapplier(s.controller)
 	s.mockWorkflowResetter = NewMockworkflowResetter(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -95,8 +96,8 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 		NewDynamicConfigForTest(),
 	)
 
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 
 	s.logger = s.mockShard.GetLogger()
 	s.namespaceEntry = testGlobalNamespaceEntry

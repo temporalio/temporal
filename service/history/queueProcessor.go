@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -64,7 +65,7 @@ type (
 
 	queueProcessorBase struct {
 		clusterName          string
-		shard                ShardContext
+		shard                shard.Context
 		timeSource           clock.TimeSource
 		options              *QueueProcessorOptions
 		processor            processor
@@ -94,7 +95,7 @@ var (
 
 func newQueueProcessorBase(
 	clusterName string,
-	shard ShardContext,
+	shard shard.Context,
 	options *QueueProcessorOptions,
 	processor processor,
 	queueTaskProcessor queueTaskProcessor,
@@ -238,7 +239,7 @@ processorPumpLoop:
 				p.options.UpdateAckInterval(),
 				p.options.UpdateAckIntervalJitterCoefficient(),
 			))
-			if err := p.ackMgr.updateQueueAckLevel(); err == ErrShardClosed {
+			if err := p.ackMgr.updateQueueAckLevel(); err == shard.ErrShardClosed {
 				// shard is no longer owned by this instance, bail out
 				go p.Stop()
 				break processorPumpLoop

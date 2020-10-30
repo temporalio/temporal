@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -70,7 +71,7 @@ type (
 	nDCStateRebuilderProvider func() nDCStateRebuilder
 
 	workflowResetterImpl struct {
-		shard             ShardContext
+		shard             shard.Context
 		namespaceCache    cache.NamespaceCache
 		clusterMetadata   cluster.Metadata
 		historyV2Mgr      persistence.HistoryManager
@@ -83,7 +84,7 @@ type (
 var _ workflowResetter = (*workflowResetterImpl)(nil)
 
 func newWorkflowResetter(
-	shard ShardContext,
+	shard shard.Context,
 	historyCache *historyCache,
 	logger log.Logger,
 ) *workflowResetterImpl {

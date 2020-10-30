@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -50,10 +51,10 @@ type (
 	replicationTaskExecutorImpl struct {
 		currentCluster     string
 		sourceCluster      string
-		shard              ShardContext
+		shard              shard.Context
 		namespaceCache     cache.NamespaceCache
 		nDCHistoryResender xdc.NDCHistoryResender
-		historyEngine      Engine
+		historyEngine      shard.Engine
 
 		metricsClient metrics.Client
 		logger        log.Logger
@@ -64,10 +65,10 @@ type (
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
 func newReplicationTaskExecutor(
 	sourceCluster string,
-	shard ShardContext,
+	shard shard.Context,
 	namespaceCache cache.NamespaceCache,
 	nDCHistoryResender xdc.NDCHistoryResender,
-	historyEngine Engine,
+	historyEngine shard.Engine,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) replicationTaskExecutor {

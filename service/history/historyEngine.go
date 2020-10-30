@@ -71,6 +71,8 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
+
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -130,7 +132,7 @@ type (
 
 	historyEngineImpl struct {
 		currentClusterName        string
-		shard                     ShardContext
+		shard                     shard.Context
 		timeSource                clock.TimeSource
 		workflowTaskHandler       workflowTaskHandlerCallbacks
 		clusterMetadata           cluster.Metadata
@@ -213,7 +215,7 @@ var (
 
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
-	shard ShardContext,
+	shard shard.Context,
 	visibilityMgr persistence.VisibilityManager,
 	matching matching.Client,
 	historyClient history.Client,
@@ -2660,7 +2662,7 @@ func (e *historyEngineImpl) getActiveNamespaceEntry(
 }
 
 func getActiveNamespaceEntryFromShard(
-	shard ShardContext,
+	shard shard.Context,
 	namespaceUUID string,
 ) (*cache.NamespaceCacheEntry, error) {
 

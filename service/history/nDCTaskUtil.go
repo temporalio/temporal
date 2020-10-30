@@ -35,11 +35,12 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/shard"
 )
 
 // verifyTaskVersion, will return true if failover version check is successful
 func verifyTaskVersion(
-	shard ShardContext,
+	shard shard.Context,
 	logger log.Logger,
 	namespaceID string,
 	version int64,

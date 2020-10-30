@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -47,7 +48,7 @@ type (
 	}
 
 	nDCConflictResolverImpl struct {
-		shard          ShardContext
+		shard          shard.Context
 		stateRebuilder nDCStateRebuilder
 
 		context      workflowExecutionContext
@@ -59,7 +60,7 @@ type (
 var _ nDCConflictResolver = (*nDCConflictResolverImpl)(nil)
 
 func newNDCConflictResolver(
-	shard ShardContext,
+	shard shard.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
 	logger log.Logger,

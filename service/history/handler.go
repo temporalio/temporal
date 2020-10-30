@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -65,7 +66,7 @@ type (
 		resource.Resource
 
 		shuttingDown            int32
-		controller              *shardController
+		controller              *shard.ControllerImpl
 		tokenSerializer         common.TaskTokenSerializer
 		startWG                 sync.WaitGroup
 		config                  *configs.Config
@@ -82,7 +83,7 @@ const (
 )
 
 var (
-	_ EngineFactory                       = (*Handler)(nil)
+	_ shard.EngineFactory                 = (*Handler)(nil)
 	_ historyservice.HistoryServiceServer = (*Handler)(nil)
 
 	errNamespaceNotSet         = serviceerror.NewInvalidArgument("Namespace not set on request.")
@@ -184,7 +185,7 @@ func (h *Handler) Start() {
 		h.queueTaskProcessor.Start()
 	}
 
-	h.controller = newShardController(
+	h.controller = shard.NewController(
 		h.Resource,
 		h,
 		h.config,
@@ -219,8 +220,8 @@ func (h *Handler) isShuttingDown() bool {
 
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(
-	shardContext ShardContext,
-) Engine {
+	shardContext shard.Context,
+) shard.Engine {
 	return NewEngineWithShardContext(
 		shardContext,
 		h.GetVisibilityManager(),
@@ -679,7 +680,7 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 
 	itemsInCacheByIDCount, itemsInCacheByNameCount := h.GetNamespaceCache().GetCacheSize()
 	status := ""
-	switch atomic.LoadInt32(&h.controller.status) {
+	switch h.controller.Status() {
 	case common.DaemonStatusInitialized:
 		status = "initialized"
 	case common.DaemonStatusStarted:
@@ -689,8 +690,8 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 	}
 
 	resp := &historyservice.DescribeHistoryHostResponse{
-		ShardsNumber: int32(h.controller.numShards()),
-		ShardIds:     h.controller.shardIDs(),
+		ShardsNumber: int32(h.controller.NumShards()),
+		ShardIds:     h.controller.ShardIDs(),
 		NamespaceCache: &namespacespb.NamespaceCacheInfo{
 			ItemsInCacheByIdCount:   itemsInCacheByIDCount,
 			ItemsInCacheByNameCount: itemsInCacheByNameCount,
@@ -732,7 +733,7 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 // CloseShard closes a shard hosted by this instance
 func (h *Handler) CloseShard(_ context.Context, request *historyservice.CloseShardRequest) (_ *historyservice.CloseShardResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-	h.controller.removeEngineForShard(request.GetShardId(), nil)
+	h.controller.RemoveEngineForShard(request.GetShardId(), nil)
 	return &historyservice.CloseShardResponse{}, nil
 }
 
@@ -1367,7 +1368,7 @@ func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.S
 	}
 
 	// shard ID is already provided in the request
-	engine, err := h.controller.getEngineForShard(int32(request.GetShardId()))
+	engine, err := h.controller.GetEngineForShard(int32(request.GetShardId()))
 	if err != nil {
 		return nil, h.error(err, scope, "", "")
 	}
@@ -1449,7 +1450,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 		go func(token *replicationspb.ReplicationToken) {
 			defer wg.Done()
 
-			engine, err := h.controller.getEngineForShard(token.GetShardId())
+			engine, err := h.controller.GetEngineForShard(token.GetShardId())
 			if err != nil {
 				h.GetLogger().Warn("History engine not found for shard", tag.Error(err))
 				return
@@ -1614,7 +1615,7 @@ func (h *Handler) GetDLQMessages(ctx context.Context, request *historyservice.Ge
 		return nil, errShuttingDown
 	}
 
-	engine, err := h.controller.getEngineForShard(request.GetShardId())
+	engine, err := h.controller.GetEngineForShard(request.GetShardId())
 	if err != nil {
 		err = h.error(err, scope, "", "")
 		return nil, err
@@ -1643,7 +1644,7 @@ func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.
 		return nil, errShuttingDown
 	}
 
-	engine, err := h.controller.getEngineForShard(request.GetShardId())
+	engine, err := h.controller.GetEngineForShard(request.GetShardId())
 	if err != nil {
 		err = h.error(err, scope, "", "")
 		return nil, err
@@ -1671,7 +1672,7 @@ func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	engine, err := h.controller.getEngineForShard(request.GetShardId())
+	engine, err := h.controller.GetEngineForShard(request.GetShardId())
 	if err != nil {
 		err = h.error(err, scope, "", "")
 		return nil, err

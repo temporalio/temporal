@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -66,7 +67,7 @@ type (
 		*require.Assertions
 
 		controller             *gomock.Controller
-		mockShard              *shardContextTest
+		mockShard              *shard.ContextTest
 		mockNamespaceCache     *cache.MockNamespaceCache
 		mockClusterMetadata    *cluster.MockMetadata
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
@@ -116,7 +117,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockNDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -125,7 +126,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 			}},
 		config,
 	)
-	s.mockShard.eventsCache = events.NewEventsCache(
+	s.mockShard.EventsCache = events.NewEventsCache(
 		convert.Int32Ptr(s.mockShard.GetShardID()),
 		s.mockShard.GetConfig().EventsCacheInitialSize(),
 		s.mockShard.GetConfig().EventsCacheMaxSize(),
@@ -135,15 +136,15 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.mockShard.GetLogger(),
 		s.mockShard.GetMetricsClient(),
 	)
-	s.mockShard.resource.TimeSource = s.timeSource
+	s.mockShard.Resource.TimeSource = s.timeSource
 
-	s.mockMatchingClient = s.mockShard.resource.MatchingClient
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
-	s.mockVisibilityMgr = s.mockShard.resource.VisibilityMgr
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockArchivalMetadata = s.mockShard.resource.ArchivalMetadata
-	s.mockArchiverProvider = s.mockShard.resource.ArchiverProvider
-	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
+	s.mockMatchingClient = s.mockShard.Resource.MatchingClient
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
+	s.mockVisibilityMgr = s.mockShard.Resource.VisibilityMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockArchivalMetadata = s.mockShard.Resource.ArchivalMetadata
+	s.mockArchiverProvider = s.mockShard.Resource.ArchiverProvider
+	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(testNamespace).Return(testGlobalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testTargetNamespaceID).Return(testGlobalTargetNamespaceEntry, nil).AnyTimes()

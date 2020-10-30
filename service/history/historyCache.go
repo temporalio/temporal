@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -48,7 +49,7 @@ type (
 
 	historyCache struct {
 		cache.Cache
-		shard            ShardContext
+		shard            shard.Context
 		executionManager persistence.ExecutionManager
 		disabled         bool
 		logger           log.Logger
@@ -64,7 +65,7 @@ const (
 	cacheReleased    int32 = 1
 )
 
-func newHistoryCache(shard ShardContext) *historyCache {
+func newHistoryCache(shard shard.Context) *historyCache {
 	opts := &cache.Options{}
 	config := shard.GetConfig()
 	opts.InitialCapacity = config.HistoryCacheInitialSize()

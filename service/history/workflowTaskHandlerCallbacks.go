@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -67,7 +68,7 @@ type (
 	workflowTaskHandlerCallbacksImpl struct {
 		currentClusterName   string
 		config               *configs.Config
-		shard                ShardContext
+		shard                shard.Context
 		timeSource           clock.TimeSource
 		historyEngine        *historyEngineImpl
 		namespaceCache       cache.NamespaceCache
