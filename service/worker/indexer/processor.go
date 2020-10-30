@@ -170,7 +170,7 @@ func (p *indexProcessor) messageProcessLoop(workerWG *sync.WaitGroup) {
 		err := p.process(msg)
 		sw.Stop()
 		if err != nil {
-			msg.Nack() //nolint:errcheck
+			_ = msg.Nack()
 		}
 	}
 }
