@@ -58,10 +58,10 @@ type Authorizer interface {
 	Authorize(ctx context.Context, attributes *Attributes) (Result, error)
 }
 
-type RequestWithNamespace interface {
+type requestWithNamespace interface {
 	GetNamespace() string
 }
 
-type RequestWithName interface {
+type requestWithName interface {
 	GetName() string
 }
