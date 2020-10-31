@@ -76,9 +76,7 @@ func (c *Collection) logValue(
 	cachedValue, isInCache := c.keys.Load(key)
 	if !isInCache || !cmpValueEquals(cachedValue, value) {
 		c.keys.Store(key, value)
-		if !cmpValueEquals(value, defaultValue) {
-			c.logger.Info("Get dynamic config", tag.Name(key.String()), tag.Value(value), tag.DefaultValue(defaultValue))
-		}
+		c.logger.Info("Get dynamic config", tag.Name(key.String()), tag.Value(value), tag.DefaultValue(defaultValue))
 	}
 }
 
