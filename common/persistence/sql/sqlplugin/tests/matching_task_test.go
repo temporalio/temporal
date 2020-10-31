@@ -156,7 +156,7 @@ func (s *matchingTaskSuite) TestInsertSelect_Single() {
 	minTaskID := convert.Int64Ptr(taskID - 1)
 	maxTaskID := convert.Int64Ptr(taskID)
 	pageSize := convert.IntPtr(1)
-	filter := &sqlplugin.TasksFilter{
+	filter := sqlplugin.TasksFilter{
 		RangeHash:   testMatchingTaskRangeHash,
 		TaskQueueID: queueID,
 		MinTaskID:   minTaskID,
@@ -189,7 +189,7 @@ func (s *matchingTaskSuite) TestInsertSelect_Multiple() {
 	minTaskID := convert.Int64Ptr(taskID - 2)
 	maxTaskID := convert.Int64Ptr(taskID)
 	pageSize := convert.IntPtr(2)
-	filter := &sqlplugin.TasksFilter{
+	filter := sqlplugin.TasksFilter{
 		RangeHash:   testMatchingTaskRangeHash,
 		TaskQueueID: queueID,
 		MinTaskID:   minTaskID,
@@ -210,7 +210,7 @@ func (s *matchingTaskSuite) TestDeleteSelect() {
 	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
 	taskID := int64(100)
 
-	filter := &sqlplugin.TasksFilter{
+	filter := sqlplugin.TasksFilter{
 		RangeHash:   testMatchingTaskRangeHash,
 		TaskQueueID: queueID,
 		TaskID:      convert.Int64Ptr(taskID),
@@ -233,7 +233,7 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.TasksFilter{
+	filter := sqlplugin.TasksFilter{
 		RangeHash:   testMatchingTaskRangeHash,
 		TaskQueueID: queueID,
 		TaskID:      convert.Int64Ptr(taskID),
@@ -247,7 +247,7 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Single() {
 	minTaskID := convert.Int64Ptr(taskID - 1)
 	maxTaskID := convert.Int64Ptr(taskID)
 	pageSize := convert.IntPtr(1)
-	filter = &sqlplugin.TasksFilter{
+	filter = sqlplugin.TasksFilter{
 		RangeHash:   testMatchingTaskRangeHash,
 		TaskQueueID: queueID,
 		MinTaskID:   minTaskID,
@@ -272,7 +272,7 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(2, int(rowsAffected))
 
-	filter := &sqlplugin.TasksFilter{
+	filter := sqlplugin.TasksFilter{
 		RangeHash:            testMatchingTaskRangeHash,
 		TaskQueueID:          queueID,
 		TaskIDLessThanEquals: convert.Int64Ptr(taskID),
@@ -287,7 +287,7 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Multiple() {
 	minTaskID := convert.Int64Ptr(taskID - 2)
 	maxTaskID := convert.Int64Ptr(taskID)
 	pageSize := convert.IntPtr(2)
-	filter = &sqlplugin.TasksFilter{
+	filter = sqlplugin.TasksFilter{
 		RangeHash:   testMatchingTaskRangeHash,
 		TaskQueueID: queueID,
 		MinTaskID:   minTaskID,
