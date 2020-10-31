@@ -45,7 +45,7 @@ $ tctl workflow list
 
 ### Use Temporal Web UI
 
-Try [Temporal Web UI](https://github.com/temporalio/web) by opening [http://localhost:8088](http://localhost:8088)for viewing your sample workflows executing on Temporal.
+Try [Temporal Web UI](https://github.com/temporalio/web) by opening [http://localhost:8088](http://localhost:8088) for viewing your sample workflows executing on Temporal.
 
 ## Repository
 
