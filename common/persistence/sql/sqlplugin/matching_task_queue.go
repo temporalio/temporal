@@ -59,8 +59,8 @@ type (
 		// Required Filter params:
 		//  to read a single row: {shardID, namespaceID, name, taskType}
 		//  to range read multiple rows: {shardID, namespaceIDGreaterThan, nameGreaterThan, taskTypeGreaterThan, pageSize}
-		SelectFromTaskQueues(filter *TaskQueuesFilter) ([]TaskQueuesRow, error)
-		DeleteFromTaskQueues(filter *TaskQueuesFilter) (sql.Result, error)
-		LockTaskQueues(filter *TaskQueuesFilter) (int64, error)
+		SelectFromTaskQueues(filter TaskQueuesFilter) ([]TaskQueuesRow, error)
+		DeleteFromTaskQueues(filter TaskQueuesFilter) (sql.Result, error)
+		LockTaskQueues(filter TaskQueuesFilter) (int64, error)
 	}
 )
