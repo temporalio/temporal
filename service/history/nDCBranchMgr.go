@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/shard"
 )
 
 const (
@@ -57,7 +58,7 @@ type (
 	}
 
 	nDCBranchMgrImpl struct {
-		shard           ShardContext
+		shard           shard.Context
 		namespaceCache  cache.NamespaceCache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryManager
@@ -71,7 +72,7 @@ type (
 var _ nDCBranchMgr = (*nDCBranchMgrImpl)(nil)
 
 func newNDCBranchMgr(
-	shard ShardContext,
+	shard shard.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
 	logger log.Logger,

@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -66,7 +67,7 @@ type (
 		*require.Assertions
 
 		controller               *gomock.Controller
-		mockShard                *shardContextTest
+		mockShard                *shard.ContextTest
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
@@ -115,7 +116,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
 	config := configs.NewDynamicConfigForTest()
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -125,7 +126,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 			}},
 		config,
 	)
-	s.mockShard.eventsCache = events.NewEventsCache(
+	s.mockShard.EventsCache = events.NewEventsCache(
 		convert.Int32Ptr(s.mockShard.GetShardID()),
 		s.mockShard.GetConfig().EventsCacheInitialSize(),
 		s.mockShard.GetConfig().EventsCacheMaxSize(),
@@ -136,13 +137,13 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockShard.GetMetricsClient(),
 	)
 
-	s.mockShard.resource.TimeSource = s.timeSource
+	s.mockShard.Resource.TimeSource = s.timeSource
 
-	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
-	s.mockMatchingClient = s.mockShard.resource.MatchingClient
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
+	s.mockMatchingClient = s.mockShard.Resource.MatchingClient
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	// ack manager will use the namespace information
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testGlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()

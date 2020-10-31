@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 )
 
 const (
@@ -71,8 +72,8 @@ type (
 		currentCluster          string
 		sourceCluster           string
 		status                  int32
-		shard                   ShardContext
-		historyEngine           Engine
+		shard                   shard.Context
+		historyEngine           shard.Engine
 		historySerializer       persistence.PayloadSerializer
 		config                  *configs.Config
 		metricsClient           metrics.Client
@@ -106,8 +107,8 @@ type (
 
 // NewReplicationTaskProcessor creates a new replication task processor.
 func NewReplicationTaskProcessor(
-	shard ShardContext,
-	historyEngine Engine,
+	shard shard.Context,
+	historyEngine shard.Engine,
 	config *configs.Config,
 	metricsClient metrics.Client,
 	replicationTaskFetcher ReplicationTaskFetcher,

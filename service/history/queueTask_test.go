@@ -29,7 +29,7 @@ import (
 	"testing"
 	"time"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/common/task"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -52,7 +53,7 @@ type (
 		*require.Assertions
 
 		controller            *gomock.Controller
-		mockShard             *shardContextTest
+		mockShard             *shard.ContextTest
 		mockQueueTaskExecutor *MockqueueTaskExecutor
 		mockQueueTaskInfo     *MockqueueTaskInfo
 
@@ -72,7 +73,7 @@ func (s *queueTaskSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{

@@ -27,7 +27,6 @@ package history
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -42,12 +41,11 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -57,7 +55,7 @@ type (
 		controller *gomock.Controller
 
 		mockResource     *resource.Test
-		mockShard        ShardContext
+		mockShard        *shard.ContextTest
 		config           *configs.Config
 		mockClientBean   *client.MockBean
 		adminClient      *adminservicemock.MockAdminServiceClient
@@ -89,28 +87,23 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
+	s.mockShard = shard.NewTestContext(
+		s.controller,
+		&persistence.ShardInfoWithFailover{
+			ShardInfo: &persistencespb.ShardInfo{
+				ShardId:                0,
+				RangeId:                1,
+				ReplicationAckLevel:    0,
+				ReplicationDlqAckLevel: map[string]int64{"test": -1},
+			}},
+		NewDynamicConfigForTest(),
+	)
+	s.mockResource = s.mockShard.Resource
 	s.mockClientBean = s.mockResource.ClientBean
 	s.adminClient = s.mockResource.RemoteAdminClient
 	s.clusterMetadata = s.mockResource.ClusterMetadata
 	s.executionManager = s.mockResource.ExecutionMgr
 	s.shardManager = s.mockResource.ShardMgr
-	logger := log.NewNoop()
-	s.mockShard = &shardContextImpl{
-		shardID:  0,
-		Resource: s.mockResource,
-		shardInfo: &persistence.ShardInfoWithFailover{ShardInfo: &persistencespb.ShardInfo{
-			ShardId:                0,
-			RangeId:                1,
-			ReplicationDlqAckLevel: map[string]int64{"test": -1},
-		}},
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		config:                    NewDynamicConfigForTest(),
-		logger:                    logger,
-		remoteClusterCurrentTime:  make(map[string]time.Time),
-		executionManager:          s.executionManager,
-	}
 	s.config = NewDynamicConfigForTest()
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return("active").AnyTimes()
 	s.taskExecutors = make(map[string]replicationTaskExecutor)

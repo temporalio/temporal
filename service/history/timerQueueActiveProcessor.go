@@ -36,11 +36,12 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
 	timerQueueActiveProcessorImpl struct {
-		shard                   ShardContext
+		shard                   shard.Context
 		timerTaskFilter         taskFilter
 		now                     timeNow
 		logger                  log.Logger
@@ -52,7 +53,7 @@ type (
 )
 
 func newTimerQueueActiveProcessor(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	matchingClient matching.Client,
 	taskAllocator taskAllocator,
@@ -142,7 +143,7 @@ func newTimerQueueActiveProcessor(
 }
 
 func newTimerQueueFailoverProcessor(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	namespaceIDs map[string]struct{},
 	standbyClusterName string,

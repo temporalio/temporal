@@ -34,14 +34,10 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/task"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
-	// EngineFactory is used to create an instance of sharded history engine
-	EngineFactory interface {
-		CreateEngine(context ShardContext) Engine
-	}
-
 	queueProcessor interface {
 		common.Daemon
 		notifyNewTask()
@@ -84,7 +80,7 @@ type (
 		task.PriorityTask
 		queueTaskInfo
 		GetQueueType() queueType
-		GetShard() ShardContext
+		GetShard() shard.Context
 	}
 
 	queueTaskExecutor interface {
@@ -93,7 +89,7 @@ type (
 
 	queueTaskProcessor interface {
 		common.Daemon
-		StopShardProcessor(ShardContext)
+		StopShardProcessor(shard.Context)
 		Submit(queueTask) error
 		TrySubmit(queueTask) (bool, error)
 	}

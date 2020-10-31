@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/shard"
 )
 
 const (
@@ -42,7 +43,7 @@ const (
 
 type (
 	timerQueueStandbyProcessorImpl struct {
-		shard                   ShardContext
+		shard                   shard.Context
 		timerTaskFilter         taskFilter
 		logger                  log.Logger
 		metricsClient           metrics.Client
@@ -53,7 +54,7 @@ type (
 )
 
 func newTimerQueueStandbyProcessor(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	clusterName string,
 	taskAllocator taskAllocator,

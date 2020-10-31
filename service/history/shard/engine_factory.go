@@ -22,29 +22,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination engine_factory_mock.go
 
-import "github.com/stretchr/testify/mock"
+package shard
 
-// MockHistoryEngineFactory is mock implementation for HistoryEngineFactory
-type MockHistoryEngineFactory struct {
-	mock.Mock
-}
-
-// CreateEngine is mock implementation for CreateEngine of HistoryEngineFactory
-func (_m *MockHistoryEngineFactory) CreateEngine(context ShardContext) Engine {
-	ret := _m.Called(context)
-
-	var r0 Engine
-	if rf, ok := ret.Get(0).(func(ShardContext) Engine); ok {
-		r0 = rf(context)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(Engine)
-		}
+type (
+	// EngineFactory is used to create an instance of sharded history engine
+	EngineFactory interface {
+		CreateEngine(context Context) Engine
 	}
-
-	return r0
-}
-
-var _ EngineFactory = (*MockHistoryEngineFactory)(nil)
+)

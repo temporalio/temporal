@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 )
 
 var (
@@ -63,7 +64,7 @@ type (
 	transferQueueProcessorImpl struct {
 		isGlobalNamespaceEnabled bool
 		currentClusterName       string
-		shard                    ShardContext
+		shard                    shard.Context
 		taskAllocator            taskAllocator
 		config                   *configs.Config
 		metricsClient            metrics.Client
@@ -83,7 +84,7 @@ type (
 )
 
 func newTransferQueueProcessor(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,
@@ -286,7 +287,7 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 				err := t.completeTransfer()
 				if err != nil {
 					t.logger.Info("Failed to complete transfer task", tag.Error(err))
-					if err == ErrShardClosed {
+					if err == shard.ErrShardClosed {
 						// shard closed, trigger shutdown and bail out
 						t.Stop()
 						return
