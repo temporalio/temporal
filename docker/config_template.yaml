@@ -105,10 +105,12 @@ persistence:
         es-visibility:
             elasticsearch:
                 url:
-                    scheme: "http"
-                    host: "{{ default .Env.ES_SEEDS "" }}:9200"
+                    scheme: {{ default .Env.ES_SCHEME "http" }}
+                    host: "{{ default .Env.ES_SEEDS "" }}:{{ default .Env.ES_PORT "9200" }}"
+                username: {{ default .Env.ES_USER "" }}
+                password: {{ default .Env.ES_PWD "" }}
                 indices:
-                    visibility: temporal-visibility-dev
+                    visibility: {{ default .Env.ES_VIS_INDEX "temporal-visibility-dev" }} 
         {{- end }}
 
 global:
