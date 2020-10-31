@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -74,39 +73,40 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 		return nil, serviceerror.NewInternal(err.Error())
 	}
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
+	var row sqlplugin.TaskQueuesRow
 	rows, err := m.db.SelectFromTaskQueues(sqlplugin.TaskQueuesFilter{RangeHash: tqHash, TaskQueueID: tqId})
-	if err != nil {
-		if err == sql.ErrNoRows {
-			namespaceID := request.NamespaceID
-			tqInfo := &persistencespb.TaskQueueInfo{
-				NamespaceId:    namespaceID,
-				Name:           request.TaskQueue,
-				TaskType:       request.TaskType,
-				AckLevel:       ackLevel,
-				Kind:           request.TaskQueueKind,
-				ExpiryTime:     nil,
-				LastUpdateTime: timestamp.TimeNowPtrUtc(),
-			}
-			blob, err := serialization.TaskQueueInfoToBlob(tqInfo)
-			if err != nil {
-				return nil, err
-			}
-			row := sqlplugin.TaskQueuesRow{
-				RangeHash:    tqHash,
-				TaskQueueID:  tqId,
-				Data:         blob.Data,
-				DataEncoding: blob.EncodingType.String(),
-			}
-			rows = []sqlplugin.TaskQueuesRow{row}
-			if _, err := m.db.InsertIntoTaskQueues(&row); err != nil {
-				return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. Failed to make task queue %v of type %v. Error: %v", request.TaskQueue, request.TaskType, err))
-			}
-		} else {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. Failed to check if task queue existed. Error: %v", err))
+	switch err {
+	case nil:
+		row = rows[0]
+	case sql.ErrNoRows:
+		namespaceID := request.NamespaceID
+		tqInfo := &persistencespb.TaskQueueInfo{
+			NamespaceId:    namespaceID,
+			Name:           request.TaskQueue,
+			TaskType:       request.TaskType,
+			AckLevel:       ackLevel,
+			Kind:           request.TaskQueueKind,
+			ExpiryTime:     nil,
+			LastUpdateTime: timestamp.TimeNowPtrUtc(),
 		}
+		blob, err := serialization.TaskQueueInfoToBlob(tqInfo)
+		if err != nil {
+			return nil, err
+		}
+		row = sqlplugin.TaskQueuesRow{
+			RangeHash:    tqHash,
+			TaskQueueID:  tqId,
+			RangeID:      0,
+			Data:         blob.Data,
+			DataEncoding: blob.EncodingType.String(),
+		}
+		if _, err := m.db.InsertIntoTaskQueues(&row); err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. Failed to make task queue %v of type %v. Error: %v", request.TaskQueue, request.TaskType, err))
+		}
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. Failed to check if task queue existed. Error: %v", err))
 	}
 
-	row := rows[0]
 	if request.RangeID > 0 && request.RangeID != row.RangeID {
 		return nil, &persistence.ConditionFailedError{
 			Msg: fmt.Sprintf("leaseTaskQueue:renew failed:taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
@@ -125,31 +125,31 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 		// We need to separately check the condition and do the
 		// update because we want to throw different error codes.
 		// Since we need to do things separately (in a transaction), we need to take a lock.
-		err1 := lockTaskQueue(tx, tqHash, tqId, rangeID)
-		if err1 != nil {
-			return err1
+		err := lockTaskQueue(tx, tqHash, tqId, rangeID)
+		if err != nil {
+			return err
 		}
 
 		// todo: we shoudnt edit protobufs
 		tqInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 
-		blob, err1 := serialization.TaskQueueInfoToBlob(tqInfo)
-		if err1 != nil {
-			return err1
+		blob, err := serialization.TaskQueueInfoToBlob(tqInfo)
+		if err != nil {
+			return err
 		}
-		result, err1 := tx.UpdateTaskQueues(&sqlplugin.TaskQueuesRow{
+		result, err := tx.UpdateTaskQueues(&sqlplugin.TaskQueuesRow{
 			RangeHash:    tqHash,
 			TaskQueueID:  tqId,
 			RangeID:      row.RangeID + 1,
 			Data:         blob.Data,
 			DataEncoding: blob.EncodingType.String(),
 		})
-		if err1 != nil {
-			return err1
+		if err != nil {
+			return err
 		}
-		rowsAffected, err1 := result.RowsAffected()
-		if err1 != nil {
-			return fmt.Errorf("rowsAffected error: %v", err1)
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("rowsAffected error: %v", err)
 		}
 		if rowsAffected == 0 {
 			return fmt.Errorf("%v rows affected instead of 1", rowsAffected)
@@ -170,50 +170,35 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 	}
 
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueInfo.Name, request.TaskQueueInfo.TaskType)
-
 	tq := request.TaskQueueInfo
 	tq.LastUpdateTime = timestamp.TimeNowPtrUtc()
 
-	var blob commonpb.DataBlob
+	var resp *persistence.UpdateTaskQueueResponse
 	if request.TaskQueueInfo.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
 		tq.ExpiryTime = stickyTaskQueueTTL()
-		blob, err = serialization.TaskQueueInfoToBlob(tq)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := m.db.ReplaceIntoTaskQueues(&sqlplugin.TaskQueuesRow{
-			RangeHash:    tqHash,
-			TaskQueueID:  tqId,
-			RangeID:      request.RangeID,
-			Data:         blob.Data,
-			DataEncoding: blob.EncodingType.String(),
-		}); err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("UpdateTaskQueue operation failed. Failed to make sticky task queue. Error: %v", err))
-		}
 	}
-	var resp *persistence.UpdateTaskQueueResponse
-	blob, err = serialization.TaskQueueInfoToBlob(tq)
+	blob, err := serialization.TaskQueueInfoToBlob(tq)
 	if err != nil {
 		return nil, err
 	}
 	err = m.txExecute("UpdateTaskQueue", func(tx sqlplugin.Tx) error {
-		err1 := lockTaskQueue(tx, tqHash, tqId, request.RangeID)
-		if err1 != nil {
-			return err1
+		err := lockTaskQueue(tx, tqHash, tqId, request.RangeID)
+		if err != nil {
+			return err
 		}
-		result, err1 := tx.UpdateTaskQueues(&sqlplugin.TaskQueuesRow{
+		result, err := tx.UpdateTaskQueues(&sqlplugin.TaskQueuesRow{
 			RangeHash:    tqHash,
 			TaskQueueID:  tqId,
 			RangeID:      request.RangeID,
 			Data:         blob.Data,
 			DataEncoding: blob.EncodingType.String(),
 		})
-		if err1 != nil {
-			return err1
+		if err != nil {
+			return err
 		}
-		rowsAffected, err1 := result.RowsAffected()
-		if err1 != nil {
-			return err1
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return err
 		}
 		if rowsAffected != 1 {
 			return fmt.Errorf("%v rows were affected instead of 1", rowsAffected)
