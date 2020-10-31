@@ -90,6 +90,7 @@ func NewClient(config *Config) (Client, error) {
 	client, err := elastic.NewClient(
 		elastic.SetURL(config.URL.String()),
 		elastic.SetSniff(false),
+		elastic.SetBasicAuth(config.Username, config.Password)
 
 		// Disable health check so we don't block client creation if ES happens to be down.
 		elastic.SetHealthcheck(false),
