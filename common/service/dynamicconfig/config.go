@@ -73,10 +73,12 @@ func (c *Collection) logValue(
 	value, defaultValue interface{},
 	cmpValueEquals func(interface{}, interface{}) bool,
 ) {
-	loadedValue, loaded := c.keys.LoadOrStore(key, value)
-	if !loaded || !cmpValueEquals(loadedValue, value) {
-		c.logger.Info("Get dynamic config",
-			tag.Name(key.String()), tag.Value(value), tag.DefaultValue(defaultValue))
+	cachedValue, isInCache := c.keys.Load(key)
+	if !isInCache || !cmpValueEquals(cachedValue, value) {
+		c.keys.Store(key, value)
+		if !cmpValueEquals(value, defaultValue) {
+			c.logger.Info("Get dynamic config", tag.Name(key.String()), tag.Value(value), tag.DefaultValue(defaultValue))
+		}
 	}
 }
 
