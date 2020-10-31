@@ -40,10 +40,6 @@ const (
 	// (default range ID: initialRangeID == 1)
 	createTaskQueueQry = `INSERT ` + taskQueueCreatePart
 
-	replaceTaskQueueQry = `INSERT ` + taskQueueCreatePart + `
-ON DUPLICATE KEY UPDATE
-range_id=VALUES(range_id), data=VALUES(data), data_encoding=VALUES(data_encoding)`
-
 	updateTaskQueueQry = `UPDATE task_queues SET
 range_id = :range_id,
 data = :data,
@@ -128,11 +124,6 @@ func (mdb *db) DeleteFromTasks(filter sqlplugin.TasksFilter) (sql.Result, error)
 // InsertIntoTaskQueues inserts one or more rows into task_queues table
 func (mdb *db) InsertIntoTaskQueues(row *sqlplugin.TaskQueuesRow) (sql.Result, error) {
 	return mdb.conn.NamedExec(createTaskQueueQry, row)
-}
-
-// ReplaceIntoTaskQueues replaces one or more rows in task_queues table
-func (mdb *db) ReplaceIntoTaskQueues(row *sqlplugin.TaskQueuesRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(replaceTaskQueueQry, row)
 }
 
 // UpdateTaskQueues updates a row in task_queues table

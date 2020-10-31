@@ -40,12 +40,6 @@ const (
 	// (default range ID: initialRangeID == 1)
 	createTaskQueueQry = `INSERT ` + taskQueueCreatePart
 
-	replaceTaskQueueQry = `INSERT ` + taskQueueCreatePart +
-		`ON CONFLICT (range_hash, task_queue_id) DO UPDATE
-SET range_id = excluded.range_id,
-data = excluded.data,
-data_encoding = excluded.data_encoding`
-
 	updateTaskQueueQry = `UPDATE task_queues SET
 range_id = :range_id,
 data = :data,
@@ -133,11 +127,6 @@ func (pdb *db) DeleteFromTasks(filter sqlplugin.TasksFilter) (sql.Result, error)
 // InsertIntoTaskQueues inserts one or more rows into task_queues table
 func (pdb *db) InsertIntoTaskQueues(row *sqlplugin.TaskQueuesRow) (sql.Result, error) {
 	return pdb.conn.NamedExec(createTaskQueueQry, row)
-}
-
-// ReplaceIntoTaskQueues replaces one or more rows in task_queues table
-func (pdb *db) ReplaceIntoTaskQueues(row *sqlplugin.TaskQueuesRow) (sql.Result, error) {
-	return pdb.conn.NamedExec(replaceTaskQueueQry, row)
 }
 
 // UpdateTaskQueues updates a row in task_queues table

@@ -104,7 +104,7 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. Failed to make task queue %v of type %v. Error: %v", request.TaskQueue, request.TaskType, err))
 		}
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. Failed to check if task queue existed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. Failed to check if task queue %v of type %v existed. Error: %v", request.TaskQueue, request.TaskType, err))
 	}
 
 	if request.RangeID > 0 && request.RangeID != row.RangeID {
