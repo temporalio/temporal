@@ -30,12 +30,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
-	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
+	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -282,14 +284,15 @@ func (s *Service) Start() {
 	if err != nil {
 		logger.Fatal("creating grpc server options failed", tag.Error(err))
 	}
-	opts = append(opts, grpc.UnaryInterceptor(rpc.Interceptor))
+	opts = append(
+		opts,
+		grpc.ChainUnaryInterceptor(
+			rpc.ServiceErrorInterceptor,
+			authorization.NewAuthorizationInterceptor(s.params.Authorizer, s.Resource.GetMetricsClient())))
 	s.server = grpc.NewServer(opts...)
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
 	s.handler = NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
-	if s.params.Authorizer != nil {
-		s.handler = NewAccessControlledHandlerImpl(s.handler, s.params.Authorizer)
-	}
 
 	workflowservice.RegisterWorkflowServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.handler)
