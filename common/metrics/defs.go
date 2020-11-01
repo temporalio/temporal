@@ -1061,6 +1061,13 @@ const (
 	NumWorkerScopes
 )
 
+// -- Operation scopes for Authorization --
+const (
+	// ReplicationScope is the scope used by all metric emitted by replicator
+	AuthorizerScope = iota + NumWorkerScopes
+	NumAuthorizationScopes
+)
+
 // ScopeDefs record the scopes for all services
 var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// common scope Names
