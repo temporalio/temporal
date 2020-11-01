@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -60,7 +61,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockShard           *shardContextTest
+		mockShard           *shard.ContextTest
 		mockEventsCache     *events.MockCache
 		mockTaskRefresher   *MockmutableStateTaskRefresher
 		mockNamespaceCache  *cache.MockNamespaceCache
@@ -88,7 +89,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskRefresher = NewMockmutableStateTaskRefresher(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -99,10 +100,10 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 		NewDynamicConfigForTest(),
 	)
 
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
-	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockEventsCache = s.mockShard.mockEventsCache
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 

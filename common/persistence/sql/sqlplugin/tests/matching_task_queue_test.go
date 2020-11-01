@@ -122,7 +122,7 @@ func (s *matchingTaskQueueSuite) TestInsertSelect() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.TaskQueuesFilter{
+	filter := sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
 	}
@@ -174,7 +174,7 @@ func (s *matchingTaskQueueSuite) TestReplaceSelect() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.TaskQueuesFilter{
+	filter := sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
 	}
@@ -231,7 +231,7 @@ func (s *matchingTaskQueueSuite) TestInsertUpdateSelect() {
 	rowsAffected, err = result.RowsAffected()
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.TaskQueuesFilter{
+	filter := sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
 	}
@@ -244,7 +244,7 @@ func (s *matchingTaskQueueSuite) TestDeleteSelect() {
 	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
 	rangeID := int64(1)
 
-	filter := &sqlplugin.TaskQueuesFilter{
+	filter := sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
 		RangeID:     convert.Int64Ptr(rangeID),
@@ -254,7 +254,7 @@ func (s *matchingTaskQueueSuite) TestDeleteSelect() {
 	rowsAffected, err := result.RowsAffected()
 	s.Equal(0, int(rowsAffected))
 
-	filter = &sqlplugin.TaskQueuesFilter{
+	filter = sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
 	}
@@ -274,7 +274,7 @@ func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Success() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.TaskQueuesFilter{
+	filter := sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
 		RangeID:     convert.Int64Ptr(rangeID),
@@ -284,7 +284,7 @@ func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Success() {
 	rowsAffected, err = result.RowsAffected()
 	s.Equal(1, int(rowsAffected))
 
-	filter = &sqlplugin.TaskQueuesFilter{
+	filter = sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
 	}
@@ -304,7 +304,7 @@ func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Fail() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := &sqlplugin.TaskQueuesFilter{
+	filter := sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
 		RangeID:     convert.Int64Ptr(rangeID + 1),
@@ -314,7 +314,7 @@ func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Fail() {
 	rowsAffected, err = result.RowsAffected()
 	s.Equal(0, int(rowsAffected))
 
-	filter = &sqlplugin.TaskQueuesFilter{
+	filter = sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
 	}
@@ -336,7 +336,7 @@ func (s *matchingTaskQueueSuite) TestInsertLock() {
 
 	// NOTE: lock without transaction is equivalent to select
 	//  this test only test the select functionality
-	filter := &sqlplugin.TaskQueuesFilter{
+	filter := sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
 	}

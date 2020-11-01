@@ -38,6 +38,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -46,7 +47,7 @@ type (
 		*require.Assertions
 
 		controller *gomock.Controller
-		mockShard  *shardContextTest
+		mockShard  *shard.ContextTest
 
 		cache *historyCache
 	}
@@ -68,7 +69,7 @@ func (s *historyCacheSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -79,7 +80,7 @@ func (s *historyCacheSuite) SetupTest() {
 		NewDynamicConfigForTest(),
 	)
 
-	s.mockShard.resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 }
 
 func (s *historyCacheSuite) TearDownTest() {

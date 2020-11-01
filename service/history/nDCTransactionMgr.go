@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/shard"
 )
 
 // NOTE: terminology
@@ -149,7 +150,7 @@ type (
 	}
 
 	nDCTransactionMgrImpl struct {
-		shard            ShardContext
+		shard            shard.Context
 		namespaceCache   cache.NamespaceCache
 		historyCache     *historyCache
 		clusterMetadata  cluster.Metadata
@@ -168,7 +169,7 @@ type (
 var _ nDCTransactionMgr = (*nDCTransactionMgrImpl)(nil)
 
 func newNDCTransactionMgr(
-	shard ShardContext,
+	shard shard.Context,
 	historyCache *historyCache,
 	eventsReapplier nDCEventsReapplier,
 	logger log.Logger,

@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -47,7 +48,7 @@ type (
 		*require.Assertions
 
 		controller       *gomock.Controller
-		mockShard        *shardContextTest
+		mockShard        *shard.ContextTest
 		mockContext      *MockworkflowExecutionContext
 		mockMutableState *MockmutableState
 		mockStateBuilder *MocknDCStateRebuilder
@@ -76,7 +77,7 @@ func (s *nDCConflictResolverSuite) SetupTest() {
 	s.mockMutableState = NewMockmutableState(s.controller)
 	s.mockStateBuilder = NewMocknDCStateRebuilder(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{

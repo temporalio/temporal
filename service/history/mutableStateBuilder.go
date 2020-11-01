@@ -57,11 +57,12 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/executionstate"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/persistence/wss"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 const (
@@ -165,7 +166,7 @@ type (
 		workflowTaskManager mutableStateWorkflowTaskManager
 		queryRegistry       queryRegistry
 
-		shard           ShardContext
+		shard           shard.Context
 		clusterMetadata cluster.Metadata
 		eventsCache     events.Cache
 		config          *configs.Config
@@ -178,7 +179,7 @@ type (
 var _ mutableState = (*mutableStateBuilder)(nil)
 
 func newMutableStateBuilder(
-	shard ShardContext,
+	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *cache.NamespaceCacheEntry,
@@ -251,7 +252,7 @@ func newMutableStateBuilder(
 }
 
 func newMutableStateBuilderWithVersionHistories(
-	shard ShardContext,
+	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *cache.NamespaceCacheEntry,
@@ -3824,7 +3825,7 @@ func (e *mutableStateBuilder) UpdateWorkflowStateStatus(
 	status enumspb.WorkflowExecutionStatus,
 ) error {
 
-	return wss.UpdateWorkflowStateStatus(e.executionState, state, status)
+	return executionstate.SetStateStatus(e.executionState, state, status)
 }
 
 func (e *mutableStateBuilder) StartTransaction(

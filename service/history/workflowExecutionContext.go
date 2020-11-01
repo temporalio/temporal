@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 const (
@@ -133,8 +134,8 @@ type (
 	workflowExecutionContextImpl struct {
 		namespaceID       string
 		workflowExecution commonpb.WorkflowExecution
-		shard             ShardContext
-		engine            Engine
+		shard             shard.Context
+		engine            shard.Engine
 		executionManager  persistence.ExecutionManager
 		logger            log.Logger
 		metricsClient     metrics.Client
@@ -157,7 +158,7 @@ var (
 func newWorkflowExecutionContext(
 	namespaceID string,
 	execution commonpb.WorkflowExecution,
-	shard ShardContext,
+	shard shard.Context,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) *workflowExecutionContextImpl {

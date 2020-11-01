@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -65,7 +66,7 @@ type (
 	}
 
 	nDCStateRebuilderImpl struct {
-		shard           ShardContext
+		shard           shard.Context
 		namespaceCache  cache.NamespaceCache
 		eventsCache     events.Cache
 		clusterMetadata cluster.Metadata
@@ -80,7 +81,7 @@ type (
 var _ nDCStateRebuilder = (*nDCStateRebuilderImpl)(nil)
 
 func newNDCStateRebuilder(
-	shard ShardContext,
+	shard shard.Context,
 	logger log.Logger,
 ) *nDCStateRebuilderImpl {
 

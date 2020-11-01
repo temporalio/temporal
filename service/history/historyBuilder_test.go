@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -60,7 +61,7 @@ type (
 		*require.Assertions
 
 		controller         *gomock.Controller
-		mockShard          *shardContextTest
+		mockShard          *shard.ContextTest
 		mockEventsCache    *events.MockCache
 		mockNamespaceCache *cache.MockNamespaceCache
 
@@ -81,7 +82,7 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -98,8 +99,8 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.namespaceID = testNamespaceID
 	s.namespaceEntry = cache.NewLocalNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{Id: s.namespaceID}, &persistencespb.NamespaceConfig{}, "", nil)
 
-	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
-	s.mockEventsCache = s.mockShard.mockEventsCache
+	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
+	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(s.namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(s.namespaceEntry, nil).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()

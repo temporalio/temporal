@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -53,7 +54,7 @@ type (
 		*require.Assertions
 
 		controller         *gomock.Controller
-		mockShard          *shardContextTest
+		mockShard          *shard.ContextTest
 		mockStateRebuilder *MocknDCStateRebuilder
 
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
@@ -87,7 +88,7 @@ func (s *workflowResetterSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockStateRebuilder = NewMocknDCStateRebuilder(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -97,7 +98,7 @@ func (s *workflowResetterSuite) SetupTest() {
 			}},
 		NewDynamicConfigForTest(),
 	)
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
 
 	s.workflowResetter = newWorkflowResetter(
 		s.mockShard,

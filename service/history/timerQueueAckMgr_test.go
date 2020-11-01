@@ -33,6 +33,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/shard"
 
 	"github.com/gogo/protobuf/types"
 
@@ -55,7 +56,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockShard           *shardContextTest
+		mockShard           *shard.ContextTest
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockExecutionMgr *mocks.ExecutionManager
@@ -71,7 +72,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockShard           *shardContextTest
+		mockShard           *shard.ContextTest
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockExecutionMgr *mocks.ExecutionManager
@@ -114,7 +115,7 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 	config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -128,9 +129,9 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 		config,
 	)
 
-	s.mockShardMgr = s.mockShard.resource.ShardMgr
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockShardMgr = s.mockShard.Resource.ShardMgr
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 
 	s.logger = s.mockShard.GetLogger()
 
@@ -546,7 +547,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -561,9 +562,9 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 		config,
 	)
 
-	s.mockShardMgr = s.mockShard.resource.ShardMgr
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockShardMgr = s.mockShard.Resource.ShardMgr
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()

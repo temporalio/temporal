@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 )
 
 var (
@@ -64,7 +65,7 @@ type (
 	timerQueueProcessorImpl struct {
 		isGlobalNamespaceEnabled bool
 		currentClusterName       string
-		shard                    ShardContext
+		shard                    shard.Context
 		taskAllocator            taskAllocator
 		config                   *configs.Config
 		metricsClient            metrics.Client
@@ -82,7 +83,7 @@ type (
 )
 
 func newTimerQueueProcessor(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	matchingClient matching.Client,
 	queueTaskProcessor queueTaskProcessor,
@@ -280,7 +281,7 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 				err := t.completeTimers()
 				if err != nil {
 					t.logger.Info("Failed to complete timers.", tag.Error(err))
-					if err == ErrShardClosed {
+					if err == shard.ErrShardClosed {
 						// shard is unloaded, timer processor should quit as well
 						go t.Stop()
 						return

@@ -98,7 +98,7 @@ func (mdb *db) InsertIntoTasks(rows []sqlplugin.TasksRow) (sql.Result, error) {
 }
 
 // SelectFromTasks reads one or more rows from tasks table
-func (mdb *db) SelectFromTasks(filter *sqlplugin.TasksFilter) ([]sqlplugin.TasksRow, error) {
+func (mdb *db) SelectFromTasks(filter sqlplugin.TasksFilter) ([]sqlplugin.TasksRow, error) {
 	var err error
 	var rows []sqlplugin.TasksRow
 	switch {
@@ -114,7 +114,7 @@ func (mdb *db) SelectFromTasks(filter *sqlplugin.TasksFilter) ([]sqlplugin.Tasks
 }
 
 // DeleteFromTasks deletes one or more rows from tasks table
-func (mdb *db) DeleteFromTasks(filter *sqlplugin.TasksFilter) (sql.Result, error) {
+func (mdb *db) DeleteFromTasks(filter sqlplugin.TasksFilter) (sql.Result, error) {
 	if filter.TaskIDLessThanEquals != nil {
 		if filter.Limit == nil || *filter.Limit == 0 {
 			return nil, fmt.Errorf("missing limit parameter")
@@ -141,7 +141,7 @@ func (mdb *db) UpdateTaskQueues(row *sqlplugin.TaskQueuesRow) (sql.Result, error
 }
 
 // SelectFromTaskQueues reads one or more rows from task_queues table
-func (mdb *db) SelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
+func (mdb *db) SelectFromTaskQueues(filter sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
 	switch {
 	case filter.TaskQueueID != nil:
 		if filter.RangeHashLessThanEqualTo != 0 || filter.RangeHashGreaterThanEqualTo != 0 {
@@ -160,7 +160,7 @@ func (mdb *db) SelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlpl
 	}
 }
 
-func (mdb *db) selectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
+func (mdb *db) selectFromTaskQueues(filter sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
 	var err error
 	var row sqlplugin.TaskQueuesRow
 	err = mdb.conn.Get(&row, getTaskQueueQry, filter.RangeHash, filter.TaskQueueID)
@@ -170,7 +170,7 @@ func (mdb *db) selectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlpl
 	return []sqlplugin.TaskQueuesRow{row}, err
 }
 
-func (mdb *db) rangeSelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
+func (mdb *db) rangeSelectFromTaskQueues(filter sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
 	var err error
 	var rows []sqlplugin.TaskQueuesRow
 
@@ -189,12 +189,12 @@ func (mdb *db) rangeSelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]
 }
 
 // DeleteFromTaskQueues deletes a row from task_queues table
-func (mdb *db) DeleteFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) (sql.Result, error) {
+func (mdb *db) DeleteFromTaskQueues(filter sqlplugin.TaskQueuesFilter) (sql.Result, error) {
 	return mdb.conn.Exec(deleteTaskQueueQry, filter.RangeHash, filter.TaskQueueID, *filter.RangeID)
 }
 
 // LockTaskQueues locks a row in task_queues table
-func (mdb *db) LockTaskQueues(filter *sqlplugin.TaskQueuesFilter) (int64, error) {
+func (mdb *db) LockTaskQueues(filter sqlplugin.TaskQueuesFilter) (int64, error) {
 	var rangeID int64
 	err := mdb.conn.Get(&rangeID, lockTaskQueueQry, filter.RangeHash, filter.TaskQueueID)
 	return rangeID, err

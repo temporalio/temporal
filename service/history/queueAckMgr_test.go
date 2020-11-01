@@ -30,6 +30,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/shard"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -49,7 +50,7 @@ type (
 		*require.Assertions
 
 		controller *gomock.Controller
-		mockShard  *shardContextTest
+		mockShard  *shard.ContextTest
 
 		mockProcessor *MockProcessor
 
@@ -62,7 +63,7 @@ type (
 		*require.Assertions
 
 		controller *gomock.Controller
-		mockShard  *shardContextTest
+		mockShard  *shard.ContextTest
 
 		mockProcessor *MockProcessor
 
@@ -96,7 +97,7 @@ func (s *queueAckMgrSuite) SetupTest() {
 	config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&p.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -285,7 +286,7 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 	config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&p.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
