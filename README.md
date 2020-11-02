@@ -35,10 +35,10 @@ We have a number of [HelloWorld type scenarios](https://github.com/temporalio/sa
 
 ### Use CLI
 
-Use [Temporal's command line tool](https://docs.temporal.io/docs/tctl) `tctl` to interact with the local Temporal server.
+Use [Temporal's command line tool](https://docs.temporal.io/docs/tctl) `tctl` to interact with the local Temporal server (`--address` flag is for Mac users only).
 
 ```bash
-$ alias tctl="docker run --rm temporalio/tctl:latest --address host.docker.internal:7233"
+$ alias tctl="docker run --rm --entrypoint tctl temporalio/admin-tools:latest --address host.docker.internal:7233"
 $ tctl namespace list
 $ tctl workflow list
 ```
