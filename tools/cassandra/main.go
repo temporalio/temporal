@@ -104,6 +104,12 @@ func buildCLIOptions() *cli.App {
 			Usage:  "name of the cassandra Keyspace",
 			EnvVar: "CASSANDRA_KEYSPACE",
 		},
+		cli.StringFlag{
+			Name:   schema.CLIFlagDatacenter,
+			Value:  "",
+			Usage:  "enable NetworkTopologyStrategy by providing datacenter name",
+			EnvVar: "CASSANDRA_DATACENTER",
+		},
 		cli.BoolFlag{
 			Name:  schema.CLIFlagQuiet,
 			Usage: "Don't set exit status to 1 on error",
@@ -188,7 +194,7 @@ func buildCLIOptions() *cli.App {
 		{
 			Name:    "create-Keyspace",
 			Aliases: []string{"create"},
-			Usage:   "creates a Keyspace with simple strategy",
+			Usage:   "creates a Keyspace with simple strategy or network topology if datacenter name is provided",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  schema.CLIFlagKeyspace,
@@ -198,6 +204,11 @@ func buildCLIOptions() *cli.App {
 					Name:  schema.CLIFlagReplicationFactor,
 					Value: 1,
 					Usage: "replication factor for the Keyspace",
+				},
+				cli.StringFlag{
+					Name:  schema.CLIFlagDatacenter,
+					Value: "",
+					Usage: "enable NetworkTopologyStrategy by providing datacenter name",
 				},
 			},
 			Action: func(c *cli.Context) {

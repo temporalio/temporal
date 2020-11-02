@@ -106,6 +106,8 @@ const (
 	CLIOptSchemaDir = "schema-dir"
 	// CLIOptReplicationFactor is the cli option for replication factor
 	CLIOptReplicationFactor = "replication-factor"
+	// CLIOptDatacenter is the cli option for NetworkTopologyStrategy datacenter
+	CLIOptDatacenter = "datacenter"
 	// CLIOptQuiet is the cli option for quiet mode
 	CLIOptQuiet = "quiet"
 
@@ -143,6 +145,8 @@ const (
 	CLIFlagSchemaDir = CLIOptSchemaDir + ", d"
 	// CLIFlagReplicationFactor is the cli flag for replication factor
 	CLIFlagReplicationFactor = CLIOptReplicationFactor + ", rf"
+	// CLIFlagDatacenter is the cli option for NetworkTopologyStrategy datacenter
+	CLIFlagDatacenter = CLIOptDatacenter + ", dc"
 	// CLIFlagQuiet is the cli flag for quiet mode
 	CLIFlagQuiet = CLIOptQuiet + ", q"
 
