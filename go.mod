@@ -45,7 +45,7 @@ require (
 	github.com/olivere/elastic v6.2.34+incompatible
 	github.com/onsi/ginkgo v1.10.3 // indirect
 	github.com/onsi/gomega v1.7.1 // indirect
-	github.com/pborman/uuid v1.2.0
+	github.com/pborman/uuid v1.2.1
 	github.com/pierrec/lz4 v2.5.2+incompatible // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0 // indirect
 	github.com/robfig/cron v1.2.0
@@ -59,10 +59,10 @@ require (
 	github.com/urfave/cli/v2 v2.2.0
 	github.com/valyala/fastjson v1.5.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/api v1.1.1-0.20201023174906-79ee9050db14
-	go.temporal.io/sdk v1.1.0
+	go.temporal.io/api v1.1.1-0.20201102165954-7c55c58b053e
+	go.temporal.io/sdk v1.1.1-0.20201102175620-eb126e0b815a
 	go.temporal.io/version v0.0.0-20201010013230-09a97e02aa8c
-	go.uber.org/atomic v1.6.0
+	go.uber.org/atomic v1.7.0
 	go.uber.org/multierr v1.5.0
 	go.uber.org/zap v1.15.0
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
@@ -73,5 +73,4 @@ require (
 	google.golang.org/grpc/examples v0.0.0-20200625174016-7a808837ae92
 	gopkg.in/validator.v2 v2.0.0-20200605151824-2b28d334fa05
 	gopkg.in/yaml.v2 v2.3.0
-	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776 // indirect
 )
