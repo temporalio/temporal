@@ -131,58 +131,6 @@ func (s *matchingTaskQueueSuite) TestInsertSelect() {
 	s.Equal([]sqlplugin.TaskQueuesRow{taskQueue}, rows)
 }
 
-func (s *matchingTaskQueueSuite) TestInsertReplace_Exists() {
-	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
-	rangeID := int64(1)
-
-	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
-	rangeID++
-	result, err := s.store.InsertIntoTaskQueues(&taskQueue)
-	s.NoError(err)
-	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
-
-	taskQueue = s.newRandomTasksQueueRow(queueID, rangeID)
-	result, err = s.store.ReplaceIntoTaskQueues(&taskQueue)
-	s.NoError(err)
-	// NOTE: cannot do assertion on affected rows
-	//  PostgreSQL will return 1
-	//  MySQL will return 2: ref https://dev.mysql.com/doc/c-api/5.7/en/mysql-affected-rows.html
-}
-
-func (s *matchingTaskQueueSuite) TestReplace_NonExists() {
-	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
-	rangeID := int64(1)
-
-	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
-	result, err := s.store.ReplaceIntoTaskQueues(&taskQueue)
-	s.NoError(err)
-	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
-}
-
-func (s *matchingTaskQueueSuite) TestReplaceSelect() {
-	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
-	rangeID := int64(1)
-
-	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
-	result, err := s.store.ReplaceIntoTaskQueues(&taskQueue)
-	s.NoError(err)
-	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
-
-	filter := sqlplugin.TaskQueuesFilter{
-		RangeHash:   testMatchingTaskQueueRangeHash,
-		TaskQueueID: queueID,
-	}
-	rows, err := s.store.SelectFromTaskQueues(filter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.TaskQueuesRow{taskQueue}, rows)
-}
-
 func (s *matchingTaskQueueSuite) TestInsertUpdate_Success() {
 	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
 	rangeID := int64(1)

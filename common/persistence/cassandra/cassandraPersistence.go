@@ -657,16 +657,24 @@ workflow_state = ? ` +
 		`and task_id = ? ` +
 		`IF range_id = ?`
 
-	templateUpdateTaskQueueQueryWithTTL = `INSERT INTO tasks (` +
+	templateUpdateTaskQueueQueryWithTTLPart1 = `INSERT INTO tasks (` +
 		`namespace_id, ` +
 		`task_queue_name, ` +
 		`task_queue_type, ` +
 		`type, ` +
-		`task_id, ` +
-		`range_id, ` +
-		`task_queue, ` +
-		`task_queue_encoding ` +
-		`) VALUES (?, ?, ?, ?, ?, ?, ?, ?) USING TTL ?`
+		`task_id ` +
+		`) VALUES (?, ?, ?, ?, ?) USING TTL ?`
+
+	templateUpdateTaskQueueQueryWithTTLPart2 = `UPDATE tasks USING TTL ? SET ` +
+		`range_id = ?, ` +
+		`task_queue = ?, ` +
+		`task_queue_encoding = ? ` +
+		`WHERE namespace_id = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
+		`and type = ? ` +
+		`and task_id = ? ` +
+		`IF range_id = ?`
 
 	templateDeleteTaskQueueQuery = `DELETE FROM tasks ` +
 		`WHERE namespace_id = ? ` +
@@ -2284,54 +2292,51 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest) (*p.UpdateTaskQueueResponse, error) {
 	tli := *request.TaskQueueInfo
 	tli.LastUpdateTime = timestamp.TimeNowPtrUtc()
+	datablob, err := serialization.TaskQueueInfoToBlob(&tli)
+	if err != nil {
+		return nil, convertCommonErrors("UpdateTaskQueue", err)
+	}
+
+	var applied bool
+	previous := make(map[string]interface{})
 	if tli.Kind == enumspb.TASK_QUEUE_KIND_STICKY { // if task_queue is sticky, then update with TTL
-		expiry := types.TimestampNow()
-		expiry.Seconds += int64(stickyTaskQueueTTL)
-
-		datablob, err := serialization.TaskQueueInfoToBlob(&tli)
-		if err != nil {
-			return nil, convertCommonErrors("UpdateTaskQueue", err)
-		}
-
-		query := d.session.Query(templateUpdateTaskQueueQueryWithTTL,
+		batch := d.session.NewBatch(gocql.LoggedBatch)
+		batch.Query(templateUpdateTaskQueueQueryWithTTLPart1,
+			tli.GetNamespaceId(),
+			&tli.Name,
+			tli.TaskType,
+			rowTypeTaskQueue,
+			taskQueueTaskID,
+			stickyTaskQueueTTL,
+		)
+		batch.Query(templateUpdateTaskQueueQueryWithTTLPart2,
+			stickyTaskQueueTTL,
+			request.RangeID,
+			datablob.Data,
+			datablob.EncodingType.String(),
 			tli.GetNamespaceId(),
 			&tli.Name,
 			tli.TaskType,
 			rowTypeTaskQueue,
 			taskQueueTaskID,
 			request.RangeID,
+		)
+		applied, _, err = d.session.MapExecuteBatchCAS(batch, previous)
+	} else {
+		query := d.session.Query(templateUpdateTaskQueueQuery,
+			request.RangeID,
 			datablob.Data,
 			datablob.EncodingType.String(),
-			stickyTaskQueueTTL,
+			tli.GetNamespaceId(),
+			&tli.Name,
+			tli.TaskType,
+			rowTypeTaskQueue,
+			taskQueueTaskID,
+			request.RangeID,
 		)
-		err = query.Exec()
-		if err != nil {
-			return nil, convertCommonErrors("UpdateTaskQueue", err)
-		}
-
-		return &p.UpdateTaskQueueResponse{}, nil
+		applied, err = query.MapScanCAS(previous)
 	}
 
-	tli.LastUpdateTime = timestamp.TimeNowPtrUtc()
-	datablob, err := serialization.TaskQueueInfoToBlob(&tli)
-	if err != nil {
-		return nil, convertCommonErrors("UpdateTaskQueue", err)
-	}
-
-	query := d.session.Query(templateUpdateTaskQueueQuery,
-		request.RangeID,
-		datablob.Data,
-		datablob.EncodingType.String(),
-		tli.GetNamespaceId(),
-		&tli.Name,
-		tli.TaskType,
-		rowTypeTaskQueue,
-		taskQueueTaskID,
-		request.RangeID,
-	)
-
-	previous := make(map[string]interface{})
-	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		if isThrottlingError(err) {
 			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("UpdateTaskQueue operation failed. Error: %v", err))

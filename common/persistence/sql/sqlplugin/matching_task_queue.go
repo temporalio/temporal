@@ -53,7 +53,6 @@ type (
 	// MatchingTaskQueue is the SQL persistence interface for matching task queues
 	MatchingTaskQueue interface {
 		InsertIntoTaskQueues(row *TaskQueuesRow) (sql.Result, error)
-		ReplaceIntoTaskQueues(row *TaskQueuesRow) (sql.Result, error)
 		UpdateTaskQueues(row *TaskQueuesRow) (sql.Result, error)
 		// SelectFromTaskQueues returns one or more rows from task_queues table
 		// Required Filter params:
