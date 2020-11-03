@@ -1,15 +1,4 @@
 steps:
-  - label: ":golang: build"
-    agents:
-      queue: "default"
-      docker: "*"
-    command: "make"
-    plugins:
-      - docker-compose#v3.1.0:
-          run: build
-          config: docker/buildkite/docker-compose.yml
-
-  - wait
 
   - label: ":golang: integration test with cassandra 1"
     agents:
