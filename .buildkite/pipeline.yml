@@ -11,19 +11,7 @@ steps:
 
   - wait
 
-#  - label: ":golang: unit test"
-#    agents:
-#      queue: "default"
-#      docker: "*"
-#    command: "make cover_profile"
-#    artifact_paths:
-#      - "build/coverage/*.out"
-#    plugins:
-#      - docker-compose#v3.1.0:
-#          run: unit-test
-#          config: docker/buildkite/docker-compose.yml
-
-  - label: ":golang: integration test with cassandra"
+  - label: ":golang: integration test with cassandra 1"
     agents:
       queue: "default"
       docker: "*"
@@ -38,37 +26,7 @@ steps:
           run: integration-test-cassandra
           config: docker/buildkite/docker-compose.yml
 
-#  - label: ":golang: integration xdc test with cassandra"
-#    agents:
-#      queue: "default"
-#      docker: "*"
-#    command: "make cover_xdc_profile"
-#    artifact_paths:
-#      - "build/coverage/*.out"
-#    retry:
-#      automatic:
-#        limit: 1
-#    plugins:
-#      - docker-compose#v3.1.0:
-#          run: integration-test-xdc-cassandra
-#          config: docker/buildkite/docker-compose.yml
-#
-#  - label: ":golang: integration ndc test with cassandra"
-#    agents:
-#      queue: "default"
-#      docker: "*"
-#    command: "make cover_ndc_profile"
-#    artifact_paths:
-#      - "build/coverage/*.out"
-#    retry:
-#      automatic:
-#        limit: 1
-#    plugins:
-#      - docker-compose#v3.1.0:
-#          run: integration-test-xdc-cassandra
-#          config: docker/buildkite/docker-compose.yml
-
-  - label: ":golang: integration test with mysql"
+  - label: ":golang: integration test with mysql 1"
     agents:
       queue: "default"
       docker: "*"
@@ -83,37 +41,7 @@ steps:
           run: integration-test-mysql
           config: docker/buildkite/docker-compose.yml
 
-#  - label: ":golang: integration xdc test with mysql"
-#    agents:
-#      queue: "default"
-#      docker: "*"
-#    command: "make cover_xdc_profile"
-#    artifact_paths:
-#      - "build/coverage/*.out"
-#    retry:
-#      automatic:
-#        limit: 1
-#    plugins:
-#      - docker-compose#v3.1.0:
-#          run: integration-test-xdc-mysql
-#          config: docker/buildkite/docker-compose.yml
-#
-#  - label: ":golang: integration ndc test with mysql"
-#    agents:
-#      queue: "default"
-#      docker: "*"
-#    command: "make cover_ndc_profile"
-#    artifact_paths:
-#      - "build/coverage/*.out"
-#    retry:
-#      automatic:
-#        limit: 1
-#    plugins:
-#      - docker-compose#v3.1.0:
-#          run: integration-test-xdc-mysql
-#          config: docker/buildkite/docker-compose.yml
-
-  - label: ":golang: integration test with postgresql"
+  - label: ":golang: integration test with postgresql 1"
     agents:
       queue: "default"
       docker: "*"
@@ -128,60 +56,139 @@ steps:
           run: integration-test-postgresql
           config: docker/buildkite/docker-compose.yml
 
-#  - label: ":golang: integration xdc test with postgresql"
-#    agents:
-#      queue: "default"
-#      docker: "*"
-#    command: "make cover_xdc_profile"
-#    artifact_paths:
-#      - "build/coverage/*.out"
-#    retry:
-#      automatic:
-#        limit: 1
-#    plugins:
-#      - docker-compose#v3.1.0:
-#          run: integration-test-xdc-postgresql
-#          config: docker/buildkite/docker-compose.yml
-#
-#  - label: ":golang: integration ndc test with postgresql"
-#    agents:
-#      queue: "default"
-#      docker: "*"
-#    command: "make cover_ndc_profile"
-#    artifact_paths:
-#      - "build/coverage/*.out"
-#    retry:
-#      automatic:
-#        limit: 1
-#    plugins:
-#      - docker-compose#v3.1.0:
-#          run: integration-test-xdc-postgresql
-#          config: docker/buildkite/docker-compose.yml
+  - label: ":golang: integration test with cassandra 2"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-cassandra
+          config: docker/buildkite/docker-compose.yml
 
-#  - wait
-#
-#  - label: ":golang: code-coverage"
-#    agents:
-#      queue: "default"
-#      docker: "*"
-#    command: "scripts/buildkite/gocov.sh"
-#    retry:
-#      automatic:
-#        limit: 2
-#    plugins:
-#      - docker-compose#v3.1.0:
-#          run: coverage-report
-#          config: docker/buildkite/docker-compose.yml
-#
-#  - label: ":docker: build and push master"
-#    agents:
-#      queue: "default"
-#      docker: "*"
-#    command: "scripts/buildkite/docker-push.sh"
-#    retry:
-#      automatic:
-#        limit: 1
-#    plugins:
-#      - docker-login#v2.0.1:
-#          username: temporaltech
-#          password-env: DOCKER_LOGIN_PASSWORD
+  - label: ":golang: integration test with mysql 2"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-mysql
+          config: docker/buildkite/docker-compose.yml
+
+  - label: ":golang: integration test with postgresql 2"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-postgresql
+          config: docker/buildkite/docker-compose.yml
+
+  - label: ":golang: integration test with cassandra 3"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-cassandra
+          config: docker/buildkite/docker-compose.yml
+
+  - label: ":golang: integration test with mysql 3"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-mysql
+          config: docker/buildkite/docker-compose.yml
+
+  - label: ":golang: integration test with postgresql 3"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-postgresql
+          config: docker/buildkite/docker-compose.yml
+
+  - label: ":golang: integration test with cassandra 4"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-cassandra
+          config: docker/buildkite/docker-compose.yml
+
+  - label: ":golang: integration test with mysql 4"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-mysql
+          config: docker/buildkite/docker-compose.yml
+
+  - label: ":golang: integration test with postgresql 4"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-postgresql
+          config: docker/buildkite/docker-compose.yml
+
+
