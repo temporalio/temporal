@@ -28,7 +28,7 @@ require (
 	github.com/google/uuid v1.1.2
 	github.com/iancoleman/strcase v0.0.0-20191112232945-16388991a334
 	github.com/jcmturner/gokrb5/v8 v8.3.0 // indirect
-	github.com/jmoiron/sqlx v1.2.0
+	github.com/jmoiron/sqlx v1.2.1-0.20200615141059-0794cb1f47ee
 	github.com/jonboulle/clockwork v0.1.0
 	github.com/klauspost/compress v1.10.8 // indirect
 	github.com/lib/pq v1.6.0
@@ -74,6 +74,3 @@ require (
 	gopkg.in/validator.v2 v2.0.0-20200605151824-2b28d334fa05
 	gopkg.in/yaml.v2 v2.3.0
 )
-
-// TODO https://github.com/uber/cadence/issues/2863
-replace github.com/jmoiron/sqlx v1.2.0 => github.com/longquanzheng/sqlx v0.0.0-20191125235044-053e6130695c
