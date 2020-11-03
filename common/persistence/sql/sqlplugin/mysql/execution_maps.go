@@ -129,7 +129,44 @@ var (
 
 // ReplaceIntoActivityInfoMaps replaces one or more rows in activity_info_maps table
 func (mdb *db) ReplaceIntoActivityInfoMaps(rows []sqlplugin.ActivityInfoMapsRow) (sql.Result, error) {
-	return mdb.db.NamedExec(setKeyInActivityInfoMapQry, rows)
+	q, args, err := mdb.db.BindNamed(setKeyInActivityInfoMapQry, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	q = expandBatchInsertQuery(q, len(rows))
+
+	return mdb.conn.Exec(q, args...)
+}
+
+func expandBatchInsertQuery(q string, rowCount int) string {
+	b := strings.Builder{}
+	// Inclusive start index
+	valStartIdx := strings.Index(q, "(?,")
+
+	// Add 2 to get exclusive end index
+	valEndIdx := strings.Index(q, "?)") + 2
+
+	// Write initial half of query
+	b.WriteString(q[0:valEndIdx])
+
+	// Create rowCount-1 more (?, ?, ?) placeholders
+	for i := 0; i < rowCount-1; i++ {
+		b.WriteString(",")
+		b.WriteString(q[valStartIdx:valEndIdx])
+	}
+
+	// sqlx does not like VALUES() and is generating an artifact
+	// into the sql query when we don't use a semicolon when we don't terminate with a `;`.
+	// Removing that while writing the second half of the query if it exists.
+	lastIdx := strings.LastIndex(q, ",")
+	if lastIdx == -1 || lastIdx <= valEndIdx {
+		b.WriteString(q[valEndIdx:])
+	} else {
+		b.WriteString(q[valEndIdx:lastIdx])
+	}
+
+	return b.String()
 }
 
 // SelectFromActivityInfoMaps reads one or more rows from activity_info_maps table
@@ -169,7 +206,15 @@ var (
 
 // ReplaceIntoTimerInfoMaps replaces one or more rows in timer_info_maps table
 func (mdb *db) ReplaceIntoTimerInfoMaps(rows []sqlplugin.TimerInfoMapsRow) (sql.Result, error) {
-	return mdb.db.NamedExec(setKeyInTimerInfoMapSQLQuery, rows)
+	q, args, err := mdb.db.BindNamed(setKeyInTimerInfoMapSQLQuery, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	q = expandBatchInsertQuery(q, len(rows))
+
+	return mdb.conn.Exec(q, args...)
+
 }
 
 // SelectFromTimerInfoMaps reads one or more rows from timer_info_maps table
@@ -209,7 +254,15 @@ var (
 
 // ReplaceIntoChildExecutionInfoMaps replaces one or more rows in child_execution_info_maps table
 func (mdb *db) ReplaceIntoChildExecutionInfoMaps(rows []sqlplugin.ChildExecutionInfoMapsRow) (sql.Result, error) {
-	return mdb.db.NamedExec(setKeyInChildExecutionInfoMapQry, rows)
+	q, args, err := mdb.db.BindNamed(setKeyInChildExecutionInfoMapQry, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	q = expandBatchInsertQuery(q, len(rows))
+
+	return mdb.conn.Exec(q, args...)
+
 }
 
 // SelectFromChildExecutionInfoMaps reads one or more rows from child_execution_info_maps table
@@ -249,7 +302,15 @@ var (
 
 // ReplaceIntoRequestCancelInfoMaps replaces one or more rows in request_cancel_info_maps table
 func (mdb *db) ReplaceIntoRequestCancelInfoMaps(rows []sqlplugin.RequestCancelInfoMapsRow) (sql.Result, error) {
-	return mdb.db.NamedExec(setKeyInRequestCancelInfoMapQry, rows)
+	q, args, err := mdb.db.BindNamed(setKeyInRequestCancelInfoMapQry, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	q = expandBatchInsertQuery(q, len(rows))
+
+	return mdb.conn.Exec(q, args...)
+
 }
 
 // SelectFromRequestCancelInfoMaps reads one or more rows from request_cancel_info_maps table
@@ -289,7 +350,14 @@ var (
 
 // ReplaceIntoSignalInfoMaps replaces one or more rows in signal_info_maps table
 func (mdb *db) ReplaceIntoSignalInfoMaps(rows []sqlplugin.SignalInfoMapsRow) (sql.Result, error) {
-	return mdb.db.NamedExec(setKeyInSignalInfoMapQry, rows)
+	q, args, err := mdb.db.BindNamed(setKeyInSignalInfoMapQry, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	q = expandBatchInsertQuery(q, len(rows))
+
+	return mdb.conn.Exec(q, args...)
 }
 
 // SelectFromSignalInfoMaps reads one or more rows from signal_info_maps table
@@ -344,7 +412,14 @@ run_id = ?`
 
 // InsertIntoSignalsRequestedSets inserts one or more rows into signals_requested_sets table
 func (mdb *db) ReplaceIntoSignalsRequestedSets(rows []sqlplugin.SignalsRequestedSetsRow) (sql.Result, error) {
-	return mdb.db.NamedExec(createSignalsRequestedSetQry, rows)
+	q, args, err := mdb.db.BindNamed(createSignalsRequestedSetQry, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	q = expandBatchInsertQuery(q, len(rows))
+
+	return mdb.conn.Exec(q, args...)
 }
 
 // SelectFromSignalsRequestedSets reads one or more rows from signals_requested_sets table
