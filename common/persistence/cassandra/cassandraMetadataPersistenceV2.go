@@ -250,7 +250,6 @@ func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceReq
 	namespace := request.Name
 	if len(request.ID) > 0 {
 		query = m.session.Query(templateGetNamespaceQuery, request.ID)
-		query = m.session.Query(templateGetNamespaceQuery, request.ID)
 		err = query.Scan(&namespace)
 		if err != nil {
 			return nil, handleError(request.Name, request.ID, err)
