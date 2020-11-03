@@ -27,6 +27,7 @@ package host
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -196,6 +197,8 @@ func (s *integrationSuite) TestResetWorkflow() {
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("Poll and process final workflow task", tag.Error(err))
 	s.NoError(err)
+
+	fmt.Println("trigger new commit")
 
 	s.NotNil(firstActivityCompletionEvent)
 	s.True(workflowComplete)
