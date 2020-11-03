@@ -27,6 +27,7 @@ package host
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -194,11 +195,27 @@ func (s *integrationSuite) TestResetWorkflow() {
 	s.Logger.Info("Poll and process third activity", tag.Error(err))
 	s.NoError(err)
 
+	fmt.Println("###### @@ ######")
+	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+		},
+		MaximumPageSize: 1000,
+	})
+	s.NoError(err)
+	fmt.Println("#######")
+	prettyPrint := func(input interface{}) string {
+		binary, _ := json.Marshal(input)
+		return string(binary)
+	}
+	fmt.Printf("%v\n", prettyPrint(historyResponse.History))
+	fmt.Println("#######")
+	fmt.Println("###### @@ ######")
+
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("Poll and process final workflow task", tag.Error(err))
 	s.NoError(err)
-
-	fmt.Println("trigger new commit")
 
 	s.NotNil(firstActivityCompletionEvent)
 	s.True(workflowComplete)
