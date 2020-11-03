@@ -13,7 +13,7 @@ persistence:
         password: "temporal"
         maxConns: 20
         maxIdleConns: 20
-        maxConnLifetime: "1h"
+        maxConnLifetime: "4m"
     postgres-visibility:
       sql:
         pluginName: "postgres"
@@ -24,7 +24,7 @@ persistence:
         password: "temporal"
         maxConns: 2
         maxIdleConns: 2
-        maxConnLifetime: "1h"
+        maxConnLifetime: "4m"
 
 global:
   membership:

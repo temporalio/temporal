@@ -61,7 +61,7 @@ persistence:
                 {{- end }}
                 maxConns: {{ default .Env.SQL_MAX_CONNS "20" }}
                 maxIdleConns: {{ default .Env.SQL_MAX_IDLE_CONNS "20" }}
-                maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "1h" }}
+                maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "4m" }}
         visibility:
             sql:
                 pluginName: "mysql"
@@ -76,7 +76,7 @@ persistence:
                 {{- end }}
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "20" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "20" }}
-                maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
+                maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "4m" }}
         {{- else if eq $db "postgresql" }}
         default:
             sql:
@@ -88,7 +88,7 @@ persistence:
                 password: {{ default .Env.POSTGRES_PWD "" }}
                 maxConns: {{ default .Env.SQL_MAX_CONNS "20" }}
                 maxIdleConns: {{ default .Env.SQL_MAX_IDLE_CONNS "20" }}
-                maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "1h" }}
+                maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "4m" }}
         visibility:
             sql:
                 pluginName: "postgres"
@@ -99,7 +99,7 @@ persistence:
                 password: {{ default .Env.POSTGRES_PWD "" }}
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "20" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "20" }}
-                maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
+                maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "4m" }}
         {{- end }}
         {{- if eq $es "true" }}
         es-visibility:
