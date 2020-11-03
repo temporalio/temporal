@@ -204,11 +204,13 @@ func (s *integrationSuite) TestResetWorkflow() {
 		MaximumPageSize: 1000,
 	})
 	s.NoError(err)
+	fmt.Println("#######")
 	prettyPrint := func(input interface{}) string {
 		binary, _ := json.Marshal(input)
 		return string(binary)
 	}
 	fmt.Printf("%v\n", prettyPrint(historyResponse.History))
+	fmt.Println("#######")
 	fmt.Println("###### @@ ######")
 
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
