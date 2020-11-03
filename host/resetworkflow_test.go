@@ -193,7 +193,7 @@ func (s *integrationSuite) TestResetWorkflow() {
 	s.Logger.Info("Poll and process third activity", tag.Error(err))
 	s.NoError(err)
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("Poll and process final workflow task", tag.Error(err))
 	s.NoError(err)
 
