@@ -343,7 +343,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	s.Equal(targetRunID, rebuildMutableState.GetExecutionState().RunId)
 	s.Equal(int64(historySize1+historySize2), rebuiltHistorySize)
 	s.Equal(versionhistory.NewVersionHistories(
-		versionhistory.New(
+		versionhistory.NewVersionHistory(
 			targetBranchToken,
 			[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID, version)},
 		),

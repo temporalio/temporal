@@ -226,7 +226,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 ) (bool, error) {
 
 	if mutableState.GetExecutionInfo().GetVersionHistories() != nil {
-		currentVersionHistory, err := versionhistory.GetCurrent(mutableState.GetExecutionInfo().GetVersionHistories())
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())
 		if err != nil {
 			return false, err
 		}

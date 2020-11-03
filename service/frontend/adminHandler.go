@@ -923,7 +923,7 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 	versionHistories *historyspb.VersionHistories,
 ) (*historyspb.VersionHistory, error) {
 
-	targetBranch, err := versionhistory.GetCurrent(versionHistories)
+	targetBranch, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {
 		return nil, err
 	}
@@ -964,7 +964,7 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 			return nil, err
 		}
 
-		targetBranch, err = versionhistory.Get(versionHistories, idx)
+		targetBranch, err = versionhistory.GetVersionHistory(versionHistories, idx)
 		if err != nil {
 			return nil, err
 		}
@@ -982,7 +982,7 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 			if err != nil {
 				return nil, err
 			}
-			startBranch, err := versionhistory.Get(versionHistories, idx)
+			startBranch, err := versionhistory.GetVersionHistory(versionHistories, idx)
 			if err != nil {
 				return nil, err
 			}

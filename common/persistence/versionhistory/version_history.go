@@ -33,16 +33,16 @@ import (
 	"go.temporal.io/server/common"
 )
 
-// New create a new instance of VersionHistory.
-func New(branchToken []byte, items []*historyspb.VersionHistoryItem) *historyspb.VersionHistory {
+// NewVersionHistory create a new instance of VersionHistory.
+func NewVersionHistory(branchToken []byte, items []*historyspb.VersionHistoryItem) *historyspb.VersionHistory {
 	return &historyspb.VersionHistory{
 		BranchToken: branchToken,
 		Items:       items,
 	}
 }
 
-// Copy VersionHistory.
-func Copy(v *historyspb.VersionHistory) *historyspb.VersionHistory {
+// CopyVersionHistory copies VersionHistory.
+func CopyVersionHistory(v *historyspb.VersionHistory) *historyspb.VersionHistory {
 	token := make([]byte, len(v.BranchToken))
 	copy(token, v.BranchToken)
 
@@ -52,11 +52,11 @@ func Copy(v *historyspb.VersionHistory) *historyspb.VersionHistory {
 		items = append(items, &itemCopy)
 	}
 
-	return New(token, items)
+	return NewVersionHistory(token, items)
 }
 
-// CopyUntilLCAItem returns copy of VersionHistory up until LCA item.
-func CopyUntilLCAItem(v *historyspb.VersionHistory, lcaItem *historyspb.VersionHistoryItem) (*historyspb.VersionHistory, error) {
+// CopyVersionHistoryUntilLCAItem returns copy of VersionHistory up until LCA item.
+func CopyVersionHistoryUntilLCAItem(v *historyspb.VersionHistory, lcaItem *historyspb.VersionHistoryItem) (*historyspb.VersionHistory, error) {
 	versionHistory := &historyspb.VersionHistory{}
 	notFoundErr := serviceerror.NewInvalidArgument("version history does not contains the LCA item.")
 	for _, item := range v.Items {

@@ -196,7 +196,7 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 		)
 	}
 
-	baseVersionHistory, err := versionhistory.Get(baseVersionHistories, index)
+	baseVersionHistory, err := versionhistory.GetVersionHistory(baseVersionHistories, index)
 	if err != nil {
 		return nil, err
 	}

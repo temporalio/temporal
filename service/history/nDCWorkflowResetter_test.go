@@ -136,7 +136,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(500)
 	version := int64(123)
-	versionHistory := versionhistory.New(
+	versionHistory := versionhistory.NewVersionHistory(
 		branchToken,
 		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID, version)},
 	)
@@ -216,7 +216,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(500)
 	version := int64(123)
-	versionHistory := versionhistory.New(
+	versionHistory := versionhistory.NewVersionHistory(
 		branchToken,
 		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID, version)},
 	)

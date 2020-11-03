@@ -46,7 +46,7 @@ func NewVersionHistories(versionHistory *historyspb.VersionHistory) *historyspb.
 func CopyVersionHistories(h *historyspb.VersionHistories) *historyspb.VersionHistories {
 	var histories []*historyspb.VersionHistory
 	for _, history := range h.Histories {
-		histories = append(histories, Copy(history))
+		histories = append(histories, CopyVersionHistory(history))
 	}
 
 	return &historyspb.VersionHistories{
@@ -55,8 +55,8 @@ func CopyVersionHistories(h *historyspb.VersionHistories) *historyspb.VersionHis
 	}
 }
 
-// Get the VersionHistory according to index provided.
-func Get(h *historyspb.VersionHistories, index int32) (*historyspb.VersionHistory, error) {
+// GetVersionHistory gets the VersionHistory according to index provided.
+func GetVersionHistory(h *historyspb.VersionHistories, index int32) (*historyspb.VersionHistory, error) {
 	if index < 0 || index >= int32(len(h.Histories)) {
 		return nil, serviceerror.NewInvalidArgument("invalid index.")
 	}
@@ -64,8 +64,8 @@ func Get(h *historyspb.VersionHistories, index int32) (*historyspb.VersionHistor
 	return h.Histories[index], nil
 }
 
-// Add a VersionHistory and return the whether current branch is changed.
-func Add(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (bool, int32, error) {
+// AddVersionHistory adds a VersionHistory and return the whether current branch is changed.
+func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (bool, int32, error) {
 	if v == nil {
 		return false, 0, serviceerror.NewInvalidArgument("version histories is null.")
 	}
@@ -76,7 +76,7 @@ func Add(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (bool, in
 		return false, 0, err
 	}
 
-	currentVersionHistory, err := Get(h, h.CurrentVersionHistoryIndex)
+	currentVersionHistory, err := GetVersionHistory(h, h.CurrentVersionHistoryIndex)
 	if err != nil {
 		return false, 0, err
 	}
@@ -91,7 +91,7 @@ func Add(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (bool, in
 
 	// TODO maybe we need more strict validation
 
-	newVersionHistory := Copy(v)
+	newVersionHistory := CopyVersionHistory(v)
 	h.Histories = append(h.Histories, newVersionHistory)
 	newVersionHistoryIndex := int32(len(h.Histories)) - 1
 
@@ -152,7 +152,7 @@ func FindItemFirstIndex(h *historyspb.VersionHistories, item *historyspb.Version
 
 // IsRebuilt returns true if the current branch index's last write version is not the largest among all branches' last write version.
 func IsRebuilt(h *historyspb.VersionHistories) (bool, error) {
-	currentVersionHistory, err := GetCurrent(h)
+	currentVersionHistory, err := GetCurrentVersionHistory(h)
 	if err != nil {
 		return false, err
 	}
@@ -185,7 +185,7 @@ func SetCurrentIndex(h *historyspb.VersionHistories, currentVersionHistoryIndex 
 	return nil
 }
 
-// GetCurrent get the current VersionHistory.
-func GetCurrent(h *historyspb.VersionHistories) (*historyspb.VersionHistory, error) {
-	return Get(h, h.GetCurrentVersionHistoryIndex())
+// GetCurrentVersionHistory gets the current VersionHistory.
+func GetCurrentVersionHistory(h *historyspb.VersionHistories) (*historyspb.VersionHistory, error) {
+	return GetVersionHistory(h, h.GetCurrentVersionHistoryIndex())
 }

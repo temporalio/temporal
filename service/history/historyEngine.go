@@ -2326,7 +2326,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	resetRunID := uuid.New()
 	baseRebuildLastEventID := request.GetWorkflowTaskFinishEventId() - 1
 	baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
-	baseCurrentVersionHistory, err := versionhistory.GetCurrent(baseVersionHistories)
+	baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 	if err != nil {
 		return nil, err
 	}
@@ -2934,7 +2934,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 				}
 
 				baseVersionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-				baseCurrentVersionHistory, err := versionhistory.GetCurrent(baseVersionHistories)
+				baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 				if err != nil {
 					return nil, err
 				}

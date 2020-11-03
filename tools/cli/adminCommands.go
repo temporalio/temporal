@@ -136,7 +136,7 @@ func AdminDescribeWorkflow(c *cli.Context) {
 		currentBranchTokenBytes := resp.GetDatabaseMutableState().GetExecutionInfo().GetEventBranchToken()
 		if versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories(); versionHistories != nil {
 			// if VersionHistories is set, then all branch infos are stored in VersionHistories
-			currentVersionHistory, err := versionhistory.GetCurrent(versionHistories)
+			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 			if err != nil {
 				fmt.Println(colorRed("Unable to get current version history:"), err)
 			} else {

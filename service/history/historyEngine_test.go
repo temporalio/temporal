@@ -4952,7 +4952,7 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 	token, err := msBuilder.GetCurrentBranchToken()
 	s.NoError(err)
 	item := versionhistory.NewItem(1, 1)
-	versionHistory := versionhistory.New(token, []*historyspb.VersionHistoryItem{item})
+	versionHistory := versionhistory.NewVersionHistory(token, []*historyspb.VersionHistoryItem{item})
 	ms.ExecutionInfo.VersionHistories = versionhistory.NewVersionHistories(versionHistory)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: testRunID}

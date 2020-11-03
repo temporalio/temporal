@@ -307,7 +307,7 @@ func (e *mutableStateBuilder) Load(
 	// back fill version history for local namespace workflows
 	if e.executionInfo.VersionHistories == nil {
 		e.executionInfo.VersionHistories = versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
-		currentVersionHistory, err := versionhistory.GetCurrent(e.executionInfo.VersionHistories)
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
 		if err != nil {
 			return err
 		}
@@ -348,7 +348,7 @@ func (e *mutableStateBuilder) Load(
 
 func (e *mutableStateBuilder) GetCurrentBranchToken() ([]byte, error) {
 	if e.executionInfo.VersionHistories != nil {
-		currentVersionHistory, err := versionhistory.GetCurrent(e.executionInfo.VersionHistories)
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
 		if err != nil {
 			return nil, err
 		}
@@ -379,7 +379,7 @@ func (e *mutableStateBuilder) SetCurrentBranchToken(
 		return nil
 	}
 
-	currentVersionHistory, err := versionhistory.GetCurrent(e.executionInfo.VersionHistories)
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
 	if err != nil {
 		return err
 	}
@@ -498,7 +498,7 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 	}
 
 	if e.executionInfo.VersionHistories != nil {
-		versionHistory, err := versionhistory.GetCurrent(e.executionInfo.VersionHistories)
+		versionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
 		if err != nil {
 			return err
 		}
@@ -538,7 +538,7 @@ func (e *mutableStateBuilder) GetCurrentVersion() int64 {
 func (e *mutableStateBuilder) GetStartVersion() (int64, error) {
 
 	if e.executionInfo.VersionHistories != nil {
-		versionHistory, err := versionhistory.GetCurrent(e.executionInfo.VersionHistories)
+		versionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
 		if err != nil {
 			return 0, err
 		}
@@ -555,7 +555,7 @@ func (e *mutableStateBuilder) GetStartVersion() (int64, error) {
 func (e *mutableStateBuilder) GetLastWriteVersion() (int64, error) {
 
 	if e.executionInfo.VersionHistories != nil {
-		versionHistory, err := versionhistory.GetCurrent(e.executionInfo.VersionHistories)
+		versionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
 		if err != nil {
 			return 0, err
 		}
@@ -4238,7 +4238,7 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 	e.GetExecutionInfo().LastEventTaskId = lastEvent.GetTaskId()
 
 	if e.executionInfo.VersionHistories != nil {
-		currentVersionHistory, err := versionhistory.GetCurrent(e.executionInfo.VersionHistories)
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
 		if err != nil {
 			return err
 		}

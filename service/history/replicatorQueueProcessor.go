@@ -568,7 +568,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 			var versionHistory *historyspb.VersionHistory
 			if versionHistories != nil {
 				var err error
-				versionHistory, err = versionhistory.GetCurrent(versionHistories)
+				versionHistory, err = versionhistory.GetCurrentVersionHistory(versionHistories)
 				if err != nil {
 					return nil, err
 				}
@@ -729,7 +729,7 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 		return nil, nil, err
 	}
 
-	versionHistory, err := versionhistory.Get(versionHistories, versionHistoryIndex)
+	versionHistory, err := versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
 	if err != nil {
 		return nil, nil, err
 	}

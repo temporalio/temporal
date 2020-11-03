@@ -103,7 +103,7 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 	}
 
 	localVersionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
-	versionHistory, err := versionhistory.Get(localVersionHistories, versionHistoryIndex)
+	versionHistory, err := versionhistory.GetVersionHistory(localVersionHistories, versionHistoryIndex)
 	if err != nil {
 		return false, 0, err
 	}
@@ -122,7 +122,7 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 		return doContinue, versionHistoryIndex, nil
 	}
 
-	newVersionHistory, err := versionhistory.CopyUntilLCAItem(versionHistory, lcaVersionHistoryItem)
+	newVersionHistory, err := versionhistory.CopyVersionHistoryUntilLCAItem(versionHistory, lcaVersionHistoryItem)
 	if err != nil {
 		return false, 0, err
 	}
@@ -255,7 +255,7 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 
 	versionhistory.SetBranchToken(newVersionHistory, resp.NewBranchToken)
 
-	branchChanged, newIndex, err := versionhistory.Add(
+	branchChanged, newIndex, err := versionhistory.AddVersionHistory(
 		r.mutableState.GetExecutionInfo().GetVersionHistories(),
 		newVersionHistory,
 	)

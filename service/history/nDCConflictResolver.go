@@ -90,7 +90,7 @@ func (r *nDCConflictResolverImpl) prepareMutableState(
 		return r.mutableState, false, nil
 	}
 
-	currentVersionHistory, err := versionhistory.Get(versionHistories, currentVersionHistoryIndex)
+	currentVersionHistory, err := versionhistory.GetVersionHistory(versionHistories, currentVersionHistoryIndex)
 	if err != nil {
 		return nil, false, err
 	}
@@ -125,7 +125,7 @@ func (r *nDCConflictResolverImpl) rebuild(
 ) (mutableState, error) {
 
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
-	replayVersionHistory, err := versionhistory.Get(versionHistories, branchIndex)
+	replayVersionHistory, err := versionhistory.GetVersionHistory(versionHistories, branchIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +159,7 @@ func (r *nDCConflictResolverImpl) rebuild(
 
 	// after rebuilt verification
 	rebuildVersionHistories := rebuildMutableState.GetExecutionInfo().GetVersionHistories()
-	rebuildVersionHistory, err := versionhistory.GetCurrent(rebuildVersionHistories)
+	rebuildVersionHistory, err := versionhistory.GetCurrentVersionHistory(rebuildVersionHistories)
 	if err != nil {
 		return nil, err
 	}
