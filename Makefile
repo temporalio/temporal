@@ -41,7 +41,7 @@ GOPATH := $(shell go env GOPATH)
 endif
 
 GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)
-export PATH := $(GOBIN):$(PATH)
+SHELL := PATH=$(GOBIN):$(PATH) /bin/bash
 
 MODULE_ROOT := go.temporal.io/server
 BUILD := ./build
