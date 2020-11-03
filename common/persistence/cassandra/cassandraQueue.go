@@ -43,10 +43,6 @@ import (
 )
 
 const (
-	emptyMessageID = -1
-)
-
-const (
 	templateEnqueueMessageQuery       = `INSERT INTO queue (queue_type, message_id, message_payload, message_encoding) VALUES(?, ?, ?, ?) IF NOT EXISTS`
 	templateGetLastMessageIDQuery     = `SELECT message_id FROM queue WHERE queue_type=? ORDER BY message_id DESC LIMIT 1`
 	templateGetMessagesQuery          = `SELECT message_id, message_payload, message_encoding FROM queue WHERE queue_type = ? and message_id > ? LIMIT ?`
@@ -135,7 +131,7 @@ func (q *cassandraQueue) EnqueueMessageToDLQ(
 	// Use negative queue type as the dlq type
 	lastMessageID, err := q.getLastMessageID(q.getDLQTypeFromQueueType())
 	if err != nil {
-		return emptyMessageID, err
+		return persistence.EmptyQueueMessageID, err
 	}
 
 	// Use negative queue type as the dlq type
@@ -152,13 +148,13 @@ func (q *cassandraQueue) tryEnqueue(
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		if isThrottlingError(err) {
-			return emptyMessageID, serviceerror.NewResourceExhausted(fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType))
+			return persistence.EmptyQueueMessageID, serviceerror.NewResourceExhausted(fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType))
 		}
-		return emptyMessageID, serviceerror.NewInternal(fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType))
+		return persistence.EmptyQueueMessageID, serviceerror.NewInternal(fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType))
 	}
 
 	if !applied {
-		return emptyMessageID, &persistence.ConditionFailedError{Msg: fmt.Sprintf("message ID %v exists in queue", previous["message_id"])}
+		return persistence.EmptyQueueMessageID, &persistence.ConditionFailedError{Msg: fmt.Sprintf("message ID %v exists in queue", previous["message_id"])}
 	}
 
 	return messageID, nil
@@ -173,12 +169,12 @@ func (q *cassandraQueue) getLastMessageID(
 	err := query.MapScan(result)
 	if err != nil {
 		if err == gocql.ErrNotFound {
-			return emptyMessageID, nil
+			return persistence.EmptyQueueMessageID, nil
 		} else if isThrottlingError(err) {
-			return emptyMessageID, serviceerror.NewResourceExhausted(fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", queueType, err))
+			return persistence.EmptyQueueMessageID, serviceerror.NewResourceExhausted(fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", queueType, err))
 		}
 
-		return emptyMessageID, serviceerror.NewInternal(fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", queueType, err))
+		return persistence.EmptyQueueMessageID, serviceerror.NewInternal(fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", queueType, err))
 	}
 
 	return result["message_id"].(int64), nil

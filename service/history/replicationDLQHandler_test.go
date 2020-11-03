@@ -94,7 +94,7 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 				ShardId:                0,
 				RangeId:                1,
 				ReplicationAckLevel:    0,
-				ReplicationDlqAckLevel: map[string]int64{"test": -1},
+				ReplicationDlqAckLevel: map[string]int64{"test": persistence.EmptyQueueMessageID},
 			}},
 		NewDynamicConfigForTest(),
 	)
