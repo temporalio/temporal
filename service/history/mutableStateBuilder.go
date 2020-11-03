@@ -311,12 +311,12 @@ func (e *mutableStateBuilder) Load(
 		if err != nil {
 			return err
 		}
-		if err := versionhistory.AddOrUpdateItem(currentVersionHistory, versionhistory.NewItem(
+		if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewItem(
 			e.nextEventID-1, common.EmptyVersion,
 		)); err != nil {
 			return err
 		}
-		versionhistory.SetBranchToken(currentVersionHistory, e.executionInfo.EventBranchToken)
+		versionhistory.SetVersionHistoryBranchToken(currentVersionHistory, e.executionInfo.EventBranchToken)
 		e.executionInfo.EventBranchToken = nil
 	}
 
@@ -383,7 +383,7 @@ func (e *mutableStateBuilder) SetCurrentBranchToken(
 	if err != nil {
 		return err
 	}
-	versionhistory.SetBranchToken(currentVersionHistory, branchToken)
+	versionhistory.SetVersionHistoryBranchToken(currentVersionHistory, branchToken)
 	return nil
 }
 
@@ -503,9 +503,9 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 			return err
 		}
 
-		if len(versionHistory.GetItems()) > 0 {
+		if versionhistory.IsEmptyVersionHistory(versionHistory) {
 			// this make sure current version >= last write version
-			versionHistoryItem, err := versionhistory.GetLastItem(versionHistory)
+			versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
 			if err != nil {
 				return err
 			}
@@ -542,7 +542,7 @@ func (e *mutableStateBuilder) GetStartVersion() (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		firstItem, err := versionhistory.GetFirstItem(versionHistory)
+		firstItem, err := versionhistory.GetFirstVersionHistoryItem(versionHistory)
 		if err != nil {
 			return 0, err
 		}
@@ -559,7 +559,7 @@ func (e *mutableStateBuilder) GetLastWriteVersion() (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		lastItem, err := versionhistory.GetLastItem(versionHistory)
+		lastItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
 		if err != nil {
 			return 0, err
 		}
@@ -4242,7 +4242,7 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 		if err != nil {
 			return err
 		}
-		if err := versionhistory.AddOrUpdateItem(currentVersionHistory, versionhistory.NewItem(
+		if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewItem(
 			lastEvent.GetEventId(), lastEvent.GetVersion(),
 		)); err != nil {
 			return err

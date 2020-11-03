@@ -109,7 +109,7 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 	}
 
 	// if can directly append to a branch
-	if versionhistory.IsLCAAppendable(versionHistory, lcaVersionHistoryItem) {
+	if versionhistory.IsVersionHistoryLCAItemAppendable(versionHistory, lcaVersionHistoryItem) {
 		doContinue, err := r.verifyEventsOrder(
 			ctx,
 			versionHistory,
@@ -122,7 +122,7 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 		return doContinue, versionHistoryIndex, nil
 	}
 
-	newVersionHistory, err := versionhistory.CopyVersionHistoryUntilLCAItem(versionHistory, lcaVersionHistoryItem)
+	newVersionHistory, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(versionHistory, lcaVersionHistoryItem)
 	if err != nil {
 		return false, 0, err
 	}
@@ -158,7 +158,7 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 
 	localVersionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 
-	versionHistoryIndex, lcaVersionHistoryItem, err := versionhistory.FindLCAIndexAndItem(
+	versionHistoryIndex, lcaVersionHistoryItem, err := versionhistory.FindLCAVersionHistoryIndexAndVersionHistoryItem(
 		localVersionHistories,
 		incomingVersionHistory,
 	)
@@ -194,7 +194,7 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 	r.mutableState = targetWorkflow.getMutableState()
 
 	localVersionHistories = r.mutableState.GetExecutionInfo().GetVersionHistories()
-	return versionhistory.FindLCAIndexAndItem(localVersionHistories, incomingVersionHistory)
+	return versionhistory.FindLCAVersionHistoryIndexAndVersionHistoryItem(localVersionHistories, incomingVersionHistory)
 }
 
 func (r *nDCBranchMgrImpl) verifyEventsOrder(
@@ -204,7 +204,7 @@ func (r *nDCBranchMgrImpl) verifyEventsOrder(
 	incomingFirstEventVersion int64,
 ) (bool, error) {
 
-	lastVersionHistoryItem, err := versionhistory.GetLastItem(localVersionHistory)
+	lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(localVersionHistory)
 	if err != nil {
 		return false, err
 	}
@@ -253,7 +253,7 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 		return 0, err
 	}
 
-	versionhistory.SetBranchToken(newVersionHistory, resp.NewBranchToken)
+	versionhistory.SetVersionHistoryBranchToken(newVersionHistory, resp.NewBranchToken)
 
 	branchChanged, newIndex, err := versionhistory.AddVersionHistory(
 		r.mutableState.GetExecutionInfo().GetVersionHistories(),

@@ -1278,7 +1278,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	if err != nil {
 		return err
 	}
-	baseRebuildLastEventVersion, err := versionhistory.GetEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
+	baseRebuildLastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
 	if err != nil {
 		return err
 	}

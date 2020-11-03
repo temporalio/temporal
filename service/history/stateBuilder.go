@@ -122,7 +122,7 @@ func (b *stateBuilderImpl) applyEvents(
 			if err != nil {
 				return nil, err
 			}
-			if err := versionhistory.AddOrUpdateItem(versionHistory, versionhistory.NewItem(
+			if err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, versionhistory.NewItem(
 				event.GetEventId(),
 				event.GetVersion(),
 			)); err != nil {

@@ -71,7 +71,7 @@ func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHist
 	}
 
 	// assuming existing version histories inside are valid
-	incomingFirstItem, err := GetFirstItem(v)
+	incomingFirstItem, err := GetFirstVersionHistoryItem(v)
 	if err != nil {
 		return false, 0, err
 	}
@@ -80,7 +80,7 @@ func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHist
 	if err != nil {
 		return false, 0, err
 	}
-	currentFirstItem, err := GetFirstItem(currentVersionHistory)
+	currentFirstItem, err := GetFirstVersionHistoryItem(currentVersionHistory)
 	if err != nil {
 		return false, 0, err
 	}
@@ -96,11 +96,11 @@ func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHist
 	newVersionHistoryIndex := int32(len(h.Histories)) - 1
 
 	// check if need to switch current branch
-	newLastItem, err := GetLastItem(newVersionHistory)
+	newLastItem, err := GetLastVersionHistoryItem(newVersionHistory)
 	if err != nil {
 		return false, 0, err
 	}
-	currentLastItem, err := GetLastItem(currentVersionHistory)
+	currentLastItem, err := GetLastVersionHistoryItem(currentVersionHistory)
 	if err != nil {
 		return false, 0, err
 	}
@@ -113,14 +113,14 @@ func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHist
 	return currentBranchChanged, newVersionHistoryIndex, nil
 }
 
-// FindLCAIndexAndItem finds the lowest common ancestor VersionHistory index and corresponding item.
-func FindLCAIndexAndItem(h *historyspb.VersionHistories, incomingHistory *historyspb.VersionHistory) (int32, *historyspb.VersionHistoryItem, error) {
+// FindLCAVersionHistoryIndexAndVersionHistoryItem finds the lowest common ancestor VersionHistory index and corresponding item.
+func FindLCAVersionHistoryIndexAndVersionHistoryItem(h *historyspb.VersionHistories, incomingHistory *historyspb.VersionHistory) (int32, *historyspb.VersionHistoryItem, error) {
 	var versionHistoryIndex int32
 	var versionHistoryLength int32
 	var versionHistoryItem *historyspb.VersionHistoryItem
 
 	for index, localHistory := range h.Histories {
-		item, err := FindLCAItem(localHistory, incomingHistory)
+		item, err := FindLCAVersionHistoryItem(localHistory, incomingHistory)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -140,30 +140,30 @@ func FindLCAIndexAndItem(h *historyspb.VersionHistories, incomingHistory *histor
 	return versionHistoryIndex, versionHistoryItem, nil
 }
 
-// FindItemFirstIndex find the first VersionHistory index which contains the given version history item.
-func FindItemFirstIndex(h *historyspb.VersionHistories, item *historyspb.VersionHistoryItem) (int32, error) {
+// FindFirstVersionHistoryIndexByVersionHistoryItem find the first VersionHistory index which contains the given version history item.
+func FindFirstVersionHistoryIndexByVersionHistoryItem(h *historyspb.VersionHistories, item *historyspb.VersionHistoryItem) (int32, error) {
 	for index, history := range h.Histories {
-		if ContainsItem(history, item) {
+		if ContainsVersionHistoryItem(history, item) {
 			return int32(index), nil
 		}
 	}
 	return 0, serviceerror.NewInvalidArgument("version histories does not contains given item.")
 }
 
-// IsRebuilt returns true if the current branch index's last write version is not the largest among all branches' last write version.
-func IsRebuilt(h *historyspb.VersionHistories) (bool, error) {
+// IsVersionHistoriesRebuilt returns true if the current branch index's last write version is not the largest among all branches' last write version.
+func IsVersionHistoriesRebuilt(h *historyspb.VersionHistories) (bool, error) {
 	currentVersionHistory, err := GetCurrentVersionHistory(h)
 	if err != nil {
 		return false, err
 	}
 
-	currentLastItem, err := GetLastItem(currentVersionHistory)
+	currentLastItem, err := GetLastVersionHistoryItem(currentVersionHistory)
 	if err != nil {
 		return false, err
 	}
 
 	for _, versionHistory := range h.Histories {
-		lastItem, err := GetLastItem(versionHistory)
+		lastItem, err := GetLastVersionHistoryItem(versionHistory)
 		if err != nil {
 			return false, err
 		}
@@ -175,8 +175,8 @@ func IsRebuilt(h *historyspb.VersionHistories) (bool, error) {
 	return false, nil
 }
 
-// SetCurrentIndex set the current VersionHistory index.
-func SetCurrentIndex(h *historyspb.VersionHistories, currentVersionHistoryIndex int32) error {
+// SetCurrentVersionHistoryIndex set the current VersionHistory index.
+func SetCurrentVersionHistoryIndex(h *historyspb.VersionHistories, currentVersionHistoryIndex int32) error {
 	if currentVersionHistoryIndex < 0 || currentVersionHistoryIndex >= int32(len(h.Histories)) {
 		return serviceerror.NewInvalidArgument("invalid current version history index.")
 	}

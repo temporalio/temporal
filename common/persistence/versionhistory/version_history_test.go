@@ -63,20 +63,20 @@ func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Success() {
 
 	history := NewVersionHistory(BranchToken, Items)
 
-	newHistory, err := CopyVersionHistoryUntilLCAItem(history, NewItem(2, 0))
+	newHistory, err := CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewItem(2, 0))
 	s.NoError(err)
 	newBranchToken := []byte("other random branch token")
-	SetBranchToken(newHistory, newBranchToken)
+	SetVersionHistoryBranchToken(newHistory, newBranchToken)
 	s.Equal(newBranchToken, newHistory.BranchToken)
 	s.Equal(NewVersionHistory(
 		newBranchToken,
 		[]*historyspb.VersionHistoryItem{{EventId: 2, Version: 0}},
 	), newHistory)
 
-	newHistory, err = CopyVersionHistoryUntilLCAItem(history, NewItem(5, 4))
+	newHistory, err = CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewItem(5, 4))
 	s.NoError(err)
 	newBranchToken = []byte("another random branch token")
-	SetBranchToken(newHistory, newBranchToken)
+	SetVersionHistoryBranchToken(newHistory, newBranchToken)
 	s.Equal(newBranchToken, newHistory.BranchToken)
 	s.Equal(NewVersionHistory(
 		newBranchToken,
@@ -86,10 +86,10 @@ func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Success() {
 		},
 	), newHistory)
 
-	newHistory, err = CopyVersionHistoryUntilLCAItem(history, NewItem(6, 4))
+	newHistory, err = CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewItem(6, 4))
 	s.NoError(err)
 	newBranchToken = []byte("yet another random branch token")
-	SetBranchToken(newHistory, newBranchToken)
+	SetVersionHistoryBranchToken(newHistory, newBranchToken)
 	s.Equal(newBranchToken, newHistory.BranchToken)
 	s.Equal(NewVersionHistory(
 		newBranchToken,
@@ -109,22 +109,22 @@ func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Failure() {
 
 	history := NewVersionHistory(BranchToken, Items)
 
-	_, err := CopyVersionHistoryUntilLCAItem(history, NewItem(4, 0))
+	_, err := CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewItem(4, 0))
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
-	_, err = CopyVersionHistoryUntilLCAItem(history, NewItem(2, 1))
+	_, err = CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewItem(2, 1))
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
-	_, err = CopyVersionHistoryUntilLCAItem(history, NewItem(5, 3))
+	_, err = CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewItem(5, 3))
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
-	_, err = CopyVersionHistoryUntilLCAItem(history, NewItem(7, 5))
+	_, err = CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewItem(7, 5))
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
-	_, err = CopyVersionHistoryUntilLCAItem(history, NewItem(4, 0))
+	_, err = CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewItem(4, 0))
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
-	_, err = CopyVersionHistoryUntilLCAItem(history, NewItem(7, 4))
+	_, err = CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewItem(7, 4))
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
@@ -135,7 +135,7 @@ func (s *versionHistorySuite) TestSetBranchToken() {
 	}
 	history := NewVersionHistory(nil, Items)
 
-	SetBranchToken(history, []byte("some random branch token"))
+	SetVersionHistoryBranchToken(history, []byte("some random branch token"))
 }
 
 func (s *versionHistorySuite) TestAddOrUpdateItem_VersionIncrease() {
@@ -150,7 +150,7 @@ func (s *versionHistorySuite) TestAddOrUpdateItem_VersionIncrease() {
 		EventId: 8,
 		Version: 5,
 	}
-	err := AddOrUpdateItem(history, item)
+	err := AddOrUpdateVersionHistoryItem(history, item)
 	s.NoError(err)
 
 	s.Equal(NewVersionHistory(
@@ -176,7 +176,7 @@ func (s *versionHistorySuite) TestAddOrUpdateItem_EventIDIncrease() {
 		EventId: 8,
 		Version: 4,
 	}
-	err := AddOrUpdateItem(history, item)
+	err := AddOrUpdateVersionHistoryItem(history, item)
 	s.NoError(err)
 
 	s.Equal(NewVersionHistory(
@@ -196,7 +196,7 @@ func (s *versionHistorySuite) TestAddOrUpdateItem_Failed_LowerVersion() {
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
-	err := AddOrUpdateItem(history, NewItem(8, 3))
+	err := AddOrUpdateVersionHistoryItem(history, NewItem(8, 3))
 	s.Error(err)
 }
 
@@ -208,10 +208,10 @@ func (s *versionHistorySuite) TestAddOrUpdateItem_Failed_SameVersion_EventIDNotI
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
-	err := AddOrUpdateItem(history, NewItem(5, 4))
+	err := AddOrUpdateVersionHistoryItem(history, NewItem(5, 4))
 	s.Error(err)
 
-	err = AddOrUpdateItem(history, NewItem(6, 4))
+	err = AddOrUpdateVersionHistoryItem(history, NewItem(6, 4))
 	s.Error(err)
 }
 
@@ -223,13 +223,13 @@ func (s *versionHistorySuite) TestAddOrUpdateItem_Failed_VersionNoIncreasing() {
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
-	err := AddOrUpdateItem(history, NewItem(6, 3))
+	err := AddOrUpdateVersionHistoryItem(history, NewItem(6, 3))
 	s.Error(err)
 
-	err = AddOrUpdateItem(history, NewItem(2, 3))
+	err = AddOrUpdateVersionHistoryItem(history, NewItem(2, 3))
 	s.Error(err)
 
-	err = AddOrUpdateItem(history, NewItem(7, 3))
+	err = AddOrUpdateVersionHistoryItem(history, NewItem(7, 3))
 	s.Error(err)
 }
 
@@ -244,7 +244,7 @@ func (s *versionHistoriesSuite) TestContainsItem_True() {
 	prevEventID := common.FirstEventID - 1
 	for _, item := range Items {
 		for EventID := prevEventID + 1; EventID <= item.GetEventId(); EventID++ {
-			s.True(ContainsItem(history, NewItem(EventID, item.GetVersion())))
+			s.True(ContainsVersionHistoryItem(history, NewItem(EventID, item.GetVersion())))
 		}
 		prevEventID = item.GetEventId()
 	}
@@ -258,11 +258,11 @@ func (s *versionHistoriesSuite) TestContainsItem_False() {
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
-	s.False(ContainsItem(history, NewItem(4, 0)))
-	s.False(ContainsItem(history, NewItem(3, 1)))
+	s.False(ContainsVersionHistoryItem(history, NewItem(4, 0)))
+	s.False(ContainsVersionHistoryItem(history, NewItem(3, 1)))
 
-	s.False(ContainsItem(history, NewItem(7, 4)))
-	s.False(ContainsItem(history, NewItem(6, 5)))
+	s.False(ContainsVersionHistoryItem(history, NewItem(7, 4)))
+	s.False(ContainsVersionHistoryItem(history, NewItem(6, 5)))
 }
 
 func (s *versionHistorySuite) TestIsLCAAppendable_True() {
@@ -273,7 +273,7 @@ func (s *versionHistorySuite) TestIsLCAAppendable_True() {
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
-	ret := IsLCAAppendable(history, NewItem(6, 4))
+	ret := IsVersionHistoryLCAItemAppendable(history, NewItem(6, 4))
 	s.True(ret)
 }
 
@@ -285,7 +285,7 @@ func (s *versionHistorySuite) TestIsLCAAppendable_False_VersionNotMatch() {
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
-	ret := IsLCAAppendable(history, NewItem(6, 7))
+	ret := IsVersionHistoryLCAItemAppendable(history, NewItem(6, 7))
 	s.False(ret)
 }
 
@@ -297,7 +297,7 @@ func (s *versionHistorySuite) TestIsLCAAppendable_False_EventIDNotMatch() {
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
-	ret := IsLCAAppendable(history, NewItem(7, 4))
+	ret := IsVersionHistoryLCAItemAppendable(history, NewItem(7, 4))
 	s.False(ret)
 }
 
@@ -319,7 +319,7 @@ func (s *versionHistorySuite) TestFindLCAItem_ReturnLocal() {
 	localVersionHistory := NewVersionHistory(localBranchToken, localItems)
 	remoteVersionHistory := NewVersionHistory(remoteBranchToken, remoteItems)
 
-	item, err := FindLCAItem(localVersionHistory, remoteVersionHistory)
+	item, err := FindLCAVersionHistoryItem(localVersionHistory, remoteVersionHistory)
 	s.NoError(err)
 	s.Equal(NewItem(5, 4), item)
 }
@@ -342,7 +342,7 @@ func (s *versionHistorySuite) TestFindLCAItem_ReturnRemote() {
 	localVersionHistory := NewVersionHistory(localBranchToken, localItems)
 	remoteVersionHistory := NewVersionHistory(remoteBranchToken, remoteItems)
 
-	item, err := FindLCAItem(localVersionHistory, remoteVersionHistory)
+	item, err := FindLCAVersionHistoryItem(localVersionHistory, remoteVersionHistory)
 	s.NoError(err)
 	s.Equal(NewItem(6, 6), item)
 }
@@ -364,7 +364,7 @@ func (s *versionHistorySuite) TestFindLCAItem_Error_NoLCA() {
 	localVersionHistory := NewVersionHistory(localBranchToken, localItems)
 	remoteVersionHistory := NewVersionHistory(remoteBranchToken, remoteItems)
 
-	_, err := FindLCAItem(localVersionHistory, remoteVersionHistory)
+	_, err := FindLCAVersionHistoryItem(localVersionHistory, remoteVersionHistory)
 	s.Error(err)
 }
 
@@ -373,22 +373,22 @@ func (s *versionHistorySuite) TestGetFirstItem_Success() {
 	item := NewItem(3, 0)
 	history := NewVersionHistory(BranchToken, []*historyspb.VersionHistoryItem{item})
 
-	firstItem, err := GetFirstItem(history)
+	firstItem, err := GetFirstVersionHistoryItem(history)
 	s.NoError(err)
 	s.Equal(item, firstItem)
 
 	item = NewItem(4, 0)
-	err = AddOrUpdateItem(history, item)
+	err = AddOrUpdateVersionHistoryItem(history, item)
 	s.NoError(err)
 
-	firstItem, err = GetFirstItem(history)
+	firstItem, err = GetFirstVersionHistoryItem(history)
 	s.NoError(err)
 	s.Equal(item, firstItem)
 
-	err = AddOrUpdateItem(history, NewItem(7, 1))
+	err = AddOrUpdateVersionHistoryItem(history, NewItem(7, 1))
 	s.NoError(err)
 
-	firstItem, err = GetFirstItem(history)
+	firstItem, err = GetFirstVersionHistoryItem(history)
 	s.NoError(err)
 	s.Equal(item, firstItem)
 }
@@ -397,7 +397,7 @@ func (s *versionHistorySuite) TestGetFirstItem_Failure() {
 	BranchToken := []byte("some random branch token")
 	history := NewVersionHistory(BranchToken, []*historyspb.VersionHistoryItem{})
 
-	_, err := GetFirstItem(history)
+	_, err := GetFirstVersionHistoryItem(history)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
@@ -406,23 +406,23 @@ func (s *versionHistorySuite) TestGetLastItem_Success() {
 	item := NewItem(3, 0)
 	history := NewVersionHistory(BranchToken, []*historyspb.VersionHistoryItem{item})
 
-	lastItem, err := GetLastItem(history)
+	lastItem, err := GetLastVersionHistoryItem(history)
 	s.NoError(err)
 	s.Equal(item, lastItem)
 
 	item = NewItem(4, 0)
-	err = AddOrUpdateItem(history, item)
+	err = AddOrUpdateVersionHistoryItem(history, item)
 	s.NoError(err)
 
-	lastItem, err = GetLastItem(history)
+	lastItem, err = GetLastVersionHistoryItem(history)
 	s.NoError(err)
 	s.Equal(item, lastItem)
 
 	item = NewItem(7, 1)
-	err = AddOrUpdateItem(history, item)
+	err = AddOrUpdateVersionHistoryItem(history, item)
 	s.NoError(err)
 
-	lastItem, err = GetLastItem(history)
+	lastItem, err = GetLastVersionHistoryItem(history)
 	s.NoError(err)
 	s.Equal(item, lastItem)
 }
@@ -431,7 +431,7 @@ func (s *versionHistorySuite) TestGetLastItem_Failure() {
 	BranchToken := []byte("some random branch token")
 	history := NewVersionHistory(BranchToken, []*historyspb.VersionHistoryItem{})
 
-	_, err := GetLastItem(history)
+	_, err := GetLastVersionHistoryItem(history)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
@@ -442,30 +442,30 @@ func (s *versionHistoriesSuite) TestGetVersion_Success() {
 	item3 := NewItem(8, 12)
 	history := NewVersionHistory(BranchToken, []*historyspb.VersionHistoryItem{item1, item2, item3})
 
-	Version, err := GetEventVersion(history, 1)
+	Version, err := GetVersionHistoryEventVersion(history, 1)
 	s.NoError(err)
 	s.Equal(item1.GetVersion(), Version)
-	Version, err = GetEventVersion(history, 2)
+	Version, err = GetVersionHistoryEventVersion(history, 2)
 	s.NoError(err)
 	s.Equal(item1.GetVersion(), Version)
-	Version, err = GetEventVersion(history, 3)
+	Version, err = GetVersionHistoryEventVersion(history, 3)
 	s.NoError(err)
 	s.Equal(item1.GetVersion(), Version)
 
-	Version, err = GetEventVersion(history, 4)
+	Version, err = GetVersionHistoryEventVersion(history, 4)
 	s.NoError(err)
 	s.Equal(item2.GetVersion(), Version)
-	Version, err = GetEventVersion(history, 5)
+	Version, err = GetVersionHistoryEventVersion(history, 5)
 	s.NoError(err)
 	s.Equal(item2.GetVersion(), Version)
-	Version, err = GetEventVersion(history, 6)
+	Version, err = GetVersionHistoryEventVersion(history, 6)
 	s.NoError(err)
 	s.Equal(item2.GetVersion(), Version)
 
-	Version, err = GetEventVersion(history, 7)
+	Version, err = GetVersionHistoryEventVersion(history, 7)
 	s.NoError(err)
 	s.Equal(item3.GetVersion(), Version)
-	Version, err = GetEventVersion(history, 8)
+	Version, err = GetVersionHistoryEventVersion(history, 8)
 	s.NoError(err)
 	s.Equal(item3.GetVersion(), Version)
 }
@@ -477,10 +477,10 @@ func (s *versionHistoriesSuite) TestGetVersion_Failure() {
 	item3 := NewItem(8, 12)
 	history := NewVersionHistory(BranchToken, []*historyspb.VersionHistoryItem{item1, item2, item3})
 
-	_, err := GetEventVersion(history, 0)
+	_, err := GetVersionHistoryEventVersion(history, 0)
 	s.Error(err)
 
-	_, err = GetEventVersion(history, 9)
+	_, err = GetVersionHistoryEventVersion(history, 9)
 	s.Error(err)
 }
 
@@ -563,7 +563,7 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_LargerEven
 		{EventId: 11, Version: 100},
 	})
 
-	index, item, err := FindLCAIndexAndItem(histories, versionHistoryIncoming)
+	index, item, err := FindLCAVersionHistoryIndexAndVersionHistoryItem(histories, versionHistoryIncoming)
 	s.Nil(err)
 	s.Equal(int32(0), index)
 	s.Equal(NewItem(7, 6), item)
@@ -593,7 +593,7 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_SameEventI
 		{EventId: 11, Version: 100},
 	})
 
-	index, item, err := FindLCAIndexAndItem(histories, versionHistoryIncoming)
+	index, item, err := FindLCAVersionHistoryIndexAndVersionHistoryItem(histories, versionHistoryIncoming)
 	s.Nil(err)
 	s.Equal(int32(1), index)
 	s.Equal(NewItem(7, 6), item)
@@ -616,15 +616,15 @@ func (s *versionHistoriesSuite) TestFindFirstVersionHistoryIndexByItem() {
 	_, _, err := AddVersionHistory(histories, versionHistory2)
 	s.Nil(err)
 
-	index, err := FindItemFirstIndex(histories, NewItem(8, 10))
+	index, err := FindFirstVersionHistoryIndexByVersionHistoryItem(histories, NewItem(8, 10))
 	s.NoError(err)
 	s.Equal(int32(1), index)
 
-	index, err = FindItemFirstIndex(histories, NewItem(4, 4))
+	index, err = FindFirstVersionHistoryIndexByVersionHistoryItem(histories, NewItem(4, 4))
 	s.NoError(err)
 	s.Equal(int32(0), index)
 
-	_, err = FindItemFirstIndex(histories, NewItem(41, 4))
+	_, err = FindFirstVersionHistoryIndexByVersionHistoryItem(histories, NewItem(41, 4))
 	s.Error(err)
 }
 
@@ -651,19 +651,19 @@ func (s *versionHistoriesSuite) TestCurrentVersionHistoryIndexIsInReplay() {
 	s.Equal(int32(1), newVersionHistoryIndex)
 	s.Equal(int32(1), histories.CurrentVersionHistoryIndex)
 
-	isInReplay, err := IsRebuilt(histories)
+	isInReplay, err := IsVersionHistoriesRebuilt(histories)
 	s.NoError(err)
 	s.False(isInReplay)
 
-	err = SetCurrentIndex(histories, 0)
+	err = SetCurrentVersionHistoryIndex(histories, 0)
 	s.NoError(err)
-	isInReplay, err = IsRebuilt(histories)
+	isInReplay, err = IsVersionHistoriesRebuilt(histories)
 	s.NoError(err)
 	s.True(isInReplay)
 
-	err = SetCurrentIndex(histories, 1)
+	err = SetCurrentVersionHistoryIndex(histories, 1)
 	s.NoError(err)
-	isInReplay, err = IsRebuilt(histories)
+	isInReplay, err = IsVersionHistoriesRebuilt(histories)
 	s.NoError(err)
 	s.False(isInReplay)
 }

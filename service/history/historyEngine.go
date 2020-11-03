@@ -2330,7 +2330,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	baseRebuildLastEventVersion, err := versionhistory.GetEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
+	baseRebuildLastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
 	if err != nil {
 		return nil, err
 	}
@@ -2938,7 +2938,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 				if err != nil {
 					return nil, err
 				}
-				baseRebuildLastEventVersion, err := versionhistory.GetEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
+				baseRebuildLastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
 				if err != nil {
 					return nil, err
 				}
