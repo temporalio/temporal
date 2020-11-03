@@ -58,7 +58,7 @@ func CopyVersionHistories(h *historyspb.VersionHistories) *historyspb.VersionHis
 // GetVersionHistory gets the VersionHistory according to index provided.
 func GetVersionHistory(h *historyspb.VersionHistories, index int32) (*historyspb.VersionHistory, error) {
 	if index < 0 || index >= int32(len(h.Histories)) {
-		return nil, serviceerror.NewInvalidArgument("invalid index.")
+		return nil, serviceerror.NewInvalidArgument("version histories index is out of range.")
 	}
 
 	return h.Histories[index], nil
