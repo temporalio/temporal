@@ -92,15 +92,9 @@ func (reqCtx *handlerContext) handleErr(err error) error {
 
 	scope := reqCtx.scope
 
-	switch err {
-	case context.DeadlineExceeded:
+	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 		scope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
-		return serviceerror.NewDeadlineExceeded(err.Error())
-	case context.Canceled:
-		scope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
-		return serviceerror.NewCanceled(err.Error())
-	default:
-		// noop
+		return err
 	}
 
 	switch err.(type) {
