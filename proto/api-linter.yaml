@@ -27,6 +27,11 @@
     - 'core::0158::response-repeated-first-field'
     - 'core::0158::request-page-token-field'
     - 'core::0158::request-page-size-field'
+    - 'core::0165::response-purge-sample-field'
+    - 'core::0165::response-purge-count-field'
+    - 'core::0165::request-filter-field'
+    - 'core::0165::request-parent-field'
+    - 'core::0165::request-force-field'
 
 - included_paths:
     - '**/*service/v1/service.proto'
