@@ -720,7 +720,7 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 
 	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
 		versionHistories,
-		versionhistory.NewItem(
+		versionhistory.NewVersionHistoryItem(
 			eventID,
 			version,
 		),

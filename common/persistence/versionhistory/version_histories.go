@@ -113,8 +113,8 @@ func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHist
 	return currentBranchChanged, newVersionHistoryIndex, nil
 }
 
-// FindLCAVersionHistoryIndexAndVersionHistoryItem finds the lowest common ancestor VersionHistory index and corresponding item.
-func FindLCAVersionHistoryIndexAndVersionHistoryItem(h *historyspb.VersionHistories, incomingHistory *historyspb.VersionHistory) (int32, *historyspb.VersionHistoryItem, error) {
+// FindLCAVersionHistoryItemAndIndex finds the lowest common ancestor VersionHistory index and corresponding item.
+func FindLCAVersionHistoryItemAndIndex(h *historyspb.VersionHistories, incomingHistory *historyspb.VersionHistory) (*historyspb.VersionHistoryItem, int32, error) {
 	var versionHistoryIndex int32
 	var versionHistoryLength int32
 	var versionHistoryItem *historyspb.VersionHistoryItem
@@ -122,7 +122,7 @@ func FindLCAVersionHistoryIndexAndVersionHistoryItem(h *historyspb.VersionHistor
 	for index, localHistory := range h.Histories {
 		item, err := FindLCAVersionHistoryItem(localHistory, incomingHistory)
 		if err != nil {
-			return 0, nil, err
+			return nil, 0, err
 		}
 
 		// if not set
@@ -137,14 +137,14 @@ func FindLCAVersionHistoryIndexAndVersionHistoryItem(h *historyspb.VersionHistor
 			versionHistoryItem = item
 		}
 	}
-	return versionHistoryIndex, versionHistoryItem, nil
+	return versionHistoryItem, versionHistoryIndex, nil
 }
 
 // FindFirstVersionHistoryIndexByVersionHistoryItem find the first VersionHistory index which contains the given version history item.
 func FindFirstVersionHistoryIndexByVersionHistoryItem(h *historyspb.VersionHistories, item *historyspb.VersionHistoryItem) (int32, error) {
-	for index, history := range h.Histories {
+	for versionHistoryIndex, history := range h.Histories {
 		if ContainsVersionHistoryItem(history, item) {
-			return int32(index), nil
+			return int32(versionHistoryIndex), nil
 		}
 	}
 	return 0, serviceerror.NewInvalidArgument("version histories does not contains given item.")

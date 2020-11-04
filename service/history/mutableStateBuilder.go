@@ -311,7 +311,7 @@ func (e *mutableStateBuilder) Load(
 		if err != nil {
 			return err
 		}
-		if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewItem(
+		if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
 			e.nextEventID-1, common.EmptyVersion,
 		)); err != nil {
 			return err
@@ -503,7 +503,7 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 			return err
 		}
 
-		if versionhistory.IsEmptyVersionHistory(versionHistory) {
+		if !versionhistory.IsEmptyVersionHistory(versionHistory) {
 			// this make sure current version >= last write version
 			versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
 			if err != nil {
@@ -4242,7 +4242,7 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 		if err != nil {
 			return err
 		}
-		if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewItem(
+		if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
 			lastEvent.GetEventId(), lastEvent.GetVersion(),
 		)); err != nil {
 			return err

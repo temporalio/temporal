@@ -30,8 +30,8 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 )
 
-// NewItem create a new instance of VersionHistoryItem.
-func NewItem(eventID int64, version int64) *historyspb.VersionHistoryItem {
+// NewVersionHistoryItem create a new instance of VersionHistoryItem.
+func NewVersionHistoryItem(eventID int64, version int64) *historyspb.VersionHistoryItem {
 	if eventID < 0 || version < 0 {
 		panic(fmt.Sprintf("invalid version history item event ID: %v, version: %v", eventID, version))
 	}

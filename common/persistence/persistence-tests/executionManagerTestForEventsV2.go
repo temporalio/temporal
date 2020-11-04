@@ -211,7 +211,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 	}
 	versionHistory := versionhistory.NewVersionHistory(
 		[]byte{1},
-		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(1, 0)},
+		[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(1, 0)},
 	)
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
@@ -279,7 +279,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 	}}
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	s.NoError(err)
-	err = versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, versionhistory.NewItem(2, 0))
+	err = versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, versionhistory.NewVersionHistoryItem(2, 0))
 	s.NoError(err)
 	updatedInfo.VersionHistories = versionHistories
 

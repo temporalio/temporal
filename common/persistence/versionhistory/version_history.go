@@ -155,8 +155,8 @@ func FindLCAVersionHistoryItem(v *historyspb.VersionHistory, remote *historyspb.
 	return nil, serviceerror.NewInvalidArgument("version history is malformed. No joint point found.")
 }
 
-// IsVersionHistoryLCAItemAppendable checks if a LCA VersionHistoryItem is appendable.
-func IsVersionHistoryLCAItemAppendable(v *historyspb.VersionHistory, lcaItem *historyspb.VersionHistoryItem) bool {
+// IsLCAVersionHistoryItemAppendable checks if a LCA VersionHistoryItem is appendable.
+func IsLCAVersionHistoryItemAppendable(v *historyspb.VersionHistory, lcaItem *historyspb.VersionHistoryItem) bool {
 	if len(v.Items) == 0 {
 		panic("version history not initialized")
 	}

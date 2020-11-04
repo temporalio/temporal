@@ -958,7 +958,7 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 		request.GetEndEventVersion() == lastItem.GetVersion() {
 		// this is a special case, target branch remains the same
 	} else {
-		endItem := versionhistory.NewItem(request.GetEndEventId(), request.GetEndEventVersion())
+		endItem := versionhistory.NewVersionHistoryItem(request.GetEndEventId(), request.GetEndEventVersion())
 		idx, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(versionHistories, endItem)
 		if err != nil {
 			return nil, err
@@ -970,7 +970,7 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 		}
 	}
 
-	startItem := versionhistory.NewItem(request.GetStartEventId(), request.GetStartEventVersion())
+	startItem := versionhistory.NewVersionHistoryItem(request.GetStartEventId(), request.GetStartEventVersion())
 	// If the request start event is defined. The start event may be on a different branch as current branch.
 	// We need to find the LCA of the start event and the current branch.
 	if request.GetStartEventId() == common.FirstEventID-1 &&

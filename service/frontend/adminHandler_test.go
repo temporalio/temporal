@@ -237,7 +237,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
 	branchToken := []byte{1}
 	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
-		versionhistory.NewItem(int64(10), int64(100)),
+		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
 	})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	mState := &historyservice.GetMutableStateResponse{
@@ -274,7 +274,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAnd
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
 	branchToken := []byte{1}
 	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
-		versionhistory.NewItem(int64(10), int64(100)),
+		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
 	})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	mState := &historyservice.GetMutableStateResponse{
@@ -307,8 +307,8 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	inputStartVersion := int64(10)
 	inputEndEventID := int64(100)
 	inputEndVersion := int64(11)
-	firstItem := versionhistory.NewItem(inputStartEventID, inputStartVersion)
-	endItem := versionhistory.NewItem(inputEndEventID, inputEndVersion)
+	firstItem := versionhistory.NewVersionHistoryItem(inputStartEventID, inputStartVersion)
+	endItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, endItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
@@ -340,8 +340,8 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	inputEndEventID := int64(100)
 	inputStartVersion := int64(10)
 	inputEndVersion := int64(11)
-	firstItem := versionhistory.NewItem(inputStartEventID, inputStartVersion)
-	targetItem := versionhistory.NewItem(inputEndEventID, inputEndVersion)
+	firstItem := versionhistory.NewVersionHistoryItem(inputStartEventID, inputStartVersion)
+	targetItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
@@ -373,8 +373,8 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	inputEndEventID := int64(100)
 	inputStartVersion := int64(10)
 	inputEndVersion := int64(11)
-	firstItem := versionhistory.NewItem(inputStartEventID, inputStartVersion)
-	targetItem := versionhistory.NewItem(inputEndEventID, inputEndVersion)
+	firstItem := versionhistory.NewVersionHistoryItem(inputStartEventID, inputStartVersion)
+	targetItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
@@ -406,11 +406,11 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	inputEndEventID := int64(100)
 	inputStartVersion := int64(10)
 	inputEndVersion := int64(101)
-	item1 := versionhistory.NewItem(inputStartEventID, inputStartVersion)
-	item2 := versionhistory.NewItem(inputEndEventID, inputEndVersion)
+	item1 := versionhistory.NewVersionHistoryItem(inputStartEventID, inputStartVersion)
+	item2 := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
 	versionHistory1 := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{item1, item2})
-	item3 := versionhistory.NewItem(int64(10), int64(20))
-	item4 := versionhistory.NewItem(int64(20), int64(51))
+	item3 := versionhistory.NewVersionHistoryItem(int64(10), int64(20))
+	item4 := versionhistory.NewVersionHistoryItem(int64(20), int64(51))
 	versionHistory2 := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{item1, item3, item4})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory1)
 	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory2)

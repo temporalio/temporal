@@ -117,13 +117,13 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 	lastEventID0 := int64(5)
 	versionHistory0 := versionhistory.NewVersionHistory(
 		branchToken0,
-		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID0, version)},
+		[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID0, version)},
 	)
 	branchToken1 := []byte("other random branch token")
 	lastEventID1 := int64(2)
 	versionHistory1 := versionhistory.NewVersionHistory(
 		branchToken1,
-		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID1, version)},
+		[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
 	)
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
 	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
@@ -150,7 +150,7 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 			VersionHistories: versionhistory.NewVersionHistories(
 				versionhistory.NewVersionHistory(
 					branchToken1,
-					[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID1, version)},
+					[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
 				),
 			),
 		},
@@ -181,7 +181,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_NoRebuild() {
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(2)
 	version := int64(12)
-	versionHistoryItem := versionhistory.NewItem(lastEventID, version)
+	versionHistoryItem := versionhistory.NewVersionHistoryItem(lastEventID, version)
 	versionHistory := versionhistory.NewVersionHistory(
 		branchToken,
 		[]*historyspb.VersionHistoryItem{versionHistoryItem},
@@ -206,7 +206,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	branchToken0 := []byte("some random branch token")
 	lastEventID0 := int64(2)
 
-	versionHistoryItem0 := versionhistory.NewItem(lastEventID0, version)
+	versionHistoryItem0 := versionhistory.NewVersionHistoryItem(lastEventID0, version)
 	versionHistory0 := versionhistory.NewVersionHistory(
 		branchToken0,
 		[]*historyspb.VersionHistoryItem{versionHistoryItem0},
@@ -215,7 +215,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	// stale branch, used for rebuild
 	branchToken1 := []byte("other random branch token")
 	lastEventID1 := lastEventID0 - 1
-	versionHistoryItem1 := versionhistory.NewItem(lastEventID1, version)
+	versionHistoryItem1 := versionhistory.NewVersionHistoryItem(lastEventID1, version)
 	versionHistory1 := versionhistory.NewVersionHistory(
 		branchToken1,
 		[]*historyspb.VersionHistoryItem{versionHistoryItem1},
@@ -246,7 +246,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 			VersionHistories: versionhistory.NewVersionHistories(
 				versionhistory.NewVersionHistory(
 					branchToken1,
-					[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID1, version)},
+					[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
 				),
 			),
 		},

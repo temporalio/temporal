@@ -253,7 +253,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 		// case 2: local version history and incoming version history diverged
 		// case 2-1: local version history has the higher version and discard the incoming event
 		// case 2-2: incoming version history has the higher version and resend the missing incoming events
-		if versionhistory.IsVersionHistoryLCAItemAppendable(currentVersionHistory, lcaItem) || versionhistory.IsVersionHistoryLCAItemAppendable(incomingVersionHistory, lcaItem) {
+		if versionhistory.IsLCAVersionHistoryItemAppendable(currentVersionHistory, lcaItem) || versionhistory.IsLCAVersionHistoryItemAppendable(incomingVersionHistory, lcaItem) {
 			// case 1
 			if scheduleID > lcaItem.GetEventId() {
 				return false, serviceerrors.NewRetryTaskV2(
