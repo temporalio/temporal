@@ -120,17 +120,17 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 	baseBranchLCAEventID := int64(1394)
 	baseBranchLastEventVersion := int64(400)
 	baseBranchLastEventID := int64(2333)
-	versionHistory := versionhistory.New(baseBranchToken, []*historyspb.VersionHistoryItem{
-		versionhistory.NewItem(10, 0),
-		versionhistory.NewItem(50, 100),
-		versionhistory.NewItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
-		versionhistory.NewItem(baseBranchLastEventID, baseBranchLastEventVersion),
+	versionHistory := versionhistory.NewVersionHistory(baseBranchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(10, 0),
+		versionhistory.NewVersionHistoryItem(50, 100),
+		versionhistory.NewVersionHistoryItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
+		versionhistory.NewVersionHistoryItem(baseBranchLastEventID, baseBranchLastEventVersion),
 	})
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
 	newBranchToken := []byte("some random new branch token")
-	newVersionHistory, err := versionhistory.DuplicateUntilLCAItem(versionHistory,
-		versionhistory.NewItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
+	newVersionHistory, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(versionHistory,
+		versionhistory.NewVersionHistoryItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
 	)
 	s.NoError(err)
 
@@ -161,12 +161,12 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 	s.Nil(err)
 	s.Equal(int32(1), newIndex)
 
-	compareVersionHistory, err := versionhistory.DuplicateUntilLCAItem(
+	compareVersionHistory, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(
 		versionHistory,
-		versionhistory.NewItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
+		versionhistory.NewVersionHistoryItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
 	)
 	s.NoError(err)
-	s.NoError(versionhistory.SetBranchToken(compareVersionHistory, newBranchToken))
+	versionhistory.SetVersionHistoryBranchToken(compareVersionHistory, newBranchToken)
 	newVersionHistory, err = versionhistory.GetVersionHistory(versionHistories, newIndex)
 	s.NoError(err)
 	s.True(compareVersionHistory.Equal(newVersionHistory))
@@ -175,18 +175,18 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 
 	lastWriteVersion := int64(300)
-	versionHistory := versionhistory.New([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
-		versionhistory.NewItem(10, 0),
-		versionhistory.NewItem(50, 100),
-		versionhistory.NewItem(100, 200),
-		versionhistory.NewItem(150, 300),
+	versionHistory := versionhistory.NewVersionHistory([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(10, 0),
+		versionhistory.NewVersionHistoryItem(50, 100),
+		versionhistory.NewVersionHistoryItem(100, 200),
+		versionhistory.NewVersionHistoryItem(150, 300),
 	})
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
-	incomingVersionHistory := versionhistory.Duplicate(versionHistory)
-	err := versionhistory.AddOrUpdateItem(
+	incomingVersionHistory := versionhistory.CopyVersionHistory(versionHistory)
+	err := versionhistory.AddOrUpdateVersionHistoryItem(
 		incomingVersionHistory,
-		versionhistory.NewItem(200, 300),
+		versionhistory.NewVersionHistoryItem(200, 300),
 	)
 	s.NoError(err)
 
@@ -227,18 +227,18 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 
 func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_NoMissingEventInBetween() {
 
-	versionHistory := versionhistory.New([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
-		versionhistory.NewItem(10, 0),
-		versionhistory.NewItem(50, 100),
-		versionhistory.NewItem(100, 200),
-		versionhistory.NewItem(150, 300),
+	versionHistory := versionhistory.NewVersionHistory([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(10, 0),
+		versionhistory.NewVersionHistoryItem(50, 100),
+		versionhistory.NewVersionHistoryItem(100, 200),
+		versionhistory.NewVersionHistoryItem(150, 300),
 	})
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
-	incomingVersionHistory := versionhistory.Duplicate(versionHistory)
-	err := versionhistory.AddOrUpdateItem(
+	incomingVersionHistory := versionhistory.CopyVersionHistory(versionHistory)
+	err := versionhistory.AddOrUpdateVersionHistoryItem(
 		incomingVersionHistory,
-		versionhistory.NewItem(200, 300),
+		versionhistory.NewVersionHistoryItem(200, 300),
 	)
 	s.NoError(err)
 
@@ -257,17 +257,17 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_NoMissing
 
 func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEventInBetween() {
 
-	versionHistory := versionhistory.New([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
-		versionhistory.NewItem(10, 0),
-		versionhistory.NewItem(50, 100),
-		versionhistory.NewItem(100, 200),
-		versionhistory.NewItem(150, 300),
+	versionHistory := versionhistory.NewVersionHistory([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(10, 0),
+		versionhistory.NewVersionHistoryItem(50, 100),
+		versionhistory.NewVersionHistoryItem(100, 200),
+		versionhistory.NewVersionHistoryItem(150, 300),
 	})
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
-	incomingVersionHistory := versionhistory.Duplicate(versionHistory)
-	incomingFirstEventVersionHistoryItem := versionhistory.NewItem(200, 300)
-	err := versionhistory.AddOrUpdateItem(
+	incomingVersionHistory := versionhistory.CopyVersionHistory(versionHistory)
+	incomingFirstEventVersionHistoryItem := versionhistory.NewVersionHistoryItem(200, 300)
+	err := versionhistory.AddOrUpdateVersionHistoryItem(
 		incomingVersionHistory,
 		incomingFirstEventVersionHistoryItem,
 	)
@@ -296,19 +296,19 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 	baseBranchLCAEventID := int64(85)
 	baseBranchLCAEventVersion := int64(200)
 
-	versionHistory := versionhistory.New(baseBranchToken, []*historyspb.VersionHistoryItem{
-		versionhistory.NewItem(10, 0),
-		versionhistory.NewItem(50, 100),
-		versionhistory.NewItem(baseBranchLCAEventID+10, baseBranchLCAEventVersion),
-		versionhistory.NewItem(150, 300),
+	versionHistory := versionhistory.NewVersionHistory(baseBranchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(10, 0),
+		versionhistory.NewVersionHistoryItem(50, 100),
+		versionhistory.NewVersionHistoryItem(baseBranchLCAEventID+10, baseBranchLCAEventVersion),
+		versionhistory.NewVersionHistoryItem(150, 300),
 	})
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
-	incomingVersionHistory := versionhistory.New(nil, []*historyspb.VersionHistoryItem{
-		versionhistory.NewItem(10, 0),
-		versionhistory.NewItem(50, 100),
-		versionhistory.NewItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
-		versionhistory.NewItem(200, 400),
+	incomingVersionHistory := versionhistory.NewVersionHistory(nil, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(10, 0),
+		versionhistory.NewVersionHistoryItem(50, 100),
+		versionhistory.NewVersionHistoryItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
+		versionhistory.NewVersionHistoryItem(200, 400),
 	})
 
 	newBranchToken := []byte("some random new branch token")
@@ -355,19 +355,19 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_Missin
 	baseBranchLastEventID := int64(150)
 	baseBranchLastEventVersion := int64(300)
 
-	versionHistory := versionhistory.New(baseBranchToken, []*historyspb.VersionHistoryItem{
-		versionhistory.NewItem(10, 0),
-		versionhistory.NewItem(50, 100),
-		versionhistory.NewItem(baseBranchLCAEventID+10, baseBranchLCAEventVersion),
-		versionhistory.NewItem(baseBranchLastEventID, baseBranchLastEventVersion),
+	versionHistory := versionhistory.NewVersionHistory(baseBranchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(10, 0),
+		versionhistory.NewVersionHistoryItem(50, 100),
+		versionhistory.NewVersionHistoryItem(baseBranchLCAEventID+10, baseBranchLCAEventVersion),
+		versionhistory.NewVersionHistoryItem(baseBranchLastEventID, baseBranchLastEventVersion),
 	})
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
-	incomingVersionHistory := versionhistory.New(nil, []*historyspb.VersionHistoryItem{
-		versionhistory.NewItem(10, 0),
-		versionhistory.NewItem(50, 100),
-		versionhistory.NewItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
-		versionhistory.NewItem(200, 400),
+	incomingVersionHistory := versionhistory.NewVersionHistory(nil, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(10, 0),
+		versionhistory.NewVersionHistoryItem(50, 100),
+		versionhistory.NewVersionHistoryItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
+		versionhistory.NewVersionHistoryItem(200, 400),
 	})
 
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()

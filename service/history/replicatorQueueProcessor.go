@@ -718,9 +718,9 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 		return nil, nil, serviceerror.NewInternal("replicatorQueueProcessor encounter workflow without version histories")
 	}
 
-	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByItem(
+	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
 		versionHistories,
-		versionhistory.NewItem(
+		versionhistory.NewVersionHistoryItem(
 			eventID,
 			version,
 		),

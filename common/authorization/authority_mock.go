@@ -72,3 +72,77 @@ func (mr *MockAuthorizerMockRecorder) Authorize(ctx, attributes interface{}) *go
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authorize", reflect.TypeOf((*MockAuthorizer)(nil).Authorize), ctx, attributes)
 }
+
+// MockrequestWithNamespace is a mock of requestWithNamespace interface.
+type MockrequestWithNamespace struct {
+	ctrl     *gomock.Controller
+	recorder *MockrequestWithNamespaceMockRecorder
+}
+
+// MockrequestWithNamespaceMockRecorder is the mock recorder for MockrequestWithNamespace.
+type MockrequestWithNamespaceMockRecorder struct {
+	mock *MockrequestWithNamespace
+}
+
+// NewMockrequestWithNamespace creates a new mock instance.
+func NewMockrequestWithNamespace(ctrl *gomock.Controller) *MockrequestWithNamespace {
+	mock := &MockrequestWithNamespace{ctrl: ctrl}
+	mock.recorder = &MockrequestWithNamespaceMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockrequestWithNamespace) EXPECT() *MockrequestWithNamespaceMockRecorder {
+	return m.recorder
+}
+
+// GetNamespace mocks base method.
+func (m *MockrequestWithNamespace) GetNamespace() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNamespace")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetNamespace indicates an expected call of GetNamespace.
+func (mr *MockrequestWithNamespaceMockRecorder) GetNamespace() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespace", reflect.TypeOf((*MockrequestWithNamespace)(nil).GetNamespace))
+}
+
+// MockrequestWithName is a mock of requestWithName interface.
+type MockrequestWithName struct {
+	ctrl     *gomock.Controller
+	recorder *MockrequestWithNameMockRecorder
+}
+
+// MockrequestWithNameMockRecorder is the mock recorder for MockrequestWithName.
+type MockrequestWithNameMockRecorder struct {
+	mock *MockrequestWithName
+}
+
+// NewMockrequestWithName creates a new mock instance.
+func NewMockrequestWithName(ctrl *gomock.Controller) *MockrequestWithName {
+	mock := &MockrequestWithName{ctrl: ctrl}
+	mock.recorder = &MockrequestWithNameMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockrequestWithName) EXPECT() *MockrequestWithNameMockRecorder {
+	return m.recorder
+}
+
+// GetName mocks base method.
+func (m *MockrequestWithName) GetName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetName indicates an expected call of GetName.
+func (mr *MockrequestWithNameMockRecorder) GetName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockrequestWithName)(nil).GetName))
+}

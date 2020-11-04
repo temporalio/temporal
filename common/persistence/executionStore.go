@@ -640,7 +640,7 @@ func getLastWriteVersion(
 	if err != nil {
 		return 0, err
 	}
-	versionHistoryItem, err := versionhistory.GetLastItem(versionHistory)
+	versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
 	if err != nil {
 		return 0, err
 	}

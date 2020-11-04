@@ -115,17 +115,17 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 
 	branchToken0 := []byte("some random branch token")
 	lastEventID0 := int64(5)
-	versionHistory0 := versionhistory.New(
+	versionHistory0 := versionhistory.NewVersionHistory(
 		branchToken0,
-		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID0, version)},
+		[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID0, version)},
 	)
 	branchToken1 := []byte("other random branch token")
 	lastEventID1 := int64(2)
-	versionHistory1 := versionhistory.New(
+	versionHistory1 := versionhistory.NewVersionHistory(
 		branchToken1,
-		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID1, version)},
+		[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
 	)
-	versionHistories := versionhistory.NewVHS(versionHistory0)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
 	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
 	s.NoError(err)
 
@@ -147,10 +147,10 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 	mockRebuildMutableState := NewMockmutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
 		&persistencespb.WorkflowExecutionInfo{
-			VersionHistories: versionhistory.NewVHS(
-				versionhistory.New(
+			VersionHistories: versionhistory.NewVersionHistories(
+				versionhistory.NewVersionHistory(
 					branchToken1,
-					[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID1, version)},
+					[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
 				),
 			),
 		},
@@ -181,12 +181,12 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_NoRebuild() {
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(2)
 	version := int64(12)
-	versionHistoryItem := versionhistory.NewItem(lastEventID, version)
-	versionHistory := versionhistory.New(
+	versionHistoryItem := versionhistory.NewVersionHistoryItem(lastEventID, version)
+	versionHistory := versionhistory.NewVersionHistory(
 		branchToken,
 		[]*historyspb.VersionHistoryItem{versionHistoryItem},
 	)
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
 	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.prepareMutableState(context.Background(), 0, version)
@@ -206,8 +206,8 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	branchToken0 := []byte("some random branch token")
 	lastEventID0 := int64(2)
 
-	versionHistoryItem0 := versionhistory.NewItem(lastEventID0, version)
-	versionHistory0 := versionhistory.New(
+	versionHistoryItem0 := versionhistory.NewVersionHistoryItem(lastEventID0, version)
+	versionHistory0 := versionhistory.NewVersionHistory(
 		branchToken0,
 		[]*historyspb.VersionHistoryItem{versionHistoryItem0},
 	)
@@ -215,13 +215,13 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	// stale branch, used for rebuild
 	branchToken1 := []byte("other random branch token")
 	lastEventID1 := lastEventID0 - 1
-	versionHistoryItem1 := versionhistory.NewItem(lastEventID1, version)
-	versionHistory1 := versionhistory.New(
+	versionHistoryItem1 := versionhistory.NewVersionHistoryItem(lastEventID1, version)
+	versionHistory1 := versionhistory.NewVersionHistory(
 		branchToken1,
 		[]*historyspb.VersionHistoryItem{versionHistoryItem1},
 	)
 
-	versionHistories := versionhistory.NewVHS(versionHistory0)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
 	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
 	s.Nil(err)
 
@@ -243,10 +243,10 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	mockRebuildMutableState := NewMockmutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
 		&persistencespb.WorkflowExecutionInfo{
-			VersionHistories: versionhistory.NewVHS(
-				versionhistory.New(
+			VersionHistories: versionhistory.NewVersionHistories(
+				versionhistory.NewVersionHistory(
 					branchToken1,
-					[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID1, version)},
+					[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
 				),
 			),
 		},
