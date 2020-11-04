@@ -335,7 +335,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 		if err != nil {
 			return 0, transactionPolicyActive, err
 		}
-		baseRebuildLastEventVersion, err := versionhistory.GetEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
+		baseRebuildLastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
 		if err != nil {
 			return 0, transactionPolicyActive, err
 		}

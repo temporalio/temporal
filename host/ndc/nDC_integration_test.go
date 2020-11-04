@@ -323,7 +323,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 		baseVersionHistory := s.eventBatchesToVersionHistory(nil, baseBranch)
 
 		var branch1 []*historypb.History
-		branchVersionHistory1 := versionhistory.Duplicate(baseVersionHistory)
+		branchVersionHistory1 := versionhistory.CopyVersionHistory(baseVersionHistory)
 		branchGenerator1 := baseGenerator.DeepCopy()
 		for i := 0; i < 10 && branchGenerator1.HasNextVertex(); i++ {
 			events := branchGenerator1.GetNextVertices()
@@ -336,7 +336,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 		branchVersionHistory1 = s.eventBatchesToVersionHistory(branchVersionHistory1, branch1)
 
 		var branch2 []*historypb.History
-		branchVersionHistory2 := versionhistory.Duplicate(baseVersionHistory)
+		branchVersionHistory2 := versionhistory.CopyVersionHistory(baseVersionHistory)
 		branchGenerator2 := baseGenerator.DeepCopy()
 		branchGenerator2.SetVersion(branchGenerator2.GetVersion() + 1)
 		for i := 0; i < 10 && branchGenerator2.HasNextVertex(); i++ {
@@ -649,14 +649,14 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 
 	versionHistory1 := s.eventBatchesToVersionHistory(nil, eventsBatch1)
 
-	versionHistory2, err := versionhistory.DuplicateUntilLCAItem(versionHistory1,
-		versionhistory.NewItem(14, 22),
+	versionHistory2, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(versionHistory1,
+		versionhistory.NewVersionHistoryItem(14, 22),
 	)
 	s.NoError(err)
 	versionHistory2 = s.eventBatchesToVersionHistory(versionHistory2, eventsBatch2)
 
-	versionHistory3, err := versionhistory.DuplicateUntilLCAItem(versionHistory1,
-		versionhistory.NewItem(14, 22),
+	versionHistory3, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(versionHistory1,
+		versionhistory.NewVersionHistoryItem(14, 22),
 	)
 	s.NoError(err)
 	versionHistory3 = s.eventBatchesToVersionHistory(versionHistory3, eventsBatch3)
@@ -921,14 +921,14 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 
 	versionHistory1 := s.eventBatchesToVersionHistory(nil, eventsBatch1)
 
-	versionHistory2, err := versionhistory.DuplicateUntilLCAItem(versionHistory1,
-		versionhistory.NewItem(14, 22),
+	versionHistory2, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(versionHistory1,
+		versionhistory.NewVersionHistoryItem(14, 22),
 	)
 	s.NoError(err)
 	versionHistory2 = s.eventBatchesToVersionHistory(versionHistory2, eventsBatch2)
 
-	versionHistory3, err := versionhistory.DuplicateUntilLCAItem(versionHistory1,
-		versionhistory.NewItem(14, 22),
+	versionHistory3, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(versionHistory1,
+		versionhistory.NewVersionHistoryItem(14, 22),
 	)
 	s.NoError(err)
 	versionHistory3 = s.eventBatchesToVersionHistory(versionHistory3, eventsBatch3)
@@ -1078,7 +1078,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 
 	newGenerator := s.generator.DeepCopy()
 	var newBranch []*historypb.History
-	newVersionHistory := versionhistory.Duplicate(versionHistory)
+	newVersionHistory := versionhistory.CopyVersionHistory(versionHistory)
 	newGenerator.SetVersion(newGenerator.GetVersion() + 1) // simulate events from other cluster
 	for i := 0; i < 4 && newGenerator.HasNextVertex(); i++ {
 		events := newGenerator.GetNextVertices()
@@ -1123,7 +1123,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 			},
 		},
 	}
-	staleVersionHistory := s.eventBatchesToVersionHistory(versionhistory.Duplicate(versionHistory), staleBranch)
+	staleVersionHistory := s.eventBatchesToVersionHistory(versionhistory.CopyVersionHistory(versionHistory), staleBranch)
 	s.applyEvents(
 		workflowID,
 		runID,
@@ -1461,20 +1461,20 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 
 	versionHistory1 := s.eventBatchesToVersionHistory(nil, eventsBatch1)
 
-	versionHistory2, err := versionhistory.DuplicateUntilLCAItem(versionHistory1,
-		versionhistory.NewItem(14, 22),
+	versionHistory2, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(versionHistory1,
+		versionhistory.NewVersionHistoryItem(14, 22),
 	)
 	s.NoError(err)
 	versionHistory2 = s.eventBatchesToVersionHistory(versionHistory2, eventsBatch2)
 
-	versionHistory3, err := versionhistory.DuplicateUntilLCAItem(versionHistory1,
-		versionhistory.NewItem(14, 22),
+	versionHistory3, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(versionHistory1,
+		versionhistory.NewVersionHistoryItem(14, 22),
 	)
 	s.NoError(err)
 	versionHistory3 = s.eventBatchesToVersionHistory(versionHistory3, eventsBatch3)
 
-	versionHistory4, err := versionhistory.DuplicateUntilLCAItem(versionHistory2,
-		versionhistory.NewItem(16, 32),
+	versionHistory4, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(versionHistory2,
+		versionhistory.NewVersionHistoryItem(16, 32),
 	)
 	s.NoError(err)
 	versionHistory4 = s.eventBatchesToVersionHistory(versionHistory4, eventsBatch4)
@@ -1777,12 +1777,12 @@ func (s *nDCIntegrationTestSuite) eventBatchesToVersionHistory(
 	// TODO temporary code to generate version history
 	//  we should generate version as part of modeled based testing
 	if versionHistory == nil {
-		versionHistory = versionhistory.New(nil, nil)
+		versionHistory = versionhistory.NewVersionHistory(nil, nil)
 	}
 	for _, batch := range eventBatches {
 		for _, event := range batch.Events {
-			err := versionhistory.AddOrUpdateItem(versionHistory,
-				versionhistory.NewItem(
+			err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory,
+				versionhistory.NewVersionHistoryItem(
 					event.GetEventId(),
 					event.GetVersion(),
 				))

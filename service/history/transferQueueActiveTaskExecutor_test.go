@@ -2138,7 +2138,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createPersistenceMutableState(
 	if ms.GetExecutionInfo().GetVersionHistories() != nil {
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())
 		s.NoError(err)
-		err = versionhistory.AddOrUpdateItem(currentVersionHistory, versionhistory.NewItem(
+		err = versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
 			lastEventID, lastEventVersion,
 		))
 		s.NoError(err)

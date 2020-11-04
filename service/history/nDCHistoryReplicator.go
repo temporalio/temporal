@@ -521,7 +521,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 	task nDCReplicationTask,
 ) error {
 
-	versionHistoryItem := versionhistory.NewItem(
+	versionHistoryItem := versionhistory.NewVersionHistoryItem(
 		task.getLastEvent().GetEventId(),
 		task.getLastEvent().GetVersion(),
 	)
@@ -529,7 +529,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 	if err != nil {
 		return err
 	}
-	if err = versionhistory.AddOrUpdateItem(versionHistory, versionHistoryItem); err != nil {
+	if err = versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, versionHistoryItem); err != nil {
 		return err
 	}
 

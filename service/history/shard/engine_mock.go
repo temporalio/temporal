@@ -34,8 +34,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/api/common/v1"
-	historypb "go.temporal.io/api/history/v1"
-
+	history "go.temporal.io/api/history/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
 	persistence "go.temporal.io/server/common/persistence"
@@ -497,7 +496,7 @@ func (mr *MockEngineMockRecorder) QueryWorkflow(ctx, request interface{}) *gomoc
 }
 
 // ReapplyEvents mocks base method.
-func (m *MockEngine) ReapplyEvents(ctx context.Context, namespaceUUID, workflowID, runID string, events []*historypb.HistoryEvent) error {
+func (m *MockEngine) ReapplyEvents(ctx context.Context, namespaceUUID, workflowID, runID string, events []*history.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, namespaceUUID, workflowID, runID, events)
 	ret0, _ := ret[0].(error)

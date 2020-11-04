@@ -176,9 +176,9 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 	}()
 
 	baseVersionHistories := baseWorkflow.getMutableState().GetExecutionInfo().GetVersionHistories()
-	index, err := versionhistory.FindFirstVersionHistoryIndexByItem(
+	index, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
 		baseVersionHistories,
-		versionhistory.NewItem(baseLastEventID, baseLastEventVersion),
+		versionhistory.NewVersionHistoryItem(baseLastEventID, baseLastEventVersion),
 	)
 	if err != nil {
 		// the base event and incoming event are from different branch

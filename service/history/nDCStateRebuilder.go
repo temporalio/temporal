@@ -157,11 +157,11 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	if err != nil {
 		return nil, 0, err
 	}
-	lastItem, err := versionhistory.GetLastItem(currentVersionHistory)
+	lastItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
 	if err != nil {
 		return nil, 0, err
 	}
-	if !lastItem.Equal(versionhistory.NewItem(
+	if !lastItem.Equal(versionhistory.NewVersionHistoryItem(
 		baseLastEventID,
 		baseLastEventVersion,
 	)) {
