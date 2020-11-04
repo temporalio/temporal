@@ -92,7 +92,8 @@ PROTO_OUT := api
 ALL_SRC         := $(shell find . -name "*.go" | grep -v -e "^$(PROTO_OUT)")
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
-UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
+#UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
+UNIT_TEST_DIRS = ./common/persistence/sql/sqlplugin/tests
 
 # Code coverage output files.
 COVER_ROOT                 := $(BUILD)/coverage
@@ -294,37 +295,31 @@ clean-build-results:
 	@mkdir -p $(COVER_ROOT)
 
 cover_profile: clean-build-results
+	@printf $(COLOR) "Running unit tests..."
 	@echo "mode: atomic" > $(UNIT_COVER_FILE)
-
-	@echo Running package tests:
 	$(foreach UNIT_TEST_DIR,$(patsubst ./%/,%,$(UNIT_TEST_DIRS)),\
 		mkdir -p $(BUILD)/$(UNIT_TEST_DIR); \
 		go test ./$(UNIT_TEST_DIR) $(TEST_ARG) -coverprofile=$(BUILD)/$(UNIT_TEST_DIR)/coverage.out || exit 1; \
-		cat $(BUILD)/$(UNIT_TEST_DIR)/coverage.out | grep -v "^mode: \w\+" >> $(UNIT_COVER_FILE) \
+		grep -v "^mode: \w\+" $(BUILD)/$(UNIT_TEST_DIR)/coverage.out >> $(UNIT_COVER_FILE) || true \
 	$(NEWLINE))
 
 cover_integration_profile: clean-build-results
+	@printf $(COLOR) "Running integration test with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)..."
 	@echo "mode: atomic" > $(INTEG_COVER_FILE)
-
-	@echo Running integration test with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_OUT_DIR)
 	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out || exit 1;
-	@cat $(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" >> $(INTEG_COVER_FILE)
+	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out || true >> $(INTEG_COVER_FILE)
 
 cover_xdc_profile: clean-build-results
+	@printf $(COLOR) "Running integration test for cross dc with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)..."
 	@echo "mode: atomic" > $(INTEG_XDC_COVER_FILE)
-
-	@echo Running integration test for cross dc with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)
 	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out || exit 1;
-	@cat $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE)
+	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE)
 
 cover_ndc_profile: clean-build-results
-	@mkdir -p $(BUILD)
-	@mkdir -p $(COVER_ROOT)
+	@printf $(COLOR) "Running integration test for N DC with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)..."
 	@echo "mode: atomic" > $(INTEG_NDC_COVER_FILE)
-
-	@echo Running integration test for N DC with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)
 	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_NDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out -count=$(TEST_RUN_COUNT) || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_NDC_COVER_FILE)
