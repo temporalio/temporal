@@ -895,7 +895,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 
 func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string, taskQueue string,
 	startTimeUnixNano, executionTimeUnixNano int64, status enumspb.WorkflowExecutionStatus,
-	taskID int64, memo []byte, encoding enumspb.EncodingType,
+	taskID int64, memo []byte, memoEncoding enumspb.EncodingType,
 	searchAttributes map[string]*commonpb.Payload) *indexerspb.Message {
 
 	msgType := enumsspb.MESSAGE_TYPE_INDEX
@@ -908,7 +908,7 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 	}
 	if len(memo) != 0 {
 		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
-		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: encoding.String()}}
+		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: memoEncoding.String()}}
 	}
 	for k, v := range searchAttributes {
 		// TODO: current implementation assumes that payload is JSON.
