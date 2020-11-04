@@ -41,7 +41,7 @@ GOPATH := $(shell go env GOPATH)
 endif
 
 GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)
-export PATH := $(GOBIN):$(PATH)
+SHELL := PATH=$(GOBIN):$(PATH) /bin/sh
 
 MODULE_ROOT := go.temporal.io/server
 BUILD := ./build
@@ -160,7 +160,11 @@ install-proto-submodule:
 protoc: $(PROTO_OUT)
 	@printf $(COLOR) "Build proto files..."
 # Run protoc separately for each directory because of different package names.
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc $(PROTO_IMPORTS) --gogoslick_out=Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)*.proto$(NEWLINE))
+	$(foreach PROTO_DIR,$(PROTO_DIRS),\
+		protoc $(PROTO_IMPORTS) \
+		 	--gogoslick_out=Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) \
+			$(PROTO_DIR)*.proto \
+	$(NEWLINE))
 
 fix-proto-path:
 	mv -f $(PROTO_OUT)/temporal/server/api/* $(PROTO_OUT) && rm -rf $(PROTO_OUT)/temporal
@@ -172,7 +176,10 @@ mock_file_name = $(call service_name,$(1))mock/$(subst $(call service_name,$(1))
 
 proto-mock: $(PROTO_OUT)
 	@printf $(COLOR) "Generate proto mocks..."
-	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),cd $(PROTO_OUT) && mockgen -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE))$(NEWLINE) )
+	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),\
+		cd $(PROTO_OUT) && \
+		mockgen -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE)) \
+	$(NEWLINE))
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api..."
@@ -254,7 +261,7 @@ buf-build:
 
 buf-breaking:
 	@printf $(COLOR) "Run buf breaking changes check against image.bin..."
-	@(cd $(PROTO_ROOT) && buf check breaking --against-input image.bin)
+	@(cd $(PROTO_ROOT) && buf check breaking --against image.bin)
 
 check: copyright goimports-check lint vet staticcheck errcheck
 
@@ -264,12 +271,16 @@ clean-test-results:
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
-	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(UNIT_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
+	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS),\
+		@go test -timeout $(TEST_TIMEOUT) -race $(UNIT_TEST_DIR) $(TEST_TAG) | tee -a test.log \
+	$(NEWLINE))
 	@! grep -q "^--- FAIL" test.log
 
 integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
-	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(INTEG_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
+	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS),\
+		@go test -timeout $(TEST_TIMEOUT) -race $(INTEG_TEST_DIR) $(TEST_TAG) | tee -a test.log \
+	$(NEWLINE))
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
 	@go test -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
@@ -283,56 +294,50 @@ clean-build-results:
 	@mkdir -p $(COVER_ROOT)
 
 cover_profile: clean-build-results
+	@printf $(COLOR) "Running unit tests..."
 	@echo "mode: atomic" > $(UNIT_COVER_FILE)
-
-	@echo Running package tests:
-	@for dir in $(UNIT_TEST_DIRS); do \
-		mkdir -p $(BUILD)/"$$dir"; \
-		go test "$$dir" $(TEST_ARG) -coverprofile=$(BUILD)/"$$dir"/coverage.out || exit 1; \
-		cat $(BUILD)/"$$dir"/coverage.out | grep -v "^mode: \w\+" >> $(UNIT_COVER_FILE); \
-	done;
+	$(foreach UNIT_TEST_DIR,$(patsubst ./%/,%,$(UNIT_TEST_DIRS)),\
+		mkdir -p $(BUILD)/$(UNIT_TEST_DIR); \
+		go test ./$(UNIT_TEST_DIR) $(TEST_ARG) -coverprofile=$(BUILD)/$(UNIT_TEST_DIR)/coverage.out || exit 1; \
+		grep -v "^mode: \w\+" $(BUILD)/$(UNIT_TEST_DIR)/coverage.out >> $(UNIT_COVER_FILE) || true \
+	$(NEWLINE))
 
 cover_integration_profile: clean-build-results
+	@printf $(COLOR) "Running integration test with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)..."
 	@echo "mode: atomic" > $(INTEG_COVER_FILE)
-
-	@echo Running integration test with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_OUT_DIR)
 	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out || exit 1;
-	@cat $(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" >> $(INTEG_COVER_FILE)
+	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out >> $(INTEG_COVER_FILE) || true
 
 cover_xdc_profile: clean-build-results
+	@printf $(COLOR) "Running integration test for cross dc with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)..."
 	@echo "mode: atomic" > $(INTEG_XDC_COVER_FILE)
-
-	@echo Running integration test for cross dc with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)
 	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out || exit 1;
-	@cat $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE)
+	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE) || true
 
 cover_ndc_profile: clean-build-results
-	@mkdir -p $(BUILD)
-	@mkdir -p $(COVER_ROOT)
+	@printf $(COLOR) "Running integration test for N DC with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)..."
 	@echo "mode: atomic" > $(INTEG_NDC_COVER_FILE)
-
-	@echo Running integration test for N DC with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)
 	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_NDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out -count=$(TEST_RUN_COUNT) || exit 1;
-	@cat $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_NDC_COVER_FILE)
+	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out | grep -v "mode: set" >> $(INTEG_NDC_COVER_FILE) || true
 
 $(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_NOSQL_CASS_COVER_FILE) $(INTEG_XDC_NOSQL_CASS_COVER_FILE) $(INTEG_NDC_NOSQL_CASS_COVER_FILE) $(INTEG_SQL_MYSQL_COVER_FILE) $(INTEG_XDC_SQL_MYSQL_COVER_FILE) $(INTEG_NDC_SQL_MYSQL_COVER_FILE) $(INTEG_SQL_POSTGRESQL_COVER_FILE) $(INTEG_XDC_SQL_POSTGRESQL_COVER_FILE) $(INTEG_NDC_SQL_POSTGRESQL_COVER_FILE)
 	@echo "mode: atomic" > $(COVER_ROOT)/cover.out
-	cat $(UNIT_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(UNIT_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
 	# NoSQL Cassandra
-	cat $(INTEG_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_XDC_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_NDC_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
+	cat $(INTEG_XDC_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
+	cat $(INTEG_NDC_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
 	# SQL MySQL
-	cat $(INTEG_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_XDC_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_NDC_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
+	cat $(INTEG_XDC_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
+	cat $(INTEG_NDC_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
 	# SQL PostgreSQL
-	cat $(INTEG_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_XDC_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_NDC_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
+	cat $(INTEG_XDC_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
+	cat $(INTEG_NDC_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
 
 cover: $(COVER_ROOT)/cover.out
 	go tool cover -html=$(COVER_ROOT)/cover.out;
