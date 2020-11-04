@@ -441,8 +441,8 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 
 	namespaceRecord2New := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
-			Info:   &*namespaceRecord2Old.Namespace.Info,
-			Config: &*namespaceRecord2Old.Namespace.Config,
+			Info:   namespaceRecord2Old.Namespace.Info,
+			Config: namespaceRecord2Old.Namespace.Config,
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName, // only this changed
 				Clusters: []string{
@@ -462,7 +462,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 	namespaceRecord1New := &persistence.GetNamespaceResponse{ // only the description changed
 		Namespace: &persistencespb.NamespaceDetail{
 			Info:   &persistencespb.NamespaceInfo{Id: namespaceRecord1Old.Namespace.Info.Id, Name: namespaceRecord1Old.Namespace.Info.Name, Description: "updated description", Data: make(map[string]string)},
-			Config: &*namespaceRecord2Old.Namespace.Config,
+			Config: namespaceRecord2Old.Namespace.Config,
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -591,8 +591,8 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 
 func (s *namespaceCacheSuite) buildEntryFromRecord(record *persistence.GetNamespaceResponse) *NamespaceCacheEntry {
 	newEntry := newNamespaceCacheEntry(s.clusterMetadata)
-	newEntry.info = &*record.Namespace.Info
-	newEntry.config = &*record.Namespace.Config
+	newEntry.info = record.Namespace.Info
+	newEntry.config = record.Namespace.Config
 	newEntry.replicationConfig = &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: record.Namespace.ReplicationConfig.ActiveClusterName,
 	}
