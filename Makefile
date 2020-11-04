@@ -41,7 +41,7 @@ GOPATH := $(shell go env GOPATH)
 endif
 
 GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)
-SHELL := PATH=$(GOBIN):$(PATH) /bin/bash
+SHELL := PATH=$(GOBIN):$(PATH) /bin/sh
 
 MODULE_ROOT := go.temporal.io/server
 BUILD := ./build
@@ -92,7 +92,8 @@ PROTO_OUT := api
 ALL_SRC         := $(shell find . -name "*.go" | grep -v -e "^$(PROTO_OUT)")
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
-UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
+#UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
+UNIT_TEST_DIRS = ./common/persistence/sql/sqlplugin/tests
 
 # Code coverage output files.
 COVER_ROOT                 := $(BUILD)/coverage
@@ -261,7 +262,7 @@ buf-build:
 
 buf-breaking:
 	@printf $(COLOR) "Run buf breaking changes check against image.bin..."
-	@(cd $(PROTO_ROOT) && buf check breaking --against-input image.bin)
+	@(cd $(PROTO_ROOT) && buf check breaking --against image.bin)
 
 check: copyright goimports-check lint vet staticcheck errcheck
 
@@ -307,37 +308,37 @@ cover_integration_profile: clean-build-results
 	@echo "mode: atomic" > $(INTEG_COVER_FILE)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_OUT_DIR)
 	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out || exit 1;
-	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out || true >> $(INTEG_COVER_FILE)
+	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out >> $(INTEG_COVER_FILE) || true
 
 cover_xdc_profile: clean-build-results
 	@printf $(COLOR) "Running integration test for cross dc with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)..."
 	@echo "mode: atomic" > $(INTEG_XDC_COVER_FILE)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)
 	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out || exit 1;
-	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE)
+	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE) || true
 
 cover_ndc_profile: clean-build-results
 	@printf $(COLOR) "Running integration test for N DC with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)..."
 	@echo "mode: atomic" > $(INTEG_NDC_COVER_FILE)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)
 	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_NDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out -count=$(TEST_RUN_COUNT) || exit 1;
-	@cat $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_NDC_COVER_FILE)
+	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out | grep -v "mode: set" >> $(INTEG_NDC_COVER_FILE) || true
 
 $(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_NOSQL_CASS_COVER_FILE) $(INTEG_XDC_NOSQL_CASS_COVER_FILE) $(INTEG_NDC_NOSQL_CASS_COVER_FILE) $(INTEG_SQL_MYSQL_COVER_FILE) $(INTEG_XDC_SQL_MYSQL_COVER_FILE) $(INTEG_NDC_SQL_MYSQL_COVER_FILE) $(INTEG_SQL_POSTGRESQL_COVER_FILE) $(INTEG_XDC_SQL_POSTGRESQL_COVER_FILE) $(INTEG_NDC_SQL_POSTGRESQL_COVER_FILE)
 	@echo "mode: atomic" > $(COVER_ROOT)/cover.out
-	cat $(UNIT_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(UNIT_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
 	# NoSQL Cassandra
-	cat $(INTEG_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_XDC_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_NDC_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
+	cat $(INTEG_XDC_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
+	cat $(INTEG_NDC_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
 	# SQL MySQL
-	cat $(INTEG_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_XDC_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_NDC_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
+	cat $(INTEG_XDC_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
+	cat $(INTEG_NDC_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
 	# SQL PostgreSQL
-	cat $(INTEG_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_XDC_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_NDC_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
+	cat $(INTEG_XDC_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
+	cat $(INTEG_NDC_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
 
 cover: $(COVER_ROOT)/cover.out
 	go tool cover -html=$(COVER_ROOT)/cover.out;
