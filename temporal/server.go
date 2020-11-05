@@ -338,6 +338,11 @@ func (s *Server) getServiceParams(
 	} else {
 		params.Authorizer = authorization.NewNopAuthorizer()
 	}
+	if s.so.claimMapper != nil {
+		params.ClaimMapper = s.so.claimMapper
+	} else {
+		params.ClaimMapper = authorization.NewNoopClaimMapper()
+	}
 
 	return &params, nil
 }

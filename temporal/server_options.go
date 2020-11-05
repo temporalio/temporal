@@ -37,6 +37,7 @@ type (
 		config            *config.Config
 		authorizer        authorization.Authorizer
 		tlsConfigProvider encryption.TLSConfigProvider
+		claimMapper       authorization.ClaimMapper
 		configDir         string
 		env               string
 		zone              string

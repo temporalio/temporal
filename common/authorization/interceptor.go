@@ -26,10 +26,15 @@ package authorization
 
 import (
 	"context"
+	"crypto/x509/pkix"
 	"strings"
 
-	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
+
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/metrics"
 )
@@ -45,42 +50,79 @@ func (a *interceptor) Interceptor(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 
-	var namespace string
-	requestWithNamespace, ok := req.(requestWithNamespace)
-	if ok {
-		namespace = requestWithNamespace.GetNamespace()
+	var caller *Claims
+
+	if a.claimMapper != nil {
+		var tlsSubject *pkix.Name
+		var authHeaders []string
+
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			authHeaders = md["authorization"]
+		}
+		if p, ok := peer.FromContext(ctx); ok {
+			if tlsAuth, ok := p.AuthInfo.(credentials.TLSInfo); ok {
+				if len(tlsAuth.State.VerifiedChains) > 0 && len(tlsAuth.State.VerifiedChains[0]) > 0 {
+					tlsSubject = &tlsAuth.State.VerifiedChains[0][0].Subject
+				}
+			}
+		}
+		// Add auth into to ctx only if there's some auth info
+		if tlsSubject != nil || len(authHeaders) > 0 {
+			authInfo := AuthInfo{authHeaders[0], tlsSubject}
+			if a.authorizer != nil {
+				claims, err := a.claimMapper.GetClaims(authInfo)
+				if err != nil {
+					return nil, err
+				}
+				caller = claims
+				ctx = context.WithValue(ctx, "auth-claims", claims)
+			}
+		}
 	}
 
-	apiName := info.FullMethod
-	index := strings.LastIndex(apiName, "/")
-	if index > -1 {
-		apiName = apiName[index+1:]
-	}
+	if a.authorizer != nil {
+		var namespace string
+		requestWithNamespace, ok := req.(requestWithNamespace)
+		if ok {
+			namespace = requestWithNamespace.GetNamespace()
+		}
 
-	scope := a.getMetricsScope(metrics.NumAuthorizationScopes, namespace)
-	sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
-	defer sw.Stop()
+		apiName := info.FullMethod
+		index := strings.LastIndex(apiName, "/")
+		if index > -1 {
+			apiName = apiName[index+1:]
+		}
 
-	result, err := a.authorizer.Authorize(ctx, &Attributes{Namespace: namespace, APIName: apiName})
-	if err != nil {
-		scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
-		return nil, err
-	}
-	if result.Decision != DecisionAllow {
-		scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
-		return nil, errUnauthorized
+		scope := a.getMetricsScope(metrics.NumAuthorizationScopes, namespace)
+		sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
+		defer sw.Stop()
+
+		result, err := a.authorizer.Authorize(ctx, caller, &CallTarget{Namespace: namespace, APIName: apiName})
+		if err != nil {
+			scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
+			return nil, err
+		}
+		if result.Decision != DecisionAllow {
+			scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
+			return nil, errUnauthorized
+		}
 	}
 	return handler(ctx, req)
 }
 
 type interceptor struct {
 	authorizer    Authorizer
+	claimMapper   ClaimMapper
 	metricsClient metrics.Client
 }
 
 // GetAuthorizationInterceptor creates an authorization interceptor and return a func that points to its Interceptor method
-func NewAuthorizationInterceptor(authorizer Authorizer, metrics metrics.Client) grpc.UnaryServerInterceptor {
-	return (&interceptor{authorizer: authorizer, metricsClient: metrics}).Interceptor
+func NewAuthorizationInterceptor(
+	claimMapper ClaimMapper,
+	authorizer Authorizer,
+	metrics metrics.Client,
+) grpc.UnaryServerInterceptor {
+	return (&interceptor{claimMapper: claimMapper, authorizer: authorizer, metricsClient: metrics}).Interceptor
 }
 
 // getMetricsScopeWithNamespace return metrics scope with namespace tag

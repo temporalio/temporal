@@ -59,18 +59,18 @@ func (m *MockAuthorizer) EXPECT() *MockAuthorizerMockRecorder {
 }
 
 // Authorize mocks base method.
-func (m *MockAuthorizer) Authorize(ctx context.Context, attributes *Attributes) (Result, error) {
+func (m *MockAuthorizer) Authorize(ctx context.Context, caller *Claims, target *CallTarget) (Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Authorize", ctx, attributes)
+	ret := m.ctrl.Call(m, "Authorize", ctx, caller, target)
 	ret0, _ := ret[0].(Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Authorize indicates an expected call of Authorize.
-func (mr *MockAuthorizerMockRecorder) Authorize(ctx, attributes interface{}) *gomock.Call {
+func (mr *MockAuthorizerMockRecorder) Authorize(ctx, caller, target interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authorize", reflect.TypeOf((*MockAuthorizer)(nil).Authorize), ctx, attributes)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authorize", reflect.TypeOf((*MockAuthorizer)(nil).Authorize), ctx, caller, target)
 }
 
 // MockrequestWithNamespace is a mock of requestWithNamespace interface.

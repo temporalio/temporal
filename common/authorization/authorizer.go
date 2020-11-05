@@ -38,8 +38,7 @@ const (
 type (
 	// Attributes is input for authority to make decision.
 	// It can be extended in future if required auth on resources like WorkflowType and TaskQueue
-	Attributes struct {
-		Actor     string
+	CallTarget struct {
 		APIName   string
 		Namespace string
 	}
@@ -55,7 +54,7 @@ type (
 
 // Authorizer is an interface for authorization
 type Authorizer interface {
-	Authorize(ctx context.Context, attributes *Attributes) (Result, error)
+	Authorize(ctx context.Context, caller *Claims, target *CallTarget) (Result, error)
 }
 
 type requestWithNamespace interface {
