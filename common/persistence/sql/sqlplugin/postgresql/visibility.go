@@ -25,6 +25,7 @@
 package postgresql
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -114,9 +115,13 @@ var errCloseParams = errors.New("missing one of {closeTime, historyLength} param
 
 // InsertIntoVisibility inserts a row into visibility table. If an row already exist,
 // its left as such and no update will be made
-func (pdb *db) InsertIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, error) {
+func (pdb *db) InsertIntoVisibility(
+	ctx context.Context,
+	row *sqlplugin.VisibilityRow,
+) (sql.Result, error) {
 	row.StartTime = pdb.converter.ToPostgreSQLDateTime(row.StartTime)
-	return pdb.conn.Exec(templateCreateWorkflowExecutionStarted,
+	return pdb.conn.ExecContext(ctx,
+		templateCreateWorkflowExecutionStarted,
 		row.NamespaceID,
 		row.WorkflowID,
 		row.RunID,
@@ -125,16 +130,21 @@ func (pdb *db) InsertIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, e
 		row.WorkflowTypeName,
 		row.Status,
 		row.Memo,
-		row.Encoding)
+		row.Encoding,
+	)
 }
 
 // ReplaceIntoVisibility replaces an existing row if it exist or creates a new row in visibility table
-func (pdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, error) {
+func (pdb *db) ReplaceIntoVisibility(
+	ctx context.Context,
+	row *sqlplugin.VisibilityRow,
+) (sql.Result, error) {
 	switch {
 	case row.CloseTime != nil && row.HistoryLength != nil:
 		row.StartTime = pdb.converter.ToPostgreSQLDateTime(row.StartTime)
 		closeTime := pdb.converter.ToPostgreSQLDateTime(*row.CloseTime)
-		return pdb.conn.Exec(templateCreateWorkflowExecutionClosed,
+		return pdb.conn.ExecContext(ctx,
+			templateCreateWorkflowExecutionClosed,
 			row.NamespaceID,
 			row.WorkflowID,
 			row.RunID,
@@ -145,19 +155,30 @@ func (pdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, 
 			row.Status,
 			*row.HistoryLength,
 			row.Memo,
-			row.Encoding)
+			row.Encoding,
+		)
 	default:
 		return nil, errCloseParams
 	}
 }
 
 // DeleteFromVisibility deletes a row from visibility table if it exist
-func (pdb *db) DeleteFromVisibility(filter sqlplugin.VisibilityDeleteFilter) (sql.Result, error) {
-	return pdb.conn.Exec(templateDeleteWorkflowExecution, filter.NamespaceID, filter.RunID)
+func (pdb *db) DeleteFromVisibility(
+	ctx context.Context,
+	filter sqlplugin.VisibilityDeleteFilter,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx,
+		templateDeleteWorkflowExecution,
+		filter.NamespaceID,
+		filter.RunID,
+	)
 }
 
 // SelectFromVisibility reads one or more rows from visibility table
-func (pdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]sqlplugin.VisibilityRow, error) {
+func (pdb *db) SelectFromVisibility(
+	ctx context.Context,
+	filter sqlplugin.VisibilitySelectFilter,
+) ([]sqlplugin.VisibilityRow, error) {
 	var err error
 	var rows []sqlplugin.VisibilityRow
 	if filter.MinTime != nil {
@@ -170,7 +191,12 @@ func (pdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 	switch {
 	case filter.MinTime == nil && filter.RunID != nil && filter.Status != 1:
 		var row sqlplugin.VisibilityRow
-		err = pdb.conn.Get(&row, templateGetClosedWorkflowExecution, filter.NamespaceID, *filter.RunID)
+		err = pdb.conn.GetContext(ctx,
+			&row,
+			templateGetClosedWorkflowExecution,
+			filter.NamespaceID,
+			*filter.RunID,
+		)
 		if err == nil {
 			rows = append(rows, row)
 		}
@@ -180,7 +206,8 @@ func (pdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutionsByID
 		}
-		err = pdb.conn.Select(&rows,
+		err = pdb.conn.SelectContext(ctx,
+			&rows,
 			qry,
 			*filter.WorkflowID,
 			filter.NamespaceID,
@@ -196,7 +223,8 @@ func (pdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutionsByType
 		}
-		err = pdb.conn.Select(&rows,
+		err = pdb.conn.SelectContext(ctx,
+			&rows,
 			qry,
 			*filter.WorkflowTypeName,
 			filter.NamespaceID,
@@ -209,7 +237,8 @@ func (pdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 	case filter.MinTime != nil && filter.MaxTime != nil &&
 		filter.RunID != nil && filter.PageSize != nil &&
 		filter.Status != 0 && filter.Status != 1: // 0 is UNSPECIFIED, 1 is RUNNING
-		err = pdb.conn.Select(&rows,
+		err = pdb.conn.SelectContext(ctx,
+			&rows,
 			templateGetClosedWorkflowExecutionsByStatus,
 			filter.Status,
 			filter.NamespaceID,
@@ -225,7 +254,8 @@ func (pdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutions
 		}
-		err = pdb.conn.Select(&rows,
+		err = pdb.conn.SelectContext(ctx,
+			&rows,
 			qry,
 			filter.NamespaceID,
 			*filter.MinTime,

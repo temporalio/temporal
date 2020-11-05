@@ -25,6 +25,7 @@
 package sqlplugin
 
 import (
+	"context"
 	"database/sql"
 )
 
@@ -53,10 +54,10 @@ type (
 
 	// MatchingTask is the SQL persistence interface for matching tasks
 	MatchingTask interface {
-		InsertIntoTasks(rows []TasksRow) (sql.Result, error)
+		InsertIntoTasks(ctx context.Context, rows []TasksRow) (sql.Result, error)
 		// SelectFromTasks retrieves one or more rows from the tasks table
 		// Required filter params - {namespaceID, taskqueueName, taskType, minTaskID, maxTaskID, pageSize}
-		SelectFromTasks(filter TasksFilter) ([]TasksRow, error)
+		SelectFromTasks(ctx context.Context, filter TasksFilter) ([]TasksRow, error)
 		// DeleteFromTasks deletes a row from tasks table
 		// Required filter params:
 		//  to delete single row
@@ -64,6 +65,6 @@ type (
 		//  to delete multiple rows
 		//    - {namespaceID, taskqueueName, taskType, taskIDLessThanEquals, limit }
 		//    - this will delete upto limit number of tasks less than or equal to the given task id
-		DeleteFromTasks(filter TasksFilter) (sql.Result, error)
+		DeleteFromTasks(ctx context.Context, filter TasksFilter) (sql.Result, error)
 	}
 )

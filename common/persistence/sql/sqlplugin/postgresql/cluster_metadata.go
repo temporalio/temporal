@@ -25,6 +25,7 @@
 package postgresql
 
 import (
+	"context"
 	"database/sql"
 	"strconv"
 	"strings"
@@ -78,34 +79,68 @@ cluster_membership WHERE membership_partition = $`
 	templateWithOrderBySessionStartSuffix = ` ORDER BY membership_partition ASC, host_id ASC`
 )
 
-func (pdb *db) SaveClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Result, error) {
+func (pdb *db) SaveClusterMetadata(
+	ctx context.Context,
+	row *sqlplugin.ClusterMetadataRow,
+) (sql.Result, error) {
 	if row.Version == 0 {
-		// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove after 1.1 release.
-		pdb.conn.Exec(insertClusterMetadataQry, constMetadataPartition, row.Data, row.DataEncoding, row.Data, row.DataEncoding, 1)
+		// TODO(vitarb): immutable metadata is needed for backward compatibility only,
+		//  remove after 1.1 release.
+		return pdb.conn.ExecContext(ctx,
+			insertClusterMetadataQry,
+			constMetadataPartition,
+			row.Data,
+			row.DataEncoding,
+			row.Data,
+			row.DataEncoding,
+			1,
+		)
 	}
-	return pdb.conn.Exec(updateClusterMetadataQry, row.Data, row.DataEncoding, row.Version+1, constMetadataPartition)
+	return pdb.conn.ExecContext(ctx,
+		updateClusterMetadataQry,
+		row.Data,
+		row.DataEncoding,
+		row.Version+1,
+		constMetadataPartition,
+	)
 }
 
-func (pdb *db) GetClusterMetadata() (*sqlplugin.ClusterMetadataRow, error) {
+func (pdb *db) GetClusterMetadata(
+	ctx context.Context,
+) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
-	err := pdb.conn.Get(&row, getClusterMetadataQry, constMetadataPartition)
+	err := pdb.conn.GetContext(ctx,
+		&row,
+		getClusterMetadataQry,
+		constMetadataPartition,
+	)
 	if err != nil {
 		return nil, err
 	}
 	return &row, err
 }
 
-func (pdb *db) WriteLockGetClusterMetadata() (*sqlplugin.ClusterMetadataRow, error) {
+func (pdb *db) WriteLockGetClusterMetadata(
+	ctx context.Context,
+) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
-	err := pdb.conn.Get(&row, writeLockGetClusterMetadataQry, constMetadataPartition)
+	err := pdb.conn.GetContext(ctx,
+		&row,
+		writeLockGetClusterMetadataQry,
+		constMetadataPartition,
+	)
 	if err != nil {
 		return nil, err
 	}
-	return &row, err
+	return &row, nil
 }
 
-func (pdb *db) UpsertClusterMembership(row *sqlplugin.ClusterMembershipRow) (sql.Result, error) {
-	return pdb.conn.Exec(templateUpsertActiveClusterMembership,
+func (pdb *db) UpsertClusterMembership(
+	ctx context.Context,
+	row *sqlplugin.ClusterMembershipRow,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx,
+		templateUpsertActiveClusterMembership,
 		constMembershipPartition,
 		row.HostID,
 		row.RPCAddress,
@@ -116,7 +151,10 @@ func (pdb *db) UpsertClusterMembership(row *sqlplugin.ClusterMembershipRow) (sql
 		row.RecordExpiry)
 }
 
-func (pdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]sqlplugin.ClusterMembershipRow, error) {
+func (pdb *db) GetClusterMembers(
+	ctx context.Context,
+	filter *sqlplugin.ClusterMembershipFilter,
+) ([]sqlplugin.ClusterMembershipRow, error) {
 	var queryString strings.Builder
 	var operands []interface{}
 	queryString.WriteString(templateGetClusterMembership)
@@ -176,7 +214,7 @@ func (pdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]s
 	compiledQryString := queryString.String()
 
 	var rows []sqlplugin.ClusterMembershipRow
-	err := pdb.conn.Select(&rows,
+	err := pdb.conn.SelectContext(ctx, &rows,
 		compiledQryString,
 		operands...)
 
@@ -192,9 +230,14 @@ func (pdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]s
 	return convertedRows, err
 }
 
-func (pdb *db) PruneClusterMembership(filter *sqlplugin.PruneClusterMembershipFilter) (sql.Result, error) {
-	return pdb.conn.Exec(templatePruneStaleClusterMembership,
+func (pdb *db) PruneClusterMembership(
+	ctx context.Context,
+	filter *sqlplugin.PruneClusterMembershipFilter,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx,
+		templatePruneStaleClusterMembership,
 		constMembershipPartition,
 		filter.PruneRecordsBefore,
-		filter.MaxRecordsAffected)
+		filter.MaxRecordsAffected,
+	)
 }

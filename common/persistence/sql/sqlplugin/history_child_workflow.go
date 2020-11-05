@@ -25,6 +25,7 @@
 package sqlplugin
 
 import (
+	"context"
 	"database/sql"
 
 	"go.temporal.io/server/common/primitives"
@@ -59,13 +60,13 @@ type (
 
 	// HistoryExecutionChildWorkflow is the SQL persistence interface for history execution child workflows
 	HistoryExecutionChildWorkflow interface {
-		ReplaceIntoChildExecutionInfoMaps(rows []ChildExecutionInfoMapsRow) (sql.Result, error)
+		ReplaceIntoChildExecutionInfoMaps(ctx context.Context, rows []ChildExecutionInfoMapsRow) (sql.Result, error)
 		// SelectFromChildExecutionInfoMaps returns one or more rows form child_execution_info_maps table
-		SelectFromChildExecutionInfoMaps(filter ChildExecutionInfoMapsSelectFilter) ([]ChildExecutionInfoMapsRow, error)
+		SelectFromChildExecutionInfoMaps(ctx context.Context, filter ChildExecutionInfoMapsSelectFilter) ([]ChildExecutionInfoMapsRow, error)
 		// DeleteFromChildExecutionInfoMaps deletes one or more rows from child_execution_info_maps
 		// Required filter params
 		// - single row - {shardID, namespaceID, workflowID, runID, initiatedID}
 		// - multiple rows - {shardID, namespaceID, workflowID, runID}
-		DeleteFromChildExecutionInfoMaps(filter ChildExecutionInfoMapsDeleteFilter) (sql.Result, error)
+		DeleteFromChildExecutionInfoMaps(ctx context.Context, filter ChildExecutionInfoMapsDeleteFilter) (sql.Result, error)
 	}
 )

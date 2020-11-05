@@ -105,7 +105,7 @@ func (s *historyCurrentExecutionSuite) TestInsert_Success() {
 	lastWriteVersion := rand.Int63()
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
-	result, err := s.store.InsertIntoCurrentExecutions(&currentExecution)
+	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -122,14 +122,14 @@ func (s *historyCurrentExecutionSuite) TestInsert_Fail_Duplicate() {
 	lastWriteVersion := rand.Int63()
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
-	result, err := s.store.InsertIntoCurrentExecutions(&currentExecution)
+	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	currentExecution = s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
-	_, err = s.store.InsertIntoCurrentExecutions(&currentExecution)
+	_, err = s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -143,7 +143,7 @@ func (s *historyCurrentExecutionSuite) TestInsertSelect() {
 	lastWriteVersion := rand.Int63()
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
-	result, err := s.store.InsertIntoCurrentExecutions(&currentExecution)
+	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -155,7 +155,7 @@ func (s *historyCurrentExecutionSuite) TestInsertSelect() {
 		WorkflowID:  workflowID,
 		RunID:       nil,
 	}
-	row, err := s.store.SelectFromCurrentExecutions(filter)
+	row, err := s.store.SelectFromCurrentExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(&currentExecution, row)
 }
@@ -170,14 +170,14 @@ func (s *historyCurrentExecutionSuite) TestInsertUpdate_Success() {
 	lastWriteVersion := rand.Int63()
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
-	result, err := s.store.InsertIntoCurrentExecutions(&currentExecution)
+	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	currentExecution = s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, primitives.NewUUID().String(), rand.Int63(), rand.Int63())
-	result, err = s.store.UpdateCurrentExecutions(&currentExecution)
+	result, err = s.store.UpdateCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -194,7 +194,7 @@ func (s *historyCurrentExecutionSuite) TestUpdate_Fail() {
 	lastWriteVersion := rand.Int63()
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
-	result, err := s.store.UpdateCurrentExecutions(&currentExecution)
+	result, err := s.store.UpdateCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -211,14 +211,14 @@ func (s *historyCurrentExecutionSuite) TestInsertUpdateSelect() {
 	lastWriteVersion := rand.Int63()
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
-	result, err := s.store.InsertIntoCurrentExecutions(&currentExecution)
+	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	currentExecution = s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, primitives.NewUUID().String(), rand.Int63(), rand.Int63())
-	result, err = s.store.UpdateCurrentExecutions(&currentExecution)
+	result, err = s.store.UpdateCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -230,7 +230,7 @@ func (s *historyCurrentExecutionSuite) TestInsertUpdateSelect() {
 		WorkflowID:  workflowID,
 		RunID:       nil,
 	}
-	row, err := s.store.SelectFromCurrentExecutions(filter)
+	row, err := s.store.SelectFromCurrentExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(&currentExecution, row)
 }
@@ -245,7 +245,7 @@ func (s *historyCurrentExecutionSuite) TestInsertDeleteSelect_Success() {
 	lastWriteVersion := rand.Int63()
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
-	result, err := s.store.InsertIntoCurrentExecutions(&currentExecution)
+	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -257,14 +257,14 @@ func (s *historyCurrentExecutionSuite) TestInsertDeleteSelect_Success() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	result, err = s.store.DeleteFromCurrentExecutions(filter)
+	result, err = s.store.DeleteFromCurrentExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	filter.RunID = nil
-	_, err = s.store.SelectFromCurrentExecutions(filter)
+	_, err = s.store.SelectFromCurrentExecutions(newExecutionContext(), filter)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -278,7 +278,7 @@ func (s *historyCurrentExecutionSuite) TestInsertDeleteSelect_Fail() {
 	lastWriteVersion := rand.Int63()
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
-	result, err := s.store.InsertIntoCurrentExecutions(&currentExecution)
+	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -290,14 +290,14 @@ func (s *historyCurrentExecutionSuite) TestInsertDeleteSelect_Fail() {
 		WorkflowID:  workflowID,
 		RunID:       primitives.NewUUID(),
 	}
-	result, err = s.store.DeleteFromCurrentExecutions(filter)
+	result, err = s.store.DeleteFromCurrentExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
 	filter.RunID = nil
-	row, err := s.store.SelectFromCurrentExecutions(filter)
+	row, err := s.store.SelectFromCurrentExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(&currentExecution, row)
 }
@@ -312,7 +312,7 @@ func (s *historyCurrentExecutionSuite) TestLock() {
 	lastWriteVersion := rand.Int63()
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
-	result, err := s.store.InsertIntoCurrentExecutions(&currentExecution)
+	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -326,7 +326,7 @@ func (s *historyCurrentExecutionSuite) TestLock() {
 		WorkflowID:  workflowID,
 		RunID:       nil,
 	}
-	row, err := s.store.LockCurrentExecutions(filter)
+	row, err := s.store.LockCurrentExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(&currentExecution, row)
 }

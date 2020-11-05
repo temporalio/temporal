@@ -25,6 +25,7 @@
 package sqlplugin
 
 import (
+	"context"
 	"database/sql"
 
 	"go.temporal.io/server/common/persistence"
@@ -43,10 +44,10 @@ type (
 	}
 
 	QueueMetadata interface {
-		InsertIntoQueueMetadata(row *QueueMetadataRow) (sql.Result, error)
-		UpdateQueueMetadata(row *QueueMetadataRow) (sql.Result, error)
-		SelectFromQueueMetadata(filter QueueMetadataFilter) (*QueueMetadataRow, error)
+		InsertIntoQueueMetadata(ctx context.Context, row *QueueMetadataRow) (sql.Result, error)
+		UpdateQueueMetadata(ctx context.Context, row *QueueMetadataRow) (sql.Result, error)
+		SelectFromQueueMetadata(ctx context.Context, filter QueueMetadataFilter) (*QueueMetadataRow, error)
 
-		LockQueueMetadata(filter QueueMetadataFilter) (*QueueMetadataRow, error)
+		LockQueueMetadata(ctx context.Context, filter QueueMetadataFilter) (*QueueMetadataRow, error)
 	}
 )

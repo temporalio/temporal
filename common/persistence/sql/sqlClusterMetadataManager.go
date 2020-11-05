@@ -44,7 +44,9 @@ type sqlClusterMetadataManager struct {
 var _ p.ClusterMetadataStore = (*sqlClusterMetadataManager)(nil)
 
 func (s *sqlClusterMetadataManager) GetClusterMetadata() (*p.InternalGetClusterMetadataResponse, error) {
-	row, err := s.db.GetClusterMetadata()
+	ctx, cancel := newVisibilityContext()
+	defer cancel()
+	row, err := s.db.GetClusterMetadata(ctx)
 
 	if err != nil {
 		return nil, convertCommonErrors("GetClusterMetadata", err)
@@ -62,8 +64,10 @@ func (s *sqlClusterMetadataManager) GetClusterMetadata() (*p.InternalGetClusterM
 }
 
 func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
-	err := s.txExecute("SaveClusterMetadata", func(tx sqlplugin.Tx) error {
-		oldClusterMetadata, err := tx.WriteLockGetClusterMetadata()
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	err := s.txExecute(ctx, "SaveClusterMetadata", func(tx sqlplugin.Tx) error {
+		oldClusterMetadata, err := tx.WriteLockGetClusterMetadata(ctx)
 		var lastVersion int64
 		if err != nil {
 			if err != sql.ErrNoRows {
@@ -76,7 +80,7 @@ func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveC
 			return serviceerror.NewInternal(fmt.Sprintf("SaveClusterMetadata encountered version mismatch, expected %v but got %v.",
 				request.Version, oldClusterMetadata.Version))
 		}
-		_, err = tx.SaveClusterMetadata(&sqlplugin.ClusterMetadataRow{
+		_, err = tx.SaveClusterMetadata(ctx, &sqlplugin.ClusterMetadataRow{
 			Data:         request.ClusterMetadata.Data,
 			DataEncoding: request.ClusterMetadata.EncodingType.String(),
 			Version:      request.Version,
@@ -94,6 +98,8 @@ func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveC
 }
 
 func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	var lastSeenHostId []byte
 	if len(request.NextPageToken) == 16 {
 		lastSeenHostId = request.NextPageToken
@@ -122,7 +128,7 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembe
 		filter.RPCAddressEquals = request.RPCAddressEquals.String()
 	}
 
-	rows, err := s.db.GetClusterMembers(filter)
+	rows, err := s.db.GetClusterMembers(ctx, filter)
 
 	if err != nil {
 		return nil, convertCommonErrors("GetClusterMembers", err)
@@ -151,9 +157,11 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembe
 }
 
 func (s *sqlClusterMetadataManager) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	now := time.Now().UTC()
 	recordExpiry := now.Add(request.RecordExpiry)
-	_, err := s.db.UpsertClusterMembership(&sqlplugin.ClusterMembershipRow{
+	_, err := s.db.UpsertClusterMembership(ctx, &sqlplugin.ClusterMembershipRow{
 		Role:          request.Role,
 		HostID:        request.HostID,
 		RPCAddress:    request.RPCAddress.String(),
@@ -170,7 +178,9 @@ func (s *sqlClusterMetadataManager) UpsertClusterMembership(request *p.UpsertClu
 }
 
 func (s *sqlClusterMetadataManager) PruneClusterMembership(request *p.PruneClusterMembershipRequest) error {
-	_, err := s.db.PruneClusterMembership(&sqlplugin.PruneClusterMembershipFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	_, err := s.db.PruneClusterMembership(ctx, &sqlplugin.PruneClusterMembershipFilter{
 		PruneRecordsBefore: time.Now().UTC(),
 		MaxRecordsAffected: request.MaxRecordsPruned})
 
@@ -181,8 +191,10 @@ func (s *sqlClusterMetadataManager) PruneClusterMembership(request *p.PruneClust
 	return nil
 }
 
-func newClusterMetadataPersistence(db sqlplugin.DB,
-	logger log.Logger) (p.ClusterMetadataStore, error) {
+func newClusterMetadataPersistence(
+	db sqlplugin.DB,
+	logger log.Logger,
+) (p.ClusterMetadataStore, error) {
 	return &sqlClusterMetadataManager{
 		sqlStore: sqlStore{
 			db:     db,

@@ -25,6 +25,7 @@
 package sqlplugin
 
 import (
+	"context"
 	"database/sql"
 
 	"go.temporal.io/server/common/primitives"
@@ -59,13 +60,13 @@ type (
 
 	// HistoryExecutionTimer is the SQL persistence interface for history execution timers
 	HistoryExecutionTimer interface {
-		ReplaceIntoTimerInfoMaps(rows []TimerInfoMapsRow) (sql.Result, error)
+		ReplaceIntoTimerInfoMaps(ctx context.Context, rows []TimerInfoMapsRow) (sql.Result, error)
 		// SelectFromTimerInfoMaps returns one or more rows form timer_info_maps table
-		SelectFromTimerInfoMaps(filter TimerInfoMapsSelectFilter) ([]TimerInfoMapsRow, error)
+		SelectFromTimerInfoMaps(ctx context.Context, filter TimerInfoMapsSelectFilter) ([]TimerInfoMapsRow, error)
 		// DeleteFromTimerInfoMaps deletes one or more rows from timer_info_maps
 		// Required filter params
 		// - single row - {shardID, namespaceID, workflowID, runID, timerID}
 		// - multiple rows - {shardID, namespaceID, workflowID, runID}
-		DeleteFromTimerInfoMaps(filter TimerInfoMapsDeleteFilter) (sql.Result, error)
+		DeleteFromTimerInfoMaps(ctx context.Context, filter TimerInfoMapsDeleteFilter) (sql.Result, error)
 	}
 )

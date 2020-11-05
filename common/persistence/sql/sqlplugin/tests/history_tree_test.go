@@ -85,7 +85,7 @@ func (s *historyTreeSuite) TestInsert_Success() {
 	branchID := primitives.NewUUID()
 
 	node := s.newRandomTreeRow(shardID, treeID, branchID)
-	result, err := s.store.InsertIntoHistoryTree(&node)
+	result, err := s.store.InsertIntoHistoryTree(newExecutionContext(), &node)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -98,14 +98,14 @@ func (s *historyTreeSuite) TestInsert_Fail_Duplicate() {
 	branchID := primitives.NewUUID()
 
 	node := s.newRandomTreeRow(shardID, treeID, branchID)
-	result, err := s.store.InsertIntoHistoryTree(&node)
+	result, err := s.store.InsertIntoHistoryTree(newExecutionContext(), &node)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	node = s.newRandomTreeRow(shardID, treeID, branchID)
-	_, err = s.store.InsertIntoHistoryTree(&node)
+	_, err = s.store.InsertIntoHistoryTree(newExecutionContext(), &node)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -115,7 +115,7 @@ func (s *historyTreeSuite) TestInsertSelect() {
 	branchID := primitives.NewUUID()
 
 	tree := s.newRandomTreeRow(shardID, treeID, branchID)
-	result, err := s.store.InsertIntoHistoryTree(&tree)
+	result, err := s.store.InsertIntoHistoryTree(newExecutionContext(), &tree)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -125,7 +125,7 @@ func (s *historyTreeSuite) TestInsertSelect() {
 		ShardID: shardID,
 		TreeID:  treeID,
 	}
-	rows, err := s.store.SelectFromHistoryTree(selectFilter)
+	rows, err := s.store.SelectFromHistoryTree(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -144,7 +144,7 @@ func (s *historyTreeSuite) TestDeleteSelect() {
 		TreeID:   treeID,
 		BranchID: branchID,
 	}
-	result, err := s.store.DeleteFromHistoryTree(deleteFilter)
+	result, err := s.store.DeleteFromHistoryTree(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -154,7 +154,7 @@ func (s *historyTreeSuite) TestDeleteSelect() {
 		ShardID: shardID,
 		TreeID:  treeID,
 	}
-	rows, err := s.store.SelectFromHistoryTree(selectFilter)
+	rows, err := s.store.SelectFromHistoryTree(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -169,7 +169,7 @@ func (s *historyTreeSuite) TestInsertDeleteSelect() {
 	branchID := primitives.NewUUID()
 
 	tree := s.newRandomTreeRow(shardID, treeID, branchID)
-	result, err := s.store.InsertIntoHistoryTree(&tree)
+	result, err := s.store.InsertIntoHistoryTree(newExecutionContext(), &tree)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -180,7 +180,7 @@ func (s *historyTreeSuite) TestInsertDeleteSelect() {
 		TreeID:   treeID,
 		BranchID: branchID,
 	}
-	result, err = s.store.DeleteFromHistoryTree(deleteFilter)
+	result, err = s.store.DeleteFromHistoryTree(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -190,7 +190,7 @@ func (s *historyTreeSuite) TestInsertDeleteSelect() {
 		ShardID: shardID,
 		TreeID:  treeID,
 	}
-	rows, err := s.store.SelectFromHistoryTree(selectFilter)
+	rows, err := s.store.SelectFromHistoryTree(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID

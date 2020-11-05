@@ -83,7 +83,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsert_Single_Success() {
 	taskID := int64(1)
 
 	task := s.newRandomTransferTaskRow(shardID, taskID)
-	result, err := s.store.InsertIntoTransferTasks([]sqlplugin.TransferTasksRow{task})
+	result, err := s.store.InsertIntoTransferTasks(newExecutionContext(), []sqlplugin.TransferTasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -97,7 +97,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsert_Multiple_Success() {
 	task1 := s.newRandomTransferTaskRow(shardID, taskID)
 	taskID++
 	task2 := s.newRandomTransferTaskRow(shardID, taskID)
-	result, err := s.store.InsertIntoTransferTasks([]sqlplugin.TransferTasksRow{task1, task2})
+	result, err := s.store.InsertIntoTransferTasks(newExecutionContext(), []sqlplugin.TransferTasksRow{task1, task2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -109,14 +109,14 @@ func (s *historyHistoryTransferTaskSuite) TestInsert_Single_Fail_Duplicate() {
 	taskID := int64(1)
 
 	task := s.newRandomTransferTaskRow(shardID, taskID)
-	result, err := s.store.InsertIntoTransferTasks([]sqlplugin.TransferTasksRow{task})
+	result, err := s.store.InsertIntoTransferTasks(newExecutionContext(), []sqlplugin.TransferTasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	task = s.newRandomTransferTaskRow(shardID, taskID)
-	_, err = s.store.InsertIntoTransferTasks([]sqlplugin.TransferTasksRow{task})
+	_, err = s.store.InsertIntoTransferTasks(newExecutionContext(), []sqlplugin.TransferTasksRow{task})
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -127,7 +127,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsert_Multiple_Fail_Duplicate() {
 	task1 := s.newRandomTransferTaskRow(shardID, taskID)
 	taskID++
 	task2 := s.newRandomTransferTaskRow(shardID, taskID)
-	result, err := s.store.InsertIntoTransferTasks([]sqlplugin.TransferTasksRow{task1, task2})
+	result, err := s.store.InsertIntoTransferTasks(newExecutionContext(), []sqlplugin.TransferTasksRow{task1, task2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -136,7 +136,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsert_Multiple_Fail_Duplicate() {
 	task2 = s.newRandomTransferTaskRow(shardID, taskID)
 	taskID++
 	task3 := s.newRandomTransferTaskRow(shardID, taskID)
-	_, err = s.store.InsertIntoTransferTasks([]sqlplugin.TransferTasksRow{task2, task3})
+	_, err = s.store.InsertIntoTransferTasks(newExecutionContext(), []sqlplugin.TransferTasksRow{task2, task3})
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -145,7 +145,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsertSelect_Single() {
 	taskID := int64(1)
 
 	task := s.newRandomTransferTaskRow(shardID, taskID)
-	result, err := s.store.InsertIntoTransferTasks([]sqlplugin.TransferTasksRow{task})
+	result, err := s.store.InsertIntoTransferTasks(newExecutionContext(), []sqlplugin.TransferTasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -155,7 +155,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsertSelect_Single() {
 		ShardID: shardID,
 		TaskID:  taskID,
 	}
-	rows, err := s.store.SelectFromTransferTasks(filter)
+	rows, err := s.store.SelectFromTransferTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -177,7 +177,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsertSelect_Multiple() {
 		taskID++
 		tasks = append(tasks, task)
 	}
-	result, err := s.store.InsertIntoTransferTasks(tasks)
+	result, err := s.store.InsertIntoTransferTasks(newExecutionContext(), tasks)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -188,7 +188,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsertSelect_Multiple() {
 		MinTaskID: minTaskID,
 		MaxTaskID: maxTaskID,
 	}
-	rows, err := s.store.RangeSelectFromTransferTasks(filter)
+	rows, err := s.store.RangeSelectFromTransferTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -204,13 +204,13 @@ func (s *historyHistoryTransferTaskSuite) TestDeleteSelect_Single() {
 		ShardID: shardID,
 		TaskID:  taskID,
 	}
-	result, err := s.store.DeleteFromTransferTasks(filter)
+	result, err := s.store.DeleteFromTransferTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.SelectFromTransferTasks(filter)
+	rows, err := s.store.SelectFromTransferTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -228,13 +228,13 @@ func (s *historyHistoryTransferTaskSuite) TestDeleteSelect_Multiple() {
 		MinTaskID: minTaskID,
 		MaxTaskID: maxTaskID,
 	}
-	result, err := s.store.RangeDeleteFromTransferTasks(filter)
+	result, err := s.store.RangeDeleteFromTransferTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.RangeSelectFromTransferTasks(filter)
+	rows, err := s.store.RangeSelectFromTransferTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -247,7 +247,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsertDeleteSelect_Single() {
 	taskID := int64(1)
 
 	task := s.newRandomTransferTaskRow(shardID, taskID)
-	result, err := s.store.InsertIntoTransferTasks([]sqlplugin.TransferTasksRow{task})
+	result, err := s.store.InsertIntoTransferTasks(newExecutionContext(), []sqlplugin.TransferTasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -257,13 +257,13 @@ func (s *historyHistoryTransferTaskSuite) TestInsertDeleteSelect_Single() {
 		ShardID: shardID,
 		TaskID:  taskID,
 	}
-	result, err = s.store.DeleteFromTransferTasks(filter)
+	result, err = s.store.DeleteFromTransferTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	rows, err := s.store.SelectFromTransferTasks(filter)
+	rows, err := s.store.SelectFromTransferTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -285,7 +285,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsertDeleteSelect_Multiple() {
 		taskID++
 		tasks = append(tasks, task)
 	}
-	result, err := s.store.InsertIntoTransferTasks(tasks)
+	result, err := s.store.InsertIntoTransferTasks(newExecutionContext(), tasks)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -296,13 +296,13 @@ func (s *historyHistoryTransferTaskSuite) TestInsertDeleteSelect_Multiple() {
 		MinTaskID: minTaskID,
 		MaxTaskID: maxTaskID,
 	}
-	result, err = s.store.RangeDeleteFromTransferTasks(filter)
+	result, err = s.store.RangeDeleteFromTransferTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(numTasks, int(rowsAffected))
 
-	rows, err := s.store.RangeSelectFromTransferTasks(filter)
+	rows, err := s.store.RangeSelectFromTransferTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID

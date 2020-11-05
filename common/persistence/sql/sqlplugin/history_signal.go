@@ -25,6 +25,7 @@
 package sqlplugin
 
 import (
+	"context"
 	"database/sql"
 
 	"go.temporal.io/server/common/primitives"
@@ -59,13 +60,13 @@ type (
 
 	// HistoryExecutionSignal is the SQL persistence interface for history execution signals
 	HistoryExecutionSignal interface {
-		ReplaceIntoSignalInfoMaps(rows []SignalInfoMapsRow) (sql.Result, error)
+		ReplaceIntoSignalInfoMaps(ctx context.Context, rows []SignalInfoMapsRow) (sql.Result, error)
 		// SelectFromSignalInfoMaps returns one or more rows form signal_info_maps table
-		SelectFromSignalInfoMaps(filter SignalInfoMapsSelectFilter) ([]SignalInfoMapsRow, error)
+		SelectFromSignalInfoMaps(ctx context.Context, filter SignalInfoMapsSelectFilter) ([]SignalInfoMapsRow, error)
 		// DeleteFromSignalInfoMaps deletes one or more rows from signal_info_maps table
 		// Required filter params
 		// - single row - {shardID, namespaceID, workflowID, runID, initiatedID}
 		// - multiple rows - {shardID, namespaceID, workflowID, runID}
-		DeleteFromSignalInfoMaps(filter SignalInfoMapsDeleteFilter) (sql.Result, error)
+		DeleteFromSignalInfoMaps(ctx context.Context, filter SignalInfoMapsDeleteFilter) (sql.Result, error)
 	}
 )

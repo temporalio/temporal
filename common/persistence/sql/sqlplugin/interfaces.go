@@ -25,6 +25,7 @@
 package sqlplugin
 
 import (
+	"context"
 	"database/sql"
 
 	"go.temporal.io/server/common/service/config"
@@ -93,7 +94,7 @@ type (
 	DB interface {
 		TableCRUD
 
-		BeginTx() (Tx, error)
+		BeginTx(ctx context.Context) (Tx, error)
 		PluginName() string
 		IsDupEntryError(err error) bool
 		Close() error
@@ -105,11 +106,12 @@ type (
 		PluginName() string
 		Close() error
 	}
+
 	// Conn defines the API for a single database connection
 	Conn interface {
-		Exec(query string, args ...interface{}) (sql.Result, error)
-		NamedExec(query string, arg interface{}) (sql.Result, error)
-		Get(dest interface{}, query string, args ...interface{}) error
-		Select(dest interface{}, query string, args ...interface{}) error
+		ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+		NamedExecContext(ctx context.Context, query string, arg interface{}) (sql.Result, error)
+		GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+		SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
 	}
 )

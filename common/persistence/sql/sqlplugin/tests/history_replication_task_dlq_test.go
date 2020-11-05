@@ -86,7 +86,7 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsert_Single_Success() {
 	taskID := int64(1)
 
 	task := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
-	result, err := s.store.InsertIntoReplicationDLQTasks([]sqlplugin.ReplicationDLQTasksRow{task})
+	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -101,7 +101,7 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsert_Multiple_Success() {
 	task1 := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
 	taskID++
 	task2 := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
-	result, err := s.store.InsertIntoReplicationDLQTasks([]sqlplugin.ReplicationDLQTasksRow{task1, task2})
+	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task1, task2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -114,14 +114,14 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsert_Single_Fail_Duplicate
 	taskID := int64(1)
 
 	task := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
-	result, err := s.store.InsertIntoReplicationDLQTasks([]sqlplugin.ReplicationDLQTasksRow{task})
+	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	task = s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
-	_, err = s.store.InsertIntoReplicationDLQTasks([]sqlplugin.ReplicationDLQTasksRow{task})
+	_, err = s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task})
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -133,7 +133,7 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsert_Multiple_Fail_Duplica
 	task1 := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
 	taskID++
 	task2 := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
-	result, err := s.store.InsertIntoReplicationDLQTasks([]sqlplugin.ReplicationDLQTasksRow{task1, task2})
+	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task1, task2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -142,7 +142,7 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsert_Multiple_Fail_Duplica
 	task2 = s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
 	taskID++
 	task3 := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
-	_, err = s.store.InsertIntoReplicationDLQTasks([]sqlplugin.ReplicationDLQTasksRow{task2, task3})
+	_, err = s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task2, task3})
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -152,7 +152,7 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertSelect_Single() {
 	taskID := int64(1)
 
 	task := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
-	result, err := s.store.InsertIntoReplicationDLQTasks([]sqlplugin.ReplicationDLQTasksRow{task})
+	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -163,7 +163,7 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertSelect_Single() {
 		SourceClusterName: sourceCluster,
 		TaskID:            taskID,
 	}
-	rows, err := s.store.SelectFromReplicationDLQTasks(filter)
+	rows, err := s.store.SelectFromReplicationDLQTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -188,7 +188,7 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertSelect_Multiple() {
 		taskID++
 		tasks = append(tasks, task)
 	}
-	result, err := s.store.InsertIntoReplicationDLQTasks(tasks)
+	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), tasks)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -201,7 +201,7 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertSelect_Multiple() {
 		MaxTaskID:         maxTaskID,
 		PageSize:          pageSize,
 	}
-	rows, err := s.store.RangeSelectFromReplicationDLQTasks(filter)
+	rows, err := s.store.RangeSelectFromReplicationDLQTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -220,13 +220,13 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestDeleteSelect_Single() {
 		SourceClusterName: sourceCluster,
 		TaskID:            taskID,
 	}
-	result, err := s.store.DeleteFromReplicationDLQTasks(filter)
+	result, err := s.store.DeleteFromReplicationDLQTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.SelectFromReplicationDLQTasks(filter)
+	rows, err := s.store.SelectFromReplicationDLQTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -248,13 +248,13 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestDeleteSelect_Multiple() {
 		MaxTaskID:         maxTaskID,
 		PageSize:          0,
 	}
-	result, err := s.store.RangeDeleteFromReplicationDLQTasks(filter)
+	result, err := s.store.RangeDeleteFromReplicationDLQTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.RangeSelectFromReplicationDLQTasks(filter)
+	rows, err := s.store.RangeSelectFromReplicationDLQTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -269,7 +269,7 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertDeleteSelect_Single() 
 	taskID := int64(1)
 
 	task := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
-	result, err := s.store.InsertIntoReplicationDLQTasks([]sqlplugin.ReplicationDLQTasksRow{task})
+	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -280,13 +280,13 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertDeleteSelect_Single() 
 		SourceClusterName: sourceCluster,
 		TaskID:            taskID,
 	}
-	result, err = s.store.DeleteFromReplicationDLQTasks(filter)
+	result, err = s.store.DeleteFromReplicationDLQTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	rows, err := s.store.SelectFromReplicationDLQTasks(filter)
+	rows, err := s.store.SelectFromReplicationDLQTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -311,7 +311,7 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertDeleteSelect_Multiple(
 		taskID++
 		tasks = append(tasks, task)
 	}
-	result, err := s.store.InsertIntoReplicationDLQTasks(tasks)
+	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), tasks)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -324,13 +324,13 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertDeleteSelect_Multiple(
 		MaxTaskID:         maxTaskID,
 		PageSize:          pageSize,
 	}
-	result, err = s.store.RangeDeleteFromReplicationDLQTasks(filter)
+	result, err = s.store.RangeDeleteFromReplicationDLQTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(numTasks, int(rowsAffected))
 
-	rows, err := s.store.RangeSelectFromReplicationDLQTasks(filter)
+	rows, err := s.store.RangeSelectFromReplicationDLQTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID

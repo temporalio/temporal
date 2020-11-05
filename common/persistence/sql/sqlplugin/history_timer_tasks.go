@@ -25,6 +25,7 @@
 package sqlplugin
 
 import (
+	"context"
 	"database/sql"
 	"time"
 )
@@ -59,15 +60,15 @@ type (
 
 	// HistoryTimerTask is the SQL persistence interface for history timer tasks
 	HistoryTimerTask interface {
-		InsertIntoTimerTasks(rows []TimerTasksRow) (sql.Result, error)
+		InsertIntoTimerTasks(ctx context.Context, rows []TimerTasksRow) (sql.Result, error)
 		// SelectFromTimerTasks returns one or more rows from timer_tasks table
-		SelectFromTimerTasks(filter TimerTasksFilter) ([]TimerTasksRow, error)
+		SelectFromTimerTasks(ctx context.Context, filter TimerTasksFilter) ([]TimerTasksRow, error)
 		// RangeSelectFromTimerTasks returns one or more rows from timer_tasks table
-		RangeSelectFromTimerTasks(filter TimerTasksRangeFilter) ([]TimerTasksRow, error)
+		RangeSelectFromTimerTasks(ctx context.Context, filter TimerTasksRangeFilter) ([]TimerTasksRow, error)
 		// DeleteFromTimerTasks deletes one or more rows from timer_tasks table
-		DeleteFromTimerTasks(filter TimerTasksFilter) (sql.Result, error)
+		DeleteFromTimerTasks(ctx context.Context, filter TimerTasksFilter) (sql.Result, error)
 		// RangeDeleteFromTimerTasks deletes one or more rows from timer_tasks table
 		//  TimerTasksRangeFilter - {TaskID, PageSize} will be ignored
-		RangeDeleteFromTimerTasks(filter TimerTasksRangeFilter) (sql.Result, error)
+		RangeDeleteFromTimerTasks(ctx context.Context, filter TimerTasksRangeFilter) (sql.Result, error)
 	}
 )
