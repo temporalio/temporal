@@ -188,10 +188,10 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 	lastWorkflowTaskStartedEventID := int64(9999)
 	nextEventID := lastWorkflowTaskStartedEventID * 2
 	lastWorkflowTaskStartedVersion := s.namespaceEntry.GetFailoverVersion()
-	versionHistory := versionhistory.New([]byte("branch token"), []*historyspb.VersionHistoryItem{
+	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
 		{EventId: lastWorkflowTaskStartedEventID, Version: lastWorkflowTaskStartedVersion},
 	})
-	histories := versionhistory.NewVHS(versionHistory)
+	histories := versionhistory.NewVersionHistories(versionHistory)
 
 	releaseCalled := false
 

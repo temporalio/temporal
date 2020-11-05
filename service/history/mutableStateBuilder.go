@@ -259,7 +259,7 @@ func newMutableStateBuilderWithVersionHistories(
 ) *mutableStateBuilder {
 
 	s := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry)
-	s.executionInfo.VersionHistories = versionhistory.NewVHS(&historyspb.VersionHistory{})
+	s.executionInfo.VersionHistories = versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
 	return s
 }
 
@@ -306,20 +306,17 @@ func (e *mutableStateBuilder) Load(
 
 	// back fill version history for local namespace workflows
 	if e.executionInfo.VersionHistories == nil {
-		e.executionInfo.VersionHistories = versionhistory.NewVHS(&historyspb.VersionHistory{})
+		e.executionInfo.VersionHistories = versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
 		if err != nil {
 			return err
 		}
-		if err := versionhistory.AddOrUpdateItem(currentVersionHistory, versionhistory.NewItem(
+		if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
 			e.nextEventID-1, common.EmptyVersion,
 		)); err != nil {
 			return err
 		}
-		err = versionhistory.SetBranchToken(currentVersionHistory, e.executionInfo.EventBranchToken)
-		if err != nil {
-			return err
-		}
+		versionhistory.SetVersionHistoryBranchToken(currentVersionHistory, e.executionInfo.EventBranchToken)
 		e.executionInfo.EventBranchToken = nil
 	}
 
@@ -386,7 +383,8 @@ func (e *mutableStateBuilder) SetCurrentBranchToken(
 	if err != nil {
 		return err
 	}
-	return versionhistory.SetBranchToken(currentVersionHistory, branchToken)
+	versionhistory.SetVersionHistoryBranchToken(currentVersionHistory, branchToken)
+	return nil
 }
 
 func (e *mutableStateBuilder) SetNextEventID(nextEventID int64) {
@@ -505,9 +503,9 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 			return err
 		}
 
-		if !versionhistory.IsEmpty(versionHistory) {
+		if !versionhistory.IsEmptyVersionHistory(versionHistory) {
 			// this make sure current version >= last write version
-			versionHistoryItem, err := versionhistory.GetLastItem(versionHistory)
+			versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
 			if err != nil {
 				return err
 			}
@@ -544,7 +542,7 @@ func (e *mutableStateBuilder) GetStartVersion() (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		firstItem, err := versionhistory.GetFirstItem(versionHistory)
+		firstItem, err := versionhistory.GetFirstVersionHistoryItem(versionHistory)
 		if err != nil {
 			return 0, err
 		}
@@ -561,7 +559,7 @@ func (e *mutableStateBuilder) GetLastWriteVersion() (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		lastItem, err := versionhistory.GetLastItem(versionHistory)
+		lastItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
 		if err != nil {
 			return 0, err
 		}
@@ -4240,7 +4238,7 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 		if err != nil {
 			return err
 		}
-		if err := versionhistory.AddOrUpdateItem(currentVersionHistory, versionhistory.NewItem(
+		if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
 			lastEvent.GetEventId(), lastEvent.GetVersion(),
 		)); err != nil {
 			return err

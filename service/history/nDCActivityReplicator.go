@@ -231,17 +231,17 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			return false, err
 		}
 
-		lastLocalItem, err := versionhistory.GetLastItem(currentVersionHistory)
+		lastLocalItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
 		if err != nil {
 			return false, err
 		}
 
-		lastIncomingItem, err := versionhistory.GetLastItem(incomingVersionHistory)
+		lastIncomingItem, err := versionhistory.GetLastVersionHistoryItem(incomingVersionHistory)
 		if err != nil {
 			return false, err
 		}
 
-		lcaItem, err := versionhistory.FindLCAItem(currentVersionHistory, incomingVersionHistory)
+		lcaItem, err := versionhistory.FindLCAVersionHistoryItem(currentVersionHistory, incomingVersionHistory)
 		if err != nil {
 			return false, err
 		}
@@ -253,7 +253,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 		// case 2: local version history and incoming version history diverged
 		// case 2-1: local version history has the higher version and discard the incoming event
 		// case 2-2: incoming version history has the higher version and resend the missing incoming events
-		if versionhistory.IsLCAAppendable(currentVersionHistory, lcaItem) || versionhistory.IsLCAAppendable(incomingVersionHistory, lcaItem) {
+		if versionhistory.IsLCAVersionHistoryItemAppendable(currentVersionHistory, lcaItem) || versionhistory.IsLCAVersionHistoryItemAppendable(incomingVersionHistory, lcaItem) {
 			// case 1
 			if scheduleID > lcaItem.GetEventId() {
 				return false, serviceerrors.NewRetryTaskV2(
