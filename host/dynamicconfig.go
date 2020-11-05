@@ -47,10 +47,10 @@ var (
 		dynamicconfig.ReplicationTaskFetcherAggregationInterval:     200 * time.Millisecond,
 		dynamicconfig.ReplicationTaskFetcherErrorRetryWait:          50 * time.Millisecond,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryWait:        time.Millisecond,
-		dynamicconfig.FrontendEnableRPCReplication:                  true,
-		dynamicconfig.HistoryEnableRPCReplication:                   true,
-		dynamicconfig.HistoryEnableKafkaReplication:                 false,
-		dynamicconfig.WorkerEnableRPCReplication:                    true,
+		dynamicconfig.FrontendEnableRPCReplication:                  false,
+		dynamicconfig.HistoryEnableRPCReplication:                   false,
+		dynamicconfig.HistoryEnableKafkaReplication:                 true,
+		dynamicconfig.WorkerEnableRPCReplication:                    false,
 	}
 )
 
