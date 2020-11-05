@@ -24,130 +24,118 @@
 
 package ndc
 
-import (
-	"math"
-	"reflect"
-	"time"
-
-	"github.com/pborman/uuid"
-	historypb "go.temporal.io/api/history/v1"
-
-	"go.temporal.io/server/common/persistence"
-	test "go.temporal.io/server/common/testing"
-)
-
 func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 
-	workflowID := "replication-message-test" + uuid.New()
-	runID := uuid.New()
-	workflowType := "event-generator-workflow-type"
-	taskqueue := "event-generator-taskQueue"
-
-	var historyBatch []*historypb.History
-	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 2)
-
-	for s.generator.HasNextVertex() {
-		events := s.generator.GetNextVertices()
-		historyEvents := &historypb.History{}
-		for _, event := range events {
-			historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
-		}
-		historyBatch = append(historyBatch, historyEvents)
-	}
-
-	versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
-
-	s.applyEventsThroughFetcher(
-		workflowID,
-		runID,
-		workflowType,
-		taskqueue,
-		versionHistory,
-		historyBatch,
-	)
-
-	// Applying replication messages through fetcher is Async.
-	// So we need to retry a couple of times.
-	for i := 0; i < 10; i++ {
-		time.Sleep(time.Second)
-		err := s.verifyEventHistory(workflowID, runID, historyBatch)
-		if err == nil {
-			return
-		}
-	}
-
-	s.Fail("Verification of replicated messages failed")
+	//workflowID := "replication-message-test" + uuid.New()
+	//runID := uuid.New()
+	//workflowType := "event-generator-workflow-type"
+	//taskqueue := "event-generator-taskQueue"
+	//
+	//var historyBatch []*historypb.History
+	//s.generator = test.InitializeHistoryEventGenerator(s.namespace, 2)
+	//
+	//for s.generator.HasNextVertex() {
+	//	events := s.generator.GetNextVertices()
+	//	historyEvents := &historypb.History{}
+	//	for _, event := range events {
+	//		historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+	//	}
+	//	historyBatch = append(historyBatch, historyEvents)
+	//}
+	//
+	//versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
+	//
+	//s.applyEventsThroughFetcher(
+	//	workflowID,
+	//	runID,
+	//	workflowType,
+	//	taskqueue,
+	//	versionHistory,
+	//	historyBatch,
+	//)
+	//
+	//// Applying replication messages through fetcher is Async.
+	//// So we need to retry a couple of times.
+	//for i := 0; i < 10; i++ {
+	//	time.Sleep(time.Second)
+	//	err := s.verifyEventHistory(workflowID, runID, historyBatch)
+	//	if err == nil {
+	//		return
+	//	}
+	//}
+	//
+	//s.Fail("Verification of replicated messages failed")
 }
 
 func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 
-	workflowID := "replication-message-dlq-test" + uuid.New()
-	runID := uuid.New()
-	workflowType := "event-generator-workflow-type"
-	taskqueue := "event-generator-taskQueue"
-
-	var historyBatch []*historypb.History
-	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
-
-	events := s.generator.GetNextVertices()
-	historyEvents := &historypb.History{}
-	for _, event := range events {
-		historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
-	}
-	historyBatch = append(historyBatch, historyEvents)
-
-	versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
-
-	s.NotNil(historyBatch)
-	historyBatch[0].Events[1].Version = 2
-
-	s.applyEventsThroughFetcher(
-		workflowID,
-		runID,
-		workflowType,
-		taskqueue,
-		versionHistory,
-		historyBatch,
-	)
-
-	execMgrFactory := s.active.GetExecutionManagerFactory()
-	executionManager, err := execMgrFactory.NewExecutionManager(1)
-	s.NoError(err)
-
-	expectedDLQMsgs := map[int64]bool{}
-	for _, batch := range historyBatch {
-		firstEventID := batch.Events[0].GetEventId()
-		expectedDLQMsgs[firstEventID] = true
-	}
-
-	// Applying replication messages through fetcher is Async.
-	// So we need to retry a couple of times.
-Loop:
-	for i := 0; i < 60; i++ {
-		time.Sleep(time.Second)
-
-		actualDLQMsgs := map[int64]bool{}
-		request := persistence.NewGetReplicationTasksFromDLQRequest(
-			"standby", -1, math.MaxInt64, math.MaxInt64, nil,
-		)
-		var token []byte
-		for doPaging := true; doPaging; doPaging = len(token) > 0 {
-			request.NextPageToken = token
-			response, err := executionManager.GetReplicationTasksFromDLQ(request)
-			if err != nil {
-				continue Loop
-			}
-			token = response.NextPageToken
-
-			for _, task := range response.Tasks {
-				firstEventID := task.GetFirstEventId()
-				actualDLQMsgs[firstEventID] = true
-			}
-		}
-		if reflect.DeepEqual(expectedDLQMsgs, actualDLQMsgs) {
-			return
-		}
-	}
-
-	s.Fail("Failed to get messages from DLQ")
+	//	workflowID := "replication-message-dlq-test" + uuid.New()
+	//	runID := uuid.New()
+	//	workflowType := "event-generator-workflow-type"
+	//	taskqueue := "event-generator-taskQueue"
+	//
+	//	var historyBatch []*historypb.History
+	//	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
+	//
+	//	events := s.generator.GetNextVertices()
+	//	historyEvents := &historypb.History{}
+	//	for _, event := range events {
+	//		historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+	//	}
+	//	historyBatch = append(historyBatch, historyEvents)
+	//
+	//	versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
+	//
+	//	s.NotNil(historyBatch)
+	//	historyBatch[0].Events[1].Version = 2
+	//
+	//	s.applyEventsThroughFetcher(
+	//		workflowID,
+	//		runID,
+	//		workflowType,
+	//		taskqueue,
+	//		versionHistory,
+	//		historyBatch,
+	//	)
+	//
+	//	execMgrFactory := s.active.GetExecutionManagerFactory()
+	//	executionManager, err := execMgrFactory.NewExecutionManager(1)
+	//	s.NoError(err)
+	//
+	//	expectedDLQMsgs := map[int64]bool{}
+	//	for _, batch := range historyBatch {
+	//		firstEventID := batch.Events[0].GetEventId()
+	//		expectedDLQMsgs[firstEventID] = true
+	//	}
+	//
+	//	// Applying replication messages through fetcher is Async.
+	//	// So we need to retry a couple of times.
+	//Loop:
+	//	for i := 0; i < 60; i++ {
+	//		time.Sleep(time.Second)
+	//
+	//		actualDLQMsgs := map[int64]bool{}
+	//		request := persistence.NewGetReplicationTasksFromDLQRequest(
+	//			"standby", -1, math.MaxInt64, math.MaxInt64, nil,
+	//		)
+	//		var token []byte
+	//		for doPaging := true; doPaging; doPaging = len(token) > 0 {
+	//			request.NextPageToken = token
+	//			response, err := executionManager.GetReplicationTasksFromDLQ(request)
+	//			if err != nil {
+	//				continue Loop
+	//			}
+	//			token = response.NextPageToken
+	//
+	//			for _, task := range response.Tasks {
+	//				firstEventID := task.GetFirstEventId()
+	//				actualDLQMsgs[firstEventID] = true
+	//			}
+	//		}
+	//		if reflect.DeepEqual(expectedDLQMsgs, actualDLQMsgs) {
+	//			return
+	//		}
+	//	}
+	//
+	//	s.Fail("Failed to get messages from DLQ")
 }
