@@ -57,7 +57,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/executionstate"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
@@ -1571,12 +1570,8 @@ func (e *mutableStateBuilder) IsWorkflowExecutionRunning() bool {
 	}
 }
 
-func (e *mutableStateBuilder) IsCancelRequested() (bool, string) {
-	if e.executionInfo.CancelRequested {
-		return e.executionInfo.CancelRequested, e.executionState.CreateRequestId
-	}
-
-	return false, ""
+func (e *mutableStateBuilder) IsCancelRequested() bool {
+	return e.executionInfo.CancelRequested
 }
 
 func (e *mutableStateBuilder) IsSignalRequested(
@@ -3823,7 +3818,7 @@ func (e *mutableStateBuilder) UpdateWorkflowStateStatus(
 	status enumspb.WorkflowExecutionStatus,
 ) error {
 
-	return executionstate.SetStateStatus(e.executionState, state, status)
+	return setStateStatus(e.executionState, state, status)
 }
 
 func (e *mutableStateBuilder) StartTransaction(

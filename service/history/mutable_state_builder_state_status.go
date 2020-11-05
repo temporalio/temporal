@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package executionstate
+package history
 
 import (
 	"fmt"
@@ -39,8 +39,8 @@ const (
 	invalidStateTransitionMsg = "unable to change workflow state from %v to %v, status %v"
 )
 
-// SetStateStatus sets state and status in WorkflowExecutionState.
-func SetStateStatus(
+// setStateStatus sets state and status in WorkflowExecutionState.
+func setStateStatus(
 	e *persistencespb.WorkflowExecutionState,
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,

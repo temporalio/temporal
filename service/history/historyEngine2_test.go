@@ -763,7 +763,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	s.Equal(scheduledEvent, response.ScheduledEvent)
 }
 
-func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
+func (s *engine2Suite) TestRequestCancelWorkflowExecution_Running() {
 	namespaceID := testNamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -799,7 +799,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 	s.Equal(int64(4), executionBuilder.GetNextEventID())
 }
 
-func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
+func (s *engine2Suite) TestRequestCancelWorkflowExecution_Finished() {
 	namespaceID := testNamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -815,6 +815,28 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
+
+	err := s.historyEngine.RequestCancelWorkflowExecution(context.Background(), &historyservice.RequestCancelWorkflowExecutionRequest{
+		NamespaceId: namespaceID,
+		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowExecution.WorkflowId,
+				RunId:      workflowExecution.RunId,
+			},
+			Identity: "identity",
+		},
+	})
+	s.Nil(err)
+}
+
+func (s *engine2Suite) TestRequestCancelWorkflowExecution_NotFound() {
+	namespaceID := testNamespaceID
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: "wId",
+		RunId:      testRunID,
+	}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, &serviceerror.NotFound{}).Once()
 
 	err := s.historyEngine.RequestCancelWorkflowExecution(context.Background(), &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: namespaceID,

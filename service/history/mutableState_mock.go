@@ -40,6 +40,7 @@ import (
 	history "go.temporal.io/api/history/v1"
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
+
 	enums0 "go.temporal.io/server/api/enums/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
@@ -1480,12 +1481,11 @@ func (mr *MockmutableStateMockRecorder) HasProcessedOrPendingWorkflowTask() *gom
 }
 
 // IsCancelRequested mocks base method.
-func (m *MockmutableState) IsCancelRequested() (bool, string) {
+func (m *MockmutableState) IsCancelRequested() bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsCancelRequested")
 	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(string)
-	return ret0, ret1
+	return ret0
 }
 
 // IsCancelRequested indicates an expected call of IsCancelRequested.
