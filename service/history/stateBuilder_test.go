@@ -146,7 +146,7 @@ func (s *stateBuilderSuite) mockUpdateVersion(events ...*historypb.HistoryEvent)
 	s.mockTaskGenerator.EXPECT().generateUserTimerTasks(
 		timestamp.TimeValue(events[len(events)-1].GetEventTime()),
 	).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().SetHistoryBuilder(newHistoryBuilderFromEvents(events, s.logger)).Times(1)
+	s.mockMutableState.EXPECT().SetHistoryBuilder(newHistoryBuilderFromEvents(events)).Times(1)
 }
 
 func (s *stateBuilderSuite) toHistory(events ...*historypb.HistoryEvent) []*historypb.HistoryEvent {

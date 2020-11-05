@@ -107,7 +107,7 @@ func (s *historyBuilderSuite) SetupTest() {
 
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
 		s.logger, testLocalNamespaceEntry)
-	s.builder = newHistoryBuilder(s.msBuilder, s.logger)
+	s.builder = newHistoryBuilder(s.msBuilder)
 }
 
 func (s *historyBuilderSuite) TearDownTest() {
