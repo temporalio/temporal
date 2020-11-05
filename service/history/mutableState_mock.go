@@ -662,18 +662,18 @@ func (mr *MockmutableStateMockRecorder) AddUpsertWorkflowSearchAttributesEvent(a
 }
 
 // AddWorkflowExecutionCancelRequestedEvent mocks base method.
-func (m *MockmutableState) AddWorkflowExecutionCancelRequestedEvent(arg0 string, arg1 *historyservice.RequestCancelWorkflowExecutionRequest) (*history.HistoryEvent, error) {
+func (m *MockmutableState) AddWorkflowExecutionCancelRequestedEvent(arg0 *historyservice.RequestCancelWorkflowExecutionRequest) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowExecutionCancelRequestedEvent", arg0, arg1)
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionCancelRequestedEvent", arg0)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddWorkflowExecutionCancelRequestedEvent indicates an expected call of AddWorkflowExecutionCancelRequestedEvent.
-func (mr *MockmutableStateMockRecorder) AddWorkflowExecutionCancelRequestedEvent(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockmutableStateMockRecorder) AddWorkflowExecutionCancelRequestedEvent(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionCancelRequestedEvent", reflect.TypeOf((*MockmutableState)(nil).AddWorkflowExecutionCancelRequestedEvent), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionCancelRequestedEvent", reflect.TypeOf((*MockmutableState)(nil).AddWorkflowExecutionCancelRequestedEvent), arg0)
 }
 
 // AddWorkflowExecutionCanceledEvent mocks base method.

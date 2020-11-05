@@ -243,7 +243,7 @@ func newMutableStateBuilder(
 	s.executionState = &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
 
-	s.hBuilder = newHistoryBuilder(s, logger)
+	s.hBuilder = newHistoryBuilder(s)
 	s.taskGenerator = newMutableStateTaskGenerator(shard.GetNamespaceCache(), s.logger, s)
 	s.workflowTaskManager = newMutableStateWorkflowTaskManager(s)
 
@@ -2646,7 +2646,6 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTimedoutEvent(
 }
 
 func (e *mutableStateBuilder) AddWorkflowExecutionCancelRequestedEvent(
-	cause string,
 	request *historyservice.RequestCancelWorkflowExecutionRequest,
 ) (*historypb.HistoryEvent, error) {
 
@@ -2666,7 +2665,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionCancelRequestedEvent(
 		return nil, e.createInternalServerError(opTag)
 	}
 
-	event := e.hBuilder.AddWorkflowExecutionCancelRequestedEvent(cause, request)
+	event := e.hBuilder.AddWorkflowExecutionCancelRequestedEvent(request)
 	if err := e.ReplicateWorkflowExecutionCancelRequestedEvent(event); err != nil {
 		return nil, err
 	}
@@ -4067,7 +4066,7 @@ func (e *mutableStateBuilder) cleanupTransaction(
 ) error {
 
 	// Clear all updates to prepare for the next session
-	e.hBuilder = newHistoryBuilder(e, e.logger)
+	e.hBuilder = newHistoryBuilder(e)
 
 	e.updateActivityInfos = make(map[*persistencespb.ActivityInfo]struct{})
 	e.deleteActivityInfos = make(map[int64]struct{})
