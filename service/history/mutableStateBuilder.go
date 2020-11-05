@@ -1571,12 +1571,8 @@ func (e *mutableStateBuilder) IsWorkflowExecutionRunning() bool {
 	}
 }
 
-func (e *mutableStateBuilder) IsCancelRequested() (bool, string) {
-	if e.executionInfo.CancelRequested {
-		return e.executionInfo.CancelRequested, e.executionState.CreateRequestId
-	}
-
-	return false, ""
+func (e *mutableStateBuilder) IsCancelRequested() bool {
+	return e.executionInfo.CancelRequested
 }
 
 func (e *mutableStateBuilder) IsSignalRequested(

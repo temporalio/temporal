@@ -164,7 +164,7 @@ type (
 		HasParentExecution() bool
 		HasPendingWorkflowTask() bool
 		HasProcessedOrPendingWorkflowTask() bool
-		IsCancelRequested() (bool, string)
+		IsCancelRequested() bool
 		IsCurrentWorkflowGuaranteed() bool
 		IsSignalRequested(requestID string) bool
 		IsStickyTaskQueueEnabled() bool
