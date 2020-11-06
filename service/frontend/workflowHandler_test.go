@@ -651,7 +651,7 @@ func (s *workflowHandlerSuite) TestDescribeNamespace_Success_ArchivalDisabled() 
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	req := &workflowservice.DescribeNamespaceRequest{
-		Name: "test-namespace",
+		Namespace: "test-namespace",
 	}
 	result, err := wh.DescribeNamespace(context.Background(), req)
 
@@ -674,7 +674,7 @@ func (s *workflowHandlerSuite) TestDescribeNamespace_Success_ArchivalEnabled() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	req := &workflowservice.DescribeNamespaceRequest{
-		Name: "test-namespace",
+		Namespace: "test-namespace",
 	}
 	result, err := wh.DescribeNamespace(context.Background(), req)
 
@@ -1393,7 +1393,7 @@ func updateRequest(
 	visibilityArchivalState enumspb.ArchivalState,
 ) *workflowservice.UpdateNamespaceRequest {
 	return &workflowservice.UpdateNamespaceRequest{
-		Name: "test-name",
+		Namespace: "test-name",
 		Config: &namespacepb.NamespaceConfig{
 			HistoryArchivalState:    historyArchivalState,
 			HistoryArchivalUri:      historyArchivalURI,
@@ -1443,7 +1443,7 @@ func registerNamespaceRequest(
 	visibilityArchivalURI string,
 ) *workflowservice.RegisterNamespaceRequest {
 	return &workflowservice.RegisterNamespaceRequest{
-		Name:                             "test-namespace",
+		Namespace:                        "test-namespace",
 		Description:                      "test-description",
 		OwnerEmail:                       "test-owner-email",
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(10 * time.Hour * 24),

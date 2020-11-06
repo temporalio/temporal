@@ -129,7 +129,7 @@ func (d *namespaceCLIImpl) RegisterNamespace(c *cli.Context) {
 	}
 
 	request := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       ownerEmail,
 		Data:                             namespaceData,
@@ -173,12 +173,12 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 			ActiveClusterName: activeCluster,
 		}
 		updateRequest = &workflowservice.UpdateNamespaceRequest{
-			Name:              namespace,
+			Namespace:         namespace,
 			ReplicationConfig: replicationConfig,
 		}
 	} else {
 		resp, err := d.describeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
-			Name: namespace,
+			Namespace: namespace,
 		})
 		if err != nil {
 			if _, ok := err.(*serviceerror.NotFound); !ok {
@@ -263,7 +263,7 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 			Clusters: clusters,
 		}
 		updateRequest = &workflowservice.UpdateNamespaceRequest{
-			Name:              namespace,
+			Namespace:         namespace,
 			UpdateInfo:        updateInfo,
 			Config:            updateConfig,
 			ReplicationConfig: replicationConfig,
@@ -296,8 +296,8 @@ func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 	resp, err := d.describeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
-		Id:   namespaceID,
+		Namespace: namespace,
+		Id:        namespaceID,
 	})
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
