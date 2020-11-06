@@ -39,6 +39,7 @@ import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
+import "temporal/server/api/indexer/v1/message.proto";
 
 // shard column
 message ShardInfo {
@@ -57,6 +58,8 @@ message ShardInfo {
     map<string, google.protobuf.Timestamp> cluster_timer_ack_level = 11 [(gogoproto.stdtime) = true];
     map<string, int64> cluster_replication_level = 12;
     map<string, int64> replication_dlq_ack_level = 13;
+    int64 visibility_ack_level = 14;
+    map<string, int64> cluster_visibility_level = 15;
 }
 
 // execution column
@@ -169,6 +172,17 @@ message ReplicationTaskInfo {
     bytes new_run_branch_token = 13;
     reserved 14;
     int64 task_id = 15;
+}
+
+// visibility column
+message VisibilityTaskInfo {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    temporal.server.api.enums.v1.TaskType task_type = 4;
+    int64 version = 5;
+    int64 task_id = 6;
+    map<string, temporal.server.api.indexer.v1.Field> fields = 7;
 }
 
 // timer column

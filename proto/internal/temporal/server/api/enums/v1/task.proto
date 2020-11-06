@@ -41,6 +41,8 @@ enum TaskCategory {
     TASK_CATEGORY_TIMER = 2;
     // Replication is the task type for replication task.
     TASK_CATEGORY_REPLICATION = 3;
+    // Visibility is the task type for visibility task.
+    TASK_CATEGORY_VISIBILITY = 4;
 }
 
 enum TaskType {
@@ -63,4 +65,6 @@ enum TaskType {
     TASK_TYPE_DELETE_HISTORY_EVENT = 16;
     TASK_TYPE_ACTIVITY_RETRY_TIMER = 17;
     TASK_TYPE_WORKFLOW_BACKOFF_TIMER = 18;
+    TASK_TYPE_VISIBILITY_INDEX = 19;
+    TASK_TYPE_VISIBILITY_DELETE = 20;
 }

@@ -77,6 +77,10 @@ const (
 	rowTypeReplicationNamespaceID = "10000000-5000-f000-f000-000000000000"
 	rowTypeReplicationWorkflowID  = "20000000-5000-f000-f000-000000000000"
 	rowTypeReplicationRunID       = "30000000-5000-f000-f000-000000000000"
+	// Row constants for visibility task row.
+	rowTypeVisibilityNamespaceID = "10000000-6000-f000-f000-000000000000"
+	rowTypeVisibilityWorkflowID  = "20000000-6000-f000-f000-000000000000"
+	rowTypeVisibilityRunID       = "30000000-6000-f000-f000-000000000000"
 	// Row Constants for Replication Task DLQ Row. Source cluster name will be used as WorkflowID.
 	rowTypeDLQNamespaceID = "10000000-6000-f000-f000-000000000000"
 	rowTypeDLQRunID       = "30000000-6000-f000-f000-000000000000"
@@ -96,6 +100,7 @@ const (
 	rowTypeTimerTask
 	rowTypeReplicationTask
 	rowTypeDLQ
+	rowTypeVisibilityTask
 )
 
 const (
@@ -172,6 +177,10 @@ workflow_state = ? ` +
 
 	templateCreateReplicationTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, namespace_id, workflow_id, run_id, replication, replication_encoding, visibility_ts, task_id) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	templateCreateVisibilityTaskQuery = `INSERT INTO executions (` +
+		`shard_id, type, namespace_id, workflow_id, run_id, visibility, visibility_encoding, visibility_ts, task_id) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateTimerTaskQuery = `INSERT INTO executions (` +

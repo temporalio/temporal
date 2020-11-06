@@ -35,6 +35,7 @@ message Field {
     }
 }
 
+// Deprecated. Remove with kafka removal.
 message Message {
     temporal.server.api.enums.v1.MessageType message_type = 1;
     string namespace_id = 2;

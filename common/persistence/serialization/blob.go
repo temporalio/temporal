@@ -203,6 +203,10 @@ func ReplicationTaskInfoToBlob(info *persistencespb.ReplicationTaskInfo) (common
 	return proto3Encode(info)
 }
 
+func VisibilityTaskInfoToBlob(info *persistencespb.VisibilityTaskInfo) (commonpb.DataBlob, error) {
+	return proto3Encode(info)
+}
+
 func ReplicationTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.ReplicationTaskInfo, error) {
 	result := &persistencespb.ReplicationTaskInfo{}
 	return result, proto3Decode(blob, encoding, result)

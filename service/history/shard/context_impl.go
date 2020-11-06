@@ -488,6 +488,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 		request.UpdateWorkflowMutation.TransferTasks,
 		request.UpdateWorkflowMutation.ReplicationTasks,
 		request.UpdateWorkflowMutation.TimerTasks,
+		request.UpdateWorkflowMutation.VisibilityTasks,
 		&transferMaxReadLevel,
 	); err != nil {
 		return nil, err
@@ -499,6 +500,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 			request.NewWorkflowSnapshot.TransferTasks,
 			request.NewWorkflowSnapshot.ReplicationTasks,
 			request.NewWorkflowSnapshot.TimerTasks,
+			request.NewWorkflowSnapshot.VisibilityTasks,
 			&transferMaxReadLevel,
 		); err != nil {
 			return nil, err
@@ -982,6 +984,7 @@ func (s *ContextImpl) allocateTaskIDsLocked(
 	transferTasks []persistence.Task,
 	replicationTasks []persistence.Task,
 	timerTasks []persistence.Task,
+	visibilityTasks []persistence.Task,
 	transferMaxReadLevel *int64,
 ) error {
 
@@ -992,6 +995,11 @@ func (s *ContextImpl) allocateTaskIDsLocked(
 	}
 	if err := s.allocateTransferIDsLocked(
 		replicationTasks,
+		transferMaxReadLevel); err != nil {
+		return err
+	}
+	if err := s.allocateTransferIDsLocked(
+		visibilityTasks,
 		transferMaxReadLevel); err != nil {
 		return err
 	}

@@ -364,6 +364,13 @@ type (
 		NewRunBranchToken   []byte
 	}
 
+	// VisibilityTask is the task created for...
+	VisibilityTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
+	}
+
 	// SyncActivityTask is the replication task created for shipping activity info to other clusters
 	SyncActivityTask struct {
 		VisibilityTimestamp time.Time
@@ -527,6 +534,7 @@ type (
 		TransferTasks    []Task
 		ReplicationTasks []Task
 		TimerTasks       []Task
+		VisibilityTasks  []Task
 
 		Condition int64
 		Checksum  *persistencespb.Checksum
@@ -548,6 +556,7 @@ type (
 		TransferTasks    []Task
 		ReplicationTasks []Task
 		TimerTasks       []Task
+		VisibilityTasks  []Task
 
 		Condition int64
 		Checksum  *persistencespb.Checksum
@@ -1890,6 +1899,41 @@ func (a *HistoryReplicationTask) GetVisibilityTimestamp() time.Time {
 
 // SetVisibilityTimestamp set the visibility timestamp
 func (a *HistoryReplicationTask) SetVisibilityTimestamp(timestamp time.Time) {
+	a.VisibilityTimestamp = timestamp
+}
+
+// GetType returns the type of the visibility task
+func (a *VisibilityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_VISIBILITY_INDEX
+}
+
+// GetVersion returns the version of the visibility task
+func (a *VisibilityTask) GetVersion() int64 {
+	return a.Version
+}
+
+// SetVersion returns the version of the visibility task
+func (a *VisibilityTask) SetVersion(version int64) {
+	a.Version = version
+}
+
+// GetTaskID returns the sequence ID of the visibility task
+func (a *VisibilityTask) GetTaskID() int64 {
+	return a.TaskID
+}
+
+// SetTaskID sets the sequence ID of the visibility task
+func (a *VisibilityTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
+// GetVisibilityTime get the visibility timestamp
+func (a *VisibilityTask) GetVisibilityTimestamp() time.Time {
+	return a.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp set the visibility timestamp
+func (a *VisibilityTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
 }
 

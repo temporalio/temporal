@@ -46,6 +46,7 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+// Deprecated. Remove with kafka removal.
 type MessageType int32
 
 const (

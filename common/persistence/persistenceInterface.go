@@ -293,6 +293,7 @@ type (
 		TransferTasks    []Task
 		TimerTasks       []Task
 		ReplicationTasks []Task
+		VisibilityTasks  []Task
 
 		Condition int64
 
@@ -316,6 +317,7 @@ type (
 		TransferTasks    []Task
 		TimerTasks       []Task
 		ReplicationTasks []Task
+		VisibilityTasks  []Task
 
 		Condition int64
 

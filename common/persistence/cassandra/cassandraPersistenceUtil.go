@@ -157,6 +157,7 @@ func applyWorkflowMutationBatch(
 		workflowMutation.TransferTasks,
 		workflowMutation.ReplicationTasks,
 		workflowMutation.TimerTasks,
+		workflowMutation.VisibilityTasks,
 	)
 }
 
@@ -268,6 +269,7 @@ func applyWorkflowSnapshotBatchAsReset(
 		workflowSnapshot.TransferTasks,
 		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.TimerTasks,
+		workflowSnapshot.VisibilityTasks,
 	)
 }
 
@@ -375,6 +377,7 @@ func applyWorkflowSnapshotBatchAsNew(
 		workflowSnapshot.TransferTasks,
 		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.TimerTasks,
+		workflowSnapshot.VisibilityTasks,
 	)
 }
 
@@ -545,6 +548,7 @@ func applyTasks(
 	transferTasks []p.Task,
 	replicationTasks []p.Task,
 	timerTasks []p.Task,
+	visibilityTasks []p.Task,
 ) error {
 
 	if err := createTransferTasks(
@@ -561,6 +565,17 @@ func applyTasks(
 	if err := createReplicationTasks(
 		batch,
 		replicationTasks,
+		shardID,
+		namespaceID,
+		workflowID,
+		runID,
+	); err != nil {
+		return err
+	}
+
+	if err := createVisibilityTasks(
+		batch,
+		visibilityTasks,
 		shardID,
 		namespaceID,
 		workflowID,
@@ -735,6 +750,55 @@ func createReplicationTasks(
 			rowTypeReplicationNamespaceID,
 			rowTypeReplicationWorkflowID,
 			rowTypeReplicationRunID,
+			datablob.Data,
+			datablob.EncodingType.String(),
+			defaultVisibilityTimestamp,
+			task.GetTaskID())
+	}
+
+	return nil
+}
+
+func createVisibilityTasks(
+	batch *gocql.Batch,
+	visibilityTasks []p.Task,
+	shardID int32,
+	namespaceID string,
+	workflowID string,
+	runID string,
+) error {
+
+	for _, task := range visibilityTasks {
+		version := common.EmptyVersion
+
+		switch task.GetType() {
+		case enumsspb.TASK_TYPE_VISIBILITY_INDEX:
+			version = task.GetVersion()
+		case enumsspb.TASK_TYPE_VISIBILITY_DELETE:
+			version = task.GetVersion()
+		default:
+			return serviceerror.NewInternal(fmt.Sprintf("Unknow visibility task type: %v", task.GetType()))
+		}
+
+		datablob, err := serialization.VisibilityTaskInfoToBlob(&persistencespb.VisibilityTaskInfo{
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
+			TaskId:      task.GetTaskID(),
+			TaskType:    task.GetType(),
+			Version:     version,
+		})
+
+		if err != nil {
+			return err
+		}
+
+		batch.Query(templateCreateVisibilityTaskQuery,
+			shardID,
+			rowTypeVisibilityTask,
+			rowTypeVisibilityNamespaceID,
+			rowTypeVisibilityWorkflowID,
+			rowTypeVisibilityRunID,
 			datablob.Data,
 			datablob.EncodingType.String(),
 			defaultVisibilityTimestamp,
