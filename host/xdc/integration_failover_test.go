@@ -141,7 +141,7 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	namespace := "test-namespace-for-fail-over-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         clusterReplicationConfig,
 		ActiveClusterName:                clusterName[0],
@@ -151,7 +151,7 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
@@ -167,7 +167,7 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
@@ -227,7 +227,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	namespace := "test-simple-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         clusterReplicationConfig,
 		ActiveClusterName:                clusterName[0],
@@ -237,7 +237,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
@@ -424,7 +424,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
@@ -531,7 +531,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	namespace := "test-sticky-workflow-task-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         clusterReplicationConfig,
 		ActiveClusterName:                clusterName[0],
@@ -541,7 +541,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
@@ -652,7 +652,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
@@ -685,7 +685,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 
 	// Update namespace to fail over back
 	updateReq = &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[0],
 		},
@@ -706,7 +706,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	namespace := "test-start-workflow-failover-ID-reuse-policy" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         clusterReplicationConfig,
 		ActiveClusterName:                clusterName[0],
@@ -716,7 +716,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
@@ -797,7 +797,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
@@ -843,7 +843,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	namespace := "test-terminate-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         clusterReplicationConfig,
 		ActiveClusterName:                clusterName[0],
@@ -853,7 +853,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
@@ -942,7 +942,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
@@ -1028,7 +1028,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	namespace := "test-continueAsNew-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         clusterReplicationConfig,
 		ActiveClusterName:                clusterName[0],
@@ -1038,7 +1038,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
@@ -1134,7 +1134,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
@@ -1166,7 +1166,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	namespace := "test-signal-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         clusterReplicationConfig,
 		ActiveClusterName:                clusterName[0],
@@ -1176,7 +1176,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
@@ -1274,7 +1274,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
@@ -1347,7 +1347,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	namespace := "test-user-timer-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         clusterReplicationConfig,
 		ActiveClusterName:                clusterName[0],
@@ -1357,7 +1357,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
@@ -1492,7 +1492,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
@@ -1519,7 +1519,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	namespace := "test-activity-heartbeat-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         clusterReplicationConfig,
 		ActiveClusterName:                clusterName[0],
@@ -1529,7 +1529,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
@@ -1666,7 +1666,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
@@ -1728,7 +1728,7 @@ func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	namespace := "test-transient-workflow-task-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         clusterReplicationConfig,
 		ActiveClusterName:                clusterName[0],
@@ -1738,7 +1738,7 @@ func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
@@ -1823,7 +1823,7 @@ func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
 
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
@@ -1849,7 +1849,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	namespace := "test-cron-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         clusterReplicationConfig,
 		ActiveClusterName:                clusterName[0],
@@ -1859,7 +1859,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
@@ -1916,7 +1916,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	// Failover during backoff
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
@@ -1949,7 +1949,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	namespace := "test-workflow-retry-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         clusterReplicationConfig,
 		ActiveClusterName:                clusterName[0],
@@ -1959,7 +1959,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
@@ -2023,7 +2023,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},

@@ -1609,7 +1609,7 @@ func (s *nDCIntegrationTestSuite) registerNamespace() {
 	s.namespace = "test-simple-workflow-ndc-" + common.GenerateRandomString(5)
 	client1 := s.active.GetFrontendClient() // active
 	_, err := client1.RegisterNamespace(host.NewContext(), &workflowservice.RegisterNamespaceRequest{
-		Name:              s.namespace,
+		Namespace:         s.namespace,
 		IsGlobalNamespace: true,
 		Clusters:          clusterReplicationConfig,
 		// make the active cluster `standby` and replicate to `active` cluster
@@ -1619,7 +1619,7 @@ func (s *nDCIntegrationTestSuite) registerNamespace() {
 	s.Require().NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Name: s.namespace,
+		Namespace: s.namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.Require().NoError(err)
