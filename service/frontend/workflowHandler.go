@@ -243,7 +243,7 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 		return nil, err
 	}
 
-	if request.GetName() == "" {
+	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
 	}
 
@@ -274,7 +274,7 @@ func (wh *WorkflowHandler) DescribeNamespace(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
-	if request.GetName() == "" && request.GetId() == "" {
+	if request.GetNamespace() == "" && request.GetId() == "" {
 		return nil, errNamespaceNotSet
 	}
 
@@ -337,7 +337,7 @@ func (wh *WorkflowHandler) UpdateNamespace(ctx context.Context, request *workflo
 		}
 	}
 
-	if request.GetName() == "" {
+	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
 	}
 
@@ -373,7 +373,7 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 		return nil, err
 	}
 
-	if request.GetName() == "" {
+	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
 	}
 

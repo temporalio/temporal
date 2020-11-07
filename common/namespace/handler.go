@@ -134,7 +134,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	}
 
 	// first check if the name is already registered as the local namespace
-	_, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: registerRequest.GetName()})
+	_, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: registerRequest.GetNamespace()})
 	switch err.(type) {
 	case nil:
 		// namespace already exists, cannot proceed
@@ -202,7 +202,7 @@ func (d *HandlerImpl) RegisterNamespace(
 
 	info := &persistencespb.NamespaceInfo{
 		Id:          uuid.New(),
-		Name:        registerRequest.GetName(),
+		Name:        registerRequest.GetNamespace(),
 		State:       enumspb.NAMESPACE_STATE_REGISTERED,
 		Owner:       registerRequest.GetOwnerEmail(),
 		Description: registerRequest.GetDescription(),
@@ -276,7 +276,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	}
 
 	d.logger.Info("Register namespace succeeded",
-		tag.WorkflowNamespace(registerRequest.GetName()),
+		tag.WorkflowNamespace(registerRequest.GetNamespace()),
 		tag.WorkflowNamespaceID(namespaceResponse.ID),
 	)
 
@@ -333,7 +333,7 @@ func (d *HandlerImpl) DescribeNamespace(
 
 	// TODO, we should migrate the non global namespace to new table, see #773
 	req := &persistence.GetNamespaceRequest{
-		Name: describeRequest.GetName(),
+		Name: describeRequest.GetNamespace(),
 		ID:   describeRequest.GetId(),
 	}
 	resp, err := d.metadataMgr.GetNamespace(req)
@@ -365,7 +365,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		return nil, err
 	}
 	notificationVersion := metadata.NotificationVersion
-	getResponse, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: updateRequest.GetName()})
+	getResponse, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: updateRequest.GetNamespace()})
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +454,7 @@ func (d *HandlerImpl) UpdateNamespace(
 			config.VisibilityArchivalUri = nextVisibilityArchivalState.URI
 		}
 		if updatedConfig.BadBinaries != nil {
-			maxLength := d.maxBadBinaryCount(updateRequest.GetName())
+			maxLength := d.maxBadBinaryCount(updateRequest.GetNamespace())
 			// only do merging
 			bb := d.mergeBadBinaries(config.BadBinaries.Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UTC())
 			config.BadBinaries = &bb
@@ -597,7 +597,7 @@ func (d *HandlerImpl) DeprecateNamespace(
 		return nil, err
 	}
 	notificationVersion := metadata.NotificationVersion
-	getResponse, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: deprecateRequest.GetName()})
+	getResponse, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: deprecateRequest.GetNamespace()})
 	if err != nil {
 		return nil, err
 	}

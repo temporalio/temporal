@@ -139,7 +139,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 	isGlobalNamespace := false
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
 		WorkflowExecutionRetentionPeriod: &retention,
@@ -165,7 +165,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 
 	retention := 1 * time.Hour * 24
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                isGlobalNamespace,
 		WorkflowExecutionRetentionPeriod: &retention,
 	})
@@ -173,7 +173,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 	s.Nil(registerResp)
 
 	resp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 
@@ -225,7 +225,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 	}
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
 		WorkflowExecutionRetentionPeriod: &retention,
@@ -238,7 +238,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 	s.Nil(registerResp)
 
 	resp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 
@@ -283,7 +283,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	isGlobalNamespace := false
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
 		WorkflowExecutionRetentionPeriod: &retention,
@@ -324,7 +324,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	}
 
 	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 	fnTest(
@@ -336,7 +336,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	)
 
 	getResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 	fnTest(
@@ -352,7 +352,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	namespace := s.getRandomNamespace()
 	isGlobalNamespace := false
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                isGlobalNamespace,
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	})
@@ -399,7 +399,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	}
 
 	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
 			Description: description,
 			OwnerEmail:  email,
@@ -428,7 +428,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	)
 
 	getResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 	fnTest(
@@ -454,7 +454,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 
 	retention := 1 * time.Hour * 24
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                isGlobalNamespace,
 		WorkflowExecutionRetentionPeriod: &retention,
 	})
@@ -462,7 +462,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 	s.Nil(registerResp)
 
 	resp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 
@@ -515,7 +515,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
 		WorkflowExecutionRetentionPeriod: &retention,
@@ -528,7 +528,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 	s.Nil(registerResp)
 
 	resp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 
@@ -581,7 +581,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Twice()
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
 		WorkflowExecutionRetentionPeriod: &retention,
@@ -622,7 +622,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	}
 
 	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 	fnTest(
@@ -634,7 +634,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	)
 
 	getResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 	fnTest(
@@ -665,7 +665,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Twice()
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		IsGlobalNamespace:                isGlobalNamespace,
 		Clusters:                         clusters,
 		ActiveClusterName:                activeClusterName,
@@ -708,7 +708,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	}
 
 	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
 			Description: description,
 			OwnerEmail:  email,
@@ -737,7 +737,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	)
 
 	getResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 	fnTest(
@@ -773,7 +773,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Twice()
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
 		WorkflowExecutionRetentionPeriod: &retention,
@@ -817,7 +817,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	}
 
 	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 		},
@@ -832,7 +832,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	)
 
 	getResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 	fnTest(
