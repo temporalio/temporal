@@ -31,10 +31,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -59,7 +60,7 @@ import (
 type visibilityArchiverSuite struct {
 	*require.Assertions
 	suite.Suite
-	s3cli *mocks.S3API
+	s3cli *mocks.MockS3API
 
 	container         *archiver.VisibilityBootstrapContainer
 	logger            log.Logger
@@ -100,10 +101,14 @@ func (s *visibilityArchiverSuite) TestValidateURI() {
 		},
 	}
 
-	s.s3cli.On("HeadBucketWithContext", mock.Anything, mock.MatchedBy(func(input *s3.HeadBucketInput) bool {
-		return *input.Bucket != s.testArchivalURI.Hostname()
-	})).Return(nil, awserr.New("NotFound", "", nil))
-	s.s3cli.On("HeadBucketWithContext", mock.Anything, mock.Anything).Return(&s3.HeadBucketOutput{}, nil)
+	s.s3cli.EXPECT().HeadBucketWithContext(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx aws.Context, input *s3.HeadBucketInput, options ...request.Option) (*s3.HeadBucketOutput, error) {
+			if *input.Bucket != s.testArchivalURI.Hostname() {
+				return nil, awserr.New("NotFound", "", nil)
+			}
+
+			return &s3.HeadBucketOutput{}, nil
+		}).AnyTimes()
 
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	for _, tc := range testCases {
@@ -129,8 +134,6 @@ const (
 func (s *visibilityArchiverSuite) SetupSuite() {
 	var err error
 	scope := tally.NewTestScope("test", nil)
-	s.s3cli = &mocks.S3API{}
-	setupFsEmulation(s.s3cli)
 
 	s.testArchivalURI, err = archiver.NewURI(testBucketURI)
 	s.Require().NoError(err)
@@ -140,7 +143,6 @@ func (s *visibilityArchiverSuite) SetupSuite() {
 		Logger:        loggerimpl.NewLogger(zapLogger),
 		MetricsClient: metrics.NewClient(scope, metrics.VisibilityArchiverScope),
 	}
-	s.setupVisibilityDirectory()
 }
 
 func (s *visibilityArchiverSuite) TearDownSuite() {
@@ -150,6 +152,10 @@ func (s *visibilityArchiverSuite) TearDownSuite() {
 func (s *visibilityArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
+
+	s.s3cli = mocks.NewMockS3API(s.controller)
+	setupFsEmulation(s.s3cli)
+	s.setupVisibilityDirectory()
 }
 
 func (s *visibilityArchiverSuite) TearDownTest() {
