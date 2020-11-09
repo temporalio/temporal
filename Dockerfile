@@ -24,7 +24,7 @@ COPY . .
 RUN CGO_ENABLED=0 make
 
 # Download dockerize
-FROM alpine:3.11 AS dockerize
+FROM alpine:3.12 AS dockerize
 
 RUN apk add --no-cache openssl
 
@@ -36,7 +36,7 @@ RUN wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSI
     && chown root:root /usr/local/bin/dockerize
 
 # Alpine base image
-FROM alpine:3.11 AS alpine
+FROM alpine:3.12 AS alpine
 
 RUN apk add --update --no-cache ca-certificates tzdata bash curl vim
 
