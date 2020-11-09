@@ -138,7 +138,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	isGlobalNamespace := true
 
 	resp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
 		WorkflowExecutionRetentionPeriod: &retention,
@@ -167,7 +167,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	isGlobalNamespace := false
 
 	resp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
 		WorkflowExecutionRetentionPeriod: &retention,
@@ -192,14 +192,14 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 
 	retention := 1 * time.Hour * 24
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		WorkflowExecutionRetentionPeriod: &retention,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
 
 	resp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 
@@ -251,7 +251,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	}
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
 		WorkflowExecutionRetentionPeriod: &retention,
@@ -264,7 +264,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	s.Nil(registerResp)
 
 	resp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 
@@ -308,7 +308,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 	}
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
 		WorkflowExecutionRetentionPeriod: &retention,
@@ -348,7 +348,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 	}
 
 	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 	fnTest(
@@ -360,7 +360,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 	)
 
 	getResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 	fnTest(
@@ -375,7 +375,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_AllAttrSet() {
 	namespace := s.getRandomNamespace()
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	})
 	s.NoError(err)
@@ -428,7 +428,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_Al
 	}
 
 	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
 			Description: description,
 			OwnerEmail:  email,
@@ -451,7 +451,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_Al
 	fnTest(updateResp.NamespaceInfo, updateResp.Config, updateResp.ReplicationConfig, updateResp.GetIsGlobalNamespace(), updateResp.GetFailoverVersion())
 
 	getResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	})
 	s.NoError(err)
 	fnTest(

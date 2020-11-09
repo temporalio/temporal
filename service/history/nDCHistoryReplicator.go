@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/shard"
 )
 
 var (
@@ -95,7 +96,7 @@ type (
 	}
 
 	nDCHistoryReplicatorImpl struct {
-		shard             ShardContext
+		shard             shard.Context
 		clusterMetadata   cluster.Metadata
 		historyV2Mgr      persistence.HistoryManager
 		historySerializer persistence.PayloadSerializer
@@ -117,7 +118,7 @@ type (
 var errPanic = serviceerror.NewInternal("encounter panic")
 
 func newNDCHistoryReplicator(
-	shard ShardContext,
+	shard shard.Context,
 	historyCache *historyCache,
 	eventsReapplier nDCEventsReapplier,
 	logger log.Logger,
@@ -520,7 +521,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 	task nDCReplicationTask,
 ) error {
 
-	versionHistoryItem := versionhistory.NewItem(
+	versionHistoryItem := versionhistory.NewVersionHistoryItem(
 		task.getLastEvent().GetEventId(),
 		task.getLastEvent().GetVersion(),
 	)
@@ -528,7 +529,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 	if err != nil {
 		return err
 	}
-	if err = versionhistory.AddOrUpdateItem(versionHistory, versionHistoryItem); err != nil {
+	if err = versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, versionHistoryItem); err != nil {
 		return err
 	}
 

@@ -44,12 +44,3 @@ type (
 func (cfg *Config) GetVisibilityIndex() string {
 	return cfg.Indices[common.VisibilityAppName]
 }
-
-// CompleteUserInfo complete url.URL with username and password for ElasticSearch
-func (cfg *Config) CompleteUserInfo() {
-	if len(cfg.Username) > 0 && len(cfg.Password) > 0 {
-		cfg.URL.User = url.UserPassword(cfg.Username, cfg.Password)
-	} else if len(cfg.Username) > 0 {
-		cfg.URL.User = url.User(cfg.Username)
-	}
-}

@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
@@ -73,6 +74,9 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -81,7 +85,7 @@ type (
 		*require.Assertions
 
 		controller               *gomock.Controller
-		mockShard                *shardContextTest
+		mockShard                *shard.ContextTest
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
@@ -97,8 +101,8 @@ type (
 		mockHistoryV2Mgr  *mocks.HistoryV2Manager
 		mockShardManager  *mocks.ShardManager
 
-		eventsCache eventsCache
-		config      *Config
+		eventsCache events.Cache
+		config      *configs.Config
 	}
 )
 
@@ -185,9 +189,9 @@ var testGlobalChildNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 	nil,
 )
 
-func NewDynamicConfigForTest() *Config {
+func NewDynamicConfigForTest() *configs.Config {
 	dc := dynamicconfig.NewNopCollection()
-	config := NewConfig(dc, 1, false)
+	config := configs.NewConfig(dc, 1, false)
 	// reduce the duration of long poll to increase test speed
 	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
 	return config
@@ -199,7 +203,7 @@ func TestEngineSuite(t *testing.T) {
 }
 
 func (s *engineSuite) SetupSuite() {
-	s.config = NewDynamicConfigForTest()
+	s.config = configs.NewDynamicConfigForTest()
 }
 
 func (s *engineSuite) TearDownSuite() {
@@ -218,7 +222,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -228,16 +232,25 @@ func (s *engineSuite) SetupTest() {
 			}},
 		s.config,
 	)
-	s.eventsCache = newEventsCache(s.mockShard)
-	s.mockShard.eventsCache = s.eventsCache
+	s.eventsCache = events.NewEventsCache(
+		convert.Int32Ptr(s.mockShard.GetShardID()),
+		s.mockShard.GetConfig().EventsCacheInitialSize(),
+		s.mockShard.GetConfig().EventsCacheMaxSize(),
+		s.mockShard.GetConfig().EventsCacheTTL(),
+		s.mockShard.GetHistoryManager(),
+		false,
+		s.mockShard.GetLogger(),
+		s.mockShard.GetMetricsClient(),
+	)
+	s.mockShard.EventsCache = s.eventsCache
 
-	s.mockMatchingClient = s.mockShard.resource.MatchingClient
-	s.mockHistoryClient = s.mockShard.resource.HistoryClient
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
-	s.mockShardManager = s.mockShard.resource.ShardMgr
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
+	s.mockMatchingClient = s.mockShard.Resource.MatchingClient
+	s.mockHistoryClient = s.mockShard.Resource.HistoryClient
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockShardManager = s.mockShard.Resource.ShardMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
@@ -245,9 +258,9 @@ func (s *engineSuite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testLocalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(testNamespace).Return(testLocalNamespaceEntry, nil).AnyTimes()
 
-	historyEventNotifier := newHistoryEventNotifier(
+	eventNitifier := events.NewNotifier(
 		clock.NewRealTimeSource(),
-		s.mockShard.resource.MetricsClient,
+		s.mockShard.Resource.MetricsClient,
 		func(namespaceID, workflowID string) int32 {
 			key := namespaceID + "_" + workflowID
 			return int32(len(key))
@@ -256,27 +269,27 @@ func (s *engineSuite) SetupTest() {
 
 	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName:   s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
-		shard:                s.mockShard,
-		clusterMetadata:      s.mockClusterMetadata,
-		executionManager:     s.mockExecutionMgr,
-		historyV2Mgr:         s.mockHistoryV2Mgr,
-		historyCache:         historyCache,
-		logger:               s.mockShard.GetLogger(),
-		metricsClient:        s.mockShard.GetMetricsClient(),
-		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
-		historyEventNotifier: historyEventNotifier,
-		config:               NewDynamicConfigForTest(),
-		txProcessor:          s.mockTxProcessor,
-		replicatorProcessor:  s.mockReplicationProcessor,
-		timerProcessor:       s.mockTimerProcessor,
-		eventsReapplier:      s.mockEventsReapplier,
-		workflowResetter:     s.mockWorkflowResetter,
+		currentClusterName:  s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
+		shard:               s.mockShard,
+		clusterMetadata:     s.mockClusterMetadata,
+		executionManager:    s.mockExecutionMgr,
+		historyV2Mgr:        s.mockHistoryV2Mgr,
+		historyCache:        historyCache,
+		logger:              s.mockShard.GetLogger(),
+		metricsClient:       s.mockShard.GetMetricsClient(),
+		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
+		eventNotifier:       eventNitifier,
+		config:              configs.NewDynamicConfigForTest(),
+		txProcessor:         s.mockTxProcessor,
+		replicatorProcessor: s.mockReplicationProcessor,
+		timerProcessor:      s.mockTimerProcessor,
+		eventsReapplier:     s.mockEventsReapplier,
+		workflowResetter:    s.mockWorkflowResetter,
 	}
 	s.mockShard.SetEngine(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
 
-	h.historyEventNotifier.Start()
+	h.eventNotifier.Start()
 
 	s.mockHistoryEngine = h
 }
@@ -284,7 +297,7 @@ func (s *engineSuite) SetupTest() {
 func (s *engineSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.Finish(s.T())
-	s.mockHistoryEngine.historyEventNotifier.Stop()
+	s.mockHistoryEngine.eventNotifier.Stop()
 }
 
 func (s *engineSuite) TestGetMutableStateSync() {
@@ -450,7 +463,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			WorkflowId: execution.WorkflowId,
 			RunId:      execution.RunId,
 		}
-		s.mockHistoryEngine.historyEventNotifier.NotifyNewHistoryEvent(newHistoryEventNotification(
+		s.mockHistoryEngine.eventNotifier.NotifyNewHistoryEvent(events.NewNotification(
 			"testNamespaceID",
 			newExecution,
 			int64(1),
@@ -4938,9 +4951,9 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 	ms.ExecutionInfo.LastProcessedEvent = 1
 	token, err := msBuilder.GetCurrentBranchToken()
 	s.NoError(err)
-	item := versionhistory.NewItem(1, 1)
-	versionHistory := versionhistory.New(token, []*historyspb.VersionHistoryItem{item})
-	ms.ExecutionInfo.VersionHistories = versionhistory.NewVHS(versionHistory)
+	item := versionhistory.NewVersionHistoryItem(1, 1)
+	versionHistory := versionhistory.NewVersionHistory(token, []*historyspb.VersionHistoryItem{item})
+	ms.ExecutionInfo.VersionHistories = versionhistory.NewVersionHistories(versionHistory)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: testRunID}
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
@@ -5037,7 +5050,7 @@ func addWorkflowTaskStartedEventWithRequestID(builder mutableState, scheduleID i
 func addWorkflowTaskCompletedEvent(builder mutableState, scheduleID, startedID int64, identity string) *historypb.HistoryEvent {
 	event, _ := builder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: identity,
-	}, defaultHistoryMaxAutoResetPoints)
+	}, configs.DefaultHistoryMaxAutoResetPoints)
 
 	builder.FlushBufferedEvents() // nolint:errcheck
 
@@ -5239,8 +5252,12 @@ func addFailWorkflowEvent(
 	return event
 }
 
-func newMutableStateBuilderWithEventV2(shard ShardContext, eventsCache eventsCache,
-	logger log.Logger, runID string) *mutableStateBuilder {
+func newMutableStateBuilderWithEventV2(
+	shard shard.Context,
+	eventsCache events.Cache,
+	logger log.Logger,
+	runID string,
+) *mutableStateBuilder {
 
 	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry)
 	_ = msBuilder.SetHistoryTree(runID)
@@ -5248,8 +5265,13 @@ func newMutableStateBuilderWithEventV2(shard ShardContext, eventsCache eventsCac
 	return msBuilder
 }
 
-func newMutableStateBuilderWithVersionHistoriesForTest(shard ShardContext, eventsCache eventsCache,
-	logger log.Logger, version int64, runID string) *mutableStateBuilder {
+func newMutableStateBuilderWithVersionHistoriesForTest(
+	shard shard.Context,
+	eventsCache events.Cache,
+	logger log.Logger,
+	version int64,
+	runID string,
+) *mutableStateBuilder {
 
 	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry)
 	msBuilder.UpdateCurrentVersion(version, false)
@@ -5296,7 +5318,7 @@ func createMutableState(ms mutableState) *persistencespb.WorkflowMutableState {
 		bufferedEvents = append(bufferedEvents, builder.updateBufferedEvents...)
 	}
 	if builder.executionInfo.VersionHistories != nil {
-		info.VersionHistories = versionhistory.DuplicateVHS(builder.executionInfo.VersionHistories)
+		info.VersionHistories = versionhistory.CopyVersionHistories(builder.executionInfo.VersionHistories)
 	}
 
 	return &persistencespb.WorkflowMutableState{

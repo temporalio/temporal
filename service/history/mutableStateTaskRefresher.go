@@ -38,6 +38,8 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/events"
 )
 
 var emptyTasks = []persistence.Task{}
@@ -48,17 +50,17 @@ type (
 	}
 
 	mutableStateTaskRefresherImpl struct {
-		config         *Config
+		config         *configs.Config
 		namespaceCache cache.NamespaceCache
-		eventsCache    eventsCache
+		eventsCache    events.Cache
 		logger         log.Logger
 	}
 )
 
 func newMutableStateTaskRefresher(
-	config *Config,
+	config *configs.Config,
 	namespaceCache cache.NamespaceCache,
-	eventsCache eventsCache,
+	eventsCache events.Cache,
 	logger log.Logger,
 ) *mutableStateTaskRefresherImpl {
 
@@ -299,7 +301,7 @@ Loop:
 			continue Loop
 		}
 
-		scheduleEvent, err := r.eventsCache.getEvent(
+		scheduleEvent, err := r.eventsCache.GetEvent(
 			executionInfo.NamespaceId,
 			executionInfo.WorkflowId,
 			executionState.RunId,
@@ -380,7 +382,7 @@ Loop:
 			continue Loop
 		}
 
-		scheduleEvent, err := r.eventsCache.getEvent(
+		scheduleEvent, err := r.eventsCache.GetEvent(
 			executionInfo.NamespaceId,
 			executionInfo.WorkflowId,
 			executionState.RunId,
@@ -419,7 +421,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRequestCancelExternalWork
 	}
 
 	for _, requestCancelInfo := range pendingRequestCancelInfos {
-		initiateEvent, err := r.eventsCache.getEvent(
+		initiateEvent, err := r.eventsCache.GetEvent(
 			executionInfo.NamespaceId,
 			executionInfo.WorkflowId,
 			executionState.RunId,
@@ -458,7 +460,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 	}
 
 	for _, signalInfo := range pendingSignalInfos {
-		initiateEvent, err := r.eventsCache.getEvent(
+		initiateEvent, err := r.eventsCache.GetEvent(
 			executionInfo.NamespaceId,
 			executionInfo.WorkflowId,
 			executionState.RunId,

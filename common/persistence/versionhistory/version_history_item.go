@@ -22,16 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package rpc
+package versionhistory
 
 import (
-	"context"
+	"fmt"
 
-	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
+	historyspb "go.temporal.io/server/api/history/v1"
 )
 
-func Interceptor(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	resp, err := handler(ctx, req)
-	return resp, serviceerror.ToStatus(err).Err()
+// NewVersionHistoryItem create a new instance of VersionHistoryItem.
+func NewVersionHistoryItem(eventID int64, version int64) *historyspb.VersionHistoryItem {
+	if eventID < 0 || version < 0 {
+		panic(fmt.Sprintf("invalid version history item event ID: %v, version: %v", eventID, version))
+	}
+
+	return &historyspb.VersionHistoryItem{EventId: eventID, Version: version}
 }

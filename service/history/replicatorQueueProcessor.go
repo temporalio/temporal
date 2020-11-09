@@ -47,12 +47,13 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
 	replicatorQueueProcessorImpl struct {
 		currentClusterName    string
-		shard                 ShardContext
+		shard                 shard.Context
 		historyCache          *historyCache
 		replicationTaskFilter taskFilter
 		executionMgr          persistence.ExecutionManager
@@ -78,7 +79,7 @@ var (
 )
 
 func newReplicatorQueueProcessor(
-	shard ShardContext,
+	shard shard.Context,
 	historyCache *historyCache,
 	replicator messaging.Producer,
 	executionMgr persistence.ExecutionManager,
@@ -717,9 +718,9 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 		return nil, nil, serviceerror.NewInternal("replicatorQueueProcessor encounter workflow without version histories")
 	}
 
-	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByItem(
+	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
 		versionHistories,
-		versionhistory.NewItem(
+		versionhistory.NewVersionHistoryItem(
 			eventID,
 			version,
 		),

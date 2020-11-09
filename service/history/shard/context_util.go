@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package shard
 
 import (
 	"time"
@@ -33,25 +33,27 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/events"
 )
 
-type shardContextTest struct {
-	*shardContextImpl
+type ContextTest struct {
+	*ContextImpl
 
-	resource        *resource.Test
-	mockEventsCache *MockeventsCache
+	Resource        *resource.Test
+	MockEventsCache *events.MockCache
 }
 
-var _ ShardContext = (*shardContextTest)(nil)
+var _ Context = (*ContextTest)(nil)
 
-func newTestShardContext(
+func NewTestContext(
 	ctrl *gomock.Controller,
 	shardInfo *persistence.ShardInfoWithFailover,
-	config *Config,
-) *shardContextTest {
+	config *configs.Config,
+) *ContextTest {
 	resource := resource.NewTest(ctrl, metrics.History)
-	eventsCache := NewMockeventsCache(ctrl)
-	shard := &shardContextImpl{
+	eventsCache := events.NewMockCache(ctrl)
+	shard := &ContextImpl{
 		Resource:                  resource,
 		shardID:                   shardInfo.GetShardId(),
 		rangeID:                   shardInfo.GetRangeId(),
@@ -65,17 +67,17 @@ func newTestShardContext(
 		maxTransferSequenceNumber: 100000,
 		timerMaxReadLevelMap:      make(map[string]time.Time),
 		remoteClusterCurrentTime:  make(map[string]time.Time),
-		eventsCache:               eventsCache,
+		EventsCache:               eventsCache,
 	}
-	return &shardContextTest{
-		shardContextImpl: shard,
-		resource:         resource,
-		mockEventsCache:  eventsCache,
+	return &ContextTest{
+		ContextImpl:     shard,
+		Resource:        resource,
+		MockEventsCache: eventsCache,
 	}
 }
 
-func (s *shardContextTest) Finish(
+func (s *ContextTest) Finish(
 	t mock.TestingT,
 ) {
-	s.resource.Finish(t)
+	s.Resource.Finish(t)
 }

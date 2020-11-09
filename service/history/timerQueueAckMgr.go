@@ -32,6 +32,8 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -56,11 +58,11 @@ type (
 	timerQueueAckMgrImpl struct {
 		scope               int
 		isFailover          bool
-		shard               ShardContext
+		shard               shard.Context
 		executionMgr        persistence.ExecutionManager
 		logger              log.Logger
 		metricsClient       metrics.Client
-		config              *Config
+		config              *configs.Config
 		timeNow             timeNow
 		updateTimerAckLevel updateTimerAckLevel
 		timerQueueShutdown  timerQueueShutdown
@@ -131,7 +133,7 @@ func compareTimerIDLess(first *timerKey, second *timerKey) bool {
 
 func newTimerQueueAckMgr(
 	scope int,
-	shard ShardContext,
+	shard shard.Context,
 	metricsClient metrics.Client,
 	minLevel time.Time,
 	timeNow timeNow,
@@ -167,7 +169,7 @@ func newTimerQueueAckMgr(
 }
 
 func newTimerQueueFailoverAckMgr(
-	shard ShardContext,
+	shard shard.Context,
 	metricsClient metrics.Client,
 	minLevel time.Time,
 	maxLevel time.Time,

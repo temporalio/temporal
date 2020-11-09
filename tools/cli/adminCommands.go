@@ -25,8 +25,6 @@
 package cli
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"strconv"
@@ -40,6 +38,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/codec"
@@ -48,6 +47,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	cassp "go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
@@ -122,80 +122,44 @@ func AdminShowWorkflow(c *cli.Context) {
 
 // AdminDescribeWorkflow describe a new workflow execution for admin
 func AdminDescribeWorkflow(c *cli.Context) {
-	identJSON := func(s string) string {
-		if s == "" {
-			return "<empty>"
-		}
-
-		var data interface{}
-		err := json.Unmarshal([]byte(s), &data)
-		if err != nil {
-			return s
-		}
-
-		b, err := json.MarshalIndent(data, "", "  ")
-		if err != nil {
-			return s
-		}
-		return string(b)
-	}
-
 	resp := describeMutableState(c)
-	fmt.Printf("Cache Mutable State:\n%s\n", identJSON(resp.GetCacheMutableState()))
-	fmt.Printf("Database Mutable State:\n%s\n", identJSON(resp.GetDatabaseMutableState()))
 
-	output := struct {
-		TreeID      string
-		BranchID    string
-		ShardID     string
-		HistoryAddr string
-	}{
-		resp.GetTreeId(),
-		resp.GetBranchId(),
-		resp.GetShardId(),
-		resp.GetHistoryAddr(),
+	if resp != nil {
+		fmt.Println(colorGreen("Cache mutable state:"))
+		if resp.GetCacheMutableState() != nil {
+			prettyPrintJSONObject(resp.GetCacheMutableState())
+		}
+		fmt.Println(colorGreen("Database mutable state:"))
+		prettyPrintJSONObject(resp.GetDatabaseMutableState())
+
+		fmt.Println(colorGreen("Current branch token:"))
+		currentBranchTokenBytes := resp.GetDatabaseMutableState().GetExecutionInfo().GetEventBranchToken()
+		if versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories(); versionHistories != nil {
+			// if VersionHistories is set, then all branch infos are stored in VersionHistories
+			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+			if err != nil {
+				fmt.Println(colorRed("Unable to get current version history:"), err)
+			} else {
+				currentBranchTokenBytes = currentVersionHistory.GetBranchToken()
+			}
+		}
+
+		if len(currentBranchTokenBytes) > 0 {
+			currentBranchToken := persistencespb.HistoryBranch{}
+			err := currentBranchToken.Unmarshal(currentBranchTokenBytes)
+			if err != nil {
+				fmt.Println(colorRed("Unable to unmarshal current branch token:"), err)
+			} else {
+				prettyPrintJSONObject(currentBranchToken)
+			}
+		}
+
+		fmt.Printf("History service address: %s\n", resp.GetHistoryAddr())
+		fmt.Printf("Shard Id: %s\n", resp.GetShardId())
 	}
-	prettyPrintJSONObject(output)
-
-	// This commented out block should be restored when MutableState is passed as proto object.
-
-	// if resp != nil {
-	// 	msStr := resp.GetDatabaseMutableState()
-	// 	ms := persistenceblobs.WorkflowMutableState{}
-	// 	// TODO: this won't work for some cases because json.Unmarshal can't be used for proto object
-	// 	// Proper refactoring is required here: resp.GetDatabaseMutableState() should return proto object.
-	// 	err := json.Unmarshal([]byte(msStr), &ms)
-	// 	if err != nil {
-	// 		ErrorAndExit("json.Unmarshal err", err)
-	// 	}
-	// 	currentBranchToken := ms.ExecutionInfo.EventBranchToken
-	// 	if ms.VersionHistories != nil {
-	// 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
-	// 		currentVersionHistory, err := ms.VersionHistories.GetCurrentVersionHistory()
-	// 		if err != nil {
-	// 			ErrorAndExit("ms.VersionHistories.GetCurrentVersionHistory err", err)
-	// 		}
-	// 		currentBranchToken = currentVersionHistory.GetBranchToken()
-	// 	}
-	//
-	// 	branchInfo := persistenceblobs.HistoryBranch{}
-	// 	err = branchInfo.Unmarshal(currentBranchToken)
-	// 	if err != nil {
-	// 		ErrorAndExit("failed to unmarshal current branch token from proto", err)
-	// 	}
-	// 	prettyPrintJSONObject(branchInfo)
-	// 	if ms.ExecutionInfo.AutoResetPoints != nil {
-	// 		fmt.Println("auto-reset-points:")
-	// 		for _, p := range ms.ExecutionInfo.AutoResetPoints.Points {
-	// 			createT := timestamp.TimeValue(p.GetCreateTime())
-	// 			expireT := timestamp.TimeValue(p.GetExpireTime())
-	// 			fmt.Println(p.GetBinaryChecksum(), p.GetRunId(), p.GetFirstWorkflowTaskCompletedId(), p.GetResettable(), createT, expireT)
-	// 		}
-	// 	}
-	// }
 }
 
-func describeMutableState(c *cli.Context) *adminservice.DescribeWorkflowExecutionResponse {
+func describeMutableState(c *cli.Context) *adminservice.DescribeMutableStateResponse {
 	adminClient := cFactory.AdminClient(c)
 
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
@@ -205,7 +169,7 @@ func describeMutableState(c *cli.Context) *adminservice.DescribeWorkflowExecutio
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	resp, err := adminClient.DescribeWorkflowExecution(ctx, &adminservice.DescribeWorkflowExecutionRequest{
+	resp, err := adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: namespace,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
@@ -252,15 +216,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	rid := c.String(FlagRunID)
 
 	resp := describeMutableState(c)
-	// TODO: this is temporary solution for JSON version of WorkflowMutableState.
-	// Proper refactoring is required here: resp.GetDatabaseMutableState() should return proto object.
-	msStr := resp.GetDatabaseMutableState()
-	ms := map[string]interface{}{}
-	err := json.Unmarshal([]byte(msStr), &ms)
-	if err != nil {
-		ErrorAndExit("json.Unmarshal err", err)
-	}
-	namespaceID := ms["ExecutionInfo"].(map[string]interface{})["NamespaceId"].(string)
+	namespaceID := resp.GetDatabaseMutableState().GetExecutionInfo().GetNamespaceId()
 	skipError := c.Bool(FlagSkipErrorMode)
 	session := connectToCassandra(c)
 	shardID := resp.GetShardId()
@@ -270,26 +226,13 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	}
 	shardIDInt32 := int32(shardIDInt)
 	var branchTokens [][]byte
-	if vhs, ok := ms["VersionHistories"]; ok && vhs != nil {
+	if versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories(); versionHistories != nil {
 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
-		branchTokens = [][]byte{}
-		for i, history := range ms["VersionHistories"].(map[string]interface{})["Histories"].([]interface{}) {
-			versionHistory := history.(map[string]interface{})
-			branchToken := versionHistory["BranchToken"].(string)
-			branchTokenBytes, err := base64.StdEncoding.DecodeString(branchToken)
-			if err != nil {
-				ErrorAndExit(fmt.Sprintf("unable to decode BranchToken for history item %d", i), err)
-			}
-
-			branchTokens = append(branchTokens, branchTokenBytes)
+		for _, historyItem := range versionHistories.GetHistories() {
+			branchTokens = append(branchTokens, historyItem.GetBranchToken())
 		}
 	} else {
-		eventBranchToken := ms["ExecutionInfo"].(map[string]interface{})["EventBranchToken"].(string)
-		eventBranchTokenBytes, err := base64.StdEncoding.DecodeString(eventBranchToken)
-		if err != nil {
-			ErrorAndExit("unable to decode EventBranchToken", err)
-		}
-		branchTokens = append(branchTokens, eventBranchTokenBytes)
+		branchTokens = append(branchTokens, resp.GetDatabaseMutableState().GetExecutionInfo().GetEventBranchToken())
 	}
 
 	for _, branchToken := range branchTokens {

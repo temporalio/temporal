@@ -60,24 +60,24 @@ func (m *MockAdminServiceClient) EXPECT() *MockAdminServiceClientMockRecorder {
 	return m.recorder
 }
 
-// DescribeWorkflowExecution mocks base method.
-func (m *MockAdminServiceClient) DescribeWorkflowExecution(ctx context.Context, in *adminservice.DescribeWorkflowExecutionRequest, opts ...grpc.CallOption) (*adminservice.DescribeWorkflowExecutionResponse, error) {
+// DescribeMutableState mocks base method.
+func (m *MockAdminServiceClient) DescribeMutableState(ctx context.Context, in *adminservice.DescribeMutableStateRequest, opts ...grpc.CallOption) (*adminservice.DescribeMutableStateResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "DescribeWorkflowExecution", varargs...)
-	ret0, _ := ret[0].(*adminservice.DescribeWorkflowExecutionResponse)
+	ret := m.ctrl.Call(m, "DescribeMutableState", varargs...)
+	ret0, _ := ret[0].(*adminservice.DescribeMutableStateResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// DescribeWorkflowExecution indicates an expected call of DescribeWorkflowExecution.
-func (mr *MockAdminServiceClientMockRecorder) DescribeWorkflowExecution(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// DescribeMutableState indicates an expected call of DescribeMutableState.
+func (mr *MockAdminServiceClientMockRecorder) DescribeMutableState(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockAdminServiceClient)(nil).DescribeWorkflowExecution), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeMutableState", reflect.TypeOf((*MockAdminServiceClient)(nil).DescribeMutableState), varargs...)
 }
 
 // DescribeHistoryHost mocks base method.
@@ -403,19 +403,19 @@ func (m *MockAdminServiceServer) EXPECT() *MockAdminServiceServerMockRecorder {
 	return m.recorder
 }
 
-// DescribeWorkflowExecution mocks base method.
-func (m *MockAdminServiceServer) DescribeWorkflowExecution(arg0 context.Context, arg1 *adminservice.DescribeWorkflowExecutionRequest) (*adminservice.DescribeWorkflowExecutionResponse, error) {
+// DescribeMutableState mocks base method.
+func (m *MockAdminServiceServer) DescribeMutableState(arg0 context.Context, arg1 *adminservice.DescribeMutableStateRequest) (*adminservice.DescribeMutableStateResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeWorkflowExecution", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.DescribeWorkflowExecutionResponse)
+	ret := m.ctrl.Call(m, "DescribeMutableState", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.DescribeMutableStateResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// DescribeWorkflowExecution indicates an expected call of DescribeWorkflowExecution.
-func (mr *MockAdminServiceServerMockRecorder) DescribeWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
+// DescribeMutableState indicates an expected call of DescribeMutableState.
+func (mr *MockAdminServiceServerMockRecorder) DescribeMutableState(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockAdminServiceServer)(nil).DescribeWorkflowExecution), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeMutableState", reflect.TypeOf((*MockAdminServiceServer)(nil).DescribeMutableState), arg0, arg1)
 }
 
 // DescribeHistoryHost mocks base method.

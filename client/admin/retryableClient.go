@@ -114,16 +114,16 @@ func (c *retryableClient) CloseShard(
 	return resp, err
 }
 
-func (c *retryableClient) DescribeWorkflowExecution(
+func (c *retryableClient) DescribeMutableState(
 	ctx context.Context,
-	request *adminservice.DescribeWorkflowExecutionRequest,
+	request *adminservice.DescribeMutableStateRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.DescribeWorkflowExecutionResponse, error) {
+) (*adminservice.DescribeMutableStateResponse, error) {
 
-	var resp *adminservice.DescribeWorkflowExecutionResponse
+	var resp *adminservice.DescribeMutableStateResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.DescribeWorkflowExecution(ctx, request, opts...)
+		resp, err = c.client.DescribeMutableState(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)

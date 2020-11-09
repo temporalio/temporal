@@ -379,9 +379,9 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueueSticky() {
 	}
 	_, err = s.TaskMgr.UpdateTaskQueue(&p.UpdateTaskQueueRequest{
 		TaskQueueInfo: taskQueueInfo,
-		RangeID:       2,
+		RangeID:       tli.RangeID,
 	})
-	s.NoError(err) // because update with ttl doesn't check rangeID
+	s.NoError(err)
 }
 
 func (s *MatchingPersistenceSuite) deleteAllTaskQueue() {

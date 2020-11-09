@@ -209,11 +209,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 		WorkflowId: "test-eventsv2-workflow-version-history",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
-	versionHistory := versionhistory.New(
+	versionHistory := versionhistory.NewVersionHistory(
 		[]byte{1},
-		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(1, 0)},
+		[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(1, 0)},
 	)
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
 	csum := s.newRandomChecksum()
 
@@ -279,7 +279,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 	}}
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	s.NoError(err)
-	err = versionhistory.AddOrUpdateItem(versionHistory, versionhistory.NewItem(2, 0))
+	err = versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, versionhistory.NewVersionHistoryItem(2, 0))
 	s.NoError(err)
 	updatedInfo.VersionHistories = versionHistories
 

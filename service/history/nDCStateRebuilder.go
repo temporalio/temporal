@@ -46,6 +46,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -64,9 +66,9 @@ type (
 	}
 
 	nDCStateRebuilderImpl struct {
-		shard           ShardContext
+		shard           shard.Context
 		namespaceCache  cache.NamespaceCache
-		eventsCache     eventsCache
+		eventsCache     events.Cache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryManager
 		taskRefresher   mutableStateTaskRefresher
@@ -79,7 +81,7 @@ type (
 var _ nDCStateRebuilder = (*nDCStateRebuilderImpl)(nil)
 
 func newNDCStateRebuilder(
-	shard ShardContext,
+	shard shard.Context,
 	logger log.Logger,
 ) *nDCStateRebuilderImpl {
 
@@ -155,11 +157,11 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	if err != nil {
 		return nil, 0, err
 	}
-	lastItem, err := versionhistory.GetLastItem(currentVersionHistory)
+	lastItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
 	if err != nil {
 		return nil, 0, err
 	}
-	if !lastItem.Equal(versionhistory.NewItem(
+	if !lastItem.Equal(versionhistory.NewVersionHistoryItem(
 		baseLastEventID,
 		baseLastEventVersion,
 	)) {

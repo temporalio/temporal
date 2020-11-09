@@ -40,12 +40,6 @@ const (
 	// (default range ID: initialRangeID == 1)
 	createTaskQueueQry = `INSERT ` + taskQueueCreatePart
 
-	replaceTaskQueueQry = `INSERT ` + taskQueueCreatePart +
-		`ON CONFLICT (range_hash, task_queue_id) DO UPDATE
-SET range_id = excluded.range_id,
-data = excluded.data,
-data_encoding = excluded.data_encoding`
-
 	updateTaskQueueQry = `UPDATE task_queues SET
 range_id = :range_id,
 data = :data,
@@ -101,7 +95,7 @@ func (pdb *db) InsertIntoTasks(rows []sqlplugin.TasksRow) (sql.Result, error) {
 }
 
 // SelectFromTasks reads one or more rows from tasks table
-func (pdb *db) SelectFromTasks(filter *sqlplugin.TasksFilter) ([]sqlplugin.TasksRow, error) {
+func (pdb *db) SelectFromTasks(filter sqlplugin.TasksFilter) ([]sqlplugin.TasksRow, error) {
 	var err error
 	var rows []sqlplugin.TasksRow
 	switch {
@@ -119,7 +113,7 @@ func (pdb *db) SelectFromTasks(filter *sqlplugin.TasksFilter) ([]sqlplugin.Tasks
 }
 
 // DeleteFromTasks deletes one or more rows from tasks table
-func (pdb *db) DeleteFromTasks(filter *sqlplugin.TasksFilter) (sql.Result, error) {
+func (pdb *db) DeleteFromTasks(filter sqlplugin.TasksFilter) (sql.Result, error) {
 	if filter.TaskIDLessThanEquals != nil {
 		if filter.Limit == nil || *filter.Limit == 0 {
 			return nil, fmt.Errorf("missing limit parameter")
@@ -135,18 +129,13 @@ func (pdb *db) InsertIntoTaskQueues(row *sqlplugin.TaskQueuesRow) (sql.Result, e
 	return pdb.conn.NamedExec(createTaskQueueQry, row)
 }
 
-// ReplaceIntoTaskQueues replaces one or more rows in task_queues table
-func (pdb *db) ReplaceIntoTaskQueues(row *sqlplugin.TaskQueuesRow) (sql.Result, error) {
-	return pdb.conn.NamedExec(replaceTaskQueueQry, row)
-}
-
 // UpdateTaskQueues updates a row in task_queues table
 func (pdb *db) UpdateTaskQueues(row *sqlplugin.TaskQueuesRow) (sql.Result, error) {
 	return pdb.conn.NamedExec(updateTaskQueueQry, row)
 }
 
 // SelectFromTaskQueues reads one or more rows from task_queues table
-func (pdb *db) SelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
+func (pdb *db) SelectFromTaskQueues(filter sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
 	switch {
 	case filter.TaskQueueID != nil:
 		if filter.RangeHashLessThanEqualTo != 0 || filter.RangeHashGreaterThanEqualTo != 0 {
@@ -165,7 +154,7 @@ func (pdb *db) SelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlpl
 	}
 }
 
-func (pdb *db) selectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
+func (pdb *db) selectFromTaskQueues(filter sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
 	var err error
 	var row sqlplugin.TaskQueuesRow
 	err = pdb.conn.Get(&row, getTaskQueueQry, filter.RangeHash, filter.TaskQueueID)
@@ -175,7 +164,7 @@ func (pdb *db) selectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlpl
 	return []sqlplugin.TaskQueuesRow{row}, err
 }
 
-func (pdb *db) rangeSelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
+func (pdb *db) rangeSelectFromTaskQueues(filter sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
 	var err error
 	var rows []sqlplugin.TaskQueuesRow
 	if filter.RangeHashLessThanEqualTo > 0 {
@@ -193,12 +182,12 @@ func (pdb *db) rangeSelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]
 }
 
 // DeleteFromTaskQueues deletes a row from task_queues table
-func (pdb *db) DeleteFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) (sql.Result, error) {
+func (pdb *db) DeleteFromTaskQueues(filter sqlplugin.TaskQueuesFilter) (sql.Result, error) {
 	return pdb.conn.Exec(deleteTaskQueueQry, filter.RangeHash, filter.TaskQueueID, *filter.RangeID)
 }
 
 // LockTaskQueues locks a row in task_queues table
-func (pdb *db) LockTaskQueues(filter *sqlplugin.TaskQueuesFilter) (int64, error) {
+func (pdb *db) LockTaskQueues(filter sqlplugin.TaskQueuesFilter) (int64, error) {
 	var rangeID int64
 	err := pdb.conn.Get(&rangeID, lockTaskQueueQry, filter.RangeHash, filter.TaskQueueID)
 	return rangeID, err

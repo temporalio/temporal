@@ -162,7 +162,7 @@ func (s *integrationSuite) TestVisibilityArchival() {
 
 func (s *integrationSuite) getNamespaceID(namespace string) string {
 	namespaceResp, err := s.engine.DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
-		Name: s.archivalNamespace,
+		Namespace: s.archivalNamespace,
 	})
 	s.NoError(err)
 	return namespaceResp.NamespaceInfo.GetId()

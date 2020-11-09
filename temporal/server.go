@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 
@@ -148,8 +149,13 @@ func (s *Server) Start() error {
 		s.so.config.ClusterMetadata.ReplicationConsumer,
 	)
 
+	var globalMetricsScope tally.Scope
+	if s.so.config.Global.Metrics != nil {
+		globalMetricsScope = s.so.config.Global.Metrics.NewScope(s.logger)
+	}
+
 	for _, svcName := range s.so.serviceNames {
-		params, err := s.getServiceParams(svcName, dynamicConfig, tlsFactory, clusterMetadata, dc, zapLogger)
+		params, err := s.getServiceParams(svcName, dynamicConfig, tlsFactory, clusterMetadata, dc, zapLogger, globalMetricsScope)
 		if err != nil {
 			return err
 		}
@@ -219,7 +225,9 @@ func (s *Server) getServiceParams(
 	tlsFactory encryption.TLSConfigProvider,
 	clusterMetadata cluster.Metadata,
 	dc *dynamicconfig.Collection,
-	zapLogger *zap.Logger) (*resource.BootstrapParams, error) {
+	zapLogger *zap.Logger,
+	metricsScope tally.Scope,
+) (*resource.BootstrapParams, error) {
 
 	params := resource.BootstrapParams{}
 	params.Name = svcName
@@ -251,7 +259,9 @@ func (s *Server) getServiceParams(
 		}
 
 	params.DCRedirectionPolicy = s.so.config.DCRedirectionPolicy
-	metricsScope := svcCfg.Metrics.NewScope(s.logger)
+	if metricsScope == nil {
+		metricsScope = svcCfg.Metrics.NewScope(s.logger)
+	}
 	params.MetricsScope = metricsScope
 	metricsClient := metrics.NewClient(metricsScope, metrics.GetMetricsServiceIdx(svcName, s.logger))
 	params.MetricsClient = metricsClient
@@ -297,7 +307,6 @@ func (s *Server) getServiceParams(
 			return nil, fmt.Errorf("unable to find advanced visibility store in config for %q key", advancedVisStoreKey)
 		}
 
-		advancedVisStore.ElasticSearch.CompleteUserInfo()
 		esClient, err := elasticsearch.NewClient(advancedVisStore.ElasticSearch)
 		if err != nil {
 			return nil, fmt.Errorf("error creating elastic search client: %v", err)

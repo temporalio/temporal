@@ -41,6 +41,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -64,11 +66,11 @@ type (
 	}
 
 	taskProcessor struct {
-		shard         ShardContext
+		shard         shard.Context
 		cache         *historyCache
 		shutdownCh    chan struct{}
 		tasksCh       chan *taskInfo
-		config        *Config
+		config        *configs.Config
 		logger        log.Logger
 		metricsClient metrics.Client
 		timeSource    clock.TimeSource
@@ -99,7 +101,7 @@ func newTaskInfo(
 
 func newTaskProcessor(
 	options taskProcessorOptions,
-	shard ShardContext,
+	shard shard.Context,
 	historyCache *historyCache,
 	logger log.Logger,
 ) *taskProcessor {

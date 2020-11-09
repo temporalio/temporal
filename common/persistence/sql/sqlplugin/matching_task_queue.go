@@ -53,14 +53,13 @@ type (
 	// MatchingTaskQueue is the SQL persistence interface for matching task queues
 	MatchingTaskQueue interface {
 		InsertIntoTaskQueues(row *TaskQueuesRow) (sql.Result, error)
-		ReplaceIntoTaskQueues(row *TaskQueuesRow) (sql.Result, error)
 		UpdateTaskQueues(row *TaskQueuesRow) (sql.Result, error)
 		// SelectFromTaskQueues returns one or more rows from task_queues table
 		// Required Filter params:
 		//  to read a single row: {shardID, namespaceID, name, taskType}
 		//  to range read multiple rows: {shardID, namespaceIDGreaterThan, nameGreaterThan, taskTypeGreaterThan, pageSize}
-		SelectFromTaskQueues(filter *TaskQueuesFilter) ([]TaskQueuesRow, error)
-		DeleteFromTaskQueues(filter *TaskQueuesFilter) (sql.Result, error)
-		LockTaskQueues(filter *TaskQueuesFilter) (int64, error)
+		SelectFromTaskQueues(filter TaskQueuesFilter) ([]TaskQueuesRow, error)
+		DeleteFromTaskQueues(filter TaskQueuesFilter) (sql.Result, error)
+		LockTaskQueues(filter TaskQueuesFilter) (int64, error)
 	}
 )

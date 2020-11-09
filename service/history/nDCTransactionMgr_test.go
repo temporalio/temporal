@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -54,7 +55,7 @@ type (
 		*require.Assertions
 
 		controller           *gomock.Controller
-		mockShard            *shardContextTest
+		mockShard            *shard.ContextTest
 		mockCreateMgr        *MocknDCTransactionMgrForNewWorkflow
 		mockUpdateMgr        *MocknDCTransactionMgrForExistingWorkflow
 		mockEventsReapplier  *MocknDCEventsReapplier
@@ -84,7 +85,7 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 	s.mockEventsReapplier = NewMocknDCEventsReapplier(s.controller)
 	s.mockWorkflowResetter = NewMockworkflowResetter(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -95,8 +96,8 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 		NewDynamicConfigForTest(),
 	)
 
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 
 	s.logger = s.mockShard.GetLogger()
 	s.namespaceEntry = testGlobalNamespaceEntry
@@ -187,10 +188,10 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 	lastWorkflowTaskStartedEventID := int64(9999)
 	nextEventID := lastWorkflowTaskStartedEventID * 2
 	lastWorkflowTaskStartedVersion := s.namespaceEntry.GetFailoverVersion()
-	versionHistory := versionhistory.New([]byte("branch token"), []*historyspb.VersionHistoryItem{
+	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
 		{EventId: lastWorkflowTaskStartedEventID, Version: lastWorkflowTaskStartedVersion},
 	})
-	histories := versionhistory.NewVHS(versionHistory)
+	histories := versionhistory.NewVersionHistories(versionHistory)
 
 	releaseCalled := false
 

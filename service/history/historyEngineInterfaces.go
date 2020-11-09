@@ -32,17 +32,12 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/task"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
-	// EngineFactory is used to create an instance of sharded history engine
-	EngineFactory interface {
-		CreateEngine(context ShardContext) Engine
-	}
-
 	queueProcessor interface {
 		common.Daemon
 		notifyNewTask()
@@ -85,7 +80,7 @@ type (
 		task.PriorityTask
 		queueTaskInfo
 		GetQueueType() queueType
-		GetShard() ShardContext
+		GetShard() shard.Context
 	}
 
 	queueTaskExecutor interface {
@@ -94,7 +89,7 @@ type (
 
 	queueTaskProcessor interface {
 		common.Daemon
-		StopShardProcessor(ShardContext)
+		StopShardProcessor(shard.Context)
 		Submit(queueTask) error
 		TrySubmit(queueTask) (bool, error)
 	}
@@ -126,13 +121,6 @@ type (
 		getAckLevel() timerKey
 		getReadLevel() timerKey
 		updateAckLevel() error
-	}
-
-	historyEventNotifier interface {
-		common.Daemon
-		NotifyNewHistoryEvent(event *historyEventNotification)
-		WatchHistoryEvent(identifier definition.WorkflowIdentifier) (string, chan *historyEventNotification, error)
-		UnwatchHistoryEvent(identifier definition.WorkflowIdentifier, subscriberID string) error
 	}
 
 	queueType int

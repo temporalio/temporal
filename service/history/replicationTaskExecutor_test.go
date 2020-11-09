@@ -27,7 +27,6 @@ package history
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -45,12 +44,13 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -61,9 +61,9 @@ type (
 
 		currentCluster     string
 		mockResource       *resource.Test
-		mockShard          ShardContext
+		mockShard          *shard.ContextTest
 		mockEngine         *MockEngine
-		config             *Config
+		config             *configs.Config
 		historyClient      *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *cache.MockNamespaceCache
 		mockClientBean     *client.MockBean
@@ -94,32 +94,27 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.currentCluster = "test"
 
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
+	s.config = NewDynamicConfigForTest()
+	s.mockShard = shard.NewTestContext(
+		s.controller,
+		&persistence.ShardInfoWithFailover{
+			ShardInfo: &persistencespb.ShardInfo{
+				ShardId:                0,
+				RangeId:                1,
+				ReplicationAckLevel:    0,
+				ReplicationDlqAckLevel: map[string]int64{"test": -1},
+			}},
+		s.config,
+	)
+	s.mockEngine = NewMockEngine(s.controller)
+	s.mockResource = s.mockShard.Resource
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockClientBean = s.mockResource.ClientBean
 	s.adminClient = s.mockResource.RemoteAdminClient
 	s.clusterMetadata = s.mockResource.ClusterMetadata
 	s.executionManager = s.mockResource.ExecutionMgr
 	s.nDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
-	logger := log.NewNoop()
-	s.mockShard = &shardContextImpl{
-		shardID:  0,
-		Resource: s.mockResource,
-		shardInfo: &persistence.ShardInfoWithFailover{ShardInfo: &persistencespb.ShardInfo{
-			ShardId:                0,
-			RangeId:                1,
-			ReplicationAckLevel:    0,
-			ReplicationDlqAckLevel: map[string]int64{"test": -1},
-		}},
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		config:                    NewDynamicConfigForTest(),
-		logger:                    logger,
-		remoteClusterCurrentTime:  make(map[string]time.Time),
-		executionManager:          s.executionManager,
-	}
-	s.mockEngine = NewMockEngine(s.controller)
-	s.config = NewDynamicConfigForTest()
+
 	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return("active").AnyTimes()

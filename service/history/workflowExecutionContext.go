@@ -48,6 +48,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 const (
@@ -131,13 +134,13 @@ type (
 	workflowExecutionContextImpl struct {
 		namespaceID       string
 		workflowExecution commonpb.WorkflowExecution
-		shard             ShardContext
-		engine            Engine
+		shard             shard.Context
+		engine            shard.Engine
 		executionManager  persistence.ExecutionManager
 		logger            log.Logger
 		metricsClient     metrics.Client
 		timeSource        clock.TimeSource
-		config            *Config
+		config            *configs.Config
 
 		mutex           locks.Mutex
 		mutableState    mutableState
@@ -155,7 +158,7 @@ var (
 func newWorkflowExecutionContext(
 	namespaceID string,
 	execution commonpb.WorkflowExecution,
-	shard ShardContext,
+	shard shard.Context,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) *workflowExecutionContextImpl {
@@ -537,7 +540,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 
 	workflowState, workflowStatus := resetMutableState.GetWorkflowStateStatus()
 	// Current branch changed and notify the watchers
-	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
+	c.engine.NotifyNewHistoryEvent(events.NewNotification(
 		c.namespaceID,
 		&c.workflowExecution,
 		resetMutableState.GetLastFirstEventID(),
@@ -760,7 +763,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		return err
 	}
 	workflowState, workflowStatus := c.mutableState.GetWorkflowStateStatus()
-	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
+	c.engine.NotifyNewHistoryEvent(events.NewNotification(
 		c.namespaceID,
 		&c.workflowExecution,
 		c.mutableState.GetLastFirstEventID(),

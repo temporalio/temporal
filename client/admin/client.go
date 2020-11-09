@@ -119,18 +119,18 @@ func (c *clientImpl) CloseShard(
 	return client.CloseShard(ctx, request, opts...)
 }
 
-func (c *clientImpl) DescribeWorkflowExecution(
+func (c *clientImpl) DescribeMutableState(
 	ctx context.Context,
-	request *adminservice.DescribeWorkflowExecutionRequest,
+	request *adminservice.DescribeMutableStateRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.DescribeWorkflowExecutionResponse, error) {
+) (*adminservice.DescribeMutableStateResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.DescribeWorkflowExecution(ctx, request, opts...)
+	return client.DescribeMutableState(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetWorkflowExecutionRawHistoryV2(

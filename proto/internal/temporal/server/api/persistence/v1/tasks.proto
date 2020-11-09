@@ -29,8 +29,6 @@ import "dependencies/gogoproto/gogo.proto";
 
 import "temporal/api/enums/v1/task_queue.proto";
 
-import "temporal/server/api/enums/v1/task.proto";
-
 // task column
 message AllocatedTaskInfo {
     TaskInfo data = 1;

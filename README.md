@@ -1,4 +1,4 @@
-[![Build status](https://badge.buildkite.com/fc0e676d7bee1a159916af52ebdb541708d4b9f88b8a980f6b.svg)](https://buildkite.com/temporal/temporal-server)
+[![Build status](https://badge.buildkite.com/fc0e676d7bee1a159916af52ebdb541708d4b9f88b8a980f6b.svg?branch=master)](https://buildkite.com/temporal/temporal-server)
 [![Coverage Status](https://coveralls.io/repos/github/temporalio/temporal/badge.svg?branch=master)](https://coveralls.io/github/temporalio/temporal?branch=master)
 [![Discourse](https://img.shields.io/static/v1?label=Discourse&message=Get%20Help&color=informational)](https://community.temporal.io)
 
@@ -35,17 +35,17 @@ We have a number of [HelloWorld type scenarios](https://github.com/temporalio/sa
 
 ### Use CLI
 
-Use [Temporal's command line tool](https://docs.temporal.io/docs/tctl) `tctl` to interact with the local Temporal server.
+Use [Temporal's command line tool](https://docs.temporal.io/docs/tctl) `tctl` to interact with the local Temporal server (`--address` flag is for Mac users only).
 
 ```bash
-$ alias tctl="docker run --rm temporalio/tctl:latest --address host.docker.internal:7233"
+$ alias tctl="docker run --rm --entrypoint tctl temporalio/admin-tools:latest --address host.docker.internal:7233"
 $ tctl namespace list
 $ tctl workflow list
 ```
 
 ### Use Temporal Web UI
 
-Try [Temporal Web UI](https://github.com/temporalio/web) by opening [http://localhost:8088](http://localhost:8088)for viewing your sample workflows executing on Temporal.
+Try [Temporal Web UI](https://github.com/temporalio/web) by opening [http://localhost:8088](http://localhost:8088) for viewing your sample workflows executing on Temporal.
 
 ## Repository
 

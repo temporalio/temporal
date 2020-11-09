@@ -51,6 +51,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -59,8 +61,8 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockShard           *shardContextTest
-		mockEventsCache     *MockeventsCache
+		mockShard           *shard.ContextTest
+		mockEventsCache     *events.MockCache
 		mockTaskRefresher   *MockmutableStateTaskRefresher
 		mockNamespaceCache  *cache.MockNamespaceCache
 		mockClusterMetadata *cluster.MockMetadata
@@ -87,7 +89,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskRefresher = NewMockmutableStateTaskRefresher(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -98,12 +100,12 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 		NewDynamicConfigForTest(),
 	)
 
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
-	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockEventsCache = s.mockShard.mockEventsCache
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
 
@@ -340,10 +342,10 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowId)
 	s.Equal(targetRunID, rebuildMutableState.GetExecutionState().RunId)
 	s.Equal(int64(historySize1+historySize2), rebuiltHistorySize)
-	s.Equal(versionhistory.NewVHS(
-		versionhistory.New(
+	s.Equal(versionhistory.NewVersionHistories(
+		versionhistory.NewVersionHistory(
 			targetBranchToken,
-			[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID, version)},
+			[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},
 		),
 	), rebuildMutableState.GetExecutionInfo().GetVersionHistories())
 	s.Equal(rebuildMutableState.GetExecutionInfo().StartTime, now)

@@ -30,6 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/metrics"
 
 	"go.temporal.io/api/serviceerror"
@@ -91,6 +92,11 @@ func (reqCtx *handlerContext) handleErr(err error) error {
 	}
 
 	scope := reqCtx.scope
+
+	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
+		scope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
+		return err
+	}
 
 	switch err.(type) {
 	case *serviceerror.Internal:

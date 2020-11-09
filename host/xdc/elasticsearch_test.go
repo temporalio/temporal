@@ -157,7 +157,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	namespace := "test-xdc-search-attr-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		Clusters:                         clusterReplicationConfigES,
 		ActiveClusterName:                clusterNameES[0],
 		IsGlobalNamespace:                true,
@@ -167,7 +167,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)

@@ -40,7 +40,6 @@ import (
 	history "go.temporal.io/api/history/v1"
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
-
 	enums0 "go.temporal.io/server/api/enums/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
@@ -662,18 +661,18 @@ func (mr *MockmutableStateMockRecorder) AddUpsertWorkflowSearchAttributesEvent(a
 }
 
 // AddWorkflowExecutionCancelRequestedEvent mocks base method.
-func (m *MockmutableState) AddWorkflowExecutionCancelRequestedEvent(arg0 string, arg1 *historyservice.RequestCancelWorkflowExecutionRequest) (*history.HistoryEvent, error) {
+func (m *MockmutableState) AddWorkflowExecutionCancelRequestedEvent(arg0 *historyservice.RequestCancelWorkflowExecutionRequest) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowExecutionCancelRequestedEvent", arg0, arg1)
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionCancelRequestedEvent", arg0)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddWorkflowExecutionCancelRequestedEvent indicates an expected call of AddWorkflowExecutionCancelRequestedEvent.
-func (mr *MockmutableStateMockRecorder) AddWorkflowExecutionCancelRequestedEvent(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockmutableStateMockRecorder) AddWorkflowExecutionCancelRequestedEvent(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionCancelRequestedEvent", reflect.TypeOf((*MockmutableState)(nil).AddWorkflowExecutionCancelRequestedEvent), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionCancelRequestedEvent", reflect.TypeOf((*MockmutableState)(nil).AddWorkflowExecutionCancelRequestedEvent), arg0)
 }
 
 // AddWorkflowExecutionCanceledEvent mocks base method.
@@ -762,18 +761,18 @@ func (mr *MockmutableStateMockRecorder) CheckResettable() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckResettable", reflect.TypeOf((*MockmutableState)(nil).CheckResettable))
 }
 
-// CopyToPersistence mocks base method.
-func (m *MockmutableState) CopyToPersistence() *persistence.WorkflowMutableState {
+// ToProto mocks base method.
+func (m *MockmutableState) ToProto() *persistence.WorkflowMutableState {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CopyToPersistence")
+	ret := m.ctrl.Call(m, "ToProto")
 	ret0, _ := ret[0].(*persistence.WorkflowMutableState)
 	return ret0
 }
 
-// CopyToPersistence indicates an expected call of CopyToPersistence.
-func (mr *MockmutableStateMockRecorder) CopyToPersistence() *gomock.Call {
+// ToProto indicates an expected call of ToProto.
+func (mr *MockmutableStateMockRecorder) ToProto() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyToPersistence", reflect.TypeOf((*MockmutableState)(nil).CopyToPersistence))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToProto", reflect.TypeOf((*MockmutableState)(nil).ToProto))
 }
 
 // RetryActivity mocks base method.
@@ -1481,12 +1480,11 @@ func (mr *MockmutableStateMockRecorder) HasProcessedOrPendingWorkflowTask() *gom
 }
 
 // IsCancelRequested mocks base method.
-func (m *MockmutableState) IsCancelRequested() (bool, string) {
+func (m *MockmutableState) IsCancelRequested() bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsCancelRequested")
 	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(string)
-	return ret0, ret1
+	return ret0
 }
 
 // IsCancelRequested indicates an expected call of IsCancelRequested.

@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/shard"
 )
 
 const (
@@ -57,7 +58,7 @@ type (
 	}
 
 	nDCBranchMgrImpl struct {
-		shard           ShardContext
+		shard           shard.Context
 		namespaceCache  cache.NamespaceCache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryManager
@@ -71,7 +72,7 @@ type (
 var _ nDCBranchMgr = (*nDCBranchMgrImpl)(nil)
 
 func newNDCBranchMgr(
-	shard ShardContext,
+	shard shard.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
 	logger log.Logger,
@@ -96,7 +97,7 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 	incomingFirstEventVersion int64,
 ) (bool, int32, error) {
 
-	versionHistoryIndex, lcaVersionHistoryItem, err := r.flushBufferedEvents(ctx, incomingVersionHistory)
+	lcaVersionHistoryItem, versionHistoryIndex, err := r.flushBufferedEvents(ctx, incomingVersionHistory)
 	if err != nil {
 		return false, 0, err
 	}
@@ -108,7 +109,7 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 	}
 
 	// if can directly append to a branch
-	if versionhistory.IsLCAAppendable(versionHistory, lcaVersionHistoryItem) {
+	if versionhistory.IsLCAVersionHistoryItemAppendable(versionHistory, lcaVersionHistoryItem) {
 		doContinue, err := r.verifyEventsOrder(
 			ctx,
 			versionHistory,
@@ -121,7 +122,7 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 		return doContinue, versionHistoryIndex, nil
 	}
 
-	newVersionHistory, err := versionhistory.DuplicateUntilLCAItem(versionHistory, lcaVersionHistoryItem)
+	newVersionHistory, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(versionHistory, lcaVersionHistoryItem)
 	if err != nil {
 		return false, 0, err
 	}
@@ -153,22 +154,22 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 func (r *nDCBranchMgrImpl) flushBufferedEvents(
 	ctx context.Context,
 	incomingVersionHistory *historyspb.VersionHistory,
-) (int32, *historyspb.VersionHistoryItem, error) {
+) (*historyspb.VersionHistoryItem, int32, error) {
 
 	localVersionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 
-	versionHistoryIndex, lcaVersionHistoryItem, err := versionhistory.FindLCAVersionHistoryIndexAndItem(
+	lcaVersionHistoryItem, versionHistoryIndex, err := versionhistory.FindLCAVersionHistoryItemAndIndex(
 		localVersionHistories,
 		incomingVersionHistory,
 	)
 	if err != nil {
-		return 0, nil, err
+		return nil, 0, err
 	}
 
 	// check whether there are buffered events, if so, flush it
 	// NOTE: buffered events does not show in version history or next event id
 	if !r.mutableState.HasBufferedEvents() {
-		return versionHistoryIndex, lcaVersionHistoryItem, nil
+		return lcaVersionHistoryItem, versionHistoryIndex, nil
 	}
 
 	targetWorkflow := newNDCWorkflow(
@@ -180,20 +181,20 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 		noopReleaseFn,
 	)
 	if err := targetWorkflow.flushBufferedEvents(); err != nil {
-		return 0, nil, err
+		return nil, 0, err
 	}
 	// the workflow must be updated as active, to send out replication tasks
 	if err := targetWorkflow.context.updateWorkflowExecutionAsActive(
 		r.shard.GetTimeSource().Now(),
 	); err != nil {
-		return 0, nil, err
+		return nil, 0, err
 	}
 
 	r.context = targetWorkflow.getContext()
 	r.mutableState = targetWorkflow.getMutableState()
 
 	localVersionHistories = r.mutableState.GetExecutionInfo().GetVersionHistories()
-	return versionhistory.FindLCAVersionHistoryIndexAndItem(localVersionHistories, incomingVersionHistory)
+	return versionhistory.FindLCAVersionHistoryItemAndIndex(localVersionHistories, incomingVersionHistory)
 }
 
 func (r *nDCBranchMgrImpl) verifyEventsOrder(
@@ -203,7 +204,7 @@ func (r *nDCBranchMgrImpl) verifyEventsOrder(
 	incomingFirstEventVersion int64,
 ) (bool, error) {
 
-	lastVersionHistoryItem, err := versionhistory.GetLastItem(localVersionHistory)
+	lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(localVersionHistory)
 	if err != nil {
 		return false, err
 	}
@@ -252,9 +253,8 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 		return 0, err
 	}
 
-	if err := versionhistory.SetBranchToken(newVersionHistory, resp.NewBranchToken); err != nil {
-		return 0, err
-	}
+	versionhistory.SetVersionHistoryBranchToken(newVersionHistory, resp.NewBranchToken)
+
 	branchChanged, newIndex, err := versionhistory.AddVersionHistory(
 		r.mutableState.GetExecutionInfo().GetVersionHistories(),
 		newVersionHistory,

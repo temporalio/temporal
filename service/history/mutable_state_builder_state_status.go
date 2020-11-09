@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package wss
+package history
 
 import (
 	"fmt"
@@ -39,13 +39,12 @@ const (
 	invalidStateTransitionMsg = "unable to change workflow state from %v to %v, status %v"
 )
 
-// UpdateWorkflowStateStatus update the workflow state
-func UpdateWorkflowStateStatus(
+// setStateStatus sets state and status in WorkflowExecutionState.
+func setStateStatus(
 	e *persistencespb.WorkflowExecutionState,
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 ) error {
-
 	switch e.GetState() {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_VOID:
 		// no validation
@@ -53,24 +52,24 @@ func UpdateWorkflowStateStatus(
 		switch state {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return createInvalidStateTransitionErr(e.GetState(), state, status)
+				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return createInvalidStateTransitionErr(e.GetState(), state, status)
+				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED &&
 				status != enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT &&
 				status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
-				return createInvalidStateTransitionErr(e.GetState(), state, status)
+				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return createInvalidStateTransitionErr(e.GetState(), state, status)
+				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		default:
@@ -79,21 +78,21 @@ func UpdateWorkflowStateStatus(
 	case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		switch state {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
-			return createInvalidStateTransitionErr(e.GetState(), state, status)
+			return invalidStateTransitionErr(e.GetState(), state, status)
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return createInvalidStateTransitionErr(e.GetState(), state, status)
+				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return createInvalidStateTransitionErr(e.GetState(), state, status)
+				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return createInvalidStateTransitionErr(e.GetState(), state, status)
+				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		default:
@@ -102,18 +101,18 @@ func UpdateWorkflowStateStatus(
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		switch state {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
-			return createInvalidStateTransitionErr(e.GetState(), state, status)
+			return invalidStateTransitionErr(e.GetState(), state, status)
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-			return createInvalidStateTransitionErr(e.GetState(), state, status)
+			return invalidStateTransitionErr(e.GetState(), state, status)
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 			if status != e.GetStatus() {
-				return createInvalidStateTransitionErr(e.GetState(), state, status)
+				return invalidStateTransitionErr(e.GetState(), state, status)
 
 			}
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
-			return createInvalidStateTransitionErr(e.GetState(), state, status)
+			return invalidStateTransitionErr(e.GetState(), state, status)
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
@@ -122,22 +121,22 @@ func UpdateWorkflowStateStatus(
 		switch state {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return createInvalidStateTransitionErr(e.GetState(), state, status)
+				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return createInvalidStateTransitionErr(e.GetState(), state, status)
+				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return createInvalidStateTransitionErr(e.GetState(), state, status)
+				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return createInvalidStateTransitionErr(e.GetState(), state, status)
+				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		default:
@@ -152,8 +151,7 @@ func UpdateWorkflowStateStatus(
 	return nil
 }
 
-// UpdateWorkflowStateStatus update the workflow state
-func createInvalidStateTransitionErr(
+func invalidStateTransitionErr(
 	currentState enumsspb.WorkflowExecutionState,
 	targetState enumsspb.WorkflowExecutionState,
 	targetStatus enumspb.WorkflowExecutionStatus,

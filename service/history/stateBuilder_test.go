@@ -48,6 +48,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -56,8 +58,8 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockShard           *shardContextTest
-		mockEventsCache     *MockeventsCache
+		mockShard           *shard.ContextTest
+		mockEventsCache     *events.MockCache
 		mockNamespaceCache  *cache.MockNamespaceCache
 		mockTaskGenerator   *MockmutableStateTaskGenerator
 		mockMutableState    *MockmutableState
@@ -93,7 +95,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.mockMutableState = NewMockmutableState(s.controller)
 	s.mockTaskGeneratorForNew = NewMockmutableStateTaskGenerator(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -104,15 +106,15 @@ func (s *stateBuilderSuite) SetupTest() {
 		NewDynamicConfigForTest(),
 	)
 
-	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockEventsCache = s.mockShard.mockEventsCache
+	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
-	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionhistory.NewVHS(&historyspb.VersionHistory{})}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{})}).AnyTimes()
 
 	s.stateBuilder = newStateBuilder(
 		s.mockShard,
@@ -144,7 +146,7 @@ func (s *stateBuilderSuite) mockUpdateVersion(events ...*historypb.HistoryEvent)
 	s.mockTaskGenerator.EXPECT().generateUserTimerTasks(
 		timestamp.TimeValue(events[len(events)-1].GetEventTime()),
 	).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().SetHistoryBuilder(newHistoryBuilderFromEvents(events, s.logger)).Times(1)
+	s.mockMutableState.EXPECT().SetHistoryBuilder(newHistoryBuilderFromEvents(events)).Times(1)
 }
 
 func (s *stateBuilderSuite) toHistory(events ...*historypb.HistoryEvent) []*historypb.HistoryEvent {

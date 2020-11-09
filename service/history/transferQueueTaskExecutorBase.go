@@ -46,6 +46,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -55,23 +57,23 @@ const (
 
 type (
 	transferQueueTaskExecutorBase struct {
-		shard          ShardContext
+		shard          shard.Context
 		historyService *historyEngineImpl
 		cache          *historyCache
 		logger         log.Logger
 		metricsClient  metrics.Client
 		matchingClient matching.Client
 		visibilityMgr  persistence.VisibilityManager
-		config         *Config
+		config         *configs.Config
 	}
 )
 
 func newTransferQueueTaskExecutorBase(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	logger log.Logger,
 	metricsClient metrics.Client,
-	config *Config,
+	config *configs.Config,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
 		shard:          shard,

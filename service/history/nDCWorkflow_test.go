@@ -321,13 +321,16 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		WorkflowId:      s.workflowID,
 		LastEventTaskId: lastEventTaskID,
 	}
-	executionState := &persistencespb.WorkflowExecutionState{
-		RunId:  s.runID,
-		State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
+	executionState := &persistencespb.WorkflowExecutionState{
+		RunId: s.runID,
+	}
+	s.mockMutableState.EXPECT().UpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING).
+		DoAndReturn(func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error {
+			executionState.State, executionState.Status = state, status
+			return nil
+		}).AnyTimes()
+
 	nDCWorkflow := newNDCWorkflow(
 		context.Background(),
 		s.mockNamespaceCache,

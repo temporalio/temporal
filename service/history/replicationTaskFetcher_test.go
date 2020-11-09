@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -46,7 +47,7 @@ type (
 		controller *gomock.Controller
 
 		mockResource           *resource.Test
-		config                 *Config
+		config                 *configs.Config
 		frontendClient         *adminservicemock.MockAdminServiceClient
 		replicationTaskFetcher *ReplicationTaskFetcherImpl
 	}

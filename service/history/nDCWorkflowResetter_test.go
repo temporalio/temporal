@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -52,7 +53,7 @@ type (
 		*require.Assertions
 
 		controller              *gomock.Controller
-		mockShard               *shardContextTest
+		mockShard               *shard.ContextTest
 		mockBaseMutableState    *MockmutableState
 		mockRebuiltMutableState *MockmutableState
 		mockTransactionMgr      *MocknDCTransactionMgr
@@ -86,7 +87,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 	s.mockTransactionMgr = NewMocknDCTransactionMgr(s.controller)
 	s.mockStateBuilder = NewMocknDCStateRebuilder(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -97,7 +98,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 		NewDynamicConfigForTest(),
 	)
 
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
 
 	s.logger = s.mockShard.GetLogger()
 
@@ -135,11 +136,11 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(500)
 	version := int64(123)
-	versionHistory := versionhistory.New(
+	versionHistory := versionhistory.NewVersionHistory(
 		branchToken,
-		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID, version)},
+		[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},
 	)
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 
 	baseEventID := lastEventID - 100
 	baseVersion := version
@@ -215,11 +216,11 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(500)
 	version := int64(123)
-	versionHistory := versionhistory.New(
+	versionHistory := versionhistory.NewVersionHistory(
 		branchToken,
-		[]*historyspb.VersionHistoryItem{versionhistory.NewItem(lastEventID, version)},
+		[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},
 	)
-	versionHistories := versionhistory.NewVHS(versionHistory)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	baseEventID := lastEventID + 100
 	baseVersion := version
 	incomingFirstEventID := baseEventID + 12

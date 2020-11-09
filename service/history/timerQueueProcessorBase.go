@@ -33,6 +33,8 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -56,14 +58,14 @@ var (
 type (
 	timerQueueProcessorBase struct {
 		scope                int
-		shard                ShardContext
+		shard                shard.Context
 		historyService       *historyEngineImpl
 		cache                *historyCache
 		executionManager     persistence.ExecutionManager
 		status               int32
 		shutdownWG           sync.WaitGroup
 		shutdownCh           chan struct{}
-		config               *Config
+		config               *configs.Config
 		logger               log.Logger
 		metricsClient        metrics.Client
 		metricsScope         metrics.Scope
@@ -89,7 +91,7 @@ type (
 
 func newTimerQueueProcessorBase(
 	scope int,
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	timerProcessor timerProcessor,
 	queueTaskProcessor queueTaskProcessor,
@@ -316,7 +318,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 				t.config.TimerProcessorUpdateAckInterval(),
 				t.config.TimerProcessorUpdateAckIntervalJitterCoefficient(),
 			))
-			if err := t.timerQueueAckMgr.updateAckLevel(); err == ErrShardClosed {
+			if err := t.timerQueueAckMgr.updateAckLevel(); err == shard.ErrShardClosed {
 				// shard is closed, shutdown timerQProcessor and bail out
 				go t.Stop()
 				return err

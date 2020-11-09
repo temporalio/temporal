@@ -38,6 +38,7 @@ import (
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
 	persistence "go.temporal.io/server/common/persistence"
+	events "go.temporal.io/server/service/history/events"
 )
 
 // MockEngine is a mock of Engine interface.
@@ -567,7 +568,7 @@ func (mr *MockEngineMockRecorder) RefreshWorkflowTasks(ctx, namespaceUUID, execu
 }
 
 // NotifyNewHistoryEvent mocks base method.
-func (m *MockEngine) NotifyNewHistoryEvent(event *historyEventNotification) {
+func (m *MockEngine) NotifyNewHistoryEvent(event *events.Notification) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyNewHistoryEvent", event)
 }

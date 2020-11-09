@@ -243,7 +243,7 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 		return nil, err
 	}
 
-	if request.GetName() == "" {
+	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
 	}
 
@@ -274,7 +274,7 @@ func (wh *WorkflowHandler) DescribeNamespace(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
-	if request.GetName() == "" && request.GetId() == "" {
+	if request.GetNamespace() == "" && request.GetId() == "" {
 		return nil, errNamespaceNotSet
 	}
 
@@ -337,7 +337,7 @@ func (wh *WorkflowHandler) UpdateNamespace(ctx context.Context, request *workflo
 		}
 	}
 
-	if request.GetName() == "" {
+	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
 	}
 
@@ -373,7 +373,7 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 		return nil, err
 	}
 
-	if request.GetName() == "" {
+	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
 	}
 
@@ -837,8 +837,8 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
-		if err != nil {
+		errCancel := wh.cancelOutstandingPoll(ctx, err, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
+		if errCancel != nil {
 			// For all other errors log an error and return it back to client.
 			ctxTimeout := "not-set"
 			ctxDeadline, ok := ctx.Deadline()
@@ -848,12 +848,9 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 			wh.GetLogger().Error("PollWorkflowTaskQueue failed.",
 				tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
 				tag.Value(ctxTimeout),
-				tag.Error(err))
-			return nil, wh.error(err, scope)
+				tag.Error(errCancel))
 		}
-
-		// Must be cancellation error.  Doesn't matter what we return here.  Client already went away.
-		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
+		return nil, wh.error(err, scope)
 	}
 
 	tagsForErrorLog = append(tagsForErrorLog, []tag.Tag{tag.WorkflowID(
@@ -1109,7 +1106,6 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 				tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
 				tag.Value(ctxTimeout),
 				tag.Error(errCancel))
-			return nil, wh.error(errCancel, scope)
 		}
 		return nil, wh.error(err, scope)
 	}
