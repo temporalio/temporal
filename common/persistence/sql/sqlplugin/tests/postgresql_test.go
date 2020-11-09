@@ -62,7 +62,7 @@ func TestPostgreSQLNamespaceSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL DB: %v", err))
+		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -79,7 +79,7 @@ func TestPostgreSQLQueueMessageSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL DB: %v", err))
+		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -90,13 +90,30 @@ func TestPostgreSQLQueueMessageSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestPostgreSQLQueueMetadataSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		t.Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newQueueMetadataSuite(t, store)
+	suite.Run(t, s)
+}
+
 func TestPostgreSQLMatchingTaskSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL DB: %v", err))
+		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -113,7 +130,7 @@ func TestPostgreSQLMatchingTaskQueueSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL DB: %v", err))
+		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -130,7 +147,7 @@ func TestPostgreSQLHistoryShardSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -147,7 +164,7 @@ func TestPostgreSQLHistoryNodeSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -164,7 +181,7 @@ func TestPostgreSQLHistoryTreeSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -181,7 +198,7 @@ func TestPostgreSQLHistoryCurrentExecutionSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -198,7 +215,7 @@ func TestPostgreSQLHistoryExecutionSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -215,7 +232,7 @@ func TestPostgreSQLHistoryTransferTaskSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -232,7 +249,7 @@ func TestPostgreSQLHistoryTimerTaskSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -249,7 +266,7 @@ func TestPostgreSQLHistoryReplicationTaskSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -266,7 +283,7 @@ func TestPostgreSQLHistoryReplicationDLQTaskSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -283,7 +300,7 @@ func TestPostgreSQLHistoryExecutionBufferSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -300,7 +317,7 @@ func TestPostgreSQLHistoryExecutionActivitySuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -317,7 +334,7 @@ func TestPostgreSQLHistoryExecutionChildWorkflowSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -334,7 +351,7 @@ func TestPostgreSQLHistoryExecutionTimerSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -351,7 +368,7 @@ func TestPostgreSQLHistoryExecutionRequestCancelSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -368,7 +385,7 @@ func TestPostgreSQLHistoryExecutionSignalSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -385,7 +402,7 @@ func TestPostgreSQLHistoryExecutionSignalRequestSuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -402,7 +419,7 @@ func TestPostgreSQLVisibilitySuite(t *testing.T) {
 	SetupPostgreSQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()

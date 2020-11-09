@@ -927,11 +927,11 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 	if err != nil {
 		return nil, err
 	}
-	firstItem, err := versionhistory.GetFirstItem(targetBranch)
+	firstItem, err := versionhistory.GetFirstVersionHistoryItem(targetBranch)
 	if err != nil {
 		return nil, err
 	}
-	lastItem, err := versionhistory.GetLastItem(targetBranch)
+	lastItem, err := versionhistory.GetLastVersionHistoryItem(targetBranch)
 	if err != nil {
 		return nil, err
 	}
@@ -958,8 +958,8 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 		request.GetEndEventVersion() == lastItem.GetVersion() {
 		// this is a special case, target branch remains the same
 	} else {
-		endItem := versionhistory.NewItem(request.GetEndEventId(), request.GetEndEventVersion())
-		idx, err := versionhistory.FindFirstVersionHistoryIndexByItem(versionHistories, endItem)
+		endItem := versionhistory.NewVersionHistoryItem(request.GetEndEventId(), request.GetEndEventVersion())
+		idx, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(versionHistories, endItem)
 		if err != nil {
 			return nil, err
 		}
@@ -970,15 +970,15 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 		}
 	}
 
-	startItem := versionhistory.NewItem(request.GetStartEventId(), request.GetStartEventVersion())
+	startItem := versionhistory.NewVersionHistoryItem(request.GetStartEventId(), request.GetStartEventVersion())
 	// If the request start event is defined. The start event may be on a different branch as current branch.
 	// We need to find the LCA of the start event and the current branch.
 	if request.GetStartEventId() == common.FirstEventID-1 &&
 		request.GetStartEventVersion() == firstItem.GetVersion() {
 		// this is a special case, start event is on the same branch as target branch
 	} else {
-		if !versionhistory.ContainsItem(targetBranch, startItem) {
-			idx, err := versionhistory.FindFirstVersionHistoryIndexByItem(versionHistories, startItem)
+		if !versionhistory.ContainsVersionHistoryItem(targetBranch, startItem) {
+			idx, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(versionHistories, startItem)
 			if err != nil {
 				return nil, err
 			}
@@ -986,7 +986,7 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 			if err != nil {
 				return nil, err
 			}
-			startItem, err = versionhistory.FindLCAItem(targetBranch, startBranch)
+			startItem, err = versionhistory.FindLCAVersionHistoryItem(targetBranch, startBranch)
 			if err != nil {
 				return nil, err
 			}

@@ -97,7 +97,7 @@ func (s *integrationSuite) TestResetWorkflow() {
 						TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
 						Input:                  payloads.EncodeBytes(buf.Bytes()),
 						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-						ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
+						ScheduleToStartTimeout: timestamp.DurationPtr(100 * time.Second),
 						StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
 						HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 					}},

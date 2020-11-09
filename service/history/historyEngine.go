@@ -1746,7 +1746,9 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 	return e.updateWorkflow(ctx, namespaceID, execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, ErrWorkflowCompleted
+				// the request to cancel this workflow is a success even
+				// if the target workflow has already finished
+				return &updateWorkflowAction{noop: true}, nil
 			}
 
 			// There is a workflow execution currently running with the WorkflowID.
@@ -1767,21 +1769,13 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 				}
 			}
 
-			isCancelRequested, cancelRequestID := mutableState.IsCancelRequested()
+			isCancelRequested := mutableState.IsCancelRequested()
 			if isCancelRequested {
-				cancelRequest := req.CancelRequest
-				if cancelRequest.GetRequestId() != "" {
-					requestID := cancelRequest.GetRequestId()
-					if requestID != "" && cancelRequestID == requestID {
-						return updateWorkflowWithNewWorkflowTask, nil
-					}
-				}
-				// if we consider workflow cancellation idempotent, then this error is redundant
-				// this error maybe useful if this API is invoked by external, not workflow task from transfer queue.
-				return nil, ErrCancellationAlreadyRequested
+				// since cancellation is idempotent
+				return &updateWorkflowAction{noop: true}, nil
 			}
 
-			if _, err := mutableState.AddWorkflowExecutionCancelRequestedEvent("", req); err != nil {
+			if _, err := mutableState.AddWorkflowExecutionCancelRequestedEvent(req); err != nil {
 				return nil, serviceerror.NewInternal("Unable to cancel workflow execution.")
 			}
 
@@ -2330,7 +2324,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	baseRebuildLastEventVersion, err := versionhistory.GetEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
+	baseRebuildLastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
 	if err != nil {
 		return nil, err
 	}
@@ -2938,7 +2932,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 				if err != nil {
 					return nil, err
 				}
-				baseRebuildLastEventVersion, err := versionhistory.GetEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
+				baseRebuildLastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
 				if err != nil {
 					return nil, err
 				}

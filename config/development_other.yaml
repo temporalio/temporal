@@ -64,12 +64,12 @@ clusterMetadata:
       enabled: true
       initialFailoverVersion: 2
       rpcName: "frontend"
-      rpcAddress: "localhost:8933"
+      rpcAddress: "localhost:8233"
     other:
       enabled: true
       initialFailoverVersion: 3
       rpcName: "frontend"
-      rpcAddress: "localhost:9933"
+      rpcAddress: "localhost:9233"
 
 dcRedirectionPolicy:
   policy: "selected-apis-forwarding"

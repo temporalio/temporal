@@ -43,6 +43,7 @@ type (
 		Namespace
 		Visibility
 		QueueMessage
+		QueueMetadata
 
 		MatchingTask
 		MatchingTaskQueue

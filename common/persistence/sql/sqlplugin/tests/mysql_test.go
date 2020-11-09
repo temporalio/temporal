@@ -62,7 +62,7 @@ func TestMySQLNamespaceSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -79,7 +79,7 @@ func TestMySQLQueueMessageSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -90,13 +90,30 @@ func TestMySQLQueueMessageSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestMySQLQueueMetadataSuite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(cfg)
+	SetupMySQLSchema(cfg)
+	store, err := sql.NewSQLDB(cfg)
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(cfg)
+	}()
+
+	s := newQueueMetadataSuite(t, store)
+	suite.Run(t, s)
+}
+
 func TestMySQLMatchingTaskSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(cfg)
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -113,7 +130,7 @@ func TestMySQLMatchingTaskQueueSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -130,7 +147,7 @@ func TestMySQLHistoryShardSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -147,7 +164,7 @@ func TestMySQLHistoryNodeSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -164,7 +181,7 @@ func TestMySQLHistoryTreeSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -181,7 +198,7 @@ func TestMySQLHistoryCurrentExecutionSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -198,7 +215,7 @@ func TestMySQLHistoryExecutionSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -215,7 +232,7 @@ func TestMySQLHistoryTransferTaskSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -232,7 +249,7 @@ func TestMySQLHistoryTimerTaskSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -249,7 +266,7 @@ func TestMySQLHistoryReplicationTaskSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -266,7 +283,7 @@ func TestMySQLHistoryReplicationDLQTaskSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -283,7 +300,7 @@ func TestMySQLHistoryExecutionBufferSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -300,7 +317,7 @@ func TestMySQLHistoryExecutionActivitySuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -317,7 +334,7 @@ func TestMySQLHistoryExecutionChildWorkflowSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -334,7 +351,7 @@ func TestMySQLHistoryExecutionTimerSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -351,7 +368,7 @@ func TestMySQLHistoryExecutionRequestCancelSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -368,7 +385,7 @@ func TestMySQLHistoryExecutionSignalSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -385,7 +402,7 @@ func TestMySQLHistoryExecutionSignalRequestSuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -402,7 +419,7 @@ func TestMySQLVisibilitySuite(t *testing.T) {
 	SetupMySQLSchema(cfg)
 	store, err := sql.NewSQLDB(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL DB: %v", err))
+		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()

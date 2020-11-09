@@ -278,7 +278,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		})
 	}
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace1,
+		Namespace:                        namespace1,
 		Description:                      description1,
 		OwnerEmail:                       email1,
 		WorkflowExecutionRetentionPeriod: &retention1,
@@ -306,7 +306,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	}
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 	registerResp, err = s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace2,
+		Namespace:                        namespace2,
 		Description:                      description2,
 		OwnerEmail:                       email2,
 		WorkflowExecutionRetentionPeriod: &retention2,
@@ -390,7 +390,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeriod() {
 	registerRequest := &workflowservice.RegisterNamespaceRequest{
-		Name:                             "random namespace name",
+		Namespace:                        "random namespace name",
 		Description:                      "random namespace name",
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(time.Duration(0)),
 		IsGlobalNamespace:                false,
@@ -403,7 +403,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeri
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod() {
 	namespace := "random namespace name"
 	registerRequest := &workflowservice.RegisterNamespaceRequest{
-		Name:                             namespace,
+		Namespace:                        namespace,
 		Description:                      namespace,
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(10 * time.Hour * 24),
 		IsGlobalNamespace:                false,
@@ -413,7 +413,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod
 	s.Nil(registerResp)
 
 	updateRequest := &workflowservice.UpdateNamespaceRequest{
-		Name: namespace,
+		Namespace: namespace,
 		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionTtl: timestamp.DurationPtr(time.Duration(-1)),
 		},

@@ -38,11 +38,12 @@ const (
 )
 
 type (
-	// QueueRow represents a row in queue table
-	QueueRow struct {
-		QueueType      persistence.QueueType
-		MessageID      int64
-		MessagePayload []byte
+	// QueueMessageRow represents a row in queue table
+	QueueMessageRow struct {
+		QueueType       persistence.QueueType
+		MessageID       int64
+		MessagePayload  []byte
+		MessageEncoding string
 	}
 
 	// QueueMessagesFilter
@@ -59,23 +60,13 @@ type (
 		PageSize     int
 	}
 
-	// QueueMetadataRow represents a row in queue_metadata table
-	QueueMetadataRow struct {
-		QueueType persistence.QueueType
-		Data      []byte
-	}
-
 	QueueMessage interface {
-		InsertIntoMessages(row []QueueRow) (sql.Result, error)
-		SelectFromMessages(filter QueueMessagesFilter) ([]QueueRow, error)
-		RangeSelectFromMessages(filter QueueMessagesRangeFilter) ([]QueueRow, error)
+		InsertIntoMessages(row []QueueMessageRow) (sql.Result, error)
+		SelectFromMessages(filter QueueMessagesFilter) ([]QueueMessageRow, error)
+		RangeSelectFromMessages(filter QueueMessagesRangeFilter) ([]QueueMessageRow, error)
 		DeleteFromMessages(filter QueueMessagesFilter) (sql.Result, error)
 		RangeDeleteFromMessages(filter QueueMessagesRangeFilter) (sql.Result, error)
 
 		GetLastEnqueuedMessageIDForUpdate(queueType persistence.QueueType) (int64, error)
-
-		InsertAckLevel(queueType persistence.QueueType, messageID int64, clusterName string) error
-		UpdateAckLevels(queueType persistence.QueueType, clusterAckLevels map[string]int64) error
-		GetAckLevels(queueType persistence.QueueType, forUpdate bool) (map[string]int64, error)
 	}
 )

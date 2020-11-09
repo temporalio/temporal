@@ -160,7 +160,7 @@ func getHistoryResendInfo(
 	if err != nil {
 		return nil, err
 	}
-	lastItem, err := versionhistory.GetLastItem(currentBranch)
+	lastItem, err := versionhistory.GetLastVersionHistoryItem(currentBranch)
 	if err != nil {
 		return nil, err
 	}

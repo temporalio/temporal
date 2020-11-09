@@ -57,7 +57,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/executionstate"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
@@ -244,7 +243,7 @@ func newMutableStateBuilder(
 	s.executionState = &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
 
-	s.hBuilder = newHistoryBuilder(s, logger)
+	s.hBuilder = newHistoryBuilder(s)
 	s.taskGenerator = newMutableStateTaskGenerator(shard.GetNamespaceCache(), s.logger, s)
 	s.workflowTaskManager = newMutableStateWorkflowTaskManager(s)
 
@@ -259,7 +258,7 @@ func newMutableStateBuilderWithVersionHistories(
 ) *mutableStateBuilder {
 
 	s := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry)
-	s.executionInfo.VersionHistories = versionhistory.NewVHS(&historyspb.VersionHistory{})
+	s.executionInfo.VersionHistories = versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
 	return s
 }
 
@@ -306,20 +305,17 @@ func (e *mutableStateBuilder) Load(
 
 	// back fill version history for local namespace workflows
 	if e.executionInfo.VersionHistories == nil {
-		e.executionInfo.VersionHistories = versionhistory.NewVHS(&historyspb.VersionHistory{})
+		e.executionInfo.VersionHistories = versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
 		if err != nil {
 			return err
 		}
-		if err := versionhistory.AddOrUpdateItem(currentVersionHistory, versionhistory.NewItem(
+		if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
 			e.nextEventID-1, common.EmptyVersion,
 		)); err != nil {
 			return err
 		}
-		err = versionhistory.SetBranchToken(currentVersionHistory, e.executionInfo.EventBranchToken)
-		if err != nil {
-			return err
-		}
+		versionhistory.SetVersionHistoryBranchToken(currentVersionHistory, e.executionInfo.EventBranchToken)
 		e.executionInfo.EventBranchToken = nil
 	}
 
@@ -386,7 +382,8 @@ func (e *mutableStateBuilder) SetCurrentBranchToken(
 	if err != nil {
 		return err
 	}
-	return versionhistory.SetBranchToken(currentVersionHistory, branchToken)
+	versionhistory.SetVersionHistoryBranchToken(currentVersionHistory, branchToken)
+	return nil
 }
 
 func (e *mutableStateBuilder) SetNextEventID(nextEventID int64) {
@@ -505,9 +502,9 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 			return err
 		}
 
-		if !versionhistory.IsEmpty(versionHistory) {
+		if !versionhistory.IsEmptyVersionHistory(versionHistory) {
 			// this make sure current version >= last write version
-			versionHistoryItem, err := versionhistory.GetLastItem(versionHistory)
+			versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
 			if err != nil {
 				return err
 			}
@@ -544,7 +541,7 @@ func (e *mutableStateBuilder) GetStartVersion() (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		firstItem, err := versionhistory.GetFirstItem(versionHistory)
+		firstItem, err := versionhistory.GetFirstVersionHistoryItem(versionHistory)
 		if err != nil {
 			return 0, err
 		}
@@ -561,7 +558,7 @@ func (e *mutableStateBuilder) GetLastWriteVersion() (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		lastItem, err := versionhistory.GetLastItem(versionHistory)
+		lastItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
 		if err != nil {
 			return 0, err
 		}
@@ -1573,12 +1570,8 @@ func (e *mutableStateBuilder) IsWorkflowExecutionRunning() bool {
 	}
 }
 
-func (e *mutableStateBuilder) IsCancelRequested() (bool, string) {
-	if e.executionInfo.CancelRequested {
-		return e.executionInfo.CancelRequested, e.executionState.CreateRequestId
-	}
-
-	return false, ""
+func (e *mutableStateBuilder) IsCancelRequested() bool {
+	return e.executionInfo.CancelRequested
 }
 
 func (e *mutableStateBuilder) IsSignalRequested(
@@ -2653,7 +2646,6 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTimedoutEvent(
 }
 
 func (e *mutableStateBuilder) AddWorkflowExecutionCancelRequestedEvent(
-	cause string,
 	request *historyservice.RequestCancelWorkflowExecutionRequest,
 ) (*historypb.HistoryEvent, error) {
 
@@ -2673,7 +2665,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionCancelRequestedEvent(
 		return nil, e.createInternalServerError(opTag)
 	}
 
-	event := e.hBuilder.AddWorkflowExecutionCancelRequestedEvent(cause, request)
+	event := e.hBuilder.AddWorkflowExecutionCancelRequestedEvent(request)
 	if err := e.ReplicateWorkflowExecutionCancelRequestedEvent(event); err != nil {
 		return nil, err
 	}
@@ -3825,7 +3817,7 @@ func (e *mutableStateBuilder) UpdateWorkflowStateStatus(
 	status enumspb.WorkflowExecutionStatus,
 ) error {
 
-	return executionstate.SetStateStatus(e.executionState, state, status)
+	return setStateStatus(e.executionState, state, status)
 }
 
 func (e *mutableStateBuilder) StartTransaction(
@@ -4074,7 +4066,7 @@ func (e *mutableStateBuilder) cleanupTransaction(
 ) error {
 
 	// Clear all updates to prepare for the next session
-	e.hBuilder = newHistoryBuilder(e, e.logger)
+	e.hBuilder = newHistoryBuilder(e)
 
 	e.updateActivityInfos = make(map[*persistencespb.ActivityInfo]struct{})
 	e.deleteActivityInfos = make(map[int64]struct{})
@@ -4244,7 +4236,7 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 		if err != nil {
 			return err
 		}
-		if err := versionhistory.AddOrUpdateItem(currentVersionHistory, versionhistory.NewItem(
+		if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
 			lastEvent.GetEventId(), lastEvent.GetVersion(),
 		)); err != nil {
 			return err

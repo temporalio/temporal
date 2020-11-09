@@ -46,7 +46,7 @@ const (
 var (
 	ctx                              = context.Background()
 	describeNamespaceAttributes      = &Attributes{Namespace: testNamespace, APIName: "DescribeNamespace"}
-	describeNamespaceRequest         = &workflowservice.DescribeNamespaceRequest{Name: testNamespace}
+	describeNamespaceRequest         = &workflowservice.DescribeNamespaceRequest{Namespace: testNamespace}
 	describeNamespaceInfo            = &grpc.UnaryServerInfo{FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace"}
 	startWorkflowExecutionAttributes = &Attributes{Namespace: testNamespace, APIName: "StartWorkflowExecution"}
 	startWorkflowExecutionRequest    = &workflowservice.StartWorkflowExecutionRequest{Namespace: testNamespace}

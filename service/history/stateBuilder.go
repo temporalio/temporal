@@ -122,7 +122,7 @@ func (b *stateBuilderImpl) applyEvents(
 			if err != nil {
 				return nil, err
 			}
-			if err := versionhistory.AddOrUpdateItem(versionHistory, versionhistory.NewItem(
+			if err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, versionhistory.NewVersionHistoryItem(
 				event.GetEventId(),
 				event.GetVersion(),
 			)); err != nil {
@@ -654,7 +654,7 @@ func (b *stateBuilderImpl) applyEvents(
 	b.mutableState.GetExecutionInfo().LastFirstEventId = firstEvent.GetEventId()
 	b.mutableState.SetNextEventID(lastEvent.GetEventId() + 1)
 
-	b.mutableState.SetHistoryBuilder(newHistoryBuilderFromEvents(history, b.logger))
+	b.mutableState.SetHistoryBuilder(newHistoryBuilderFromEvents(history))
 
 	return newRunMutableStateBuilder, nil
 }

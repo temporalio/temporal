@@ -4951,9 +4951,9 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 	ms.ExecutionInfo.LastProcessedEvent = 1
 	token, err := msBuilder.GetCurrentBranchToken()
 	s.NoError(err)
-	item := versionhistory.NewItem(1, 1)
-	versionHistory := versionhistory.New(token, []*historyspb.VersionHistoryItem{item})
-	ms.ExecutionInfo.VersionHistories = versionhistory.NewVHS(versionHistory)
+	item := versionhistory.NewVersionHistoryItem(1, 1)
+	versionHistory := versionhistory.NewVersionHistory(token, []*historyspb.VersionHistoryItem{item})
+	ms.ExecutionInfo.VersionHistories = versionhistory.NewVersionHistories(versionHistory)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: testRunID}
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
@@ -5318,7 +5318,7 @@ func createMutableState(ms mutableState) *persistencespb.WorkflowMutableState {
 		bufferedEvents = append(bufferedEvents, builder.updateBufferedEvents...)
 	}
 	if builder.executionInfo.VersionHistories != nil {
-		info.VersionHistories = versionhistory.DuplicateVHS(builder.executionInfo.VersionHistories)
+		info.VersionHistories = versionhistory.CopyVersionHistories(builder.executionInfo.VersionHistories)
 	}
 
 	return &persistencespb.WorkflowMutableState{
