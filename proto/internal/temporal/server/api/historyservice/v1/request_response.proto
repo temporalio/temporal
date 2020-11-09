@@ -86,7 +86,6 @@ message GetMutableStateResponse {
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11 [(gogoproto.stdduration) = true];
-    int32 event_store_version = 12;
     bytes current_branch_token = 13;
     reserved 14;
     temporal.server.api.enums.v1.WorkflowExecutionState workflow_state = 15;
@@ -151,7 +150,6 @@ message RecordWorkflowTaskStartedResponse {
     bool sticky_execution_enabled = 7;
     temporal.server.api.history.v1.TransientWorkflowTaskInfo workflow_task_info = 8;
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 9;
-    int32 event_store_version = 10;
     bytes branch_token = 11;
     google.protobuf.Timestamp scheduled_time = 12 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp started_time = 13 [(gogoproto.stdtime) = true];

@@ -781,19 +781,17 @@ func createReplicationTasks(
 		}
 
 		blob, err := serialization.ReplicationTaskInfoToBlob(&persistencespb.ReplicationTaskInfo{
-			TaskId:                  task.GetTaskID(),
-			NamespaceId:             namespaceID,
-			WorkflowId:              workflowID,
-			RunId:                   runID,
-			TaskType:                task.GetType(),
-			FirstEventId:            firstEventID,
-			NextEventId:             nextEventID,
-			Version:                 version,
-			ScheduledId:             activityScheduleID,
-			EventStoreVersion:       p.EventStoreVersion,
-			NewRunEventStoreVersion: p.EventStoreVersion,
-			BranchToken:             branchToken,
-			NewRunBranchToken:       newRunBranchToken,
+			TaskId:            task.GetTaskID(),
+			NamespaceId:       namespaceID,
+			WorkflowId:        workflowID,
+			RunId:             runID,
+			TaskType:          task.GetType(),
+			FirstEventId:      firstEventID,
+			NextEventId:       nextEventID,
+			Version:           version,
+			ScheduledId:       activityScheduleID,
+			BranchToken:       branchToken,
+			NewRunBranchToken: newRunBranchToken,
 		})
 		if err != nil {
 			return err
