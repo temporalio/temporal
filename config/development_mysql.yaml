@@ -13,7 +13,7 @@ persistence:
         password: "temporal"
         maxConns: 20
         maxIdleConns: 20
-        maxConnLifetime: "4m"
+        maxConnLifetime: "1h"
     mysql-visibility:
       sql:
         pluginName: "mysql"
@@ -24,7 +24,7 @@ persistence:
         password: "temporal"
         maxConns: 2
         maxIdleConns: 2
-        maxConnLifetime: "4m"
+        maxConnLifetime: "1h"
 
 global:
   membership:
