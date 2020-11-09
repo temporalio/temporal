@@ -1,8 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,12 +18,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package mysql
+syntax = "proto3";
 
-// NOTE: whenever there is a new data base schema update, plz update the following versions
+package temporal.server.api.persistence.v1;
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
-// Version is the MySQL database release version
-const Version = "1.2"
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
-// VisibilityVersion is the MySQL visibility database release version
-const VisibilityVersion = "1.0"
+// message_payload column
+message QueueMessage {
+
+}
+
+// data column
+message QueueMetadata {
+    map<string, int64> cluster_ack_levels = 1;
+}

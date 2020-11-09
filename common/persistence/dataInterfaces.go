@@ -53,7 +53,7 @@ const (
 type CreateWorkflowMode int
 
 // QueueType is an enum that represents various queue types in persistence
-type QueueType int
+type QueueType int32
 
 // Queue types used in queue table
 // Use positive numbers for queue type

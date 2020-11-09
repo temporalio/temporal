@@ -30,6 +30,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -178,6 +179,7 @@ type (
 		ID        int64     `json:"message_id"`
 		QueueType QueueType `json:"queue_type"`
 		Payload   []byte    `json:"message_payload"`
+		// TODO wire encoding type
 	}
 
 	// DataBlob represents a blob for any binary data.

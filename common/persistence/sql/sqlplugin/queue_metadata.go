@@ -26,47 +26,27 @@ package sqlplugin
 
 import (
 	"database/sql"
-	"math"
 
 	"go.temporal.io/server/common/persistence"
 )
 
-const (
-	EmptyMessageID = int64(-1)
-	MinMessageID   = EmptyMessageID + 1
-	MaxMessageID   = math.MaxInt64
-)
-
 type (
-	// QueueMessageRow represents a row in queue table
-	QueueMessageRow struct {
-		QueueType       persistence.QueueType
-		MessageID       int64
-		MessagePayload  []byte
-		MessageEncoding string
-	}
-
-	// QueueMessagesFilter
-	QueueMessagesFilter struct {
-		QueueType persistence.QueueType
-		MessageID int64
-	}
-
-	// QueueMessagesRangeFilter
-	QueueMessagesRangeFilter struct {
+	// QueueMetadataRow represents a row in queue_metadata table
+	QueueMetadataRow struct {
 		QueueType    persistence.QueueType
-		MinMessageID int64
-		MaxMessageID int64
-		PageSize     int
+		Data         []byte
+		DataEncoding string
 	}
 
-	QueueMessage interface {
-		InsertIntoMessages(row []QueueMessageRow) (sql.Result, error)
-		SelectFromMessages(filter QueueMessagesFilter) ([]QueueMessageRow, error)
-		RangeSelectFromMessages(filter QueueMessagesRangeFilter) ([]QueueMessageRow, error)
-		DeleteFromMessages(filter QueueMessagesFilter) (sql.Result, error)
-		RangeDeleteFromMessages(filter QueueMessagesRangeFilter) (sql.Result, error)
+	QueueMetadataFilter struct {
+		QueueType persistence.QueueType
+	}
 
-		GetLastEnqueuedMessageIDForUpdate(queueType persistence.QueueType) (int64, error)
+	QueueMetadata interface {
+		InsertIntoQueueMetadata(row *QueueMetadataRow) (sql.Result, error)
+		UpdateQueueMetadata(row *QueueMetadataRow) (sql.Result, error)
+		SelectFromQueueMetadata(filter QueueMetadataFilter) (*QueueMetadataRow, error)
+
+		LockQueueMetadata(filter QueueMetadataFilter) (*QueueMetadataRow, error)
 	}
 )

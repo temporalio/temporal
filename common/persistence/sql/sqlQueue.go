@@ -30,8 +30,10 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -48,14 +50,23 @@ func newQueue(
 	logger log.Logger,
 	queueType persistence.QueueType,
 ) (persistence.Queue, error) {
-	return &sqlQueue{
+	queue := &sqlQueue{
 		sqlStore: sqlStore{
 			db:     db,
 			logger: logger,
 		},
 		queueType: queueType,
 		logger:    logger,
-	}, nil
+	}
+
+	if err := queue.initializeQueueMetadata(); err != nil {
+		return nil, err
+	}
+	if err := queue.initializeDLQMetadata(); err != nil {
+		return nil, err
+	}
+
+	return queue, nil
 }
 
 func (q *sqlQueue) EnqueueMessage(
@@ -66,12 +77,12 @@ func (q *sqlQueue) EnqueueMessage(
 		lastMessageID, err := tx.GetLastEnqueuedMessageIDForUpdate(q.queueType)
 		switch err {
 		case nil:
-			_, err = tx.InsertIntoMessages([]sqlplugin.QueueRow{
+			_, err = tx.InsertIntoMessages([]sqlplugin.QueueMessageRow{
 				newQueueRow(q.queueType, lastMessageID+1, messagePayload),
 			})
 			return err
 		case sql.ErrNoRows:
-			_, err = tx.InsertIntoMessages([]sqlplugin.QueueRow{
+			_, err = tx.InsertIntoMessages([]sqlplugin.QueueMessageRow{
 				newQueueRow(q.queueType, sqlplugin.EmptyMessageID+1, messagePayload),
 			})
 			return err
@@ -111,9 +122,9 @@ func newQueueRow(
 	queueType persistence.QueueType,
 	messageID int64,
 	payload []byte,
-) sqlplugin.QueueRow {
+) sqlplugin.QueueMessageRow {
 
-	return sqlplugin.QueueRow{QueueType: queueType, MessageID: messageID, MessagePayload: payload}
+	return sqlplugin.QueueMessageRow{QueueType: queueType, MessageID: messageID, MessagePayload: payload}
 }
 
 func (q *sqlQueue) DeleteMessagesBefore(
@@ -137,28 +148,46 @@ func (q *sqlQueue) UpdateAckLevel(
 ) error {
 
 	err := q.txExecute("UpdateAckLevel", func(tx sqlplugin.Tx) error {
-		clusterAckLevels, err := tx.GetAckLevels(q.queueType, true)
+		row, err := tx.LockQueueMetadata(sqlplugin.QueueMetadataFilter{
+			QueueType: q.queueType,
+		})
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err))
 		}
 
-		if clusterAckLevels == nil {
-			err := tx.InsertAckLevel(q.queueType, messageID, clusterName)
-			if err != nil {
-				return serviceerror.NewInternal(fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err))
-			}
-			return nil
+		queueMetadata, err := serialization.QueueMetadataFromBlob(row.Data, row.DataEncoding)
+		if err != nil {
+			return err
+		}
+		if queueMetadata.ClusterAckLevels == nil {
+			queueMetadata.ClusterAckLevels = make(map[string]int64)
 		}
 
 		// Ignore possibly delayed message
-		if clusterAckLevels[clusterName] > messageID {
+		if queueMetadata.ClusterAckLevels[clusterName] > messageID {
 			return nil
 		}
+		queueMetadata.ClusterAckLevels[clusterName] = messageID
 
-		clusterAckLevels[clusterName] = messageID
-		err = tx.UpdateAckLevels(q.queueType, clusterAckLevels)
+		blob, err := serialization.QueueMetadataToBlob(queueMetadata)
+		if err != nil {
+			return err
+		}
+
+		result, err := tx.UpdateQueueMetadata(&sqlplugin.QueueMetadataRow{
+			QueueType:    q.queueType,
+			Data:         blob.Data,
+			DataEncoding: blob.EncodingType.String(),
+		})
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err))
+		}
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("rowsAffected returned error for queue metadata %v: %v", q.queueType, err)
+		}
+		if rowsAffected != 1 {
+			return fmt.Errorf("rowsAffected returned %v queue metadata instead of one", rowsAffected)
 		}
 		return nil
 	})
@@ -170,7 +199,23 @@ func (q *sqlQueue) UpdateAckLevel(
 }
 
 func (q *sqlQueue) GetAckLevels() (map[string]int64, error) {
-	return q.db.GetAckLevels(q.queueType, false)
+	row, err := q.db.SelectFromQueueMetadata(sqlplugin.QueueMetadataFilter{
+		QueueType: q.queueType,
+	})
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetAckLevels operation failed. Error %v", err))
+	}
+
+	queueMetadata, err := serialization.QueueMetadataFromBlob(row.Data, row.DataEncoding)
+	if err != nil {
+		return nil, err
+	}
+
+	clusterAckLevels := queueMetadata.ClusterAckLevels
+	if clusterAckLevels == nil {
+		clusterAckLevels = make(map[string]int64)
+	}
+	return clusterAckLevels, nil
 }
 
 func (q *sqlQueue) EnqueueMessageToDLQ(
@@ -183,12 +228,12 @@ func (q *sqlQueue) EnqueueMessageToDLQ(
 		lastMessageID, err = tx.GetLastEnqueuedMessageIDForUpdate(q.getDLQTypeFromQueueType())
 		switch err {
 		case nil:
-			_, err = tx.InsertIntoMessages([]sqlplugin.QueueRow{
+			_, err = tx.InsertIntoMessages([]sqlplugin.QueueMessageRow{
 				newQueueRow(q.getDLQTypeFromQueueType(), lastMessageID+1, messagePayload),
 			})
 			return err
 		case sql.ErrNoRows:
-			_, err = tx.InsertIntoMessages([]sqlplugin.QueueRow{
+			_, err = tx.InsertIntoMessages([]sqlplugin.QueueMessageRow{
 				newQueueRow(q.getDLQTypeFromQueueType(), sqlplugin.EmptyMessageID+1, messagePayload),
 			})
 			return err
@@ -276,28 +321,46 @@ func (q *sqlQueue) UpdateDLQAckLevel(
 ) error {
 
 	err := q.txExecute("UpdateDLQAckLevel", func(tx sqlplugin.Tx) error {
-		clusterAckLevels, err := tx.GetAckLevels(q.getDLQTypeFromQueueType(), true)
+		row, err := tx.LockQueueMetadata(sqlplugin.QueueMetadataFilter{
+			QueueType: q.getDLQTypeFromQueueType(),
+		})
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err))
 		}
 
-		if clusterAckLevels == nil {
-			err := tx.InsertAckLevel(q.getDLQTypeFromQueueType(), messageID, clusterName)
-			if err != nil {
-				return serviceerror.NewInternal(fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err))
-			}
-			return nil
+		queueMetadata, err := serialization.QueueMetadataFromBlob(row.Data, row.DataEncoding)
+		if err != nil {
+			return err
+		}
+		if queueMetadata.ClusterAckLevels == nil {
+			queueMetadata.ClusterAckLevels = make(map[string]int64)
 		}
 
 		// Ignore possibly delayed message
-		if clusterAckLevels[clusterName] > messageID {
+		if queueMetadata.ClusterAckLevels[clusterName] > messageID {
 			return nil
 		}
+		queueMetadata.ClusterAckLevels[clusterName] = messageID
 
-		clusterAckLevels[clusterName] = messageID
-		err = tx.UpdateAckLevels(q.getDLQTypeFromQueueType(), clusterAckLevels)
+		blob, err := serialization.QueueMetadataToBlob(queueMetadata)
+		if err != nil {
+			return err
+		}
+
+		result, err := tx.UpdateQueueMetadata(&sqlplugin.QueueMetadataRow{
+			QueueType:    q.getDLQTypeFromQueueType(),
+			Data:         blob.Data,
+			DataEncoding: blob.EncodingType.String(),
+		})
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err))
+		}
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("rowsAffected returned error for DLQ metadata %v: %v", q.queueType, err)
+		}
+		if rowsAffected != 1 {
+			return fmt.Errorf("rowsAffected returned %v DLQ metadata instead of one", rowsAffected)
 		}
 		return nil
 	})
@@ -309,10 +372,93 @@ func (q *sqlQueue) UpdateDLQAckLevel(
 }
 
 func (q *sqlQueue) GetDLQAckLevels() (map[string]int64, error) {
+	row, err := q.db.SelectFromQueueMetadata(sqlplugin.QueueMetadataFilter{
+		QueueType: q.getDLQTypeFromQueueType(),
+	})
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetDLQAckLevels operation failed. Error %v", err))
+	}
 
-	return q.db.GetAckLevels(q.getDLQTypeFromQueueType(), false)
+	queueMetadata, err := serialization.QueueMetadataFromBlob(row.Data, row.DataEncoding)
+	if err != nil {
+		return nil, err
+	}
+
+	clusterAckLevels := queueMetadata.ClusterAckLevels
+	if clusterAckLevels == nil {
+		clusterAckLevels = make(map[string]int64)
+	}
+	return clusterAckLevels, nil
 }
 
 func (q *sqlQueue) getDLQTypeFromQueueType() persistence.QueueType {
 	return -q.queueType
+}
+
+func (q *sqlQueue) initializeQueueMetadata() error {
+	_, err := q.db.SelectFromQueueMetadata(sqlplugin.QueueMetadataFilter{
+		QueueType: q.queueType,
+	})
+	switch err {
+	case nil:
+		return nil
+	case sql.ErrNoRows:
+		queueMetadata := &persistencespb.QueueMetadata{}
+		blob, err := serialization.QueueMetadataToBlob(queueMetadata)
+		if err != nil {
+			return err
+		}
+		result, err := q.db.InsertIntoQueueMetadata(&sqlplugin.QueueMetadataRow{
+			QueueType:    q.queueType,
+			Data:         blob.Data,
+			DataEncoding: blob.EncodingType.String(),
+		})
+		if err != nil {
+			return serviceerror.NewInternal(fmt.Sprintf("initializeQueueMetadata operation failed. Error %v", err))
+		}
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("rowsAffected returned error when initializing queue metadata  %v: %v", q.queueType, err)
+		}
+		if rowsAffected != 1 {
+			return fmt.Errorf("rowsAffected returned %v queue metadata instead of one", rowsAffected)
+		}
+		return nil
+	default:
+		return err
+	}
+}
+
+func (q *sqlQueue) initializeDLQMetadata() error {
+	_, err := q.db.SelectFromQueueMetadata(sqlplugin.QueueMetadataFilter{
+		QueueType: q.getDLQTypeFromQueueType(),
+	})
+	switch err {
+	case nil:
+		return nil
+	case sql.ErrNoRows:
+		queueMetadata := &persistencespb.QueueMetadata{}
+		blob, err := serialization.QueueMetadataToBlob(queueMetadata)
+		if err != nil {
+			return err
+		}
+		result, err := q.db.InsertIntoQueueMetadata(&sqlplugin.QueueMetadataRow{
+			QueueType:    q.getDLQTypeFromQueueType(),
+			Data:         blob.Data,
+			DataEncoding: blob.EncodingType.String(),
+		})
+		if err != nil {
+			return serviceerror.NewInternal(fmt.Sprintf("initializeDLQMetadata operation failed. Error %v", err))
+		}
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("rowsAffected returned error when initializing DLQ metadata  %v: %v", q.queueType, err)
+		}
+		if rowsAffected != 1 {
+			return fmt.Errorf("rowsAffected returned %v DLQ metadata instead of one", rowsAffected)
+		}
+		return nil
+	default:
+		return err
+	}
 }
