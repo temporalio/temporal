@@ -109,6 +109,7 @@ message HistoryTaskAttributes {
     temporal.api.history.v1.History history = 9;
     temporal.api.history.v1.History new_run_history = 10;
     reserved 11;
+    reserved 12;
     reserved 13;
     reserved 14;
 }
