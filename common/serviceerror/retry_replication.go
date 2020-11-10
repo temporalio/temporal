@@ -94,7 +94,7 @@ func (e *RetryReplication) Status() *status.Status {
 	return st
 }
 
-func convertRetryReplication(
+func fromRetryTaskV2Failure(
 	status *status.Status,
 	errDetails *errordetails.RetryTaskV2Failure,
 ) *RetryReplication {
