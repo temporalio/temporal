@@ -59,7 +59,7 @@ message PollWorkflowTaskQueueResponse {
     temporal.api.query.v1.WorkflowQuery query = 10;
     temporal.server.api.history.v1.TransientWorkflowTaskInfo workflow_task_info = 11;
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 12;
-    int32 event_store_version = 13;
+    reserved 13;
     bytes branch_token = 14;
     google.protobuf.Timestamp scheduled_time = 15 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp started_time = 16 [(gogoproto.stdtime) = true];

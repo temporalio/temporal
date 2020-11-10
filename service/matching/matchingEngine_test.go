@@ -312,11 +312,10 @@ func (s *matchingEngineSuite) PollWorkflowTaskQueuesResultTest() {
 			Name: tl,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		EventStoreVersion: 0,
-		BranchToken:       nil,
-		ScheduledTime:     nil,
-		StartedTime:       nil,
-		Queries:           nil,
+		BranchToken:   nil,
+		ScheduledTime: nil,
+		StartedTime:   nil,
+		Queries:       nil,
 	}
 
 	s.Nil(err)
