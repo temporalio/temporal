@@ -230,15 +230,7 @@ func (f *ReplicationTaskFetcherImpl) fetchTasks() {
 	for {
 		select {
 		case request := <-f.requestChan:
-			// Here we only add the request to map. We will wait until timer fires to send the request to remote.
-			if req, ok := f.requestByShard[request.token.GetShardId()]; ok && req != request {
-				// since this replication task fetcher is per host
-				// and replication task processor is per shard
-				// during shard movement, duplicated requests can appear
-				// if shard moved from this host, to this host.
-				close(req.respChan)
-			}
-			f.requestByShard[request.token.GetShardId()] = request
+			f.bufferRequests(request)
 
 		case <-timer.C:
 			// When timer fires, we collect all the requests we have so far and attempt to send them to remote.
@@ -262,6 +254,20 @@ func (f *ReplicationTaskFetcherImpl) fetchTasks() {
 			return
 		}
 	}
+}
+
+func (f *ReplicationTaskFetcherImpl) bufferRequests(
+	request *request,
+) {
+	// Here we only add the request to map. We will wait until timer fires to send the request to remote.
+	if req, ok := f.requestByShard[request.token.GetShardId()]; ok && req != request {
+		// since this replication task fetcher is per host
+		// and replication task processor is per shard
+		// during shard movement, duplicated requests can appear
+		// if shard moved from this host, to this host.
+		close(req.respChan)
+	}
+	f.requestByShard[request.token.GetShardId()] = request
 }
 
 func (f *ReplicationTaskFetcherImpl) getMessages(

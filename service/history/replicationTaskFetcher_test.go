@@ -89,6 +89,74 @@ func (s *replicationTaskFetcherSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
+func (s *replicationTaskFetcherSuite) TestBufferRequests_NoDuplicate() {
+	shardID := int32(1)
+
+	respChan := make(chan *replicationspb.ReplicationMessages, 1)
+	shardRequest := &request{
+		token: &replicationspb.ReplicationToken{
+			ShardId:                shardID,
+			LastProcessedMessageId: 1,
+			LastRetrievedMessageId: 2,
+		},
+		respChan: respChan,
+	}
+
+	s.replicationTaskFetcher.bufferRequests(shardRequest)
+
+	select {
+	case <-respChan:
+		s.Fail("new request channel should not be closed")
+	default:
+		// noop
+	}
+
+	s.Equal(map[int32]*request{
+		shardID: shardRequest,
+	}, s.replicationTaskFetcher.requestByShard)
+}
+
+func (s *replicationTaskFetcherSuite) TestBufferRequests_Duplicate() {
+	shardID := int32(1)
+
+	respChan1 := make(chan *replicationspb.ReplicationMessages, 1)
+	shardRequest1 := &request{
+		token: &replicationspb.ReplicationToken{
+			ShardId:                shardID,
+			LastProcessedMessageId: 1,
+			LastRetrievedMessageId: 2,
+		},
+		respChan: respChan1,
+	}
+
+	respChan2 := make(chan *replicationspb.ReplicationMessages, 1)
+	shardRequest2 := &request{
+		token: &replicationspb.ReplicationToken{
+			ShardId:                shardID,
+			LastProcessedMessageId: 1,
+			LastRetrievedMessageId: 2,
+		},
+		respChan: respChan2,
+	}
+
+	s.replicationTaskFetcher.bufferRequests(shardRequest1)
+	s.replicationTaskFetcher.bufferRequests(shardRequest2)
+
+	_, ok := <-respChan1
+	s.False(ok)
+
+	select {
+	case <-respChan2:
+		s.Fail("new request channel should not be closed")
+	default:
+		// noop
+	}
+
+	s.Equal(map[int32]*request{
+		shardID: shardRequest2,
+	}, s.replicationTaskFetcher.requestByShard)
+}
+
 func (s *replicationTaskFetcherSuite) TestGetMessages() {
 	shardID := int32(1)
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
