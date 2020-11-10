@@ -587,24 +587,22 @@ func (r *workflowResetterImpl) getPaginationFn(
 
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
 
-		_, historyBatches, token, _, err := PaginateHistory(
-			r.historyV2Mgr,
-			true,
-			branchToken,
-			firstEventID,
-			nextEventID,
-			paginationToken,
-			nDCDefaultPageSize,
-			convert.Int32Ptr(r.shard.GetShardID()),
-		)
+		resp, err := r.historyV2Mgr.ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+			BranchToken:   branchToken,
+			MinEventID:    firstEventID,
+			MaxEventID:    nextEventID,
+			PageSize:      nDCDefaultPageSize,
+			NextPageToken: paginationToken,
+			ShardID:       convert.Int32Ptr(r.shard.GetShardID()),
+		})
 		if err != nil {
 			return nil, nil, err
 		}
 
 		var paginateItems []interface{}
-		for _, history := range historyBatches {
+		for _, history := range resp.History {
 			paginateItems = append(paginateItems, history)
 		}
-		return paginateItems, token, nil
+		return paginateItems, resp.NextPageToken, nil
 	}
 }
