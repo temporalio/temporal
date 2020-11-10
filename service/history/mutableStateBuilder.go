@@ -154,6 +154,7 @@ type (
 		insertTransferTasks    []persistence.Task
 		insertReplicationTasks []persistence.Task
 		insertTimerTasks       []persistence.Task
+		insertVisibilityTasks  []persistence.Task
 
 		// do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
@@ -1784,6 +1785,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
 	if err := e.taskGenerator.generateRecordWorkflowStartedTasks(
 		timestamp.TimeValue(event.GetEventTime()),
 		event,
+		e.config.UseKafkaForVisibility(),
 	); err != nil {
 		return nil, err
 	}
@@ -3832,6 +3834,13 @@ func (e *mutableStateBuilder) AddTransferTasks(
 	e.insertTransferTasks = append(e.insertTransferTasks, transferTasks...)
 }
 
+func (e *mutableStateBuilder) AddVisibilityTasks(
+	visibilityTasks ...persistence.Task,
+) {
+
+	e.insertVisibilityTasks = append(e.insertVisibilityTasks, visibilityTasks...)
+}
+
 // TODO convert AddTransferTasks to prepareTimerTasks
 func (e *mutableStateBuilder) AddTimerTasks(
 	timerTasks ...persistence.Task,
@@ -3958,6 +3967,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		TransferTasks:    e.insertTransferTasks,
 		ReplicationTasks: e.insertReplicationTasks,
 		TimerTasks:       e.insertTimerTasks,
+		VisibilityTasks:  e.insertVisibilityTasks,
 
 		Condition: e.nextEventIDInDB,
 		Checksum:  checksum,
@@ -4035,6 +4045,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		TransferTasks:    e.insertTransferTasks,
 		ReplicationTasks: e.insertReplicationTasks,
 		TimerTasks:       e.insertTimerTasks,
+		VisibilityTasks:  e.insertVisibilityTasks,
 
 		Condition: e.nextEventIDInDB,
 		Checksum:  checksum,
@@ -4143,6 +4154,7 @@ func (e *mutableStateBuilder) cleanupTransaction(
 	e.insertTransferTasks = nil
 	e.insertReplicationTasks = nil
 	e.insertTimerTasks = nil
+	e.insertVisibilityTasks = nil
 
 	return nil
 }

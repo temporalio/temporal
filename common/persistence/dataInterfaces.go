@@ -229,14 +229,14 @@ type (
 		RecordVisibility    bool
 	}
 
-	// RecordWorkflowStartedTask identifites a transfer task for writing visibility open execution record
+	// Deprecated. RecordWorkflowStartedTask identifies a transfer task for writing visibility open execution record
 	RecordWorkflowStartedTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
 	}
 
-	// ResetWorkflowTask identifites a transfer task to reset workflow
+	// ResetWorkflowTask identifies a transfer task to reset workflow
 	ResetWorkflowTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
@@ -364,8 +364,8 @@ type (
 		NewRunBranchToken   []byte
 	}
 
-	// VisibilityTask is the task created for...
-	VisibilityTask struct {
+	// RecordWorkflowStartedVisibilityTask identifies a transfer task for writing visibility open execution record
+	RecordWorkflowStartedVisibilityTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
@@ -1903,37 +1903,37 @@ func (a *HistoryReplicationTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the visibility task
-func (a *VisibilityTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_VISIBILITY_INDEX
+func (a *RecordWorkflowStartedVisibilityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_VISIBILITY_RECORD_WORKFLOW_STARTED
 }
 
 // GetVersion returns the version of the visibility task
-func (a *VisibilityTask) GetVersion() int64 {
+func (a *RecordWorkflowStartedVisibilityTask) GetVersion() int64 {
 	return a.Version
 }
 
 // SetVersion returns the version of the visibility task
-func (a *VisibilityTask) SetVersion(version int64) {
+func (a *RecordWorkflowStartedVisibilityTask) SetVersion(version int64) {
 	a.Version = version
 }
 
 // GetTaskID returns the sequence ID of the visibility task
-func (a *VisibilityTask) GetTaskID() int64 {
+func (a *RecordWorkflowStartedVisibilityTask) GetTaskID() int64 {
 	return a.TaskID
 }
 
 // SetTaskID sets the sequence ID of the visibility task
-func (a *VisibilityTask) SetTaskID(id int64) {
+func (a *RecordWorkflowStartedVisibilityTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
 // GetVisibilityTime get the visibility timestamp
-func (a *VisibilityTask) GetVisibilityTimestamp() time.Time {
+func (a *RecordWorkflowStartedVisibilityTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
 
 // SetVisibilityTimestamp set the visibility timestamp
-func (a *VisibilityTask) SetVisibilityTimestamp(timestamp time.Time) {
+func (a *RecordWorkflowStartedVisibilityTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
 }
 

@@ -235,6 +235,8 @@ type Config struct {
 
 	EnableDropStuckTaskByNamespaceID dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
 	SkipReapplicationByNamespaceId   dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
+
+	UseKafkaForVisibility dynamicconfig.BoolPropertyFn
 }
 
 const (

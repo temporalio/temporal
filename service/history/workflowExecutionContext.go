@@ -421,6 +421,7 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 		newWorkflow.TransferTasks,
 		newWorkflow.ReplicationTasks,
 		newWorkflow.TimerTasks,
+		newWorkflow.VisibilityTasks,
 	)
 	return nil
 }

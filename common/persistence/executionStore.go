@@ -463,6 +463,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		TransferTasks:    input.TransferTasks,
 		ReplicationTasks: input.ReplicationTasks,
 		TimerTasks:       input.TimerTasks,
+		VisibilityTasks:  input.VisibilityTasks,
 
 		Condition: input.Condition,
 		Checksum:  input.Checksum,

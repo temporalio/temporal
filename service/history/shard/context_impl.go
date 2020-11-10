@@ -411,6 +411,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 		request.NewWorkflowSnapshot.TransferTasks,
 		request.NewWorkflowSnapshot.ReplicationTasks,
 		request.NewWorkflowSnapshot.TimerTasks,
+		request.NewWorkflowSnapshot.VisibilityTasks,
 		&transferMaxReadLevel,
 	); err != nil {
 		return nil, err

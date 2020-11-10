@@ -54,6 +54,7 @@ type (
 		generateRecordWorkflowStartedTasks(
 			now time.Time,
 			startEvent *historypb.HistoryEvent,
+			useKafkaForVisibility bool,
 		) error
 		generateDelayedWorkflowTasks(
 			now time.Time,
@@ -218,16 +219,26 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedWorkflowTasks(
 func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
 	now time.Time,
 	startEvent *historypb.HistoryEvent,
+	useKafkaForVisibility bool,
 ) error {
 
 	startVersion := startEvent.GetVersion()
 
-	r.mutableState.AddTransferTasks(&persistence.RecordWorkflowStartedTask{
+	// TODO (alex): remove after kafka deprecation
+	if useKafkaForVisibility {
+		r.mutableState.AddTransferTasks(&persistence.RecordWorkflowStartedTask{
+			// TaskID is set by shard
+			VisibilityTimestamp: now,
+			Version:             startVersion,
+		})
+		return nil
+	}
+
+	r.mutableState.AddVisibilityTasks(&persistence.RecordWorkflowStartedVisibilityTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		Version:             startVersion,
 	})
-
 	return nil
 }
 

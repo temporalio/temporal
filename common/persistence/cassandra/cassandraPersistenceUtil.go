@@ -647,7 +647,6 @@ func createTransferTasks(
 
 		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 			enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
-			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW,
 			enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 			// No explicit property needs to be set
 
