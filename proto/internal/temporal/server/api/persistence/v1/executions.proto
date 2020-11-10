@@ -106,7 +106,7 @@ message WorkflowExecutionInfo {
     repeated string retry_non_retryable_error_types = 41;
     bool has_retry_policy = 42;
     string cron_schedule = 43;
-    int32 event_store_version = 44;
+    reserved 44;
     bytes event_branch_token = 45;
     int64 signal_count = 46;
     int64 history_size = 47 [deprecated = true];
@@ -161,8 +161,8 @@ message ReplicationTaskInfo {
     int64 first_event_id = 6;
     int64 next_event_id = 7;
     int64 scheduled_id = 8;
-    int32 event_store_version = 9;
-    int32 new_run_event_store_version = 10;
+    reserved 9;
+    reserved 10;
     bytes branch_token = 11;
     reserved 12;
     bytes new_run_branch_token = 13;

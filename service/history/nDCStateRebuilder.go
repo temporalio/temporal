@@ -115,7 +115,6 @@ func (r *nDCStateRebuilderImpl) rebuild(
 ) (mutableState, int64, error) {
 
 	iter := collection.NewPagingIterator(r.getPaginationFn(
-		baseWorkflowIdentifier,
 		common.FirstEventID,
 		baseLastEventID+1,
 		baseBranchToken,
@@ -230,7 +229,6 @@ func (r *nDCStateRebuilderImpl) applyEvents(
 }
 
 func (r *nDCStateRebuilderImpl) getPaginationFn(
-	workflowIdentifier definition.WorkflowIdentifier,
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
@@ -238,25 +236,23 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
 
-		_, historyBatches, token, size, err := PaginateHistory(
-			r.historyV2Mgr,
-			true,
-			branchToken,
-			firstEventID,
-			nextEventID,
-			paginationToken,
-			nDCDefaultPageSize,
-			convert.Int32Ptr(r.shard.GetShardID()),
-		)
+		resp, err := r.historyV2Mgr.ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+			BranchToken:   branchToken,
+			MinEventID:    firstEventID,
+			MaxEventID:    nextEventID,
+			PageSize:      nDCDefaultPageSize,
+			NextPageToken: paginationToken,
+			ShardID:       convert.Int32Ptr(r.shard.GetShardID()),
+		})
 		if err != nil {
 			return nil, nil, err
 		}
-		r.rebuiltHistorySize += int64(size)
 
+		r.rebuiltHistorySize += int64(resp.Size)
 		var paginateItems []interface{}
-		for _, history := range historyBatches {
+		for _, history := range resp.History {
 			paginateItems = append(paginateItems, history)
 		}
-		return paginateItems, token, nil
+		return paginateItems, resp.NextPageToken, nil
 	}
 }

@@ -5392,7 +5392,6 @@ func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo)
 		ExecutionStats:                    sourceInfo.ExecutionStats,
 		StartVersion:                      sourceInfo.StartVersion,
 		CancelRequestId:                   sourceInfo.CancelRequestId,
-		EventStoreVersion:                 sourceInfo.EventStoreVersion,
 		WorkflowExecutionTimeout:          sourceInfo.WorkflowExecutionTimeout,
 		HistorySize:                       sourceInfo.HistorySize,
 	}

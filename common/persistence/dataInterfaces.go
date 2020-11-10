@@ -41,14 +41,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
-const (
-	// EventStoreVersion is already deprecated, this is used for forward
-	// compatibility (so that rollback is possible).
-	// TODO we can remove it after fixing all the query templates and when
-	// we decide the compatibility is no longer needed.
-	EventStoreVersion = 2
-)
-
 // CreateWorkflowMode workflow creation mode
 type CreateWorkflowMode int
 

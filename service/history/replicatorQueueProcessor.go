@@ -30,7 +30,6 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -293,106 +292,6 @@ func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
 	return err
 }
 
-// GetAllHistory return history
-func GetAllHistory(
-	historyV2Mgr persistence.HistoryManager,
-	metricsClient metrics.Client,
-	byBatch bool,
-	firstEventID int64,
-	nextEventID int64,
-	branchToken []byte,
-	shardID *int32,
-) (*historypb.History, []*historypb.History, error) {
-
-	// overall result
-	var historyEvents []*historypb.HistoryEvent
-	var historyBatches []*historypb.History
-	historySize := 0
-	var err error
-
-	// variable used for each page
-	var pageHistoryEvents []*historypb.HistoryEvent
-	var pageHistoryBatches []*historypb.History
-	var pageToken []byte
-	var pageHistorySize int
-
-	for hasMore := true; hasMore; hasMore = len(pageToken) > 0 {
-		pageHistoryEvents, pageHistoryBatches, pageToken, pageHistorySize, err = PaginateHistory(
-			historyV2Mgr, byBatch,
-			branchToken, firstEventID, nextEventID,
-			pageToken, defaultHistoryPageSize, shardID,
-		)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		historyEvents = append(historyEvents, pageHistoryEvents...)
-		historyBatches = append(historyBatches, pageHistoryBatches...)
-		historySize += pageHistorySize
-	}
-
-	// Emit metric and log for history size
-	if metricsClient != nil {
-		metricsClient.RecordTimer(metrics.ReplicatorQueueProcessorScope, metrics.HistorySize, time.Duration(historySize))
-	}
-
-	history := &historypb.History{
-		Events: historyEvents,
-	}
-	return history, historyBatches, nil
-}
-
-// PaginateHistory return paged history
-func PaginateHistory(
-	historyV2Mgr persistence.HistoryManager,
-	byBatch bool,
-	branchToken []byte,
-	firstEventID int64,
-	nextEventID int64,
-	tokenIn []byte,
-	pageSize int,
-	shardID *int32,
-) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, error) {
-
-	var historyEvents []*historypb.HistoryEvent
-	var historyBatches []*historypb.History
-	var tokenOut []byte
-	var historySize int
-
-	req := &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken,
-		MinEventID:    firstEventID,
-		MaxEventID:    nextEventID,
-		PageSize:      pageSize,
-		NextPageToken: tokenIn,
-		ShardID:       shardID,
-	}
-	if byBatch {
-		response, err := historyV2Mgr.ReadHistoryBranchByBatch(req)
-		if err != nil {
-			return nil, nil, nil, 0, err
-		}
-
-		// Keep track of total history size
-		historySize += response.Size
-		historyBatches = append(historyBatches, response.History...)
-		tokenOut = response.NextPageToken
-
-	} else {
-		response, err := historyV2Mgr.ReadHistoryBranch(req)
-		if err != nil {
-			return nil, nil, nil, 0, err
-		}
-
-		// Keep track of total history size
-		historySize += response.Size
-		historyEvents = append(historyEvents, response.HistoryEvents...)
-		tokenOut = response.NextPageToken
-	}
-
-	return historyEvents, historyBatches, tokenOut, historySize, nil
-}
-
 // TODO: when kafka deprecation is finished, delete all logic above
 //  and move logic below to dedicated replicationTaskAckMgr
 
@@ -485,7 +384,10 @@ func (p *replicatorQueueProcessorImpl) getTask(
 	return p.toReplicationTask(ctx, &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task})
 }
 
-func (p *replicatorQueueProcessorImpl) readTasksWithBatchSize(readLevel int64, batchSize int) ([]queueTaskInfo, bool, error) {
+func (p *replicatorQueueProcessorImpl) readTasksWithBatchSize(
+	readLevel int64,
+	batchSize int,
+) ([]queueTaskInfo, bool, error) {
 	response, err := p.executionMgr.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
 		ReadLevel:    readLevel,
 		MaxReadLevel: p.shard.GetTransferMaxReadLevel(),
@@ -538,12 +440,13 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 	taskInfo *persistencespb.ReplicationTaskInfo,
 ) (*replicationspb.ReplicationTask, error) {
 	namespaceID := taskInfo.GetNamespaceId()
+	workflowID := taskInfo.GetWorkflowId()
 	runID := taskInfo.GetRunId()
 	return p.processReplication(
 		ctx,
 		false, // not necessary to send out sync activity task if workflow closed
 		namespaceID,
-		taskInfo.GetWorkflowId(),
+		workflowID,
 		runID,
 		func(mutableState mutableState) (*replicationspb.ReplicationTask, error) {
 			activityInfo, ok := mutableState.GetActivityInfo(taskInfo.GetScheduledId())
@@ -565,13 +468,9 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 
 			// Version history uses when replicate the sync activity task
 			versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-			var versionHistory *historyspb.VersionHistory
-			if versionHistories != nil {
-				var err error
-				versionHistory, err = versionhistory.GetCurrentVersionHistory(versionHistories)
-				if err != nil {
-					return nil, err
-				}
+			versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+			if err != nil {
+				return nil, err
 			}
 
 			return &replicationspb.ReplicationTask{
@@ -579,7 +478,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 				Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 					SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
 						NamespaceId:        namespaceID,
-						WorkflowId:         taskInfo.GetWorkflowId(),
+						WorkflowId:         workflowID,
 						RunId:              runID,
 						Version:            activityInfo.Version,
 						ScheduledId:        activityInfo.ScheduleId,
@@ -604,16 +503,15 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 	task *persistencespb.ReplicationTaskInfo,
 ) (*replicationspb.ReplicationTask, error) {
 	namespaceID := task.GetNamespaceId()
+	workflowID := task.GetWorkflowId()
 	runID := task.GetRunId()
 	return p.processReplication(
 		ctx,
 		true, // still necessary to send out history replication message if workflow closed
 		namespaceID,
-		task.GetWorkflowId(),
+		workflowID,
 		runID,
 		func(mutableState mutableState) (*replicationspb.ReplicationTask, error) {
-
-			// NDC workflow
 			versionHistoryItems, branchToken, err := p.getVersionHistoryItems(
 				mutableState,
 				task.GetFirstEventId(),
@@ -656,7 +554,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 					HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
 						TaskId:              task.GetFirstEventId(),
 						NamespaceId:         namespaceID,
-						WorkflowId:          task.GetWorkflowId(),
+						WorkflowId:          workflowID,
 						RunId:               runID,
 						VersionHistoryItems: versionHistoryItems,
 						Events:              eventsBlob,
@@ -769,31 +667,4 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 	default:
 		return nil, err
 	}
-}
-
-func (p *replicatorQueueProcessorImpl) isNewRunNDCEnabled(
-	ctx context.Context,
-	namespaceID string,
-	workflowID string,
-	runID string,
-) (isNDCWorkflow bool, retError error) {
-
-	context, release, err := p.historyCache.getOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-	)
-	if err != nil {
-		return false, err
-	}
-	defer func() { release(retError) }()
-
-	mutableState, err := context.loadWorkflowExecution()
-	if err != nil {
-		return false, err
-	}
-	return mutableState.GetExecutionInfo().GetVersionHistories() != nil, nil
 }

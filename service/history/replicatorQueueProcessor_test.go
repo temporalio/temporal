@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -480,47 +479,4 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	wrapper := &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task}
 	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, wrapper, s.logger))
 	s.Nil(err)
-}
-
-func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
-	firstEventID := int64(133)
-	nextEventID := int64(134)
-	pageSize := 1
-	shardID := int32(1)
-
-	req := &persistence.ReadHistoryBranchRequest{
-		BranchToken:   []byte("asd"),
-		MinEventID:    firstEventID,
-		MaxEventID:    nextEventID,
-		PageSize:      pageSize,
-		NextPageToken: []byte{},
-		ShardID:       &shardID,
-	}
-	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: []*historypb.HistoryEvent{
-			{
-				EventId: int64(1),
-				// EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-				// Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
-			},
-		},
-		NextPageToken:    []byte{},
-		Size:             1,
-		LastFirstEventID: nextEventID,
-	}, nil).Once()
-	hEvents, bEvents, token, size, err := PaginateHistory(
-		s.mockHistoryV2Mgr,
-		false,
-		[]byte("asd"),
-		firstEventID,
-		nextEventID,
-		[]byte{},
-		pageSize,
-		&shardID)
-
-	s.Equal(1, len(hEvents))
-	s.Equal(0, len(bEvents))
-	s.NotNil(token)
-	s.Equal(1, size)
-	s.NoError(err)
 }

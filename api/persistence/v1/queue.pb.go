@@ -51,7 +51,7 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-// queue column
+// message_payload column
 type QueueMessage struct {
 }
 
@@ -87,7 +87,7 @@ func (m *QueueMessage) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_QueueMessage proto.InternalMessageInfo
 
-// queue metadata column
+// data column
 type QueueMetadata struct {
 	ClusterAckLevels map[string]int64 `protobuf:"bytes,1,rep,name=cluster_ack_levels,json=clusterAckLevels,proto3" json:"cluster_ack_levels,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
 }
