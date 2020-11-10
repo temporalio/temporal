@@ -184,7 +184,7 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 		// the base event and incoming event are from different branch
 		// only re-replicate the gap on the incoming branch
 		// the base branch event will eventually arrived
-		return nil, serviceerrors.NewRetryTaskV2(
+		return nil, serviceerrors.NewRetryReplication(
 			resendOnResetWorkflowMessage,
 			r.namespaceID,
 			r.workflowID,

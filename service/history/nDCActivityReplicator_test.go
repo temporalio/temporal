@@ -418,7 +418,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 	).AnyTimes()
 
 	err = s.nDCActivityReplicator.SyncActivity(context.Background(), request)
-	s.Equal(serviceerrors.NewRetryTaskV2(
+	s.Equal(serviceerrors.NewRetryReplication(
 		resendHigherVersionMessage,
 		namespaceID,
 		workflowID,
@@ -507,7 +507,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 	).AnyTimes()
 
 	err = s.nDCActivityReplicator.SyncActivity(context.Background(), request)
-	s.Equal(serviceerrors.NewRetryTaskV2(
+	s.Equal(serviceerrors.NewRetryReplication(
 		resendMissingEventMessage,
 		namespaceID,
 		workflowID,

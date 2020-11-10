@@ -308,7 +308,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 		},
 		VersionHistoryItems: []*historyspb.VersionHistoryItem{item},
 	}
-	retryErr := serviceerrors.NewRetryTaskV2(
+	retryErr := serviceerrors.NewRetryReplication(
 		"",
 		s.namespaceID,
 		workflowID,
