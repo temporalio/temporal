@@ -55,8 +55,8 @@ func FromStatus(st *status.Status) error {
 		switch errDetails := errDetails.(type) {
 		case *errordetails.ShardOwnershipLostFailure:
 			return newShardOwnershipLost(st, errDetails)
-		case *errordetails.RetryTaskV2Failure:
-			return fromRetryTaskV2Failure(st, errDetails)
+		case *errordetails.RetryReplicationFailure:
+			return newRetryReplication(st, errDetails)
 		}
 	}
 
