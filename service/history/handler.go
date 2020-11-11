@@ -1782,9 +1782,7 @@ func (h *Handler) updateErrorMetric(
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrCancellationAlreadyRequestedCounter)
 	case *serviceerror.ResourceExhausted:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
-	case *serviceerrors.RetryTask:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
-	case *serviceerrors.RetryTaskV2:
+	case *serviceerrors.RetryReplication:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
 	case *serviceerror.Internal:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceFailures)

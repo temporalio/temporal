@@ -126,6 +126,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 
 	replicationStopWatch := e.metricsClient.StartTimer(metrics.SyncActivityTaskScope, metrics.ServiceLatency)
 	defer replicationStopWatch.Stop()
+
 	request := &historyservice.SyncActivityRequest{
 		NamespaceId:        attr.NamespaceId,
 		WorkflowId:         attr.WorkflowId,
@@ -144,33 +145,35 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
-	err = e.historyEngine.SyncActivity(ctx, request)
-	// Handle resend error
-	retryV2Err, okV2 := err.(*serviceerrors.RetryTaskV2)
 
-	if okV2 {
+	err = e.historyEngine.SyncActivity(ctx, request)
+	switch retryErr := err.(type) {
+	case nil:
+		return nil
+
+	case *serviceerrors.RetryReplication:
 		e.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientRequests)
 		stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientLatency)
 		defer stopwatch.Stop()
 
 		if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
-			retryV2Err.NamespaceId,
-			retryV2Err.WorkflowId,
-			retryV2Err.RunId,
-			retryV2Err.StartEventId,
-			retryV2Err.StartEventVersion,
-			retryV2Err.EndEventId,
-			retryV2Err.EndEventVersion,
+			retryErr.NamespaceId,
+			retryErr.WorkflowId,
+			retryErr.RunId,
+			retryErr.StartEventId,
+			retryErr.StartEventVersion,
+			retryErr.EndEventId,
+			retryErr.EndEventVersion,
 		); resendErr != nil {
 			e.logger.Error("error resend history for sync activity", tag.Error(resendErr))
 			// should return the replication error, not the resending error
 			return err
 		}
-	} else {
+		return e.historyEngine.SyncActivity(ctx, request)
+
+	default:
 		return err
 	}
-	// should try again after back fill the history
-	return e.historyEngine.SyncActivity(ctx, request)
 }
 
 func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
@@ -186,6 +189,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 
 	replicationStopWatch := e.metricsClient.StartTimer(metrics.HistoryReplicationV2TaskScope, metrics.ServiceLatency)
 	defer replicationStopWatch.Stop()
+
 	request := &historyservice.ReplicateEventsV2Request{
 		NamespaceId: attr.NamespaceId,
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -201,29 +205,34 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 	defer cancel()
 
 	err = e.historyEngine.ReplicateEventsV2(ctx, request)
-	retryErr, ok := err.(*serviceerrors.RetryTaskV2)
-	if !ok {
+	switch retryErr := err.(type) {
+	case nil:
+		return nil
+
+	case *serviceerrors.RetryReplication:
+		e.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientRequests)
+		resendStopWatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientLatency)
+		defer resendStopWatch.Stop()
+
+		if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+			retryErr.NamespaceId,
+			retryErr.WorkflowId,
+			retryErr.RunId,
+			retryErr.StartEventId,
+			retryErr.StartEventVersion,
+			retryErr.EndEventId,
+			retryErr.EndEventVersion,
+		); resendErr != nil {
+			e.logger.Error("error resend history for history event", tag.Error(resendErr))
+			// should return the replication error, not the resending error
+			return err
+		}
+
+		return e.historyEngine.ReplicateEventsV2(ctx, request)
+
+	default:
 		return err
 	}
-	e.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientRequests)
-	resendStopWatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientLatency)
-	defer resendStopWatch.Stop()
-
-	if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
-		retryErr.NamespaceId,
-		retryErr.WorkflowId,
-		retryErr.RunId,
-		retryErr.StartEventId,
-		retryErr.StartEventVersion,
-		retryErr.EndEventId,
-		retryErr.EndEventVersion,
-	); resendErr != nil {
-		e.logger.Error("error resend history for history event v2", tag.Error(resendErr))
-		// should return the replication error, not the resending error
-		return err
-	}
-
-	return e.historyEngine.ReplicateEventsV2(ctx, request)
 }
 
 func (e *replicationTaskExecutorImpl) filterTask(

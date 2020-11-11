@@ -288,7 +288,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEv
 		incomingVersionHistory,
 		150+2,
 		300)
-	s.IsType(&serviceerrors.RetryTaskV2{}, err)
+	s.IsType(&serviceerrors.RetryReplication{}, err)
 }
 
 func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMissingEventInBetween() {
@@ -386,5 +386,5 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_Missin
 		baseBranchLCAEventID+2,
 		baseBranchLCAEventVersion,
 	)
-	s.IsType(&serviceerrors.RetryTaskV2{}, err)
+	s.IsType(&serviceerrors.RetryReplication{}, err)
 }

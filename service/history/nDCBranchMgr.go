@@ -217,7 +217,7 @@ func (r *nDCBranchMgrImpl) verifyEventsOrder(
 	if incomingFirstEventID > nextEventID {
 		executionInfo := r.mutableState.GetExecutionInfo()
 		executionState := r.mutableState.GetExecutionState()
-		return false, serviceerrors.NewRetryTaskV2(
+		return false, serviceerrors.NewRetryReplication(
 			outOfOrderDeliveryMessage,
 			executionInfo.NamespaceId,
 			executionInfo.WorkflowId,
