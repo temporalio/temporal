@@ -110,19 +110,19 @@ type (
 
 		pendingChildExecutionInfoIDs map[int64]*persistencespb.ChildExecutionInfo    // Initiated Event ID -> Child Execution Info
 		updateChildExecutionInfos    map[*persistencespb.ChildExecutionInfo]struct{} // Modified ChildExecution Infos since last update
-		deleteChildExecutionInfo     *int64                                          // Deleted ChildExecution Info since last update
+		deleteChildExecutionInfos    map[int64]struct{}                              // Deleted ChildExecution Info since last update
 
 		pendingRequestCancelInfoIDs map[int64]*persistencespb.RequestCancelInfo    // Initiated Event ID -> RequestCancelInfo
 		updateRequestCancelInfos    map[*persistencespb.RequestCancelInfo]struct{} // Modified RequestCancel Infos since last update, for persistence update
-		deleteRequestCancelInfo     *int64                                         // Deleted RequestCancel Info since last update, for persistence update
+		deleteRequestCancelInfos    map[int64]struct{}                             // Deleted RequestCancel Info since last update, for persistence update
 
 		pendingSignalInfoIDs map[int64]*persistencespb.SignalInfo    // Initiated Event ID -> SignalInfo
 		updateSignalInfos    map[*persistencespb.SignalInfo]struct{} // Modified SignalInfo since last update
-		deleteSignalInfo     *int64                                  // Deleted SignalInfo since last update
+		deleteSignalInfos    map[int64]struct{}                      // Deleted SignalInfo since last update
 
 		pendingSignalRequestedIDs map[string]struct{} // Set of signaled requestIds
 		updateSignalRequestedIDs  map[string]struct{} // Set of signaled requestIds since last update
-		deleteSignalRequestedID   string              // Deleted signaled requestId
+		deleteSignalRequestedIDs  map[string]struct{} // Deleted signaled requestId
 
 		bufferedEvents       []*historypb.HistoryEvent // buffered history events that are already persisted
 		updateBufferedEvents []*historypb.HistoryEvent // buffered history events that needs to be persisted
@@ -198,19 +198,19 @@ func newMutableStateBuilder(
 
 		updateChildExecutionInfos:    make(map[*persistencespb.ChildExecutionInfo]struct{}),
 		pendingChildExecutionInfoIDs: make(map[int64]*persistencespb.ChildExecutionInfo),
-		deleteChildExecutionInfo:     nil,
+		deleteChildExecutionInfos:    make(map[int64]struct{}),
 
 		updateRequestCancelInfos:    make(map[*persistencespb.RequestCancelInfo]struct{}),
 		pendingRequestCancelInfoIDs: make(map[int64]*persistencespb.RequestCancelInfo),
-		deleteRequestCancelInfo:     nil,
+		deleteRequestCancelInfos:    make(map[int64]struct{}),
 
 		updateSignalInfos:    make(map[*persistencespb.SignalInfo]struct{}),
 		pendingSignalInfoIDs: make(map[int64]*persistencespb.SignalInfo),
-		deleteSignalInfo:     nil,
+		deleteSignalInfos:    make(map[int64]struct{}),
 
 		updateSignalRequestedIDs:  make(map[string]struct{}),
 		pendingSignalRequestedIDs: make(map[string]struct{}),
-		deleteSignalRequestedID:   "",
+		deleteSignalRequestedIDs:  make(map[string]struct{}),
 
 		currentVersion:        namespaceEntry.GetFailoverVersion(),
 		hasBufferedEventsInDB: false,
@@ -1170,7 +1170,7 @@ func (e *mutableStateBuilder) DeletePendingChildExecution(
 		e.logDataInconsistency()
 	}
 
-	e.deleteChildExecutionInfo = &initiatedEventID
+	e.deleteChildExecutionInfos[initiatedEventID] = struct{}{}
 	return nil
 }
 
@@ -1190,7 +1190,7 @@ func (e *mutableStateBuilder) DeletePendingRequestCancel(
 		e.logDataInconsistency()
 	}
 
-	e.deleteRequestCancelInfo = &initiatedEventID
+	e.deleteRequestCancelInfos[initiatedEventID] = struct{}{}
 	return nil
 }
 
@@ -1210,7 +1210,7 @@ func (e *mutableStateBuilder) DeletePendingSignal(
 		e.logDataInconsistency()
 	}
 
-	e.deleteSignalInfo = &initiatedEventID
+	e.deleteSignalInfos[initiatedEventID] = struct{}{}
 	return nil
 }
 
@@ -1603,7 +1603,7 @@ func (e *mutableStateBuilder) DeleteSignalRequested(
 ) {
 
 	delete(e.pendingSignalRequestedIDs, requestID)
-	e.deleteSignalRequestedID = requestID
+	e.deleteSignalRequestedIDs[requestID] = struct{}{}
 }
 
 func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
@@ -3902,13 +3902,13 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		UpsertTimerInfos:          convertUpdateTimerInfos(e.updateTimerInfos),
 		DeleteTimerInfos:          convertDeleteTimerInfos(e.deleteTimerInfos),
 		UpsertChildExecutionInfos: convertUpdateChildExecutionInfos(e.updateChildExecutionInfos),
-		DeleteChildExecutionInfo:  e.deleteChildExecutionInfo,
+		DeleteChildExecutionInfos: convertInt64SetToSlice(e.deleteChildExecutionInfos),
 		UpsertRequestCancelInfos:  convertUpdateRequestCancelInfos(e.updateRequestCancelInfos),
-		DeleteRequestCancelInfo:   e.deleteRequestCancelInfo,
+		DeleteRequestCancelInfos:  convertInt64SetToSlice(e.deleteRequestCancelInfos),
 		UpsertSignalInfos:         convertUpdateSignalInfos(e.updateSignalInfos),
-		DeleteSignalInfo:          e.deleteSignalInfo,
+		DeleteSignalInfos:         convertInt64SetToSlice(e.deleteSignalInfos),
 		UpsertSignalRequestedIDs:  convertStringSetToSlice(e.updateSignalRequestedIDs),
-		DeleteSignalRequestedID:   e.deleteSignalRequestedID,
+		DeleteSignalRequestedIDs:  convertStringSetToSlice(e.deleteSignalRequestedIDs),
 		NewBufferedEvents:         e.updateBufferedEvents,
 		ClearBufferedEvents:       e.clearBufferedEvents,
 
@@ -4076,16 +4076,16 @@ func (e *mutableStateBuilder) cleanupTransaction(
 	e.deleteTimerInfos = make(map[string]struct{})
 
 	e.updateChildExecutionInfos = make(map[*persistencespb.ChildExecutionInfo]struct{})
-	e.deleteChildExecutionInfo = nil
+	e.deleteChildExecutionInfos = make(map[int64]struct{})
 
 	e.updateRequestCancelInfos = make(map[*persistencespb.RequestCancelInfo]struct{})
-	e.deleteRequestCancelInfo = nil
+	e.deleteRequestCancelInfos = make(map[int64]struct{})
 
 	e.updateSignalInfos = make(map[*persistencespb.SignalInfo]struct{})
-	e.deleteSignalInfo = nil
+	e.deleteSignalInfos = make(map[int64]struct{})
 
 	e.updateSignalRequestedIDs = make(map[string]struct{})
-	e.deleteSignalRequestedID = ""
+	e.deleteSignalRequestedIDs = make(map[string]struct{})
 
 	e.clearBufferedEvents = false
 	if e.updateBufferedEvents != nil {

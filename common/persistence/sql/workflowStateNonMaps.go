@@ -39,7 +39,7 @@ import (
 func updateSignalsRequested(
 	tx sqlplugin.Tx,
 	signalRequestedIDs []string,
-	deleteSignalRequestID string,
+	deleteSignalRequestIDs []string,
 	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
@@ -62,7 +62,7 @@ func updateSignalsRequested(
 		}
 	}
 
-	if deleteSignalRequestID != "" {
+	for _, deleteSignalRequestID := range deleteSignalRequestIDs {
 		if _, err := tx.DeleteFromSignalsRequestedSets(sqlplugin.SignalsRequestedSetsDeleteFilter{
 			ShardID:     shardID,
 			NamespaceID: namespaceID,
@@ -73,7 +73,6 @@ func updateSignalsRequested(
 			return serviceerror.NewInternal(fmt.Sprintf("Failed to update signals requested. Failed to execute delete query. Error: %v", err))
 		}
 	}
-
 	return nil
 }
 
