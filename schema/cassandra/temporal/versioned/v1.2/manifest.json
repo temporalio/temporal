@@ -3,6 +3,6 @@
   "MinCompatibleVersion": "1.0",
   "Description": "schema update for RPC replication",
   "SchemaUpdateCqlFiles": [
-    "replication.cql"
+    "queue.cql"
   ]
 }
