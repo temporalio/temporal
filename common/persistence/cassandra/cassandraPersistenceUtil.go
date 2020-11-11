@@ -933,7 +933,7 @@ func createOrUpdateCurrentExecution(
 func updateActivityInfos(
 	batch *gocql.Batch,
 	activityInfos []*persistencespb.ActivityInfo,
-	deleteInfos []int64,
+	deleteIDs []int64,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -959,9 +959,9 @@ func updateActivityInfos(
 			rowTypeExecutionTaskID)
 	}
 
-	for _, deleteInfoID := range deleteInfos {
+	for _, deleteID := range deleteIDs {
 		batch.Query(templateDeleteActivityInfoQuery,
-			deleteInfoID,
+			deleteID,
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1093,7 +1093,7 @@ func resetTimerInfos(
 func updateChildExecutionInfos(
 	batch *gocql.Batch,
 	childExecutionInfos []*persistencespb.ChildExecutionInfo,
-	deleteInfos []int64,
+	deleteIDs []int64,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1119,9 +1119,9 @@ func updateChildExecutionInfos(
 			rowTypeExecutionTaskID)
 	}
 
-	for _, deleteInfoID := range deleteInfos {
+	for _, deleteID := range deleteIDs {
 		batch.Query(templateDeleteChildExecutionInfoQuery,
-			deleteInfoID,
+			deleteID,
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1162,7 +1162,7 @@ func resetChildExecutionInfos(
 func updateRequestCancelInfos(
 	batch *gocql.Batch,
 	requestCancelInfos []*persistencespb.RequestCancelInfo,
-	deleteInfos []int64,
+	deleteIDs []int64,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1188,9 +1188,9 @@ func updateRequestCancelInfos(
 			rowTypeExecutionTaskID)
 	}
 
-	for _, deleteInfoID := range deleteInfos {
+	for _, deleteID := range deleteIDs {
 		batch.Query(templateDeleteRequestCancelInfoQuery,
-			deleteInfoID,
+			deleteID,
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1234,7 +1234,7 @@ func resetRequestCancelInfos(
 func updateSignalInfos(
 	batch *gocql.Batch,
 	signalInfos []*persistencespb.SignalInfo,
-	deleteInfos []int64,
+	deleteIDs []int64,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1260,9 +1260,9 @@ func updateSignalInfos(
 			rowTypeExecutionTaskID)
 	}
 
-	for _, deleteInfoID := range deleteInfos {
+	for _, deleteID := range deleteIDs {
 		batch.Query(templateDeleteSignalInfoQuery,
-			deleteInfoID,
+			deleteID,
 			shardID,
 			rowTypeExecution,
 			namespaceID,
