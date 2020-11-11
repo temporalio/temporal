@@ -251,7 +251,7 @@ func (t *activityReplicationTask) HandleErr(
 		return err
 	}
 
-	retryV2Err, ok := err.(*serviceerrors.RetryTaskV2)
+	retryV2Err, ok := err.(*serviceerrors.RetryReplication)
 
 	if ok {
 		t.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientRequests)
@@ -297,7 +297,7 @@ func (t *historyMetadataReplicationTask) Execute() error {
 func (t *historyMetadataReplicationTask) HandleErr(
 	err error,
 ) error {
-	retryErr, ok := err.(*serviceerrors.RetryTaskV2)
+	retryErr, ok := err.(*serviceerrors.RetryReplication)
 	if !ok {
 		return err
 	}
@@ -318,7 +318,7 @@ func (t *historyReplicationV2Task) HandleErr(err error) error {
 		return err
 	}
 
-	retryErr, ok := err.(*serviceerrors.RetryTaskV2)
+	retryErr, ok := err.(*serviceerrors.RetryReplication)
 	if !ok {
 		return err
 	}

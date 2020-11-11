@@ -161,7 +161,6 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		ExecutionStats:                    info.ExecutionStats,
 		StartVersion:                      info.StartVersion,
 		HistorySize:                       info.HistorySize,
-		EventStoreVersion:                 info.EventStoreVersion,
 		CancelRequestId:                   info.CancelRequestId,
 		VersionHistories:                  info.VersionHistories,
 	}
@@ -280,12 +279,11 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		Memo:                              info.Memo,
 		SearchAttributes:                  info.SearchAttributes,
 
-		ExecutionStats:    info.ExecutionStats,
-		VersionHistories:  info.VersionHistories,
-		CancelRequestId:   info.CancelRequestId,
-		EventStoreVersion: info.EventStoreVersion,
-		HistorySize:       info.HistorySize,
-		StartVersion:      info.StartVersion,
+		ExecutionStats:   info.ExecutionStats,
+		VersionHistories: info.VersionHistories,
+		CancelRequestId:  info.CancelRequestId,
+		HistorySize:      info.HistorySize,
+		StartVersion:     info.StartVersion,
 	}, nil
 }
 
@@ -414,13 +412,13 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		UpsertTimerInfos:          input.UpsertTimerInfos,
 		DeleteTimerInfos:          input.DeleteTimerInfos,
 		UpsertChildExecutionInfos: input.UpsertChildExecutionInfos,
-		DeleteChildExecutionInfo:  input.DeleteChildExecutionInfo,
+		DeleteChildExecutionInfos: input.DeleteChildExecutionInfos,
 		UpsertRequestCancelInfos:  input.UpsertRequestCancelInfos,
-		DeleteRequestCancelInfo:   input.DeleteRequestCancelInfo,
+		DeleteRequestCancelInfos:  input.DeleteRequestCancelInfos,
 		UpsertSignalInfos:         input.UpsertSignalInfos,
-		DeleteSignalInfo:          input.DeleteSignalInfo,
+		DeleteSignalInfos:         input.DeleteSignalInfos,
 		UpsertSignalRequestedIDs:  input.UpsertSignalRequestedIDs,
-		DeleteSignalRequestedID:   input.DeleteSignalRequestedID,
+		DeleteSignalRequestedIDs:  input.DeleteSignalRequestedIDs,
 		NewBufferedEvents:         serializedNewBufferedEvents,
 		ClearBufferedEvents:       input.ClearBufferedEvents,
 

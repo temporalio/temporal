@@ -25,6 +25,7 @@
 package persistence
 
 import (
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
@@ -803,12 +804,12 @@ func (p *historyV2RateLimitedPersistenceClient) GetAllHistoryTreeBranches(reques
 	return response, err
 }
 
-func (p *queueRateLimitedPersistenceClient) EnqueueMessage(message []byte) error {
+func (p *queueRateLimitedPersistenceClient) EnqueueMessage(blob commonpb.DataBlob) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.EnqueueMessage(message)
+	return p.persistence.EnqueueMessage(blob)
 }
 
 func (p *queueRateLimitedPersistenceClient) ReadMessages(lastMessageID int64, maxCount int) ([]*QueueMessage, error) {
@@ -843,12 +844,12 @@ func (p *queueRateLimitedPersistenceClient) DeleteMessagesBefore(messageID int64
 	return p.persistence.DeleteMessagesBefore(messageID)
 }
 
-func (p *queueRateLimitedPersistenceClient) EnqueueMessageToDLQ(message []byte) (int64, error) {
+func (p *queueRateLimitedPersistenceClient) EnqueueMessageToDLQ(blob commonpb.DataBlob) (int64, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
-		return emptyMessageID, ErrPersistenceLimitExceeded
+		return EmptyQueueMessageID, ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.EnqueueMessageToDLQ(message)
+	return p.persistence.EnqueueMessageToDLQ(blob)
 }
 
 func (p *queueRateLimitedPersistenceClient) ReadMessagesFromDLQ(firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error) {

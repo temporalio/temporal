@@ -94,7 +94,7 @@ func applyWorkflowMutationBatch(
 	if err := updateChildExecutionInfos(
 		batch,
 		workflowMutation.UpsertChildExecutionInfos,
-		workflowMutation.DeleteChildExecutionInfo,
+		workflowMutation.DeleteChildExecutionInfos,
 		shardID,
 		namespaceID,
 		workflowID,
@@ -106,7 +106,7 @@ func applyWorkflowMutationBatch(
 	if err := updateRequestCancelInfos(
 		batch,
 		workflowMutation.UpsertRequestCancelInfos,
-		workflowMutation.DeleteRequestCancelInfo,
+		workflowMutation.DeleteRequestCancelInfos,
 		shardID,
 		namespaceID,
 		workflowID,
@@ -118,7 +118,7 @@ func applyWorkflowMutationBatch(
 	if err := updateSignalInfos(
 		batch,
 		workflowMutation.UpsertSignalInfos,
-		workflowMutation.DeleteSignalInfo,
+		workflowMutation.DeleteSignalInfos,
 		shardID,
 		namespaceID,
 		workflowID,
@@ -130,7 +130,7 @@ func applyWorkflowMutationBatch(
 	updateSignalsRequested(
 		batch,
 		workflowMutation.UpsertSignalRequestedIDs,
-		workflowMutation.DeleteSignalRequestedID,
+		workflowMutation.DeleteSignalRequestedIDs,
 		shardID,
 		namespaceID,
 		workflowID,
@@ -358,7 +358,7 @@ func applyWorkflowSnapshotBatchAsNew(
 	updateSignalsRequested(
 		batch,
 		workflowSnapshot.SignalRequestedIDs,
-		"",
+		nil,
 		shardID,
 		namespaceID,
 		workflowID,
@@ -713,19 +713,17 @@ func createReplicationTasks(
 		}
 
 		datablob, err := serialization.ReplicationTaskInfoToBlob(&persistencespb.ReplicationTaskInfo{
-			NamespaceId:             namespaceID,
-			WorkflowId:              workflowID,
-			RunId:                   runID,
-			TaskId:                  task.GetTaskID(),
-			TaskType:                task.GetType(),
-			Version:                 version,
-			FirstEventId:            firstEventID,
-			NextEventId:             nextEventID,
-			ScheduledId:             activityScheduleID,
-			EventStoreVersion:       p.EventStoreVersion,
-			NewRunBranchToken:       newRunBranchToken,
-			NewRunEventStoreVersion: p.EventStoreVersion,
-			BranchToken:             branchToken,
+			NamespaceId:       namespaceID,
+			WorkflowId:        workflowID,
+			RunId:             runID,
+			TaskId:            task.GetTaskID(),
+			TaskType:          task.GetType(),
+			Version:           version,
+			FirstEventId:      firstEventID,
+			NextEventId:       nextEventID,
+			ScheduledId:       activityScheduleID,
+			BranchToken:       branchToken,
+			NewRunBranchToken: newRunBranchToken,
 		})
 
 		if err != nil {
@@ -935,7 +933,7 @@ func createOrUpdateCurrentExecution(
 func updateActivityInfos(
 	batch *gocql.Batch,
 	activityInfos []*persistencespb.ActivityInfo,
-	deleteInfos []int64,
+	deleteIDs []int64,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -961,9 +959,9 @@ func updateActivityInfos(
 			rowTypeExecutionTaskID)
 	}
 
-	for _, deleteInfo := range deleteInfos {
+	for _, deleteID := range deleteIDs {
 		batch.Query(templateDeleteActivityInfoQuery,
-			deleteInfo,
+			deleteID,
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1030,14 +1028,14 @@ func updateTimerInfos(
 	workflowID string,
 	runID string,
 ) error {
-	for _, a := range timerInfos {
-		datablob, err := serialization.TimerInfoToBlob(a)
+	for _, timerInfo := range timerInfos {
+		datablob, err := serialization.TimerInfoToBlob(timerInfo)
 		if err != nil {
 			return err
 		}
 
 		batch.Query(templateUpdateTimerInfoQuery,
-			a.GetTimerId(),                 // timermap key
+			timerInfo.GetTimerId(),         // timermap key
 			datablob.Data,                  // timermap data
 			datablob.EncodingType.String(), // timermap encoding
 			shardID,                        // where ...
@@ -1049,9 +1047,9 @@ func updateTimerInfos(
 			rowTypeExecutionTaskID)
 	}
 
-	for _, t := range deleteInfos {
+	for _, deleteInfoID := range deleteInfos {
 		batch.Query(templateDeleteTimerInfoQuery,
-			t,
+			deleteInfoID,
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1072,8 +1070,8 @@ func resetTimerInfos(
 	workflowID string,
 	runID string,
 ) error {
-	timerMap, timerMapEncoding, err := resetTimerInfoMap(timerInfos)
 
+	timerMap, timerMapEncoding, err := resetTimerInfoMap(timerInfos)
 	if err != nil {
 		return err
 	}
@@ -1095,21 +1093,21 @@ func resetTimerInfos(
 func updateChildExecutionInfos(
 	batch *gocql.Batch,
 	childExecutionInfos []*persistencespb.ChildExecutionInfo,
-	deleteInfo *int64,
+	deleteIDs []int64,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
 
-	for _, c := range childExecutionInfos {
-		datablob, err := serialization.ChildExecutionInfoToBlob(c)
+	for _, childInfo := range childExecutionInfos {
+		datablob, err := serialization.ChildExecutionInfoToBlob(childInfo)
 		if err != nil {
 			return nil
 		}
 
 		batch.Query(templateUpdateChildExecutionInfoQuery,
-			c.InitiatedId,
+			childInfo.InitiatedId,
 			datablob.Data,
 			datablob.EncodingType.String(),
 			shardID,
@@ -1121,10 +1119,9 @@ func updateChildExecutionInfos(
 			rowTypeExecutionTaskID)
 	}
 
-	// deleteInfo is the initiatedID for ChildInfo being deleted
-	if deleteInfo != nil {
+	for _, deleteID := range deleteIDs {
 		batch.Query(templateDeleteChildExecutionInfoQuery,
-			*deleteInfo,
+			deleteID,
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1165,21 +1162,21 @@ func resetChildExecutionInfos(
 func updateRequestCancelInfos(
 	batch *gocql.Batch,
 	requestCancelInfos []*persistencespb.RequestCancelInfo,
-	deleteInfo *int64,
+	deleteIDs []int64,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
 
-	for _, c := range requestCancelInfos {
-		datablob, err := serialization.RequestCancelInfoToBlob(c)
+	for _, requestCancelInfo := range requestCancelInfos {
+		datablob, err := serialization.RequestCancelInfoToBlob(requestCancelInfo)
 		if err != nil {
 			return err
 		}
 
 		batch.Query(templateUpdateRequestCancelInfoQuery,
-			c.GetInitiatedId(),
+			requestCancelInfo.GetInitiatedId(),
 			datablob.Data,
 			datablob.EncodingType.String(),
 			shardID,
@@ -1191,10 +1188,9 @@ func updateRequestCancelInfos(
 			rowTypeExecutionTaskID)
 	}
 
-	// deleteInfo is the initiatedID for RequestCancelInfo being deleted
-	if deleteInfo != nil {
+	for _, deleteID := range deleteIDs {
 		batch.Query(templateDeleteRequestCancelInfoQuery,
-			*deleteInfo,
+			deleteID,
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1203,7 +1199,6 @@ func updateRequestCancelInfos(
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID)
 	}
-
 	return nil
 }
 
@@ -1239,21 +1234,21 @@ func resetRequestCancelInfos(
 func updateSignalInfos(
 	batch *gocql.Batch,
 	signalInfos []*persistencespb.SignalInfo,
-	deleteInfo *int64,
+	deleteIDs []int64,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
 
-	for _, c := range signalInfos {
-		datablob, err := serialization.SignalInfoToBlob(c)
+	for _, signalInfo := range signalInfos {
+		datablob, err := serialization.SignalInfoToBlob(signalInfo)
 		if err != nil {
 			return err
 		}
 
 		batch.Query(templateUpdateSignalInfoQuery,
-			c.GetInitiatedId(),
+			signalInfo.GetInitiatedId(),
 			datablob.Data,
 			datablob.EncodingType.String(),
 			shardID,
@@ -1265,10 +1260,9 @@ func updateSignalInfos(
 			rowTypeExecutionTaskID)
 	}
 
-	// deleteInfo is the initiatedID for SignalInfo being deleted
-	if deleteInfo != nil {
+	for _, deleteID := range deleteIDs {
 		batch.Query(templateDeleteSignalInfoQuery,
-			*deleteInfo,
+			deleteID,
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1277,7 +1271,6 @@ func updateSignalInfos(
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID)
 	}
-
 	return nil
 }
 
@@ -1312,7 +1305,7 @@ func resetSignalInfos(
 func updateSignalsRequested(
 	batch *gocql.Batch,
 	signalReqIDs []string,
-	deleteSignalReqID string,
+	deleteSignalReqIDs []string,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1331,10 +1324,9 @@ func updateSignalsRequested(
 			rowTypeExecutionTaskID)
 	}
 
-	if deleteSignalReqID != "" {
-		req := []string{deleteSignalReqID} // for cassandra set binding
+	if len(deleteSignalReqIDs) > 0 {
 		batch.Query(templateDeleteWorkflowExecutionSignalRequestedQuery,
-			req,
+			deleteSignalReqIDs,
 			shardID,
 			rowTypeExecution,
 			namespaceID,

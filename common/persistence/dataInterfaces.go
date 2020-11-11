@@ -41,14 +41,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
-const (
-	// EventStoreVersion is already deprecated, this is used for forward
-	// compatibility (so that rollback is possible).
-	// TODO we can remove it after fixing all the query templates and when
-	// we decide the compatibility is no longer needed.
-	EventStoreVersion = 2
-)
-
 // CreateWorkflowMode workflow creation mode
 type CreateWorkflowMode int
 
@@ -522,13 +514,13 @@ type (
 		UpsertTimerInfos          []*persistencespb.TimerInfo
 		DeleteTimerInfos          []string
 		UpsertChildExecutionInfos []*persistencespb.ChildExecutionInfo
-		DeleteChildExecutionInfo  *int64
+		DeleteChildExecutionInfos []int64
 		UpsertRequestCancelInfos  []*persistencespb.RequestCancelInfo
-		DeleteRequestCancelInfo   *int64
+		DeleteRequestCancelInfos  []int64
 		UpsertSignalInfos         []*persistencespb.SignalInfo
-		DeleteSignalInfo          *int64
+		DeleteSignalInfos         []int64
 		UpsertSignalRequestedIDs  []string
-		DeleteSignalRequestedID   string
+		DeleteSignalRequestedIDs  []string
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 

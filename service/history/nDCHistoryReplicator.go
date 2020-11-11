@@ -369,7 +369,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareBranch(
 	switch err.(type) {
 	case nil:
 		return doContinue, versionHistoryIndex, nil
-	case *serviceerrors.RetryTaskV2:
+	case *serviceerrors.RetryReplication:
 		// replication message can arrive out of order
 		// do not log
 		return false, 0, err
@@ -616,7 +616,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 	// for non reset workflow execution replication task, just do re-replication
 	if !task.isWorkflowReset() {
 		firstEvent := task.getFirstEvent()
-		return nil, serviceerrors.NewRetryTaskV2(
+		return nil, serviceerrors.NewRetryReplication(
 			mutableStateMissingMessage,
 			task.getNamespaceID(),
 			task.getWorkflowID(),

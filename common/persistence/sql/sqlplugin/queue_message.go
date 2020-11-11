@@ -26,15 +26,8 @@ package sqlplugin
 
 import (
 	"database/sql"
-	"math"
 
 	"go.temporal.io/server/common/persistence"
-)
-
-const (
-	EmptyMessageID = int64(-1)
-	MinMessageID   = EmptyMessageID + 1
-	MaxMessageID   = math.MaxInt64
 )
 
 type (

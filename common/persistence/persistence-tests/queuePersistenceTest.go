@@ -32,7 +32,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -97,7 +97,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 
 	wg.Wait()
 
-	result, lastRetrievedMessageID, err := s.GetReplicationMessages(sqlplugin.EmptyMessageID, numMessages)
+	result, lastRetrievedMessageID, err := s.GetReplicationMessages(persistence.EmptyQueueMessageID, numMessages)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Len(result, numMessages)
 	s.Equal(int64(numMessages-1), lastRetrievedMessageID)
@@ -173,28 +173,28 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 
 	wg.Wait()
 
-	result1, token, err := s.GetMessagesFromNamespaceDLQ(sqlplugin.EmptyMessageID, maxMessageID, numMessages/2, nil)
+	result1, token, err := s.GetMessagesFromNamespaceDLQ(persistence.EmptyQueueMessageID, maxMessageID, numMessages/2, nil)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.NotNil(token)
-	result2, token, err := s.GetMessagesFromNamespaceDLQ(sqlplugin.EmptyMessageID, maxMessageID, numMessages, token)
+	result2, token, err := s.GetMessagesFromNamespaceDLQ(persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 	s.Equal(len(result1)+len(result2), numMessages)
-	_, _, err = s.GetMessagesFromNamespaceDLQ(sqlplugin.EmptyMessageID, 1<<63-1, numMessages, nil)
+	_, _, err = s.GetMessagesFromNamespaceDLQ(persistence.EmptyQueueMessageID, 1<<63-1, numMessages, nil)
 	s.NoError(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 
 	lastMessageID := result2[len(result2)-1].SourceTaskId
 	err = s.DeleteMessageFromNamespaceDLQ(lastMessageID)
 	s.NoError(err)
-	result3, token, err := s.GetMessagesFromNamespaceDLQ(sqlplugin.EmptyMessageID, maxMessageID, numMessages, token)
+	result3, token, err := s.GetMessagesFromNamespaceDLQ(persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 	s.Equal(len(result3), numMessages-1)
 
-	err = s.RangeDeleteMessagesFromNamespaceDLQ(sqlplugin.EmptyMessageID, lastMessageID)
+	err = s.RangeDeleteMessagesFromNamespaceDLQ(persistence.EmptyQueueMessageID, lastMessageID)
 	s.NoError(err)
-	result4, token, err := s.GetMessagesFromNamespaceDLQ(sqlplugin.EmptyMessageID, maxMessageID, numMessages, token)
+	result4, token, err := s.GetMessagesFromNamespaceDLQ(persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 	s.Equal(len(result4), 0)
@@ -204,7 +204,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 func (s *QueuePersistenceSuite) TestNamespaceDLQMetadataOperations() {
 	ackLevel, err := s.GetNamespaceDLQAckLevel()
 	s.Require().NoError(err)
-	s.Equal(sqlplugin.EmptyMessageID, ackLevel)
+	s.Equal(persistence.EmptyQueueMessageID, ackLevel)
 
 	err = s.UpdateNamespaceDLQAckLevel(10)
 	s.NoError(err)

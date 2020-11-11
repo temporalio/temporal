@@ -577,7 +577,7 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *persistencespb.WorkflowE
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedState, nextEventID, workflowTaskScheduleIDs, activityScheduleIDs,
 		s.ShardInfo.GetRangeId(), condition, timerTasks, upsertActivityInfos, deleteActivityInfos,
 		upsertTimerInfos, deleteTimerInfos, nil, nil, nil, nil,
-		nil, nil, nil, "")
+		nil, nil, nil, nil)
 }
 
 // UpdateWorkflowExecutionAndFinish is a utility method to update workflow execution
@@ -610,7 +610,7 @@ func (s *TestBase) UpsertChildExecutionsState(updatedInfo *persistencespb.Workfl
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedState, nextEventID, nil, nil,
 		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
 		nil, nil, upsertChildInfos, nil, nil, nil,
-		nil, nil, nil, "")
+		nil, nil, nil, nil)
 }
 
 // UpsertRequestCancelState is a utility method to update mutable state of workflow execution
@@ -620,7 +620,7 @@ func (s *TestBase) UpsertRequestCancelState(updatedInfo *persistencespb.Workflow
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedState, nextEventID, nil, nil,
 		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
 		nil, nil, nil, nil, upsertCancelInfos, nil,
-		nil, nil, nil, "")
+		nil, nil, nil, nil)
 }
 
 // UpsertSignalInfoState is a utility method to update mutable state of workflow execution
@@ -630,7 +630,7 @@ func (s *TestBase) UpsertSignalInfoState(updatedInfo *persistencespb.WorkflowExe
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedState, nextEventID, nil, nil,
 		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
-		upsertSignalInfos, nil, nil, "")
+		upsertSignalInfos, nil, nil, nil)
 }
 
 // UpsertSignalsRequestedState is a utility method to update mutable state of workflow execution
@@ -640,7 +640,7 @@ func (s *TestBase) UpsertSignalsRequestedState(updatedInfo *persistencespb.Workf
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedState, nextEventID, nil, nil,
 		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
-		nil, nil, upsertSignalsRequested, "")
+		nil, nil, upsertSignalsRequested, nil)
 }
 
 // DeleteChildExecutionsState is a utility method to delete child execution from mutable state
@@ -649,8 +649,8 @@ func (s *TestBase) DeleteChildExecutionsState(updatedInfo *persistencespb.Workfl
 	condition int64, deleteChildInfo int64) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedState, nextEventID, nil, nil,
 		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
-		nil, nil, nil, &deleteChildInfo, nil, nil,
-		nil, nil, nil, "")
+		nil, nil, nil, []int64{deleteChildInfo}, nil, nil,
+		nil, nil, nil, nil)
 }
 
 // DeleteCancelState is a utility method to delete request cancel state from mutable state
@@ -659,8 +659,8 @@ func (s *TestBase) DeleteCancelState(updatedInfo *persistencespb.WorkflowExecuti
 	condition int64, deleteCancelInfo int64) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedState, nextEventID, nil, nil,
 		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
-		nil, nil, nil, nil, nil, &deleteCancelInfo,
-		nil, nil, nil, "")
+		nil, nil, nil, nil, nil, []int64{deleteCancelInfo},
+		nil, nil, nil, nil)
 }
 
 // DeleteSignalState is a utility method to delete request cancel state from mutable state
@@ -670,17 +670,17 @@ func (s *TestBase) DeleteSignalState(updatedInfo *persistencespb.WorkflowExecuti
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedState, nextEventID, nil, nil,
 		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
-		nil, &deleteSignalInfo, nil, "")
+		nil, []int64{deleteSignalInfo}, nil, nil)
 }
 
 // DeleteSignalsRequestedState is a utility method to delete mutable state of workflow execution
 func (s *TestBase) DeleteSignalsRequestedState(updatedInfo *persistencespb.WorkflowExecutionInfo,
 	updatedState *persistencespb.WorkflowExecutionState, nextEventID int64,
-	condition int64, deleteSignalsRequestedID string) error {
+	condition int64, deleteSignalsRequestedIDs []string) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedState, nextEventID, nil, nil,
 		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, deleteSignalsRequestedID)
+		nil, nil, nil, deleteSignalsRequestedIDs)
 }
 
 // UpdateWorklowStateAndReplication is a utility method to update workflow execution
@@ -688,7 +688,7 @@ func (s *TestBase) UpdateWorklowStateAndReplication(updatedInfo *persistencespb.
 	updatedState *persistencespb.WorkflowExecutionState, nextEventID int64,
 	condition int64, txTasks []persistence.Task) error {
 	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedState, nextEventID, nil, nil,
-		s.ShardInfo.GetRangeId(), condition, nil, txTasks, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
+		s.ShardInfo.GetRangeId(), condition, nil, txTasks, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 }
 
 // UpdateWorkflowExecutionWithRangeID is a utility method to update workflow execution
@@ -696,14 +696,14 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *persistencesp
 	updatedState *persistencespb.WorkflowExecutionState, nextEventID int64,
 	workflowTaskScheduleIDs []int64, activityScheduleIDs []int64, rangeID, condition int64, timerTasks []persistence.Task,
 	upsertActivityInfos []*persistencespb.ActivityInfo, deleteActivityInfos []int64, upsertTimerInfos []*persistencespb.TimerInfo,
-	deleteTimerInfos []string, upsertChildInfos []*persistencespb.ChildExecutionInfo, deleteChildInfo *int64,
-	upsertCancelInfos []*persistencespb.RequestCancelInfo, deleteCancelInfo *int64,
-	upsertSignalInfos []*persistencespb.SignalInfo, deleteSignalInfo *int64,
-	upsertSignalRequestedIDs []string, deleteSignalRequestedID string) error {
+	deleteTimerInfos []string, upsertChildInfos []*persistencespb.ChildExecutionInfo, deleteChildInfos []int64,
+	upsertCancelInfos []*persistencespb.RequestCancelInfo, deleteCancelInfos []int64,
+	upsertSignalInfos []*persistencespb.SignalInfo, deleteSignalInfos []int64,
+	upsertSignalRequestedIDs []string, deleteSignalRequestedIDs []string) error {
 	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedState, nextEventID, workflowTaskScheduleIDs, activityScheduleIDs, rangeID,
 		condition, timerTasks, []persistence.Task{}, upsertActivityInfos, deleteActivityInfos, upsertTimerInfos, deleteTimerInfos,
-		upsertChildInfos, deleteChildInfo, upsertCancelInfos, deleteCancelInfo, upsertSignalInfos, deleteSignalInfo,
-		upsertSignalRequestedIDs, deleteSignalRequestedID)
+		upsertChildInfos, deleteChildInfos, upsertCancelInfos, deleteCancelInfos, upsertSignalInfos, deleteSignalInfos,
+		upsertSignalRequestedIDs, deleteSignalRequestedIDs)
 }
 
 // UpdateWorkflowExecutionWithReplication is a utility method to update workflow execution
@@ -712,9 +712,9 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *persisten
 	workflowTaskScheduleIDs []int64, activityScheduleIDs []int64, rangeID,
 	condition int64, timerTasks []persistence.Task, txTasks []persistence.Task, upsertActivityInfos []*persistencespb.ActivityInfo,
 	deleteActivityInfos []int64, upsertTimerInfos []*persistencespb.TimerInfo, deleteTimerInfos []string,
-	upsertChildInfos []*persistencespb.ChildExecutionInfo, deleteChildInfo *int64, upsertCancelInfos []*persistencespb.RequestCancelInfo,
-	deleteCancelInfo *int64, upsertSignalInfos []*persistencespb.SignalInfo, deleteSignalInfo *int64, upsertSignalRequestedIDs []string,
-	deleteSignalRequestedID string) error {
+	upsertChildInfos []*persistencespb.ChildExecutionInfo, deleteChildInfos []int64, upsertCancelInfos []*persistencespb.RequestCancelInfo,
+	deleteCancelInfos []int64, upsertSignalInfos []*persistencespb.SignalInfo, deleteSignalInfos []int64, upsertSignalRequestedIDs []string,
+	deleteSignalRequestedIDs []string) error {
 	var transferTasks []persistence.Task
 	var replicationTasks []persistence.Task
 	for _, task := range txTasks {
@@ -754,13 +754,13 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *persisten
 			UpsertTimerInfos:          upsertTimerInfos,
 			DeleteTimerInfos:          deleteTimerInfos,
 			UpsertChildExecutionInfos: upsertChildInfos,
-			DeleteChildExecutionInfo:  deleteChildInfo,
+			DeleteChildExecutionInfos: deleteChildInfos,
 			UpsertRequestCancelInfos:  upsertCancelInfos,
-			DeleteRequestCancelInfo:   deleteCancelInfo,
+			DeleteRequestCancelInfos:  deleteCancelInfos,
 			UpsertSignalInfos:         upsertSignalInfos,
-			DeleteSignalInfo:          deleteSignalInfo,
+			DeleteSignalInfos:         deleteSignalInfos,
 			UpsertSignalRequestedIDs:  upsertSignalRequestedIDs,
-			DeleteSignalRequestedID:   deleteSignalRequestedID,
+			DeleteSignalRequestedIDs:  deleteSignalRequestedIDs,
 
 			TransferTasks:    transferTasks,
 			ReplicationTasks: replicationTasks,
