@@ -32,8 +32,8 @@ import (
 )
 
 type (
-	// RetryTaskV2 represents retry task v2 error.
-	RetryTaskV2 struct {
+	// RetryReplication represents retry task v2 error.
+	RetryReplication struct {
 		Message           string
 		NamespaceId       string
 		WorkflowId        string
@@ -42,13 +42,22 @@ type (
 		StartEventVersion int64
 		EndEventId        int64
 		EndEventVersion   int64
-		st                *status.Status
+		status            *status.Status
 	}
 )
 
-// NewRetryTaskV2 returns new RetryTaskV2 error.
-func NewRetryTaskV2(message, namespaceId, workflowId, runId string, startEventId, startEventVersion, endEventId, endEventVersion int64) *RetryTaskV2 {
-	return &RetryTaskV2{
+// NewRetryReplication returns new RetryReplication error.
+func NewRetryReplication(
+	message string,
+	namespaceId string,
+	workflowId string,
+	runId string,
+	startEventId int64,
+	startEventVersion int64,
+	endEventId int64,
+	endEventVersion int64,
+) *RetryReplication {
+	return &RetryReplication{
 		Message:           message,
 		NamespaceId:       namespaceId,
 		WorkflowId:        workflowId,
@@ -61,13 +70,13 @@ func NewRetryTaskV2(message, namespaceId, workflowId, runId string, startEventId
 }
 
 // Error returns string message.
-func (e *RetryTaskV2) Error() string {
+func (e *RetryReplication) Error() string {
 	return e.Message
 }
 
-func (e *RetryTaskV2) Status() *status.Status {
-	if e.st != nil {
-		return e.st
+func (e *RetryReplication) Status() *status.Status {
+	if e.status != nil {
+		return e.status
 	}
 
 	st := status.New(codes.Aborted, e.Message)
@@ -85,9 +94,12 @@ func (e *RetryTaskV2) Status() *status.Status {
 	return st
 }
 
-func newRetryTaskV2(st *status.Status, errDetails *errordetails.RetryTaskV2Failure) *RetryTaskV2 {
-	return &RetryTaskV2{
-		Message:           st.Message(),
+func fromRetryTaskV2Failure(
+	status *status.Status,
+	errDetails *errordetails.RetryTaskV2Failure,
+) *RetryReplication {
+	return &RetryReplication{
+		Message:           status.Message(),
 		NamespaceId:       errDetails.GetNamespaceId(),
 		WorkflowId:        errDetails.GetWorkflowId(),
 		RunId:             errDetails.GetRunId(),
@@ -95,6 +107,6 @@ func newRetryTaskV2(st *status.Status, errDetails *errordetails.RetryTaskV2Failu
 		StartEventVersion: errDetails.GetStartEventVersion(),
 		EndEventId:        errDetails.GetEndEventId(),
 		EndEventVersion:   errDetails.GetEndEventVersion(),
-		st:                st,
+		status:            status,
 	}
 }

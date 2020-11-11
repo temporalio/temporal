@@ -256,7 +256,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 		if versionhistory.IsLCAVersionHistoryItemAppendable(currentVersionHistory, lcaItem) || versionhistory.IsLCAVersionHistoryItemAppendable(incomingVersionHistory, lcaItem) {
 			// case 1
 			if scheduleID > lcaItem.GetEventId() {
-				return false, serviceerrors.NewRetryTaskV2(
+				return false, serviceerrors.NewRetryReplication(
 					resendMissingEventMessage,
 					namespaceID,
 					workflowID,
@@ -274,7 +274,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 				return false, nil
 			} else if lastIncomingItem.GetVersion() > lastLocalItem.GetVersion() {
 				// case 2-2
-				return false, serviceerrors.NewRetryTaskV2(
+				return false, serviceerrors.NewRetryReplication(
 					resendHigherVersionMessage,
 					namespaceID,
 					workflowID,

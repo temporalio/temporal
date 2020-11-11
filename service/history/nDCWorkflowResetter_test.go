@@ -250,12 +250,12 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 		incomingFirstEventVersion,
 	)
 	s.Error(err)
-	s.IsType(&serviceerrors.RetryTaskV2{}, err)
+	s.IsType(&serviceerrors.RetryReplication{}, err)
 	s.Nil(rebuiltMutableState)
 
-	retryErr, isRetryError := err.(*serviceerrors.RetryTaskV2)
+	retryErr, isRetryError := err.(*serviceerrors.RetryReplication)
 	s.True(isRetryError)
-	expectedErr := serviceerrors.NewRetryTaskV2(
+	expectedErr := serviceerrors.NewRetryReplication(
 		resendOnResetWorkflowMessage,
 		s.namespaceID,
 		s.workflowID,
