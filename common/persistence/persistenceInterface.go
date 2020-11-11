@@ -26,12 +26,19 @@ package persistence
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+)
+
+const (
+	EmptyQueueMessageID = int64(-1)
+	MinQueueMessageID   = EmptyQueueMessageID + 1
+	MaxQueueMessageID   = math.MaxInt64
 )
 
 type (

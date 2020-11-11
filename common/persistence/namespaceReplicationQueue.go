@@ -43,7 +43,6 @@ import (
 
 const (
 	purgeInterval                    = 5 * time.Minute
-	emptyMessageID                   = -1
 	localNamespaceReplicationCluster = "namespaceReplication"
 )
 
@@ -244,12 +243,12 @@ func (q *namespaceReplicationQueueImpl) UpdateDLQAckLevel(
 func (q *namespaceReplicationQueueImpl) GetDLQAckLevel() (int64, error) {
 	dlqMetadata, err := q.queue.GetDLQAckLevels()
 	if err != nil {
-		return emptyMessageID, err
+		return EmptyQueueMessageID, err
 	}
 
 	ackLevel, ok := dlqMetadata[localNamespaceReplicationCluster]
 	if !ok {
-		return emptyMessageID, nil
+		return EmptyQueueMessageID, nil
 	}
 	return ackLevel, nil
 }

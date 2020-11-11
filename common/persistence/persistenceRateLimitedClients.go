@@ -846,7 +846,7 @@ func (p *queueRateLimitedPersistenceClient) DeleteMessagesBefore(messageID int64
 
 func (p *queueRateLimitedPersistenceClient) EnqueueMessageToDLQ(blob commonpb.DataBlob) (int64, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
-		return emptyMessageID, ErrPersistenceLimitExceeded
+		return EmptyQueueMessageID, ErrPersistenceLimitExceeded
 	}
 
 	return p.persistence.EnqueueMessageToDLQ(blob)

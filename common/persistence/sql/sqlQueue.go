@@ -84,7 +84,7 @@ func (q *sqlQueue) EnqueueMessage(
 			return err
 		case sql.ErrNoRows:
 			_, err = tx.InsertIntoMessages([]sqlplugin.QueueMessageRow{
-				newQueueRow(q.queueType, sqlplugin.EmptyMessageID+1, blob),
+				newQueueRow(q.queueType, persistence.EmptyQueueMessageID+1, blob),
 			})
 			return err
 		default:
@@ -105,7 +105,7 @@ func (q *sqlQueue) ReadMessages(
 	rows, err := q.db.RangeSelectFromMessages(sqlplugin.QueueMessagesRangeFilter{
 		QueueType:    q.queueType,
 		MinMessageID: lastMessageID,
-		MaxMessageID: sqlplugin.MaxMessageID,
+		MaxMessageID: persistence.MaxQueueMessageID,
 		PageSize:     pageSize,
 	})
 	if err != nil {
@@ -144,7 +144,7 @@ func (q *sqlQueue) DeleteMessagesBefore(
 
 	_, err := q.db.RangeDeleteFromMessages(sqlplugin.QueueMessagesRangeFilter{
 		QueueType:    q.queueType,
-		MinMessageID: sqlplugin.EmptyMessageID,
+		MinMessageID: persistence.EmptyQueueMessageID,
 		MaxMessageID: messageID - 1,
 	})
 	if err != nil {
@@ -245,7 +245,7 @@ func (q *sqlQueue) EnqueueMessageToDLQ(
 			return err
 		case sql.ErrNoRows:
 			_, err = tx.InsertIntoMessages([]sqlplugin.QueueMessageRow{
-				newQueueRow(q.getDLQTypeFromQueueType(), sqlplugin.EmptyMessageID+1, blob),
+				newQueueRow(q.getDLQTypeFromQueueType(), persistence.EmptyQueueMessageID+1, blob),
 			})
 			return err
 		default:
@@ -253,7 +253,7 @@ func (q *sqlQueue) EnqueueMessageToDLQ(
 		}
 	})
 	if err != nil {
-		return sqlplugin.EmptyMessageID, serviceerror.NewInternal(err.Error())
+		return persistence.EmptyQueueMessageID, serviceerror.NewInternal(err.Error())
 	}
 	return lastMessageID + 1, nil
 }

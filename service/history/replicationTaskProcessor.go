@@ -58,7 +58,6 @@ const (
 	replicationTimeout               = 30 * time.Second
 	taskErrorRetryBackoffCoefficient = 1.2
 	dlqErrorRetryWait                = time.Second
-	emptyMessageID                   = -1
 )
 
 var (
@@ -145,8 +144,8 @@ func NewReplicationTaskProcessor(
 		requestChan:            replicationTaskFetcher.GetRequestChan(),
 		syncShardChan:          make(chan *replicationspb.SyncShardStatus),
 		done:                   make(chan struct{}),
-		lastProcessedMessageID: emptyMessageID,
-		lastRetrievedMessageID: emptyMessageID,
+		lastProcessedMessageID: persistence.EmptyQueueMessageID,
+		lastRetrievedMessageID: persistence.EmptyQueueMessageID,
 	}
 }
 
