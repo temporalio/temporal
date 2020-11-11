@@ -32,8 +32,8 @@ import (
 )
 
 type (
-	// RetryTaskV2 represents retry task v2 error.
-	RetryTaskV2 struct {
+	// RetryReplication represents retry task v2 error.
+	RetryReplication struct {
 		Message           string
 		NamespaceId       string
 		WorkflowId        string
@@ -46,9 +46,18 @@ type (
 	}
 )
 
-// NewRetryTaskV2 returns new RetryTaskV2 error.
-func NewRetryTaskV2(message, namespaceId, workflowId, runId string, startEventId, startEventVersion, endEventId, endEventVersion int64) *RetryTaskV2 {
-	return &RetryTaskV2{
+// NewRetryReplication returns new RetryReplication error.
+func NewRetryReplication(
+	message string,
+	namespaceId string,
+	workflowId string,
+	runId string,
+	startEventId int64,
+	startEventVersion int64,
+	endEventId int64,
+	endEventVersion int64,
+) *RetryReplication {
+	return &RetryReplication{
 		Message:           message,
 		NamespaceId:       namespaceId,
 		WorkflowId:        workflowId,
@@ -61,18 +70,18 @@ func NewRetryTaskV2(message, namespaceId, workflowId, runId string, startEventId
 }
 
 // Error returns string message.
-func (e *RetryTaskV2) Error() string {
+func (e *RetryReplication) Error() string {
 	return e.Message
 }
 
-func (e *RetryTaskV2) Status() *status.Status {
+func (e *RetryReplication) Status() *status.Status {
 	if e.st != nil {
 		return e.st
 	}
 
 	st := status.New(codes.Aborted, e.Message)
 	st, _ = st.WithDetails(
-		&errordetails.RetryTaskV2Failure{
+		&errordetails.RetryReplicationFailure{
 			NamespaceId:       e.NamespaceId,
 			WorkflowId:        e.WorkflowId,
 			RunId:             e.RunId,
@@ -85,8 +94,11 @@ func (e *RetryTaskV2) Status() *status.Status {
 	return st
 }
 
-func newRetryTaskV2(st *status.Status, errDetails *errordetails.RetryTaskV2Failure) *RetryTaskV2 {
-	return &RetryTaskV2{
+func newRetryReplication(
+	st *status.Status,
+	errDetails *errordetails.RetryReplicationFailure,
+) *RetryReplication {
+	return &RetryReplication{
 		Message:           st.Message(),
 		NamespaceId:       errDetails.GetNamespaceId(),
 		WorkflowId:        errDetails.GetWorkflowId(),

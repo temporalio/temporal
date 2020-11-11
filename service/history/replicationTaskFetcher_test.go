@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
@@ -77,8 +78,8 @@ func (s *replicationTaskFetcherSuite) SetupTest() {
 
 	s.replicationTaskFetcher = newReplicationTaskFetcher(
 		logger,
-		"standby",
-		"active",
+		cluster.TestAlternativeClusterName,
+		cluster.TestCurrentClusterName,
 		s.config,
 		s.frontendClient,
 	)
@@ -88,59 +89,103 @@ func (s *replicationTaskFetcherSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *replicationTaskFetcherSuite) TestGetMessages() {
-	requestByShard := make(map[int32]*request)
-	token := &replicationspb.ReplicationToken{
-		ShardId:                1,
-		LastProcessedMessageId: 1,
-		LastRetrievedMessageId: 2,
-	}
-	requestByShard[1] = &request{
-		token: token,
-	}
-	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
-		Tokens: []*replicationspb.ReplicationToken{
-			token,
-		},
-		ClusterName: "active",
-	}
-	messageByShared := make(map[int32]*replicationspb.ReplicationMessages)
-	messageByShared[1] = &replicationspb.ReplicationMessages{}
-	expectedResponse := &adminservice.GetReplicationMessagesResponse{
-		ShardMessages: messageByShared,
-	}
-	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(expectedResponse, nil)
-	response, err := s.replicationTaskFetcher.getMessages(requestByShard)
-	s.NoError(err)
-	s.Equal(messageByShared, response)
-}
+func (s *replicationTaskFetcherSuite) TestBufferRequests_NoDuplicate() {
+	shardID := int32(1)
 
-func (s *replicationTaskFetcherSuite) TestFetchAndDistributeTasks() {
-	requestByShard := make(map[int32]*request)
-	token := &replicationspb.ReplicationToken{
-		ShardId:                1,
-		LastProcessedMessageId: 1,
-		LastRetrievedMessageId: 2,
-	}
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
-	requestByShard[1] = &request{
-		token:    token,
+	shardRequest := &request{
+		token: &replicationspb.ReplicationToken{
+			ShardId:                shardID,
+			LastProcessedMessageId: 1,
+			LastRetrievedMessageId: 2,
+		},
 		respChan: respChan,
 	}
+
+	s.replicationTaskFetcher.bufferRequests(shardRequest)
+
+	select {
+	case <-respChan:
+		s.Fail("new request channel should not be closed")
+	default:
+		// noop
+	}
+
+	s.Equal(map[int32]*request{
+		shardID: shardRequest,
+	}, s.replicationTaskFetcher.requestByShard)
+}
+
+func (s *replicationTaskFetcherSuite) TestBufferRequests_Duplicate() {
+	shardID := int32(1)
+
+	respChan1 := make(chan *replicationspb.ReplicationMessages, 1)
+	shardRequest1 := &request{
+		token: &replicationspb.ReplicationToken{
+			ShardId:                shardID,
+			LastProcessedMessageId: 1,
+			LastRetrievedMessageId: 2,
+		},
+		respChan: respChan1,
+	}
+
+	respChan2 := make(chan *replicationspb.ReplicationMessages, 1)
+	shardRequest2 := &request{
+		token: &replicationspb.ReplicationToken{
+			ShardId:                shardID,
+			LastProcessedMessageId: 1,
+			LastRetrievedMessageId: 2,
+		},
+		respChan: respChan2,
+	}
+
+	s.replicationTaskFetcher.bufferRequests(shardRequest1)
+	s.replicationTaskFetcher.bufferRequests(shardRequest2)
+
+	_, ok := <-respChan1
+	s.False(ok)
+
+	select {
+	case <-respChan2:
+		s.Fail("new request channel should not be closed")
+	default:
+		// noop
+	}
+
+	s.Equal(map[int32]*request{
+		shardID: shardRequest2,
+	}, s.replicationTaskFetcher.requestByShard)
+}
+
+func (s *replicationTaskFetcherSuite) TestGetMessages() {
+	shardID := int32(1)
+	respChan := make(chan *replicationspb.ReplicationMessages, 1)
+	shardRequest := &request{
+		token: &replicationspb.ReplicationToken{
+			ShardId:                shardID,
+			LastProcessedMessageId: 1,
+			LastRetrievedMessageId: 2,
+		},
+		respChan: respChan,
+	}
+	requestByShard := map[int32]*request{
+		shardID: shardRequest,
+	}
+
 	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
 		Tokens: []*replicationspb.ReplicationToken{
-			token,
+			shardRequest.token,
 		},
-		ClusterName: "active",
+		ClusterName: cluster.TestCurrentClusterName,
 	}
-	messageByShared := make(map[int32]*replicationspb.ReplicationMessages)
-	messageByShared[1] = &replicationspb.ReplicationMessages{}
-	expectedResponse := &adminservice.GetReplicationMessagesResponse{
-		ShardMessages: messageByShared,
+	responseByShard := map[int32]*replicationspb.ReplicationMessages{
+		shardID: {},
 	}
-	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(expectedResponse, nil)
-	err := s.replicationTaskFetcher.fetchAndDistributeTasks(requestByShard)
+	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(
+		&adminservice.GetReplicationMessagesResponse{
+			ShardMessages: responseByShard,
+		}, nil)
+	err := s.replicationTaskFetcher.getMessages(requestByShard)
 	s.NoError(err)
-	respToken := <-respChan
-	s.Equal(messageByShared[1], respToken)
+	s.Equal(responseByShard[shardID], <-respChan)
 }

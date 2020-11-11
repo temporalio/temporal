@@ -74,7 +74,6 @@ type (
 var (
 	errUnknownReplicationTask = errors.New("unknown replication task")
 	errHistoryNotFoundTask    = errors.New("history not found")
-	defaultHistoryPageSize    = 1000
 )
 
 func newReplicatorQueueProcessor(
@@ -212,7 +211,9 @@ func (p *replicatorQueueProcessorImpl) processSyncActivityTask(
 func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(
 	task *persistencespb.ReplicationTaskInfo,
 ) error {
-	replicationTask, err := p.toReplicationTask(context.Background(), &persistence.ReplicationTaskInfoWrapper{task})
+	replicationTask, err := p.toReplicationTask(context.Background(), &persistence.ReplicationTaskInfoWrapper{
+		ReplicationTaskInfo: task,
+	})
 	if err != nil || replicationTask == nil {
 		return err
 	}
