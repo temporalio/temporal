@@ -272,13 +272,13 @@ type (
 		UpsertTimerInfos          []*persistencespb.TimerInfo
 		DeleteTimerInfos          []string
 		UpsertChildExecutionInfos []*persistencespb.ChildExecutionInfo
-		DeleteChildExecutionInfo  *int64
+		DeleteChildExecutionInfos []int64
 		UpsertRequestCancelInfos  []*persistencespb.RequestCancelInfo
-		DeleteRequestCancelInfo   *int64
+		DeleteRequestCancelInfos  []int64
 		UpsertSignalInfos         []*persistencespb.SignalInfo
-		DeleteSignalInfo          *int64
+		DeleteSignalInfos         []int64
 		UpsertSignalRequestedIDs  []string
-		DeleteSignalRequestedID   string
+		DeleteSignalRequestedIDs  []string
 		NewBufferedEvents         *commonpb.DataBlob
 		ClearBufferedEvents       bool
 
