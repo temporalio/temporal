@@ -446,7 +446,7 @@ func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrNotFoundCounter)
 	case *serviceerror.ResourceExhausted:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
-	case *serviceerrors.RetryTask:
+	case *serviceerrors.RetryReplication:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
 	}
 }
