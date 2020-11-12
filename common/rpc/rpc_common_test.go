@@ -98,10 +98,10 @@ func startHelloWorldServer(s suite.Suite, factory *TestFactory) (*grpc.Server, s
 	return server, port
 }
 
-func runHelloWorldTest(s suite.Suite, serverFactory *TestFactory, clientFactory *TestFactory, isValid bool) {
+func runHelloWorldTest(s suite.Suite, host string, serverFactory *TestFactory, clientFactory *TestFactory, isValid bool) {
 	server, port := startHelloWorldServer(s, serverFactory)
 	defer server.Stop()
-	err := dialHello(s, "127.0.0.1:"+port, clientFactory, serverFactory.serverUsage)
+	err := dialHello(s, host+":"+port, clientFactory, serverFactory.serverUsage)
 
 	if isValid {
 		s.NoError(err)
