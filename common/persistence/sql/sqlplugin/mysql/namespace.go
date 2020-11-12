@@ -25,6 +25,7 @@
 package mysql
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 
@@ -65,74 +66,142 @@ const (
 var errMissingArgs = errors.New("missing one or more args for API")
 
 // InsertIntoNamespace inserts a single row into namespaces table
-func (mdb *db) InsertIntoNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) {
-	return mdb.conn.Exec(createNamespaceQuery, partitionID, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding, row.NotificationVersion)
+func (mdb *db) InsertIntoNamespace(
+	ctx context.Context,
+	row *sqlplugin.NamespaceRow,
+) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		createNamespaceQuery,
+		partitionID,
+		row.ID,
+		row.Name,
+		row.IsGlobal,
+		row.Data,
+		row.DataEncoding,
+		row.NotificationVersion,
+	)
 }
 
 // UpdateNamespace updates a single row in namespaces table
-func (mdb *db) UpdateNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) {
-	return mdb.conn.Exec(updateNamespaceQuery, row.Name, row.Data, row.DataEncoding, row.NotificationVersion, row.ID)
+func (mdb *db) UpdateNamespace(
+	ctx context.Context,
+	row *sqlplugin.NamespaceRow,
+) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		updateNamespaceQuery,
+		row.Name,
+		row.Data,
+		row.DataEncoding,
+		row.NotificationVersion,
+		row.ID,
+	)
 }
 
 // SelectFromNamespace reads one or more rows from namespaces table
-func (mdb *db) SelectFromNamespace(filter sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
+func (mdb *db) SelectFromNamespace(
+	ctx context.Context,
+	filter sqlplugin.NamespaceFilter,
+) ([]sqlplugin.NamespaceRow, error) {
 	switch {
 	case filter.ID != nil || filter.Name != nil:
 		if filter.ID != nil && filter.Name != nil {
 			return nil, serviceerror.NewInternal("only ID or name filter can be specified for selection")
 		}
-		return mdb.selectFromNamespace(filter)
+		return mdb.selectFromNamespace(ctx, filter)
 	case filter.PageSize != nil && *filter.PageSize > 0:
-		return mdb.selectAllFromNamespace(filter)
+		return mdb.selectAllFromNamespace(ctx, filter)
 	default:
 		return nil, errMissingArgs
 	}
 }
 
-func (mdb *db) selectFromNamespace(filter sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
+func (mdb *db) selectFromNamespace(
+	ctx context.Context,
+	filter sqlplugin.NamespaceFilter,
+) ([]sqlplugin.NamespaceRow, error) {
 	var err error
 	var row sqlplugin.NamespaceRow
 	switch {
 	case filter.ID != nil:
-		err = mdb.conn.Get(&row, getNamespaceByIDQuery, partitionID, *filter.ID)
+		err = mdb.conn.GetContext(ctx,
+			&row,
+			getNamespaceByIDQuery,
+			partitionID,
+			*filter.ID,
+		)
 	case filter.Name != nil:
-		err = mdb.conn.Get(&row, getNamespaceByNameQuery, partitionID, *filter.Name)
+		err = mdb.conn.GetContext(ctx,
+			&row,
+			getNamespaceByNameQuery,
+			partitionID,
+			*filter.Name,
+		)
 	}
 	if err != nil {
 		return nil, err
 	}
-	return []sqlplugin.NamespaceRow{row}, err
+	return []sqlplugin.NamespaceRow{row}, nil
 }
 
-func (mdb *db) selectAllFromNamespace(filter sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
+func (mdb *db) selectAllFromNamespace(
+	ctx context.Context,
+	filter sqlplugin.NamespaceFilter,
+) ([]sqlplugin.NamespaceRow, error) {
 	var err error
 	var rows []sqlplugin.NamespaceRow
 	switch {
 	case filter.GreaterThanID != nil:
-		err = mdb.conn.Select(&rows, listNamespacesRangeQuery, partitionID, *filter.GreaterThanID, *filter.PageSize)
+		err = mdb.conn.SelectContext(ctx,
+			&rows,
+			listNamespacesRangeQuery,
+			partitionID,
+			*filter.GreaterThanID,
+			*filter.PageSize,
+		)
 	default:
-		err = mdb.conn.Select(&rows, listNamespacesQuery, partitionID, filter.PageSize)
+		err = mdb.conn.SelectContext(ctx,
+			&rows,
+			listNamespacesQuery,
+			partitionID,
+			filter.PageSize,
+		)
 	}
 	return rows, err
 }
 
 // DeleteFromNamespace deletes a single row in namespaces table
-func (mdb *db) DeleteFromNamespace(filter sqlplugin.NamespaceFilter) (sql.Result, error) {
+func (mdb *db) DeleteFromNamespace(
+	ctx context.Context,
+	filter sqlplugin.NamespaceFilter,
+) (sql.Result, error) {
 	var err error
 	var result sql.Result
 	switch {
 	case filter.ID != nil:
-		result, err = mdb.conn.Exec(deleteNamespaceByIDQuery, partitionID, filter.ID)
+		result, err = mdb.conn.ExecContext(ctx,
+			deleteNamespaceByIDQuery,
+			partitionID,
+			filter.ID,
+		)
 	default:
-		result, err = mdb.conn.Exec(deleteNamespaceByNameQuery, partitionID, filter.Name)
+		result, err = mdb.conn.ExecContext(ctx,
+			deleteNamespaceByNameQuery,
+			partitionID,
+			filter.Name,
+		)
 	}
 	return result, err
 }
 
 // LockNamespaceMetadata acquires a write lock on a single row in namespace_metadata table
-func (mdb *db) LockNamespaceMetadata() (*sqlplugin.NamespaceMetadataRow, error) {
+func (mdb *db) LockNamespaceMetadata(
+	ctx context.Context,
+) (*sqlplugin.NamespaceMetadataRow, error) {
 	var row sqlplugin.NamespaceMetadataRow
-	err := mdb.conn.Get(&row.NotificationVersion, lockNamespaceMetadataQuery)
+	err := mdb.conn.GetContext(ctx,
+		&row.NotificationVersion,
+		lockNamespaceMetadataQuery,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -140,13 +209,25 @@ func (mdb *db) LockNamespaceMetadata() (*sqlplugin.NamespaceMetadataRow, error) 
 }
 
 // SelectFromNamespaceMetadata reads a single row in namespace_metadata table
-func (mdb *db) SelectFromNamespaceMetadata() (*sqlplugin.NamespaceMetadataRow, error) {
+func (mdb *db) SelectFromNamespaceMetadata(
+	ctx context.Context,
+) (*sqlplugin.NamespaceMetadataRow, error) {
 	var row sqlplugin.NamespaceMetadataRow
-	err := mdb.conn.Get(&row.NotificationVersion, getNamespaceMetadataQuery)
+	err := mdb.conn.GetContext(ctx,
+		&row.NotificationVersion,
+		getNamespaceMetadataQuery,
+	)
 	return &row, err
 }
 
 // UpdateNamespaceMetadata updates a single row in namespace_metadata table
-func (mdb *db) UpdateNamespaceMetadata(row *sqlplugin.NamespaceMetadataRow) (sql.Result, error) {
-	return mdb.conn.Exec(updateNamespaceMetadataQuery, row.NotificationVersion+1, row.NotificationVersion)
+func (mdb *db) UpdateNamespaceMetadata(
+	ctx context.Context,
+	row *sqlplugin.NamespaceMetadataRow,
+) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		updateNamespaceMetadataQuery,
+		row.NotificationVersion+1,
+		row.NotificationVersion,
+	)
 }

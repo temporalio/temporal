@@ -25,6 +25,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -60,10 +61,12 @@ func newQueue(
 		logger:    logger,
 	}
 
-	if err := queue.initializeQueueMetadata(); err != nil {
+	ctx, cancel := newVisibilityContext()
+	defer cancel()
+	if err := queue.initializeQueueMetadata(ctx); err != nil {
 		return nil, err
 	}
-	if err := queue.initializeDLQMetadata(); err != nil {
+	if err := queue.initializeDLQMetadata(ctx); err != nil {
 		return nil, err
 	}
 
@@ -73,17 +76,18 @@ func newQueue(
 func (q *sqlQueue) EnqueueMessage(
 	blob commonpb.DataBlob,
 ) error {
-
-	err := q.txExecute("EnqueueMessage", func(tx sqlplugin.Tx) error {
-		lastMessageID, err := tx.GetLastEnqueuedMessageIDForUpdate(q.queueType)
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	err := q.txExecute(ctx, "EnqueueMessage", func(tx sqlplugin.Tx) error {
+		lastMessageID, err := tx.GetLastEnqueuedMessageIDForUpdate(ctx, q.queueType)
 		switch err {
 		case nil:
-			_, err = tx.InsertIntoMessages([]sqlplugin.QueueMessageRow{
+			_, err = tx.InsertIntoMessages(ctx, []sqlplugin.QueueMessageRow{
 				newQueueRow(q.queueType, lastMessageID+1, blob),
 			})
 			return err
 		case sql.ErrNoRows:
-			_, err = tx.InsertIntoMessages([]sqlplugin.QueueMessageRow{
+			_, err = tx.InsertIntoMessages(ctx, []sqlplugin.QueueMessageRow{
 				newQueueRow(q.queueType, persistence.EmptyQueueMessageID+1, blob),
 			})
 			return err
@@ -101,8 +105,9 @@ func (q *sqlQueue) ReadMessages(
 	lastMessageID int64,
 	pageSize int,
 ) ([]*persistence.QueueMessage, error) {
-
-	rows, err := q.db.RangeSelectFromMessages(sqlplugin.QueueMessagesRangeFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	rows, err := q.db.RangeSelectFromMessages(ctx, sqlplugin.QueueMessagesRangeFilter{
 		QueueType:    q.queueType,
 		MinMessageID: lastMessageID,
 		MaxMessageID: persistence.MaxQueueMessageID,
@@ -124,25 +129,12 @@ func (q *sqlQueue) ReadMessages(
 	return messages, nil
 }
 
-func newQueueRow(
-	queueType persistence.QueueType,
-	messageID int64,
-	blob commonpb.DataBlob,
-) sqlplugin.QueueMessageRow {
-
-	return sqlplugin.QueueMessageRow{
-		QueueType:       queueType,
-		MessageID:       messageID,
-		MessagePayload:  blob.Data,
-		MessageEncoding: blob.EncodingType.String(),
-	}
-}
-
 func (q *sqlQueue) DeleteMessagesBefore(
 	messageID int64,
 ) error {
-
-	_, err := q.db.RangeDeleteFromMessages(sqlplugin.QueueMessagesRangeFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	_, err := q.db.RangeDeleteFromMessages(ctx, sqlplugin.QueueMessagesRangeFilter{
 		QueueType:    q.queueType,
 		MinMessageID: persistence.EmptyQueueMessageID,
 		MaxMessageID: messageID - 1,
@@ -157,9 +149,10 @@ func (q *sqlQueue) UpdateAckLevel(
 	messageID int64,
 	clusterName string,
 ) error {
-
-	err := q.txExecute("UpdateAckLevel", func(tx sqlplugin.Tx) error {
-		row, err := tx.LockQueueMetadata(sqlplugin.QueueMetadataFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	err := q.txExecute(ctx, "UpdateAckLevel", func(tx sqlplugin.Tx) error {
+		row, err := tx.LockQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
 			QueueType: q.queueType,
 		})
 		if err != nil {
@@ -185,7 +178,7 @@ func (q *sqlQueue) UpdateAckLevel(
 			return err
 		}
 
-		result, err := tx.UpdateQueueMetadata(&sqlplugin.QueueMetadataRow{
+		result, err := tx.UpdateQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
 			QueueType:    q.queueType,
 			Data:         blob.Data,
 			DataEncoding: blob.EncodingType.String(),
@@ -210,7 +203,9 @@ func (q *sqlQueue) UpdateAckLevel(
 }
 
 func (q *sqlQueue) GetAckLevels() (map[string]int64, error) {
-	row, err := q.db.SelectFromQueueMetadata(sqlplugin.QueueMetadataFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	row, err := q.db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
 		QueueType: q.queueType,
 	})
 	if err != nil {
@@ -232,19 +227,20 @@ func (q *sqlQueue) GetAckLevels() (map[string]int64, error) {
 func (q *sqlQueue) EnqueueMessageToDLQ(
 	blob commonpb.DataBlob,
 ) (int64, error) {
-
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	var lastMessageID int64
-	err := q.txExecute("EnqueueMessageToDLQ", func(tx sqlplugin.Tx) error {
+	err := q.txExecute(ctx, "EnqueueMessageToDLQ", func(tx sqlplugin.Tx) error {
 		var err error
-		lastMessageID, err = tx.GetLastEnqueuedMessageIDForUpdate(q.getDLQTypeFromQueueType())
+		lastMessageID, err = tx.GetLastEnqueuedMessageIDForUpdate(ctx, q.getDLQTypeFromQueueType())
 		switch err {
 		case nil:
-			_, err = tx.InsertIntoMessages([]sqlplugin.QueueMessageRow{
+			_, err = tx.InsertIntoMessages(ctx, []sqlplugin.QueueMessageRow{
 				newQueueRow(q.getDLQTypeFromQueueType(), lastMessageID+1, blob),
 			})
 			return err
 		case sql.ErrNoRows:
-			_, err = tx.InsertIntoMessages([]sqlplugin.QueueMessageRow{
+			_, err = tx.InsertIntoMessages(ctx, []sqlplugin.QueueMessageRow{
 				newQueueRow(q.getDLQTypeFromQueueType(), persistence.EmptyQueueMessageID+1, blob),
 			})
 			return err
@@ -264,7 +260,8 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 	pageSize int,
 	pageToken []byte,
 ) ([]*persistence.QueueMessage, []byte, error) {
-
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	if pageToken != nil && len(pageToken) != 0 {
 		lastReadMessageID, err := deserializePageToken(pageToken)
 		if err != nil {
@@ -273,7 +270,7 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 		firstMessageID = lastReadMessageID
 	}
 
-	rows, err := q.db.RangeSelectFromMessages(sqlplugin.QueueMessagesRangeFilter{
+	rows, err := q.db.RangeSelectFromMessages(ctx, sqlplugin.QueueMessagesRangeFilter{
 		QueueType:    q.getDLQTypeFromQueueType(),
 		MinMessageID: firstMessageID,
 		MaxMessageID: lastMessageID,
@@ -304,8 +301,9 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 func (q *sqlQueue) DeleteMessageFromDLQ(
 	messageID int64,
 ) error {
-
-	_, err := q.db.DeleteFromMessages(sqlplugin.QueueMessagesFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	_, err := q.db.DeleteFromMessages(ctx, sqlplugin.QueueMessagesFilter{
 		QueueType: q.getDLQTypeFromQueueType(),
 		MessageID: messageID,
 	})
@@ -319,8 +317,9 @@ func (q *sqlQueue) RangeDeleteMessagesFromDLQ(
 	firstMessageID int64,
 	lastMessageID int64,
 ) error {
-
-	_, err := q.db.RangeDeleteFromMessages(sqlplugin.QueueMessagesRangeFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	_, err := q.db.RangeDeleteFromMessages(ctx, sqlplugin.QueueMessagesRangeFilter{
 		QueueType:    q.getDLQTypeFromQueueType(),
 		MinMessageID: firstMessageID,
 		MaxMessageID: lastMessageID,
@@ -335,9 +334,10 @@ func (q *sqlQueue) UpdateDLQAckLevel(
 	messageID int64,
 	clusterName string,
 ) error {
-
-	err := q.txExecute("UpdateDLQAckLevel", func(tx sqlplugin.Tx) error {
-		row, err := tx.LockQueueMetadata(sqlplugin.QueueMetadataFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	err := q.txExecute(ctx, "UpdateDLQAckLevel", func(tx sqlplugin.Tx) error {
+		row, err := tx.LockQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
 			QueueType: q.getDLQTypeFromQueueType(),
 		})
 		if err != nil {
@@ -363,7 +363,7 @@ func (q *sqlQueue) UpdateDLQAckLevel(
 			return err
 		}
 
-		result, err := tx.UpdateQueueMetadata(&sqlplugin.QueueMetadataRow{
+		result, err := tx.UpdateQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
 			QueueType:    q.getDLQTypeFromQueueType(),
 			Data:         blob.Data,
 			DataEncoding: blob.EncodingType.String(),
@@ -388,7 +388,9 @@ func (q *sqlQueue) UpdateDLQAckLevel(
 }
 
 func (q *sqlQueue) GetDLQAckLevels() (map[string]int64, error) {
-	row, err := q.db.SelectFromQueueMetadata(sqlplugin.QueueMetadataFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	row, err := q.db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
 		QueueType: q.getDLQTypeFromQueueType(),
 	})
 	if err != nil {
@@ -411,8 +413,10 @@ func (q *sqlQueue) getDLQTypeFromQueueType() persistence.QueueType {
 	return -q.queueType
 }
 
-func (q *sqlQueue) initializeQueueMetadata() error {
-	_, err := q.db.SelectFromQueueMetadata(sqlplugin.QueueMetadataFilter{
+func (q *sqlQueue) initializeQueueMetadata(
+	ctx context.Context,
+) error {
+	_, err := q.db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
 		QueueType: q.queueType,
 	})
 	switch err {
@@ -424,7 +428,7 @@ func (q *sqlQueue) initializeQueueMetadata() error {
 		if err != nil {
 			return err
 		}
-		result, err := q.db.InsertIntoQueueMetadata(&sqlplugin.QueueMetadataRow{
+		result, err := q.db.InsertIntoQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
 			QueueType:    q.queueType,
 			Data:         blob.Data,
 			DataEncoding: blob.EncodingType.String(),
@@ -445,8 +449,10 @@ func (q *sqlQueue) initializeQueueMetadata() error {
 	}
 }
 
-func (q *sqlQueue) initializeDLQMetadata() error {
-	_, err := q.db.SelectFromQueueMetadata(sqlplugin.QueueMetadataFilter{
+func (q *sqlQueue) initializeDLQMetadata(
+	ctx context.Context,
+) error {
+	_, err := q.db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
 		QueueType: q.getDLQTypeFromQueueType(),
 	})
 	switch err {
@@ -458,7 +464,7 @@ func (q *sqlQueue) initializeDLQMetadata() error {
 		if err != nil {
 			return err
 		}
-		result, err := q.db.InsertIntoQueueMetadata(&sqlplugin.QueueMetadataRow{
+		result, err := q.db.InsertIntoQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
 			QueueType:    q.getDLQTypeFromQueueType(),
 			Data:         blob.Data,
 			DataEncoding: blob.EncodingType.String(),
@@ -476,5 +482,19 @@ func (q *sqlQueue) initializeDLQMetadata() error {
 		return nil
 	default:
 		return err
+	}
+}
+
+func newQueueRow(
+	queueType persistence.QueueType,
+	messageID int64,
+	blob commonpb.DataBlob,
+) sqlplugin.QueueMessageRow {
+
+	return sqlplugin.QueueMessageRow{
+		QueueType:       queueType,
+		MessageID:       messageID,
+		MessagePayload:  blob.Data,
+		MessageEncoding: blob.EncodingType.String(),
 	}
 }

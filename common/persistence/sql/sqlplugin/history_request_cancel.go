@@ -25,6 +25,7 @@
 package sqlplugin
 
 import (
+	"context"
 	"database/sql"
 
 	"go.temporal.io/server/common/primitives"
@@ -59,13 +60,13 @@ type (
 
 	// HistoryExecutionRequestCancel is the SQL persistence interface for history execution request cancels
 	HistoryExecutionRequestCancel interface {
-		ReplaceIntoRequestCancelInfoMaps(rows []RequestCancelInfoMapsRow) (sql.Result, error)
+		ReplaceIntoRequestCancelInfoMaps(ctx context.Context, rows []RequestCancelInfoMapsRow) (sql.Result, error)
 		// SelectFromRequestCancelInfoMaps returns one or more rows form request_cancel_info_maps table
-		SelectFromRequestCancelInfoMaps(filter RequestCancelInfoMapsSelectFilter) ([]RequestCancelInfoMapsRow, error)
+		SelectFromRequestCancelInfoMaps(ctx context.Context, filter RequestCancelInfoMapsSelectFilter) ([]RequestCancelInfoMapsRow, error)
 		// DeleteFromRequestCancelInfoMaps deletes one or more rows from request_cancel_info_maps
 		// Required filter params
 		// - single row - {shardID, namespaceID, workflowID, runID, initiatedID}
 		// - multiple rows - {shardID, namespaceID, workflowID, runID}
-		DeleteFromRequestCancelInfoMaps(filter RequestCancelInfoMapsDeleteFilter) (sql.Result, error)
+		DeleteFromRequestCancelInfoMaps(ctx context.Context, filter RequestCancelInfoMapsDeleteFilter) (sql.Result, error)
 	}
 )

@@ -85,7 +85,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsert_Single_Success() {
 	taskID := int64(1)
 
 	task := s.newRandomTimerTaskRow(shardID, timestamp, taskID)
-	result, err := s.store.InsertIntoTimerTasks([]sqlplugin.TimerTasksRow{task})
+	result, err := s.store.InsertIntoTimerTasks(newExecutionContext(), []sqlplugin.TimerTasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -101,7 +101,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsert_Multiple_Success() {
 	timestamp = timestamp.Add(time.Millisecond)
 	taskID++
 	task2 := s.newRandomTimerTaskRow(shardID, timestamp, taskID)
-	result, err := s.store.InsertIntoTimerTasks([]sqlplugin.TimerTasksRow{task1, task2})
+	result, err := s.store.InsertIntoTimerTasks(newExecutionContext(), []sqlplugin.TimerTasksRow{task1, task2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -114,14 +114,14 @@ func (s *historyHistoryTimerTaskSuite) TestInsert_Single_Fail_Duplicate() {
 	taskID := int64(1)
 
 	task := s.newRandomTimerTaskRow(shardID, timestamp, taskID)
-	result, err := s.store.InsertIntoTimerTasks([]sqlplugin.TimerTasksRow{task})
+	result, err := s.store.InsertIntoTimerTasks(newExecutionContext(), []sqlplugin.TimerTasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	task = s.newRandomTimerTaskRow(shardID, timestamp, taskID)
-	_, err = s.store.InsertIntoTimerTasks([]sqlplugin.TimerTasksRow{task})
+	_, err = s.store.InsertIntoTimerTasks(newExecutionContext(), []sqlplugin.TimerTasksRow{task})
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -134,7 +134,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsert_Multiple_Fail_Duplicate() {
 	timestamp = timestamp.Add(time.Millisecond)
 	taskID++
 	task2 := s.newRandomTimerTaskRow(shardID, timestamp, taskID)
-	result, err := s.store.InsertIntoTimerTasks([]sqlplugin.TimerTasksRow{task1, task2})
+	result, err := s.store.InsertIntoTimerTasks(newExecutionContext(), []sqlplugin.TimerTasksRow{task1, task2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -144,7 +144,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsert_Multiple_Fail_Duplicate() {
 	timestamp = timestamp.Add(time.Millisecond)
 	taskID++
 	task3 := s.newRandomTimerTaskRow(shardID, timestamp, taskID)
-	_, err = s.store.InsertIntoTimerTasks([]sqlplugin.TimerTasksRow{task2, task3})
+	_, err = s.store.InsertIntoTimerTasks(newExecutionContext(), []sqlplugin.TimerTasksRow{task2, task3})
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -154,7 +154,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsertSelect_Single() {
 	taskID := int64(1)
 
 	task := s.newRandomTimerTaskRow(shardID, timestamp, taskID)
-	result, err := s.store.InsertIntoTimerTasks([]sqlplugin.TimerTasksRow{task})
+	result, err := s.store.InsertIntoTimerTasks(newExecutionContext(), []sqlplugin.TimerTasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -165,7 +165,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsertSelect_Single() {
 		VisibilityTimestamp: timestamp,
 		TaskID:              taskID,
 	}
-	rows, err := s.store.SelectFromTimerTasks(filter)
+	rows, err := s.store.SelectFromTimerTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -189,7 +189,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsertSelect_Multiple() {
 		taskID++
 		tasks = append(tasks, task)
 	}
-	result, err := s.store.InsertIntoTimerTasks(tasks)
+	result, err := s.store.InsertIntoTimerTasks(newExecutionContext(), tasks)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -201,7 +201,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsertSelect_Multiple() {
 		MaxVisibilityTimestamp: maxTimestamp,
 		PageSize:               numTasks,
 	}
-	rows, err := s.store.RangeSelectFromTimerTasks(filter)
+	rows, err := s.store.RangeSelectFromTimerTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -219,13 +219,13 @@ func (s *historyHistoryTimerTaskSuite) TestDeleteSelect_Single() {
 		VisibilityTimestamp: timestamp,
 		TaskID:              taskID,
 	}
-	result, err := s.store.DeleteFromTimerTasks(filter)
+	result, err := s.store.DeleteFromTimerTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.SelectFromTimerTasks(filter)
+	rows, err := s.store.SelectFromTimerTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -246,14 +246,14 @@ func (s *historyHistoryTimerTaskSuite) TestDeleteSelect_Multiple() {
 		MaxVisibilityTimestamp: maxTimestamp,
 		PageSize:               0,
 	}
-	result, err := s.store.RangeDeleteFromTimerTasks(filter)
+	result, err := s.store.RangeDeleteFromTimerTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
 	filter.PageSize = pageSize
-	rows, err := s.store.RangeSelectFromTimerTasks(filter)
+	rows, err := s.store.RangeSelectFromTimerTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -267,7 +267,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsertDeleteSelect_Single() {
 	taskID := int64(1)
 
 	task := s.newRandomTimerTaskRow(shardID, timestamp, taskID)
-	result, err := s.store.InsertIntoTimerTasks([]sqlplugin.TimerTasksRow{task})
+	result, err := s.store.InsertIntoTimerTasks(newExecutionContext(), []sqlplugin.TimerTasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -278,13 +278,13 @@ func (s *historyHistoryTimerTaskSuite) TestInsertDeleteSelect_Single() {
 		VisibilityTimestamp: timestamp,
 		TaskID:              taskID,
 	}
-	result, err = s.store.DeleteFromTimerTasks(filter)
+	result, err = s.store.DeleteFromTimerTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	rows, err := s.store.SelectFromTimerTasks(filter)
+	rows, err := s.store.SelectFromTimerTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -309,7 +309,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsertDeleteSelect_Multiple() {
 		taskID++
 		tasks = append(tasks, task)
 	}
-	result, err := s.store.InsertIntoTimerTasks(tasks)
+	result, err := s.store.InsertIntoTimerTasks(newExecutionContext(), tasks)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -321,14 +321,14 @@ func (s *historyHistoryTimerTaskSuite) TestInsertDeleteSelect_Multiple() {
 		MaxVisibilityTimestamp: maxTimestamp,
 		PageSize:               0,
 	}
-	result, err = s.store.RangeDeleteFromTimerTasks(filter)
+	result, err = s.store.RangeDeleteFromTimerTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(numTasks, int(rowsAffected))
 
 	filter.PageSize = pageSize
-	rows, err := s.store.RangeSelectFromTimerTasks(filter)
+	rows, err := s.store.RangeSelectFromTimerTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID

@@ -63,7 +63,8 @@ func newHistoryV2Persistence(
 func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
-
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	branchInfo := request.BranchInfo
 	beginNodeID := p.GetBeginNodeID(branchInfo)
 
@@ -112,8 +113,8 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 			DataEncoding: blob.EncodingType.String(),
 		}
 
-		return m.txExecute("AppendHistoryNodes", func(tx sqlplugin.Tx) error {
-			result, err := tx.InsertIntoHistoryNode(nodeRow)
+		return m.txExecute(ctx, "AppendHistoryNodes", func(tx sqlplugin.Tx) error {
+			result, err := tx.InsertIntoHistoryNode(ctx, nodeRow)
 			if err != nil {
 				return err
 			}
@@ -125,7 +126,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 				return fmt.Errorf("expected 1 row to be affected for node table, got %v", rowsAffected)
 			}
 
-			result, err = tx.InsertIntoHistoryTree(treeRow)
+			result, err = tx.InsertIntoHistoryTree(ctx, treeRow)
 			if err != nil {
 				return err
 			}
@@ -140,7 +141,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 		})
 	}
 
-	_, err = m.db.InsertIntoHistoryNode(nodeRow)
+	_, err = m.db.InsertIntoHistoryNode(ctx, nodeRow)
 	if err != nil {
 		if m.db.IsDupEntryError(err) {
 			return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
@@ -154,6 +155,8 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	branchIDBytes, err := primitives.ParseUUID(request.BranchID)
 	if err != nil {
 		return nil, err
@@ -180,7 +183,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 		minNodeID = lastNodeID + 1
 	}
 
-	rows, err := m.db.SelectFromHistoryNode(sqlplugin.HistoryNodeSelectFilter{
+	rows, err := m.db.SelectFromHistoryNode(ctx, sqlplugin.HistoryNodeSelectFilter{
 		ShardID:   request.ShardID,
 		TreeID:    treeIDBytes,
 		BranchID:  branchIDBytes,
@@ -293,7 +296,8 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 	request *p.InternalForkHistoryBranchRequest,
 ) (*p.InternalForkHistoryBranchResponse, error) {
-
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	forkB := request.ForkBranchInfo
 	treeID := forkB.TreeId
 
@@ -356,7 +360,7 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 		DataEncoding: blob.EncodingType.String(),
 	}
 
-	result, err := m.db.InsertIntoHistoryTree(row)
+	result, err := m.db.InsertIntoHistoryTree(ctx, row)
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +380,8 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
-
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	branch := request.BranchInfo
 	treeID := branch.TreeId
 	branchIDBytes, err := primitives.ParseUUID(branch.GetBranchId())
@@ -414,8 +419,8 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 		}
 	}
 
-	return m.txExecute("DeleteHistoryBranch", func(tx sqlplugin.Tx) error {
-		_, err = tx.DeleteFromHistoryTree(sqlplugin.HistoryTreeDeleteFilter{
+	return m.txExecute(ctx, "DeleteHistoryBranch", func(tx sqlplugin.Tx) error {
+		_, err = tx.DeleteFromHistoryTree(ctx, sqlplugin.HistoryTreeDeleteFilter{
 			TreeID:   treeIDBytes,
 			BranchID: branchIDBytes,
 			ShardID:  request.ShardID,
@@ -443,7 +448,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 				// No any branch is using this range, we can delete all of it
 				deleteFilter.MinNodeID = br.BeginNodeId
 			}
-			_, err := tx.DeleteFromHistoryNode(deleteFilter)
+			_, err := tx.DeleteFromHistoryNode(ctx, deleteFilter)
 			if err != nil {
 				return err
 			}
@@ -468,7 +473,8 @@ func (m *sqlHistoryV2Manager) GetAllHistoryTreeBranches(
 func (m *sqlHistoryV2Manager) GetHistoryTree(
 	request *p.GetHistoryTreeRequest,
 ) (*p.GetHistoryTreeResponse, error) {
-
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	treeID, err := primitives.ParseUUID(request.TreeID)
 	if err != nil {
 		return nil, err
@@ -476,7 +482,7 @@ func (m *sqlHistoryV2Manager) GetHistoryTree(
 
 	branches := make([]*persistencespb.HistoryBranch, 0)
 
-	rows, err := m.db.SelectFromHistoryTree(sqlplugin.HistoryTreeSelectFilter{
+	rows, err := m.db.SelectFromHistoryTree(ctx, sqlplugin.HistoryTreeSelectFilter{
 		TreeID:  treeID,
 		ShardID: *request.ShardID,
 	})

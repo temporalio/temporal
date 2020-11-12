@@ -25,6 +25,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -43,7 +44,11 @@ type sqlShardManager struct {
 }
 
 // newShardPersistence creates an instance of ShardManager
-func newShardPersistence(db sqlplugin.DB, currentClusterName string, log log.Logger) (persistence.ShardManager, error) {
+func newShardPersistence(
+	db sqlplugin.DB,
+	currentClusterName string,
+	log log.Logger,
+) (persistence.ShardManager, error) {
 	return &sqlShardManager{
 		sqlStore: sqlStore{
 			db:     db,
@@ -53,7 +58,11 @@ func newShardPersistence(db sqlplugin.DB, currentClusterName string, log log.Log
 	}, nil
 }
 
-func (m *sqlShardManager) CreateShard(request *persistence.CreateShardRequest) error {
+func (m *sqlShardManager) CreateShard(
+	request *persistence.CreateShardRequest,
+) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	if _, err := m.GetShard(&persistence.GetShardRequest{
 		ShardID: request.ShardInfo.GetShardId(),
 	}); err == nil {
@@ -67,42 +76,53 @@ func (m *sqlShardManager) CreateShard(request *persistence.CreateShardRequest) e
 		return serviceerror.NewInternal(fmt.Sprintf("CreateShard operation failed. Error: %v", err))
 	}
 
-	if _, err := m.db.InsertIntoShards(row); err != nil {
+	if _, err := m.db.InsertIntoShards(ctx, row); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("CreateShard operation failed. Failed to insert into shards table. Error: %v", err))
 	}
 
 	return nil
 }
 
-func (m *sqlShardManager) GetShard(request *persistence.GetShardRequest) (*persistence.GetShardResponse, error) {
-	row, err := m.db.SelectFromShards(sqlplugin.ShardsFilter{ShardID: request.ShardID})
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetShard operation failed. Shard with ID %v not found. Error: %v", request.ShardID, err))
+func (m *sqlShardManager) GetShard(
+	request *persistence.GetShardRequest,
+) (*persistence.GetShardResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	row, err := m.db.SelectFromShards(ctx, sqlplugin.ShardsFilter{
+		ShardID: request.ShardID,
+	})
+	switch err {
+	case nil:
+		shardInfo, err := serialization.ShardInfoFromBlob(row.Data, row.DataEncoding, m.currentClusterName)
+		if err != nil {
+			return nil, err
 		}
+		return &persistence.GetShardResponse{ShardInfo: shardInfo}, nil
+	case sql.ErrNoRows:
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("GetShard operation failed. Shard with ID %v not found. Error: %v", request.ShardID, err))
+	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetShard operation failed. Failed to get record. ShardId: %v. Error: %v", request.ShardID, err))
 	}
-
-	shardInfo, err := serialization.ShardInfoFromBlob(row.Data, row.DataEncoding, m.currentClusterName)
-	if err != nil {
-		return nil, err
-	}
-
-	resp := &persistence.GetShardResponse{ShardInfo: shardInfo}
-
-	return resp, nil
 }
 
-func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) error {
+func (m *sqlShardManager) UpdateShard(
+	request *persistence.UpdateShardRequest,
+) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	row, err := shardInfoToShardsRow(*request.ShardInfo)
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("UpdateShard operation failed. Error: %v", err))
 	}
-	return m.txExecute("UpdateShard", func(tx sqlplugin.Tx) error {
-		if err := lockShard(tx, request.ShardInfo.GetShardId(), request.PreviousRangeID); err != nil {
+	return m.txExecute(ctx, "UpdateShard", func(tx sqlplugin.Tx) error {
+		if err := lockShard(ctx,
+			tx,
+			request.ShardInfo.GetShardId(),
+			request.PreviousRangeID,
+		); err != nil {
 			return err
 		}
-		result, err := tx.UpdateShards(row)
+		result, err := tx.UpdateShards(ctx, row)
 		if err != nil {
 			return err
 		}
@@ -118,52 +138,68 @@ func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) e
 }
 
 // initiated by the owning shard
-func lockShard(tx sqlplugin.Tx, shardID int32, oldRangeID int64) error {
-	rangeID, err := tx.WriteLockShards(sqlplugin.ShardsFilter{ShardID: shardID})
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID))
+func lockShard(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	shardID int32,
+	oldRangeID int64,
+) error {
+
+	rangeID, err := tx.WriteLockShards(ctx, sqlplugin.ShardsFilter{
+		ShardID: shardID,
+	})
+	switch err {
+	case nil:
+		if rangeID != oldRangeID {
+			return &persistence.ShardOwnershipLostError{
+				ShardID: shardID,
+				Msg:     fmt.Sprintf("Failed to update shard. Previous range ID: %v; new range ID: %v", oldRangeID, rangeID),
+			}
 		}
+		return nil
+	case sql.ErrNoRows:
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID))
+	default:
 		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID: %v. Error: %v", shardID, err))
 	}
-
-	if rangeID != oldRangeID {
-		return &persistence.ShardOwnershipLostError{
-			ShardID: shardID,
-			Msg:     fmt.Sprintf("Failed to update shard. Previous range ID: %v; new range ID: %v", oldRangeID, rangeID),
-		}
-	}
-
-	return nil
 }
 
 // initiated by the owning shard
-func readLockShard(tx sqlplugin.Tx, shardID int32, oldRangeID int64) error {
-	rangeID, err := tx.ReadLockShards(sqlplugin.ShardsFilter{ShardID: shardID})
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID))
+func readLockShard(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	shardID int32,
+	oldRangeID int64,
+) error {
+	rangeID, err := tx.ReadLockShards(ctx, sqlplugin.ShardsFilter{
+		ShardID: shardID,
+	})
+	switch err {
+	case nil:
+		if rangeID != oldRangeID {
+			return &persistence.ShardOwnershipLostError{
+				ShardID: shardID,
+				Msg:     fmt.Sprintf("Failed to lock shard. Previous range ID: %v; new range ID: %v", oldRangeID, rangeID),
+			}
 		}
+		return nil
+	case sql.ErrNoRows:
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID))
+	default:
 		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID: %v. Error: %v", shardID, err))
 	}
-
-	if rangeID != oldRangeID {
-		return &persistence.ShardOwnershipLostError{
-			ShardID: shardID,
-			Msg:     fmt.Sprintf("Failed to lock shard. Previous range ID: %v; new range ID: %v", oldRangeID, rangeID),
-		}
-	}
-	return nil
 }
 
-func shardInfoToShardsRow(s persistencespb.ShardInfo) (*sqlplugin.ShardsRow, error) {
-	blob, err := serialization.ShardInfoToBlob(&s)
+func shardInfoToShardsRow(
+	shard persistencespb.ShardInfo,
+) (*sqlplugin.ShardsRow, error) {
+	blob, err := serialization.ShardInfoToBlob(&shard)
 	if err != nil {
 		return nil, err
 	}
 	return &sqlplugin.ShardsRow{
-		ShardID:      s.GetShardId(),
-		RangeID:      s.GetRangeId(),
+		ShardID:      shard.GetShardId(),
+		RangeID:      shard.GetRangeId(),
 		Data:         blob.Data,
 		DataEncoding: blob.EncodingType.String(),
 	}, nil

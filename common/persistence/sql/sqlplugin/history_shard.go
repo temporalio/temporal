@@ -24,7 +24,10 @@
 
 package sqlplugin
 
-import "database/sql"
+import (
+	"context"
+	"database/sql"
+)
 
 type (
 	// ShardsRow represents a row in shards table
@@ -43,10 +46,10 @@ type (
 
 	// HistoryShard is the SQL persistence interface for history shards
 	HistoryShard interface {
-		InsertIntoShards(rows *ShardsRow) (sql.Result, error)
-		UpdateShards(row *ShardsRow) (sql.Result, error)
-		SelectFromShards(filter ShardsFilter) (*ShardsRow, error)
-		ReadLockShards(filter ShardsFilter) (int64, error)
-		WriteLockShards(filter ShardsFilter) (int64, error)
+		InsertIntoShards(ctx context.Context, rows *ShardsRow) (sql.Result, error)
+		UpdateShards(ctx context.Context, row *ShardsRow) (sql.Result, error)
+		SelectFromShards(ctx context.Context, filter ShardsFilter) (*ShardsRow, error)
+		ReadLockShards(ctx context.Context, filter ShardsFilter) (int64, error)
+		WriteLockShards(ctx context.Context, filter ShardsFilter) (int64, error)
 	}
 )

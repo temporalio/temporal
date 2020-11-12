@@ -25,6 +25,7 @@
 package sqlplugin
 
 import (
+	"context"
 	"database/sql"
 
 	"go.temporal.io/server/common/primitives"
@@ -64,8 +65,8 @@ type (
 
 	// HistoryNode is the SQL persistence interface for history nodes
 	HistoryNode interface {
-		InsertIntoHistoryNode(row *HistoryNodeRow) (sql.Result, error)
-		SelectFromHistoryNode(filter HistoryNodeSelectFilter) ([]HistoryNodeRow, error)
-		DeleteFromHistoryNode(filter HistoryNodeDeleteFilter) (sql.Result, error)
+		InsertIntoHistoryNode(ctx context.Context, row *HistoryNodeRow) (sql.Result, error)
+		SelectFromHistoryNode(ctx context.Context, filter HistoryNodeSelectFilter) ([]HistoryNodeRow, error)
+		DeleteFromHistoryNode(ctx context.Context, filter HistoryNodeDeleteFilter) (sql.Result, error)
 	}
 )

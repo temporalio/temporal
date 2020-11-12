@@ -83,7 +83,7 @@ func (s *queueMetadataSuite) TestInsert_Success() {
 	queueType := persistence.QueueType(rand.Int31())
 
 	queueMetadata := s.newRandomQueueMetadataRow(queueType)
-	result, err := s.store.InsertIntoQueueMetadata(&queueMetadata)
+	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.Equal(1, int(rowsAffected))
@@ -93,13 +93,13 @@ func (s *queueMetadataSuite) TestInsert_Fail_Duplicate() {
 	queueType := persistence.QueueType(rand.Int31())
 
 	queueMetadata := s.newRandomQueueMetadataRow(queueType)
-	result, err := s.store.InsertIntoQueueMetadata(&queueMetadata)
+	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.Equal(1, int(rowsAffected))
 
 	queueMetadata = s.newRandomQueueMetadataRow(queueType)
-	_, err = s.store.InsertIntoQueueMetadata(&queueMetadata)
+	_, err = s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -107,7 +107,7 @@ func (s *queueMetadataSuite) TestInsertSelect() {
 	queueType := persistence.QueueType(rand.Int31())
 
 	queueMetadata := s.newRandomQueueMetadataRow(queueType)
-	result, err := s.store.InsertIntoQueueMetadata(&queueMetadata)
+	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.Equal(1, int(rowsAffected))
@@ -115,7 +115,7 @@ func (s *queueMetadataSuite) TestInsertSelect() {
 	filter := sqlplugin.QueueMetadataFilter{
 		QueueType: queueType,
 	}
-	row, err := s.store.SelectFromQueueMetadata(filter)
+	row, err := s.store.SelectFromQueueMetadata(newExecutionContext(), filter)
 	s.NoError(err)
 	row.QueueType = queueType
 	s.Equal(&queueMetadata, row)
@@ -125,13 +125,13 @@ func (s *queueMetadataSuite) TestInsertUpdate_Success() {
 	queueType := persistence.QueueType(rand.Int31())
 
 	queueMetadata := s.newRandomQueueMetadataRow(queueType)
-	result, err := s.store.InsertIntoQueueMetadata(&queueMetadata)
+	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.Equal(1, int(rowsAffected))
 
 	queueMetadata = s.newRandomQueueMetadataRow(queueType)
-	result, err = s.store.UpdateQueueMetadata(&queueMetadata)
+	result, err = s.store.UpdateQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.Equal(1, int(rowsAffected))
@@ -141,7 +141,7 @@ func (s *queueMetadataSuite) TestUpdate_Fail() {
 	queueType := persistence.QueueType(rand.Int31())
 
 	queueMetadata := s.newRandomQueueMetadataRow(queueType)
-	result, err := s.store.UpdateQueueMetadata(&queueMetadata)
+	result, err := s.store.UpdateQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.Equal(0, int(rowsAffected))
@@ -151,13 +151,13 @@ func (s *queueMetadataSuite) TestInsertUpdateSelect() {
 	queueType := persistence.QueueType(rand.Int31())
 
 	queueMetadata := s.newRandomQueueMetadataRow(queueType)
-	result, err := s.store.InsertIntoQueueMetadata(&queueMetadata)
+	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.Equal(1, int(rowsAffected))
 
 	queueMetadata = s.newRandomQueueMetadataRow(queueType)
-	result, err = s.store.UpdateQueueMetadata(&queueMetadata)
+	result, err = s.store.UpdateQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.Equal(1, int(rowsAffected))
@@ -165,7 +165,7 @@ func (s *queueMetadataSuite) TestInsertUpdateSelect() {
 	filter := sqlplugin.QueueMetadataFilter{
 		QueueType: queueType,
 	}
-	row, err := s.store.SelectFromQueueMetadata(filter)
+	row, err := s.store.SelectFromQueueMetadata(newExecutionContext(), filter)
 	s.NoError(err)
 	row.QueueType = queueType
 	s.Equal(&queueMetadata, row)
@@ -175,7 +175,7 @@ func (s *queueMetadataSuite) TestSelectReadLock() {
 	queueType := persistence.QueueType(rand.Int31())
 
 	queueMetadata := s.newRandomQueueMetadataRow(queueType)
-	result, err := s.store.InsertIntoQueueMetadata(&queueMetadata)
+	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.Equal(1, int(rowsAffected))
@@ -185,7 +185,7 @@ func (s *queueMetadataSuite) TestSelectReadLock() {
 	filter := sqlplugin.QueueMetadataFilter{
 		QueueType: queueType,
 	}
-	row, err := s.store.LockQueueMetadata(filter)
+	row, err := s.store.LockQueueMetadata(newExecutionContext(), filter)
 	s.NoError(err)
 	row.QueueType = queueType
 	s.Equal(&queueMetadata, row)

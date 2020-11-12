@@ -92,7 +92,7 @@ func (s *historyExecutionSuite) TestInsert_Success() {
 	lastWriteVersion := rand.Int63()
 
 	execution := s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, nextEventID, lastWriteVersion)
-	result, err := s.store.InsertIntoExecutions(&execution)
+	result, err := s.store.InsertIntoExecutions(newExecutionContext(), &execution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -108,14 +108,14 @@ func (s *historyExecutionSuite) TestInsert_Fail_Duplicate() {
 	lastWriteVersion := rand.Int63()
 
 	execution := s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, nextEventID, lastWriteVersion)
-	result, err := s.store.InsertIntoExecutions(&execution)
+	result, err := s.store.InsertIntoExecutions(newExecutionContext(), &execution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	execution = s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, nextEventID, lastWriteVersion)
-	_, err = s.store.InsertIntoExecutions(&execution)
+	_, err = s.store.InsertIntoExecutions(newExecutionContext(), &execution)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -128,7 +128,7 @@ func (s *historyExecutionSuite) TestInsertSelect() {
 	lastWriteVersion := rand.Int63()
 
 	execution := s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, nextEventID, lastWriteVersion)
-	result, err := s.store.InsertIntoExecutions(&execution)
+	result, err := s.store.InsertIntoExecutions(newExecutionContext(), &execution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -140,7 +140,7 @@ func (s *historyExecutionSuite) TestInsertSelect() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	row, err := s.store.SelectFromExecutions(filter)
+	row, err := s.store.SelectFromExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(&execution, row)
 }
@@ -154,14 +154,14 @@ func (s *historyExecutionSuite) TestInsertUpdate_Success() {
 	lastWriteVersion := rand.Int63()
 
 	execution := s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, nextEventID, lastWriteVersion)
-	result, err := s.store.InsertIntoExecutions(&execution)
+	result, err := s.store.InsertIntoExecutions(newExecutionContext(), &execution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	execution = s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, rand.Int63(), rand.Int63())
-	result, err = s.store.UpdateExecutions(&execution)
+	result, err = s.store.UpdateExecutions(newExecutionContext(), &execution)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -177,7 +177,7 @@ func (s *historyExecutionSuite) TestUpdate_Fail() {
 	lastWriteVersion := rand.Int63()
 
 	execution := s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, nextEventID, lastWriteVersion)
-	result, err := s.store.UpdateExecutions(&execution)
+	result, err := s.store.UpdateExecutions(newExecutionContext(), &execution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -193,14 +193,14 @@ func (s *historyExecutionSuite) TestInsertUpdateSelect() {
 	lastWriteVersion := rand.Int63()
 
 	execution := s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, nextEventID, lastWriteVersion)
-	result, err := s.store.InsertIntoExecutions(&execution)
+	result, err := s.store.InsertIntoExecutions(newExecutionContext(), &execution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	execution = s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, rand.Int63(), rand.Int63())
-	result, err = s.store.UpdateExecutions(&execution)
+	result, err = s.store.UpdateExecutions(newExecutionContext(), &execution)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -212,7 +212,7 @@ func (s *historyExecutionSuite) TestInsertUpdateSelect() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	row, err := s.store.SelectFromExecutions(filter)
+	row, err := s.store.SelectFromExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(&execution, row)
 }
@@ -229,13 +229,13 @@ func (s *historyExecutionSuite) TestDeleteSelect() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	result, err := s.store.DeleteFromExecutions(filter)
+	result, err := s.store.DeleteFromExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	_, err = s.store.SelectFromExecutions(filter)
+	_, err = s.store.SelectFromExecutions(newExecutionContext(), filter)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -248,7 +248,7 @@ func (s *historyExecutionSuite) TestInsertDeleteSelect() {
 	lastWriteVersion := rand.Int63()
 
 	execution := s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, nextEventID, lastWriteVersion)
-	result, err := s.store.InsertIntoExecutions(&execution)
+	result, err := s.store.InsertIntoExecutions(newExecutionContext(), &execution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -260,13 +260,13 @@ func (s *historyExecutionSuite) TestInsertDeleteSelect() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	result, err = s.store.DeleteFromExecutions(filter)
+	result, err = s.store.DeleteFromExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	_, err = s.store.SelectFromExecutions(filter)
+	_, err = s.store.SelectFromExecutions(newExecutionContext(), filter)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -279,7 +279,7 @@ func (s *historyExecutionSuite) TestReadLock() {
 	lastWriteVersion := rand.Int63()
 
 	execution := s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, nextEventID, lastWriteVersion)
-	result, err := s.store.InsertIntoExecutions(&execution)
+	result, err := s.store.InsertIntoExecutions(newExecutionContext(), &execution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -291,7 +291,7 @@ func (s *historyExecutionSuite) TestReadLock() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rowNextEventID, err := s.store.ReadLockExecutions(filter)
+	rowNextEventID, err := s.store.ReadLockExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(execution.NextEventID, rowNextEventID)
 }
@@ -305,7 +305,7 @@ func (s *historyExecutionSuite) TestWriteLock() {
 	lastWriteVersion := rand.Int63()
 
 	execution := s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, nextEventID, lastWriteVersion)
-	result, err := s.store.InsertIntoExecutions(&execution)
+	result, err := s.store.InsertIntoExecutions(newExecutionContext(), &execution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -317,7 +317,7 @@ func (s *historyExecutionSuite) TestWriteLock() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rowNextEventID, err := s.store.WriteLockExecutions(filter)
+	rowNextEventID, err := s.store.WriteLockExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(execution.NextEventID, rowNextEventID)
 }

@@ -25,6 +25,7 @@
 package sqlplugin
 
 import (
+	"context"
 	"database/sql"
 	"time"
 )
@@ -66,9 +67,9 @@ type (
 	Visibility interface {
 		// InsertIntoVisibility inserts a row into visibility table. If a row already exist,
 		// no changes will be made by this API
-		InsertIntoVisibility(row *VisibilityRow) (sql.Result, error)
+		InsertIntoVisibility(ctx context.Context, row *VisibilityRow) (sql.Result, error)
 		// ReplaceIntoVisibility deletes old row (if it exist) and inserts new row into visibility table
-		ReplaceIntoVisibility(row *VisibilityRow) (sql.Result, error)
+		ReplaceIntoVisibility(ctx context.Context, row *VisibilityRow) (sql.Result, error)
 		// SelectFromVisibility returns one or more rows from visibility table
 		// Required filter params:
 		// - getClosedWorkflowExecution - retrieves single row - {namespaceID, runID, closed=true}
@@ -77,7 +78,7 @@ type (
 		//     - namespaceID, minStartTime, maxStartTime, runID and pageSize where some or all of these may come from previous page token
 		//   - OPTIONALLY specify one of following params
 		//     - workflowID, workflowTypeName, status (along with closed=true)
-		SelectFromVisibility(filter VisibilitySelectFilter) ([]VisibilityRow, error)
-		DeleteFromVisibility(filter VisibilityDeleteFilter) (sql.Result, error)
+		SelectFromVisibility(ctx context.Context, filter VisibilitySelectFilter) ([]VisibilityRow, error)
+		DeleteFromVisibility(ctx context.Context, filter VisibilityDeleteFilter) (sql.Result, error)
 	}
 )

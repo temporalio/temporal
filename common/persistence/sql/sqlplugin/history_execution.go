@@ -25,6 +25,7 @@
 package sqlplugin
 
 import (
+	"context"
 	"database/sql"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -81,26 +82,26 @@ type (
 
 	// HistoryExecution is the SQL persistence interface for history executions
 	HistoryExecution interface {
-		InsertIntoExecutions(row *ExecutionsRow) (sql.Result, error)
-		UpdateExecutions(row *ExecutionsRow) (sql.Result, error)
-		SelectFromExecutions(filter ExecutionsFilter) (*ExecutionsRow, error)
-		DeleteFromExecutions(filter ExecutionsFilter) (sql.Result, error)
-		ReadLockExecutions(filter ExecutionsFilter) (int64, error)
-		WriteLockExecutions(filter ExecutionsFilter) (int64, error)
+		InsertIntoExecutions(ctx context.Context, row *ExecutionsRow) (sql.Result, error)
+		UpdateExecutions(ctx context.Context, row *ExecutionsRow) (sql.Result, error)
+		SelectFromExecutions(ctx context.Context, filter ExecutionsFilter) (*ExecutionsRow, error)
+		DeleteFromExecutions(ctx context.Context, filter ExecutionsFilter) (sql.Result, error)
+		ReadLockExecutions(ctx context.Context, filter ExecutionsFilter) (int64, error)
+		WriteLockExecutions(ctx context.Context, filter ExecutionsFilter) (int64, error)
 
-		LockCurrentExecutionsJoinExecutions(filter CurrentExecutionsFilter) ([]CurrentExecutionsRow, error)
+		LockCurrentExecutionsJoinExecutions(ctx context.Context, filter CurrentExecutionsFilter) ([]CurrentExecutionsRow, error)
 
-		InsertIntoCurrentExecutions(row *CurrentExecutionsRow) (sql.Result, error)
-		UpdateCurrentExecutions(row *CurrentExecutionsRow) (sql.Result, error)
+		InsertIntoCurrentExecutions(ctx context.Context, row *CurrentExecutionsRow) (sql.Result, error)
+		UpdateCurrentExecutions(ctx context.Context, row *CurrentExecutionsRow) (sql.Result, error)
 		// SelectFromCurrentExecutions returns one or more rows from current_executions table
 		// Required params - {shardID, namespaceID, workflowID}
-		SelectFromCurrentExecutions(filter CurrentExecutionsFilter) (*CurrentExecutionsRow, error)
+		SelectFromCurrentExecutions(ctx context.Context, filter CurrentExecutionsFilter) (*CurrentExecutionsRow, error)
 		// DeleteFromCurrentExecutions deletes a single row that matches the filter criteria
 		// If a row exist, that row will be deleted and this method will return success
 		// If there is no row matching the filter criteria, this method will still return success
 		// Callers can check the output of Result.RowsAffected() to see if a row was deleted or not
 		// Required params - {shardID, namespaceID, workflowID, runID}
-		DeleteFromCurrentExecutions(filter CurrentExecutionsFilter) (sql.Result, error)
-		LockCurrentExecutions(filter CurrentExecutionsFilter) (*CurrentExecutionsRow, error)
+		DeleteFromCurrentExecutions(ctx context.Context, filter CurrentExecutionsFilter) (sql.Result, error)
+		LockCurrentExecutions(ctx context.Context, filter CurrentExecutionsFilter) (*CurrentExecutionsRow, error)
 	}
 )

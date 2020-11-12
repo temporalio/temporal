@@ -25,6 +25,7 @@
 package postgresql
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 
@@ -65,74 +66,127 @@ const (
 var errMissingArgs = errors.New("missing one or more args for API")
 
 // InsertIntoNamespace inserts a single row into namespaces table
-func (pdb *db) InsertIntoNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) {
-	return pdb.conn.Exec(createNamespaceQuery, partitionID, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding, row.NotificationVersion)
+func (pdb *db) InsertIntoNamespace(
+	ctx context.Context,
+	row *sqlplugin.NamespaceRow,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx, createNamespaceQuery, partitionID, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding, row.NotificationVersion)
 }
 
 // UpdateNamespace updates a single row in namespaces table
-func (pdb *db) UpdateNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) {
-	return pdb.conn.Exec(updateNamespaceQuery, row.Name, row.Data, row.DataEncoding, row.NotificationVersion, row.ID)
+func (pdb *db) UpdateNamespace(
+	ctx context.Context,
+	row *sqlplugin.NamespaceRow,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx, updateNamespaceQuery, row.Name, row.Data, row.DataEncoding, row.NotificationVersion, row.ID)
 }
 
 // SelectFromNamespace reads one or more rows from namespaces table
-func (pdb *db) SelectFromNamespace(filter sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
+func (pdb *db) SelectFromNamespace(
+	ctx context.Context,
+	filter sqlplugin.NamespaceFilter,
+) ([]sqlplugin.NamespaceRow, error) {
 	switch {
 	case filter.ID != nil || filter.Name != nil:
 		if filter.ID != nil && filter.Name != nil {
 			return nil, serviceerror.NewInternal("only ID or name filter can be specified for selection")
 		}
-		return pdb.selectFromNamespace(filter)
+		return pdb.selectFromNamespace(ctx, filter)
 	case filter.PageSize != nil && *filter.PageSize > 0:
-		return pdb.selectAllFromNamespace(filter)
+		return pdb.selectAllFromNamespace(ctx, filter)
 	default:
 		return nil, errMissingArgs
 	}
 }
 
-func (pdb *db) selectFromNamespace(filter sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
+func (pdb *db) selectFromNamespace(
+	ctx context.Context,
+	filter sqlplugin.NamespaceFilter,
+) ([]sqlplugin.NamespaceRow, error) {
 	var err error
 	var row sqlplugin.NamespaceRow
 	switch {
 	case filter.ID != nil:
-		err = pdb.conn.Get(&row, getNamespaceByIDQuery, partitionID, *filter.ID)
+		err = pdb.conn.GetContext(ctx,
+			&row,
+			getNamespaceByIDQuery,
+			partitionID,
+			*filter.ID,
+		)
 	case filter.Name != nil:
-		err = pdb.conn.Get(&row, getNamespaceByNameQuery, partitionID, *filter.Name)
+		err = pdb.conn.GetContext(ctx,
+			&row,
+			getNamespaceByNameQuery,
+			partitionID,
+			*filter.Name,
+		)
 	}
 	if err != nil {
 		return nil, err
 	}
-	return []sqlplugin.NamespaceRow{row}, err
+	return []sqlplugin.NamespaceRow{row}, nil
 }
 
-func (pdb *db) selectAllFromNamespace(filter sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
+func (pdb *db) selectAllFromNamespace(
+	ctx context.Context,
+	filter sqlplugin.NamespaceFilter,
+) ([]sqlplugin.NamespaceRow, error) {
 	var err error
 	var rows []sqlplugin.NamespaceRow
 	switch {
 	case filter.GreaterThanID != nil:
-		err = pdb.conn.Select(&rows, listNamespacesRangeQuery, partitionID, *filter.GreaterThanID, *filter.PageSize)
+		err = pdb.conn.SelectContext(ctx,
+			&rows,
+			listNamespacesRangeQuery,
+			partitionID,
+			*filter.GreaterThanID,
+			*filter.PageSize,
+		)
 	default:
-		err = pdb.conn.Select(&rows, listNamespacesQuery, partitionID, filter.PageSize)
+		err = pdb.conn.SelectContext(ctx,
+			&rows,
+			listNamespacesQuery,
+			partitionID,
+			filter.PageSize,
+		)
 	}
 	return rows, err
 }
 
 // DeleteFromNamespace deletes a single row in namespaces table
-func (pdb *db) DeleteFromNamespace(filter sqlplugin.NamespaceFilter) (sql.Result, error) {
+func (pdb *db) DeleteFromNamespace(
+	ctx context.Context,
+	filter sqlplugin.NamespaceFilter,
+) (sql.Result, error) {
 	var err error
 	var result sql.Result
 	switch {
 	case filter.ID != nil:
-		result, err = pdb.conn.Exec(deleteNamespaceByIDQuery, partitionID, filter.ID)
+		result, err = pdb.conn.ExecContext(ctx,
+			deleteNamespaceByIDQuery,
+			partitionID,
+			filter.ID,
+		)
 	default:
-		result, err = pdb.conn.Exec(deleteNamespaceByNameQuery, partitionID, filter.Name)
+		result, err = pdb.conn.ExecContext(ctx,
+			deleteNamespaceByNameQuery,
+			partitionID,
+			filter.Name,
+		)
 	}
 	return result, err
 }
 
 // LockNamespaceMetadata acquires a write lock on a single row in namespace_metadata table
-func (pdb *db) LockNamespaceMetadata() (*sqlplugin.NamespaceMetadataRow, error) {
+func (pdb *db) LockNamespaceMetadata(
+	ctx context.Context,
+) (*sqlplugin.NamespaceMetadataRow, error) {
 	var row sqlplugin.NamespaceMetadataRow
-	err := pdb.conn.Get(&row.NotificationVersion, lockNamespaceMetadataQuery, partitionID)
+	err := pdb.conn.GetContext(ctx,
+		&row.NotificationVersion,
+		lockNamespaceMetadataQuery,
+		partitionID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -140,13 +194,27 @@ func (pdb *db) LockNamespaceMetadata() (*sqlplugin.NamespaceMetadataRow, error) 
 }
 
 // SelectFromNamespaceMetadata reads a single row in namespace_metadata table
-func (pdb *db) SelectFromNamespaceMetadata() (*sqlplugin.NamespaceMetadataRow, error) {
+func (pdb *db) SelectFromNamespaceMetadata(
+	ctx context.Context,
+) (*sqlplugin.NamespaceMetadataRow, error) {
 	var row sqlplugin.NamespaceMetadataRow
-	err := pdb.conn.Get(&row.NotificationVersion, getNamespaceMetadataQuery, partitionID)
+	err := pdb.conn.GetContext(ctx,
+		&row.NotificationVersion,
+		getNamespaceMetadataQuery,
+		partitionID,
+	)
 	return &row, err
 }
 
 // UpdateNamespaceMetadata updates a single row in namespace_metadata table
-func (pdb *db) UpdateNamespaceMetadata(row *sqlplugin.NamespaceMetadataRow) (sql.Result, error) {
-	return pdb.conn.Exec(updateNamespaceMetadataQuery, row.NotificationVersion+1, row.NotificationVersion, partitionID)
+func (pdb *db) UpdateNamespaceMetadata(
+	ctx context.Context,
+	row *sqlplugin.NamespaceMetadataRow,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx,
+		updateNamespaceMetadataQuery,
+		row.NotificationVersion+1,
+		row.NotificationVersion,
+		partitionID,
+	)
 }

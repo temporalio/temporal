@@ -25,6 +25,7 @@
 package mysql
 
 import (
+	"context"
 	"database/sql"
 
 	"go.temporal.io/server/common/persistence"
@@ -47,61 +48,133 @@ const (
 )
 
 // InsertIntoMessages inserts a new row into queue table
-func (mdb *db) InsertIntoMessages(row []sqlplugin.QueueMessageRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(templateEnqueueMessageQuery, row)
+func (mdb *db) InsertIntoMessages(
+	ctx context.Context,
+	row []sqlplugin.QueueMessageRow,
+) (sql.Result, error) {
+	return mdb.conn.NamedExecContext(ctx,
+		templateEnqueueMessageQuery,
+		row,
+	)
 }
 
-func (mdb *db) SelectFromMessages(filter sqlplugin.QueueMessagesFilter) ([]sqlplugin.QueueMessageRow, error) {
+func (mdb *db) SelectFromMessages(
+	ctx context.Context,
+	filter sqlplugin.QueueMessagesFilter,
+) ([]sqlplugin.QueueMessageRow, error) {
 	var rows []sqlplugin.QueueMessageRow
-	err := mdb.conn.Select(&rows, templateGetMessageQuery, filter.QueueType, filter.MessageID)
+	err := mdb.conn.SelectContext(ctx,
+		&rows,
+		templateGetMessageQuery,
+		filter.QueueType,
+		filter.MessageID,
+	)
 	return rows, err
 }
 
-func (mdb *db) RangeSelectFromMessages(filter sqlplugin.QueueMessagesRangeFilter) ([]sqlplugin.QueueMessageRow, error) {
+func (mdb *db) RangeSelectFromMessages(
+	ctx context.Context,
+	filter sqlplugin.QueueMessagesRangeFilter,
+) ([]sqlplugin.QueueMessageRow, error) {
 	var rows []sqlplugin.QueueMessageRow
-	err := mdb.conn.Select(&rows, templateGetMessagesQuery, filter.QueueType, filter.MinMessageID, filter.MaxMessageID, filter.PageSize)
+	err := mdb.conn.SelectContext(ctx,
+		&rows,
+		templateGetMessagesQuery,
+		filter.QueueType,
+		filter.MinMessageID,
+		filter.MaxMessageID,
+		filter.PageSize,
+	)
 	return rows, err
 }
 
 // DeleteFromMessages deletes message with a messageID from the queue
-func (mdb *db) DeleteFromMessages(filter sqlplugin.QueueMessagesFilter) (sql.Result, error) {
-	return mdb.conn.Exec(templateDeleteMessageQuery, filter.QueueType, filter.MessageID)
+func (mdb *db) DeleteFromMessages(
+	ctx context.Context,
+	filter sqlplugin.QueueMessagesFilter,
+) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		templateDeleteMessageQuery,
+		filter.QueueType,
+		filter.MessageID,
+	)
 }
 
 // RangeDeleteFromMessages deletes messages before messageID from the queue
-func (mdb *db) RangeDeleteFromMessages(filter sqlplugin.QueueMessagesRangeFilter) (sql.Result, error) {
-	return mdb.conn.Exec(templateRangeDeleteMessagesQuery, filter.QueueType, filter.MinMessageID, filter.MaxMessageID)
+func (mdb *db) RangeDeleteFromMessages(
+	ctx context.Context,
+	filter sqlplugin.QueueMessagesRangeFilter,
+) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		templateRangeDeleteMessagesQuery,
+		filter.QueueType,
+		filter.MinMessageID,
+		filter.MaxMessageID,
+	)
 }
 
 // GetLastEnqueuedMessageIDForUpdate returns the last enqueued message ID
-func (mdb *db) GetLastEnqueuedMessageIDForUpdate(queueType persistence.QueueType) (int64, error) {
+func (mdb *db) GetLastEnqueuedMessageIDForUpdate(
+	ctx context.Context,
+	queueType persistence.QueueType,
+) (int64, error) {
 	var lastMessageID int64
-	err := mdb.conn.Get(&lastMessageID, templateGetLastMessageIDQuery, queueType)
+	err := mdb.conn.GetContext(ctx,
+		&lastMessageID,
+		templateGetLastMessageIDQuery,
+		queueType,
+	)
 	return lastMessageID, err
 }
 
-func (mdb *db) InsertIntoQueueMetadata(row *sqlplugin.QueueMetadataRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(templateCreateQueueMetadataQuery, row)
+func (mdb *db) InsertIntoQueueMetadata(
+	ctx context.Context,
+	row *sqlplugin.QueueMetadataRow,
+) (sql.Result, error) {
+	return mdb.conn.NamedExecContext(ctx,
+		templateCreateQueueMetadataQuery,
+		row,
+	)
 }
 
-func (mdb *db) UpdateQueueMetadata(row *sqlplugin.QueueMetadataRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(templateUpdateQueueMetadataQuery, row)
+func (mdb *db) UpdateQueueMetadata(
+	ctx context.Context,
+	row *sqlplugin.QueueMetadataRow,
+) (sql.Result, error) {
+	return mdb.conn.NamedExecContext(ctx,
+		templateUpdateQueueMetadataQuery,
+		row,
+	)
 }
 
-func (mdb *db) SelectFromQueueMetadata(filter sqlplugin.QueueMetadataFilter) (*sqlplugin.QueueMetadataRow, error) {
+func (mdb *db) SelectFromQueueMetadata(
+	ctx context.Context,
+	filter sqlplugin.QueueMetadataFilter,
+) (*sqlplugin.QueueMetadataRow, error) {
 	var row sqlplugin.QueueMetadataRow
-	err := mdb.conn.Get(&row, templateGetQueueMetadataQuery, filter.QueueType)
+	err := mdb.conn.GetContext(ctx,
+		&row,
+		templateGetQueueMetadataQuery,
+		filter.QueueType,
+	)
 	if err != nil {
 		return nil, err
 	}
-	return &row, err
+	return &row, nil
 }
 
-func (mdb *db) LockQueueMetadata(filter sqlplugin.QueueMetadataFilter) (*sqlplugin.QueueMetadataRow, error) {
+func (mdb *db) LockQueueMetadata(
+	ctx context.Context,
+	filter sqlplugin.QueueMetadataFilter,
+) (*sqlplugin.QueueMetadataRow, error) {
 	var row sqlplugin.QueueMetadataRow
-	err := mdb.conn.Get(&row, templateLockQueueMetadataQuery, filter.QueueType)
+	err := mdb.conn.GetContext(ctx,
+		&row,
+		templateLockQueueMetadataQuery,
+		filter.QueueType,
+	)
 	if err != nil {
 		return nil, err
 	}
-	return &row, err
+	return &row, nil
 }

@@ -26,6 +26,7 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/binary"
 	"encoding/gob"
@@ -55,8 +56,8 @@ func (m *sqlStore) Close() {
 	}
 }
 
-func (m *sqlStore) txExecute(operation string, f func(tx sqlplugin.Tx) error) error {
-	tx, err := m.db.BeginTx()
+func (m *sqlStore) txExecute(ctx context.Context, operation string, f func(tx sqlplugin.Tx) error) error {
+	tx, err := m.db.BeginTx(ctx)
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("%s failed. Failed to start transaction. Error: %v", operation, err))
 	}

@@ -83,7 +83,7 @@ func (s *historyShardSuite) TestInsert_Success() {
 	rangeID := int64(1)
 
 	shard := s.newRandomShardRow(shardID, rangeID)
-	result, err := s.store.InsertIntoShards(&shard)
+	result, err := s.store.InsertIntoShards(newExecutionContext(), &shard)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -95,14 +95,14 @@ func (s *historyShardSuite) TestInsert_Fail_Duplicate() {
 	rangeID := int64(1)
 
 	shard := s.newRandomShardRow(shardID, rangeID)
-	result, err := s.store.InsertIntoShards(&shard)
+	result, err := s.store.InsertIntoShards(newExecutionContext(), &shard)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	shard = s.newRandomShardRow(shardID, rangeID)
-	_, err = s.store.InsertIntoShards(&shard)
+	_, err = s.store.InsertIntoShards(newExecutionContext(), &shard)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -111,7 +111,7 @@ func (s *historyShardSuite) TestInsertSelect() {
 	rangeID := int64(1)
 
 	shard := s.newRandomShardRow(shardID, rangeID)
-	result, err := s.store.InsertIntoShards(&shard)
+	result, err := s.store.InsertIntoShards(newExecutionContext(), &shard)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -120,7 +120,7 @@ func (s *historyShardSuite) TestInsertSelect() {
 	filter := sqlplugin.ShardsFilter{
 		ShardID: shardID,
 	}
-	row, err := s.store.SelectFromShards(filter)
+	row, err := s.store.SelectFromShards(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(&shard, row)
 }
@@ -131,14 +131,14 @@ func (s *historyShardSuite) TestInsertUpdate_Success() {
 
 	shard := s.newRandomShardRow(shardID, rangeID)
 	rangeID += 100
-	result, err := s.store.InsertIntoShards(&shard)
+	result, err := s.store.InsertIntoShards(newExecutionContext(), &shard)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	shard = s.newRandomShardRow(shardID, rangeID)
-	result, err = s.store.UpdateShards(&shard)
+	result, err = s.store.UpdateShards(newExecutionContext(), &shard)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.Equal(1, int(rowsAffected))
@@ -149,7 +149,7 @@ func (s *historyShardSuite) TestUpdate_Fail() {
 	rangeID := int64(1)
 
 	shard := s.newRandomShardRow(shardID, rangeID)
-	result, err := s.store.UpdateShards(&shard)
+	result, err := s.store.UpdateShards(newExecutionContext(), &shard)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.Equal(0, int(rowsAffected))
@@ -161,14 +161,14 @@ func (s *historyShardSuite) TestInsertUpdateSelect() {
 
 	shard := s.newRandomShardRow(shardID, rangeID)
 	rangeID += 100
-	result, err := s.store.InsertIntoShards(&shard)
+	result, err := s.store.InsertIntoShards(newExecutionContext(), &shard)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	shard = s.newRandomShardRow(shardID, rangeID)
-	result, err = s.store.UpdateShards(&shard)
+	result, err = s.store.UpdateShards(newExecutionContext(), &shard)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.Equal(1, int(rowsAffected))
@@ -176,7 +176,7 @@ func (s *historyShardSuite) TestInsertUpdateSelect() {
 	filter := sqlplugin.ShardsFilter{
 		ShardID: shardID,
 	}
-	row, err := s.store.SelectFromShards(filter)
+	row, err := s.store.SelectFromShards(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(&shard, row)
 }
@@ -186,7 +186,7 @@ func (s *historyShardSuite) TestInsertReadLock() {
 	rangeID := int64(rand.Int31())
 
 	shard := s.newRandomShardRow(shardID, rangeID)
-	result, err := s.store.InsertIntoShards(&shard)
+	result, err := s.store.InsertIntoShards(newExecutionContext(), &shard)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -197,7 +197,7 @@ func (s *historyShardSuite) TestInsertReadLock() {
 	filter := sqlplugin.ShardsFilter{
 		ShardID: shardID,
 	}
-	shardRange, err := s.store.ReadLockShards(filter)
+	shardRange, err := s.store.ReadLockShards(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(rangeID, shardRange)
 }
@@ -207,7 +207,7 @@ func (s *historyShardSuite) TestInsertWriteLock() {
 	rangeID := int64(rand.Int31())
 
 	shard := s.newRandomShardRow(shardID, rangeID)
-	result, err := s.store.InsertIntoShards(&shard)
+	result, err := s.store.InsertIntoShards(newExecutionContext(), &shard)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -218,7 +218,7 @@ func (s *historyShardSuite) TestInsertWriteLock() {
 	filter := sqlplugin.ShardsFilter{
 		ShardID: shardID,
 	}
-	shardRange, err := s.store.WriteLockShards(filter)
+	shardRange, err := s.store.WriteLockShards(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(rangeID, shardRange)
 }
