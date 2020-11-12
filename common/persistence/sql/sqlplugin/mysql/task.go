@@ -25,6 +25,7 @@
 package mysql
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -89,19 +90,41 @@ task_queue_id = :task_queue_id
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
-func (mdb *db) InsertIntoTasks(rows []sqlplugin.TasksRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(createTaskQry, rows)
+func (mdb *db) InsertIntoTasks(
+	ctx context.Context,
+	rows []sqlplugin.TasksRow,
+) (sql.Result, error) {
+	return mdb.conn.NamedExecContext(ctx,
+		createTaskQry,
+		rows,
+	)
 }
 
 // SelectFromTasks reads one or more rows from tasks table
-func (mdb *db) SelectFromTasks(filter sqlplugin.TasksFilter) ([]sqlplugin.TasksRow, error) {
+func (mdb *db) SelectFromTasks(
+	ctx context.Context,
+	filter sqlplugin.TasksFilter,
+) ([]sqlplugin.TasksRow, error) {
 	var err error
 	var rows []sqlplugin.TasksRow
 	switch {
 	case filter.MaxTaskID != nil:
-		err = mdb.conn.Select(&rows, getTaskMinMaxQry, filter.RangeHash, filter.TaskQueueID, *filter.MinTaskID, *filter.MaxTaskID, *filter.PageSize)
+		err = mdb.conn.SelectContext(ctx,
+			&rows, getTaskMinMaxQry,
+			filter.RangeHash,
+			filter.TaskQueueID,
+			*filter.MinTaskID,
+			*filter.MaxTaskID,
+			*filter.PageSize,
+		)
 	default:
-		err = mdb.conn.Select(&rows, getTaskMinQry, filter.RangeHash, filter.TaskQueueID, *filter.MinTaskID, *filter.PageSize)
+		err = mdb.conn.SelectContext(ctx,
+			&rows, getTaskMinQry,
+			filter.RangeHash,
+			filter.TaskQueueID,
+			*filter.MinTaskID,
+			*filter.PageSize,
+		)
 	}
 	if err != nil {
 		return nil, err
@@ -110,83 +133,148 @@ func (mdb *db) SelectFromTasks(filter sqlplugin.TasksFilter) ([]sqlplugin.TasksR
 }
 
 // DeleteFromTasks deletes one or more rows from tasks table
-func (mdb *db) DeleteFromTasks(filter sqlplugin.TasksFilter) (sql.Result, error) {
+func (mdb *db) DeleteFromTasks(
+	ctx context.Context,
+	filter sqlplugin.TasksFilter,
+) (sql.Result, error) {
 	if filter.TaskIDLessThanEquals != nil {
 		if filter.Limit == nil || *filter.Limit == 0 {
 			return nil, fmt.Errorf("missing limit parameter")
 		}
-		return mdb.conn.Exec(rangeDeleteTaskQry,
-			filter.RangeHash, filter.TaskQueueID, *filter.TaskIDLessThanEquals, *filter.Limit)
+		return mdb.conn.ExecContext(ctx,
+			rangeDeleteTaskQry,
+			filter.RangeHash,
+			filter.TaskQueueID,
+			*filter.TaskIDLessThanEquals,
+			*filter.Limit,
+		)
 	}
-	return mdb.conn.Exec(deleteTaskQry, filter.RangeHash, filter.TaskQueueID, *filter.TaskID)
+	return mdb.conn.ExecContext(ctx,
+		deleteTaskQry,
+		filter.RangeHash,
+		filter.TaskQueueID,
+		*filter.TaskID,
+	)
 }
 
 // InsertIntoTaskQueues inserts one or more rows into task_queues table
-func (mdb *db) InsertIntoTaskQueues(row *sqlplugin.TaskQueuesRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(createTaskQueueQry, row)
+func (mdb *db) InsertIntoTaskQueues(
+	ctx context.Context,
+	row *sqlplugin.TaskQueuesRow,
+) (sql.Result, error) {
+	return mdb.conn.NamedExecContext(ctx,
+		createTaskQueueQry,
+		row,
+	)
 }
 
 // UpdateTaskQueues updates a row in task_queues table
-func (mdb *db) UpdateTaskQueues(row *sqlplugin.TaskQueuesRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(updateTaskQueueQry, row)
+func (mdb *db) UpdateTaskQueues(
+	ctx context.Context,
+	row *sqlplugin.TaskQueuesRow,
+) (sql.Result, error) {
+	return mdb.conn.NamedExecContext(ctx,
+		updateTaskQueueQry,
+		row,
+	)
 }
 
 // SelectFromTaskQueues reads one or more rows from task_queues table
-func (mdb *db) SelectFromTaskQueues(filter sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
+func (mdb *db) SelectFromTaskQueues(
+	ctx context.Context,
+	filter sqlplugin.TaskQueuesFilter,
+) ([]sqlplugin.TaskQueuesRow, error) {
 	switch {
 	case filter.TaskQueueID != nil:
 		if filter.RangeHashLessThanEqualTo != 0 || filter.RangeHashGreaterThanEqualTo != 0 {
 			return nil, serviceerror.NewInternal("range of hashes not supported for specific selection")
 		}
-		return mdb.selectFromTaskQueues(filter)
+		return mdb.selectFromTaskQueues(ctx, filter)
 	case filter.RangeHashLessThanEqualTo != 0 && filter.PageSize != nil:
 		if filter.RangeHashLessThanEqualTo < filter.RangeHashGreaterThanEqualTo {
 			return nil, serviceerror.NewInternal("range of hashes bound is invalid")
 		}
-		return mdb.rangeSelectFromTaskQueues(filter)
+		return mdb.rangeSelectFromTaskQueues(ctx, filter)
 	case filter.TaskQueueIDGreaterThan != nil && filter.PageSize != nil:
-		return mdb.rangeSelectFromTaskQueues(filter)
+		return mdb.rangeSelectFromTaskQueues(ctx, filter)
 	default:
 		return nil, serviceerror.NewInternal("invalid set of query filter params")
 	}
 }
 
-func (mdb *db) selectFromTaskQueues(filter sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
+func (mdb *db) selectFromTaskQueues(
+	ctx context.Context,
+	filter sqlplugin.TaskQueuesFilter,
+) ([]sqlplugin.TaskQueuesRow, error) {
 	var err error
 	var row sqlplugin.TaskQueuesRow
-	err = mdb.conn.Get(&row, getTaskQueueQry, filter.RangeHash, filter.TaskQueueID)
+	err = mdb.conn.GetContext(ctx,
+		&row,
+		getTaskQueueQry,
+		filter.RangeHash,
+		filter.TaskQueueID,
+	)
 	if err != nil {
 		return nil, err
 	}
-	return []sqlplugin.TaskQueuesRow{row}, err
+	return []sqlplugin.TaskQueuesRow{row}, nil
 }
 
-func (mdb *db) rangeSelectFromTaskQueues(filter sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
+func (mdb *db) rangeSelectFromTaskQueues(
+	ctx context.Context,
+	filter sqlplugin.TaskQueuesFilter,
+) ([]sqlplugin.TaskQueuesRow, error) {
 	var err error
 	var rows []sqlplugin.TaskQueuesRow
 
 	if filter.RangeHashLessThanEqualTo != 0 {
-		err = mdb.conn.Select(&rows, listTaskQueueWithHashRangeQry,
-			filter.RangeHashGreaterThanEqualTo, filter.RangeHashLessThanEqualTo, filter.TaskQueueIDGreaterThan, *filter.PageSize)
+		err = mdb.conn.SelectContext(ctx,
+			&rows,
+			listTaskQueueWithHashRangeQry,
+			filter.RangeHashGreaterThanEqualTo,
+			filter.RangeHashLessThanEqualTo,
+			filter.TaskQueueIDGreaterThan,
+			*filter.PageSize,
+		)
 	} else {
-		err = mdb.conn.Select(&rows, listTaskQueueQry, filter.RangeHash, filter.TaskQueueIDGreaterThan, *filter.PageSize)
+		err = mdb.conn.SelectContext(ctx,
+			&rows,
+			listTaskQueueQry,
+			filter.RangeHash,
+			filter.TaskQueueIDGreaterThan,
+			*filter.PageSize,
+		)
 	}
-
 	if err != nil {
 		return nil, err
 	}
-
 	return rows, nil
 }
 
 // DeleteFromTaskQueues deletes a row from task_queues table
-func (mdb *db) DeleteFromTaskQueues(filter sqlplugin.TaskQueuesFilter) (sql.Result, error) {
-	return mdb.conn.Exec(deleteTaskQueueQry, filter.RangeHash, filter.TaskQueueID, *filter.RangeID)
+func (mdb *db) DeleteFromTaskQueues(
+	ctx context.Context,
+	filter sqlplugin.TaskQueuesFilter,
+) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		deleteTaskQueueQry,
+		filter.RangeHash,
+		filter.TaskQueueID,
+		*filter.RangeID,
+	)
 }
 
 // LockTaskQueues locks a row in task_queues table
-func (mdb *db) LockTaskQueues(filter sqlplugin.TaskQueuesFilter) (int64, error) {
+func (mdb *db) LockTaskQueues(
+	ctx context.Context,
+	filter sqlplugin.TaskQueuesFilter,
+) (int64, error) {
 	var rangeID int64
-	err := mdb.conn.Get(&rangeID, lockTaskQueueQry, filter.RangeHash, filter.TaskQueueID)
+	err := mdb.conn.GetContext(ctx,
+		&rangeID,
+		lockTaskQueueQry,
+		filter.RangeHash,
+		filter.TaskQueueID,
+	)
 	return rangeID, err
 }

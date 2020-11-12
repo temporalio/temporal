@@ -25,6 +25,7 @@
 package sqlplugin
 
 import (
+	"context"
 	"database/sql"
 
 	"go.temporal.io/server/common/primitives"
@@ -59,13 +60,13 @@ type (
 
 	// HistoryExecutionActivity is the SQL persistence interface for history nodes and history execution activities
 	HistoryExecutionActivity interface {
-		ReplaceIntoActivityInfoMaps(rows []ActivityInfoMapsRow) (sql.Result, error)
+		ReplaceIntoActivityInfoMaps(ctx context.Context, rows []ActivityInfoMapsRow) (sql.Result, error)
 		// SelectFromActivityInfoMaps returns one or more rows from activity_info_maps
-		SelectFromActivityInfoMaps(filter ActivityInfoMapsSelectFilter) ([]ActivityInfoMapsRow, error)
+		SelectFromActivityInfoMaps(ctx context.Context, filter ActivityInfoMapsSelectFilter) ([]ActivityInfoMapsRow, error)
 		// DeleteFromActivityInfoMaps deletes a row from activity_info_maps table
 		// Required filter params
 		// - single row delete - {shardID, namespaceID, workflowID, runID, scheduleID}
 		// - range delete - {shardID, namespaceID, workflowID, runID}
-		DeleteFromActivityInfoMaps(filter ActivityInfoMapsDeleteFilter) (sql.Result, error)
+		DeleteFromActivityInfoMaps(ctx context.Context, filter ActivityInfoMapsDeleteFilter) (sql.Result, error)
 	}
 )

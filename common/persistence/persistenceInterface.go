@@ -26,12 +26,19 @@ package persistence
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+)
+
+const (
+	EmptyQueueMessageID = int64(-1)
+	MinQueueMessageID   = EmptyQueueMessageID + 1
+	MaxQueueMessageID   = math.MaxInt64
 )
 
 type (
@@ -161,12 +168,13 @@ type (
 	// Queue is a store to enqueue and get messages
 	Queue interface {
 		Closeable
-		EnqueueMessage(messagePayload []byte) error
+		EnqueueMessage(blob commonpb.DataBlob) error
 		ReadMessages(lastMessageID int64, maxCount int) ([]*QueueMessage, error)
 		DeleteMessagesBefore(messageID int64) error
 		UpdateAckLevel(messageID int64, clusterName string) error
 		GetAckLevels() (map[string]int64, error)
-		EnqueueMessageToDLQ(messagePayload []byte) (int64, error)
+
+		EnqueueMessageToDLQ(blob commonpb.DataBlob) (int64, error)
 		ReadMessagesFromDLQ(firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
 		DeleteMessageFromDLQ(messageID int64) error
 		RangeDeleteMessagesFromDLQ(firstMessageID int64, lastMessageID int64) error
@@ -176,10 +184,10 @@ type (
 
 	// QueueMessage is the message that stores in the queue
 	QueueMessage struct {
-		ID        int64     `json:"message_id"`
 		QueueType QueueType `json:"queue_type"`
-		Payload   []byte    `json:"message_payload"`
-		// TODO wire encoding type
+		ID        int64     `json:"message_id"`
+		Data      []byte    `json:"message_payload"`
+		Encoding  string    `json:"message_encoding"`
 	}
 
 	// DataBlob represents a blob for any binary data.
@@ -272,13 +280,13 @@ type (
 		UpsertTimerInfos          []*persistencespb.TimerInfo
 		DeleteTimerInfos          []string
 		UpsertChildExecutionInfos []*persistencespb.ChildExecutionInfo
-		DeleteChildExecutionInfo  *int64
+		DeleteChildExecutionInfos []int64
 		UpsertRequestCancelInfos  []*persistencespb.RequestCancelInfo
-		DeleteRequestCancelInfo   *int64
+		DeleteRequestCancelInfos  []int64
 		UpsertSignalInfos         []*persistencespb.SignalInfo
-		DeleteSignalInfo          *int64
+		DeleteSignalInfos         []int64
 		UpsertSignalRequestedIDs  []string
-		DeleteSignalRequestedID   string
+		DeleteSignalRequestedIDs  []string
 		NewBufferedEvents         *commonpb.DataBlob
 		ClearBufferedEvents       bool
 

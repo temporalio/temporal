@@ -302,7 +302,7 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 	lastReadTaskID int64,
 ) (*replicationspb.ReplicationMessages, error) {
 
-	if lastReadTaskID == emptyMessageID {
+	if lastReadTaskID == persistence.EmptyQueueMessageID {
 		lastReadTaskID = p.shard.GetClusterReplicationLevel(pollingCluster)
 	}
 

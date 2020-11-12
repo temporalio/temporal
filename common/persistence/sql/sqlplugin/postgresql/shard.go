@@ -25,6 +25,7 @@
 package postgresql
 
 import (
+	"context"
 	"database/sql"
 
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -47,35 +48,74 @@ const (
 )
 
 // InsertIntoShards inserts one or more rows into shards table
-func (pdb *db) InsertIntoShards(row *sqlplugin.ShardsRow) (sql.Result, error) {
-	return pdb.conn.Exec(createShardQry, row.ShardID, row.RangeID, row.Data, row.DataEncoding)
+func (pdb *db) InsertIntoShards(
+	ctx context.Context,
+	row *sqlplugin.ShardsRow,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx,
+		createShardQry,
+		row.ShardID,
+		row.RangeID,
+		row.Data,
+		row.DataEncoding,
+	)
 }
 
 // UpdateShards updates one or more rows into shards table
-func (pdb *db) UpdateShards(row *sqlplugin.ShardsRow) (sql.Result, error) {
-	return pdb.conn.Exec(updateShardQry, row.RangeID, row.Data, row.DataEncoding, row.ShardID)
+func (pdb *db) UpdateShards(
+	ctx context.Context,
+	row *sqlplugin.ShardsRow,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx,
+		updateShardQry,
+		row.RangeID,
+		row.Data,
+		row.DataEncoding,
+		row.ShardID,
+	)
 }
 
 // SelectFromShards reads one or more rows from shards table
-func (pdb *db) SelectFromShards(filter sqlplugin.ShardsFilter) (*sqlplugin.ShardsRow, error) {
+func (pdb *db) SelectFromShards(
+	ctx context.Context,
+	filter sqlplugin.ShardsFilter,
+) (*sqlplugin.ShardsRow, error) {
 	var row sqlplugin.ShardsRow
-	err := pdb.conn.Get(&row, getShardQry, filter.ShardID)
+	err := pdb.conn.GetContext(ctx,
+		&row,
+		getShardQry,
+		filter.ShardID,
+	)
 	if err != nil {
 		return nil, err
 	}
-	return &row, err
+	return &row, nil
 }
 
 // ReadLockShards acquires a read lock on a single row in shards table
-func (pdb *db) ReadLockShards(filter sqlplugin.ShardsFilter) (int64, error) {
+func (pdb *db) ReadLockShards(
+	ctx context.Context,
+	filter sqlplugin.ShardsFilter,
+) (int64, error) {
 	var rangeID int64
-	err := pdb.conn.Get(&rangeID, readLockShardQry, filter.ShardID)
+	err := pdb.conn.GetContext(ctx,
+		&rangeID,
+		readLockShardQry,
+		filter.ShardID,
+	)
 	return rangeID, err
 }
 
 // WriteLockShards acquires a write lock on a single row in shards table
-func (pdb *db) WriteLockShards(filter sqlplugin.ShardsFilter) (int64, error) {
+func (pdb *db) WriteLockShards(
+	ctx context.Context,
+	filter sqlplugin.ShardsFilter,
+) (int64, error) {
 	var rangeID int64
-	err := pdb.conn.Get(&rangeID, lockShardQry, filter.ShardID)
+	err := pdb.conn.GetContext(ctx,
+		&rangeID,
+		lockShardQry,
+		filter.ShardID,
+	)
 	return rangeID, err
 }

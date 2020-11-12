@@ -25,6 +25,7 @@
 package mysql
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -92,9 +93,13 @@ var errCloseParams = errors.New("missing one of {closeTime, historyLength} param
 
 // InsertIntoVisibility inserts a row into visibility table. If an row already exist,
 // its left as such and no update will be made
-func (mdb *db) InsertIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, error) {
+func (mdb *db) InsertIntoVisibility(
+	ctx context.Context,
+	row *sqlplugin.VisibilityRow,
+) (sql.Result, error) {
 	row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
-	return mdb.conn.Exec(templateCreateWorkflowExecutionStarted,
+	return mdb.conn.ExecContext(ctx,
+		templateCreateWorkflowExecutionStarted,
 		row.NamespaceID,
 		row.WorkflowID,
 		row.RunID,
@@ -103,16 +108,21 @@ func (mdb *db) InsertIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, e
 		row.WorkflowTypeName,
 		row.Status,
 		row.Memo,
-		row.Encoding)
+		row.Encoding,
+	)
 }
 
 // ReplaceIntoVisibility replaces an existing row if it exist or creates a new row in visibility table
-func (mdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, error) {
+func (mdb *db) ReplaceIntoVisibility(
+	ctx context.Context,
+	row *sqlplugin.VisibilityRow,
+) (sql.Result, error) {
 	switch {
 	case row.CloseTime != nil && row.HistoryLength != nil:
 		row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
 		closeTime := mdb.converter.ToMySQLDateTime(*row.CloseTime)
-		return mdb.conn.Exec(templateCreateWorkflowExecutionClosed,
+		return mdb.conn.ExecContext(ctx,
+			templateCreateWorkflowExecutionClosed,
 			row.NamespaceID,
 			row.WorkflowID,
 			row.RunID,
@@ -123,19 +133,30 @@ func (mdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, 
 			row.Status,
 			*row.HistoryLength,
 			row.Memo,
-			row.Encoding)
+			row.Encoding,
+		)
 	default:
 		return nil, errCloseParams
 	}
 }
 
 // DeleteFromVisibility deletes a row from visibility table if it exist
-func (mdb *db) DeleteFromVisibility(filter sqlplugin.VisibilityDeleteFilter) (sql.Result, error) {
-	return mdb.conn.Exec(templateDeleteWorkflowExecution, filter.NamespaceID, filter.RunID)
+func (mdb *db) DeleteFromVisibility(
+	ctx context.Context,
+	filter sqlplugin.VisibilityDeleteFilter,
+) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		templateDeleteWorkflowExecution,
+		filter.NamespaceID,
+		filter.RunID,
+	)
 }
 
 // SelectFromVisibility reads one or more rows from visibility table
-func (mdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]sqlplugin.VisibilityRow, error) {
+func (mdb *db) SelectFromVisibility(
+	ctx context.Context,
+	filter sqlplugin.VisibilitySelectFilter,
+) ([]sqlplugin.VisibilityRow, error) {
 	var err error
 	var rows []sqlplugin.VisibilityRow
 	if filter.MinTime != nil {
@@ -148,7 +169,12 @@ func (mdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 	switch {
 	case filter.MinTime == nil && filter.RunID != nil && filter.Status != 1:
 		var row sqlplugin.VisibilityRow
-		err = mdb.conn.Get(&row, templateGetClosedWorkflowExecution, filter.NamespaceID, *filter.RunID)
+		err = mdb.conn.GetContext(ctx,
+			&row,
+			templateGetClosedWorkflowExecution,
+			filter.NamespaceID,
+			*filter.RunID,
+		)
 		if err == nil {
 			rows = append(rows, row)
 		}
@@ -158,7 +184,8 @@ func (mdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutionsByID
 		}
-		err = mdb.conn.Select(&rows,
+		err = mdb.conn.SelectContext(ctx,
+			&rows,
 			qry,
 			*filter.WorkflowID,
 			filter.NamespaceID,
@@ -167,14 +194,16 @@ func (mdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 			*filter.RunID,
 			*filter.MaxTime,
 			*filter.MaxTime,
-			*filter.PageSize)
+			*filter.PageSize,
+		)
 	case filter.MinTime != nil && filter.MaxTime != nil &&
 		filter.WorkflowTypeName != nil && filter.RunID != nil && filter.PageSize != nil:
 		qry := templateGetOpenWorkflowExecutionsByType
 		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutionsByType
 		}
-		err = mdb.conn.Select(&rows,
+		err = mdb.conn.SelectContext(ctx,
+			&rows,
 			qry,
 			*filter.WorkflowTypeName,
 			filter.NamespaceID,
@@ -183,11 +212,13 @@ func (mdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 			*filter.RunID,
 			*filter.MaxTime,
 			*filter.MaxTime,
-			*filter.PageSize)
+			*filter.PageSize,
+		)
 	case filter.MinTime != nil && filter.MaxTime != nil &&
 		filter.RunID != nil && filter.PageSize != nil &&
 		filter.Status != 0 && filter.Status != 1: // 0 is UNSPECIFIED, 1 is RUNNING
-		err = mdb.conn.Select(&rows,
+		err = mdb.conn.SelectContext(ctx,
+			&rows,
 			templateGetClosedWorkflowExecutionsByStatus,
 			filter.Status,
 			filter.NamespaceID,
@@ -196,14 +227,16 @@ func (mdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 			*filter.RunID,
 			*filter.MaxTime,
 			*filter.MaxTime,
-			*filter.PageSize)
+			*filter.PageSize,
+		)
 	case filter.MinTime != nil && filter.MaxTime != nil &&
 		filter.RunID != nil && filter.PageSize != nil:
 		qry := templateGetOpenWorkflowExecutions
 		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutions
 		}
-		err = mdb.conn.Select(&rows,
+		err = mdb.conn.SelectContext(ctx,
+			&rows,
 			qry,
 			filter.NamespaceID,
 			*filter.MinTime,
@@ -211,7 +244,8 @@ func (mdb *db) SelectFromVisibility(filter sqlplugin.VisibilitySelectFilter) ([]
 			*filter.RunID,
 			*filter.MaxTime,
 			*filter.MaxTime,
-			*filter.PageSize)
+			*filter.PageSize,
+		)
 	default:
 		return nil, fmt.Errorf("invalid query filter")
 	}

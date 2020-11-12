@@ -26,6 +26,7 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -70,13 +71,14 @@ func NewSQLExecutionStore(
 
 // txExecuteShardLocked executes f under transaction and with read lock on shard row
 func (m *sqlExecutionManager) txExecuteShardLocked(
+	ctx context.Context,
 	operation string,
 	rangeID int64,
 	fn func(tx sqlplugin.Tx) error,
 ) error {
 
-	return m.txExecute(operation, func(tx sqlplugin.Tx) error {
-		if err := readLockShard(tx, m.shardID, rangeID); err != nil {
+	return m.txExecute(ctx, operation, func(tx sqlplugin.Tx) error {
+		if err := readLockShard(ctx, tx, m.shardID, rangeID); err != nil {
 			return err
 		}
 		err := fn(tx)
@@ -94,15 +96,20 @@ func (m *sqlExecutionManager) GetShardID() int32 {
 func (m *sqlExecutionManager) CreateWorkflowExecution(
 	request *p.InternalCreateWorkflowExecutionRequest,
 ) (response *p.CreateWorkflowExecutionResponse, err error) {
-
-	err = m.txExecuteShardLocked("CreateWorkflowExecution", request.RangeID, func(tx sqlplugin.Tx) error {
-		response, err = m.createWorkflowExecutionTx(tx, request)
-		return err
-	})
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	err = m.txExecuteShardLocked(ctx,
+		"CreateWorkflowExecution",
+		request.RangeID,
+		func(tx sqlplugin.Tx) error {
+			response, err = m.createWorkflowExecutionTx(ctx, tx, request)
+			return err
+		})
 	return
 }
 
 func (m *sqlExecutionManager) createWorkflowExecutionTx(
+	ctx context.Context,
 	tx sqlplugin.Tx,
 	request *p.InternalCreateWorkflowExecutionRequest,
 ) (*p.CreateWorkflowExecutionResponse, error) {
@@ -123,7 +130,12 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 
 	var err error
 	var row *sqlplugin.CurrentExecutionsRow
-	if row, err = lockCurrentExecutionIfExists(tx, m.shardID, namespaceID, workflowID); err != nil {
+	if row, err = lockCurrentExecutionIfExists(ctx,
+		tx,
+		m.shardID,
+		namespaceID,
+		workflowID,
+	); err != nil {
 		return nil, err
 	}
 
@@ -186,7 +198,8 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 		}
 	}
 
-	if err := createOrUpdateCurrentExecution(tx,
+	if err := createOrUpdateCurrentExecution(ctx,
+		tx,
 		request.Mode,
 		m.shardID,
 		namespaceID,
@@ -200,7 +213,11 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 		return nil, err
 	}
 
-	if err := m.applyWorkflowSnapshotTxAsNew(tx, shardID, &request.NewWorkflowSnapshot); err != nil {
+	if err := m.applyWorkflowSnapshotTxAsNew(ctx,
+		tx,
+		shardID,
+		&request.NewWorkflowSnapshot,
+	); err != nil {
 		return nil, err
 	}
 
@@ -210,20 +227,20 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 func (m *sqlExecutionManager) GetWorkflowExecution(
 	request *p.GetWorkflowExecutionRequest,
 ) (*p.InternalGetWorkflowExecutionResponse, error) {
-
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.Execution.RunId)
 	wfID := request.Execution.WorkflowId
-	executionsRow, err := m.db.SelectFromExecutions(sqlplugin.ExecutionsFilter{
+	executionsRow, err := m.db.SelectFromExecutions(ctx, sqlplugin.ExecutionsFilter{
 		ShardID: m.shardID, NamespaceID: namespaceID, WorkflowID: wfID, RunID: runID,
 	})
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow executionsRow not found.  WorkflowId: %v, RunId: %v",
-				request.Execution.GetWorkflowId(),
-				request.Execution.GetRunId()))
-		}
+	switch err {
+	case nil:
+		// noop
+	case sql.ErrNoRows:
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow executionsRow not found.  WorkflowId: %v, RunId: %v", request.Execution.GetWorkflowId(), request.Execution.GetRunId()))
+	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed. Error: %v", err))
 	}
 
@@ -242,89 +259,81 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		ExecutionState: executionState,
 		NextEventID:    executionsRow.NextEventID}
 
-	// Populate Maps
-	{
-		var err error
-		state.ActivityInfos, err = getActivityInfoMap(m.db,
-			m.shardID,
-			namespaceID,
-			wfID,
-			runID)
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get activity info. Error: %v", err))
-		}
+	state.ActivityInfos, err = getActivityInfoMap(ctx,
+		m.db,
+		m.shardID,
+		namespaceID,
+		wfID,
+		runID,
+	)
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get activity info. Error: %v", err))
 	}
 
-	{
-		var err error
-		state.TimerInfos, err = getTimerInfoMap(m.db,
-			m.shardID,
-			namespaceID,
-			wfID,
-			runID)
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get timer info. Error: %v", err))
-		}
+	state.TimerInfos, err = getTimerInfoMap(ctx,
+		m.db,
+		m.shardID,
+		namespaceID,
+		wfID,
+		runID,
+	)
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get timer info. Error: %v", err))
 	}
 
-	{
-		var err error
-		state.ChildExecutionInfos, err = getChildExecutionInfoMap(m.db,
-			m.shardID,
-			namespaceID,
-			wfID,
-			runID)
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get child executionsRow info. Error: %v", err))
-		}
+	state.ChildExecutionInfos, err = getChildExecutionInfoMap(ctx,
+		m.db,
+		m.shardID,
+		namespaceID,
+		wfID,
+		runID,
+	)
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get child executionsRow info. Error: %v", err))
 	}
 
-	{
-		var err error
-		state.RequestCancelInfos, err = getRequestCancelInfoMap(m.db,
-			m.shardID,
-			namespaceID,
-			wfID,
-			runID)
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get request cancel info. Error: %v", err))
-		}
+	state.RequestCancelInfos, err = getRequestCancelInfoMap(ctx,
+		m.db,
+		m.shardID,
+		namespaceID,
+		wfID,
+		runID,
+	)
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get request cancel info. Error: %v", err))
 	}
 
-	{
-		var err error
-		state.SignalInfos, err = getSignalInfoMap(m.db,
-			m.shardID,
-			namespaceID,
-			wfID,
-			runID)
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get signal info. Error: %v", err))
-		}
+	state.SignalInfos, err = getSignalInfoMap(ctx,
+		m.db,
+		m.shardID,
+		namespaceID,
+		wfID,
+		runID,
+	)
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get signal info. Error: %v", err))
 	}
 
-	{
-		var err error
-		state.BufferedEvents, err = getBufferedEvents(m.db,
-			m.shardID,
-			namespaceID,
-			wfID,
-			runID)
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get buffered events. Error: %v", err))
-		}
+	state.BufferedEvents, err = getBufferedEvents(ctx,
+		m.db,
+		m.shardID,
+		namespaceID,
+		wfID,
+		runID,
+	)
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get buffered events. Error: %v", err))
 	}
 
-	{
-		var err error
-		state.SignalRequestedIDs, err = getSignalsRequested(m.db,
-			m.shardID,
-			namespaceID,
-			wfID,
-			runID)
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get signals requested. Error: %v", err))
-		}
+	state.SignalRequestedIDs, err = getSignalsRequested(ctx,
+		m.db,
+		m.shardID,
+		namespaceID,
+		wfID,
+		runID,
+	)
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get signals requested. Error: %v", err))
 	}
 
 	return &p.InternalGetWorkflowExecutionResponse{State: state}, nil
@@ -333,13 +342,18 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 func (m *sqlExecutionManager) UpdateWorkflowExecution(
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) error {
-
-	return m.txExecuteShardLocked("UpdateWorkflowExecution", request.RangeID, func(tx sqlplugin.Tx) error {
-		return m.updateWorkflowExecutionTx(tx, request)
-	})
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	return m.txExecuteShardLocked(ctx,
+		"UpdateWorkflowExecution",
+		request.RangeID,
+		func(tx sqlplugin.Tx) error {
+			return m.updateWorkflowExecutionTx(ctx, tx, request)
+		})
 }
 
 func (m *sqlExecutionManager) updateWorkflowExecutionTx(
+	ctx context.Context,
 	tx sqlplugin.Tx,
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) error {
@@ -362,11 +376,13 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 
 	switch request.Mode {
 	case p.UpdateWorkflowModeBypassCurrent:
-		if err := assertNotCurrentExecution(tx,
+		if err := assertNotCurrentExecution(ctx,
+			tx,
 			shardID,
 			namespaceID,
 			workflowID,
-			runID); err != nil {
+			runID,
+		); err != nil {
 			return err
 		}
 
@@ -380,7 +396,8 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
 			}
 
-			if err := assertRunIDAndUpdateCurrentExecution(tx,
+			if err := assertRunIDAndUpdateCurrentExecution(ctx,
+				tx,
 				shardID,
 				namespaceID,
 				workflowID,
@@ -390,13 +407,15 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 				newWorkflow.ExecutionState.State,
 				newWorkflow.ExecutionState.Status,
 				newWorkflow.ExecutionInfo.StartVersion,
-				lastWriteVersion); err != nil {
+				lastWriteVersion,
+			); err != nil {
 				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: failed to continue as new current execution. Error: %v", err))
 			}
 		} else {
 			lastWriteVersion := updateWorkflow.LastWriteVersion
 			// this is only to update the current record
-			if err := assertRunIDAndUpdateCurrentExecution(tx,
+			if err := assertRunIDAndUpdateCurrentExecution(ctx,
+				tx,
 				shardID,
 				namespaceID,
 				workflowID,
@@ -406,7 +425,8 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 				updateWorkflow.ExecutionState.State,
 				updateWorkflow.ExecutionState.Status,
 				updateWorkflow.ExecutionInfo.StartVersion,
-				lastWriteVersion); err != nil {
+				lastWriteVersion,
+			); err != nil {
 				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: failed to update current execution. Error: %v", err))
 			}
 		}
@@ -415,11 +435,20 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 		return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
-	if err := applyWorkflowMutationTx(tx, shardID, &updateWorkflow); err != nil {
+	if err := applyWorkflowMutationTx(ctx,
+		tx,
+		shardID,
+		&updateWorkflow,
+	); err != nil {
 		return err
 	}
+
 	if newWorkflow != nil {
-		if err := m.applyWorkflowSnapshotTxAsNew(tx, shardID, newWorkflow); err != nil {
+		if err := m.applyWorkflowSnapshotTxAsNew(ctx,
+			tx,
+			shardID,
+			newWorkflow,
+		); err != nil {
 			return err
 		}
 	}
@@ -429,13 +458,18 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 func (m *sqlExecutionManager) ResetWorkflowExecution(
 	request *p.InternalResetWorkflowExecutionRequest,
 ) error {
-
-	return m.txExecuteShardLocked("ResetWorkflowExecution", request.RangeID, func(tx sqlplugin.Tx) error {
-		return m.resetWorkflowExecutionTx(tx, request)
-	})
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	return m.txExecuteShardLocked(ctx,
+		"ResetWorkflowExecution",
+		request.RangeID,
+		func(tx sqlplugin.Tx) error {
+			return m.resetWorkflowExecutionTx(ctx, tx, request)
+		})
 }
 
 func (m *sqlExecutionManager) resetWorkflowExecutionTx(
+	ctx context.Context,
 	tx sqlplugin.Tx,
 	request *p.InternalResetWorkflowExecutionRequest,
 ) error {
@@ -455,7 +489,8 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 	lastWriteVersion := request.NewWorkflowSnapshot.LastWriteVersion
 
 	// 1. update current execution
-	if err := updateCurrentExecution(tx,
+	if err := updateCurrentExecution(ctx,
+		tx,
 		shardID,
 		namespaceID,
 		workflowID,
@@ -472,7 +507,14 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 	// 2. lock base run: we want to grab a read-lock for base run to prevent race condition
 	// It is only needed when base run is not current run. Because we will obtain a lock on current run anyway.
 	if !bytes.Equal(baseRunID, currentRunID) {
-		if err := lockAndCheckNextEventID(tx, shardID, namespaceID, workflowID, baseRunID, baseRunNextEventID); err != nil {
+		if err := lockAndCheckNextEventID(ctx,
+			tx,
+			shardID,
+			namespaceID,
+			workflowID,
+			baseRunID,
+			baseRunNextEventID,
+		); err != nil {
 			switch err.(type) {
 			case *p.ConditionFailedError:
 				return err
@@ -484,14 +526,25 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 
 	// 3. update or lock current run
 	if request.CurrentWorkflowMutation != nil {
-		if err := applyWorkflowMutationTx(tx, m.shardID, request.CurrentWorkflowMutation); err != nil {
+		if err := applyWorkflowMutationTx(ctx,
+			tx,
+			m.shardID,
+			request.CurrentWorkflowMutation,
+		); err != nil {
 			return err
 		}
 	} else {
 		// even the current run is not running, we need to lock the current run:
 		// 1). in case it is changed by conflict resolution
 		// 2). in case delete history timer kicks in if the base is current
-		if err := lockAndCheckNextEventID(tx, shardID, namespaceID, workflowID, currentRunID, currentRunNextEventID); err != nil {
+		if err := lockAndCheckNextEventID(ctx,
+			tx,
+			shardID,
+			namespaceID,
+			workflowID,
+			currentRunID,
+			currentRunNextEventID,
+		); err != nil {
 			switch err.(type) {
 			case *p.ConditionFailedError:
 				return err
@@ -502,19 +555,28 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 	}
 
 	// 4. create the new reset workflow
-	return m.applyWorkflowSnapshotTxAsNew(tx, m.shardID, &request.NewWorkflowSnapshot)
+	return m.applyWorkflowSnapshotTxAsNew(ctx,
+		tx,
+		m.shardID,
+		&request.NewWorkflowSnapshot,
+	)
 }
 
 func (m *sqlExecutionManager) ConflictResolveWorkflowExecution(
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
-
-	return m.txExecuteShardLocked("ConflictResolveWorkflowExecution", request.RangeID, func(tx sqlplugin.Tx) error {
-		return m.conflictResolveWorkflowExecutionTx(tx, request)
-	})
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	return m.txExecuteShardLocked(ctx,
+		"ConflictResolveWorkflowExecution",
+		request.RangeID,
+		func(tx sqlplugin.Tx) error {
+			return m.conflictResolveWorkflowExecutionTx(ctx, tx, request)
+		})
 }
 
 func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
+	ctx context.Context,
 	tx sqlplugin.Tx,
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
@@ -539,11 +601,13 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 
 	switch request.Mode {
 	case p.ConflictResolveWorkflowModeBypassCurrent:
-		if err := assertNotCurrentExecution(tx,
+		if err := assertNotCurrentExecution(ctx,
+			tx,
 			shardID,
 			namespaceID,
 			workflowID,
-			primitives.MustParseUUID(resetWorkflow.ExecutionState.RunId)); err != nil {
+			primitives.MustParseUUID(resetWorkflow.ExecutionState.RunId),
+		); err != nil {
 			return err
 		}
 
@@ -564,7 +628,8 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 		if currentWorkflow != nil {
 			prevRunID := primitives.MustParseUUID(currentWorkflow.ExecutionState.RunId)
 
-			if err := assertRunIDAndUpdateCurrentExecution(tx,
+			if err := assertRunIDAndUpdateCurrentExecution(ctx,
+				tx,
 				m.shardID,
 				namespaceID,
 				workflowID,
@@ -574,14 +639,16 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 				state,
 				status,
 				startVersion,
-				lastWriteVersion); err != nil {
+				lastWriteVersion,
+			); err != nil {
 				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
 			}
 		} else {
 			// reset workflow is current
 			prevRunID := primitives.MustParseUUID(resetWorkflow.ExecutionState.RunId)
 
-			if err := assertRunIDAndUpdateCurrentExecution(tx,
+			if err := assertRunIDAndUpdateCurrentExecution(ctx,
+				tx,
 				m.shardID,
 				namespaceID,
 				workflowID,
@@ -591,7 +658,8 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 				state,
 				status,
 				startVersion,
-				lastWriteVersion); err != nil {
+				lastWriteVersion,
+			); err != nil {
 				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
 			}
 		}
@@ -600,16 +668,30 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 		return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
-	if err := applyWorkflowSnapshotTxAsReset(tx, shardID, &resetWorkflow); err != nil {
+	if err := applyWorkflowSnapshotTxAsReset(ctx,
+		tx,
+		shardID,
+		&resetWorkflow,
+	); err != nil {
 		return err
 	}
+
 	if currentWorkflow != nil {
-		if err := applyWorkflowMutationTx(tx, shardID, currentWorkflow); err != nil {
+		if err := applyWorkflowMutationTx(ctx,
+			tx,
+			shardID,
+			currentWorkflow,
+		); err != nil {
 			return err
 		}
 	}
+
 	if newWorkflow != nil {
-		if err := m.applyWorkflowSnapshotTxAsNew(tx, shardID, newWorkflow); err != nil {
+		if err := m.applyWorkflowSnapshotTxAsNew(ctx,
+			tx,
+			shardID,
+			newWorkflow,
+		); err != nil {
 			return err
 		}
 	}
@@ -619,10 +701,11 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 func (m *sqlExecutionManager) DeleteWorkflowExecution(
 	request *p.DeleteWorkflowExecutionRequest,
 ) error {
-
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.RunID)
-	_, err := m.db.DeleteFromExecutions(sqlplugin.ExecutionsFilter{
+	_, err := m.db.DeleteFromExecutions(ctx, sqlplugin.ExecutionsFilter{
 		ShardID:     m.shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  request.WorkflowID,
@@ -638,10 +721,11 @@ func (m *sqlExecutionManager) DeleteWorkflowExecution(
 func (m *sqlExecutionManager) DeleteCurrentWorkflowExecution(
 	request *p.DeleteCurrentWorkflowExecutionRequest,
 ) error {
-
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.RunID)
-	_, err := m.db.DeleteFromCurrentExecutions(sqlplugin.CurrentExecutionsFilter{
+	_, err := m.db.DeleteFromCurrentExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
 		ShardID:     m.shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  request.WorkflowID,
@@ -653,8 +737,9 @@ func (m *sqlExecutionManager) DeleteCurrentWorkflowExecution(
 func (m *sqlExecutionManager) GetCurrentExecution(
 	request *p.GetCurrentExecutionRequest,
 ) (*p.GetCurrentExecutionResponse, error) {
-
-	row, err := m.db.SelectFromCurrentExecutions(sqlplugin.CurrentExecutionsFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	row, err := m.db.SelectFromCurrentExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
 		ShardID:     m.shardID,
 		NamespaceID: primitives.MustParseUUID(request.NamespaceID),
 		WorkflowID:  request.WorkflowID,
@@ -680,8 +765,15 @@ func (m *sqlExecutionManager) ListConcreteExecutions(
 	return nil, serviceerror.NewUnimplemented("ListConcreteExecutions is not implemented")
 }
 
-func (m *sqlExecutionManager) GetTransferTask(request *persistence.GetTransferTaskRequest) (*persistence.GetTransferTaskResponse, error) {
-	rows, err := m.db.SelectFromTransferTasks(sqlplugin.TransferTasksFilter{ShardID: request.ShardID, TaskID: request.TaskID})
+func (m *sqlExecutionManager) GetTransferTask(
+	request *persistence.GetTransferTaskRequest,
+) (*persistence.GetTransferTaskResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	rows, err := m.db.SelectFromTransferTasks(ctx, sqlplugin.TransferTasksFilter{
+		ShardID: request.ShardID,
+		TaskID:  request.TaskID,
+	})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetTransferTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
@@ -707,9 +799,13 @@ func (m *sqlExecutionManager) GetTransferTask(request *persistence.GetTransferTa
 func (m *sqlExecutionManager) GetTransferTasks(
 	request *p.GetTransferTasksRequest,
 ) (*p.GetTransferTasksResponse, error) {
-
-	rows, err := m.db.RangeSelectFromTransferTasks(sqlplugin.TransferTasksRangeFilter{
-		ShardID: m.shardID, MinTaskID: request.ReadLevel, MaxTaskID: request.MaxReadLevel})
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	rows, err := m.db.RangeSelectFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
+		ShardID:   m.shardID,
+		MinTaskID: request.ReadLevel,
+		MaxTaskID: request.MaxReadLevel,
+	})
 	if err != nil {
 		if err != sql.ErrNoRows {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTransferTasks operation failed. Select failed. Error: %v", err))
@@ -730,8 +826,9 @@ func (m *sqlExecutionManager) GetTransferTasks(
 func (m *sqlExecutionManager) CompleteTransferTask(
 	request *p.CompleteTransferTaskRequest,
 ) error {
-
-	if _, err := m.db.DeleteFromTransferTasks(sqlplugin.TransferTasksFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	if _, err := m.db.DeleteFromTransferTasks(ctx, sqlplugin.TransferTasksFilter{
 		ShardID: m.shardID,
 		TaskID:  request.TaskID,
 	}); err != nil {
@@ -743,8 +840,9 @@ func (m *sqlExecutionManager) CompleteTransferTask(
 func (m *sqlExecutionManager) RangeCompleteTransferTask(
 	request *p.RangeCompleteTransferTaskRequest,
 ) error {
-
-	if _, err := m.db.RangeDeleteFromTransferTasks(sqlplugin.TransferTasksRangeFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	if _, err := m.db.RangeDeleteFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
 		ShardID:   m.shardID,
 		MinTaskID: request.ExclusiveBeginTaskID,
 		MaxTaskID: request.InclusiveEndTaskID,
@@ -754,8 +852,15 @@ func (m *sqlExecutionManager) RangeCompleteTransferTask(
 	return nil
 }
 
-func (m *sqlExecutionManager) GetReplicationTask(request *persistence.GetReplicationTaskRequest) (*persistence.GetReplicationTaskResponse, error) {
-	rows, err := m.db.SelectFromReplicationTasks(sqlplugin.ReplicationTasksFilter{ShardID: request.ShardID, TaskID: request.TaskID})
+func (m *sqlExecutionManager) GetReplicationTask(
+	request *persistence.GetReplicationTaskRequest,
+) (*persistence.GetReplicationTaskResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	rows, err := m.db.SelectFromReplicationTasks(ctx, sqlplugin.ReplicationTasksFilter{
+		ShardID: request.ShardID,
+		TaskID:  request.TaskID,
+	})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetReplicationTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
@@ -781,19 +886,19 @@ func (m *sqlExecutionManager) GetReplicationTask(request *persistence.GetReplica
 func (m *sqlExecutionManager) GetReplicationTasks(
 	request *p.GetReplicationTasksRequest,
 ) (*p.GetReplicationTasksResponse, error) {
-
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	readLevel, maxReadLevelInclusive, err := getReadLevels(request)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := m.db.RangeSelectFromReplicationTasks(
-		sqlplugin.ReplicationTasksRangeFilter{
-			ShardID:   m.shardID,
-			MinTaskID: readLevel,
-			MaxTaskID: maxReadLevelInclusive,
-			PageSize:  request.BatchSize,
-		})
+	rows, err := m.db.RangeSelectFromReplicationTasks(ctx, sqlplugin.ReplicationTasksRangeFilter{
+		ShardID:   m.shardID,
+		MinTaskID: readLevel,
+		MaxTaskID: maxReadLevelInclusive,
+		PageSize:  request.BatchSize,
+	})
 
 	switch err {
 	case nil:
@@ -805,7 +910,9 @@ func (m *sqlExecutionManager) GetReplicationTasks(
 	}
 }
 
-func getReadLevels(request *p.GetReplicationTasksRequest) (readLevel int64, maxReadLevelInclusive int64, err error) {
+func getReadLevels(
+	request *p.GetReplicationTasksRequest,
+) (readLevel int64, maxReadLevelInclusive int64, err error) {
 	readLevel = request.ReadLevel
 	if len(request.NextPageToken) > 0 {
 		readLevel, err = deserializePageToken(request.NextPageToken)
@@ -877,8 +984,9 @@ func (m *sqlExecutionManager) populateGetReplicationDLQTasksResponse(
 func (m *sqlExecutionManager) CompleteReplicationTask(
 	request *p.CompleteReplicationTaskRequest,
 ) error {
-
-	if _, err := m.db.DeleteFromReplicationTasks(sqlplugin.ReplicationTasksFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	if _, err := m.db.DeleteFromReplicationTasks(ctx, sqlplugin.ReplicationTasksFilter{
 		ShardID: m.shardID,
 		TaskID:  request.TaskID,
 	}); err != nil {
@@ -890,8 +998,9 @@ func (m *sqlExecutionManager) CompleteReplicationTask(
 func (m *sqlExecutionManager) RangeCompleteReplicationTask(
 	request *p.RangeCompleteReplicationTaskRequest,
 ) error {
-
-	if _, err := m.db.RangeDeleteFromReplicationTasks(sqlplugin.ReplicationTasksRangeFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	if _, err := m.db.RangeDeleteFromReplicationTasks(ctx, sqlplugin.ReplicationTasksRangeFilter{
 		ShardID:   m.shardID,
 		MinTaskID: 0,
 		MaxTaskID: request.InclusiveEndTaskID,
@@ -904,13 +1013,14 @@ func (m *sqlExecutionManager) RangeCompleteReplicationTask(
 func (m *sqlExecutionManager) GetReplicationTasksFromDLQ(
 	request *p.GetReplicationTasksFromDLQRequest,
 ) (*p.GetReplicationTasksFromDLQResponse, error) {
-
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	readLevel, maxReadLevelInclusive, err := getReadLevels(&request.GetReplicationTasksRequest)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := m.db.RangeSelectFromReplicationDLQTasks(sqlplugin.ReplicationDLQTasksRangeFilter{
+	rows, err := m.db.RangeSelectFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksRangeFilter{
 		ShardID:           m.shardID,
 		MinTaskID:         readLevel,
 		MaxTaskID:         maxReadLevelInclusive,
@@ -931,8 +1041,9 @@ func (m *sqlExecutionManager) GetReplicationTasksFromDLQ(
 func (m *sqlExecutionManager) DeleteReplicationTaskFromDLQ(
 	request *p.DeleteReplicationTaskFromDLQRequest,
 ) error {
-
-	if _, err := m.db.DeleteFromReplicationDLQTasks(sqlplugin.ReplicationDLQTasksFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	if _, err := m.db.DeleteFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksFilter{
 		ShardID:           m.shardID,
 		TaskID:            request.TaskID,
 		SourceClusterName: request.SourceClusterName,
@@ -945,8 +1056,9 @@ func (m *sqlExecutionManager) DeleteReplicationTaskFromDLQ(
 func (m *sqlExecutionManager) RangeDeleteReplicationTaskFromDLQ(
 	request *p.RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
-
-	if _, err := m.db.RangeDeleteFromReplicationDLQTasks(sqlplugin.ReplicationDLQTasksRangeFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	if _, err := m.db.RangeDeleteFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksRangeFilter{
 		ShardID:           m.shardID,
 		SourceClusterName: request.SourceClusterName,
 		MinTaskID:         request.ExclusiveBeginTaskID,
@@ -957,21 +1069,16 @@ func (m *sqlExecutionManager) RangeDeleteReplicationTaskFromDLQ(
 	return nil
 }
 
-type timerTaskPageToken struct {
-	TaskID    int64
-	Timestamp time.Time
-}
-
-func (t *timerTaskPageToken) serialize() ([]byte, error) {
-	return json.Marshal(t)
-}
-
-func (t *timerTaskPageToken) deserialize(payload []byte) error {
-	return json.Unmarshal(payload, t)
-}
-
-func (m *sqlExecutionManager) GetTimerTask(request *persistence.GetTimerTaskRequest) (*persistence.GetTimerTaskResponse, error) {
-	rows, err := m.db.SelectFromTimerTasks(sqlplugin.TimerTasksFilter{ShardID: request.ShardID, TaskID: request.TaskID, VisibilityTimestamp: request.VisibilityTimestamp})
+func (m *sqlExecutionManager) GetTimerTask(
+	request *persistence.GetTimerTaskRequest,
+) (*persistence.GetTimerTaskResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	rows, err := m.db.SelectFromTimerTasks(ctx, sqlplugin.TimerTasksFilter{
+		ShardID:             request.ShardID,
+		TaskID:              request.TaskID,
+		VisibilityTimestamp: request.VisibilityTimestamp,
+	})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetTimerTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
@@ -997,7 +1104,8 @@ func (m *sqlExecutionManager) GetTimerTask(request *persistence.GetTimerTaskRequ
 func (m *sqlExecutionManager) GetTimerIndexTasks(
 	request *p.GetTimerIndexTasksRequest,
 ) (*p.GetTimerIndexTasksResponse, error) {
-
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	pageToken := &timerTaskPageToken{TaskID: math.MinInt64, Timestamp: request.MinTimestamp}
 	if len(request.NextPageToken) > 0 {
 		if err := pageToken.deserialize(request.NextPageToken); err != nil {
@@ -1005,7 +1113,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 		}
 	}
 
-	rows, err := m.db.RangeSelectFromTimerTasks(sqlplugin.TimerTasksRangeFilter{
+	rows, err := m.db.RangeSelectFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
 		ShardID:                m.shardID,
 		MinVisibilityTimestamp: pageToken.Timestamp,
 		TaskID:                 pageToken.TaskID,
@@ -1050,8 +1158,9 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 func (m *sqlExecutionManager) CompleteTimerTask(
 	request *p.CompleteTimerTaskRequest,
 ) error {
-
-	if _, err := m.db.DeleteFromTimerTasks(sqlplugin.TimerTasksFilter{
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	if _, err := m.db.DeleteFromTimerTasks(ctx, sqlplugin.TimerTasksFilter{
 		ShardID:             m.shardID,
 		VisibilityTimestamp: request.VisibilityTimestamp,
 		TaskID:              request.TaskID,
@@ -1064,10 +1173,11 @@ func (m *sqlExecutionManager) CompleteTimerTask(
 func (m *sqlExecutionManager) RangeCompleteTimerTask(
 	request *p.RangeCompleteTimerTaskRequest,
 ) error {
-
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	start := request.InclusiveBeginTimestamp
 	end := request.ExclusiveEndTimestamp
-	if _, err := m.db.RangeDeleteFromTimerTasks(sqlplugin.TimerTasksRangeFilter{
+	if _, err := m.db.RangeDeleteFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
 		ShardID:                m.shardID,
 		MinVisibilityTimestamp: start,
 		MaxVisibilityTimestamp: end,
@@ -1077,7 +1187,11 @@ func (m *sqlExecutionManager) RangeCompleteTimerTask(
 	return nil
 }
 
-func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationTaskToDLQRequest) error {
+func (m *sqlExecutionManager) PutReplicationTaskToDLQ(
+	request *p.PutReplicationTaskToDLQRequest,
+) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	replicationTask := request.TaskInfo
 	blob, err := serialization.ReplicationTaskInfoToBlob(replicationTask)
 
@@ -1085,7 +1199,7 @@ func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationT
 		return err
 	}
 
-	_, err = m.db.InsertIntoReplicationDLQTasks([]sqlplugin.ReplicationDLQTasksRow{{
+	_, err = m.db.InsertIntoReplicationDLQTasks(ctx, []sqlplugin.ReplicationDLQTasksRow{{
 		SourceClusterName: request.SourceClusterName,
 		ShardID:           m.shardID,
 		TaskID:            replicationTask.GetTaskId(),
@@ -1100,4 +1214,17 @@ func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationT
 	}
 
 	return nil
+}
+
+type timerTaskPageToken struct {
+	TaskID    int64
+	Timestamp time.Time
+}
+
+func (t *timerTaskPageToken) serialize() ([]byte, error) {
+	return json.Marshal(t)
+}
+
+func (t *timerTaskPageToken) deserialize(payload []byte) error {
+	return json.Unmarshal(payload, t)
 }

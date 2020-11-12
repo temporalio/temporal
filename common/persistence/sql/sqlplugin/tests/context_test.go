@@ -22,39 +22,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sqlplugin
+package tests
 
 import (
 	"context"
-	"database/sql"
-
-	"go.temporal.io/server/common/primitives"
+	"time"
 )
 
-type (
-	// BufferedEventsRow represents a row in buffered_events table
-	BufferedEventsRow struct {
-		ShardID      int32
-		NamespaceID  primitives.UUID
-		WorkflowID   string
-		RunID        primitives.UUID
-		Data         []byte
-		DataEncoding string
-	}
-
-	// BufferedEventsFilter contains the column names within buffered_events table that
-	// can be used to filter results through a WHERE clause
-	BufferedEventsFilter struct {
-		ShardID     int32
-		NamespaceID primitives.UUID
-		WorkflowID  string
-		RunID       primitives.UUID
-	}
-
-	// HistoryExecutionBuffer is the SQL persistence interface for history nodes and history execution buffer events
-	HistoryExecutionBuffer interface {
-		InsertIntoBufferedEvents(ctx context.Context, rows []BufferedEventsRow) (sql.Result, error)
-		SelectFromBufferedEvents(ctx context.Context, filter BufferedEventsFilter) ([]BufferedEventsRow, error)
-		DeleteFromBufferedEvents(ctx context.Context, filter BufferedEventsFilter) (sql.Result, error)
-	}
+const (
+	executionTimeout  = 2 * time.Second
+	visibilityTimeout = 4 * time.Second
 )
+
+func newExecutionContext() context.Context {
+	ctx := context.Background()
+	ctx, _ = context.WithTimeout(ctx, executionTimeout)
+	return ctx
+}
+
+func newVisibilityContext() context.Context {
+	ctx := context.Background()
+	ctx, _ = context.WithTimeout(ctx, visibilityTimeout)
+	return ctx
+}

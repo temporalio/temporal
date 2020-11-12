@@ -88,7 +88,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplace_Single() {
 	initiatedID := rand.Int63()
 
 	requestCancel := s.newRandomExecutionRequestCancelRow(shardID, namespaceID, workflowID, runID, initiatedID)
-	result, err := s.store.ReplaceIntoRequestCancelInfoMaps([]sqlplugin.RequestCancelInfoMapsRow{requestCancel})
+	result, err := s.store.ReplaceIntoRequestCancelInfoMaps(newExecutionContext(), []sqlplugin.RequestCancelInfoMapsRow{requestCancel})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -103,7 +103,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplace_Multiple() {
 
 	requestCancel1 := s.newRandomExecutionRequestCancelRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 	requestCancel2 := s.newRandomExecutionRequestCancelRow(shardID, namespaceID, workflowID, runID, rand.Int63())
-	result, err := s.store.ReplaceIntoRequestCancelInfoMaps([]sqlplugin.RequestCancelInfoMapsRow{requestCancel1, requestCancel2})
+	result, err := s.store.ReplaceIntoRequestCancelInfoMaps(newExecutionContext(), []sqlplugin.RequestCancelInfoMapsRow{requestCancel1, requestCancel2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -118,7 +118,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceSelect_Single() {
 	initiatedID := rand.Int63()
 
 	requestCancel := s.newRandomExecutionRequestCancelRow(shardID, namespaceID, workflowID, runID, initiatedID)
-	result, err := s.store.ReplaceIntoRequestCancelInfoMaps([]sqlplugin.RequestCancelInfoMapsRow{requestCancel})
+	result, err := s.store.ReplaceIntoRequestCancelInfoMaps(newExecutionContext(), []sqlplugin.RequestCancelInfoMapsRow{requestCancel})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -130,7 +130,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceSelect_Single() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromRequestCancelInfoMaps(selectFilter)
+	rows, err := s.store.SelectFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	rowMap := map[int64]sqlplugin.RequestCancelInfoMapsRow{}
 	for _, requestCancel := range rows {
@@ -154,7 +154,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceSelect_Multiple() {
 		requestCancel := s.newRandomExecutionRequestCancelRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 		requestCancels = append(requestCancels, requestCancel)
 	}
-	result, err := s.store.ReplaceIntoRequestCancelInfoMaps(requestCancels)
+	result, err := s.store.ReplaceIntoRequestCancelInfoMaps(newExecutionContext(), requestCancels)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -166,7 +166,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceSelect_Multiple() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromRequestCancelInfoMaps(selectFilter)
+	rows, err := s.store.SelectFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	requestCancelMap := map[int64]sqlplugin.RequestCancelInfoMapsRow{}
 	for _, requestCancel := range requestCancels {
@@ -193,7 +193,7 @@ func (s *historyExecutionRequestCancelSuite) TestDeleteSelect_Single() {
 		RunID:       runID,
 		InitiatedID: convert.Int64Ptr(initiatedID),
 	}
-	result, err := s.store.DeleteFromRequestCancelInfoMaps(deleteFilter)
+	result, err := s.store.DeleteFromRequestCancelInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -205,7 +205,7 @@ func (s *historyExecutionRequestCancelSuite) TestDeleteSelect_Single() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromRequestCancelInfoMaps(selectFilter)
+	rows, err := s.store.SelectFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.RequestCancelInfoMapsRow(nil), rows)
 }
@@ -223,7 +223,7 @@ func (s *historyExecutionRequestCancelSuite) TestDeleteSelect_Multiple() {
 		RunID:       runID,
 		InitiatedID: nil,
 	}
-	result, err := s.store.DeleteFromRequestCancelInfoMaps(deleteFilter)
+	result, err := s.store.DeleteFromRequestCancelInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -235,7 +235,7 @@ func (s *historyExecutionRequestCancelSuite) TestDeleteSelect_Multiple() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromRequestCancelInfoMaps(selectFilter)
+	rows, err := s.store.SelectFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.RequestCancelInfoMapsRow(nil), rows)
 }
@@ -248,7 +248,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceDeleteSelect_Single() {
 	initiatedID := rand.Int63()
 
 	requestCancel := s.newRandomExecutionRequestCancelRow(shardID, namespaceID, workflowID, runID, initiatedID)
-	result, err := s.store.ReplaceIntoRequestCancelInfoMaps([]sqlplugin.RequestCancelInfoMapsRow{requestCancel})
+	result, err := s.store.ReplaceIntoRequestCancelInfoMaps(newExecutionContext(), []sqlplugin.RequestCancelInfoMapsRow{requestCancel})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -261,7 +261,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceDeleteSelect_Single() {
 		RunID:       runID,
 		InitiatedID: convert.Int64Ptr(initiatedID),
 	}
-	result, err = s.store.DeleteFromRequestCancelInfoMaps(deleteFilter)
+	result, err = s.store.DeleteFromRequestCancelInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -273,7 +273,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceDeleteSelect_Single() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromRequestCancelInfoMaps(selectFilter)
+	rows, err := s.store.SelectFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.RequestCancelInfoMapsRow(nil), rows)
 }
@@ -291,7 +291,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceDeleteSelect_Multiple() 
 		requestCancel := s.newRandomExecutionRequestCancelRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 		requestCancels = append(requestCancels, requestCancel)
 	}
-	result, err := s.store.ReplaceIntoRequestCancelInfoMaps(requestCancels)
+	result, err := s.store.ReplaceIntoRequestCancelInfoMaps(newExecutionContext(), requestCancels)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -304,7 +304,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceDeleteSelect_Multiple() 
 		RunID:       runID,
 		InitiatedID: nil,
 	}
-	result, err = s.store.DeleteFromRequestCancelInfoMaps(deleteFilter)
+	result, err = s.store.DeleteFromRequestCancelInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -316,7 +316,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceDeleteSelect_Multiple() 
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromRequestCancelInfoMaps(selectFilter)
+	rows, err := s.store.SelectFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.RequestCancelInfoMapsRow(nil), rows)
 }

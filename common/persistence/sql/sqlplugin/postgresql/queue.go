@@ -25,6 +25,7 @@
 package postgresql
 
 import (
+	"context"
 	"database/sql"
 
 	"go.temporal.io/server/common/persistence"
@@ -47,59 +48,131 @@ const (
 )
 
 // InsertIntoMessages inserts a new row into queue table
-func (pdb *db) InsertIntoMessages(row []sqlplugin.QueueMessageRow) (sql.Result, error) {
-	return pdb.conn.NamedExec(templateEnqueueMessageQuery, row)
+func (pdb *db) InsertIntoMessages(
+	ctx context.Context,
+	row []sqlplugin.QueueMessageRow,
+) (sql.Result, error) {
+	return pdb.conn.NamedExecContext(ctx,
+		templateEnqueueMessageQuery,
+		row,
+	)
 }
 
-func (pdb *db) SelectFromMessages(filter sqlplugin.QueueMessagesFilter) ([]sqlplugin.QueueMessageRow, error) {
+func (pdb *db) SelectFromMessages(
+	ctx context.Context,
+	filter sqlplugin.QueueMessagesFilter,
+) ([]sqlplugin.QueueMessageRow, error) {
 	var rows []sqlplugin.QueueMessageRow
-	err := pdb.conn.Select(&rows, templateGetMessageQuery, filter.QueueType, filter.MessageID)
+	err := pdb.conn.SelectContext(ctx,
+		&rows,
+		templateGetMessageQuery,
+		filter.QueueType,
+		filter.MessageID,
+	)
 	return rows, err
 }
 
-func (pdb *db) RangeSelectFromMessages(filter sqlplugin.QueueMessagesRangeFilter) ([]sqlplugin.QueueMessageRow, error) {
+func (pdb *db) RangeSelectFromMessages(
+	ctx context.Context,
+	filter sqlplugin.QueueMessagesRangeFilter,
+) ([]sqlplugin.QueueMessageRow, error) {
 	var rows []sqlplugin.QueueMessageRow
-	err := pdb.conn.Select(&rows, templateGetMessagesQuery, filter.QueueType, filter.MinMessageID, filter.MaxMessageID, filter.PageSize)
+	err := pdb.conn.SelectContext(ctx,
+		&rows,
+		templateGetMessagesQuery,
+		filter.QueueType,
+		filter.MinMessageID,
+		filter.MaxMessageID,
+		filter.PageSize,
+	)
 	return rows, err
 }
 
 // DeleteFromMessages deletes message with a messageID from the queue
-func (pdb *db) DeleteFromMessages(filter sqlplugin.QueueMessagesFilter) (sql.Result, error) {
-	return pdb.conn.Exec(templateDeleteMessageQuery, filter.QueueType, filter.MessageID)
+func (pdb *db) DeleteFromMessages(
+	ctx context.Context,
+	filter sqlplugin.QueueMessagesFilter,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx,
+		templateDeleteMessageQuery,
+		filter.QueueType,
+		filter.MessageID,
+	)
 }
 
 // RangeDeleteFromMessages deletes messages before messageID from the queue
-func (pdb *db) RangeDeleteFromMessages(filter sqlplugin.QueueMessagesRangeFilter) (sql.Result, error) {
-	return pdb.conn.Exec(templateRangeDeleteMessagesQuery, filter.QueueType, filter.MinMessageID, filter.MaxMessageID)
+func (pdb *db) RangeDeleteFromMessages(
+	ctx context.Context,
+	filter sqlplugin.QueueMessagesRangeFilter,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx,
+		templateRangeDeleteMessagesQuery,
+		filter.QueueType,
+		filter.MinMessageID,
+		filter.MaxMessageID,
+	)
 }
 
 // GetLastEnqueuedMessageIDForUpdate returns the last enqueued message ID
-func (pdb *db) GetLastEnqueuedMessageIDForUpdate(queueType persistence.QueueType) (int64, error) {
+func (pdb *db) GetLastEnqueuedMessageIDForUpdate(
+	ctx context.Context,
+	queueType persistence.QueueType,
+) (int64, error) {
 	var lastMessageID int64
-	err := pdb.conn.Get(&lastMessageID, templateGetLastMessageIDQuery, queueType)
+	err := pdb.conn.GetContext(ctx,
+		&lastMessageID,
+		templateGetLastMessageIDQuery,
+		queueType,
+	)
 	return lastMessageID, err
 }
 
-func (pdb *db) InsertIntoQueueMetadata(row *sqlplugin.QueueMetadataRow) (sql.Result, error) {
-	return pdb.conn.NamedExec(templateCreateQueueMetadataQuery, row)
+func (pdb *db) InsertIntoQueueMetadata(
+	ctx context.Context,
+	row *sqlplugin.QueueMetadataRow,
+) (sql.Result, error) {
+	return pdb.conn.NamedExecContext(ctx,
+		templateCreateQueueMetadataQuery,
+		row,
+	)
 }
 
-func (pdb *db) UpdateQueueMetadata(row *sqlplugin.QueueMetadataRow) (sql.Result, error) {
-	return pdb.conn.NamedExec(templateUpdateQueueMetadataQuery, row)
+func (pdb *db) UpdateQueueMetadata(
+	ctx context.Context,
+	row *sqlplugin.QueueMetadataRow,
+) (sql.Result, error) {
+	return pdb.conn.NamedExecContext(ctx,
+		templateUpdateQueueMetadataQuery,
+		row,
+	)
 }
 
-func (pdb *db) SelectFromQueueMetadata(filter sqlplugin.QueueMetadataFilter) (*sqlplugin.QueueMetadataRow, error) {
+func (pdb *db) SelectFromQueueMetadata(
+	ctx context.Context,
+	filter sqlplugin.QueueMetadataFilter,
+) (*sqlplugin.QueueMetadataRow, error) {
 	var row sqlplugin.QueueMetadataRow
-	err := pdb.conn.Get(&row, templateGetQueueMetadataQuery, filter.QueueType)
+	err := pdb.conn.GetContext(ctx,
+		&row,
+		templateGetQueueMetadataQuery,
+		filter.QueueType,
+	)
 	if err != nil {
 		return nil, err
 	}
 	return &row, err
 }
 
-func (pdb *db) LockQueueMetadata(filter sqlplugin.QueueMetadataFilter) (*sqlplugin.QueueMetadataRow, error) {
+func (pdb *db) LockQueueMetadata(
+	ctx context.Context,
+	filter sqlplugin.QueueMetadataFilter,
+) (*sqlplugin.QueueMetadataRow, error) {
 	var row sqlplugin.QueueMetadataRow
-	err := pdb.conn.Get(&row, templateLockQueueMetadataQuery, filter.QueueType)
+	err := pdb.conn.GetContext(ctx,
+		&row,
+		templateLockQueueMetadataQuery,
+		filter.QueueType,
+	)
 	if err != nil {
 		return nil, err
 	}

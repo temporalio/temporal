@@ -25,6 +25,7 @@
 package persistence
 
 import (
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
@@ -1237,11 +1238,11 @@ func (p *historyV2PersistenceClient) updateErrorMetric(scope int, err error) {
 	}
 }
 
-func (p *queuePersistenceClient) EnqueueMessage(message []byte) error {
+func (p *queuePersistenceClient) EnqueueMessage(blob commonpb.DataBlob) error {
 	p.metricClient.IncCounter(metrics.PersistenceEnqueueMessageScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceEnqueueMessageScope, metrics.PersistenceLatency)
-	err := p.persistence.EnqueueMessage(message)
+	err := p.persistence.EnqueueMessage(blob)
 	sw.Stop()
 
 	if err != nil {
@@ -1307,11 +1308,11 @@ func (p *queuePersistenceClient) DeleteMessagesBefore(messageID int64) error {
 	return err
 }
 
-func (p *queuePersistenceClient) EnqueueMessageToDLQ(message []byte) (int64, error) {
+func (p *queuePersistenceClient) EnqueueMessageToDLQ(blob commonpb.DataBlob) (int64, error) {
 	p.metricClient.IncCounter(metrics.PersistenceEnqueueMessageToDLQScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceEnqueueMessageToDLQScope, metrics.PersistenceLatency)
-	messageID, err := p.persistence.EnqueueMessageToDLQ(message)
+	messageID, err := p.persistence.EnqueueMessageToDLQ(blob)
 	sw.Stop()
 
 	if err != nil {

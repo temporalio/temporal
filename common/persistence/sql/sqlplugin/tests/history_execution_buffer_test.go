@@ -86,7 +86,7 @@ func (s *historyExecutionBufferSuite) TestInsert_Single() {
 	runID := primitives.NewUUID()
 
 	buffer := s.newRandomExecutionBufferRow(shardID, namespaceID, workflowID, runID)
-	result, err := s.store.InsertIntoBufferedEvents([]sqlplugin.BufferedEventsRow{buffer})
+	result, err := s.store.InsertIntoBufferedEvents(newExecutionContext(), []sqlplugin.BufferedEventsRow{buffer})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -101,7 +101,7 @@ func (s *historyExecutionBufferSuite) TestInsert_Multiple() {
 
 	buffer1 := s.newRandomExecutionBufferRow(shardID, namespaceID, workflowID, runID)
 	buffer2 := s.newRandomExecutionBufferRow(shardID, namespaceID, workflowID, runID)
-	result, err := s.store.InsertIntoBufferedEvents([]sqlplugin.BufferedEventsRow{buffer1, buffer2})
+	result, err := s.store.InsertIntoBufferedEvents(newExecutionContext(), []sqlplugin.BufferedEventsRow{buffer1, buffer2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -121,7 +121,7 @@ func (s *historyExecutionBufferSuite) TestInsertSelect() {
 		buffer := s.newRandomExecutionBufferRow(shardID, namespaceID, workflowID, runID)
 		buffers = append(buffers, buffer)
 	}
-	result, err := s.store.InsertIntoBufferedEvents(buffers)
+	result, err := s.store.InsertIntoBufferedEvents(newExecutionContext(), buffers)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -133,7 +133,7 @@ func (s *historyExecutionBufferSuite) TestInsertSelect() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromBufferedEvents(filter)
+	rows, err := s.store.SelectFromBufferedEvents(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(buffers, rows)
 }
@@ -150,13 +150,13 @@ func (s *historyExecutionBufferSuite) TestDeleteSelect() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	result, err := s.store.DeleteFromBufferedEvents(filter)
+	result, err := s.store.DeleteFromBufferedEvents(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.SelectFromBufferedEvents(filter)
+	rows, err := s.store.SelectFromBufferedEvents(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.BufferedEventsRow(nil), rows)
 }
@@ -174,7 +174,7 @@ func (s *historyExecutionBufferSuite) TestInsertDelete() {
 		buffer := s.newRandomExecutionBufferRow(shardID, namespaceID, workflowID, runID)
 		buffers = append(buffers, buffer)
 	}
-	result, err := s.store.InsertIntoBufferedEvents(buffers)
+	result, err := s.store.InsertIntoBufferedEvents(newExecutionContext(), buffers)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -186,13 +186,13 @@ func (s *historyExecutionBufferSuite) TestInsertDelete() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	result, err = s.store.DeleteFromBufferedEvents(filter)
+	result, err = s.store.DeleteFromBufferedEvents(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(numBufferedEvents, int(rowsAffected))
 
-	rows, err := s.store.SelectFromBufferedEvents(filter)
+	rows, err := s.store.SelectFromBufferedEvents(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.BufferedEventsRow(nil), rows)
 }

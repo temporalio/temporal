@@ -42,7 +42,7 @@ type (
 		StartEventVersion int64
 		EndEventId        int64
 		EndEventVersion   int64
-		status            *status.Status
+		st                *status.Status
 	}
 )
 
@@ -75,13 +75,13 @@ func (e *RetryReplication) Error() string {
 }
 
 func (e *RetryReplication) Status() *status.Status {
-	if e.status != nil {
-		return e.status
+	if e.st != nil {
+		return e.st
 	}
 
 	st := status.New(codes.Aborted, e.Message)
 	st, _ = st.WithDetails(
-		&errordetails.RetryTaskV2Failure{
+		&errordetails.RetryReplicationFailure{
 			NamespaceId:       e.NamespaceId,
 			WorkflowId:        e.WorkflowId,
 			RunId:             e.RunId,
@@ -94,12 +94,12 @@ func (e *RetryReplication) Status() *status.Status {
 	return st
 }
 
-func fromRetryTaskV2Failure(
-	status *status.Status,
-	errDetails *errordetails.RetryTaskV2Failure,
+func newRetryReplication(
+	st *status.Status,
+	errDetails *errordetails.RetryReplicationFailure,
 ) *RetryReplication {
 	return &RetryReplication{
-		Message:           status.Message(),
+		Message:           st.Message(),
 		NamespaceId:       errDetails.GetNamespaceId(),
 		WorkflowId:        errDetails.GetWorkflowId(),
 		RunId:             errDetails.GetRunId(),
@@ -107,6 +107,6 @@ func fromRetryTaskV2Failure(
 		StartEventVersion: errDetails.GetStartEventVersion(),
 		EndEventId:        errDetails.GetEndEventId(),
 		EndEventVersion:   errDetails.GetEndEventVersion(),
-		status:            status,
+		st:                st,
 	}
 }
