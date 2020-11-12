@@ -43,30 +43,30 @@ type (
 		DataEncoding string
 	}
 
-	ActivityInfoMapsSelectFilter struct {
+	ActivityInfoMapsFilter struct {
 		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
+		ScheduleIDs []int64
 	}
 
-	ActivityInfoMapsDeleteFilter struct {
+	ActivityInfoMapsAllFilter struct {
 		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
-		ScheduleID  *int64
 	}
 
 	// HistoryExecutionActivity is the SQL persistence interface for history nodes and history execution activities
 	HistoryExecutionActivity interface {
+		// ReplaceIntoActivityInfoMaps replace one or more into activity_info_maps table
 		ReplaceIntoActivityInfoMaps(ctx context.Context, rows []ActivityInfoMapsRow) (sql.Result, error)
-		// SelectFromActivityInfoMaps returns one or more rows from activity_info_maps
-		SelectFromActivityInfoMaps(ctx context.Context, filter ActivityInfoMapsSelectFilter) ([]ActivityInfoMapsRow, error)
-		// DeleteFromActivityInfoMaps deletes a row from activity_info_maps table
-		// Required filter params
-		// - single row delete - {shardID, namespaceID, workflowID, runID, scheduleID}
-		// - range delete - {shardID, namespaceID, workflowID, runID}
-		DeleteFromActivityInfoMaps(ctx context.Context, filter ActivityInfoMapsDeleteFilter) (sql.Result, error)
+		// SelectAllFromActivityInfoMaps returns all rows from activity_info_maps table
+		SelectAllFromActivityInfoMaps(ctx context.Context, filter ActivityInfoMapsAllFilter) ([]ActivityInfoMapsRow, error)
+		// DeleteFromActivityInfoMaps deletes one or more row from activity_info_maps table
+		DeleteFromActivityInfoMaps(ctx context.Context, filter ActivityInfoMapsFilter) (sql.Result, error)
+		// DeleteAllFromActivityInfoMaps deletes all from activity_info_maps table
+		DeleteAllFromActivityInfoMaps(ctx context.Context, filter ActivityInfoMapsAllFilter) (sql.Result, error)
 	}
 )

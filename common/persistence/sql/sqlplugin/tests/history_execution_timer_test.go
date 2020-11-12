@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/shuffle"
@@ -125,13 +124,13 @@ func (s *historyExecutionTimerSuite) TestReplaceSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	selectFilter := sqlplugin.TimerInfoMapsSelectFilter{
+	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromTimerInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	rowMap := map[string]sqlplugin.TimerInfoMapsRow{}
 	for _, timer := range rows {
@@ -161,13 +160,13 @@ func (s *historyExecutionTimerSuite) TestReplaceSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(numTimers, int(rowsAffected))
 
-	selectFilter := sqlplugin.TimerInfoMapsSelectFilter{
+	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromTimerInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	timerMap := map[string]sqlplugin.TimerInfoMapsRow{}
 	for _, timer := range timers {
@@ -187,12 +186,12 @@ func (s *historyExecutionTimerSuite) TestDeleteSelect_Single() {
 	runID := primitives.NewUUID()
 	timerID := shuffle.String(testHistoryExecutionTimerID)
 
-	deletFilter := sqlplugin.TimerInfoMapsDeleteFilter{
+	deletFilter := sqlplugin.TimerInfoMapsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		TimerID:     convert.StringPtr(timerID),
+		TimerIDs:    []string{timerID},
 	}
 	result, err := s.store.DeleteFromTimerInfoMaps(newExecutionContext(), deletFilter)
 	s.NoError(err)
@@ -200,13 +199,13 @@ func (s *historyExecutionTimerSuite) TestDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	selectFilter := sqlplugin.TimerInfoMapsSelectFilter{
+	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromTimerInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.TimerInfoMapsRow(nil), rows)
 }
@@ -217,12 +216,12 @@ func (s *historyExecutionTimerSuite) TestDeleteSelect_Multiple() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 
-	deleteFilter := sqlplugin.TimerInfoMapsDeleteFilter{
+	deleteFilter := sqlplugin.TimerInfoMapsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		TimerID:     nil,
+		TimerIDs:    []string{shuffle.String(testHistoryExecutionTimerID), shuffle.String(testHistoryExecutionTimerID)},
 	}
 	result, err := s.store.DeleteFromTimerInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
@@ -230,13 +229,42 @@ func (s *historyExecutionTimerSuite) TestDeleteSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	selectFilter := sqlplugin.TimerInfoMapsSelectFilter{
+	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromTimerInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
+	s.NoError(err)
+	s.Equal([]sqlplugin.TimerInfoMapsRow(nil), rows)
+}
+
+func (s *historyExecutionTimerSuite) TestDeleteSelect_All() {
+	shardID := rand.Int31()
+	namespaceID := primitives.NewUUID()
+	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
+	runID := primitives.NewUUID()
+
+	deleteFilter := sqlplugin.TimerInfoMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	result, err := s.store.DeleteAllFromTimerInfoMaps(newExecutionContext(), deleteFilter)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(0, int(rowsAffected))
+
+	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.TimerInfoMapsRow(nil), rows)
 }
@@ -255,12 +283,12 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	deleteFilter := sqlplugin.TimerInfoMapsDeleteFilter{
+	deleteFilter := sqlplugin.TimerInfoMapsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		TimerID:     convert.StringPtr(timerID),
+		TimerIDs:    []string{timerID},
 	}
 	result, err = s.store.DeleteFromTimerInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
@@ -268,18 +296,64 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	selectFilter := sqlplugin.TimerInfoMapsSelectFilter{
+	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromTimerInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.TimerInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_Multiple() {
+	numTimers := 20
+
+	shardID := rand.Int31()
+	namespaceID := primitives.NewUUID()
+	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
+	runID := primitives.NewUUID()
+
+	var timers []sqlplugin.TimerInfoMapsRow
+	var timerIDs []string
+	for i := 0; i < numTimers; i++ {
+		timerID := shuffle.String(testHistoryExecutionTimerID)
+		timer := s.newRandomExecutionTimerRow(shardID, namespaceID, workflowID, runID, timerID)
+		timerIDs = append(timerIDs, timerID)
+		timers = append(timers, timer)
+	}
+	result, err := s.store.ReplaceIntoTimerInfoMaps(newExecutionContext(), timers)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(numTimers, int(rowsAffected))
+
+	deleteFilter := sqlplugin.TimerInfoMapsFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+		TimerIDs:    timerIDs,
+	}
+	result, err = s.store.DeleteFromTimerInfoMaps(newExecutionContext(), deleteFilter)
+	s.NoError(err)
+	rowsAffected, err = result.RowsAffected()
+	s.NoError(err)
+	s.Equal(numTimers, int(rowsAffected))
+
+	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
+	s.NoError(err)
+	s.Equal([]sqlplugin.TimerInfoMapsRow(nil), rows)
+}
+
+func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_All() {
 	numTimers := 20
 
 	shardID := rand.Int31()
@@ -298,26 +372,25 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(numTimers, int(rowsAffected))
 
-	deleteFilter := sqlplugin.TimerInfoMapsDeleteFilter{
+	deleteFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		TimerID:     nil,
 	}
-	result, err = s.store.DeleteFromTimerInfoMaps(newExecutionContext(), deleteFilter)
+	result, err = s.store.DeleteAllFromTimerInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(numTimers, int(rowsAffected))
 
-	selectFilter := sqlplugin.TimerInfoMapsSelectFilter{
+	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromTimerInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.TimerInfoMapsRow(nil), rows)
 }
