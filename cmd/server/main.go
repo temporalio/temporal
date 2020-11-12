@@ -121,14 +121,19 @@ func buildCLI() *cli.App {
 					services = strings.Split(c.String("services"), ",")
 				}
 
+				cfg, err := config.LoadConfig(env, configDir, zone)
+				if err != nil {
+					return cli.NewExitError(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
+				}
+
 				s := temporal.NewServer(
 					temporal.ForServices(services),
-					temporal.WithConfigLoader(configDir, env, zone),
+					temporal.WithConfig(cfg),
 					temporal.InterruptOn(temporal.InterruptCh()),
 					temporal.WithAuthorizer(authorization.NewNopAuthorizer()),
 				)
 
-				err := s.Start()
+				err = s.Start()
 				if err != nil {
 					return cli.NewExitError(fmt.Sprintf("Unable to start server: %v.", err), 1)
 				}
