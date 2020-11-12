@@ -42,6 +42,8 @@ type localStoreTlsProvider struct {
 	internodeCertProvider CertProvider
 	frontendCertProvider  CertProvider
 
+	frontendPerHostCertProviderFactory PerHostCertProviderFactory
+
 	internodeServerConfig *tls.Config
 	internodeClientConfig *tls.Config
 	frontendServerConfig  *tls.Config
@@ -50,36 +52,58 @@ type localStoreTlsProvider struct {
 
 func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS) (TLSConfigProvider, error) {
 	return &localStoreTlsProvider{
-		internodeCertProvider: &localStoreCertProvider{tlsSettings: &tlsConfig.Internode},
-		frontendCertProvider:  &localStoreCertProvider{tlsSettings: &tlsConfig.Frontend},
-		RWMutex:               sync.RWMutex{},
-		settings:              tlsConfig,
+		internodeCertProvider:              &localStoreCertProvider{tlsSettings: &tlsConfig.Internode},
+		frontendCertProvider:               &localStoreCertProvider{tlsSettings: &tlsConfig.Frontend},
+		frontendPerHostCertProviderFactory: newLocalStorePerHostCertProviderFactory(tlsConfig.Frontend.PerHostOverrides),
+		RWMutex:                            sync.RWMutex{},
+		settings:                           tlsConfig,
 	}, nil
 }
 
 func (s *localStoreTlsProvider) GetInternodeClientConfig() (*tls.Config, error) {
-	return s.getOrCreateConfig(&s.internodeClientConfig, newClientTLSConfig, s.internodeCertProvider, s.internodeCertProvider)
+	return s.getOrCreateConfig(
+		&s.internodeClientConfig,
+		func() (*tls.Config, error) {
+			return newClientTLSConfig(s.internodeCertProvider, s.internodeCertProvider)
+		},
+		s.internodeCertProvider.GetSettings().IsEnabled(),
+	)
 }
 
 func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
-	return s.getOrCreateConfig(&s.frontendClientConfig, newClientTLSConfig, s.internodeCertProvider, s.frontendCertProvider)
+	return s.getOrCreateConfig(
+		&s.frontendClientConfig,
+		func() (*tls.Config, error) {
+			return newClientTLSConfig(s.internodeCertProvider, s.frontendCertProvider)
+		},
+		s.internodeCertProvider.GetSettings().IsEnabled(),
+	)
 }
 
 func (s *localStoreTlsProvider) GetFrontendServerConfig() (*tls.Config, error) {
-	return s.getOrCreateConfig(&s.frontendServerConfig, newServerTLSConfig, s.frontendCertProvider, s.frontendCertProvider)
+	return s.getOrCreateConfig(
+		&s.frontendServerConfig,
+		func() (*tls.Config, error) {
+			return newServerTLSConfig(s.frontendCertProvider, s.frontendPerHostCertProviderFactory)
+		},
+		s.frontendCertProvider.GetSettings().IsEnabled())
 }
 
 func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) {
-	return s.getOrCreateConfig(&s.internodeServerConfig, newServerTLSConfig, s.internodeCertProvider, s.internodeCertProvider)
+	return s.getOrCreateConfig(
+		&s.internodeServerConfig,
+		func() (*tls.Config, error) {
+			return newServerTLSConfig(s.internodeCertProvider, nil)
+		},
+		s.internodeCertProvider.GetSettings().IsEnabled())
 }
 
 func (s *localStoreTlsProvider) getOrCreateConfig(
 	cachedConfig **tls.Config,
 	configConstructor tlsConfigConstructor,
-	localCertProvider CertProvider,
-	settingsProvider CertProvider,
+	isEnabled bool,
 ) (*tls.Config, error) {
-	if !localCertProvider.GetSettings().IsEnabled() {
+	if !isEnabled {
 		return nil, nil
 	}
 
@@ -99,7 +123,7 @@ func (s *localStoreTlsProvider) getOrCreateConfig(
 	}
 
 	// Load configuration
-	localConfig, err := configConstructor(localCertProvider, settingsProvider)
+	localConfig, err := configConstructor()
 
 	if err != nil {
 		return nil, err
@@ -109,7 +133,36 @@ func (s *localStoreTlsProvider) getOrCreateConfig(
 	return *cachedConfig, nil
 }
 
-func newServerTLSConfig(certProvider CertProvider, settingsProvider CertProvider) (*tls.Config, error) {
+func newServerTLSConfig(
+	certProvider CertProvider,
+	perHostCertProviderFactory PerHostCertProviderFactory,
+) (*tls.Config, error) {
+	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider)
+	if err != nil {
+		return nil, err
+	}
+
+	if tlsConfig != nil && perHostCertProviderFactory != nil {
+		tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
+			perHostCertProvider, err := perHostCertProviderFactory.GetCertProvider(c.ServerName)
+			if err != nil {
+				return nil, err
+			}
+
+			// If there are no special TLS settings for the specific host name being requested,
+			// returning nil here will fallback to the default, top-level TLS config
+			if perHostCertProvider == nil {
+				return nil, nil
+			}
+
+			return getServerTLSConfigFromCertProvider(perHostCertProvider)
+		}
+	}
+
+	return tlsConfig, nil
+}
+
+func getServerTLSConfigFromCertProvider(certProvider CertProvider) (*tls.Config, error) {
 	// Get serverCert from disk
 	serverCert, err := certProvider.FetchServerCertificate()
 	if err != nil {
@@ -126,8 +179,7 @@ func newServerTLSConfig(certProvider CertProvider, settingsProvider CertProvider
 	var clientCaPool *x509.CertPool
 
 	// If mTLS enabled
-	if settingsProvider.GetSettings().Server.RequireClientAuth {
-		// TODO: We could expose tls.ClientAuth enum instead of a bool `RequireClientAuth` for more fine grained control in config
+	if certProvider.GetSettings().Server.RequireClientAuth {
 		clientAuthType = tls.RequireAndVerifyClientCert
 
 		ca, err := certProvider.FetchClientCAs()
@@ -141,7 +193,7 @@ func newServerTLSConfig(certProvider CertProvider, settingsProvider CertProvider
 	return auth.NewTLSConfigWithClientAuthAndCAs(clientAuthType, []tls.Certificate{*serverCert}, clientCaPool), nil
 }
 
-func newClientTLSConfig(localProvider CertProvider, remoteProvider CertProvider) (*tls.Config, error) {
+func newClientTLSConfig(clientProvider CertProvider, remoteProvider CertProvider) (*tls.Config, error) {
 	// Optional ServerCA for client if not already trusted by host
 	serverCa, err := remoteProvider.FetchServerRootCAsForClient()
 	if err != nil {
@@ -151,7 +203,7 @@ func newClientTLSConfig(localProvider CertProvider, remoteProvider CertProvider)
 	// mTLS enabled, present certificate
 	var clientCerts []tls.Certificate
 	if remoteProvider.GetSettings().Server.RequireClientAuth {
-		cert, err := localProvider.FetchServerCertificate()
+		cert, err := clientProvider.FetchServerCertificate()
 		if err != nil {
 			return nil, err
 		}
