@@ -25,6 +25,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -42,8 +43,11 @@ type sqlMetadataManagerV2 struct {
 }
 
 // newMetadataPersistenceV2 creates an instance of sqlMetadataManagerV2
-func newMetadataPersistenceV2(db sqlplugin.DB, currentClusterName string,
-	logger log.Logger) (persistence.MetadataStore, error) {
+func newMetadataPersistenceV2(
+	db sqlplugin.DB,
+	currentClusterName string,
+	logger log.Logger,
+) (persistence.MetadataStore, error) {
 	return &sqlMetadataManagerV2{
 		sqlStore: sqlStore{
 			db:     db,
@@ -53,43 +57,23 @@ func newMetadataPersistenceV2(db sqlplugin.DB, currentClusterName string,
 	}, nil
 }
 
-func updateMetadata(tx sqlplugin.Tx, oldNotificationVersion int64) error {
-	result, err := tx.UpdateNamespaceMetadata(&sqlplugin.NamespaceMetadataRow{NotificationVersion: oldNotificationVersion})
-	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to update namespace metadata. Error: %v", err))
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("Could not verify whether namespace metadata update occurred. Error: %v", err))
-	} else if rowsAffected != 1 {
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to update namespace metadata. <>1 rows affected. Error: %v", err))
-	}
-
-	return nil
-}
-
-func lockMetadata(tx sqlplugin.Tx) (*sqlplugin.NamespaceMetadataRow, error) {
-	row, err := tx.LockNamespaceMetadata()
-	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to lock namespace metadata. Error: %v", err))
-	}
-	return row, nil
-}
-
-func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
+func (m *sqlMetadataManagerV2) CreateNamespace(
+	request *persistence.InternalCreateNamespaceRequest,
+) (*persistence.CreateNamespaceResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	idBytes, err := primitives.ParseUUID(request.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	var resp *persistence.CreateNamespaceResponse
-	err = m.txExecute("CreateNamespace", func(tx sqlplugin.Tx) error {
-		metadata, err := lockMetadata(tx)
+	err = m.txExecute(ctx, "CreateNamespace", func(tx sqlplugin.Tx) error {
+		metadata, err := lockMetadata(ctx, tx)
 		if err != nil {
 			return err
 		}
-		if _, err := tx.InsertIntoNamespace(&sqlplugin.NamespaceRow{
+		if _, err := tx.InsertIntoNamespace(ctx, &sqlplugin.NamespaceRow{
 			Name:                request.Name,
 			ID:                  idBytes,
 			Data:                request.Namespace.Data,
@@ -102,7 +86,10 @@ func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCrea
 			}
 			return err
 		}
-		if err := updateMetadata(tx, metadata.NotificationVersion); err != nil {
+		if err := updateMetadata(ctx,
+			tx,
+			metadata.NotificationVersion,
+		); err != nil {
 			return err
 		}
 		resp = &persistence.CreateNamespaceResponse{ID: request.ID}
@@ -111,7 +98,11 @@ func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCrea
 	return resp, err
 }
 
-func (m *sqlMetadataManagerV2) GetNamespace(request *persistence.GetNamespaceRequest) (*persistence.InternalGetNamespaceResponse, error) {
+func (m *sqlMetadataManagerV2) GetNamespace(
+	request *persistence.GetNamespaceRequest,
+) (*persistence.InternalGetNamespaceResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	idBytes, err := primitives.ParseUUID(request.ID)
 	if err != nil {
 		return nil, err
@@ -128,7 +119,7 @@ func (m *sqlMetadataManagerV2) GetNamespace(request *persistence.GetNamespaceReq
 		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name are empty.")
 	}
 
-	rows, err := m.db.SelectFromNamespace(filter)
+	rows, err := m.db.SelectFromNamespace(ctx, filter)
 	if err != nil {
 		switch err {
 		case sql.ErrNoRows:
@@ -161,13 +152,15 @@ func (m *sqlMetadataManagerV2) namespaceRowToGetNamespaceResponse(row *sqlplugin
 }
 
 func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpdateNamespaceRequest) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	idBytes, err := primitives.ParseUUID(request.Id)
 	if err != nil {
 		return err
 	}
 
-	return m.txExecute("UpdateNamespace", func(tx sqlplugin.Tx) error {
-		metadata, err := lockMetadata(tx)
+	return m.txExecute(ctx, "UpdateNamespace", func(tx sqlplugin.Tx) error {
+		metadata, err := lockMetadata(ctx, tx)
 		if err != nil {
 			return err
 		}
@@ -178,7 +171,7 @@ func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpda
 				metadata.NotificationVersion,
 			)
 		}
-		result, err := tx.UpdateNamespace(&sqlplugin.NamespaceRow{
+		result, err := tx.UpdateNamespace(ctx, &sqlplugin.NamespaceRow{
 			Name:                request.Name,
 			ID:                  idBytes,
 			Data:                request.Namespace.Data,
@@ -195,31 +188,41 @@ func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpda
 		if noRowsAffected != 1 {
 			return fmt.Errorf("%v rows updated instead of one", noRowsAffected)
 		}
-		return updateMetadata(tx, metadata.NotificationVersion)
+		return updateMetadata(ctx, tx, metadata.NotificationVersion)
 	})
 }
 
 func (m *sqlMetadataManagerV2) DeleteNamespace(request *persistence.DeleteNamespaceRequest) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	idBytes, err := primitives.ParseUUID(request.ID)
 	if err != nil {
 		return err
 	}
 
-	return m.txExecute("DeleteNamespace", func(tx sqlplugin.Tx) error {
-		_, err := tx.DeleteFromNamespace(sqlplugin.NamespaceFilter{ID: &idBytes})
+	return m.txExecute(ctx, "DeleteNamespace", func(tx sqlplugin.Tx) error {
+		_, err := tx.DeleteFromNamespace(ctx, sqlplugin.NamespaceFilter{
+			ID: &idBytes,
+		})
 		return err
 	})
 }
 
 func (m *sqlMetadataManagerV2) DeleteNamespaceByName(request *persistence.DeleteNamespaceByNameRequest) error {
-	return m.txExecute("DeleteNamespaceByName", func(tx sqlplugin.Tx) error {
-		_, err := tx.DeleteFromNamespace(sqlplugin.NamespaceFilter{Name: &request.Name})
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	return m.txExecute(ctx, "DeleteNamespaceByName", func(tx sqlplugin.Tx) error {
+		_, err := tx.DeleteFromNamespace(ctx, sqlplugin.NamespaceFilter{
+			Name: &request.Name,
+		})
 		return err
 	})
 }
 
 func (m *sqlMetadataManagerV2) GetMetadata() (*persistence.GetMetadataResponse, error) {
-	row, err := m.db.SelectFromNamespaceMetadata()
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	row, err := m.db.SelectFromNamespaceMetadata(ctx)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetMetadata operation failed. Error: %v", err))
 	}
@@ -227,12 +230,14 @@ func (m *sqlMetadataManagerV2) GetMetadata() (*persistence.GetMetadataResponse, 
 }
 
 func (m *sqlMetadataManagerV2) ListNamespaces(request *persistence.ListNamespacesRequest) (*persistence.InternalListNamespacesResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	var pageToken *primitives.UUID
 	if request.NextPageToken != nil {
 		token := primitives.UUID(request.NextPageToken)
 		pageToken = &token
 	}
-	rows, err := m.db.SelectFromNamespace(sqlplugin.NamespaceFilter{
+	rows, err := m.db.SelectFromNamespace(ctx, sqlplugin.NamespaceFilter{
 		GreaterThanID: pageToken,
 		PageSize:      &request.PageSize,
 	})
@@ -258,4 +263,37 @@ func (m *sqlMetadataManagerV2) ListNamespaces(request *persistence.ListNamespace
 	}
 
 	return resp, nil
+}
+
+func updateMetadata(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	oldNotificationVersion int64,
+) error {
+	result, err := tx.UpdateNamespaceMetadata(ctx, &sqlplugin.NamespaceMetadataRow{
+		NotificationVersion: oldNotificationVersion,
+	})
+	if err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to update namespace metadata. Error: %v", err))
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("Could not verify whether namespace metadata update occurred. Error: %v", err))
+	} else if rowsAffected != 1 {
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to update namespace metadata. <>1 rows affected. Error: %v", err))
+	}
+
+	return nil
+}
+
+func lockMetadata(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+) (*sqlplugin.NamespaceMetadataRow, error) {
+	row, err := tx.LockNamespaceMetadata(ctx)
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to lock namespace metadata. Error: %v", err))
+	}
+	return row, nil
 }

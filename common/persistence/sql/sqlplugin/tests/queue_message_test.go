@@ -84,7 +84,7 @@ func (s *queueMessageSuite) TestInsert_Single_Success() {
 	messageID := rand.Int63()
 
 	message := s.newRandomQueueMessageRow(queueType, messageID)
-	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message})
+	result, err := s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -98,7 +98,7 @@ func (s *queueMessageSuite) TestInsert_Multiple_Success() {
 	message1 := s.newRandomQueueMessageRow(queueType, messageID)
 	messageID++
 	message2 := s.newRandomQueueMessageRow(queueType, messageID)
-	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message1, message2})
+	result, err := s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message1, message2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -110,14 +110,14 @@ func (s *queueMessageSuite) TestInsert_Single_Fail_Duplicate() {
 	messageID := rand.Int63()
 
 	message := s.newRandomQueueMessageRow(queueType, messageID)
-	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message})
+	result, err := s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	message = s.newRandomQueueMessageRow(queueType, messageID)
-	_, err = s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message})
+	_, err = s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message})
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -128,7 +128,7 @@ func (s *queueMessageSuite) TestInsert_Multiple_Fail_Duplicate() {
 	message1 := s.newRandomQueueMessageRow(queueType, messageID)
 	messageID++
 	message2 := s.newRandomQueueMessageRow(queueType, messageID)
-	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message1, message2})
+	result, err := s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message1, message2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -137,7 +137,7 @@ func (s *queueMessageSuite) TestInsert_Multiple_Fail_Duplicate() {
 	message2 = s.newRandomQueueMessageRow(queueType, messageID)
 	messageID++
 	message3 := s.newRandomQueueMessageRow(queueType, messageID)
-	_, err = s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message2, message3})
+	_, err = s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message2, message3})
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -146,7 +146,7 @@ func (s *queueMessageSuite) TestInsertSelect() {
 	messageID := rand.Int63()
 
 	message := s.newRandomQueueMessageRow(queueType, messageID)
-	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message})
+	result, err := s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -156,7 +156,7 @@ func (s *queueMessageSuite) TestInsertSelect() {
 		QueueType: queueType,
 		MessageID: messageID,
 	}
-	rows, err := s.store.SelectFromMessages(filter)
+	rows, err := s.store.SelectFromMessages(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].QueueType = queueType
@@ -178,7 +178,7 @@ func (s *queueMessageSuite) TestInsertSelect_Multiple() {
 		messageID++
 		messages = append(messages, message)
 	}
-	result, err := s.store.InsertIntoMessages(messages)
+	result, err := s.store.InsertIntoMessages(newExecutionContext(), messages)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -190,7 +190,7 @@ func (s *queueMessageSuite) TestInsertSelect_Multiple() {
 		MaxMessageID: maxMessageID,
 		PageSize:     numMessages,
 	}
-	rows, err := s.store.RangeSelectFromMessages(filter)
+	rows, err := s.store.RangeSelectFromMessages(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].QueueType = queueType
@@ -206,13 +206,13 @@ func (s *queueMessageSuite) TestDeleteSelect_Single() {
 		QueueType: queueType,
 		MessageID: messageID,
 	}
-	result, err := s.store.DeleteFromMessages(filter)
+	result, err := s.store.DeleteFromMessages(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.SelectFromMessages(filter)
+	rows, err := s.store.SelectFromMessages(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].QueueType = queueType
@@ -233,14 +233,14 @@ func (s *queueMessageSuite) TestDeleteSelect_Multiple() {
 		MaxMessageID: maxMessageID,
 		PageSize:     0,
 	}
-	result, err := s.store.RangeDeleteFromMessages(filter)
+	result, err := s.store.RangeDeleteFromMessages(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
 	filter.PageSize = pageSize
-	rows, err := s.store.RangeSelectFromMessages(filter)
+	rows, err := s.store.RangeSelectFromMessages(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].QueueType = queueType
@@ -253,7 +253,7 @@ func (s *queueMessageSuite) TestInsertDeleteSelect_Single() {
 	messageID := rand.Int63()
 
 	message := s.newRandomQueueMessageRow(queueType, messageID)
-	result, err := s.store.InsertIntoMessages([]sqlplugin.QueueMessageRow{message})
+	result, err := s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -263,13 +263,13 @@ func (s *queueMessageSuite) TestInsertDeleteSelect_Single() {
 		QueueType: queueType,
 		MessageID: messageID,
 	}
-	result, err = s.store.DeleteFromMessages(filter)
+	result, err = s.store.DeleteFromMessages(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	rows, err := s.store.SelectFromMessages(filter)
+	rows, err := s.store.SelectFromMessages(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].QueueType = queueType
@@ -292,7 +292,7 @@ func (s *queueMessageSuite) TestInsertDeleteSelect_Multiple() {
 		messageID++
 		messages = append(messages, message)
 	}
-	result, err := s.store.InsertIntoMessages(messages)
+	result, err := s.store.InsertIntoMessages(newExecutionContext(), messages)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -304,14 +304,14 @@ func (s *queueMessageSuite) TestInsertDeleteSelect_Multiple() {
 		MaxMessageID: maxMessageID,
 		PageSize:     0,
 	}
-	result, err = s.store.RangeDeleteFromMessages(filter)
+	result, err = s.store.RangeDeleteFromMessages(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(numMessages, int(rowsAffected))
 
 	filter.PageSize = pageSize
-	rows, err := s.store.RangeSelectFromMessages(filter)
+	rows, err := s.store.RangeSelectFromMessages(newExecutionContext(), filter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].QueueType = queueType

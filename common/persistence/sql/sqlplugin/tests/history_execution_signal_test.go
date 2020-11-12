@@ -88,7 +88,7 @@ func (s *historyExecutionSignalSuite) TestReplace_Single() {
 	initiatedID := rand.Int63()
 
 	signal := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, initiatedID)
-	result, err := s.store.ReplaceIntoSignalInfoMaps([]sqlplugin.SignalInfoMapsRow{signal})
+	result, err := s.store.ReplaceIntoSignalInfoMaps(newExecutionContext(), []sqlplugin.SignalInfoMapsRow{signal})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -103,7 +103,7 @@ func (s *historyExecutionSignalSuite) TestReplace_Multiple() {
 
 	signal1 := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 	signal2 := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, rand.Int63())
-	result, err := s.store.ReplaceIntoSignalInfoMaps([]sqlplugin.SignalInfoMapsRow{signal1, signal2})
+	result, err := s.store.ReplaceIntoSignalInfoMaps(newExecutionContext(), []sqlplugin.SignalInfoMapsRow{signal1, signal2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -118,7 +118,7 @@ func (s *historyExecutionSignalSuite) TestReplaceSelect_Single() {
 	initiatedID := rand.Int63()
 
 	signal := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, initiatedID)
-	result, err := s.store.ReplaceIntoSignalInfoMaps([]sqlplugin.SignalInfoMapsRow{signal})
+	result, err := s.store.ReplaceIntoSignalInfoMaps(newExecutionContext(), []sqlplugin.SignalInfoMapsRow{signal})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -130,7 +130,7 @@ func (s *historyExecutionSignalSuite) TestReplaceSelect_Single() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromSignalInfoMaps(selectFilter)
+	rows, err := s.store.SelectFromSignalInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	rowMap := map[int64]sqlplugin.SignalInfoMapsRow{}
 	for _, signal := range rows {
@@ -154,7 +154,7 @@ func (s *historyExecutionSignalSuite) TestReplaceSelect_Multiple() {
 		signal := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 		signals = append(signals, signal)
 	}
-	result, err := s.store.ReplaceIntoSignalInfoMaps(signals)
+	result, err := s.store.ReplaceIntoSignalInfoMaps(newExecutionContext(), signals)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -166,7 +166,7 @@ func (s *historyExecutionSignalSuite) TestReplaceSelect_Multiple() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromSignalInfoMaps(selectFilter)
+	rows, err := s.store.SelectFromSignalInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	signalMap := map[int64]sqlplugin.SignalInfoMapsRow{}
 	for _, signal := range signals {
@@ -193,7 +193,7 @@ func (s *historyExecutionSignalSuite) TestDeleteSelect_Single() {
 		RunID:       runID,
 		InitiatedID: convert.Int64Ptr(initiatedID),
 	}
-	result, err := s.store.DeleteFromSignalInfoMaps(deleteFilter)
+	result, err := s.store.DeleteFromSignalInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -205,7 +205,7 @@ func (s *historyExecutionSignalSuite) TestDeleteSelect_Single() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromSignalInfoMaps(selectFilter)
+	rows, err := s.store.SelectFromSignalInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.SignalInfoMapsRow(nil), rows)
 }
@@ -223,7 +223,7 @@ func (s *historyExecutionSignalSuite) TestDeleteSelect_Multiple() {
 		RunID:       runID,
 		InitiatedID: nil,
 	}
-	result, err := s.store.DeleteFromSignalInfoMaps(deleteFilter)
+	result, err := s.store.DeleteFromSignalInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -235,7 +235,7 @@ func (s *historyExecutionSignalSuite) TestDeleteSelect_Multiple() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromSignalInfoMaps(selectFilter)
+	rows, err := s.store.SelectFromSignalInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.SignalInfoMapsRow(nil), rows)
 }
@@ -248,7 +248,7 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Single() {
 	initiatedID := rand.Int63()
 
 	signal := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, initiatedID)
-	result, err := s.store.ReplaceIntoSignalInfoMaps([]sqlplugin.SignalInfoMapsRow{signal})
+	result, err := s.store.ReplaceIntoSignalInfoMaps(newExecutionContext(), []sqlplugin.SignalInfoMapsRow{signal})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -261,7 +261,7 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Single() {
 		RunID:       runID,
 		InitiatedID: convert.Int64Ptr(initiatedID),
 	}
-	result, err = s.store.DeleteFromSignalInfoMaps(deleteFilter)
+	result, err = s.store.DeleteFromSignalInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -273,7 +273,7 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Single() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromSignalInfoMaps(selectFilter)
+	rows, err := s.store.SelectFromSignalInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.SignalInfoMapsRow(nil), rows)
 }
@@ -291,7 +291,7 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Multiple() {
 		signal := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 		signals = append(signals, signal)
 	}
-	result, err := s.store.ReplaceIntoSignalInfoMaps(signals)
+	result, err := s.store.ReplaceIntoSignalInfoMaps(newExecutionContext(), signals)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -304,7 +304,7 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Multiple() {
 		RunID:       runID,
 		InitiatedID: nil,
 	}
-	result, err = s.store.DeleteFromSignalInfoMaps(deleteFilter)
+	result, err = s.store.DeleteFromSignalInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -316,7 +316,7 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Multiple() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromSignalInfoMaps(selectFilter)
+	rows, err := s.store.SelectFromSignalInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.SignalInfoMapsRow(nil), rows)
 }

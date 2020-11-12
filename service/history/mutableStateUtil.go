@@ -193,6 +193,17 @@ func convertUpdateSignalInfos(
 	return outputs
 }
 
+func convertInt64SetToSlice(
+	inputs map[int64]struct{},
+) []int64 {
+
+	outputs := make([]int64, 0, len(inputs))
+	for item := range inputs {
+		outputs = append(outputs, item)
+	}
+	return outputs
+}
+
 func convertStringSetToSlice(
 	inputs map[string]struct{},
 ) []string {

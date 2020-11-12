@@ -25,6 +25,7 @@
 package sqlplugin
 
 import (
+	"context"
 	"database/sql"
 	"time"
 
@@ -74,11 +75,11 @@ type (
 
 	// ClusterMetadata is the SQL persistence interface for cluster metadata
 	ClusterMetadata interface {
-		SaveClusterMetadata(row *ClusterMetadataRow) (sql.Result, error)
-		GetClusterMetadata() (*ClusterMetadataRow, error)
-		WriteLockGetClusterMetadata() (*ClusterMetadataRow, error)
-		GetClusterMembers(filter *ClusterMembershipFilter) ([]ClusterMembershipRow, error)
-		UpsertClusterMembership(row *ClusterMembershipRow) (sql.Result, error)
-		PruneClusterMembership(filter *PruneClusterMembershipFilter) (sql.Result, error)
+		SaveClusterMetadata(ctx context.Context, row *ClusterMetadataRow) (sql.Result, error)
+		GetClusterMetadata(ctx context.Context) (*ClusterMetadataRow, error)
+		WriteLockGetClusterMetadata(ctx context.Context) (*ClusterMetadataRow, error)
+		GetClusterMembers(ctx context.Context, filter *ClusterMembershipFilter) ([]ClusterMembershipRow, error)
+		UpsertClusterMembership(ctx context.Context, row *ClusterMembershipRow) (sql.Result, error)
+		PruneClusterMembership(ctx context.Context, filter *PruneClusterMembershipFilter) (sql.Result, error)
 	}
 )

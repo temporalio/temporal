@@ -25,6 +25,8 @@
 package postgresql
 
 import (
+	"context"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 
@@ -64,8 +66,8 @@ func newDB(xdb *sqlx.DB, tx *sqlx.Tx) *db {
 }
 
 // BeginTx starts a new transaction and returns a reference to the Tx object
-func (pdb *db) BeginTx() (sqlplugin.Tx, error) {
-	xtx, err := pdb.db.Beginx()
+func (pdb *db) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
+	xtx, err := pdb.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}

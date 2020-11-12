@@ -25,6 +25,7 @@
 package mysql
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 
@@ -74,34 +75,67 @@ cluster_membership WHERE membership_partition = ?`
 	templateWithOrderBySessionStartSuffix = ` ORDER BY membership_partition ASC, host_id ASC`
 )
 
-func (mdb *db) SaveClusterMetadata(row *sqlplugin.ClusterMetadataRow) (sql.Result, error) {
+func (mdb *db) SaveClusterMetadata(
+	ctx context.Context,
+	row *sqlplugin.ClusterMetadataRow,
+) (sql.Result, error) {
 	if row.Version == 0 {
-		// TODO(vitarb): immutable metadata is needed for backward compatibility only, remove after 1.1 release.
-		mdb.conn.Exec(insertClusterMetadataQry, constMetadataPartition, row.Data, row.DataEncoding, row.Data, row.DataEncoding, 1)
+		// TODO(vitarb): immutable metadata is needed for backward compatibility only,
+		//  remove after 1.1 release.
+		return mdb.conn.ExecContext(ctx,
+			insertClusterMetadataQry,
+			constMetadataPartition,
+			row.Data,
+			row.DataEncoding,
+			row.Data, row.DataEncoding,
+			1,
+		)
 	}
-	return mdb.conn.Exec(updateClusterMetadataQry, row.Data, row.DataEncoding, row.Version+1, constMetadataPartition)
+	return mdb.conn.ExecContext(ctx,
+		updateClusterMetadataQry,
+		row.Data,
+		row.DataEncoding,
+		row.Version+1,
+		constMetadataPartition,
+	)
 }
 
-func (mdb *db) GetClusterMetadata() (*sqlplugin.ClusterMetadataRow, error) {
+func (mdb *db) GetClusterMetadata(
+	ctx context.Context,
+) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
-	err := mdb.conn.Get(&row, getClusterMetadataQry, constMetadataPartition)
+	err := mdb.conn.GetContext(ctx,
+		&row,
+		getClusterMetadataQry,
+		constMetadataPartition,
+	)
 	if err != nil {
 		return nil, err
 	}
 	return &row, err
 }
 
-func (mdb *db) WriteLockGetClusterMetadata() (*sqlplugin.ClusterMetadataRow, error) {
+func (mdb *db) WriteLockGetClusterMetadata(
+	ctx context.Context,
+) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
-	err := mdb.conn.Get(&row, writeLockGetClusterMetadataQry, constMetadataPartition)
+	err := mdb.conn.GetContext(ctx,
+		&row,
+		writeLockGetClusterMetadataQry,
+		constMetadataPartition,
+	)
 	if err != nil {
 		return nil, err
 	}
 	return &row, err
 }
 
-func (mdb *db) UpsertClusterMembership(row *sqlplugin.ClusterMembershipRow) (sql.Result, error) {
-	return mdb.conn.Exec(templateUpsertActiveClusterMembership,
+func (mdb *db) UpsertClusterMembership(
+	ctx context.Context,
+	row *sqlplugin.ClusterMembershipRow,
+) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		templateUpsertActiveClusterMembership,
 		constMembershipPartition,
 		row.HostID,
 		row.RPCAddress,
@@ -112,7 +146,10 @@ func (mdb *db) UpsertClusterMembership(row *sqlplugin.ClusterMembershipRow) (sql
 		mdb.converter.ToMySQLDateTime(row.RecordExpiry))
 }
 
-func (mdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]sqlplugin.ClusterMembershipRow, error) {
+func (mdb *db) GetClusterMembers(
+	ctx context.Context,
+	filter *sqlplugin.ClusterMembershipFilter,
+) ([]sqlplugin.ClusterMembershipRow, error) {
 	var queryString strings.Builder
 	var operands []interface{}
 	queryString.WriteString(templateGetClusterMembership)
@@ -163,18 +200,24 @@ func (mdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]s
 	compiledQryString := queryString.String()
 
 	var rows []sqlplugin.ClusterMembershipRow
-	err := mdb.conn.Select(&rows,
+	if err := mdb.conn.SelectContext(ctx,
+		&rows,
 		compiledQryString,
-		operands...)
-	if err != nil {
+		operands...,
+	); err != nil {
 		return nil, err
 	}
-	return rows, err
+	return rows, nil
 }
 
-func (mdb *db) PruneClusterMembership(filter *sqlplugin.PruneClusterMembershipFilter) (sql.Result, error) {
-	return mdb.conn.Exec(templatePruneStaleClusterMembership,
+func (mdb *db) PruneClusterMembership(
+	ctx context.Context,
+	filter *sqlplugin.PruneClusterMembershipFilter,
+) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		templatePruneStaleClusterMembership,
 		constMembershipPartition,
 		mdb.converter.ToMySQLDateTime(filter.PruneRecordsBefore),
-		filter.MaxRecordsAffected)
+		filter.MaxRecordsAffected,
+	)
 }

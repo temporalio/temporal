@@ -25,16 +25,10 @@
 package sqlplugin
 
 import (
+	"context"
 	"database/sql"
-	"math"
 
 	"go.temporal.io/server/common/persistence"
-)
-
-const (
-	EmptyMessageID = int64(-1)
-	MinMessageID   = EmptyMessageID + 1
-	MaxMessageID   = math.MaxInt64
 )
 
 type (
@@ -61,12 +55,12 @@ type (
 	}
 
 	QueueMessage interface {
-		InsertIntoMessages(row []QueueMessageRow) (sql.Result, error)
-		SelectFromMessages(filter QueueMessagesFilter) ([]QueueMessageRow, error)
-		RangeSelectFromMessages(filter QueueMessagesRangeFilter) ([]QueueMessageRow, error)
-		DeleteFromMessages(filter QueueMessagesFilter) (sql.Result, error)
-		RangeDeleteFromMessages(filter QueueMessagesRangeFilter) (sql.Result, error)
+		InsertIntoMessages(ctx context.Context, row []QueueMessageRow) (sql.Result, error)
+		SelectFromMessages(ctx context.Context, filter QueueMessagesFilter) ([]QueueMessageRow, error)
+		RangeSelectFromMessages(ctx context.Context, filter QueueMessagesRangeFilter) ([]QueueMessageRow, error)
+		DeleteFromMessages(ctx context.Context, filter QueueMessagesFilter) (sql.Result, error)
+		RangeDeleteFromMessages(ctx context.Context, filter QueueMessagesRangeFilter) (sql.Result, error)
 
-		GetLastEnqueuedMessageIDForUpdate(queueType persistence.QueueType) (int64, error)
+		GetLastEnqueuedMessageIDForUpdate(ctx context.Context, queueType persistence.QueueType) (int64, error)
 	}
 )

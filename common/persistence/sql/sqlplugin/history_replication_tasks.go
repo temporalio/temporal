@@ -24,7 +24,10 @@
 
 package sqlplugin
 
-import "database/sql"
+import (
+	"context"
+	"database/sql"
+)
 
 type (
 	// ReplicationTasksRow represents a row in replication_tasks table
@@ -53,15 +56,15 @@ type (
 
 	// HistoryReplicationTask is the SQL persistence interface for history replication tasks
 	HistoryReplicationTask interface {
-		InsertIntoReplicationTasks(rows []ReplicationTasksRow) (sql.Result, error)
+		InsertIntoReplicationTasks(ctx context.Context, rows []ReplicationTasksRow) (sql.Result, error)
 		// SelectFromReplicationTasks returns one or more rows from replication_tasks table
-		SelectFromReplicationTasks(filter ReplicationTasksFilter) ([]ReplicationTasksRow, error)
+		SelectFromReplicationTasks(ctx context.Context, filter ReplicationTasksFilter) ([]ReplicationTasksRow, error)
 		// RangeSelectFromReplicationTasks returns one or more rows from replication_tasks table
-		RangeSelectFromReplicationTasks(filter ReplicationTasksRangeFilter) ([]ReplicationTasksRow, error)
+		RangeSelectFromReplicationTasks(ctx context.Context, filter ReplicationTasksRangeFilter) ([]ReplicationTasksRow, error)
 		// DeleteFromReplicationTasks deletes a row from replication_tasks table
-		DeleteFromReplicationTasks(filter ReplicationTasksFilter) (sql.Result, error)
+		DeleteFromReplicationTasks(ctx context.Context, filter ReplicationTasksFilter) (sql.Result, error)
 		// DeleteFromReplicationTasks deletes multi rows from replication_tasks table
 		//  ReplicationTasksRangeFilter - {PageSize} will be ignored
-		RangeDeleteFromReplicationTasks(filter ReplicationTasksRangeFilter) (sql.Result, error)
+		RangeDeleteFromReplicationTasks(ctx context.Context, filter ReplicationTasksRangeFilter) (sql.Result, error)
 	}
 )

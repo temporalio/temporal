@@ -34,6 +34,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/codec"
 )
 
@@ -234,16 +235,6 @@ func ChecksumFromBlob(blob []byte, encoding string) (*persistencespb.Checksum, e
 	return result, nil
 }
 
-func QueueMessageToBlob(message *persistencespb.QueueMessage) (commonpb.DataBlob, error) {
-	// TODO change ENCODING_TYPE_JSON to ENCODING_TYPE_PROTO3
-	return encode(message, enumspb.ENCODING_TYPE_JSON)
-}
-
-func QueueMessageFromBlob(blob []byte, encoding string) (*persistencespb.QueueMessage, error) {
-	result := &persistencespb.QueueMessage{}
-	return result, decode(blob, encoding, result)
-}
-
 func QueueMetadataToBlob(metadata *persistencespb.QueueMetadata) (commonpb.DataBlob, error) {
 	// TODO change ENCODING_TYPE_JSON to ENCODING_TYPE_PROTO3
 	return encode(metadata, enumspb.ENCODING_TYPE_JSON)
@@ -252,6 +243,15 @@ func QueueMetadataToBlob(metadata *persistencespb.QueueMetadata) (commonpb.DataB
 func QueueMetadataFromBlob(blob []byte, encoding string) (*persistencespb.QueueMetadata, error) {
 	result := &persistencespb.QueueMetadata{}
 	return result, decode(blob, encoding, result)
+}
+
+func ReplicationTaskToBlob(replicationTask *replicationspb.ReplicationTask) (commonpb.DataBlob, error) {
+	return proto3Encode(replicationTask)
+}
+
+func ReplicationTaskFromBlob(blob []byte, encoding string) (*replicationspb.ReplicationTask, error) {
+	result := &replicationspb.ReplicationTask{}
+	return result, proto3Decode(blob, encoding, result)
 }
 
 func encode(

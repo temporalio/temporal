@@ -23,14 +23,6 @@ syntax = "proto3";
 package temporal.server.api.persistence.v1;
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
-import "google/protobuf/duration.proto";
-import "google/protobuf/timestamp.proto";
-
-// message_payload column
-message QueueMessage {
-
-}
-
 // data column
 message QueueMetadata {
     map<string, int64> cluster_ack_levels = 1;

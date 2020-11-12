@@ -25,6 +25,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -37,9 +38,10 @@ import (
 )
 
 func updateSignalsRequested(
+	ctx context.Context,
 	tx sqlplugin.Tx,
 	signalRequestedIDs []string,
-	deleteSignalRequestID string,
+	deleteSignalRequestIDs []string,
 	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
@@ -57,13 +59,13 @@ func updateSignalsRequested(
 				SignalID:    v,
 			}
 		}
-		if _, err := tx.ReplaceIntoSignalsRequestedSets(rows); err != nil {
+		if _, err := tx.ReplaceIntoSignalsRequestedSets(ctx, rows); err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("Failed to update signals requested. Failed to execute update query. Error: %v", err))
 		}
 	}
 
-	if deleteSignalRequestID != "" {
-		if _, err := tx.DeleteFromSignalsRequestedSets(sqlplugin.SignalsRequestedSetsDeleteFilter{
+	for _, deleteSignalRequestID := range deleteSignalRequestIDs {
+		if _, err := tx.DeleteFromSignalsRequestedSets(ctx, sqlplugin.SignalsRequestedSetsDeleteFilter{
 			ShardID:     shardID,
 			NamespaceID: namespaceID,
 			WorkflowID:  workflowID,
@@ -73,11 +75,11 @@ func updateSignalsRequested(
 			return serviceerror.NewInternal(fmt.Sprintf("Failed to update signals requested. Failed to execute delete query. Error: %v", err))
 		}
 	}
-
 	return nil
 }
 
 func getSignalsRequested(
+	ctx context.Context,
 	db sqlplugin.DB,
 	shardID int32,
 	namespaceID primitives.UUID,
@@ -85,7 +87,7 @@ func getSignalsRequested(
 	runID primitives.UUID,
 ) ([]string, error) {
 
-	rows, err := db.SelectFromSignalsRequestedSets(sqlplugin.SignalsRequestedSetsSelectFilter{
+	rows, err := db.SelectFromSignalsRequestedSets(ctx, sqlplugin.SignalsRequestedSetsSelectFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -102,6 +104,7 @@ func getSignalsRequested(
 }
 
 func deleteSignalsRequestedSet(
+	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
 	namespaceID primitives.UUID,
@@ -109,7 +112,7 @@ func deleteSignalsRequestedSet(
 	runID primitives.UUID,
 ) error {
 
-	if _, err := tx.DeleteFromSignalsRequestedSets(sqlplugin.SignalsRequestedSetsDeleteFilter{
+	if _, err := tx.DeleteFromSignalsRequestedSets(ctx, sqlplugin.SignalsRequestedSetsDeleteFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -121,6 +124,7 @@ func deleteSignalsRequestedSet(
 }
 
 func updateBufferedEvents(
+	ctx context.Context,
 	tx sqlplugin.Tx,
 	batch *commonpb.DataBlob,
 	shardID int32,
@@ -141,13 +145,14 @@ func updateBufferedEvents(
 		DataEncoding: batch.EncodingType.String(),
 	}
 
-	if _, err := tx.InsertIntoBufferedEvents([]sqlplugin.BufferedEventsRow{row}); err != nil {
+	if _, err := tx.InsertIntoBufferedEvents(ctx, []sqlplugin.BufferedEventsRow{row}); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("updateBufferedEvents operation failed. Error: %v", err))
 	}
 	return nil
 }
 
 func getBufferedEvents(
+	ctx context.Context,
 	db sqlplugin.DB,
 	shardID int32,
 	namespaceID primitives.UUID,
@@ -155,7 +160,7 @@ func getBufferedEvents(
 	runID primitives.UUID,
 ) ([]*commonpb.DataBlob, error) {
 
-	rows, err := db.SelectFromBufferedEvents(sqlplugin.BufferedEventsFilter{
+	rows, err := db.SelectFromBufferedEvents(ctx, sqlplugin.BufferedEventsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -172,6 +177,7 @@ func getBufferedEvents(
 }
 
 func deleteBufferedEvents(
+	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
 	namespaceID primitives.UUID,
@@ -179,7 +185,7 @@ func deleteBufferedEvents(
 	runID primitives.UUID,
 ) error {
 
-	if _, err := tx.DeleteFromBufferedEvents(sqlplugin.BufferedEventsFilter{
+	if _, err := tx.DeleteFromBufferedEvents(ctx, sqlplugin.BufferedEventsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,

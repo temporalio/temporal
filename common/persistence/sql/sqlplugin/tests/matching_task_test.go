@@ -84,7 +84,7 @@ func (s *matchingTaskSuite) TestInsert_Single_Success() {
 	taskID := int64(1)
 
 	task := s.newRandomTasksRow(queueID, taskID)
-	result, err := s.store.InsertIntoTasks([]sqlplugin.TasksRow{task})
+	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -99,7 +99,7 @@ func (s *matchingTaskSuite) TestInsert_Multiple_Success() {
 	taskID++
 	task2 := s.newRandomTasksRow(queueID, taskID)
 	taskID++
-	result, err := s.store.InsertIntoTasks([]sqlplugin.TasksRow{task1, task2})
+	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task1, task2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -111,14 +111,14 @@ func (s *matchingTaskSuite) TestInsert_Single_Fail_Duplicate() {
 	taskID := int64(1)
 
 	task := s.newRandomTasksRow(queueID, taskID)
-	result, err := s.store.InsertIntoTasks([]sqlplugin.TasksRow{task})
+	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	task = s.newRandomTasksRow(queueID, taskID)
-	_, err = s.store.InsertIntoTasks([]sqlplugin.TasksRow{task})
+	_, err = s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task})
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -129,7 +129,7 @@ func (s *matchingTaskSuite) TestInsert_Multiple_Fail_Duplicate() {
 	task1 := s.newRandomTasksRow(queueID, taskID)
 	taskID++
 	task2 := s.newRandomTasksRow(queueID, taskID)
-	result, err := s.store.InsertIntoTasks([]sqlplugin.TasksRow{task1, task2})
+	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task1, task2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -138,7 +138,7 @@ func (s *matchingTaskSuite) TestInsert_Multiple_Fail_Duplicate() {
 	task2 = s.newRandomTasksRow(queueID, taskID)
 	taskID++
 	task3 := s.newRandomTasksRow(queueID, taskID)
-	_, err = s.store.InsertIntoTasks([]sqlplugin.TasksRow{task2, task3})
+	_, err = s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task2, task3})
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -147,7 +147,7 @@ func (s *matchingTaskSuite) TestInsertSelect_Single() {
 	taskID := int64(100)
 
 	task := s.newRandomTasksRow(queueID, taskID)
-	result, err := s.store.InsertIntoTasks([]sqlplugin.TasksRow{task})
+	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -163,7 +163,7 @@ func (s *matchingTaskSuite) TestInsertSelect_Single() {
 		MaxTaskID:   maxTaskID,
 		PageSize:    pageSize,
 	}
-	rows, err := s.store.SelectFromTasks(filter)
+	rows, err := s.store.SelectFromTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	// fill in some omitted info
 	for index := range rows {
@@ -180,7 +180,7 @@ func (s *matchingTaskSuite) TestInsertSelect_Multiple() {
 	task1 := s.newRandomTasksRow(queueID, taskID)
 	taskID++
 	task2 := s.newRandomTasksRow(queueID, taskID)
-	result, err := s.store.InsertIntoTasks([]sqlplugin.TasksRow{task1, task2})
+	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task1, task2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -196,7 +196,7 @@ func (s *matchingTaskSuite) TestInsertSelect_Multiple() {
 		MaxTaskID:   maxTaskID,
 		PageSize:    pageSize,
 	}
-	rows, err := s.store.SelectFromTasks(filter)
+	rows, err := s.store.SelectFromTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	// fill in some omitted info
 	for index := range rows {
@@ -215,7 +215,7 @@ func (s *matchingTaskSuite) TestDeleteSelect() {
 		TaskQueueID: queueID,
 		TaskID:      convert.Int64Ptr(taskID),
 	}
-	result, err := s.store.DeleteFromTasks(filter)
+	result, err := s.store.DeleteFromTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -227,7 +227,7 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Single() {
 	taskID := int64(100)
 
 	task := s.newRandomTasksRow(queueID, taskID)
-	result, err := s.store.InsertIntoTasks([]sqlplugin.TasksRow{task})
+	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -238,7 +238,7 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Single() {
 		TaskQueueID: queueID,
 		TaskID:      convert.Int64Ptr(taskID),
 	}
-	result, err = s.store.DeleteFromTasks(filter)
+	result, err = s.store.DeleteFromTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -254,7 +254,7 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Single() {
 		MaxTaskID:   maxTaskID,
 		PageSize:    pageSize,
 	}
-	rows, err := s.store.SelectFromTasks(filter)
+	rows, err := s.store.SelectFromTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.TasksRow(nil), rows)
 }
@@ -266,7 +266,7 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Multiple() {
 	task1 := s.newRandomTasksRow(queueID, taskID)
 	taskID++
 	task2 := s.newRandomTasksRow(queueID, taskID)
-	result, err := s.store.InsertIntoTasks([]sqlplugin.TasksRow{task1, task2})
+	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task1, task2})
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -278,7 +278,7 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Multiple() {
 		TaskIDLessThanEquals: convert.Int64Ptr(taskID),
 		Limit:                convert.IntPtr(2),
 	}
-	result, err = s.store.DeleteFromTasks(filter)
+	result, err = s.store.DeleteFromTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -294,7 +294,7 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Multiple() {
 		MaxTaskID:   maxTaskID,
 		PageSize:    pageSize,
 	}
-	rows, err := s.store.SelectFromTasks(filter)
+	rows, err := s.store.SelectFromTasks(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.TasksRow(nil), rows)
 }

@@ -143,20 +143,11 @@ func (sc *statsComputer) computeMutableStateUpdateStats(req *InternalUpdateWorkf
 
 	deleteTimerInfoCount := len(req.UpdateWorkflowMutation.DeleteTimerInfos)
 
-	deleteChildInfoCount := 0
-	if req.UpdateWorkflowMutation.DeleteChildExecutionInfo != nil {
-		deleteChildInfoCount = 1
-	}
+	deleteChildInfoCount := len(req.UpdateWorkflowMutation.DeleteChildExecutionInfos)
 
-	deleteSignalInfoCount := 0
-	if req.UpdateWorkflowMutation.DeleteSignalInfo != nil {
-		deleteSignalInfoCount = 1
-	}
+	deleteSignalInfoCount := len(req.UpdateWorkflowMutation.DeleteSignalInfos)
 
-	deleteRequestCancelInfoCount := 0
-	if req.UpdateWorkflowMutation.DeleteRequestCancelInfo != nil {
-		deleteRequestCancelInfoCount = 1
-	}
+	deleteRequestCancelInfoCount := len(req.UpdateWorkflowMutation.DeleteRequestCancelInfos)
 
 	totalSize := executionInfoSize
 	totalSize += activityInfoSize

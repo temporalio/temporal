@@ -24,7 +24,10 @@
 
 package sqlplugin
 
-import "database/sql"
+import (
+	"context"
+	"database/sql"
+)
 
 type (
 	// TransferTasksRow represents a row in transfer_tasks table
@@ -52,14 +55,14 @@ type (
 
 	// HistoryTransferTask is the SQL persistence interface for history transfer tasks
 	HistoryTransferTask interface {
-		InsertIntoTransferTasks(rows []TransferTasksRow) (sql.Result, error)
+		InsertIntoTransferTasks(ctx context.Context, rows []TransferTasksRow) (sql.Result, error)
 		// SelectFromTransferTasks returns rows that match filter criteria from transfer_tasks table.
-		SelectFromTransferTasks(filter TransferTasksFilter) ([]TransferTasksRow, error)
+		SelectFromTransferTasks(ctx context.Context, filter TransferTasksFilter) ([]TransferTasksRow, error)
 		// RangeSelectFromTransferTasks returns rows that match filter criteria from transfer_tasks table.
-		RangeSelectFromTransferTasks(filter TransferTasksRangeFilter) ([]TransferTasksRow, error)
+		RangeSelectFromTransferTasks(ctx context.Context, filter TransferTasksRangeFilter) ([]TransferTasksRow, error)
 		// DeleteFromTransferTasks deletes one rows from transfer_tasks table.
-		DeleteFromTransferTasks(filter TransferTasksFilter) (sql.Result, error)
+		DeleteFromTransferTasks(ctx context.Context, filter TransferTasksFilter) (sql.Result, error)
 		// RangeDeleteFromTransferTasks deletes one or more rows from transfer_tasks table.
-		RangeDeleteFromTransferTasks(filter TransferTasksRangeFilter) (sql.Result, error)
+		RangeDeleteFromTransferTasks(ctx context.Context, filter TransferTasksRangeFilter) (sql.Result, error)
 	}
 )

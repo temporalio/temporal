@@ -121,7 +121,7 @@ func (s *visibilitySuite) TestInsertSelect_NonExists() {
 		closeTime,
 		historyLength,
 	)
-	result, err := s.store.InsertIntoVisibility(&visibility)
+	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -131,7 +131,7 @@ func (s *visibilitySuite) TestInsertSelect_NonExists() {
 		NamespaceID: namespaceID.String(),
 		RunID:       convert.StringPtr(runID.String()),
 	}
-	rows, err := s.store.SelectFromVisibility(selectFilter)
+	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -161,7 +161,7 @@ func (s *visibilitySuite) TestInsertSelect_Exists() {
 		closeTime,
 		historyLength,
 	)
-	result, err := s.store.InsertIntoVisibility(&visibility1)
+	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility1)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -178,7 +178,7 @@ func (s *visibilitySuite) TestInsertSelect_Exists() {
 		closeTime,
 		historyLength,
 	)
-	_, err = s.store.InsertIntoVisibility(&visibility2)
+	_, err = s.store.InsertIntoVisibility(newVisibilityContext(), &visibility2)
 	s.NoError(err)
 	// NOTE: cannot do assertion on affected rows
 	//  PostgreSQL will return 0
@@ -188,7 +188,7 @@ func (s *visibilitySuite) TestInsertSelect_Exists() {
 		NamespaceID: namespaceID.String(),
 		RunID:       convert.StringPtr(runID.String()),
 	}
-	rows, err := s.store.SelectFromVisibility(selectFilter)
+	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -218,7 +218,7 @@ func (s *visibilitySuite) TestReplaceSelect_NonExists() {
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
-	result, err := s.store.ReplaceIntoVisibility(&visibility)
+	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -228,7 +228,7 @@ func (s *visibilitySuite) TestReplaceSelect_NonExists() {
 		NamespaceID: namespaceID.String(),
 		RunID:       convert.StringPtr(runID.String()),
 	}
-	rows, err := s.store.SelectFromVisibility(selectFilter)
+	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -258,7 +258,7 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
-	result, err := s.store.ReplaceIntoVisibility(&visibility)
+	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -275,7 +275,7 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
-	_, err = s.store.ReplaceIntoVisibility(&visibility)
+	_, err = s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
 	// NOTE: cannot do assertion on affected rows
 	//  PostgreSQL will return 1
@@ -285,7 +285,7 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 		NamespaceID: namespaceID.String(),
 		RunID:       convert.StringPtr(runID.String()),
 	}
-	rows, err := s.store.SelectFromVisibility(selectFilter)
+	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -301,7 +301,7 @@ func (s *visibilitySuite) TestDeleteSelect() {
 		NamespaceID: namespaceID.String(),
 		RunID:       runID.String(),
 	}
-	result, err := s.store.DeleteFromVisibility(deleteFilter)
+	result, err := s.store.DeleteFromVisibility(newVisibilityContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -311,7 +311,7 @@ func (s *visibilitySuite) TestDeleteSelect() {
 		NamespaceID: namespaceID.String(),
 		RunID:       convert.StringPtr(runID.String()),
 	}
-	_, err = s.store.SelectFromVisibility(selectFilter)
+	_, err = s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -337,7 +337,7 @@ func (s *visibilitySuite) TestInsertDeleteSelect() {
 		closeTime,
 		historyLength,
 	)
-	result, err := s.store.InsertIntoVisibility(&visibility)
+	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -347,7 +347,7 @@ func (s *visibilitySuite) TestInsertDeleteSelect() {
 		NamespaceID: namespaceID.String(),
 		RunID:       runID.String(),
 	}
-	result, err = s.store.DeleteFromVisibility(deleteFilter)
+	result, err = s.store.DeleteFromVisibility(newVisibilityContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -357,7 +357,7 @@ func (s *visibilitySuite) TestInsertDeleteSelect() {
 		NamespaceID: namespaceID.String(),
 		RunID:       convert.StringPtr(runID.String()),
 	}
-	_, err = s.store.SelectFromVisibility(selectFilter)
+	_, err = s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -383,7 +383,7 @@ func (s *visibilitySuite) TestReplaceDeleteSelect() {
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
-	result, err := s.store.ReplaceIntoVisibility(&visibility)
+	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -393,7 +393,7 @@ func (s *visibilitySuite) TestReplaceDeleteSelect() {
 		NamespaceID: namespaceID.String(),
 		RunID:       runID.String(),
 	}
-	result, err = s.store.DeleteFromVisibility(deleteFilter)
+	result, err = s.store.DeleteFromVisibility(newVisibilityContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -403,7 +403,7 @@ func (s *visibilitySuite) TestReplaceDeleteSelect() {
 		NamespaceID: namespaceID.String(),
 		RunID:       convert.StringPtr(runID.String()),
 	}
-	_, err = s.store.SelectFromVisibility(selectFilter)
+	_, err = s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
@@ -431,7 +431,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		closeTime,
 		historyLength,
 	)
-	result, err := s.store.InsertIntoVisibility(&visibility)
+	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -449,7 +449,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 		PageSize:         convert.IntPtr(pageSize),
 	}
-	rows, err := s.store.SelectFromVisibility(selectFilter)
+	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -488,7 +488,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 				closeTime,
 				historyLength,
 			)
-			result, err := s.store.InsertIntoVisibility(&visibility)
+			result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
 			rowsAffected, err := result.RowsAffected()
 			s.NoError(err)
@@ -512,7 +512,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 	}
 	var rows []sqlplugin.VisibilityRow
 	for {
-		rowsPerPage, err := s.store.SelectFromVisibility(selectFilter)
+		rowsPerPage, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 		s.NoError(err)
 		rows = append(rows, rowsPerPage...)
 
@@ -555,7 +555,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
-	result, err := s.store.ReplaceIntoVisibility(&visibility)
+	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -573,7 +573,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
 		PageSize:         convert.IntPtr(pageSize),
 	}
-	rows, err := s.store.SelectFromVisibility(selectFilter)
+	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -612,7 +612,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 				timestamp.TimePtr(closeTime),
 				convert.Int64Ptr(historyLength),
 			)
-			result, err := s.store.ReplaceIntoVisibility(&visibility)
+			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
 			rowsAffected, err := result.RowsAffected()
 			s.NoError(err)
@@ -635,7 +635,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 	}
 	var rows []sqlplugin.VisibilityRow
 	for {
-		rowsPerPage, err := s.store.SelectFromVisibility(selectFilter)
+		rowsPerPage, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 		s.NoError(err)
 		rows = append(rows, rowsPerPage...)
 
@@ -679,7 +679,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		closeTime,
 		historyLength,
 	)
-	result, err := s.store.InsertIntoVisibility(&visibility)
+	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -697,7 +697,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 		PageSize:         convert.IntPtr(pageSize),
 	}
-	rows, err := s.store.SelectFromVisibility(selectFilter)
+	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -736,7 +736,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 				closeTime,
 				historyLength,
 			)
-			result, err := s.store.InsertIntoVisibility(&visibility)
+			result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
 			rowsAffected, err := result.RowsAffected()
 			s.NoError(err)
@@ -760,7 +760,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 	}
 	var rows []sqlplugin.VisibilityRow
 	for {
-		rowsPerPage, err := s.store.SelectFromVisibility(selectFilter)
+		rowsPerPage, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 		s.NoError(err)
 		rows = append(rows, rowsPerPage...)
 
@@ -803,7 +803,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
-	result, err := s.store.ReplaceIntoVisibility(&visibility)
+	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -821,7 +821,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
 		PageSize:         convert.IntPtr(pageSize),
 	}
-	rows, err := s.store.SelectFromVisibility(selectFilter)
+	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -860,7 +860,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 				timestamp.TimePtr(closeTime),
 				convert.Int64Ptr(historyLength),
 			)
-			result, err := s.store.ReplaceIntoVisibility(&visibility)
+			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
 			rowsAffected, err := result.RowsAffected()
 			s.NoError(err)
@@ -883,7 +883,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 	}
 	var rows []sqlplugin.VisibilityRow
 	for {
-		rowsPerPage, err := s.store.SelectFromVisibility(selectFilter)
+		rowsPerPage, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 		s.NoError(err)
 		rows = append(rows, rowsPerPage...)
 
@@ -927,7 +927,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Single
 		closeTime,
 		historyLength,
 	)
-	result, err := s.store.InsertIntoVisibility(&visibility)
+	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -945,7 +945,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Single
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 		PageSize:         convert.IntPtr(pageSize),
 	}
-	rows, err := s.store.SelectFromVisibility(selectFilter)
+	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -984,7 +984,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Multip
 				closeTime,
 				historyLength,
 			)
-			result, err := s.store.InsertIntoVisibility(&visibility)
+			result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
 			rowsAffected, err := result.RowsAffected()
 			s.NoError(err)
@@ -1008,7 +1008,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Multip
 	}
 	var rows []sqlplugin.VisibilityRow
 	for {
-		rowsPerPage, err := s.store.SelectFromVisibility(selectFilter)
+		rowsPerPage, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 		s.NoError(err)
 		rows = append(rows, rowsPerPage...)
 
@@ -1058,7 +1058,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseSingle(
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
-	result, err := s.store.ReplaceIntoVisibility(&visibility)
+	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -1076,7 +1076,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseSingle(
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
 		PageSize:         convert.IntPtr(pageSize),
 	}
-	rows, err := s.store.SelectFromVisibility(selectFilter)
+	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -1116,7 +1116,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multi
 				timestamp.TimePtr(closeTime),
 				convert.Int64Ptr(historyLength),
 			)
-			result, err := s.store.ReplaceIntoVisibility(&visibility)
+			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
 			rowsAffected, err := result.RowsAffected()
 			s.NoError(err)
@@ -1139,7 +1139,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multi
 	}
 	var rows []sqlplugin.VisibilityRow
 	for {
-		rowsPerPage, err := s.store.SelectFromVisibility(selectFilter)
+		rowsPerPage, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 		s.NoError(err)
 		rows = append(rows, rowsPerPage...)
 
@@ -1190,7 +1190,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeSin
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
-	result, err := s.store.ReplaceIntoVisibility(&visibility)
+	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -1208,7 +1208,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeSin
 		Status:           int32(status),
 		PageSize:         convert.IntPtr(pageSize),
 	}
-	rows, err := s.store.SelectFromVisibility(selectFilter)
+	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -1254,7 +1254,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeMul
 				timestamp.TimePtr(closeTime),
 				convert.Int64Ptr(historyLength),
 			)
-			result, err := s.store.ReplaceIntoVisibility(&visibility)
+			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
 			rowsAffected, err := result.RowsAffected()
 			s.NoError(err)
@@ -1277,7 +1277,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeMul
 	}
 	var rows []sqlplugin.VisibilityRow
 	for {
-		rowsPerPage, err := s.store.SelectFromVisibility(selectFilter)
+		rowsPerPage, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 		s.NoError(err)
 		rows = append(rows, rowsPerPage...)
 

@@ -1357,7 +1357,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.assertChecksumsEqual(testWorkflowChecksum, state2.Checksum)
 	log.Printf("Workflow execution last updated: %v", info2.LastUpdateTime)
 
-	err5 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, failedUpdateState, state0.NextEventId, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
+	err5 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, failedUpdateState, state0.NextEventId, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	s.Error(err5, "expected non nil error.")
 	s.IsType(&p.ShardOwnershipLostError{}, err5)
 	log.Printf("Conditional update failed with error: %v", err5)
@@ -1405,7 +1405,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	log.Printf("Workflow execution last updated: %v", info3.LastUpdateTime)
 
 	// update with incorrect rangeID and condition(next_event_id)
-	err7 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, failedUpdateState, state0.NextEventId, []int64{int64(5)}, nil, int64(12345), int64(3), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
+	err7 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, failedUpdateState, state0.NextEventId, []int64{int64(5)}, nil, int64(12345), int64(3), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	s.Error(err7, "expected non nil error.")
 	s.IsType(&p.ShardOwnershipLostError{}, err7)
 	log.Printf("Conditional update failed with error: %v", err7)
@@ -2719,7 +2719,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalRequested() {
 	s.Equal(1, len(state.SignalRequestedIds))
 	s.Equal(signalRequestedID, state.SignalRequestedIds[0])
 
-	err2 = s.DeleteSignalsRequestedState(updatedInfo, updatedState, int64(5), int64(5), signalRequestedID)
+	err2 = s.DeleteSignalsRequestedState(updatedInfo, updatedState, int64(5), int64(5), []string{signalRequestedID, uuid.New()})
 	s.NoError(err2)
 
 	state, err2 = s.GetWorkflowMutableState(namespaceID, workflowExecution)

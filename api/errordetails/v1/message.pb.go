@@ -187,74 +187,7 @@ func (m *ShardOwnershipLostFailure) GetCurrentHost() string {
 	return ""
 }
 
-type RetryTaskFailure struct {
-	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId  string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId       string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	NextEventId int64  `protobuf:"varint,4,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
-}
-
-func (m *RetryTaskFailure) Reset()      { *m = RetryTaskFailure{} }
-func (*RetryTaskFailure) ProtoMessage() {}
-func (*RetryTaskFailure) Descriptor() ([]byte, []int) {
-	return fileDescriptor_73580c2e9c4cb332, []int{3}
-}
-func (m *RetryTaskFailure) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *RetryTaskFailure) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_RetryTaskFailure.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *RetryTaskFailure) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_RetryTaskFailure.Merge(m, src)
-}
-func (m *RetryTaskFailure) XXX_Size() int {
-	return m.Size()
-}
-func (m *RetryTaskFailure) XXX_DiscardUnknown() {
-	xxx_messageInfo_RetryTaskFailure.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_RetryTaskFailure proto.InternalMessageInfo
-
-func (m *RetryTaskFailure) GetNamespaceId() string {
-	if m != nil {
-		return m.NamespaceId
-	}
-	return ""
-}
-
-func (m *RetryTaskFailure) GetWorkflowId() string {
-	if m != nil {
-		return m.WorkflowId
-	}
-	return ""
-}
-
-func (m *RetryTaskFailure) GetRunId() string {
-	if m != nil {
-		return m.RunId
-	}
-	return ""
-}
-
-func (m *RetryTaskFailure) GetNextEventId() int64 {
-	if m != nil {
-		return m.NextEventId
-	}
-	return 0
-}
-
-type RetryTaskV2Failure struct {
+type RetryReplicationFailure struct {
 	NamespaceId       string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	WorkflowId        string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
 	RunId             string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
@@ -264,17 +197,17 @@ type RetryTaskV2Failure struct {
 	EndEventVersion   int64  `protobuf:"varint,7,opt,name=end_event_version,json=endEventVersion,proto3" json:"end_event_version,omitempty"`
 }
 
-func (m *RetryTaskV2Failure) Reset()      { *m = RetryTaskV2Failure{} }
-func (*RetryTaskV2Failure) ProtoMessage() {}
-func (*RetryTaskV2Failure) Descriptor() ([]byte, []int) {
-	return fileDescriptor_73580c2e9c4cb332, []int{4}
+func (m *RetryReplicationFailure) Reset()      { *m = RetryReplicationFailure{} }
+func (*RetryReplicationFailure) ProtoMessage() {}
+func (*RetryReplicationFailure) Descriptor() ([]byte, []int) {
+	return fileDescriptor_73580c2e9c4cb332, []int{3}
 }
-func (m *RetryTaskV2Failure) XXX_Unmarshal(b []byte) error {
+func (m *RetryReplicationFailure) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *RetryTaskV2Failure) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *RetryReplicationFailure) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_RetryTaskV2Failure.Marshal(b, m, deterministic)
+		return xxx_messageInfo_RetryReplicationFailure.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -284,61 +217,61 @@ func (m *RetryTaskV2Failure) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return b[:n], nil
 	}
 }
-func (m *RetryTaskV2Failure) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_RetryTaskV2Failure.Merge(m, src)
+func (m *RetryReplicationFailure) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RetryReplicationFailure.Merge(m, src)
 }
-func (m *RetryTaskV2Failure) XXX_Size() int {
+func (m *RetryReplicationFailure) XXX_Size() int {
 	return m.Size()
 }
-func (m *RetryTaskV2Failure) XXX_DiscardUnknown() {
-	xxx_messageInfo_RetryTaskV2Failure.DiscardUnknown(m)
+func (m *RetryReplicationFailure) XXX_DiscardUnknown() {
+	xxx_messageInfo_RetryReplicationFailure.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_RetryTaskV2Failure proto.InternalMessageInfo
+var xxx_messageInfo_RetryReplicationFailure proto.InternalMessageInfo
 
-func (m *RetryTaskV2Failure) GetNamespaceId() string {
+func (m *RetryReplicationFailure) GetNamespaceId() string {
 	if m != nil {
 		return m.NamespaceId
 	}
 	return ""
 }
 
-func (m *RetryTaskV2Failure) GetWorkflowId() string {
+func (m *RetryReplicationFailure) GetWorkflowId() string {
 	if m != nil {
 		return m.WorkflowId
 	}
 	return ""
 }
 
-func (m *RetryTaskV2Failure) GetRunId() string {
+func (m *RetryReplicationFailure) GetRunId() string {
 	if m != nil {
 		return m.RunId
 	}
 	return ""
 }
 
-func (m *RetryTaskV2Failure) GetStartEventId() int64 {
+func (m *RetryReplicationFailure) GetStartEventId() int64 {
 	if m != nil {
 		return m.StartEventId
 	}
 	return 0
 }
 
-func (m *RetryTaskV2Failure) GetStartEventVersion() int64 {
+func (m *RetryReplicationFailure) GetStartEventVersion() int64 {
 	if m != nil {
 		return m.StartEventVersion
 	}
 	return 0
 }
 
-func (m *RetryTaskV2Failure) GetEndEventId() int64 {
+func (m *RetryReplicationFailure) GetEndEventId() int64 {
 	if m != nil {
 		return m.EndEventId
 	}
 	return 0
 }
 
-func (m *RetryTaskV2Failure) GetEndEventVersion() int64 {
+func (m *RetryReplicationFailure) GetEndEventVersion() int64 {
 	if m != nil {
 		return m.EndEventVersion
 	}
@@ -349,8 +282,7 @@ func init() {
 	proto.RegisterType((*TaskAlreadyStartedFailure)(nil), "temporal.server.api.errordetails.v1.TaskAlreadyStartedFailure")
 	proto.RegisterType((*CurrentBranchChangedFailure)(nil), "temporal.server.api.errordetails.v1.CurrentBranchChangedFailure")
 	proto.RegisterType((*ShardOwnershipLostFailure)(nil), "temporal.server.api.errordetails.v1.ShardOwnershipLostFailure")
-	proto.RegisterType((*RetryTaskFailure)(nil), "temporal.server.api.errordetails.v1.RetryTaskFailure")
-	proto.RegisterType((*RetryTaskV2Failure)(nil), "temporal.server.api.errordetails.v1.RetryTaskV2Failure")
+	proto.RegisterType((*RetryReplicationFailure)(nil), "temporal.server.api.errordetails.v1.RetryReplicationFailure")
 }
 
 func init() {
@@ -358,38 +290,37 @@ func init() {
 }
 
 var fileDescriptor_73580c2e9c4cb332 = []byte{
-	// 490 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x93, 0xbd, 0x6e, 0x13, 0x41,
-	0x14, 0x85, 0x77, 0x12, 0x62, 0x94, 0x6b, 0xf3, 0x93, 0x05, 0x24, 0x47, 0x11, 0x83, 0xb3, 0x50,
-	0x44, 0x14, 0x6b, 0x0c, 0x12, 0x0d, 0x15, 0x89, 0x40, 0x58, 0x42, 0x42, 0x72, 0xa2, 0x14, 0x48,
-	0xc8, 0x9a, 0x78, 0x2e, 0xf6, 0xca, 0xeb, 0x99, 0xe5, 0xce, 0xd8, 0x26, 0x1d, 0xbc, 0x01, 0x88,
-	0x97, 0xe0, 0x51, 0x28, 0x5d, 0xa6, 0xc4, 0xeb, 0x86, 0x32, 0x8f, 0x80, 0x66, 0xec, 0xb5, 0xad,
-	0x14, 0x94, 0x94, 0x7b, 0xce, 0x77, 0xce, 0x1e, 0xed, 0xea, 0x42, 0xc3, 0xe2, 0x20, 0xd3, 0x24,
-	0xd2, 0xba, 0x41, 0x1a, 0x21, 0xd5, 0x45, 0x96, 0xd4, 0x91, 0x48, 0x93, 0x44, 0x2b, 0x92, 0xd4,
-	0xd4, 0x47, 0x8d, 0xfa, 0x00, 0x8d, 0x11, 0x5d, 0x8c, 0x33, 0xd2, 0x56, 0x87, 0x0f, 0x8b, 0x48,
-	0x3c, 0x8f, 0xc4, 0x22, 0x4b, 0xe2, 0xf5, 0x48, 0x3c, 0x6a, 0x44, 0x7b, 0xb0, 0x7b, 0x22, 0x4c,
-	0xff, 0x65, 0x4a, 0x28, 0xe4, 0xf9, 0xb1, 0x15, 0x64, 0x51, 0xbe, 0x16, 0x49, 0x3a, 0x24, 0x8c,
-	0xbe, 0x32, 0xd8, 0x3b, 0x1a, 0x12, 0xa1, 0xb2, 0x87, 0x24, 0x54, 0xa7, 0x77, 0xd4, 0x13, 0xaa,
-	0xbb, 0xf4, 0xc3, 0x27, 0x70, 0xb7, 0x33, 0xb7, 0xdb, 0x67, 0xde, 0x6f, 0x5b, 0xdd, 0x47, 0x55,
-	0x65, 0x35, 0x76, 0x50, 0x69, 0x85, 0x9d, 0xf5, 0xe8, 0x89, 0x73, 0x5c, 0x82, 0xf0, 0xd3, 0x10,
-	0xcd, 0x95, 0xc4, 0xc6, 0x3c, 0xb1, 0xf0, 0xd6, 0x12, 0xd1, 0x07, 0xd8, 0x3d, 0xee, 0x09, 0x92,
-	0xef, 0xc6, 0x0a, 0xc9, 0xf4, 0x92, 0xec, 0xad, 0x36, 0xb6, 0x18, 0x70, 0x1f, 0x40, 0x3b, 0xbd,
-	0xdd, 0xd3, 0xc6, 0xfa, 0xd7, 0x6e, 0xb7, 0xb6, 0xbd, 0xf2, 0x46, 0x1b, 0x1b, 0xee, 0x43, 0xa5,
-	0xd8, 0xe7, 0x81, 0x0d, 0x0f, 0x94, 0x17, 0x9a, 0x43, 0xa2, 0xef, 0x0c, 0x6e, 0xb7, 0xd0, 0xd2,
-	0xb9, 0xfb, 0x0a, 0x45, 0xed, 0x3e, 0x54, 0x94, 0x18, 0xa0, 0xc9, 0x44, 0x07, 0xdb, 0x89, 0x5c,
-	0x14, 0x97, 0x97, 0x5a, 0x53, 0x86, 0x0f, 0xa0, 0x3c, 0xd6, 0xd4, 0xff, 0x98, 0xea, 0xb1, 0x23,
-	0xe6, 0xcd, 0x50, 0x48, 0x4d, 0x19, 0xde, 0x83, 0x12, 0x0d, 0x95, 0xf3, 0x36, 0xbd, 0xb7, 0x45,
-	0x43, 0xd5, 0x94, 0x61, 0x04, 0x37, 0x14, 0x7e, 0xb6, 0x6d, 0x1c, 0xb9, 0x55, 0x89, 0xac, 0x5e,
-	0xab, 0xb1, 0x83, 0xcd, 0x56, 0xd9, 0x89, 0xaf, 0x9c, 0xd6, 0x94, 0xd1, 0x8f, 0x0d, 0x08, 0x97,
-	0x9b, 0x4e, 0x9f, 0xfe, 0x87, 0x55, 0x8f, 0xe0, 0xa6, 0x71, 0xbf, 0xfe, 0xea, 0xac, 0x8a, 0x57,
-	0x17, 0xbb, 0xc2, 0x18, 0xee, 0xac, 0x53, 0x23, 0x24, 0x93, 0x68, 0x55, 0xdd, 0xf2, 0xe8, 0xce,
-	0x0a, 0x3d, 0x9d, 0x1b, 0x61, 0x0d, 0x2a, 0xa8, 0xe4, 0xaa, 0xb3, 0xe4, 0x41, 0x40, 0x25, 0x8b,
-	0xc6, 0xc7, 0xb0, 0xb3, 0x22, 0x8a, 0xbe, 0xeb, 0x1e, 0xbb, 0x55, 0x60, 0x8b, 0xb6, 0xc3, 0x74,
-	0x32, 0xe5, 0xc1, 0xc5, 0x94, 0x07, 0x97, 0x53, 0xce, 0xbe, 0xe4, 0x9c, 0xfd, 0xcc, 0x39, 0xfb,
-	0x95, 0x73, 0x36, 0xc9, 0x39, 0xfb, 0x9d, 0x73, 0xf6, 0x27, 0xe7, 0xc1, 0x65, 0xce, 0xd9, 0xb7,
-	0x19, 0x0f, 0x26, 0x33, 0x1e, 0x5c, 0xcc, 0x78, 0xf0, 0xfe, 0x79, 0x57, 0xc7, 0xcb, 0x3b, 0x48,
-	0xf4, 0x3f, 0xae, 0xe7, 0xc5, 0xfa, 0xf3, 0x59, 0xc9, 0xdf, 0xd0, 0xb3, 0xbf, 0x01, 0x00, 0x00,
-	0xff, 0xff, 0x58, 0x67, 0x0b, 0x77, 0x78, 0x03, 0x00, 0x00,
+	// 470 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x92, 0x41, 0x6b, 0x13, 0x41,
+	0x14, 0xc7, 0x77, 0x52, 0x1b, 0xe9, 0x24, 0x28, 0x5d, 0x15, 0x53, 0x8a, 0x63, 0x1a, 0x3d, 0x14,
+	0x0f, 0x1b, 0x83, 0xe0, 0xc5, 0x93, 0x2d, 0x8a, 0x01, 0x41, 0x48, 0x8b, 0x07, 0x41, 0xc2, 0x74,
+	0xe7, 0x99, 0x1d, 0xb2, 0x99, 0x59, 0xdf, 0xcc, 0x6e, 0xe8, 0x4d, 0xbf, 0x81, 0x47, 0x3f, 0x82,
+	0x1f, 0xc5, 0x63, 0x8e, 0x3d, 0x9a, 0xcd, 0xc5, 0x63, 0x3f, 0x82, 0xec, 0x6c, 0x36, 0x59, 0x3c,
+	0xf4, 0x38, 0xff, 0xff, 0xef, 0xff, 0x7f, 0x8f, 0xe1, 0xd1, 0x81, 0x85, 0x59, 0xa2, 0x91, 0xc7,
+	0x7d, 0x03, 0x98, 0x01, 0xf6, 0x79, 0x22, 0xfb, 0x80, 0xa8, 0x51, 0x80, 0xe5, 0x32, 0x36, 0xfd,
+	0x6c, 0xd0, 0x9f, 0x81, 0x31, 0x7c, 0x02, 0x41, 0x82, 0xda, 0x6a, 0xff, 0x49, 0x15, 0x09, 0xca,
+	0x48, 0xc0, 0x13, 0x19, 0xd4, 0x23, 0x41, 0x36, 0xe8, 0x1d, 0xd2, 0x83, 0x73, 0x6e, 0xa6, 0xaf,
+	0x63, 0x04, 0x2e, 0x2e, 0xcf, 0x2c, 0x47, 0x0b, 0xe2, 0x2d, 0x97, 0x71, 0x8a, 0xd0, 0xfb, 0x4e,
+	0xe8, 0xe1, 0x69, 0x8a, 0x08, 0xca, 0x9e, 0x20, 0x57, 0x61, 0x74, 0x1a, 0x71, 0x35, 0xd9, 0xf8,
+	0xfe, 0x73, 0x7a, 0x3f, 0x2c, 0xed, 0xf1, 0x85, 0xf3, 0xc7, 0x56, 0x4f, 0x41, 0x75, 0x48, 0x97,
+	0x1c, 0xb7, 0x47, 0x7e, 0x58, 0x8f, 0x9e, 0x17, 0x4e, 0x91, 0x40, 0xf8, 0x9a, 0x82, 0xf9, 0x2f,
+	0xd1, 0x28, 0x13, 0x6b, 0xaf, 0x96, 0xe8, 0x7d, 0xa6, 0x07, 0x67, 0x11, 0x47, 0xf1, 0x61, 0xae,
+	0x00, 0x4d, 0x24, 0x93, 0xf7, 0xda, 0xd8, 0x6a, 0x81, 0x47, 0x94, 0xea, 0x42, 0x1f, 0x47, 0xda,
+	0x58, 0x37, 0x76, 0x6f, 0xb4, 0xe7, 0x94, 0x77, 0xda, 0x58, 0xff, 0x88, 0xb6, 0xab, 0xfd, 0x1c,
+	0xd0, 0x70, 0x40, 0x6b, 0xad, 0x15, 0x48, 0xef, 0x67, 0x83, 0x3e, 0x1c, 0x81, 0xc5, 0xcb, 0x11,
+	0x24, 0xb1, 0x0c, 0xb9, 0x95, 0x5a, 0x55, 0xed, 0x47, 0xb4, 0xad, 0xf8, 0x0c, 0x4c, 0xc2, 0x43,
+	0x18, 0x4b, 0xb1, 0xee, 0x6f, 0x6d, 0xb4, 0xa1, 0xf0, 0x1f, 0xd3, 0xd6, 0x5c, 0xe3, 0xf4, 0x4b,
+	0xac, 0xe7, 0x05, 0x51, 0x0e, 0xa0, 0x95, 0x34, 0x14, 0xfe, 0x03, 0xda, 0xc4, 0x54, 0x15, 0xde,
+	0x8e, 0xf3, 0x76, 0x31, 0x55, 0x43, 0xe1, 0x3f, 0xa5, 0x77, 0x4c, 0xf1, 0xd7, 0x63, 0xc8, 0x8a,
+	0xed, 0xa4, 0xe8, 0xdc, 0xea, 0x92, 0xe3, 0x9d, 0x51, 0xdb, 0xa9, 0x6f, 0x0a, 0x71, 0x28, 0xfc,
+	0x80, 0xde, 0xab, 0x53, 0x19, 0xa0, 0x91, 0x5a, 0x75, 0x76, 0x1d, 0xba, 0xbf, 0x45, 0x3f, 0x96,
+	0x86, 0xdf, 0xa5, 0x6d, 0x50, 0x62, 0xdb, 0xd9, 0x74, 0x20, 0x05, 0x25, 0xaa, 0xc6, 0x67, 0x74,
+	0x7f, 0x4b, 0x54, 0x7d, 0xb7, 0x1d, 0x76, 0xb7, 0xc2, 0xd6, 0x6d, 0x27, 0xf1, 0x62, 0xc9, 0xbc,
+	0xab, 0x25, 0xf3, 0xae, 0x97, 0x8c, 0x7c, 0xcb, 0x19, 0xf9, 0x95, 0x33, 0xf2, 0x3b, 0x67, 0x64,
+	0x91, 0x33, 0xf2, 0x27, 0x67, 0xe4, 0x6f, 0xce, 0xbc, 0xeb, 0x9c, 0x91, 0x1f, 0x2b, 0xe6, 0x2d,
+	0x56, 0xcc, 0xbb, 0x5a, 0x31, 0xef, 0xd3, 0xcb, 0x89, 0x0e, 0x36, 0x87, 0x27, 0xf5, 0x0d, 0xe7,
+	0xfa, 0xaa, 0xfe, 0xbe, 0x68, 0xba, 0xa3, 0x7d, 0xf1, 0x2f, 0x00, 0x00, 0xff, 0xff, 0xa9, 0xaa,
+	0xa0, 0x9f, 0xe9, 0x02, 0x00, 0x00,
 }
 
 func (this *TaskAlreadyStartedFailure) Equal(that interface{}) bool {
@@ -467,47 +398,14 @@ func (this *ShardOwnershipLostFailure) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *RetryTaskFailure) Equal(that interface{}) bool {
+func (this *RetryReplicationFailure) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*RetryTaskFailure)
+	that1, ok := that.(*RetryReplicationFailure)
 	if !ok {
-		that2, ok := that.(RetryTaskFailure)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if this.NamespaceId != that1.NamespaceId {
-		return false
-	}
-	if this.WorkflowId != that1.WorkflowId {
-		return false
-	}
-	if this.RunId != that1.RunId {
-		return false
-	}
-	if this.NextEventId != that1.NextEventId {
-		return false
-	}
-	return true
-}
-func (this *RetryTaskV2Failure) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*RetryTaskV2Failure)
-	if !ok {
-		that2, ok := that.(RetryTaskV2Failure)
+		that2, ok := that.(RetryReplicationFailure)
 		if ok {
 			that1 = &that2
 		} else {
@@ -573,25 +471,12 @@ func (this *ShardOwnershipLostFailure) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *RetryTaskFailure) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 8)
-	s = append(s, "&errordetails.RetryTaskFailure{")
-	s = append(s, "NamespaceId: "+fmt.Sprintf("%#v", this.NamespaceId)+",\n")
-	s = append(s, "WorkflowId: "+fmt.Sprintf("%#v", this.WorkflowId)+",\n")
-	s = append(s, "RunId: "+fmt.Sprintf("%#v", this.RunId)+",\n")
-	s = append(s, "NextEventId: "+fmt.Sprintf("%#v", this.NextEventId)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *RetryTaskV2Failure) GoString() string {
+func (this *RetryReplicationFailure) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 11)
-	s = append(s, "&errordetails.RetryTaskV2Failure{")
+	s = append(s, "&errordetails.RetryReplicationFailure{")
 	s = append(s, "NamespaceId: "+fmt.Sprintf("%#v", this.NamespaceId)+",\n")
 	s = append(s, "WorkflowId: "+fmt.Sprintf("%#v", this.WorkflowId)+",\n")
 	s = append(s, "RunId: "+fmt.Sprintf("%#v", this.RunId)+",\n")
@@ -707,7 +592,7 @@ func (m *ShardOwnershipLostFailure) MarshalToSizedBuffer(dAtA []byte) (int, erro
 	return len(dAtA) - i, nil
 }
 
-func (m *RetryTaskFailure) Marshal() (dAtA []byte, err error) {
+func (m *RetryReplicationFailure) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -717,61 +602,12 @@ func (m *RetryTaskFailure) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *RetryTaskFailure) MarshalTo(dAtA []byte) (int, error) {
+func (m *RetryReplicationFailure) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *RetryTaskFailure) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.NextEventId != 0 {
-		i = encodeVarintMessage(dAtA, i, uint64(m.NextEventId))
-		i--
-		dAtA[i] = 0x20
-	}
-	if len(m.RunId) > 0 {
-		i -= len(m.RunId)
-		copy(dAtA[i:], m.RunId)
-		i = encodeVarintMessage(dAtA, i, uint64(len(m.RunId)))
-		i--
-		dAtA[i] = 0x1a
-	}
-	if len(m.WorkflowId) > 0 {
-		i -= len(m.WorkflowId)
-		copy(dAtA[i:], m.WorkflowId)
-		i = encodeVarintMessage(dAtA, i, uint64(len(m.WorkflowId)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.NamespaceId) > 0 {
-		i -= len(m.NamespaceId)
-		copy(dAtA[i:], m.NamespaceId)
-		i = encodeVarintMessage(dAtA, i, uint64(len(m.NamespaceId)))
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *RetryTaskV2Failure) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *RetryTaskV2Failure) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *RetryTaskV2Failure) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *RetryReplicationFailure) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -874,31 +710,7 @@ func (m *ShardOwnershipLostFailure) Size() (n int) {
 	return n
 }
 
-func (m *RetryTaskFailure) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.NamespaceId)
-	if l > 0 {
-		n += 1 + l + sovMessage(uint64(l))
-	}
-	l = len(m.WorkflowId)
-	if l > 0 {
-		n += 1 + l + sovMessage(uint64(l))
-	}
-	l = len(m.RunId)
-	if l > 0 {
-		n += 1 + l + sovMessage(uint64(l))
-	}
-	if m.NextEventId != 0 {
-		n += 1 + sovMessage(uint64(m.NextEventId))
-	}
-	return n
-}
-
-func (m *RetryTaskV2Failure) Size() (n int) {
+func (m *RetryReplicationFailure) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -968,24 +780,11 @@ func (this *ShardOwnershipLostFailure) String() string {
 	}, "")
 	return s
 }
-func (this *RetryTaskFailure) String() string {
+func (this *RetryReplicationFailure) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&RetryTaskFailure{`,
-		`NamespaceId:` + fmt.Sprintf("%v", this.NamespaceId) + `,`,
-		`WorkflowId:` + fmt.Sprintf("%v", this.WorkflowId) + `,`,
-		`RunId:` + fmt.Sprintf("%v", this.RunId) + `,`,
-		`NextEventId:` + fmt.Sprintf("%v", this.NextEventId) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *RetryTaskV2Failure) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&RetryTaskV2Failure{`,
+	s := strings.Join([]string{`&RetryReplicationFailure{`,
 		`NamespaceId:` + fmt.Sprintf("%v", this.NamespaceId) + `,`,
 		`WorkflowId:` + fmt.Sprintf("%v", this.WorkflowId) + `,`,
 		`RunId:` + fmt.Sprintf("%v", this.RunId) + `,`,
@@ -1296,7 +1095,7 @@ func (m *ShardOwnershipLostFailure) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *RetryTaskFailure) Unmarshal(dAtA []byte) error {
+func (m *RetryReplicationFailure) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1319,178 +1118,10 @@ func (m *RetryTaskFailure) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: RetryTaskFailure: wiretype end group for non-group")
+			return fmt.Errorf("proto: RetryReplicationFailure: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RetryTaskFailure: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NamespaceId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.NamespaceId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field WorkflowId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.WorkflowId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RunId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.RunId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NextEventId", wireType)
-			}
-			m.NextEventId = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.NextEventId |= int64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMessage(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *RetryTaskV2Failure) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMessage
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: RetryTaskV2Failure: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RetryTaskV2Failure: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: RetryReplicationFailure: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
