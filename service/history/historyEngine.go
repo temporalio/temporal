@@ -2511,6 +2511,18 @@ func (e *historyEngineImpl) NotifyNewTransferTasks(
 	}
 }
 
+func (e *historyEngineImpl) NotifyNewVisibilityTasks(
+	tasks []persistence.Task,
+) {
+
+	if len(tasks) > 0 {
+		// TODO (alex): add visibility processor
+		// task := tasks[0]
+		// clusterName := e.clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())
+		// e.visibilityProcessor.NotifyNewTask(clusterName, tasks)
+	}
+}
+
 func (e *historyEngineImpl) NotifyNewReplicationTasks(
 	tasks []persistence.Task,
 ) {

@@ -233,6 +233,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 		return taskGenerator.generateRecordWorkflowStartedTasks(
 			now,
 			startEvent,
+			r.config.UseKafkaForVisibility(),
 		)
 	}
 

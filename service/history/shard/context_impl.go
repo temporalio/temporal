@@ -577,6 +577,7 @@ func (s *ContextImpl) ResetWorkflowExecution(request *persistence.ResetWorkflowE
 			request.CurrentWorkflowMutation.TransferTasks,
 			request.CurrentWorkflowMutation.ReplicationTasks,
 			request.CurrentWorkflowMutation.TimerTasks,
+			request.CurrentWorkflowMutation.VisibilityTasks,
 			&transferMaxReadLevel,
 		); err != nil {
 			return err
@@ -588,6 +589,7 @@ func (s *ContextImpl) ResetWorkflowExecution(request *persistence.ResetWorkflowE
 		request.NewWorkflowSnapshot.TransferTasks,
 		request.NewWorkflowSnapshot.ReplicationTasks,
 		request.NewWorkflowSnapshot.TimerTasks,
+		request.NewWorkflowSnapshot.VisibilityTasks,
 		&transferMaxReadLevel,
 	); err != nil {
 		return err
@@ -665,6 +667,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 			request.CurrentWorkflowMutation.TransferTasks,
 			request.CurrentWorkflowMutation.ReplicationTasks,
 			request.CurrentWorkflowMutation.TimerTasks,
+			request.CurrentWorkflowMutation.VisibilityTasks,
 			&transferMaxReadLevel,
 		); err != nil {
 			return err
@@ -676,6 +679,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		request.ResetWorkflowSnapshot.TransferTasks,
 		request.ResetWorkflowSnapshot.ReplicationTasks,
 		request.ResetWorkflowSnapshot.TimerTasks,
+		request.ResetWorkflowSnapshot.VisibilityTasks,
 		&transferMaxReadLevel,
 	); err != nil {
 		return err
@@ -687,6 +691,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 			request.NewWorkflowSnapshot.TransferTasks,
 			request.NewWorkflowSnapshot.ReplicationTasks,
 			request.NewWorkflowSnapshot.TimerTasks,
+			request.NewWorkflowSnapshot.VisibilityTasks,
 			&transferMaxReadLevel,
 		); err != nil {
 			return err
