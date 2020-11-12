@@ -180,7 +180,7 @@ workflow_state = ? ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateVisibilityTaskQuery = `INSERT INTO executions (` +
-		`shard_id, type, namespace_id, workflow_id, run_id, visibility, visibility_encoding, visibility_ts, task_id) ` +
+		`shard_id, type, namespace_id, workflow_id, run_id, visibility_task_data, visibility_task_encoding, visibility_ts, task_id) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateTimerTaskQuery = `INSERT INTO executions (` +

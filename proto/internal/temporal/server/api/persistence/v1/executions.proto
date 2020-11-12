@@ -39,7 +39,6 @@ import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
-import "temporal/server/api/indexer/v1/message.proto";
 
 // shard column
 message ShardInfo {
@@ -182,7 +181,6 @@ message VisibilityTaskInfo {
     temporal.server.api.enums.v1.TaskType task_type = 4;
     int64 version = 5;
     int64 task_id = 6;
-    map<string, temporal.server.api.indexer.v1.Field> fields = 7;
 }
 
 // timer column
