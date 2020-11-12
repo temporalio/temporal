@@ -521,6 +521,7 @@ func (mdb *db) ReplaceIntoSignalsRequestedSets(
 		createSignalsRequestedSetQry,
 		rows,
 	)
+
 }
 
 // SelectFromSignalsRequestedSets reads one or more rows from signals_requested_sets table
