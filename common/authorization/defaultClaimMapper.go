@@ -72,7 +72,7 @@ func (a *defaultClaimMapper) GetClaims(authInfo AuthInfo) (*Claims, error) {
 						claims.namespaces = make(map[string]Role)
 					}
 					role := claims.namespaces[namespace]
-					role |= permissionToRole(parts[0])
+					role |= permissionToRole(parts[1])
 					claims.namespaces[namespace] = role
 				}
 			}
