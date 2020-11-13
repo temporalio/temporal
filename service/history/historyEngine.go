@@ -2517,9 +2517,7 @@ func (e *historyEngineImpl) NotifyNewVisibilityTasks(
 
 	if len(tasks) > 0 {
 		// TODO (alex): add visibility processor
-		// task := tasks[0]
-		// clusterName := e.clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())
-		// e.visibilityProcessor.NotifyNewTask(clusterName, tasks)
+		// e.visibilityProcessor.NotifyNewTask()
 	}
 }
 

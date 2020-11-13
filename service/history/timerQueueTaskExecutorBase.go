@@ -264,7 +264,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 	msBuilder mutableState,
 ) error {
 
-	if t.config.UseKafkaForVisibility() {
+	if !t.config.DisableKafkaForVisibility() {
 		op := func() error {
 			request := &persistence.VisibilityDeleteWorkflowExecutionRequest{
 				NamespaceID: task.GetNamespaceId(),

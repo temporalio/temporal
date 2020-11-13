@@ -236,7 +236,7 @@ type Config struct {
 	EnableDropStuckTaskByNamespaceID dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
 	SkipReapplicationByNamespaceId   dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
 
-	UseKafkaForVisibility dynamicconfig.BoolPropertyFn
+	DisableKafkaForVisibility dynamicconfig.BoolPropertyFn
 }
 
 const (
@@ -399,7 +399,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		EnableDropStuckTaskByNamespaceID: dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.EnableDropStuckTaskByNamespaceID, false),
 		SkipReapplicationByNamespaceId:   dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.SkipReapplicationByNamespaceId, false),
 
-		UseKafkaForVisibility: dc.GetBoolProperty(dynamicconfig.UseKafkaForVisibility, true),
+		DisableKafkaForVisibility: dc.GetBoolProperty(dynamicconfig.DisableKafkaForVisibility, false),
 	}
 
 	return cfg

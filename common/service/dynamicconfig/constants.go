@@ -256,7 +256,7 @@ var keys = map[Key]string{
 	SkipReapplicationByNamespaceId:                         "history.SkipReapplicationByNamespaceId",
 	DefaultActivityRetryPolicy:                             "history.defaultActivityRetryPolicy",
 	DefaultWorkflowRetryPolicy:                             "history.defaultWorkflowRetryPolicy",
-	UseKafkaForVisibility:                                  "history.useKafkaForVisibility",
+	DisableKafkaForVisibility:                              "history.disableKafkaForVisibility",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -658,8 +658,8 @@ const (
 	// SkipReapplicationByNameSpaceId is whether skipping a event re-application for a namespace
 	SkipReapplicationByNamespaceId
 
-	// UseKafkaForVisibility is to indicate if Kafka or internal visibility queue should be used for visibility.
-	UseKafkaForVisibility
+	// DisableKafkaForVisibility is to indicate if Kafka or internal visibility queue should be used for visibility.
+	DisableKafkaForVisibility
 
 	// key for worker
 

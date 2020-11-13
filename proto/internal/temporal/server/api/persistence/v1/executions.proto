@@ -58,7 +58,6 @@ message ShardInfo {
     map<string, int64> cluster_replication_level = 12;
     map<string, int64> replication_dlq_ack_level = 13;
     int64 visibility_ack_level = 14;
-    map<string, int64> cluster_visibility_level = 15;
 }
 
 // execution column
