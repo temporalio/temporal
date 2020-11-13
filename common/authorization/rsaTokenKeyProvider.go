@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -56,11 +57,11 @@ type jsonWebKeys struct {
 
 // Default RSA token key provider
 type rsaKeyProvider struct {
-	config config.JWTKeyProvider
-	keys   map[string]*rsa.PublicKey
-	timer  *time.Timer
-	logger log.Logger
+	config   config.JWTKeyProvider
+	keys     map[string]*rsa.PublicKey
 	keysLock sync.RWMutex
+	timer    *time.Timer
+	logger   log.Logger
 }
 
 var _ TokenKeyProvider = (*rsaKeyProvider)(nil)
@@ -74,12 +75,11 @@ func NewRSAKeyProvider(cfg *config.Config) *rsaKeyProvider {
 
 func (a *rsaKeyProvider) init() {
 	a.keys = make(map[string]*rsa.PublicKey)
-	if len(a.config.KeySourceURIs) == 0 {
-		return // nothing to do
-	}
-	err := a.updateKeys()
-	if err != nil {
-		a.logger.Error("error during initial retrieval of RSA token keys: ", tag.Error(err))
+	if len(a.config.KeySourceURIs) > 0 {
+		err := a.updateKeys()
+		if err != nil {
+			a.logger.Error("error during initial retrieval of RSA token keys: ", tag.Error(err))
+		}
 	}
 	a.timer = time.AfterFunc(a.config.RefreshTime, func() {
 		a.timerCallback()
@@ -87,7 +87,7 @@ func (a *rsaKeyProvider) init() {
 }
 
 func (a *rsaKeyProvider) rsaKey(alg string, kid string) (*rsa.PublicKey, error) {
-	if strings.ToLower(alg) != "rs256" {
+	if !strings.EqualFold(alg, "rs256") {
 		return nil, fmt.Errorf("unexpected signing algorithm: %s", alg)
 	}
 
@@ -101,9 +101,11 @@ func (a *rsaKeyProvider) rsaKey(alg string, kid string) (*rsa.PublicKey, error) 
 }
 
 func (a *rsaKeyProvider) timerCallback() {
-	err := a.updateKeys()
-	if err != nil {
-		a.logger.Error("error while refreshing RSA token keys: ", tag.Error(err))
+	if len(a.config.KeySourceURIs) > 0 {
+		err := a.updateKeys()
+		if err != nil {
+			a.logger.Error("error while refreshing RSA token keys: ", tag.Error(err))
+		}
 	}
 	a.timer = time.AfterFunc(a.config.RefreshTime, func() {
 		a.timerCallback()

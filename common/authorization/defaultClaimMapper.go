@@ -29,20 +29,26 @@ import (
 	"strings"
 
 	"github.com/dgrijalva/jwt-go"
+
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/service/config"
 )
 
 // Default claim mapper that gives system level admin permission to everybody
 type defaultClaimMapper struct {
 	keyProvider TokenKeyProvider
+	logger      log.Logger
 }
 
-func NewDefaultClaimMapper(provider TokenKeyProvider) ClaimMapper {
-	return &defaultClaimMapper{keyProvider: provider}
+func NewDefaultClaimMapper(provider TokenKeyProvider, cfg *config.Config) ClaimMapper {
+	logger := loggerimpl.NewLogger(cfg.Log.NewZapLogger())
+	return &defaultClaimMapper{keyProvider: provider, logger: logger}
 }
 
 var _ ClaimMapper = (*defaultClaimMapper)(nil)
 
-func (a *defaultClaimMapper) GetClaims(authInfo AuthInfo) (*Claims, error) {
+func (a *defaultClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 
 	claims := Claims{}
 
@@ -51,30 +57,40 @@ func (a *defaultClaimMapper) GetClaims(authInfo AuthInfo) (*Claims, error) {
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("unexpected authorization token format")
 		}
-		name := strings.ToLower(parts[0])
-		if name != "bearer" {
-			return nil, fmt.Errorf("unexpected name in authorization token: %s", name)
+		if !strings.EqualFold(parts[0], "bearer") {
+			return nil, fmt.Errorf("unexpected name in authorization token: %s", parts[0])
 		}
 		jwtClaims, err := parseJWT(parts[1], a.keyProvider)
 		if err != nil {
 			return nil, err
 		}
-		claims.subject = jwtClaims["sub"].(string)
+		subject, ok := jwtClaims["sub"].(string)
+		if !ok {
+			return nil, fmt.Errorf("unexpected value type of \"sub\" claim")
+		}
+		claims.subject = subject
 		permissions := jwtClaims["permissions"].([]interface{})
 		for _, permission := range permissions {
-			parts := strings.Split(permission.(string), ":")
-			if len(parts) == 2 {
-				namespace := parts[0]
-				if namespace == "system" {
-					claims.system |= permissionToRole(parts[1])
-				} else {
-					if claims.namespaces == nil {
-						claims.namespaces = make(map[string]Role)
-					}
-					role := claims.namespaces[namespace]
-					role |= permissionToRole(parts[1])
-					claims.namespaces[namespace] = role
+			p, ok := permission.(string)
+			if !ok {
+				a.logger.Warn(fmt.Sprintf("ignoring permission that is not a string: %v", permission))
+				continue
+			}
+			parts := strings.Split(p, ":")
+			if len(parts) != 2 {
+				a.logger.Warn(fmt.Sprintf("ignoring permission in unexpected format: %v", permission))
+				continue
+			}
+			namespace := strings.ToLower(parts[0])
+			if strings.EqualFold(namespace, "system") {
+				claims.system |= permissionToRole(parts[1])
+			} else {
+				if claims.namespaces == nil {
+					claims.namespaces = make(map[string]Role)
 				}
+				role := claims.namespaces[namespace]
+				role |= permissionToRole(parts[1])
+				claims.namespaces[namespace] = role
 			}
 		}
 	}
@@ -93,7 +109,7 @@ func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, 
 		} else if _, ok := token.Method.(*jwt.SigningMethodECDSA); ok {
 			return keyProvider.ecdsaKey(alg, kid)
 		}
-		return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		return nil, fmt.Errorf("unexpected signing method: %v for algorithm: %v", token.Method, token.Header["alg"])
 	})
 
 	if err != nil {
@@ -107,7 +123,7 @@ func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, 
 }
 
 func permissionToRole(permission string) Role {
-	switch permission {
+	switch strings.ToLower(permission) {
 	case "read":
 		return RoleReader
 	case "write":

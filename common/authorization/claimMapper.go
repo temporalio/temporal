@@ -30,7 +30,7 @@ import (
 	"crypto/x509/pkix"
 )
 
-// Authentication information from subjects JWT token or/and mTLS certificate
+// Authentication information from subject's JWT token or/and mTLS certificate
 type AuthInfo struct {
 	authToken  string
 	tlsSubject *pkix.Name
@@ -38,7 +38,7 @@ type AuthInfo struct {
 
 // Converts authorization info of a subject into Temporal claims (permissions) for authorization
 type ClaimMapper interface {
-	GetClaims(authInfo AuthInfo) (*Claims, error)
+	GetClaims(authInfo *AuthInfo) (*Claims, error)
 }
 
 // No-op claim mapper that gives system level admin permission to everybody
@@ -48,6 +48,6 @@ func NewNoopClaimMapper() ClaimMapper {
 	return &noopClaimMapper{}
 }
 
-func (a *noopClaimMapper) GetClaims(_ AuthInfo) (*Claims, error) {
+func (*noopClaimMapper) GetClaims(_ *AuthInfo) (*Claims, error) {
 	return &Claims{system: RoleAdmin}, nil
 }

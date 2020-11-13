@@ -50,9 +50,9 @@ func (a *interceptor) Interceptor(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 
-	var caller *Claims
+	var claims *Claims
 
-	if a.claimMapper != nil {
+	if a.claimMapper != nil && a.authorizer != nil {
 		var tlsSubject *pkix.Name
 		var authHeaders []string
 
@@ -68,15 +68,17 @@ func (a *interceptor) Interceptor(
 		}
 		// Add auth into to ctx only if there's some auth info
 		if tlsSubject != nil || len(authHeaders) > 0 {
-			authInfo := AuthInfo{authHeaders[0], tlsSubject}
-			if a.authorizer != nil {
-				claims, err := a.claimMapper.GetClaims(authInfo)
-				if err != nil {
-					return nil, err
-				}
-				caller = claims
-				ctx = context.WithValue(ctx, "auth-claims", claims)
+			var authHeader string
+			if len(authHeaders) > 0 {
+				authHeader = authHeaders[0]
 			}
+			authInfo := AuthInfo{authHeader, tlsSubject}
+			mappedClaims, err := a.claimMapper.GetClaims(&authInfo)
+			if err != nil {
+				return nil, err
+			}
+			claims = mappedClaims
+			ctx = context.WithValue(ctx, "auth-mappedClaims", mappedClaims)
 		}
 	}
 

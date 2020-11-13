@@ -133,7 +133,7 @@ func buildCLI() *cli.App {
 					temporal.WithAuthorizer(authorization.NewNopAuthorizer()),
 					temporal.WithClaimMapper(func(cfg *config.Config) authorization.ClaimMapper {
 						return authorization.NewDefaultClaimMapper(
-							authorization.NewRSAKeyProvider(cfg))
+							authorization.NewRSAKeyProvider(cfg), cfg)
 					}),
 				)
 
