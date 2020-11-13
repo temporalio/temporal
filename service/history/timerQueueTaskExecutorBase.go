@@ -278,11 +278,10 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 		return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	}
 
-	currentVersion := msBuilder.GetCurrentVersion()
 	msBuilder.AddVisibilityTasks(&persistence.DeleteExecutionVisibilityTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: time.Now().UTC(),
-		Version:             currentVersion,
+		Version:             task.GetVersion(),
 	})
 	return nil
 }

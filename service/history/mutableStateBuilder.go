@@ -3931,7 +3931,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		}
 	}
 
-	setTaskInfo(e.GetCurrentVersion(), now, e.insertTransferTasks, e.insertTimerTasks)
+	setTaskInfo(e.GetCurrentVersion(), now, e.insertTransferTasks, e.insertTimerTasks, e.insertVisibilityTasks)
 
 	// update last update time
 	e.executionInfo.LastUpdateTime = &now
@@ -4017,7 +4017,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		}
 	}
 
-	setTaskInfo(e.GetCurrentVersion(), now, e.insertTransferTasks, e.insertTimerTasks)
+	setTaskInfo(e.GetCurrentVersion(), now, e.insertTransferTasks, e.insertTimerTasks, e.insertVisibilityTasks)
 
 	// update last update time
 	e.executionInfo.LastUpdateTime = &now

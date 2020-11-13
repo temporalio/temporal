@@ -131,6 +131,7 @@ func newMutableStateTaskGenerator(
 		disableKafkaForVisibility: false,
 	}
 
+	// TODO (alex): remove when kafka deprecation is done.
 	if ms, ok := mutableState.(*mutableStateBuilder); ok {
 		mstg.disableKafkaForVisibility = ms.config.DisableKafkaForVisibility()
 	}
