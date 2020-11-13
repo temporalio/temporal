@@ -78,9 +78,9 @@ const (
 	rowTypeReplicationWorkflowID  = "20000000-5000-f000-f000-000000000000"
 	rowTypeReplicationRunID       = "30000000-5000-f000-f000-000000000000"
 	// Row constants for visibility task row.
-	rowTypeVisibilityNamespaceID = "10000000-6000-f000-f000-000000000000"
-	rowTypeVisibilityWorkflowID  = "20000000-6000-f000-f000-000000000000"
-	rowTypeVisibilityRunID       = "30000000-6000-f000-f000-000000000000"
+	rowTypeVisibilityTaskNamespaceID = "10000000-6000-f000-f000-000000000000"
+	rowTypeVisibilityTaskWorkflowID  = "20000000-6000-f000-f000-000000000000"
+	rowTypeVisibilityTaskRunID       = "30000000-6000-f000-f000-000000000000"
 	// Row Constants for Replication Task DLQ Row. Source cluster name will be used as WorkflowID.
 	rowTypeDLQNamespaceID = "10000000-6000-f000-f000-000000000000"
 	rowTypeDLQRunID       = "30000000-6000-f000-f000-000000000000"
