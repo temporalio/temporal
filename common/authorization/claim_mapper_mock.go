@@ -58,7 +58,7 @@ func (m *MockClaimMapper) EXPECT() *MockClaimMapperMockRecorder {
 }
 
 // GetClaims mocks base method.
-func (m *MockClaimMapper) GetClaims(authInfo AuthInfo) (*Claims, error) {
+func (m *MockClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetClaims", authInfo)
 	ret0, _ := ret[0].(*Claims)

@@ -44,13 +44,13 @@ const (
 )
 
 var (
-	ctx                              = context.Background()
-	describeNamespaceAttributes      = &CallTarget{Namespace: testNamespace, APIName: "DescribeNamespace"}
-	describeNamespaceRequest         = &workflowservice.DescribeNamespaceRequest{Namespace: testNamespace}
-	describeNamespaceInfo            = &grpc.UnaryServerInfo{FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace"}
-	startWorkflowExecutionAttributes = &CallTarget{Namespace: testNamespace, APIName: "StartWorkflowExecution"}
-	startWorkflowExecutionRequest    = &workflowservice.StartWorkflowExecutionRequest{Namespace: testNamespace}
-	startWorkflowExecutionInfo       = &grpc.UnaryServerInfo{FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution"}
+	ctx                           = context.Background()
+	describeNamespaceTarget       = &CallTarget{Namespace: testNamespace, APIName: "DescribeNamespace", APIFullName: "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace"}
+	describeNamespaceRequest      = &workflowservice.DescribeNamespaceRequest{Namespace: testNamespace}
+	describeNamespaceInfo         = &grpc.UnaryServerInfo{FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace"}
+	startWorkflowExecutionTarget  = &CallTarget{Namespace: testNamespace, APIName: "StartWorkflowExecution", APIFullName: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution"}
+	startWorkflowExecutionRequest = &workflowservice.StartWorkflowExecutionRequest{Namespace: testNamespace}
+	startWorkflowExecutionInfo    = &grpc.UnaryServerInfo{FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution"}
 )
 
 type (
@@ -100,7 +100,7 @@ func (s *authorizerInterceptorSuite) TearDownTest() {
 }
 
 func (s *authorizerInterceptorSuite) TestIsAuthorized() {
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceAttributes).
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceTarget).
 		Return(Result{Decision: DecisionAllow}, nil).Times(1)
 
 	res, err := s.interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
@@ -109,7 +109,7 @@ func (s *authorizerInterceptorSuite) TestIsAuthorized() {
 }
 
 func (s *authorizerInterceptorSuite) TestIsAuthorizedWithNamespace() {
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, startWorkflowExecutionAttributes).
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, startWorkflowExecutionTarget).
 		Return(Result{Decision: DecisionAllow}, nil).Times(1)
 
 	res, err := s.interceptor(ctx, startWorkflowExecutionRequest, startWorkflowExecutionInfo, s.handler)
@@ -118,7 +118,7 @@ func (s *authorizerInterceptorSuite) TestIsAuthorizedWithNamespace() {
 }
 
 func (s *authorizerInterceptorSuite) TestIsUnauthorized() {
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceAttributes).
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceTarget).
 		Return(Result{Decision: DecisionDeny}, nil).Times(1)
 	s.mockMetricsScope.On("IncCounter", metrics.ServiceErrUnauthorizedCounter)
 
@@ -128,7 +128,7 @@ func (s *authorizerInterceptorSuite) TestIsUnauthorized() {
 }
 
 func (s *authorizerInterceptorSuite) TestAuthorizationFailed() {
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceAttributes).
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceTarget).
 		Return(Result{Decision: DecisionDeny}, errUnauthorized).Times(1)
 	s.mockMetricsScope.On("IncCounter", metrics.ServiceErrAuthorizeFailedCounter)
 
