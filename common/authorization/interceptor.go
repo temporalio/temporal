@@ -87,17 +87,18 @@ func (a *interceptor) Interceptor(
 			namespace = requestWithNamespace.GetNamespace()
 		}
 
-		apiName := info.FullMethod
-		index := strings.LastIndex(apiName, "/")
+		apiFullName := info.FullMethod
+		apiName := apiFullName
+		index := strings.LastIndex(apiFullName, "/")
 		if index > -1 {
-			apiName = apiName[index+1:]
+			apiName = apiFullName[index+1:]
 		}
 
 		scope := a.getMetricsScope(metrics.NumAuthorizationScopes, namespace)
 		sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
 		defer sw.Stop()
 
-		result, err := a.authorizer.Authorize(ctx, caller, &CallTarget{Namespace: namespace, APIName: apiName})
+		result, err := a.authorizer.Authorize(ctx, claims, &CallTarget{Namespace: namespace, APIFullName: apiFullName, APIName: apiName})
 		if err != nil {
 			scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
 			return nil, err

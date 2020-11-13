@@ -39,8 +39,9 @@ type (
 	// Attributes is input for authority to make decision.
 	// It can be extended in future if required auth on resources like WorkflowType and TaskQueue
 	CallTarget struct {
-		APIName   string
-		Namespace string
+		APIName     string
+		APIFullName string
+		Namespace   string
 	}
 
 	// Result is result from authority.
