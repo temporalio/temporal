@@ -256,6 +256,7 @@ var keys = map[Key]string{
 	SkipReapplicationByNamespaceId:                         "history.SkipReapplicationByNamespaceId",
 	DefaultActivityRetryPolicy:                             "history.defaultActivityRetryPolicy",
 	DefaultWorkflowRetryPolicy:                             "history.defaultWorkflowRetryPolicy",
+	UseKafkaForVisibility:                                  "history.useKafkaForVisibility",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -656,6 +657,9 @@ const (
 	EnableDropStuckTaskByNamespaceID
 	// SkipReapplicationByNameSpaceId is whether skipping a event re-application for a namespace
 	SkipReapplicationByNamespaceId
+
+	// UseKafkaForVisibility is to indicate if Kafka or internal visibility queue should be used for visibility.
+	UseKafkaForVisibility
 
 	// key for worker
 

@@ -508,7 +508,6 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowSearchAttrTasks(
 		Version:             currentVersion, // task processing does not check this version
 	})
 	return nil
-
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateWorkflowResetTasks(

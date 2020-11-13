@@ -173,7 +173,7 @@ message ReplicationTaskInfo {
     int64 task_id = 15;
 }
 
-// visibility column
+// visibility_task_data column
 message VisibilityTaskInfo {
     string namespace_id = 1;
     string workflow_id = 2;

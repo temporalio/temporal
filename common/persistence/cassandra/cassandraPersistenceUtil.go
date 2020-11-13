@@ -645,6 +645,9 @@ func createTransferTasks(
 			targetWorkflowID = task.(*p.StartChildExecutionTask).TargetWorkflowID
 			scheduleID = task.(*p.StartChildExecutionTask).InitiatedID
 
+		case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
+			// No explicit property needs to be set
+
 		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 			enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
 			enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
@@ -768,9 +771,9 @@ func createVisibilityTasks(
 ) error {
 
 	for _, task := range visibilityTasks {
-		version := common.EmptyVersion
-		version = task.GetVersion()
+		version := task.GetVersion()
 
+		// TODO (alex): add type specific properties or remove entire switch
 		switch task.GetType() {
 		case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
 		case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
