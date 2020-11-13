@@ -110,6 +110,8 @@ type (
 		TLS RootTLS `yaml:"tls"`
 		// Metrics is the metrics subsystem configuration
 		Metrics *Metrics `yaml:"metrics"`
+		// Settings for authentication and authorization
+		Security Security `yaml:"security"`
 	}
 
 	// RootTLS contains all TLS settings for the Temporal server
@@ -498,6 +500,17 @@ type (
 		State string `yaml:"state"`
 		// URI is the namespace default URI for visibility archiver
 		URI string `yaml:"URI"`
+	}
+
+	Security struct {
+		// Signing key provider for validating JWT tokens
+		JWTKeyProvider JWTKeyProvider `yaml:"jwtKeyProvider"`
+	}
+
+	// Contains the config for signing key provider for validating JWT tokens
+	JWTKeyProvider struct {
+		KeySourceURIs []string      `yaml:"keySourceURIs"`
+		RefreshTime   time.Duration `yaml:"refreshTime"`
 	}
 )
 
