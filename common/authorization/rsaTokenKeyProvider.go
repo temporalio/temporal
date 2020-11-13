@@ -60,6 +60,7 @@ type rsaKeyProvider struct {
 	keys   map[string]*rsa.PublicKey
 	timer  *time.Timer
 	logger log.Logger
+	keysLock sync.RWMutex
 }
 
 var _ TokenKeyProvider = (*rsaKeyProvider)(nil)
@@ -90,7 +91,9 @@ func (a *rsaKeyProvider) rsaKey(alg string, kid string) (*rsa.PublicKey, error) 
 		return nil, fmt.Errorf("unexpected signing algorithm: %s", alg)
 	}
 
+	a.keysLock.RLock()
 	key, found := a.keys[kid]
+	a.keysLock.RUnlock()
 	if !found {
 		return nil, fmt.Errorf("RSA key not found for key ID: %s", kid)
 	}
@@ -137,7 +140,9 @@ func (a *rsaKeyProvider) updateKeys() error {
 		}
 	}
 	// swap old keys with the new ones
+	a.keysLock.Lock()
 	a.keys = keys
+	a.keysLock.Unlock()
 	return nil
 }
 
