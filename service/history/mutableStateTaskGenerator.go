@@ -54,7 +54,6 @@ type (
 		generateRecordWorkflowStartedTasks(
 			now time.Time,
 			startEvent *historypb.HistoryEvent,
-			useKafkaForVisibility bool,
 		) error
 		generateDelayedWorkflowTasks(
 			now time.Time,
@@ -108,6 +107,9 @@ type (
 		logger         log.Logger
 
 		mutableState mutableState
+
+		// TODO (alex): remove when kafka deprecation is done.
+		useKafkaForVisibility bool
 	}
 )
 
@@ -121,12 +123,19 @@ func newMutableStateTaskGenerator(
 	mutableState mutableState,
 ) *mutableStateTaskGeneratorImpl {
 
-	return &mutableStateTaskGeneratorImpl{
+	mstg := &mutableStateTaskGeneratorImpl{
 		namespaceCache: namespaceCache,
 		logger:         logger,
 
-		mutableState: mutableState,
+		mutableState:          mutableState,
+		useKafkaForVisibility: true,
 	}
+
+	if ms, ok := mutableState.(*mutableStateBuilder); ok {
+		mstg.useKafkaForVisibility = ms.config.UseKafkaForVisibility()
+	}
+
+	return mstg
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
@@ -157,11 +166,19 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 	currentVersion := r.mutableState.GetCurrentVersion()
 	executionInfo := r.mutableState.GetExecutionInfo()
 
-	r.mutableState.AddTransferTasks(&persistence.CloseExecutionTask{
-		// TaskID is set by shard
-		VisibilityTimestamp: now,
-		Version:             currentVersion,
-	})
+	if r.useKafkaForVisibility {
+		r.mutableState.AddTransferTasks(&persistence.CloseExecutionTask{
+			// TaskID is set by shard
+			VisibilityTimestamp: now,
+			Version:             currentVersion,
+		})
+	} else {
+		r.mutableState.AddVisibilityTasks(&persistence.CloseExecutionVisibilityTask{
+			// TaskID is set by shard
+			VisibilityTimestamp: now,
+			Version:             currentVersion,
+		})
+	}
 
 	retentionInDays := defaultWorkflowRetentionInDays
 	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(executionInfo.NamespaceId)
@@ -219,13 +236,11 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedWorkflowTasks(
 func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
 	now time.Time,
 	startEvent *historypb.HistoryEvent,
-	useKafkaForVisibility bool,
 ) error {
 
 	startVersion := startEvent.GetVersion()
 
-	// TODO (alex): remove after kafka deprecation
-	if useKafkaForVisibility {
+	if r.useKafkaForVisibility {
 		r.mutableState.AddTransferTasks(&persistence.RecordWorkflowStartedTask{
 			// TaskID is set by shard
 			VisibilityTimestamp: now,
@@ -234,7 +249,7 @@ func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
 		return nil
 	}
 
-	r.mutableState.AddVisibilityTasks(&persistence.RecordWorkflowStartedVisibilityTask{
+	r.mutableState.AddVisibilityTasks(&persistence.StartExecutionVisibilityTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		Version:             startVersion,
@@ -478,13 +493,22 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowSearchAttrTasks(
 
 	currentVersion := r.mutableState.GetCurrentVersion()
 
-	r.mutableState.AddTransferTasks(&persistence.UpsertWorkflowSearchAttributesTask{
+	if r.useKafkaForVisibility {
+		r.mutableState.AddTransferTasks(&persistence.UpsertWorkflowSearchAttributesTask{
+			// TaskID is set by shard
+			VisibilityTimestamp: now,
+			Version:             currentVersion, // task processing does not check this version
+		})
+		return nil
+	}
+
+	r.mutableState.AddVisibilityTasks(&persistence.UpsertWorkflowSearchAttributesVisibilityTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		Version:             currentVersion, // task processing does not check this version
 	})
-
 	return nil
+
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateWorkflowResetTasks(

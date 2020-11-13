@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -135,7 +136,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 		return err
 	}
 
-	if err := t.deleteWorkflowVisibility(task); err != nil {
+	if err := t.deleteWorkflowVisibility(task, msBuilder); err != nil {
 		return err
 	}
 	// calling clear here to force accesses of mutable state to read database
@@ -202,7 +203,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 	}
 	// delete visibility record here regardless if it's been archived inline or not
 	// since the entire record is included as part of the archive request.
-	if err := t.deleteWorkflowVisibility(task); err != nil {
+	if err := t.deleteWorkflowVisibility(task, msBuilder); err != nil {
 		return err
 	}
 	// calling clear here to force accesses of mutable state to read database
@@ -260,19 +261,30 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 	task *persistencespb.TimerTaskInfo,
+	msBuilder mutableState,
 ) error {
 
-	op := func() error {
-		request := &persistence.VisibilityDeleteWorkflowExecutionRequest{
-			NamespaceID: task.GetNamespaceId(),
-			WorkflowID:  task.GetWorkflowId(),
-			RunID:       task.GetRunId(),
-			TaskID:      task.GetTaskId(),
+	if t.config.UseKafkaForVisibility() {
+		op := func() error {
+			request := &persistence.VisibilityDeleteWorkflowExecutionRequest{
+				NamespaceID: task.GetNamespaceId(),
+				WorkflowID:  task.GetWorkflowId(),
+				RunID:       task.GetRunId(),
+				TaskID:      task.GetTaskId(),
+			}
+			// TODO: expose GetVisibilityManager method on shardContext interface
+			return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecution(request) // delete from db
 		}
-		// TODO: expose GetVisibilityManager method on shardContext interface
-		return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecution(request) // delete from db
+		return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	}
-	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+
+	currentVersion := msBuilder.GetCurrentVersion()
+	msBuilder.AddVisibilityTasks(&persistence.DeleteExecutionVisibilityTask{
+		// TaskID is set by shard
+		VisibilityTimestamp: time.Now().UTC(),
+		Version:             currentVersion,
+	})
+	return nil
 }
 
 func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(

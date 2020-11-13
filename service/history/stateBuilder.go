@@ -157,7 +157,6 @@ func (b *stateBuilderImpl) applyEvents(
 			if err := taskGenerator.generateRecordWorkflowStartedTasks(
 				timestamp.TimeValue(event.GetEventTime()),
 				event,
-				false,
 			); err != nil {
 				return nil, err
 			}

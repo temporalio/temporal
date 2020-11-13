@@ -772,7 +772,7 @@ func createVisibilityTasks(
 		version = task.GetVersion()
 
 		switch task.GetType() {
-		case enumsspb.TASK_TYPE_VISIBILITY_RECORD_WORKFLOW_STARTED:
+		case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
 		case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 		case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
 		case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:

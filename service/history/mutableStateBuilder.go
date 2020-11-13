@@ -1722,7 +1722,6 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	if err := e.taskGenerator.generateRecordWorkflowStartedTasks(
 		timestamp.TimeValue(event.GetEventTime()),
 		event,
-		e.config.UseKafkaForVisibility(),
 	); err != nil {
 		return nil, err
 	}
@@ -1786,7 +1785,6 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
 	if err := e.taskGenerator.generateRecordWorkflowStartedTasks(
 		timestamp.TimeValue(event.GetEventTime()),
 		event,
-		e.config.UseKafkaForVisibility(),
 	); err != nil {
 		return nil, err
 	}
