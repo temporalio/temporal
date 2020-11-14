@@ -60,8 +60,9 @@ type rsaKeyProvider struct {
 	config   config.JWTKeyProvider
 	keys     map[string]*rsa.PublicKey
 	keysLock sync.RWMutex
-	timer    *time.Timer
+	ticker   *time.Ticker
 	logger   log.Logger
+	stop     chan bool
 }
 
 var _ TokenKeyProvider = (*rsaKeyProvider)(nil)
@@ -81,9 +82,11 @@ func (a *rsaKeyProvider) init() {
 			a.logger.Error("error during initial retrieval of RSA token keys: ", tag.Error(err))
 		}
 	}
-	a.timer = time.AfterFunc(a.config.RefreshTime, func() {
-		a.timerCallback()
-	})
+	if a.config.RefreshTime > 0 {
+		a.stop = make(chan bool)
+		a.ticker = time.NewTicker(a.config.RefreshTime)
+		go a.timerCallback()
+	}
 }
 
 func (a *rsaKeyProvider) rsaKey(alg string, kid string) (*rsa.PublicKey, error) {
@@ -101,15 +104,19 @@ func (a *rsaKeyProvider) rsaKey(alg string, kid string) (*rsa.PublicKey, error) 
 }
 
 func (a *rsaKeyProvider) timerCallback() {
-	if len(a.config.KeySourceURIs) > 0 {
-		err := a.updateKeys()
-		if err != nil {
-			a.logger.Error("error while refreshing RSA token keys: ", tag.Error(err))
+	for {
+		select {
+		case <-a.stop:
+			break
+		case <-a.ticker.C:
+		}
+		if len(a.config.KeySourceURIs) > 0 {
+			err := a.updateKeys()
+			if err != nil {
+				a.logger.Error("error while refreshing RSA token keys: ", tag.Error(err))
+			}
 		}
 	}
-	a.timer = time.AfterFunc(a.config.RefreshTime, func() {
-		a.timerCallback()
-	})
 }
 
 func (a *rsaKeyProvider) updateKeys() error {
