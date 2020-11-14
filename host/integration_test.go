@@ -1294,6 +1294,10 @@ func (s *integrationSuite) TestCronWorkflow_Success() {
 	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
 	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attributes.GetInitiator())
 	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, attributes.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	s.NotNil(attributes.GetLastCompletionResult())
+	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
+	s.NoError(err)
+	s.Equal(2, r)
 }
 
 func (s *integrationSuite) TestSequential_UserTimers() {
