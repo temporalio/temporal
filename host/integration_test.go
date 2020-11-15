@@ -830,17 +830,238 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
-func (s *integrationSuite) TestCronWorkflow() {
-	s.T().Skip(`
-	    integration_test.go:1034:
-	        	Error Trace:	integration_test.go:1034
-	        	Error:      	Not equal:
-	        	            	expected: 0
-	        	            	actual  : 2
-	        	Test:       	TestIntegrationSuite/TestCronWorkflow
-	        	Messages:   	exected backof 2-0 should be multiplier of target backoff 3
-	`)
+func (s *integrationSuite) TestCronWorkflow_Failed() {
+	id := "integration-wf-cron-failed-test"
+	wt := "integration-wf-cron-failed-type"
+	tl := "integration-wf-cron-failed-taskqueue"
+	identity := "worker1"
+	cronSchedule := "@every 3s"
 
+	targetBackoffDuration := time.Second * 3
+	backoffDurationTolerance := time.Millisecond * 500
+
+	memo := &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
+	}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: wt},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(5 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
+		CronSchedule:        cronSchedule, // minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
+		Memo:                memo,
+	}
+
+	startWorkflowTS := time.Now().UTC()
+	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	var executions []*commonpb.WorkflowExecution
+	failWorkflow := true
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		counter := 0
+		if previousStartedEventID == common.EmptyEventID {
+			startedEvent := history.Events[0]
+			if startedEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+				return []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+							Failure: failure.NewServerFailure("incorrect first event", true),
+						}},
+					}}, nil
+			}
+
+			startedAttributes := startedEvent.GetWorkflowExecutionStartedEventAttributes()
+			if err := payloads.Decode(startedAttributes.GetLastCompletionResult(), &counter); err != nil {
+				return []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+							Failure: failure.NewServerFailure("cannot decode last completion result", true),
+						}},
+					}}, nil
+			}
+		}
+
+		executions = append(executions, execution)
+		if failWorkflow {
+			// Next time cause the workflow to succeed
+			failWorkflow = false
+			return []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+						Failure: failure.NewServerFailure("cron-test-error", false),
+					}},
+				}}, nil
+		}
+
+		// Next time cause the workflow to fail
+		failWorkflow = true
+		counter++
+		return []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeInt(counter),
+				}},
+			}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	startFilter := &filterpb.StartTimeFilter{}
+	startFilter.EarliestTime = &startWorkflowTS
+	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
+
+	// Sleep some time before checking the open executions.
+	// This will not cost extra time as the polling for first workflow task will be blocked for 3 seconds.
+	var listResponse *workflowservice.ListOpenWorkflowExecutionsResponse
+	var err error
+	for i := 0; i < 3; i++ {
+		time.Sleep(time.Second)
+		listResponse, err = s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 100,
+			StartTimeFilter: startFilter,
+			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				WorkflowId: id,
+			}},
+		})
+		if err == nil && len(listResponse.GetExecutions()) == 1 {
+			break
+		}
+	}
+
+	s.NoError(err)
+	s.Equal(1, len(listResponse.GetExecutions()))
+	executionInfo := listResponse.GetExecutions()[0]
+	s.Equal(targetBackoffDuration, executionInfo.GetExecutionTime().Sub(timestamp.TimeValue(executionInfo.GetStartTime())))
+
+	s.Logger.Info("Process first cron run which fails")
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("First cron run processed")
+	s.True(err == nil, err)
+
+	// Make sure the cron workflow start running at a proper time, in this case 3 seconds after the
+	// startWorkflowExecution request
+	backoffDuration := time.Now().UTC().Sub(startWorkflowTS)
+	s.True(backoffDuration > targetBackoffDuration)
+	s.True(backoffDuration < targetBackoffDuration+backoffDurationTolerance)
+
+	s.Logger.Info("Process second cron run which succeeds")
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("Second cron run processed")
+	s.True(err == nil, err)
+
+	s.Logger.Info("Process third cron run which fails")
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("Third cron run processed")
+	s.True(err == nil, err)
+
+	s.Logger.Info("Process fourth cron run which succeeds")
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("Fourth cron run processed")
+	s.True(err == nil, err)
+
+	s.Logger.Info("Process fifth cron run which fails")
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("Fifth cron run processed")
+	s.True(err == nil, err)
+
+	s.Logger.Info("Process sixth cron run which succeeds")
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("Sixth cron run processed")
+	s.True(err == nil, err)
+
+	s.Logger.Info("Terminate cron workflow")
+	_, terminateErr := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+		},
+	})
+	s.NoError(terminateErr)
+
+	for _, execution := range executions {
+		s.printWorkflowHistory(s.namespace, execution)
+	}
+
+	// Total cron executions should be 3
+	s.Equal(6, len(executions))
+
+	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
+	var closedExecutions []*workflowpb.WorkflowExecutionInfo
+	for i := 0; i < 10; i++ {
+		resp, err := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 10,
+			StartTimeFilter: startFilter,
+			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				WorkflowId: id,
+			}},
+		})
+		s.NoError(err)
+		if len(resp.GetExecutions()) == 7 {
+			closedExecutions = resp.GetExecutions()
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	s.Equal(7, len(closedExecutions))
+	// for _, execution := range closedExecutions {
+	// 	s.printWorkflowHistory(s.namespace, execution.GetExecution())
+	// }
+
+	lastExecution := closedExecutions[0]
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, lastExecution.GetStatus())
+
+	finalCronExecution := closedExecutions[1]
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, finalCronExecution.GetStatus())
+	events := s.getHistory(s.namespace, finalCronExecution.GetExecution())
+	lastEvent := events[len(events)-1]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, lastEvent.GetEventType())
+	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attributes.GetInitiator())
+	var r int
+	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
+	s.NoError(err)
+	s.Equal(3, r)
+
+	lastFailedExecution := closedExecutions[2]
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, lastFailedExecution.GetStatus())
+	// check when workflow timeout, continueAsNew event contains expected fields
+	events = s.getHistory(s.namespace, lastFailedExecution.GetExecution())
+	lastEvent = events[len(events)-1]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, lastEvent.GetEventType())
+	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attributes.GetInitiator())
+	s.Equal("cron-test-error", attributes.GetFailure().GetMessage())
+	s.NotNil(attributes.GetLastCompletionResult())
+	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
+	s.NoError(err)
+	s.Equal(2, r)
+}
+
+func (s *integrationSuite) TestCronWorkflow() {
 	id := "integration-wf-cron-test"
 	wt := "integration-wf-cron-type"
 	tl := "integration-wf-cron-taskqueue"
