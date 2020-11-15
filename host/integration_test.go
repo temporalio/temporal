@@ -831,7 +831,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 }
 
 func (s *integrationSuite) TestCronWorkflow() {
-	/*s.T().Skip(`
+	s.T().Skip(`
 	    integration_test.go:1034:
 	        	Error Trace:	integration_test.go:1034
 	        	Error:      	Not equal:
@@ -839,7 +839,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	        	            	actual  : 2
 	        	Test:       	TestIntegrationSuite/TestCronWorkflow
 	        	Messages:   	exected backof 2-0 should be multiplier of target backoff 3
-	`)*/
+	`)
 
 	id := "integration-wf-cron-test"
 	wt := "integration-wf-cron-type"
