@@ -257,6 +257,13 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 		}
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
+		if c.stats == nil {
+			// TODO (alex): This check is for compatibility only and can be removed later
+			c.stats = &persistencespb.ExecutionStats{
+				HistorySize: response.State.ExecutionInfo.GetHistorySize(),
+			}
+		}
+
 		c.updateCondition = response.State.NextEventId
 
 		// finally emit execution and session stats
@@ -264,7 +271,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 			c.metricsClient,
 			c.getNamespace(),
 			response.MutableStateStats,
-			c.stats.HistorySize,
+			c.getHistorySize(),
 		)
 	}
 
@@ -332,6 +339,13 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 		}
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
+		if c.stats == nil {
+			// TODO (alex): This check is for compatibility only and can be removed later
+			c.stats = &persistencespb.ExecutionStats{
+				HistorySize: response.State.ExecutionInfo.GetHistorySize(),
+			}
+		}
+
 		c.updateCondition = response.State.NextEventId
 
 		// finally emit execution and session stats
@@ -339,7 +353,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 			c.metricsClient,
 			c.getNamespace(),
 			response.MutableStateStats,
-			c.stats.HistorySize,
+			c.getHistorySize(),
 		)
 	}
 
@@ -795,7 +809,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	emitWorkflowHistoryStats(
 		c.metricsClient,
 		namespace,
-		int(c.stats.HistorySize),
+		int(c.getHistorySize()),
 		int(c.mutableState.GetNextEventID()-1),
 	)
 	emitSessionUpdateStats(
@@ -1184,7 +1198,7 @@ func (c *workflowExecutionContextImpl) enforceSizeCheck() (bool, error) {
 	historyCountLimitWarn := c.config.HistoryCountLimitWarn(c.getNamespace())
 	historyCountLimitError := c.config.HistoryCountLimitError(c.getNamespace())
 
-	historySize := int(c.stats.HistorySize)
+	historySize := int(c.getHistorySize())
 	historyCount := int(c.mutableState.GetNextEventID() - 1)
 
 	// Hard terminate workflow if still running and breached size or count limit
