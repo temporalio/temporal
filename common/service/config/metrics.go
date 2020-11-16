@@ -25,6 +25,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
@@ -32,6 +33,9 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber-go/tally/prometheus"
 	tallystatsdreporter "github.com/uber-go/tally/statsd"
+
+	dogstatsd "github.com/DataDog/datadog-go/statsd"
+	dogstatsdreporter "go.temporal.io/server/common/metrics/tally/dogstatsd"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -78,6 +82,9 @@ func (c *Metrics) NewScope(logger log.Logger) tally.Scope {
 		return c.newM3Scope(logger)
 	}
 	if c.Statsd != nil {
+		if c.Statsd.DatadogFormat {
+			return c.newDogstatsdScope(logger)
+		}
 		return c.newStatsdScope(logger)
 	}
 	if c.Prometheus != nil {
@@ -116,6 +123,29 @@ func (c *Metrics) newStatsdScope(logger log.Logger) tally.Scope {
 	//NOTE: according to ( https://github.com/uber-go/tally )Tally's statsd implementation doesn't support tagging.
 	// Therefore, we implement Tally interface to have a statsd reporter that can support tagging
 	reporter := statsdreporter.NewReporter(statter, tallystatsdreporter.Options{})
+	scopeOpts := tally.ScopeOptions{
+		Tags:     c.Tags,
+		Reporter: reporter,
+		Prefix:   c.Prefix,
+	}
+	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
+	return scope
+}
+
+// newDogstatsdScope returns a new statsd scope using the dogstatsd client
+// with a default reporting interval of a second
+func (c *Metrics) newDogstatsdScope(logger log.Logger) tally.Scope {
+	config := c.Statsd
+	if len(config.HostPort) == 0 {
+		return tally.NoopScope
+	}
+
+	client, err := dogstatsd.New(fmt.Sprintf("127.0.0.1:%s", config.HostPort), dogstatsd.WithBufferFlushInterval(config.FlushInterval), dogstatsd.WithMaxBytesPerPayload(config.FlushBytes))
+	if err != nil {
+		logger.Fatal("error creating dogstatsd client", tag.Error(err))
+	}
+
+	reporter := dogstatsdreporter.NewReporter(client)
 	scopeOpts := tally.ScopeOptions{
 		Tags:     c.Tags,
 		Reporter: reporter,

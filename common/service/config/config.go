@@ -400,6 +400,9 @@ type (
 		// If FlushBytes is unspecified, it defaults  to 1432 bytes, which is
 		// considered safe for local traffic.
 		FlushBytes int `yaml:"flushBytes"`
+		// DatadogFormat formats the statsd metric names to be compatible with
+		// the DogStatsD format: https://docs.datadoghq.com/developers/dogstatsd/datagram_shell/?tab=metrics
+		DatadogFormat bool `yaml:"datadogFormat"`
 	}
 
 	// Archival contains the config for archival
