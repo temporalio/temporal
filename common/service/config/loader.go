@@ -102,6 +102,16 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 	return validator.Validate(config)
 }
 
+// Helper function for loading configuration
+func LoadConfig(env string, configDir string, zone string) (*Config, error) {
+	config := Config{}
+	err := Load(env, configDir, zone, &config)
+	if err != nil {
+		return nil, fmt.Errorf("config file corrupted: %w", err)
+	}
+	return &config, nil
+}
+
 // getConfigFiles returns the list of config files to
 // process in the hierarchy order
 func getConfigFiles(env string, configDir string, zone string) ([]string, error) {

@@ -22,42 +22,48 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination authority_mock.go -self_package go.temporal.io/server/common/authorization
+package encryption
 
-package authorization
+import (
+	"strings"
 
-import "context"
-
-const (
-	// DecisionDeny means auth decision is deny
-	DecisionDeny Decision = iota + 1
-	// DecisionAllow means auth decision is allow
-	DecisionAllow
+	"go.temporal.io/server/common/service/config"
 )
 
-type (
-	// Attributes is input for authority to make decision.
-	// It can be extended in future if required auth on resources like WorkflowType and TaskQueue
-	Attributes struct {
-		Actor     string
-		APIName   string
-		Namespace string
-	}
+var _ PerHostCertProviderFactory = (*localStorePerHostCertProviderFactory)(nil)
 
-	// Result is result from authority.
-	Result struct {
-		Decision Decision
-	}
-
-	// Decision is enum type for auth decision
-	Decision int
-)
-
-// Authorizer is an interface for authorization
-type Authorizer interface {
-	Authorize(ctx context.Context, attributes *Attributes) (Result, error)
+type localStorePerHostCertProviderFactory struct {
+	certProviderCache map[string]*localStoreCertProvider
 }
 
-type requestWithNamespace interface {
-	GetNamespace() string
+func newLocalStorePerHostCertProviderFactory(overrides map[string]config.ServerTLS) PerHostCertProviderFactory {
+	factory := &localStorePerHostCertProviderFactory{}
+	if overrides == nil {
+		return factory
+	}
+
+	factory.certProviderCache = make(map[string]*localStoreCertProvider, len(overrides))
+
+	for host, settings := range overrides {
+		factory.certProviderCache[strings.ToLower(host)] = &localStoreCertProvider{
+			tlsSettings: &config.GroupTLS{
+				Server: settings,
+			},
+		}
+	}
+
+	return factory
+}
+
+func (f *localStorePerHostCertProviderFactory) GetCertProvider(hostName string) (CertProvider, error) {
+	if f.certProviderCache == nil {
+		return nil, nil
+	}
+
+	cachedCertProvider, ok := f.certProviderCache[strings.ToLower(hostName)]
+	if !ok {
+		return nil, nil
+	}
+
+	return cachedCertProvider, nil
 }

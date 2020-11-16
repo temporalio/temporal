@@ -48,7 +48,12 @@ type (
 		GetSettings() *config.GroupTLS
 	}
 
-	tlsConfigConstructor func(localProvider CertProvider, settingsProvider CertProvider) (*tls.Config, error)
+	// PerHostCertProviderFactory creates a CertProvider in the context of a specific Domain.
+	PerHostCertProviderFactory interface {
+		GetCertProvider(hostName string) (CertProvider, error)
+	}
+
+	tlsConfigConstructor func() (*tls.Config, error)
 
 	providerType string
 )

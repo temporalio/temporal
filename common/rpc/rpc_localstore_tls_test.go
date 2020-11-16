@@ -48,17 +48,20 @@ type localStoreRPCSuite struct {
 
 	logger log.Logger
 
-	insecureRPCFactory           *TestFactory
-	internodeMutualTLSRPCFactory *TestFactory
-	internodeServerTLSRPCFactory *TestFactory
-	frontendMutualTLSRPCFactory  *TestFactory
-	frontendServerTLSRPCFactory  *TestFactory
+	insecureRPCFactory              *TestFactory
+	internodeMutualTLSRPCFactory    *TestFactory
+	internodeServerTLSRPCFactory    *TestFactory
+	internodeAltMutualTLSRPCFactory *TestFactory
+	frontendMutualTLSRPCFactory     *TestFactory
+	frontendServerTLSRPCFactory     *TestFactory
 
-	internodeCertDir string
-	frontendCertDir  string
+	internodeCertDir   string
+	frontendCertDir    string
+	frontendAltCertDir string
 
-	frontendChain  CertChain
-	internodeChain CertChain
+	internodeChain   CertChain
+	frontendChain    CertChain
+	frontendAltChain CertChain
 }
 
 type CertChain struct {
@@ -87,19 +90,23 @@ func (s *localStoreRPCSuite) SetupSuite() {
 
 	s.frontendCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontend")
 	s.NoError(err)
-	s.frontendChain = s.GenerateTestChain(s.frontendCertDir)
+	s.frontendChain = s.GenerateTestChain(s.frontendCertDir, "127.0.0.1")
 
 	s.internodeCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteInternode")
 	s.NoError(err)
-	s.internodeChain = s.GenerateTestChain(s.internodeCertDir)
+	s.internodeChain = s.GenerateTestChain(s.internodeCertDir, "127.0.0.1")
+
+	s.frontendAltCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontendAlt")
+	s.NoError(err)
+	s.frontendAltChain = s.GenerateTestChain(s.frontendAltCertDir, "localhost")
 }
 
 func (s *localStoreRPCSuite) SetupTest() {
-	s.setupInternode(s.internodeChain, s.frontendChain)
-	s.setupFrontend(s.internodeChain, s.frontendChain)
+	s.setupInternode(s.internodeChain, s.frontendChain, s.frontendAltChain)
+	s.setupFrontend(s.internodeChain, s.frontendChain, s.frontendAltChain)
 }
 
-func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendChain CertChain) {
+func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendChain CertChain, frontendAltChain CertChain) {
 	localStoreServerTLS := &config.Global{
 		Membership: config.Membership{
 			MaxJoinDuration:  5,
@@ -132,6 +139,14 @@ func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendCha
 				Client: config.ClientTLS{
 					RootCAFiles: []string{frontendChain.CaPubFile},
 				},
+				PerHostOverrides: map[string]config.ServerTLS{
+					"localhost": {
+						CertFile:          frontendAltChain.CertPubFile,
+						KeyFile:           frontendAltChain.CertKeyFile,
+						ClientCAFiles:     []string{frontendAltChain.CaPubFile},
+						RequireClientAuth: true,
+					},
+				},
 			},
 		},
 	}
@@ -144,14 +159,13 @@ func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendCha
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS)
 	s.NoError(err)
 	frontendServerTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
-	s.NoError(err)
 	s.NotNil(frontendServerTLSFactory)
 
 	s.frontendMutualTLSRPCFactory = f(frontendMutualTLSFactory)
 	s.frontendServerTLSRPCFactory = f(frontendServerTLSFactory)
 }
 
-func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendChain CertChain) {
+func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendChain CertChain, frontendAltChain CertChain) {
 	localStoreServerTLS := &config.Global{
 		Membership: config.Membership{
 			MaxJoinDuration:  5,
@@ -203,6 +217,34 @@ func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendCh
 		},
 	}
 
+	localStoreAltMutualTLS := &config.Global{
+		Membership: config.Membership{
+			MaxJoinDuration:  5,
+			BroadcastAddress: "127.0.0.1",
+		},
+		TLS: config.RootTLS{
+			Internode: config.GroupTLS{
+				Server: config.ServerTLS{
+					CertFile:          frontendAltChain.CertPubFile,
+					KeyFile:           frontendAltChain.CertKeyFile,
+					ClientCAFiles:     []string{frontendAltChain.CaPubFile},
+					RequireClientAuth: true,
+				},
+				Client: config.ClientTLS{
+					RootCAFiles: []string{frontendAltChain.CaPubFile},
+				},
+			},
+			Frontend: config.GroupTLS{
+				Server: config.ServerTLS{
+					RequireClientAuth: true,
+				},
+				Client: config.ClientTLS{
+					RootCAFiles: []string{frontendAltChain.CaPubFile},
+				},
+			},
+		},
+	}
+
 	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS)
 	s.NoError(err)
 	internodeMutualTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
@@ -211,18 +253,23 @@ func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendCh
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS)
 	s.NoError(err)
 	internodeServerTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
-	s.NoError(err)
 	s.NotNil(internodeServerTLSFactory)
+
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreAltMutualTLS.TLS)
+	s.NoError(err)
+	internodeMutualAltTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	s.NotNil(internodeMutualAltTLSFactory)
 
 	s.internodeMutualTLSRPCFactory = i(internodeMutualTLSFactory)
 	s.internodeServerTLSRPCFactory = i(internodeServerTLSFactory)
+	s.internodeAltMutualTLSRPCFactory = i(internodeMutualAltTLSFactory)
 }
 
-func (s *localStoreRPCSuite) GenerateTestChain(tempDir string) CertChain {
+func (s *localStoreRPCSuite) GenerateTestChain(tempDir string, commonName string) CertChain {
 	caCert, err := encryption.GenerateSelfSignedX509CA("undefined", nil, 512)
 	s.NoError(err)
 
-	serverCert, privKey, err := encryption.GenerateServerX509UsingCA("127.0.0.1", caCert)
+	serverCert, privKey, err := encryption.GenerateServerX509UsingCA(commonName, caCert)
 	s.NoError(err)
 
 	caPubFile := tempDir + "/ca_pub.pem"
@@ -273,33 +320,37 @@ func convertFileToBase64(file string) string {
 }
 
 func (s *localStoreRPCSuite) TestServerTLS() {
-	runHelloWorldTest(s.Suite, s.internodeServerTLSRPCFactory, s.internodeServerTLSRPCFactory, true)
+	runHelloWorldTest(s.Suite, "127.0.0.1", s.internodeServerTLSRPCFactory, s.internodeServerTLSRPCFactory, true)
 }
 
 func (s *localStoreRPCSuite) TestServerTLSInternodeToFrontend() {
-	runHelloWorldTest(s.Suite, s.frontendServerTLSRPCFactory, s.internodeServerTLSRPCFactory, true)
+	runHelloWorldTest(s.Suite, "127.0.0.1", s.frontendServerTLSRPCFactory, s.internodeServerTLSRPCFactory, true)
 }
 
 func (s *localStoreRPCSuite) TestMutualTLS() {
-	runHelloWorldTest(s.Suite, s.internodeMutualTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
+	runHelloWorldTest(s.Suite, "127.0.0.1", s.internodeMutualTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
 }
 
 func (s *localStoreRPCSuite) TestMutualTLSInternodeToFrontend() {
-	runHelloWorldTest(s.Suite, s.frontendMutualTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
+	runHelloWorldTest(s.Suite, "127.0.0.1", s.frontendMutualTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
 }
 
 func (s *localStoreRPCSuite) TestMutualTLSButClientInsecure() {
-	runHelloWorldTest(s.Suite, s.internodeMutualTLSRPCFactory, s.insecureRPCFactory, false)
+	runHelloWorldTest(s.Suite, "127.0.0.1", s.internodeMutualTLSRPCFactory, s.insecureRPCFactory, false)
 }
 
 func (s *localStoreRPCSuite) TestServerTLSButClientInsecure() {
-	runHelloWorldTest(s.Suite, s.internodeServerTLSRPCFactory, s.insecureRPCFactory, false)
+	runHelloWorldTest(s.Suite, "127.0.0.1", s.internodeServerTLSRPCFactory, s.insecureRPCFactory, false)
 }
 
 func (s *localStoreRPCSuite) TestMutualTLSButClientNoCert() {
-	runHelloWorldTest(s.Suite, s.internodeMutualTLSRPCFactory, s.internodeServerTLSRPCFactory, false)
+	runHelloWorldTest(s.Suite, "127.0.0.1", s.internodeMutualTLSRPCFactory, s.internodeServerTLSRPCFactory, false)
 }
 
 func (s *localStoreRPCSuite) TestServerTLSButClientAddsCert() {
-	runHelloWorldTest(s.Suite, s.internodeServerTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
+	runHelloWorldTest(s.Suite, "127.0.0.1", s.internodeServerTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
+}
+
+func (s *localStoreRPCSuite) TestServerTLSInternodeToFrontendAlt() {
+	runHelloWorldTest(s.Suite, "localhost", s.frontendMutualTLSRPCFactory, s.internodeAltMutualTLSRPCFactory, true)
 }
