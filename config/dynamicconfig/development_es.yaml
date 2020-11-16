@@ -35,6 +35,4 @@ frontend.validSearchAttributes:
       CustomNamespace: "Keyword"
       Operator: "Keyword"
       RolloutId: "Keyword"
-      
-system.minRetentionDays:
-    - value: 0
+
