@@ -120,7 +120,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 	task *persistencespb.TimerTaskInfo,
-	context workflowExecutionContext,
+	workflowContext workflowExecutionContext,
 	msBuilder mutableState,
 ) error {
 
@@ -136,12 +136,12 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 		return err
 	}
 
-	if err := t.deleteWorkflowVisibility(task, msBuilder); err != nil {
+	if err := t.deleteWorkflowVisibility(task, workflowContext, msBuilder); err != nil {
 		return err
 	}
 	// calling clear here to force accesses of mutable state to read database
 	// if this is not called then callers will get mutable state even though its been removed from database
-	context.clear()
+	workflowContext.clear()
 	return nil
 }
 
@@ -203,7 +203,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 	}
 	// delete visibility record here regardless if it's been archived inline or not
 	// since the entire record is included as part of the archive request.
-	if err := t.deleteWorkflowVisibility(task, msBuilder); err != nil {
+	if err := t.deleteWorkflowVisibility(task, workflowContext, msBuilder); err != nil {
 		return err
 	}
 	// calling clear here to force accesses of mutable state to read database
@@ -261,6 +261,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 	task *persistencespb.TimerTaskInfo,
+	workflowContext workflowExecutionContext,
 	msBuilder mutableState,
 ) error {
 
@@ -278,12 +279,21 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 		return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	}
 
+	now := time.Now().UTC()
 	msBuilder.AddVisibilityTasks(&persistence.DeleteExecutionVisibilityTask{
 		// TaskID is set by shard
-		VisibilityTimestamp: time.Now().UTC(),
+		VisibilityTimestamp: now,
 		Version:             task.GetVersion(),
 	})
-	return nil
+
+	return workflowContext.updateWorkflowExecutionWithNew(
+		now,
+		persistence.UpdateWorkflowModeBypassCurrent,
+		nil, // no new workflow
+		nil, // no new workflow
+		transactionPolicyPassive,
+		nil,
+	)
 }
 
 func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
