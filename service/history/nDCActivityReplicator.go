@@ -147,7 +147,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		return nil
 	}
 
-	refreshTask := r.refreshTask(
+	refreshTask := r.testRefreshActivityTimerTaskMask(
 		request.GetVersion(),
 		request.GetAttempt(),
 		activityInfo,
@@ -192,7 +192,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	)
 }
 
-func (r *nDCActivityReplicatorImpl) refreshTask(
+func (r *nDCActivityReplicatorImpl) testRefreshActivityTimerTaskMask(
 	version int64,
 	attempt int32,
 	activityInfo *persistencespb.ActivityInfo,
@@ -220,29 +220,33 @@ func (r *nDCActivityReplicatorImpl) testActivity(
 	if activityInfo.Version > version {
 		// this should not retry, can be caused by failover or reset
 		return false
-	} else if activityInfo.Version < version {
+	}
+
+	if activityInfo.Version < version {
 		// incoming version larger then local version, should update activity
 		return true
-	} else {
-		// activityInfo.Version == version
-		if activityInfo.Attempt > attempt {
-			// this should not retry, can be caused by failover or reset
-			return false
-		} else if activityInfo.Attempt < attempt {
-			// version equal & attempt larger then existing, should update activity
-			return true
-		} else {
-			// activityInfo.Attempt == attempt
-
-			// version equal & attempt equal & last heartbeat after existing heartbeat
-			// should update activity
-			if activityInfo.LastHeartbeatUpdateTime != nil && activityInfo.LastHeartbeatUpdateTime.After(lastHeartbeatTime) {
-				// this should not retry, can be caused by out of order delivery
-				return false
-			}
-			return true
-		}
 	}
+
+	// activityInfo.Version == version
+	if activityInfo.Attempt > attempt {
+		// this should not retry, can be caused by failover or reset
+		return false
+	}
+
+	// activityInfo.Version == version
+	if activityInfo.Attempt < attempt {
+		// version equal & attempt larger then existing, should update activity
+		return true
+	}
+
+	// activityInfo.Version == version & activityInfo.Attempt == attempt
+
+	// last heartbeat after existing heartbeat & should update activity
+	if activityInfo.LastHeartbeatUpdateTime != nil && activityInfo.LastHeartbeatUpdateTime.After(lastHeartbeatTime) {
+		// this should not retry, can be caused by out of order delivery
+		return false
+	}
+	return true
 }
 
 func (r *nDCActivityReplicatorImpl) testVersionHistory(

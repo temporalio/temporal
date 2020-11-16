@@ -169,7 +169,7 @@ func (s *activityReplicatorSuite) TestRefreshTask_DiffCluster() {
 
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, localActivityInfo.Version).Return(false).Times(1)
 
-	apply := s.nDCActivityReplicator.refreshTask(
+	apply := s.nDCActivityReplicator.refreshActivityTimerTaskMask(
 		version,
 		attempt,
 		localActivityInfo,
@@ -187,7 +187,7 @@ func (s *activityReplicatorSuite) TestRefreshTask_SameCluster_DiffAttempt() {
 
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true).Times(1)
 
-	apply := s.nDCActivityReplicator.refreshTask(
+	apply := s.nDCActivityReplicator.refreshActivityTimerTaskMask(
 		version,
 		attempt,
 		localActivityInfo,
@@ -205,7 +205,7 @@ func (s *activityReplicatorSuite) TestRefreshTask_SameCluster_SameAttempt() {
 
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true).Times(1)
 
-	apply := s.nDCActivityReplicator.refreshTask(
+	apply := s.nDCActivityReplicator.refreshActivityTimerTaskMask(
 		version,
 		attempt,
 		localActivityInfo,
