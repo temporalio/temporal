@@ -35,15 +35,24 @@ import (
 	"go.temporal.io/server/common/service/config"
 )
 
+const (
+	defaultPermissionsClaimName = "permissions"
+)
+
 // Default claim mapper that gives system level admin permission to everybody
 type defaultClaimMapper struct {
-	keyProvider TokenKeyProvider
-	logger      log.Logger
+	keyProvider          TokenKeyProvider
+	logger               log.Logger
+	permissionsClaimName string
 }
 
 func NewDefaultClaimMapper(provider TokenKeyProvider, cfg *config.Config) ClaimMapper {
+	claimName := cfg.Global.Security.PermissionsClaimName
+	if claimName == "" {
+		claimName = defaultPermissionsClaimName
+	}
 	logger := loggerimpl.NewLogger(cfg.Log.NewZapLogger())
-	return &defaultClaimMapper{keyProvider: provider, logger: logger}
+	return &defaultClaimMapper{keyProvider: provider, logger: logger, permissionsClaimName: claimName}
 }
 
 var _ ClaimMapper = (*defaultClaimMapper)(nil)
@@ -69,28 +78,30 @@ func (a *defaultClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 			return nil, fmt.Errorf("unexpected value type of \"sub\" claim")
 		}
 		claims.subject = subject
-		permissions := jwtClaims["permissions"].([]interface{})
-		for _, permission := range permissions {
-			p, ok := permission.(string)
-			if !ok {
-				a.logger.Warn(fmt.Sprintf("ignoring permission that is not a string: %v", permission))
-				continue
-			}
-			parts := strings.Split(p, ":")
-			if len(parts) != 2 {
-				a.logger.Warn(fmt.Sprintf("ignoring permission in unexpected format: %v", permission))
-				continue
-			}
-			namespace := strings.ToLower(parts[0])
-			if strings.EqualFold(namespace, "system") {
-				claims.system |= permissionToRole(parts[1])
-			} else {
-				if claims.namespaces == nil {
-					claims.namespaces = make(map[string]Role)
+		permissions, ok := jwtClaims[a.permissionsClaimName].([]interface{})
+		if ok {
+			for _, permission := range permissions {
+				p, ok := permission.(string)
+				if !ok {
+					a.logger.Warn(fmt.Sprintf("ignoring permission that is not a string: %v", permission))
+					continue
 				}
-				role := claims.namespaces[namespace]
-				role |= permissionToRole(parts[1])
-				claims.namespaces[namespace] = role
+				parts := strings.Split(p, ":")
+				if len(parts) != 2 {
+					a.logger.Warn(fmt.Sprintf("ignoring permission in unexpected format: %v", permission))
+					continue
+				}
+				namespace := strings.ToLower(parts[0])
+				if strings.EqualFold(namespace, "system") {
+					claims.system |= permissionToRole(parts[1])
+				} else {
+					if claims.namespaces == nil {
+						claims.namespaces = make(map[string]Role)
+					}
+					role := claims.namespaces[namespace]
+					role |= permissionToRole(parts[1])
+					claims.namespaces[namespace] = role
+				}
 			}
 		}
 	}

@@ -504,7 +504,8 @@ type (
 
 	Security struct {
 		// Signing key provider for validating JWT tokens
-		JWTKeyProvider JWTKeyProvider `yaml:"jwtKeyProvider"`
+		JWTKeyProvider       JWTKeyProvider `yaml:"jwtKeyProvider"`
+		PermissionsClaimName string         `yaml:permissionsClaimName`
 	}
 
 	// Contains the config for signing key provider for validating JWT tokens
