@@ -27,7 +27,6 @@ package authorization
 import (
 	"context"
 	"crypto/x509/pkix"
-	"strings"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -89,18 +88,13 @@ func (a *interceptor) Interceptor(
 			namespace = requestWithNamespace.GetNamespace()
 		}
 
-		apiFullName := info.FullMethod
-		apiName := apiFullName
-		index := strings.LastIndex(apiFullName, "/")
-		if index > -1 {
-			apiName = apiFullName[index+1:]
-		}
+		apiName := info.FullMethod
 
 		scope := a.getMetricsScope(metrics.NumAuthorizationScopes, namespace)
 		sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
 		defer sw.Stop()
 
-		result, err := a.authorizer.Authorize(ctx, claims, &CallTarget{Namespace: namespace, APIFullName: apiFullName, APIName: apiName})
+		result, err := a.authorizer.Authorize(ctx, claims, &CallTarget{Namespace: namespace, APIName: apiName})
 		if err != nil {
 			scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
 			return nil, err

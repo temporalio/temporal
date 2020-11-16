@@ -45,10 +45,10 @@ const (
 
 var (
 	ctx                           = context.Background()
-	describeNamespaceTarget       = &CallTarget{Namespace: testNamespace, APIName: "DescribeNamespace", APIFullName: "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace"}
+	describeNamespaceTarget       = &CallTarget{Namespace: testNamespace, APIName: "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace"}
 	describeNamespaceRequest      = &workflowservice.DescribeNamespaceRequest{Namespace: testNamespace}
 	describeNamespaceInfo         = &grpc.UnaryServerInfo{FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace"}
-	startWorkflowExecutionTarget  = &CallTarget{Namespace: testNamespace, APIName: "StartWorkflowExecution", APIFullName: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution"}
+	startWorkflowExecutionTarget  = &CallTarget{Namespace: testNamespace, APIName: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution"}
 	startWorkflowExecutionRequest = &workflowservice.StartWorkflowExecutionRequest{Namespace: testNamespace}
 	startWorkflowExecutionInfo    = &grpc.UnaryServerInfo{FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution"}
 )
