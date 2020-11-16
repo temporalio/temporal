@@ -280,7 +280,7 @@ func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
 			Attributes: &replicationspb.ReplicationTask_SyncShardStatusTaskAttributes{
 				SyncShardStatusTaskAttributes: &replicationspb.SyncShardStatusTaskAttributes{
 					SourceCluster: p.currentClusterName,
-					ShardId:       int64(p.shard.GetShardID()),
+					ShardId:       p.shard.GetShardID(),
 					StatusTime:    &now,
 				},
 			},
@@ -420,17 +420,11 @@ func (p *replicatorQueueProcessorImpl) toReplicationTask(
 	task := t.ReplicationTaskInfo
 	switch task.TaskType {
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
-		task, err := p.generateSyncActivityTask(ctx, task)
-		if task != nil {
-			task.SourceTaskId = qTask.GetTaskId()
-		}
-		return task, err
+		return p.generateSyncActivityTask(ctx, task)
+
 	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
-		task, err := p.generateHistoryReplicationTask(ctx, task)
-		if task != nil {
-			task.SourceTaskId = qTask.GetTaskId()
-		}
-		return task, err
+		return p.generateHistoryReplicationTask(ctx, task)
+
 	default:
 		return nil, errUnknownReplicationTask
 	}
@@ -443,6 +437,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 	namespaceID := taskInfo.GetNamespaceId()
 	workflowID := taskInfo.GetWorkflowId()
 	runID := taskInfo.GetRunId()
+	taskID := taskInfo.GetTaskId()
 	return p.processReplication(
 		ctx,
 		false, // not necessary to send out sync activity task if workflow closed
@@ -475,7 +470,8 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 			}
 
 			return &replicationspb.ReplicationTask{
-				TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+				SourceTaskId: taskID,
 				Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 					SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
 						NamespaceId:        namespaceID,
@@ -501,11 +497,12 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 
 func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 	ctx context.Context,
-	task *persistencespb.ReplicationTaskInfo,
+	taskInfo *persistencespb.ReplicationTaskInfo,
 ) (*replicationspb.ReplicationTask, error) {
-	namespaceID := task.GetNamespaceId()
-	workflowID := task.GetWorkflowId()
-	runID := task.GetRunId()
+	namespaceID := taskInfo.GetNamespaceId()
+	workflowID := taskInfo.GetWorkflowId()
+	runID := taskInfo.GetRunId()
+	taskID := taskInfo.GetTaskId()
 	return p.processReplication(
 		ctx,
 		true, // still necessary to send out history replication message if workflow closed
@@ -515,32 +512,32 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 		func(mutableState mutableState) (*replicationspb.ReplicationTask, error) {
 			versionHistoryItems, branchToken, err := p.getVersionHistoryItems(
 				mutableState,
-				task.GetFirstEventId(),
-				task.Version,
+				taskInfo.GetFirstEventId(),
+				taskInfo.Version,
 			)
 			if err != nil {
 				return nil, err
 			}
 
 			// BranchToken will not set in get dlq replication message request
-			if len(task.BranchToken) == 0 {
-				task.BranchToken = branchToken
+			if len(taskInfo.BranchToken) == 0 {
+				taskInfo.BranchToken = branchToken
 			}
 
 			eventsBlob, err := p.getEventsBlob(
-				task.BranchToken,
-				task.GetFirstEventId(),
-				task.GetNextEventId(),
+				taskInfo.BranchToken,
+				taskInfo.GetFirstEventId(),
+				taskInfo.GetNextEventId(),
 			)
 			if err != nil {
 				return nil, err
 			}
 
 			var newRunEventsBlob *commonpb.DataBlob
-			if len(task.NewRunBranchToken) != 0 {
+			if len(taskInfo.NewRunBranchToken) != 0 {
 				// only get the first batch
 				newRunEventsBlob, err = p.getEventsBlob(
-					task.NewRunBranchToken,
+					taskInfo.NewRunBranchToken,
 					common.FirstEventID,
 					common.FirstEventID+1,
 				)
@@ -550,10 +547,11 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 			}
 
 			replicationTask := &replicationspb.ReplicationTask{
-				TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
+				TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
+				SourceTaskId: taskID,
 				Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
 					HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
-						TaskId:              task.GetFirstEventId(),
+						TaskId:              taskInfo.GetFirstEventId(),
 						NamespaceId:         namespaceID,
 						WorkflowId:          workflowID,
 						RunId:               runID,
