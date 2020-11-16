@@ -61,7 +61,7 @@
             "CustomDatetimeField": { "type": "date"},
             "CustomNamespace": { "type": "keyword"},
             "Operator": { "type": "keyword"},
-            "BinaryChecksums": { "type": "keyword"},
+            "BinaryChecksums": { "type": "keyword"}
           }
         }
       }
