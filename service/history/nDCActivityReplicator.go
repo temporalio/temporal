@@ -28,6 +28,7 @@ package history
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -35,6 +36,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -117,65 +119,40 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		return nil
 	}
 
-	version := request.GetVersion()
 	scheduleID := request.GetScheduledId()
-	shouldApply, err := r.shouldApplySyncActivity(
+	shouldApply, err := r.testVersionHistory(
 		namespaceID,
 		execution.GetWorkflowId(),
 		execution.GetRunId(),
 		scheduleID,
-		version,
 		mutableState,
 		request.GetVersionHistory(),
 	)
-	if err != nil {
+	if err != nil || !shouldApply {
 		return err
 	}
-	if !shouldApply {
-		return nil
-	}
 
-	ai, ok := mutableState.GetActivityInfo(scheduleID)
+	activityInfo, ok := mutableState.GetActivityInfo(scheduleID)
 	if !ok {
 		// this should not retry, can be caused by out of order delivery
 		// since the activity is already finished
 		return nil
 	}
-
-	if ai.Version > request.GetVersion() {
-		// this should not retry, can be caused by failover or reset
+	if shouldApply := r.testActivity(
+		request.GetVersion(),
+		request.GetAttempt(),
+		timestamp.TimeValue(request.GetLastHeartbeatTime()),
+		activityInfo,
+	); !shouldApply {
 		return nil
 	}
 
-	if ai.Version == request.GetVersion() {
-		if ai.Attempt > request.GetAttempt() {
-			// this should not retry, can be caused by failover or reset
-			return nil
-		}
-		if ai.Attempt == request.GetAttempt() {
-			lastHeartbeatTime := request.GetLastHeartbeatTime()
-			if ai.LastHeartbeatUpdateTime != nil && ai.LastHeartbeatUpdateTime.After(timestamp.TimeValue(lastHeartbeatTime)) {
-				// this should not retry, can be caused by out of order delivery
-				return nil
-			}
-			// version equal & attempt equal & last heartbeat after existing heartbeat
-			// should update activity
-		}
-		// version equal & attempt larger then existing, should update activity
-	}
-	// version larger then existing, should update activity
-
-	// calculate whether to reset the activity timer task status bits
-	// reset timer task status bits if
-	// 1. same source cluster & attempt changes
-	// 2. different source cluster
-	resetActivityTimerTaskStatus := false
-	if !r.clusterMetadata.IsVersionFromSameCluster(request.GetVersion(), ai.Version) {
-		resetActivityTimerTaskStatus = true
-	} else if ai.Attempt < request.GetAttempt() {
-		resetActivityTimerTaskStatus = true
-	}
-	err = mutableState.ReplicateActivityInfo(request, resetActivityTimerTaskStatus)
+	refreshTask := r.testRefreshActivityTimerTaskMask(
+		request.GetVersion(),
+		request.GetAttempt(),
+		activityInfo,
+	)
+	err = mutableState.ReplicateActivityInfo(request, refreshTask)
 	if err != nil {
 		return err
 	}
@@ -183,12 +160,12 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	// see whether we need to refresh the activity timer
 	eventTime := timestamp.TimeValue(request.GetScheduledTime())
 	startedTime := timestamp.TimeValue(request.GetStartedTime())
-	lhTime := timestamp.TimeValue(request.GetLastHeartbeatTime())
+	lastHeartbeatTime := timestamp.TimeValue(request.GetLastHeartbeatTime())
 	if eventTime.Before(startedTime) {
 		eventTime = startedTime
 	}
-	if eventTime.Before(lhTime) {
-		eventTime = lhTime
+	if eventTime.Before(lastHeartbeatTime) {
+		eventTime = lastHeartbeatTime
 	}
 
 	// passive logic need to explicitly call create timer
@@ -215,84 +192,136 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	)
 }
 
-func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
+func (r *nDCActivityReplicatorImpl) testRefreshActivityTimerTaskMask(
+	version int64,
+	attempt int32,
+	activityInfo *persistencespb.ActivityInfo,
+) bool {
+
+	// calculate whether to reset the activity timer task status bits
+	// reset timer task status bits if
+	// 1. same source cluster & attempt changes
+	// 2. different source cluster
+	if !r.clusterMetadata.IsVersionFromSameCluster(version, activityInfo.Version) {
+		return true
+	} else if activityInfo.Attempt != attempt {
+		return true
+	}
+	return false
+}
+
+func (r *nDCActivityReplicatorImpl) testActivity(
+	version int64,
+	attempt int32,
+	lastHeartbeatTime time.Time,
+	activityInfo *persistencespb.ActivityInfo,
+) bool {
+
+	if activityInfo.Version > version {
+		// this should not retry, can be caused by failover or reset
+		return false
+	}
+
+	if activityInfo.Version < version {
+		// incoming version larger then local version, should update activity
+		return true
+	}
+
+	// activityInfo.Version == version
+	if activityInfo.Attempt > attempt {
+		// this should not retry, can be caused by failover or reset
+		return false
+	}
+
+	// activityInfo.Version == version
+	if activityInfo.Attempt < attempt {
+		// version equal & attempt larger then existing, should update activity
+		return true
+	}
+
+	// activityInfo.Version == version & activityInfo.Attempt == attempt
+
+	// last heartbeat after existing heartbeat & should update activity
+	if activityInfo.LastHeartbeatUpdateTime != nil && activityInfo.LastHeartbeatUpdateTime.After(lastHeartbeatTime) {
+		// this should not retry, can be caused by out of order delivery
+		return false
+	}
+	return true
+}
+
+func (r *nDCActivityReplicatorImpl) testVersionHistory(
 	namespaceID string,
 	workflowID string,
 	runID string,
 	scheduleID int64,
-	activityVersion int64,
 	mutableState mutableState,
 	incomingVersionHistory *historyspb.VersionHistory,
 ) (bool, error) {
 
-	if mutableState.GetExecutionInfo().GetVersionHistories() != nil {
-		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())
-		if err != nil {
-			return false, err
-		}
-
-		lastLocalItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
-		if err != nil {
-			return false, err
-		}
-
-		lastIncomingItem, err := versionhistory.GetLastVersionHistoryItem(incomingVersionHistory)
-		if err != nil {
-			return false, err
-		}
-
-		lcaItem, err := versionhistory.FindLCAVersionHistoryItem(currentVersionHistory, incomingVersionHistory)
-		if err != nil {
-			return false, err
-		}
-
-		// case 1: local version history is superset of incoming version history
-		// or incoming version history is superset of local version history
-		// resend the missing event if local version history doesn't have the schedule event
-
-		// case 2: local version history and incoming version history diverged
-		// case 2-1: local version history has the higher version and discard the incoming event
-		// case 2-2: incoming version history has the higher version and resend the missing incoming events
-		if versionhistory.IsLCAVersionHistoryItemAppendable(currentVersionHistory, lcaItem) || versionhistory.IsLCAVersionHistoryItemAppendable(incomingVersionHistory, lcaItem) {
-			// case 1
-			if scheduleID > lcaItem.GetEventId() {
-				return false, serviceerrors.NewRetryReplication(
-					resendMissingEventMessage,
-					namespaceID,
-					workflowID,
-					runID,
-					lcaItem.GetEventId(),
-					lcaItem.GetVersion(),
-					common.EmptyEventID,
-					common.EmptyVersion,
-				)
-			}
-		} else {
-			// case 2
-			if lastIncomingItem.GetVersion() < lastLocalItem.GetVersion() {
-				// case 2-1
-				return false, nil
-			} else if lastIncomingItem.GetVersion() > lastLocalItem.GetVersion() {
-				// case 2-2
-				return false, serviceerrors.NewRetryReplication(
-					resendHigherVersionMessage,
-					namespaceID,
-					workflowID,
-					runID,
-					lcaItem.GetEventId(),
-					lcaItem.GetVersion(),
-					common.EmptyEventID,
-					common.EmptyVersion,
-				)
-			}
-		}
-
-		if state, _ := mutableState.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-			return false, nil
-		}
-	} else {
-		return false, serviceerror.NewInternal("The workflow is not nDC enabled.")
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(
+		mutableState.GetExecutionInfo().GetVersionHistories(),
+	)
+	if err != nil {
+		return false, err
 	}
 
-	return true, nil
+	lastLocalItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+	if err != nil {
+		return false, err
+	}
+
+	lastIncomingItem, err := versionhistory.GetLastVersionHistoryItem(incomingVersionHistory)
+	if err != nil {
+		return false, err
+	}
+
+	lcaItem, err := versionhistory.FindLCAVersionHistoryItem(currentVersionHistory, incomingVersionHistory)
+	if err != nil {
+		return false, err
+	}
+
+	// case 1: local version history is superset of incoming version history
+	//  or incoming version history is superset of local version history
+	//  resend the missing event if local version history doesn't have the schedule event
+
+	// case 2: local version history and incoming version history diverged
+	//  case 2-1: local version history has the higher version and discard the incoming event
+	//  case 2-2: incoming version history has the higher version and resend the missing incoming events
+	if versionhistory.IsLCAVersionHistoryItemAppendable(currentVersionHistory, lcaItem) ||
+		versionhistory.IsLCAVersionHistoryItemAppendable(incomingVersionHistory, lcaItem) {
+		// case 1
+		if scheduleID > lcaItem.GetEventId() {
+			return false, serviceerrors.NewRetryReplication(
+				resendMissingEventMessage,
+				namespaceID,
+				workflowID,
+				runID,
+				lcaItem.GetEventId(),
+				lcaItem.GetVersion(),
+				common.EmptyEventID,
+				common.EmptyVersion,
+			)
+		}
+	} else {
+		// case 2
+		if lastIncomingItem.GetVersion() < lastLocalItem.GetVersion() {
+			// case 2-1
+			return false, nil
+		} else if lastIncomingItem.GetVersion() > lastLocalItem.GetVersion() {
+			// case 2-2
+			return false, serviceerrors.NewRetryReplication(
+				resendHigherVersionMessage,
+				namespaceID,
+				workflowID,
+				runID,
+				lcaItem.GetEventId(),
+				lcaItem.GetVersion(),
+				common.EmptyEventID,
+				common.EmptyVersion,
+			)
+		}
+	}
+
+	state, _ := mutableState.GetWorkflowStateStatus()
+	return state != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, nil
 }
