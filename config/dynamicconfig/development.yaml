@@ -1,9 +1,6 @@
 frontend.enableClientVersionCheck:
 - value: true
   constraints: {}
-system.minRetentionDays:
-- value: 0
-  constraints: {}
 history.persistenceMaxQPS:
 - value: 3000
   constraints: {}
