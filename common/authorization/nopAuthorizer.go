@@ -33,9 +33,6 @@ func NewNopAuthorizer() Authorizer {
 	return &nopAuthority{}
 }
 
-func (a *nopAuthority) Authorize(
-	ctx context.Context,
-	attributes *Attributes,
-) (Result, error) {
+func (a *nopAuthority) Authorize(_ context.Context, _ *Claims, _ *CallTarget) (Result, error) {
 	return Result{Decision: DecisionAllow}, nil
 }

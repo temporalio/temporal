@@ -69,6 +69,7 @@ type (
 		ArchivalMetadata             archiver.ArchivalMetadata
 		ArchiverProvider             provider.ArchiverProvider
 		Authorizer                   authorization.Authorizer
+		ClaimMapper                  authorization.ClaimMapper
 	}
 
 	// MembershipMonitorFactory provides a bootstrapped membership monitor

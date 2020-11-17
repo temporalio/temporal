@@ -26,16 +26,24 @@ package authorization
 
 import (
 	"context"
-	"strings"
+	"crypto/x509/pkix"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/metrics"
 )
 
 var (
 	errUnauthorized = serviceerror.NewPermissionDenied("Request unauthorized.")
+)
+
+const (
+	ContextKeyMappedClaims = "auth-mappedClaims"
 )
 
 func (a *interceptor) Interceptor(
@@ -45,42 +53,86 @@ func (a *interceptor) Interceptor(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 
-	var namespace string
-	requestWithNamespace, ok := req.(requestWithNamespace)
-	if ok {
-		namespace = requestWithNamespace.GetNamespace()
+	var claims *Claims
+
+	if a.claimMapper != nil && a.authorizer != nil {
+		var tlsSubject *pkix.Name
+		var authHeaders []string
+
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			authHeaders = md["authorization"]
+		}
+		if p, ok := peer.FromContext(ctx); ok {
+			if tlsAuth, ok := p.AuthInfo.(credentials.TLSInfo); ok {
+				if len(tlsAuth.State.VerifiedChains) > 0 && len(tlsAuth.State.VerifiedChains[0]) > 0 {
+					// The assumption here is that we only expect a single verified chain of certs (first[0]).
+					// It's unclear how we should handle a situation when more than one chain is presented,
+					// which subject to use. It's okay for us to limit ourselves to one chain.
+					// We can always extend this logic later.
+					// We tale the first element in the chain ([0]) because that's the client cert
+					// (at the beginning of the chain), not intermediary CAs or the root CA (at the end of the chain).
+					tlsSubject = &tlsAuth.State.VerifiedChains[0][0].Subject
+				}
+			}
+		}
+		// Add auth info to context only if there's some auth info
+		if tlsSubject != nil || len(authHeaders) > 0 {
+			var authHeader string
+			if len(authHeaders) > 0 {
+				authHeader = authHeaders[0]
+			}
+			authInfo := AuthInfo{
+				authToken:  authHeader,
+				tlsSubject: tlsSubject,
+			}
+			mappedClaims, err := a.claimMapper.GetClaims(&authInfo)
+			if err != nil {
+				return nil, err
+			}
+			claims = mappedClaims
+			ctx = context.WithValue(ctx, ContextKeyMappedClaims, mappedClaims)
+		}
 	}
 
-	apiName := info.FullMethod
-	index := strings.LastIndex(apiName, "/")
-	if index > -1 {
-		apiName = apiName[index+1:]
-	}
+	if a.authorizer != nil {
+		var namespace string
+		requestWithNamespace, ok := req.(requestWithNamespace)
+		if ok {
+			namespace = requestWithNamespace.GetNamespace()
+		}
 
-	scope := a.getMetricsScope(metrics.NumAuthorizationScopes, namespace)
-	sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
-	defer sw.Stop()
+		apiName := info.FullMethod
 
-	result, err := a.authorizer.Authorize(ctx, &Attributes{Namespace: namespace, APIName: apiName})
-	if err != nil {
-		scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
-		return nil, err
-	}
-	if result.Decision != DecisionAllow {
-		scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
-		return nil, errUnauthorized
+		scope := a.getMetricsScope(metrics.NumAuthorizationScopes, namespace)
+		sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
+		defer sw.Stop()
+
+		result, err := a.authorizer.Authorize(ctx, claims, &CallTarget{Namespace: namespace, APIName: apiName})
+		if err != nil {
+			scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
+			return nil, err
+		}
+		if result.Decision != DecisionAllow {
+			scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
+			return nil, errUnauthorized
+		}
 	}
 	return handler(ctx, req)
 }
 
 type interceptor struct {
 	authorizer    Authorizer
+	claimMapper   ClaimMapper
 	metricsClient metrics.Client
 }
 
 // GetAuthorizationInterceptor creates an authorization interceptor and return a func that points to its Interceptor method
-func NewAuthorizationInterceptor(authorizer Authorizer, metrics metrics.Client) grpc.UnaryServerInterceptor {
-	return (&interceptor{authorizer: authorizer, metricsClient: metrics}).Interceptor
+func NewAuthorizationInterceptor(
+	claimMapper ClaimMapper,
+	authorizer Authorizer,
+	metrics metrics.Client,
+) grpc.UnaryServerInterceptor {
+	return (&interceptor{claimMapper: claimMapper, authorizer: authorizer, metricsClient: metrics}).Interceptor
 }
 
 // getMetricsScopeWithNamespace return metrics scope with namespace tag

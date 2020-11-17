@@ -75,3 +75,10 @@ func WithTLSConfigFactory(tlsConfigProvider encryption.TLSConfigProvider) Server
 		s.tlsConfigProvider = tlsConfigProvider
 	})
 }
+
+// Configures a role mapper for authorization
+func WithClaimMapper(claimMapper func(cfg *config.Config) authorization.ClaimMapper) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.claimMapper = claimMapper(s.config)
+	})
+}
