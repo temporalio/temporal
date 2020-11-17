@@ -26,15 +26,7 @@ frontend.validSearchAttributes:
       CustomDatetimeField: "Datetime"
       TemporalChangeVersion: "Keyword"
       BinaryChecksums: "Keyword"
-      project: "Keyword"
-      service: "Keyword"
-      environment: "Keyword"
-      addon: "Keyword"
-      addon-type: "Keyword"
-      user: "Keyword"
       CustomNamespace: "Keyword"
       Operator: "Keyword"
       RolloutId: "Keyword"
-      
-system.minRetentionDays:
-    - value: 0
+

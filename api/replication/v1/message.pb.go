@@ -991,6 +991,7 @@ func (m *SyncActivityTaskAttributes) GetVersionHistory() *v16.VersionHistory {
 }
 
 type HistoryTaskV2Attributes struct {
+	// TODO remove this task_id attribute once kafka deprecation is done
 	TaskId              int64                     `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	NamespaceId         string                    `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	WorkflowId          string                    `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`

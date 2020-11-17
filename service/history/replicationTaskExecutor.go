@@ -102,8 +102,8 @@ func (e *replicationTaskExecutorImpl) execute(
 		// Without kafka we should not have size limits so we don't necessary need this in the new replication scheme.
 		scope = metrics.HistoryMetadataReplicationTaskScope
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
-		scope = metrics.HistoryReplicationV2TaskScope
-		err = e.handleHistoryReplicationTaskV2(replicationTask, forceApply)
+		scope = metrics.HistoryReplicationTaskScope
+		err = e.handleHistoryReplicationTask(replicationTask, forceApply)
 	default:
 		e.logger.Error("Unknown task type.")
 		scope = metrics.ReplicatorScope
@@ -176,7 +176,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 	}
 }
 
-func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
+func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) error {
@@ -187,7 +187,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 		return err
 	}
 
-	replicationStopWatch := e.metricsClient.StartTimer(metrics.HistoryReplicationV2TaskScope, metrics.ServiceLatency)
+	replicationStopWatch := e.metricsClient.StartTimer(metrics.HistoryReplicationTaskScope, metrics.ServiceLatency)
 	defer replicationStopWatch.Stop()
 
 	request := &historyservice.ReplicateEventsV2Request{
