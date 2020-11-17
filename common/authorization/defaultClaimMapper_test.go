@@ -221,3 +221,5 @@ func (tg *tokenGenerator) HmacKey(alg string, kid string) ([]byte, error) {
 func (tg *tokenGenerator) RsaKey(alg string, kid string) (*rsa.PublicKey, error) {
 	return tg.publicKey, nil
 }
+func (tg *tokenGenerator) Close() {
+}
