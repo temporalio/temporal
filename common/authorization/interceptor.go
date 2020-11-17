@@ -65,7 +65,7 @@ func (a *interceptor) Interceptor(
 				}
 			}
 		}
-		// Add auth into to ctx only if there's some auth info
+		// Add auth info to context only if there's some auth info
 		if tlsSubject != nil || len(authHeaders) > 0 {
 			var authHeader string
 			if len(authHeaders) > 0 {

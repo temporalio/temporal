@@ -47,7 +47,7 @@ type defaultClaimMapper struct {
 }
 
 func NewDefaultClaimMapper(provider TokenKeyProvider, cfg *config.Config) ClaimMapper {
-	claimName := cfg.Global.Security.PermissionsClaimName
+	claimName := cfg.Global.Authorization.PermissionsClaimName
 	if claimName == "" {
 		claimName = defaultPermissionsClaimName
 	}

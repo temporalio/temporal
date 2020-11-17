@@ -28,14 +28,19 @@ import "context"
 
 type defaultAuthorizer struct{}
 
-// NewDefaultAuthorizer creates a no-op authority
+// NewDefaultAuthorizer creates a default authorizer
 func NewDefaultAuthorizer() Authorizer {
 	return &defaultAuthorizer{}
 }
 
 func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target *CallTarget) (Result, error) {
 
-	if claims == nil || target.Namespace == "" { // TODO: handle system calls
+	// TODO: This is a temporary workaround to allow calls to system namespace and
+	// calls with no namespace to pass through. When handling of mTLS data is added,
+	// we should remove "temporal-system" from here. Handling of call with
+	// no namespace will need to be performed at the API level, so that data would
+	// be filtered based of caller's permissions to namespaces and system.
+	if target.Namespace == "temporal-system" || target.Namespace == "" {
 		return Result{Decision: DecisionAllow}, nil
 	}
 

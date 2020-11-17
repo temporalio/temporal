@@ -69,7 +69,7 @@ var _ TokenKeyProvider = (*rsaKeyProvider)(nil)
 
 func NewRSAKeyProvider(cfg *config.Config) *rsaKeyProvider {
 	logger := loggerimpl.NewLogger(cfg.Log.NewZapLogger())
-	provider := rsaKeyProvider{config: cfg.Global.Security.JWTKeyProvider, logger: logger}
+	provider := rsaKeyProvider{config: cfg.Global.Authorization.JWTKeyProvider, logger: logger}
 	provider.init()
 	return &provider
 }
@@ -82,9 +82,9 @@ func (a *rsaKeyProvider) init() {
 			a.logger.Error("error during initial retrieval of RSA token keys: ", tag.Error(err))
 		}
 	}
-	if a.config.RefreshTime > 0 {
+	if a.config.RefreshInterval > 0 {
 		a.stop = make(chan bool)
-		a.ticker = time.NewTicker(a.config.RefreshTime)
+		a.ticker = time.NewTicker(a.config.RefreshInterval)
 		go a.timerCallback()
 	}
 }
