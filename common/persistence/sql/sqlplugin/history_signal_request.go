@@ -41,30 +41,30 @@ type (
 		SignalID    string
 	}
 
-	SignalsRequestedSetsSelectFilter struct {
+	SignalsRequestedSetsFilter struct {
 		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
+		SignalIDs   []string
 	}
 
-	SignalsRequestedSetsDeleteFilter struct {
+	SignalsRequestedSetsAllFilter struct {
 		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
-		SignalID    *string
 	}
 
 	// HistoryExecutionSignalRequest is the SQL persistence interface for history execution signal request
 	HistoryExecutionSignalRequest interface {
+		// ReplaceIntoSignalsRequestedSets replace one or more rows into signals_requested_sets table
 		ReplaceIntoSignalsRequestedSets(ctx context.Context, rows []SignalsRequestedSetsRow) (sql.Result, error)
-		// SelectFromSignalInfoMaps returns one or more rows form signals_requested_sets table
-		SelectFromSignalsRequestedSets(ctx context.Context, filter SignalsRequestedSetsSelectFilter) ([]SignalsRequestedSetsRow, error)
-		// DeleteFromSignalsRequestedSets deletes one or more rows from signals_requested_sets
-		// Required filter params
-		// - single row - {shardID, namespaceID, workflowID, runID, signalID}
-		// - multiple rows - {shardID, namespaceID, workflowID, runID}
-		DeleteFromSignalsRequestedSets(ctx context.Context, filter SignalsRequestedSetsDeleteFilter) (sql.Result, error)
+		// SelectAllFromSignalsRequestedSets returns all rows from signals_requested_sets table
+		SelectAllFromSignalsRequestedSets(ctx context.Context, filter SignalsRequestedSetsAllFilter) ([]SignalsRequestedSetsRow, error)
+		// DeleteFromSignalsRequestedSets deletes one or more rows from signals_requested_sets table
+		DeleteFromSignalsRequestedSets(ctx context.Context, filter SignalsRequestedSetsFilter) (sql.Result, error)
+		// DeleteAllFromSignalsRequestedSets deletes all rows from signals_requested_sets table
+		DeleteAllFromSignalsRequestedSets(ctx context.Context, filter SignalsRequestedSetsAllFilter) (sql.Result, error)
 	}
 )

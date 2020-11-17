@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/shuffle"
@@ -124,13 +123,13 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	selectFilter := sqlplugin.RequestCancelInfoMapsSelectFilter{
+	selectFilter := sqlplugin.RequestCancelInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	rowMap := map[int64]sqlplugin.RequestCancelInfoMapsRow{}
 	for _, requestCancel := range rows {
@@ -160,13 +159,13 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(numRequestCancels, int(rowsAffected))
 
-	selectFilter := sqlplugin.RequestCancelInfoMapsSelectFilter{
+	selectFilter := sqlplugin.RequestCancelInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	requestCancelMap := map[int64]sqlplugin.RequestCancelInfoMapsRow{}
 	for _, requestCancel := range requestCancels {
@@ -186,12 +185,12 @@ func (s *historyExecutionRequestCancelSuite) TestDeleteSelect_Single() {
 	runID := primitives.NewUUID()
 	initiatedID := rand.Int63()
 
-	deleteFilter := sqlplugin.RequestCancelInfoMapsDeleteFilter{
-		ShardID:     shardID,
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       runID,
-		InitiatedID: convert.Int64Ptr(initiatedID),
+	deleteFilter := sqlplugin.RequestCancelInfoMapsFilter{
+		ShardID:      shardID,
+		NamespaceID:  namespaceID,
+		WorkflowID:   workflowID,
+		RunID:        runID,
+		InitiatedIDs: []int64{initiatedID},
 	}
 	result, err := s.store.DeleteFromRequestCancelInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
@@ -199,13 +198,13 @@ func (s *historyExecutionRequestCancelSuite) TestDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	selectFilter := sqlplugin.RequestCancelInfoMapsSelectFilter{
+	selectFilter := sqlplugin.RequestCancelInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.RequestCancelInfoMapsRow(nil), rows)
 }
@@ -216,12 +215,12 @@ func (s *historyExecutionRequestCancelSuite) TestDeleteSelect_Multiple() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 
-	deleteFilter := sqlplugin.RequestCancelInfoMapsDeleteFilter{
-		ShardID:     shardID,
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       runID,
-		InitiatedID: nil,
+	deleteFilter := sqlplugin.RequestCancelInfoMapsFilter{
+		ShardID:      shardID,
+		NamespaceID:  namespaceID,
+		WorkflowID:   workflowID,
+		RunID:        runID,
+		InitiatedIDs: []int64{rand.Int63(), rand.Int63()},
 	}
 	result, err := s.store.DeleteFromRequestCancelInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
@@ -229,13 +228,42 @@ func (s *historyExecutionRequestCancelSuite) TestDeleteSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	selectFilter := sqlplugin.RequestCancelInfoMapsSelectFilter{
+	selectFilter := sqlplugin.RequestCancelInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
+	s.NoError(err)
+	s.Equal([]sqlplugin.RequestCancelInfoMapsRow(nil), rows)
+}
+
+func (s *historyExecutionRequestCancelSuite) TestDeleteSelect_All() {
+	shardID := rand.Int31()
+	namespaceID := primitives.NewUUID()
+	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
+	runID := primitives.NewUUID()
+
+	deleteFilter := sqlplugin.RequestCancelInfoMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	result, err := s.store.DeleteAllFromRequestCancelInfoMaps(newExecutionContext(), deleteFilter)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(0, int(rowsAffected))
+
+	selectFilter := sqlplugin.RequestCancelInfoMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	rows, err := s.store.SelectAllFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.RequestCancelInfoMapsRow(nil), rows)
 }
@@ -254,12 +282,12 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	deleteFilter := sqlplugin.RequestCancelInfoMapsDeleteFilter{
-		ShardID:     shardID,
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		RunID:       runID,
-		InitiatedID: convert.Int64Ptr(initiatedID),
+	deleteFilter := sqlplugin.RequestCancelInfoMapsFilter{
+		ShardID:      shardID,
+		NamespaceID:  namespaceID,
+		WorkflowID:   workflowID,
+		RunID:        runID,
+		InitiatedIDs: []int64{initiatedID},
 	}
 	result, err = s.store.DeleteFromRequestCancelInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
@@ -267,18 +295,64 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	selectFilter := sqlplugin.RequestCancelInfoMapsSelectFilter{
+	selectFilter := sqlplugin.RequestCancelInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.RequestCancelInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionRequestCancelSuite) TestReplaceDeleteSelect_Multiple() {
+	numRequestCancels := 20
+
+	shardID := rand.Int31()
+	namespaceID := primitives.NewUUID()
+	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
+	runID := primitives.NewUUID()
+
+	var requestCancels []sqlplugin.RequestCancelInfoMapsRow
+	var requestCancelInitiatedIDs []int64
+	for i := 0; i < numRequestCancels; i++ {
+		requestCancelInitiatedID := rand.Int63()
+		requestCancel := s.newRandomExecutionRequestCancelRow(shardID, namespaceID, workflowID, runID, requestCancelInitiatedID)
+		requestCancelInitiatedIDs = append(requestCancelInitiatedIDs, requestCancelInitiatedID)
+		requestCancels = append(requestCancels, requestCancel)
+	}
+	result, err := s.store.ReplaceIntoRequestCancelInfoMaps(newExecutionContext(), requestCancels)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(numRequestCancels, int(rowsAffected))
+
+	deleteFilter := sqlplugin.RequestCancelInfoMapsFilter{
+		ShardID:      shardID,
+		NamespaceID:  namespaceID,
+		WorkflowID:   workflowID,
+		RunID:        runID,
+		InitiatedIDs: requestCancelInitiatedIDs,
+	}
+	result, err = s.store.DeleteFromRequestCancelInfoMaps(newExecutionContext(), deleteFilter)
+	s.NoError(err)
+	rowsAffected, err = result.RowsAffected()
+	s.NoError(err)
+	s.Equal(numRequestCancels, int(rowsAffected))
+
+	selectFilter := sqlplugin.RequestCancelInfoMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	rows, err := s.store.SelectAllFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
+	s.NoError(err)
+	s.Equal([]sqlplugin.RequestCancelInfoMapsRow(nil), rows)
+}
+
+func (s *historyExecutionRequestCancelSuite) TestReplaceDeleteSelect_All() {
 	numRequestCancels := 20
 
 	shardID := rand.Int31()
@@ -297,26 +371,25 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceDeleteSelect_Multiple() 
 	s.NoError(err)
 	s.Equal(numRequestCancels, int(rowsAffected))
 
-	deleteFilter := sqlplugin.RequestCancelInfoMapsDeleteFilter{
+	deleteFilter := sqlplugin.RequestCancelInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		InitiatedID: nil,
 	}
-	result, err = s.store.DeleteFromRequestCancelInfoMaps(newExecutionContext(), deleteFilter)
+	result, err = s.store.DeleteAllFromRequestCancelInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
 	s.Equal(numRequestCancels, int(rowsAffected))
 
-	selectFilter := sqlplugin.RequestCancelInfoMapsSelectFilter{
+	selectFilter := sqlplugin.RequestCancelInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromRequestCancelInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.RequestCancelInfoMapsRow(nil), rows)
 }

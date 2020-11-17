@@ -41,7 +41,7 @@ func updateSignalsRequested(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	signalRequestedIDs []string,
-	deleteSignalRequestIDs []string,
+	deleteIDs []string,
 	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
@@ -64,13 +64,13 @@ func updateSignalsRequested(
 		}
 	}
 
-	for _, deleteSignalRequestID := range deleteSignalRequestIDs {
-		if _, err := tx.DeleteFromSignalsRequestedSets(ctx, sqlplugin.SignalsRequestedSetsDeleteFilter{
+	if len(deleteIDs) > 0 {
+		if _, err := tx.DeleteFromSignalsRequestedSets(ctx, sqlplugin.SignalsRequestedSetsFilter{
 			ShardID:     shardID,
 			NamespaceID: namespaceID,
 			WorkflowID:  workflowID,
 			RunID:       runID,
-			SignalID:    &deleteSignalRequestID,
+			SignalIDs:   deleteIDs,
 		}); err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("Failed to update signals requested. Failed to execute delete query. Error: %v", err))
 		}
@@ -87,7 +87,7 @@ func getSignalsRequested(
 	runID primitives.UUID,
 ) ([]string, error) {
 
-	rows, err := db.SelectFromSignalsRequestedSets(ctx, sqlplugin.SignalsRequestedSetsSelectFilter{
+	rows, err := db.SelectAllFromSignalsRequestedSets(ctx, sqlplugin.SignalsRequestedSetsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -112,7 +112,7 @@ func deleteSignalsRequestedSet(
 	runID primitives.UUID,
 ) error {
 
-	if _, err := tx.DeleteFromSignalsRequestedSets(ctx, sqlplugin.SignalsRequestedSetsDeleteFilter{
+	if _, err := tx.DeleteAllFromSignalsRequestedSets(ctx, sqlplugin.SignalsRequestedSetsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
