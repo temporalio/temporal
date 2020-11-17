@@ -111,7 +111,10 @@ func (a *defaultClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 
-		kid := token.Header["kid"].(string)
+		kid, ok := token.Header["kid"].(string)
+		if !ok {
+			return nil, fmt.Errorf("malformed token - no \"kid\" header")
+		}
 		alg := token.Header["alg"].(string)
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); ok {
 			return keyProvider.hmacKey(alg, kid)
