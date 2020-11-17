@@ -48,24 +48,24 @@ const (
 )
 
 // Default claim mapper that gives system level admin permission to everybody
-type defaultClaimMapper struct {
+type defaultJWTClaimMapper struct {
 	keyProvider          TokenKeyProvider
 	logger               log.Logger
 	permissionsClaimName string
 }
 
-func NewDefaultClaimMapper(provider TokenKeyProvider, cfg *config.Config) ClaimMapper {
+func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Config) ClaimMapper {
 	claimName := cfg.Global.Authorization.PermissionsClaimName
 	if claimName == "" {
 		claimName = defaultPermissionsClaimName
 	}
 	logger := loggerimpl.NewLogger(cfg.Log.NewZapLogger())
-	return &defaultClaimMapper{keyProvider: provider, logger: logger, permissionsClaimName: claimName}
+	return &defaultJWTClaimMapper{keyProvider: provider, logger: logger, permissionsClaimName: claimName}
 }
 
-var _ ClaimMapper = (*defaultClaimMapper)(nil)
+var _ ClaimMapper = (*defaultJWTClaimMapper)(nil)
 
-func (a *defaultClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
+func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 
 	claims := Claims{}
 
@@ -99,7 +99,7 @@ func (a *defaultClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 	return &claims, nil
 }
 
-func (a *defaultClaimMapper) extractPermissions(permissions []interface{}, claims *Claims) error {
+func (a *defaultJWTClaimMapper) extractPermissions(permissions []interface{}, claims *Claims) error {
 	for _, permission := range permissions {
 		p, ok := permission.(string)
 		if !ok {

@@ -42,6 +42,10 @@ var (
 	errUnauthorized = serviceerror.NewPermissionDenied("Request unauthorized.")
 )
 
+const (
+	ContextKeyMappedClaims = "auth-mappedClaims"
+)
+
 func (a *interceptor) Interceptor(
 	ctx context.Context,
 	req interface{},
@@ -77,13 +81,16 @@ func (a *interceptor) Interceptor(
 			if len(authHeaders) > 0 {
 				authHeader = authHeaders[0]
 			}
-			authInfo := AuthInfo{authHeader, tlsSubject}
+			authInfo := AuthInfo{
+				authToken:  authHeader,
+				tlsSubject: tlsSubject,
+			}
 			mappedClaims, err := a.claimMapper.GetClaims(&authInfo)
 			if err != nil {
 				return nil, err
 			}
 			claims = mappedClaims
-			ctx = context.WithValue(ctx, "auth-mappedClaims", mappedClaims)
+			ctx = context.WithValue(ctx, ContextKeyMappedClaims, mappedClaims)
 		}
 	}
 

@@ -81,7 +81,7 @@ func (s *defaultClaimMapperSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.tokenGenerator = newTokenGenerator()
 	s.config = &config.Config{}
-	s.claimMapper = NewDefaultClaimMapper(s.tokenGenerator, s.config)
+	s.claimMapper = NewDefaultJWTClaimMapper(s.tokenGenerator, s.config)
 }
 
 func (s *defaultClaimMapperSuite) TearDownTest() {
