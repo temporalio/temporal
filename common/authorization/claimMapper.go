@@ -28,6 +28,8 @@ package authorization
 
 import (
 	"crypto/x509/pkix"
+
+	"go.temporal.io/server/common/service/config"
 )
 
 // Authentication information from subject's JWT token or/and mTLS certificate
@@ -44,7 +46,9 @@ type ClaimMapper interface {
 // No-op claim mapper that gives system level admin permission to everybody
 type noopClaimMapper struct{}
 
-func NewNoopClaimMapper() ClaimMapper {
+var _ ClaimMapper = (*noopClaimMapper)(nil)
+
+func NewNoopClaimMapper(_ *config.Config) ClaimMapper {
 	return &noopClaimMapper{}
 }
 

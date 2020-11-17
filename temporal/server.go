@@ -341,7 +341,7 @@ func (s *Server) getServiceParams(
 	if s.so.claimMapper != nil {
 		params.ClaimMapper = s.so.claimMapper
 	} else {
-		params.ClaimMapper = authorization.NewDefaultClaimMapper(authorization.NewRSAKeyProvider(s.so.config), s.so.config)
+		params.ClaimMapper = authorization.NewNoopClaimMapper(s.so.config)
 	}
 
 	return &params, nil
