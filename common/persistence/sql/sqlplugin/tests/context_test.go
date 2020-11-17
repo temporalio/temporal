@@ -36,7 +36,7 @@ const (
 
 func newExecutionContext() context.Context {
 	ctx := context.Background()
-	// ctx, _ = context.WithTimeout(ctx, executionTimeout)
+	ctx, _ = context.WithTimeout(ctx, executionTimeout)
 	return ctx
 }
 
