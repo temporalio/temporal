@@ -588,7 +588,7 @@ func getDBFlags() []cli.Flag {
 		cli.StringFlag{
 			Name:  FlagDBEngine,
 			Value: "cassandra",
-			Usage: "Type of the DB engine to use (cassandra, mysql..)",
+			Usage: "Type of the DB engine to use (cassandra, mysql, postgres..)",
 		},
 		cli.StringFlag{
 			Name:  FlagDBAddress,

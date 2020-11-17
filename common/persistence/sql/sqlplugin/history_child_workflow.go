@@ -43,30 +43,30 @@ type (
 		DataEncoding string
 	}
 
-	ChildExecutionInfoMapsSelectFilter struct {
-		ShardID     int32
-		NamespaceID primitives.UUID
-		WorkflowID  string
-		RunID       primitives.UUID
+	ChildExecutionInfoMapsFilter struct {
+		ShardID      int32
+		NamespaceID  primitives.UUID
+		WorkflowID   string
+		RunID        primitives.UUID
+		InitiatedIDs []int64
 	}
 
-	ChildExecutionInfoMapsDeleteFilter struct {
+	ChildExecutionInfoMapsAllFilter struct {
 		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
-		InitiatedID *int64
 	}
 
 	// HistoryExecutionChildWorkflow is the SQL persistence interface for history execution child workflows
 	HistoryExecutionChildWorkflow interface {
+		// DeleteFromChildExecutionInfoMaps replace one or more rows into child_execution_info_maps table
 		ReplaceIntoChildExecutionInfoMaps(ctx context.Context, rows []ChildExecutionInfoMapsRow) (sql.Result, error)
-		// SelectFromChildExecutionInfoMaps returns one or more rows form child_execution_info_maps table
-		SelectFromChildExecutionInfoMaps(ctx context.Context, filter ChildExecutionInfoMapsSelectFilter) ([]ChildExecutionInfoMapsRow, error)
-		// DeleteFromChildExecutionInfoMaps deletes one or more rows from child_execution_info_maps
-		// Required filter params
-		// - single row - {shardID, namespaceID, workflowID, runID, initiatedID}
-		// - multiple rows - {shardID, namespaceID, workflowID, runID}
-		DeleteFromChildExecutionInfoMaps(ctx context.Context, filter ChildExecutionInfoMapsDeleteFilter) (sql.Result, error)
+		// SelectAllFromChildExecutionInfoMaps returns all rows into child_execution_info_maps table
+		SelectAllFromChildExecutionInfoMaps(ctx context.Context, filter ChildExecutionInfoMapsAllFilter) ([]ChildExecutionInfoMapsRow, error)
+		// DeleteFromChildExecutionInfoMaps deletes one or more rows from child_execution_info_maps table
+		DeleteFromChildExecutionInfoMaps(ctx context.Context, filter ChildExecutionInfoMapsFilter) (sql.Result, error)
+		// DeleteAllFromChildExecutionInfoMaps deletes all rows from child_execution_info_maps table
+		DeleteAllFromChildExecutionInfoMaps(ctx context.Context, filter ChildExecutionInfoMapsAllFilter) (sql.Result, error)
 	}
 )

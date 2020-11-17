@@ -886,6 +886,31 @@ func (s *integrationSuite) TestCronWorkflow() {
 
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		counter := 0
+		if previousStartedEventID == common.EmptyEventID {
+			startedEvent := history.Events[0]
+			if startedEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+				return []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+							Failure: failure.NewServerFailure("incorrect first event", true),
+						}},
+					}}, nil
+			}
+
+			startedAttributes := startedEvent.GetWorkflowExecutionStartedEventAttributes()
+			if err := payloads.Decode(startedAttributes.GetLastCompletionResult(), &counter); err != nil {
+				return []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+							Failure: failure.NewServerFailure("cannot decode last completion result", true),
+						}},
+					}}, nil
+			}
+		}
+
 		executions = append(executions, execution)
 		attemptCount++
 		if attemptCount == 3 {
@@ -1052,22 +1077,18 @@ func (s *integrationSuite) TestCronWorkflow() {
 	}
 }
 
-func (s *integrationSuite) TestCronWorkflowTimeout() {
-	id := "integration-wf-cron-timeout-test"
-	wt := "integration-wf-cron-timeout-type"
-	tl := "integration-wf-cron-timeout-taskqueue"
+func (s *integrationSuite) TestCronWorkflow_Success() {
+	id := "integration-wf-cron-success-test"
+	wt := "integration-wf-cron-success-type"
+	tl := "integration-wf-cron-success-taskqueue"
 	identity := "worker1"
 	cronSchedule := "@every 3s"
 
+	targetBackoffDuration := time.Second * 3
+	backoffDurationTolerance := time.Millisecond * 500
+
 	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payload{
-			"memoKey": payload.EncodeString("memoVal"),
-		},
-	}
-	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
-			"CustomKeywordField": payload.EncodeString(`"1"`),
-		},
+		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -1077,14 +1098,14 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(1 * time.Second), // set workflow timeout to 1s
+		WorkflowRunTimeout:  timestamp.DurationPtr(5 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
 		Identity:            identity,
-		CronSchedule:        cronSchedule, // minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
+		CronSchedule:        cronSchedule, // minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
 		Memo:                memo,
-		SearchAttributes:    searchAttr,
 	}
 
+	startWorkflowTS := time.Now().UTC()
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
@@ -1092,16 +1113,39 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 
 	var executions []*commonpb.WorkflowExecution
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, h *historypb.History) ([]*commandpb.Command, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		counter := 0
+		if previousStartedEventID == common.EmptyEventID {
+			startedEvent := history.Events[0]
+			if startedEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+				return []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+							Failure: failure.NewServerFailure("incorrect first event", true),
+						}},
+					}}, nil
+			}
+
+			startedAttributes := startedEvent.GetWorkflowExecutionStartedEventAttributes()
+			if err := payloads.Decode(startedAttributes.GetLastCompletionResult(), &counter); err != nil {
+				return []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+							Failure: failure.NewServerFailure("cannot decode last completion result", true),
+						}},
+					}}, nil
+			}
+		}
 
 		executions = append(executions, execution)
+		counter++
 		return []*commandpb.Command{
 			{
-				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
-
-				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
-					TimerId:            "timer-id",
-					StartToFireTimeout: timestamp.DurationPtr(5 * time.Second),
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeInt(counter),
 				}},
 			}}, nil
 	}
@@ -1116,33 +1160,77 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	startFilter := &filterpb.StartTimeFilter{}
+	startFilter.EarliestTime = &startWorkflowTS
+	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
+
+	// Sleep some time before checking the open executions.
+	// This will not cost extra time as the polling for first workflow task will be blocked for 3 seconds.
+	var listResponse *workflowservice.ListOpenWorkflowExecutionsResponse
+	var err error
+	for i := 0; i < 3; i++ {
+		time.Sleep(time.Second)
+		listResponse, err = s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 100,
+			StartTimeFilter: startFilter,
+			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				WorkflowId: id,
+			}},
+		})
+		if err == nil && len(listResponse.GetExecutions()) == 1 {
+			break
+		}
+	}
+
+	s.NoError(err)
+	s.Equal(1, len(listResponse.GetExecutions()))
+	executionInfo := listResponse.GetExecutions()[0]
+	s.Equal(targetBackoffDuration, executionInfo.GetExecutionTime().Sub(timestamp.TimeValue(executionInfo.GetStartTime())))
+
+	s.Logger.Info("Process first cron run")
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("First cron run processed")
 	s.True(err == nil, err)
 
-	time.Sleep(1 * time.Second) // wait for workflow timeout
+	// Make sure the cron workflow start running at a proper time, in this case 3 seconds after the
+	// startWorkflowExecution request
+	backoffDuration := time.Now().UTC().Sub(startWorkflowTS)
+	s.True(backoffDuration > targetBackoffDuration)
+	s.True(backoffDuration < targetBackoffDuration+backoffDurationTolerance)
 
-	// check when workflow timeout, continueAsNew event contains expected fields
-	events := s.getHistory(s.namespace, executions[0])
-	lastEvent := events[len(events)-1]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, lastEvent.GetEventType())
-	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
-	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attributes.GetInitiator())
-	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, attributes.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
-	s.Equal(memo, attributes.Memo)
-	s.Equal(searchAttr, attributes.SearchAttributes)
-
+	s.Logger.Info("Process second cron run")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("Second cron run processed")
 	s.True(err == nil, err)
 
-	// check new run contains expected fields
-	events = s.getHistory(s.namespace, executions[1])
-	firstEvent := events[0]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, firstEvent.GetEventType())
-	startAttributes := firstEvent.GetWorkflowExecutionStartedEventAttributes()
-	s.Equal(memo, startAttributes.Memo)
-	s.Equal(searchAttr, startAttributes.SearchAttributes)
+	describeWorkflowExecutionFunc := func(execution *commonpb.WorkflowExecution) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+		return s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace,
+			Execution: execution,
+		})
+	}
+	// Get RunID of current workflow execution
+	dweResponse, err := describeWorkflowExecutionFunc(&commonpb.WorkflowExecution{WorkflowId: id})
+	s.NoError(err)
+	currentExecution := dweResponse.WorkflowExecutionInfo.GetExecution()
+	// Wait for third run to timeout
+	for i := 0; i < 10; i++ {
+		time.Sleep(time.Second)
+		dweResponse, err = describeWorkflowExecutionFunc(currentExecution)
+		s.NoError(err)
+		if dweResponse.WorkflowExecutionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT {
+			s.Logger.Info("Third cron run timeoud out")
+			break
+		}
+	}
 
-	// terminate cron
+	s.Logger.Info("Process fourth cron run")
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("Third cron run processed")
+	s.True(err == nil, err)
+
+	s.Logger.Info("Terminate cron workflow")
 	_, terminateErr := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -1150,6 +1238,66 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 		},
 	})
 	s.NoError(terminateErr)
+
+	// for _, execution := range executions {
+	// 	s.printWorkflowHistory(s.namespace, execution)
+	// }
+
+	// Total cron executions should be 3
+	s.Equal(3, len(executions))
+
+	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
+	var closedExecutions []*workflowpb.WorkflowExecutionInfo
+	for i := 0; i < 10; i++ {
+		resp, err := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 10,
+			StartTimeFilter: startFilter,
+			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				WorkflowId: id,
+			}},
+		})
+		s.NoError(err)
+		if len(resp.GetExecutions()) == 5 {
+			closedExecutions = resp.GetExecutions()
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	s.Equal(5, len(closedExecutions))
+	// for _, execution := range closedExecutions {
+	// 	s.printWorkflowHistory(s.namespace, execution.GetExecution())
+	// }
+
+	lastExecution := closedExecutions[0]
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, lastExecution.GetStatus())
+
+	finalCronExecution := closedExecutions[1]
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, finalCronExecution.GetStatus())
+	events := s.getHistory(s.namespace, finalCronExecution.GetExecution())
+	lastEvent := events[len(events)-1]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, lastEvent.GetEventType())
+	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attributes.GetInitiator())
+	var r int
+	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
+	s.NoError(err)
+	s.Equal(3, r)
+
+	timedoutExecution := closedExecutions[2]
+	// When cron workflow timesout we continue as new to start the new run
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, timedoutExecution.GetStatus())
+	// check when workflow timeout, continueAsNew event contains expected fields
+	events = s.getHistory(s.namespace, timedoutExecution.GetExecution())
+	lastEvent = events[len(events)-1]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, lastEvent.GetEventType())
+	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attributes.GetInitiator())
+	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, attributes.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	s.NotNil(attributes.GetLastCompletionResult())
+	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
+	s.NoError(err)
+	s.Equal(2, r)
 }
 
 func (s *integrationSuite) TestSequential_UserTimers() {

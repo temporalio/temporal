@@ -37,6 +37,7 @@ import (
 
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -48,6 +49,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -92,17 +94,19 @@ func (s *replicationTaskExecutorSuite) TearDownSuite() {
 func (s *replicationTaskExecutorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
-	s.currentCluster = "test"
+	s.currentCluster = cluster.TestCurrentClusterName
 
 	s.config = NewDynamicConfigForTest()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:                0,
-				RangeId:                1,
-				ReplicationAckLevel:    0,
-				ReplicationDlqAckLevel: map[string]int64{"test": persistence.EmptyQueueMessageID},
+				ShardId:             0,
+				RangeId:             1,
+				ReplicationAckLevel: 0,
+				ReplicationDlqAckLevel: map[string]int64{
+					cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
+				},
 			}},
 		s.config,
 	)
@@ -117,7 +121,7 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 
 	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return("active").AnyTimes()
+	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.replicationTaskHandler = newReplicationTaskExecutor(
 		s.currentCluster,
@@ -135,17 +139,17 @@ func (s *replicationTaskExecutorSuite) TearDownTest() {
 	s.mockResource.Finish(s.T())
 }
 
-func (s *replicationTaskExecutorSuite) TestFilterTask() {
+func (s *replicationTaskExecutorSuite) TestFilterTask_Apply() {
 	namespaceID := uuid.New()
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(cache.NewGlobalNamespaceCacheEntryForTest(
 			nil,
 			nil,
-			&persistencespb.NamespaceReplicationConfig{
-				Clusters: []string{
-					"active",
-				}},
+			&persistencespb.NamespaceReplicationConfig{Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			}},
 			0,
 			s.clusterMetadata,
 		), nil)
@@ -154,11 +158,27 @@ func (s *replicationTaskExecutorSuite) TestFilterTask() {
 	s.True(ok)
 }
 
+func (s *replicationTaskExecutorSuite) TestFilterTask_NotApply() {
+	namespaceID := uuid.New()
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceByID(namespaceID).
+		Return(cache.NewGlobalNamespaceCacheEntryForTest(
+			nil,
+			nil,
+			&persistencespb.NamespaceReplicationConfig{Clusters: []string{cluster.TestAlternativeClusterName}},
+			0,
+			s.clusterMetadata,
+		), nil)
+	ok, err := s.replicationTaskHandler.filterTask(namespaceID, false)
+	s.NoError(err)
+	s.False(ok)
+}
+
 func (s *replicationTaskExecutorSuite) TestFilterTask_Error() {
 	namespaceID := uuid.New()
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
-		Return(nil, fmt.Errorf("test"))
+		Return(nil, fmt.Errorf("random error"))
 	ok, err := s.replicationTaskHandler.filterTask(namespaceID, false)
 	s.Error(err)
 	s.False(ok)
@@ -179,10 +199,18 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId: namespaceID,
-				WorkflowId:  workflowID,
-				RunId:       runID,
-				Attempt:     1,
+				NamespaceId:        namespaceID,
+				WorkflowId:         workflowID,
+				RunId:              runID,
+				Version:            1234,
+				ScheduledId:        2345,
+				ScheduledTime:      nil,
+				StartedId:          2346,
+				StartedTime:        nil,
+				LastHeartbeatTime:  nil,
+				Attempt:            10,
+				LastFailure:        nil,
+				LastWorkerIdentity: "",
 			},
 		},
 	}
@@ -190,13 +218,13 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 		NamespaceId:        namespaceID,
 		WorkflowId:         workflowID,
 		RunId:              runID,
-		Version:            0,
-		ScheduledId:        0,
+		Version:            1234,
+		ScheduledId:        2345,
 		ScheduledTime:      nil,
-		StartedId:          0,
+		StartedId:          2346,
 		StartedTime:        nil,
 		LastHeartbeatTime:  nil,
-		Attempt:            1,
+		Attempt:            10,
 		LastFailure:        nil,
 		LastWorkerIdentity: "",
 	}
@@ -206,7 +234,70 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 	s.NoError(err)
 }
 
-func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
+func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Resend() {
+	namespaceID := uuid.New()
+	workflowID := uuid.New()
+	runID := uuid.New()
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
+				NamespaceId:        namespaceID,
+				WorkflowId:         workflowID,
+				RunId:              runID,
+				Version:            1234,
+				ScheduledId:        2345,
+				ScheduledTime:      nil,
+				StartedId:          2346,
+				StartedTime:        nil,
+				LastHeartbeatTime:  nil,
+				Attempt:            10,
+				LastFailure:        nil,
+				LastWorkerIdentity: "",
+			},
+		},
+	}
+	request := &historyservice.SyncActivityRequest{
+		NamespaceId:        namespaceID,
+		WorkflowId:         workflowID,
+		RunId:              runID,
+		Version:            1234,
+		ScheduledId:        2345,
+		ScheduledTime:      nil,
+		StartedId:          2346,
+		StartedTime:        nil,
+		LastHeartbeatTime:  nil,
+		Attempt:            10,
+		LastFailure:        nil,
+		LastWorkerIdentity: "",
+	}
+
+	resendErr := serviceerrors.NewRetryReplication(
+		"some random error message",
+		namespaceID,
+		workflowID,
+		runID,
+		123,
+		234,
+		345,
+		456,
+	)
+	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(resendErr).Times(1)
+	s.nDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		resendErr.NamespaceId,
+		resendErr.WorkflowId,
+		resendErr.RunId,
+		resendErr.StartEventId,
+		resendErr.StartEventVersion,
+		resendErr.EndEventId,
+		resendErr.EndEventVersion,
+	)
+	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil).Times(1)
+	_, err := s.replicationTaskHandler.execute(task, true)
+	s.NoError(err)
+}
+
+func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask() {
 	namespaceID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
@@ -214,9 +305,12 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
 		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
 			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
-				NamespaceId: namespaceID,
-				WorkflowId:  workflowID,
-				RunId:       runID,
+				NamespaceId:         namespaceID,
+				WorkflowId:          workflowID,
+				RunId:               runID,
+				VersionHistoryItems: []*historyspb.VersionHistoryItem{{233, 2333}},
+				Events:              nil,
+				NewRunEvents:        nil,
 			},
 		},
 	}
@@ -226,8 +320,64 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
+		VersionHistoryItems: []*historyspb.VersionHistoryItem{{233, 2333}},
+		Events:              nil,
+		NewRunEvents:        nil,
 	}
 
+	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil).Times(1)
+	_, err := s.replicationTaskHandler.execute(task, true)
+	s.NoError(err)
+}
+
+func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
+	namespaceID := uuid.New()
+	workflowID := uuid.New()
+	runID := uuid.New()
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
+			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+				NamespaceId:         namespaceID,
+				WorkflowId:          workflowID,
+				RunId:               runID,
+				VersionHistoryItems: []*historyspb.VersionHistoryItem{{233, 2333}},
+				Events:              nil,
+				NewRunEvents:        nil,
+			},
+		},
+	}
+	request := &historyservice.ReplicateEventsV2Request{
+		NamespaceId: namespaceID,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		VersionHistoryItems: []*historyspb.VersionHistoryItem{{233, 2333}},
+		Events:              nil,
+		NewRunEvents:        nil,
+	}
+
+	resendErr := serviceerrors.NewRetryReplication(
+		"some random error message",
+		namespaceID,
+		workflowID,
+		runID,
+		123,
+		234,
+		345,
+		456,
+	)
+	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(resendErr).Times(1)
+	s.nDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		resendErr.NamespaceId,
+		resendErr.WorkflowId,
+		resendErr.RunId,
+		resendErr.StartEventId,
+		resendErr.StartEventVersion,
+		resendErr.EndEventId,
+		resendErr.EndEventVersion,
+	)
 	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil).Times(1)
 	_, err := s.replicationTaskHandler.execute(task, true)
 	s.NoError(err)

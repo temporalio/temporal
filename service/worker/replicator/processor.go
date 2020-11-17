@@ -225,8 +225,8 @@ SubmitLoop:
 			scope = metrics.HistoryMetadataReplicationTaskScope
 			err = p.handleHistoryMetadataReplicationTask(replicationTask, msg, logger)
 		case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
-			scope = metrics.HistoryReplicationV2TaskScope
-			err = p.handleHistoryReplicationV2Task(replicationTask, msg, logger)
+			scope = metrics.HistoryReplicationTaskScope
+			err = p.handleHistoryReplicationTask(replicationTask, msg, logger)
 		default:
 			logger.Error("Unknown task type.")
 			scope = metrics.ReplicatorScope
@@ -378,7 +378,7 @@ func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(
 	return p.sequentialTaskProcessor.Submit(historyMetadataReplicationTask)
 }
 
-func (p *replicationTaskProcessor) handleHistoryReplicationV2Task(
+func (p *replicationTaskProcessor) handleHistoryReplicationTask(
 	task *replicationspb.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,

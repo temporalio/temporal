@@ -60,7 +60,3 @@ type Authorizer interface {
 type requestWithNamespace interface {
 	GetNamespace() string
 }
-
-type requestWithName interface {
-	GetName() string
-}
