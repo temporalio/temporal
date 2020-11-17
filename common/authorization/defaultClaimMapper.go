@@ -29,6 +29,7 @@ import (
 	"strings"
 
 	"github.com/dgrijalva/jwt-go"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
@@ -37,6 +38,13 @@ import (
 
 const (
 	defaultPermissionsClaimName = "permissions"
+	authorizationBearer         = "bearer"
+	headerSubject               = "sub"
+	permissionScopeSystem       = "system"
+	permissionRead              = "read"
+	permissionWrite             = "write"
+	permissionWorker            = "worker"
+	permissionAdmin             = "admin"
 )
 
 // Default claim mapper that gives system level admin permission to everybody
@@ -61,51 +69,61 @@ func (a *defaultClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 
 	claims := Claims{}
 
-	if authInfo.authToken != "" {
-		parts := strings.Split(authInfo.authToken, " ")
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("unexpected authorization token format")
-		}
-		if !strings.EqualFold(parts[0], "bearer") {
-			return nil, fmt.Errorf("unexpected name in authorization token: %s", parts[0])
-		}
-		jwtClaims, err := parseJWT(parts[1], a.keyProvider)
+	if authInfo.authToken == "" {
+		return &claims, nil
+	}
+
+	parts := strings.Split(authInfo.authToken, " ")
+	if len(parts) != 2 {
+		return nil, serviceerror.NewPermissionDenied("unexpected authorization token format")
+	}
+	if !strings.EqualFold(parts[0], authorizationBearer) {
+		return nil, serviceerror.NewPermissionDenied("unexpected name in authorization token")
+	}
+	jwtClaims, err := parseJWT(parts[1], a.keyProvider)
+	if err != nil {
+		return nil, err
+	}
+	subject, ok := jwtClaims[headerSubject].(string)
+	if !ok {
+		return nil, serviceerror.NewPermissionDenied("unexpected value type of \"sub\" claim")
+	}
+	claims.subject = subject
+	permissions, ok := jwtClaims[a.permissionsClaimName].([]interface{})
+	if ok {
+		err := a.extractPermissions(permissions, &claims)
 		if err != nil {
 			return nil, err
 		}
-		subject, ok := jwtClaims["sub"].(string)
-		if !ok {
-			return nil, fmt.Errorf("unexpected value type of \"sub\" claim")
-		}
-		claims.subject = subject
-		permissions, ok := jwtClaims[a.permissionsClaimName].([]interface{})
-		if ok {
-			for _, permission := range permissions {
-				p, ok := permission.(string)
-				if !ok {
-					a.logger.Warn(fmt.Sprintf("ignoring permission that is not a string: %v", permission))
-					continue
-				}
-				parts := strings.Split(p, ":")
-				if len(parts) != 2 {
-					a.logger.Warn(fmt.Sprintf("ignoring permission in unexpected format: %v", permission))
-					continue
-				}
-				namespace := strings.ToLower(parts[0])
-				if strings.EqualFold(namespace, "system") {
-					claims.system |= permissionToRole(parts[1])
-				} else {
-					if claims.namespaces == nil {
-						claims.namespaces = make(map[string]Role)
-					}
-					role := claims.namespaces[namespace]
-					role |= permissionToRole(parts[1])
-					claims.namespaces[namespace] = role
-				}
-			}
-		}
 	}
 	return &claims, nil
+}
+
+func (a *defaultClaimMapper) extractPermissions(permissions []interface{}, claims *Claims) error {
+	for _, permission := range permissions {
+		p, ok := permission.(string)
+		if !ok {
+			a.logger.Warn(fmt.Sprintf("ignoring permission that is not a string: %v", permission))
+			continue
+		}
+		parts := strings.Split(p, ":")
+		if len(parts) != 2 {
+			a.logger.Warn(fmt.Sprintf("ignoring permission in unexpected format: %v", permission))
+			continue
+		}
+		namespace := strings.ToLower(parts[0])
+		if strings.EqualFold(namespace, permissionScopeSystem) {
+			claims.system |= permissionToRole(parts[1])
+		} else {
+			if claims.namespaces == nil {
+				claims.namespaces = make(map[string]Role)
+			}
+			role := claims.namespaces[namespace]
+			role |= permissionToRole(parts[1])
+			claims.namespaces[namespace] = role
+		}
+	}
+	return nil
 }
 
 func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, error) {
@@ -116,14 +134,17 @@ func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, 
 			return nil, fmt.Errorf("malformed token - no \"kid\" header")
 		}
 		alg := token.Header["alg"].(string)
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); ok {
-			return keyProvider.hmacKey(alg, kid)
-		} else if _, ok := token.Method.(*jwt.SigningMethodRSA); ok {
-			return keyProvider.rsaKey(alg, kid)
-		} else if _, ok := token.Method.(*jwt.SigningMethodECDSA); ok {
-			return keyProvider.ecdsaKey(alg, kid)
+		switch token.Method.(type) {
+		case *jwt.SigningMethodHMAC:
+			return keyProvider.HmacKey(alg, kid)
+		case *jwt.SigningMethodRSA:
+			return keyProvider.RsaKey(alg, kid)
+		case *jwt.SigningMethodECDSA:
+			return keyProvider.EcdsaKey(alg, kid)
+		default:
+			return nil, serviceerror.NewPermissionDenied(
+				fmt.Sprintf("unexpected signing method: %v for algorithm: %v", token.Method, token.Header["alg"]))
 		}
-		return nil, fmt.Errorf("unexpected signing method: %v for algorithm: %v", token.Method, token.Header["alg"])
 	})
 
 	if err != nil {
@@ -133,18 +154,18 @@ func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
 		return claims, nil
 	}
-	return nil, err
+	return nil, serviceerror.NewPermissionDenied("invalid token with no claims")
 }
 
 func permissionToRole(permission string) Role {
 	switch strings.ToLower(permission) {
-	case "read":
+	case permissionRead:
 		return RoleReader
-	case "write":
+	case permissionWrite:
 		return RoleWriter
-	case "admin":
+	case permissionAdmin:
 		return RoleAdmin
-	case "worker":
+	case permissionWorker:
 		return RoleWorker
 	}
 	return RoleUndefined

@@ -61,6 +61,12 @@ func (a *interceptor) Interceptor(
 		if p, ok := peer.FromContext(ctx); ok {
 			if tlsAuth, ok := p.AuthInfo.(credentials.TLSInfo); ok {
 				if len(tlsAuth.State.VerifiedChains) > 0 && len(tlsAuth.State.VerifiedChains[0]) > 0 {
+					// The assumption here is that we only expect a single verified chain of certs (first[0]).
+					// It's unclear how we should handle a situation when more than one chain is presented,
+					// which subject to use. It's okay for us to limit ourselves to one chain.
+					// We can always extend this logic later.
+					// We tale the first element in the chain ([0]) because that's the client cert
+					// (at the beginning of the chain), not intermediary CAs or the root CA (at the end of the chain).
 					tlsSubject = &tlsAuth.State.VerifiedChains[0][0].Subject
 				}
 			}

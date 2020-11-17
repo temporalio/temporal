@@ -89,7 +89,13 @@ func (a *rsaKeyProvider) init() {
 	}
 }
 
-func (a *rsaKeyProvider) rsaKey(alg string, kid string) (*rsa.PublicKey, error) {
+func (a *rsaKeyProvider) Close() {
+	a.ticker.Stop()
+	a.stop <- true
+	close(a.stop)
+}
+
+func (a *rsaKeyProvider) RsaKey(alg string, kid string) (*rsa.PublicKey, error) {
 	if !strings.EqualFold(alg, "rs256") {
 		return nil, fmt.Errorf("unexpected signing algorithm: %s", alg)
 	}
@@ -127,25 +133,9 @@ func (a *rsaKeyProvider) updateKeys() error {
 	keys := make(map[string]*rsa.PublicKey)
 
 	for _, uri := range a.config.KeySourceURIs {
-		resp, err := http.Get(uri)
+		err := a.updateKeysFromURI(uri, keys)
 		if err != nil {
 			return err
-		}
-		defer resp.Body.Close()
-
-		jwks := jwks{}
-		err = json.NewDecoder(resp.Body).Decode(&jwks)
-		if err != nil {
-			return err
-		}
-
-		for _, k := range jwks.Keys {
-			cert := "-----BEGIN CERTIFICATE-----\n" + k.X5c[0] + "\n-----END CERTIFICATE-----"
-			key, err := jwt.ParseRSAPublicKeyFromPEM([]byte(cert))
-			if err != nil {
-				return err
-			}
-			keys[k.Kid] = key
 		}
 	}
 	// swap old keys with the new ones
@@ -155,10 +145,34 @@ func (a *rsaKeyProvider) updateKeys() error {
 	return nil
 }
 
-func (a *rsaKeyProvider) hmacKey(alg string, kid string) ([]byte, error) {
+func (a *rsaKeyProvider) updateKeysFromURI(uri string, keys map[string]*rsa.PublicKey) error {
+	resp, err := http.Get(uri)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	jwks := jwks{}
+	err = json.NewDecoder(resp.Body).Decode(&jwks)
+	if err != nil {
+		return err
+	}
+
+	for _, k := range jwks.Keys {
+		cert := "-----BEGIN CERTIFICATE-----\n" + k.X5c[0] + "\n-----END CERTIFICATE-----"
+		key, err := jwt.ParseRSAPublicKeyFromPEM([]byte(cert))
+		if err != nil {
+			return err
+		}
+		keys[k.Kid] = key
+	}
+	return nil
+}
+
+func (a *rsaKeyProvider) HmacKey(alg string, kid string) ([]byte, error) {
 	return nil, fmt.Errorf("unsupported key type HMAC for: %s", alg)
 }
 
-func (a *rsaKeyProvider) ecdsaKey(alg string, kid string) (*ecdsa.PublicKey, error) {
+func (a *rsaKeyProvider) EcdsaKey(alg string, kid string) (*ecdsa.PublicKey, error) {
 	return nil, fmt.Errorf("unsupported key type ECDSA for: %s", alg)
 }

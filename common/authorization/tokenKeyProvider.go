@@ -31,7 +31,8 @@ import (
 
 // Provides keys for validating JWT tokens
 type TokenKeyProvider interface {
-	ecdsaKey(alg string, kid string) (*ecdsa.PublicKey, error)
-	hmacKey(alg string, kid string) ([]byte, error)
-	rsaKey(alg string, kid string) (*rsa.PublicKey, error)
+	EcdsaKey(alg string, kid string) (*ecdsa.PublicKey, error)
+	HmacKey(alg string, kid string) ([]byte, error)
+	RsaKey(alg string, kid string) (*rsa.PublicKey, error)
+	Close()
 }

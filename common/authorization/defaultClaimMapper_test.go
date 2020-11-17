@@ -212,12 +212,12 @@ func (tg *tokenGenerator) generateToken(subject string, permissions []string, op
 	return signedToken, err
 }
 
-func (tg *tokenGenerator) ecdsaKey(alg string, kid string) (*ecdsa.PublicKey, error) {
+func (tg *tokenGenerator) EcdsaKey(alg string, kid string) (*ecdsa.PublicKey, error) {
 	return nil, fmt.Errorf("unsupported key type ECDSA for: %s", alg)
 }
-func (tg *tokenGenerator) hmacKey(alg string, kid string) ([]byte, error) {
+func (tg *tokenGenerator) HmacKey(alg string, kid string) ([]byte, error) {
 	return nil, fmt.Errorf("unsupported key type HMAC for: %s", alg)
 }
-func (tg *tokenGenerator) rsaKey(alg string, kid string) (*rsa.PublicKey, error) {
+func (tg *tokenGenerator) RsaKey(alg string, kid string) (*rsa.PublicKey, error) {
 	return tg.publicKey, nil
 }
