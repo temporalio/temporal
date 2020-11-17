@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/shuffle"
@@ -124,13 +123,13 @@ func (s *historyExecutionActivitySuite) TestReplaceSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	selectFilter := sqlplugin.ActivityInfoMapsSelectFilter{
+	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromActivityInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	rowMap := map[int64]sqlplugin.ActivityInfoMapsRow{}
 	for _, activity := range rows {
@@ -160,13 +159,13 @@ func (s *historyExecutionActivitySuite) TestReplaceSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(numActivities, int(rowsAffected))
 
-	selectFilter := sqlplugin.ActivityInfoMapsSelectFilter{
+	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromActivityInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	activityMap := map[int64]sqlplugin.ActivityInfoMapsRow{}
 	for _, activity := range activities {
@@ -186,12 +185,12 @@ func (s *historyExecutionActivitySuite) TestDeleteSelect_Single() {
 	runID := primitives.NewUUID()
 	scheduleID := rand.Int63()
 
-	deleteFilter := sqlplugin.ActivityInfoMapsDeleteFilter{
+	deleteFilter := sqlplugin.ActivityInfoMapsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		ScheduleID:  convert.Int64Ptr(scheduleID),
+		ScheduleIDs: []int64{scheduleID},
 	}
 	result, err := s.store.DeleteFromActivityInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
@@ -199,13 +198,13 @@ func (s *historyExecutionActivitySuite) TestDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	selectFilter := sqlplugin.ActivityInfoMapsSelectFilter{
+	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromActivityInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.ActivityInfoMapsRow(nil), rows)
 }
@@ -216,12 +215,12 @@ func (s *historyExecutionActivitySuite) TestDeleteSelect_Multiple() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 
-	deleteFilter := sqlplugin.ActivityInfoMapsDeleteFilter{
+	deleteFilter := sqlplugin.ActivityInfoMapsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		ScheduleID:  nil,
+		ScheduleIDs: []int64{rand.Int63(), rand.Int63()},
 	}
 	result, err := s.store.DeleteFromActivityInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
@@ -229,13 +228,42 @@ func (s *historyExecutionActivitySuite) TestDeleteSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	selectFilter := sqlplugin.ActivityInfoMapsSelectFilter{
+	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromActivityInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
+	s.NoError(err)
+	s.Equal([]sqlplugin.ActivityInfoMapsRow(nil), rows)
+}
+
+func (s *historyExecutionActivitySuite) TestDeleteSelect_All() {
+	shardID := rand.Int31()
+	namespaceID := primitives.NewUUID()
+	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
+	runID := primitives.NewUUID()
+
+	deleteFilter := sqlplugin.ActivityInfoMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	result, err := s.store.DeleteAllFromActivityInfoMaps(newExecutionContext(), deleteFilter)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(0, int(rowsAffected))
+
+	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.ActivityInfoMapsRow(nil), rows)
 }
@@ -254,12 +282,12 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	deleteFilter := sqlplugin.ActivityInfoMapsDeleteFilter{
+	deleteFilter := sqlplugin.ActivityInfoMapsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		ScheduleID:  convert.Int64Ptr(scheduleID),
+		ScheduleIDs: []int64{scheduleID},
 	}
 	result, err = s.store.DeleteFromActivityInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
@@ -267,13 +295,13 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	selectFilter := sqlplugin.ActivityInfoMapsSelectFilter{
+	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromActivityInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.ActivityInfoMapsRow(nil), rows)
 }
@@ -287,8 +315,11 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Multiple() {
 	runID := primitives.NewUUID()
 
 	var activities []sqlplugin.ActivityInfoMapsRow
+	var activityScheduleIDs []int64
 	for i := 0; i < numActivities; i++ {
-		activity := s.newRandomExecutionActivityRow(shardID, namespaceID, workflowID, runID, rand.Int63())
+		activityScheduleID := rand.Int63()
+		activity := s.newRandomExecutionActivityRow(shardID, namespaceID, workflowID, runID, activityScheduleID)
+		activityScheduleIDs = append(activityScheduleIDs, activityScheduleID)
 		activities = append(activities, activity)
 	}
 	result, err := s.store.ReplaceIntoActivityInfoMaps(newExecutionContext(), activities)
@@ -297,12 +328,12 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(numActivities, int(rowsAffected))
 
-	deleteFilter := sqlplugin.ActivityInfoMapsDeleteFilter{
+	deleteFilter := sqlplugin.ActivityInfoMapsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		ScheduleID:  nil,
+		ScheduleIDs: activityScheduleIDs,
 	}
 	result, err = s.store.DeleteFromActivityInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
@@ -310,13 +341,56 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(numActivities, int(rowsAffected))
 
-	selectFilter := sqlplugin.ActivityInfoMapsSelectFilter{
+	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rows, err := s.store.SelectFromActivityInfoMaps(newExecutionContext(), selectFilter)
+	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
+	s.NoError(err)
+	s.Equal([]sqlplugin.ActivityInfoMapsRow(nil), rows)
+}
+
+func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_All() {
+	numActivities := 20
+
+	shardID := rand.Int31()
+	namespaceID := primitives.NewUUID()
+	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
+	runID := primitives.NewUUID()
+
+	var activities []sqlplugin.ActivityInfoMapsRow
+	for i := 0; i < numActivities; i++ {
+		activityScheduleID := rand.Int63()
+		activity := s.newRandomExecutionActivityRow(shardID, namespaceID, workflowID, runID, activityScheduleID)
+		activities = append(activities, activity)
+	}
+	result, err := s.store.ReplaceIntoActivityInfoMaps(newExecutionContext(), activities)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(numActivities, int(rowsAffected))
+
+	deleteFilter := sqlplugin.ActivityInfoMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	result, err = s.store.DeleteAllFromActivityInfoMaps(newExecutionContext(), deleteFilter)
+	s.NoError(err)
+	rowsAffected, err = result.RowsAffected()
+	s.NoError(err)
+	s.Equal(numActivities, int(rowsAffected))
+
+	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	s.Equal([]sqlplugin.ActivityInfoMapsRow(nil), rows)
 }

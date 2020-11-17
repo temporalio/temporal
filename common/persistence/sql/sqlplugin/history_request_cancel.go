@@ -43,30 +43,30 @@ type (
 		DataEncoding string
 	}
 
-	RequestCancelInfoMapsSelectFilter struct {
-		ShardID     int32
-		NamespaceID primitives.UUID
-		WorkflowID  string
-		RunID       primitives.UUID
+	RequestCancelInfoMapsFilter struct {
+		ShardID      int32
+		NamespaceID  primitives.UUID
+		WorkflowID   string
+		RunID        primitives.UUID
+		InitiatedIDs []int64
 	}
 
-	RequestCancelInfoMapsDeleteFilter struct {
+	RequestCancelInfoMapsAllFilter struct {
 		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
-		InitiatedID *int64
 	}
 
 	// HistoryExecutionRequestCancel is the SQL persistence interface for history execution request cancels
 	HistoryExecutionRequestCancel interface {
+		// ReplaceIntoRequestCancelInfoMaps replace one or more rows into request_cancel_info_maps table
 		ReplaceIntoRequestCancelInfoMaps(ctx context.Context, rows []RequestCancelInfoMapsRow) (sql.Result, error)
-		// SelectFromRequestCancelInfoMaps returns one or more rows form request_cancel_info_maps table
-		SelectFromRequestCancelInfoMaps(ctx context.Context, filter RequestCancelInfoMapsSelectFilter) ([]RequestCancelInfoMapsRow, error)
-		// DeleteFromRequestCancelInfoMaps deletes one or more rows from request_cancel_info_maps
-		// Required filter params
-		// - single row - {shardID, namespaceID, workflowID, runID, initiatedID}
-		// - multiple rows - {shardID, namespaceID, workflowID, runID}
-		DeleteFromRequestCancelInfoMaps(ctx context.Context, filter RequestCancelInfoMapsDeleteFilter) (sql.Result, error)
+		// SelectAllFromRequestCancelInfoMaps returns all rows from request_cancel_info_maps table
+		SelectAllFromRequestCancelInfoMaps(ctx context.Context, filter RequestCancelInfoMapsAllFilter) ([]RequestCancelInfoMapsRow, error)
+		// DeleteFromRequestCancelInfoMaps deletes one or more rows from request_cancel_info_maps table
+		DeleteFromRequestCancelInfoMaps(ctx context.Context, filter RequestCancelInfoMapsFilter) (sql.Result, error)
+		// DeleteAllFromRequestCancelInfoMaps deletes all rows from request_cancel_info_maps table
+		DeleteAllFromRequestCancelInfoMaps(ctx context.Context, filter RequestCancelInfoMapsAllFilter) (sql.Result, error)
 	}
 )
