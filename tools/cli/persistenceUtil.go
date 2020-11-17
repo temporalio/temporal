@@ -32,7 +32,8 @@ import (
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log/loggerimpl"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
@@ -85,7 +86,10 @@ func CreateDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 		}
 	}
 
-	if engine == cassandraDBType {
+	var defaultStore config.DataStore
+
+	switch engine {
+	case cassandraDBType:
 		defaultConfig := &config.Cassandra{
 			Hosts:    c.String(FlagDBAddress),
 			Port:     c.Int(FlagDBPort),
@@ -94,13 +98,8 @@ func CreateDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 			Keyspace: c.String(FlagKeyspace),
 			TLS:      tls,
 		}
-
-		defaultStore := config.DataStore{
-			Cassandra: defaultConfig,
-		}
-
-		return defaultStore, nil
-	} else if engine == mySQLDBType {
+		defaultStore.Cassandra = defaultConfig
+	case mysql.PluginName, postgresql.PluginName:
 		addr := fmt.Sprintf("%v:%v", c.String(FlagDBAddress), c.Int(FlagDBPort))
 		defaultConfig := &config.SQL{
 			User:         c.String(FlagUsername),
@@ -111,14 +110,11 @@ func CreateDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 			TLS:          tls,
 		}
 
-		defaultStore := config.DataStore{
-			SQL: defaultConfig,
-		}
-
-		return defaultStore, nil
+		defaultStore.SQL = defaultConfig
+	default:
+		return config.DataStore{}, fmt.Errorf("DB type %q is not supported by CLI", engine)
 	}
-
-	return config.DataStore{}, fmt.Errorf("DB type %q is not supported by CLI", engine)
+	return defaultStore, nil
 }
 
 // GetQPS returns default queries per second
