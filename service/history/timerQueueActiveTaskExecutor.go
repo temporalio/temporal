@@ -536,6 +536,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		RetryPolicy:          startAttributes.RetryPolicy,
 		Initiator:            continueAsNewInitiator,
 		Failure:              timeoutFailure,
+		LastCompletionResult: startAttributes.LastCompletionResult,
 		CronSchedule:         mutableState.GetExecutionInfo().CronSchedule,
 		Header:               startAttributes.Header,
 		Memo:                 startAttributes.Memo,
