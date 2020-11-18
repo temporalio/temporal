@@ -318,6 +318,9 @@ github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81P
 github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5cxcmMvtA=
 github.com/stretchr/testify v1.6.1 h1:hDPOHmpOpP40lSULcqw7IrRb/u7w6RpDC9399XyoNd0=
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
+github.com/temporalio/kafka-client v0.2.2/go.mod h1:45UAtcsw3FgZ04/CBa5JqXQ8o3tfIkaZYmVnuPDXUtg=
+github.com/temporalio/kafka-client v0.2.3-0.20201118205213-e4dff30fc573 h1:ovbGRTOicDVoV8T+xhB64iqWKMjtowqK6SMihlqVhVI=
+github.com/temporalio/kafka-client v0.2.3-0.20201118205213-e4dff30fc573/go.mod h1:xupTvWWv9F89/kGOyIgTbX3In9dFX5lmv14p17foFSY=
 github.com/temporalio/ringpop-go v0.0.0-20200708034907-1e016ebb537a h1:yyEBPFtXeNbtqFitJ+X3L7wpI9MrKrl8zSH3M29pREo=
 github.com/temporalio/ringpop-go v0.0.0-20200708034907-1e016ebb537a/go.mod h1:Ek9J8CAfI1IwVSqHpTOgj7FjzRSJ5SM/ud52eCmkhsw=
 github.com/uber-common/bark v1.0.0/go.mod h1:g0ZuPcD7XiExKHynr93Q742G/sbrdVQkghrqLGOoFuY=

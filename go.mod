@@ -50,9 +50,9 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/sirupsen/logrus v1.7.0 // indirect
 	github.com/stretchr/testify v1.6.1
+	github.com/temporalio/kafka-client v0.2.3-0.20201118205213-e4dff30fc573
 	github.com/temporalio/ringpop-go v0.0.0-20200708034907-1e016ebb537a
 	github.com/uber-common/bark v1.3.0 // indirect
-	github.com/uber-go/kafka-client v0.2.2
 	github.com/uber-go/tally v3.3.17+incompatible
 	github.com/uber/tchannel-go v1.20.1
 	github.com/urfave/cli v1.22.5
@@ -81,5 +81,3 @@ require (
 	gopkg.in/yaml.v2 v2.3.0
 	honnef.co/go/tools v0.0.1-2020.1.6 // indirect
 )
-
-replace github.com/uber-go/kafka-client => /home/manu/work/kafka-client

@@ -37,8 +37,8 @@ import (
 	"go.temporal.io/server/common/auth"
 
 	"github.com/Shopify/sarama"
-	uberKafkaClient "github.com/uber-go/kafka-client"
-	uberKafka "github.com/uber-go/kafka-client/kafka"
+	temporalKafkaClient "github.com/temporalio/kafka-client"
+	temporalKafka "github.com/temporalio/kafka-client/kafka"
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
@@ -48,11 +48,11 @@ import (
 )
 
 type (
-	// This is a default implementation of Client interface which makes use of uber-go/kafka-client as consumer
+	// This is a default implementation of Client interface which makes use of temporalio/kafka-client as consumer
 	kafkaClient struct {
 		config        *KafkaConfig
 		tlsConfig     *tls.Config
-		client        uberKafkaClient.Client
+		client        temporalKafkaClient.Client
 		metricsClient metrics.Client
 		logger        log.Logger
 	}
@@ -82,7 +82,7 @@ func NewKafkaClient(kc *KafkaConfig, metricsClient metrics.Client, zLogger *zap.
 		topicClusterAssignment[topic] = []string{cfg.Cluster}
 	}
 
-	client := uberKafkaClient.New(uberKafka.NewStaticNameResolver(topicClusterAssignment, brokers), zLogger, metricScope)
+	client := temporalKafkaClient.New(temporalKafka.NewStaticNameResolver(topicClusterAssignment, brokers), zLogger, metricScope)
 
 	tlsConfig, err := CreateTLSConfig(kc.TLS)
 	if err != nil {
@@ -104,8 +104,8 @@ func (c *kafkaClient) NewConsumer(app, consumerName string, concurrency int) (Co
 	kafkaClusterNameForTopic := c.config.getKafkaClusterForTopic(topics.Topic)
 	kafkaClusterNameForDLQTopic := c.config.getKafkaClusterForTopic(topics.DLQTopic)
 
-	topic := createUberKafkaTopic(topics.Topic, kafkaClusterNameForTopic)
-	dlq := createUberKafkaTopic(topics.DLQTopic, kafkaClusterNameForDLQTopic)
+	topic := createtemporalKafkaTopic(topics.Topic, kafkaClusterNameForTopic)
+	dlq := createtemporalKafkaTopic(topics.DLQTopic, kafkaClusterNameForDLQTopic)
 
 	return c.newConsumerHelper(topic, dlq, consumerName, concurrency)
 }
@@ -117,35 +117,35 @@ func (c *kafkaClient) NewConsumerWithClusterName(currentCluster, sourceCluster, 
 	kafkaClusterNameForTopic := c.config.getKafkaClusterForTopic(sourceTopics.Topic)
 	kafkaClusterNameForDLQTopic := c.config.getKafkaClusterForTopic(currentTopics.DLQTopic)
 
-	topic := createUberKafkaTopic(sourceTopics.Topic, kafkaClusterNameForTopic)
-	dlq := createUberKafkaTopic(currentTopics.DLQTopic, kafkaClusterNameForDLQTopic)
+	topic := createtemporalKafkaTopic(sourceTopics.Topic, kafkaClusterNameForTopic)
+	dlq := createtemporalKafkaTopic(currentTopics.DLQTopic, kafkaClusterNameForDLQTopic)
 
 	return c.newConsumerHelper(topic, dlq, consumerName, concurrency)
 }
 
-func createUberKafkaTopic(name, cluster string) *uberKafka.Topic {
-	return &uberKafka.Topic{
+func createtemporalKafkaTopic(name, cluster string) *temporalKafka.Topic {
+	return &temporalKafka.Topic{
 		Name:    name,
 		Cluster: cluster,
 	}
 }
 
-func (c *kafkaClient) newConsumerHelper(topic, dlq *uberKafka.Topic, consumerName string, concurrency int) (Consumer, error) {
-	topicList := uberKafka.ConsumerTopicList{
-		uberKafka.ConsumerTopic{
+func (c *kafkaClient) newConsumerHelper(topic, dlq *temporalKafka.Topic, consumerName string, concurrency int) (Consumer, error) {
+	topicList := temporalKafka.ConsumerTopicList{
+		temporalKafka.ConsumerTopic{
 			Topic: *topic,
 			DLQ:   *dlq,
 		},
 	}
-	consumerConfig := uberKafka.NewConsumerConfig(consumerName, topicList)
+	consumerConfig := temporalKafka.NewConsumerConfig(consumerName, topicList)
 	consumerConfig.Concurrency = concurrency
-	consumerConfig.Offsets.Initial.Offset = uberKafka.OffsetOldest
+	consumerConfig.Offsets.Initial.Offset = temporalKafka.OffsetOldest
 	consumerConfig.TLSConfig = c.tlsConfig
 
-	options := []uberKafkaClient.ConsumerOption{}
+	options := []temporalKafkaClient.ConsumerOption{}
 
 	if c.config.SASL.Enabled {
-		options = append(options, uberKafkaClient.WithSASLMechanism(
+		options = append(options, temporalKafkaClient.WithSASLMechanism(
 			c.config.SASL.User,
 			c.config.SASL.Password,
 			c.config.SASL.Mechanism,
