@@ -25,9 +25,12 @@
 package messaging
 
 import (
+	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"hash"
 	"io/ioutil"
 	"strings"
 
@@ -39,6 +42,7 @@ import (
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
+	"github.com/xdg/scram"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
@@ -138,7 +142,17 @@ func (c *kafkaClient) newConsumerHelper(topic, dlq *uberKafka.Topic, consumerNam
 	consumerConfig.Offsets.Initial.Offset = uberKafka.OffsetOldest
 	consumerConfig.TLSConfig = c.tlsConfig
 
-	uConsumer, err := c.client.NewConsumer(consumerConfig)
+	options := []uberKafkaClient.ConsumerOption{}
+
+	if c.config.SASL.Enabled {
+		options = append(options, uberKafkaClient.WithSASLMechanism(
+			c.config.SASL.User,
+			c.config.SASL.Password,
+			c.config.SASL.Mechanism,
+		))
+	}
+
+	uConsumer, err := c.client.NewConsumer(consumerConfig, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -157,6 +171,30 @@ func (c *kafkaClient) NewProducerWithClusterName(sourceCluster string) (Producer
 	return c.newProducerHelper(topics.Topic)
 }
 
+type scramClient struct {
+	*scram.Client
+	*scram.ClientConversation
+	scram.HashGeneratorFcn
+}
+
+func (s *scramClient) Begin(userName, password, authzID string) (err error) {
+	s.Client, err = s.HashGeneratorFcn.NewClient(userName, password, authzID)
+	if err != nil {
+		return err
+	}
+	s.ClientConversation = s.Client.NewConversation()
+	return nil
+}
+
+func (s *scramClient) Step(challenge string) (response string, err error) {
+	response, err = s.ClientConversation.Step(challenge)
+	return
+}
+
+func (s *scramClient) Done() bool {
+	return s.ClientConversation.Done()
+}
+
 func (c *kafkaClient) newProducerHelper(topic string) (Producer, error) {
 	kafkaClusterName := c.config.getKafkaClusterForTopic(topic)
 	brokers := c.config.getBrokersForKafkaCluster(kafkaClusterName)
@@ -165,6 +203,27 @@ func (c *kafkaClient) newProducerHelper(topic string) (Producer, error) {
 	config.Producer.Return.Successes = true
 	config.Net.TLS.Enable = c.tlsConfig != nil
 	config.Net.TLS.Config = c.tlsConfig
+
+	if c.config.SASL.Enabled {
+		config.Net.SASL.Enable = true
+		config.Net.SASL.User = c.config.SASL.User
+		config.Net.SASL.Password = c.config.SASL.Password
+
+		switch strings.ToLower(c.config.SASL.Mechanism) {
+		case "scramsha256":
+			config.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeSCRAMSHA256)
+			config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
+				return &scramClient{HashGeneratorFcn: func() hash.Hash { return sha256.New() }}
+			}
+		case "scramsha512":
+			config.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeSCRAMSHA512)
+			config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
+				return &scramClient{HashGeneratorFcn: func() hash.Hash { return sha512.New() }}
+			}
+		default:
+			return nil, fmt.Errorf("unknown sasl mechanism specified: %+v", c.config.SASL.Mechanism)
+		}
+	}
 
 	producer, err := sarama.NewSyncProducer(brokers, config)
 	if err != nil {

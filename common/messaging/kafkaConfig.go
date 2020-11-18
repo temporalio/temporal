@@ -34,6 +34,7 @@ type (
 	// KafkaConfig describes the configuration needed to connect to all kafka clusters
 	KafkaConfig struct {
 		TLS            auth.TLS                 `yaml:"tls"`
+		SASL           SASLConfig               `yaml:"sasl"`
 		Clusters       map[string]ClusterConfig `yaml:"clusters"`
 		Topics         map[string]TopicConfig   `yaml:"topics"`
 		ClusterToTopic map[string]TopicList     `yaml:"temporal-cluster-topics"`
@@ -43,6 +44,14 @@ type (
 	// ClusterConfig describes the configuration for a single Kafka cluster
 	ClusterConfig struct {
 		Brokers []string `yaml:"brokers"`
+	}
+
+	// SASLConfig describes the configuration for connecting via SASL for a single Kafka cluster
+	SASLConfig struct {
+		Enabled   bool   `yaml:"enabled"`
+		User      string `yaml:"user"`
+		Password  string `yaml:"password"`
+		Mechanism string `yaml:"mechanism"`
 	}
 
 	// TopicConfig describes the mapping from topic to Kafka cluster
