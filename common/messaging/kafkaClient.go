@@ -25,30 +25,36 @@
 package messaging
 
 import (
+	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
+	"errors"
 	"fmt"
+	"hash"
 	"io/ioutil"
 	"strings"
 
 	"go.temporal.io/server/common/auth"
 
 	"github.com/Shopify/sarama"
-	uberKafkaClient "github.com/uber-go/kafka-client"
-	uberKafka "github.com/uber-go/kafka-client/kafka"
+	temporalKafkaClient "github.com/temporalio/kafka-client"
+	temporalKafka "github.com/temporalio/kafka-client/kafka"
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
+	"github.com/xdg/scram"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
 
 type (
-	// This is a default implementation of Client interface which makes use of uber-go/kafka-client as consumer
+	// This is a default implementation of Client interface which makes use of temporalio/kafka-client as consumer
 	kafkaClient struct {
 		config        *KafkaConfig
 		tlsConfig     *tls.Config
-		client        uberKafkaClient.Client
+		client        temporalKafkaClient.Client
 		metricsClient metrics.Client
 		logger        log.Logger
 	}
@@ -78,7 +84,7 @@ func NewKafkaClient(kc *KafkaConfig, metricsClient metrics.Client, zLogger *zap.
 		topicClusterAssignment[topic] = []string{cfg.Cluster}
 	}
 
-	client := uberKafkaClient.New(uberKafka.NewStaticNameResolver(topicClusterAssignment, brokers), zLogger, metricScope)
+	client := temporalKafkaClient.New(temporalKafka.NewStaticNameResolver(topicClusterAssignment, brokers), zLogger, metricScope)
 
 	tlsConfig, err := CreateTLSConfig(kc.TLS)
 	if err != nil {
@@ -100,8 +106,8 @@ func (c *kafkaClient) NewConsumer(app, consumerName string, concurrency int) (Co
 	kafkaClusterNameForTopic := c.config.getKafkaClusterForTopic(topics.Topic)
 	kafkaClusterNameForDLQTopic := c.config.getKafkaClusterForTopic(topics.DLQTopic)
 
-	topic := createUberKafkaTopic(topics.Topic, kafkaClusterNameForTopic)
-	dlq := createUberKafkaTopic(topics.DLQTopic, kafkaClusterNameForDLQTopic)
+	topic := createTemporalKafkaTopic(topics.Topic, kafkaClusterNameForTopic)
+	dlq := createTemporalKafkaTopic(topics.DLQTopic, kafkaClusterNameForDLQTopic)
 
 	return c.newConsumerHelper(topic, dlq, consumerName, concurrency)
 }
@@ -113,32 +119,42 @@ func (c *kafkaClient) NewConsumerWithClusterName(currentCluster, sourceCluster, 
 	kafkaClusterNameForTopic := c.config.getKafkaClusterForTopic(sourceTopics.Topic)
 	kafkaClusterNameForDLQTopic := c.config.getKafkaClusterForTopic(currentTopics.DLQTopic)
 
-	topic := createUberKafkaTopic(sourceTopics.Topic, kafkaClusterNameForTopic)
-	dlq := createUberKafkaTopic(currentTopics.DLQTopic, kafkaClusterNameForDLQTopic)
+	topic := createTemporalKafkaTopic(sourceTopics.Topic, kafkaClusterNameForTopic)
+	dlq := createTemporalKafkaTopic(currentTopics.DLQTopic, kafkaClusterNameForDLQTopic)
 
 	return c.newConsumerHelper(topic, dlq, consumerName, concurrency)
 }
 
-func createUberKafkaTopic(name, cluster string) *uberKafka.Topic {
-	return &uberKafka.Topic{
+func createTemporalKafkaTopic(name, cluster string) *temporalKafka.Topic {
+	return &temporalKafka.Topic{
 		Name:    name,
 		Cluster: cluster,
 	}
 }
 
-func (c *kafkaClient) newConsumerHelper(topic, dlq *uberKafka.Topic, consumerName string, concurrency int) (Consumer, error) {
-	topicList := uberKafka.ConsumerTopicList{
-		uberKafka.ConsumerTopic{
+func (c *kafkaClient) newConsumerHelper(topic, dlq *temporalKafka.Topic, consumerName string, concurrency int) (Consumer, error) {
+	topicList := temporalKafka.ConsumerTopicList{
+		temporalKafka.ConsumerTopic{
 			Topic: *topic,
 			DLQ:   *dlq,
 		},
 	}
-	consumerConfig := uberKafka.NewConsumerConfig(consumerName, topicList)
+	consumerConfig := temporalKafka.NewConsumerConfig(consumerName, topicList)
 	consumerConfig.Concurrency = concurrency
-	consumerConfig.Offsets.Initial.Offset = uberKafka.OffsetOldest
+	consumerConfig.Offsets.Initial.Offset = temporalKafka.OffsetOldest
 	consumerConfig.TLSConfig = c.tlsConfig
 
-	uConsumer, err := c.client.NewConsumer(consumerConfig)
+	options := []temporalKafkaClient.ConsumerOption{}
+
+	if c.config.SASL.Enabled {
+		options = append(options, temporalKafkaClient.WithSASLMechanism(
+			c.config.SASL.User,
+			c.config.SASL.Password,
+			c.config.SASL.Mechanism,
+		))
+	}
+
+	uConsumer, err := c.client.NewConsumer(consumerConfig, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -157,6 +173,30 @@ func (c *kafkaClient) NewProducerWithClusterName(sourceCluster string) (Producer
 	return c.newProducerHelper(topics.Topic)
 }
 
+type scramClient struct {
+	*scram.Client
+	*scram.ClientConversation
+	scram.HashGeneratorFcn
+}
+
+func (s *scramClient) Begin(userName, password, authzID string) (err error) {
+	s.Client, err = s.HashGeneratorFcn.NewClient(userName, password, authzID)
+	if err != nil {
+		return err
+	}
+	s.ClientConversation = s.Client.NewConversation()
+	return nil
+}
+
+func (s *scramClient) Step(challenge string) (response string, err error) {
+	response, err = s.ClientConversation.Step(challenge)
+	return
+}
+
+func (s *scramClient) Done() bool {
+	return s.ClientConversation.Done()
+}
+
 func (c *kafkaClient) newProducerHelper(topic string) (Producer, error) {
 	kafkaClusterName := c.config.getKafkaClusterForTopic(topic)
 	brokers := c.config.getBrokersForKafkaCluster(kafkaClusterName)
@@ -165,6 +205,27 @@ func (c *kafkaClient) newProducerHelper(topic string) (Producer, error) {
 	config.Producer.Return.Successes = true
 	config.Net.TLS.Enable = c.tlsConfig != nil
 	config.Net.TLS.Config = c.tlsConfig
+
+	if c.config.SASL.Enabled {
+		config.Net.SASL.Enable = true
+		config.Net.SASL.User = c.config.SASL.User
+		config.Net.SASL.Password = c.config.SASL.Password
+
+		switch strings.ToLower(c.config.SASL.Mechanism) {
+		case "scramsha256":
+			config.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeSCRAMSHA256)
+			config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
+				return &scramClient{HashGeneratorFcn: func() hash.Hash { return sha256.New() }}
+			}
+		case "scramsha512":
+			config.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeSCRAMSHA512)
+			config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
+				return &scramClient{HashGeneratorFcn: func() hash.Hash { return sha512.New() }}
+			}
+		default:
+			return nil, fmt.Errorf("unknown sasl mechanism specified: %+v", c.config.SASL.Mechanism)
+		}
+	}
 
 	producer, err := sarama.NewSyncProducer(brokers, config)
 	if err != nil {
@@ -184,16 +245,69 @@ func CreateTLSConfig(tlsConfig auth.TLS) (*tls.Config, error) {
 		return nil, nil
 	}
 
-	cert, err := tls.LoadX509KeyPair(tlsConfig.CertFile, tlsConfig.KeyFile)
-	if err != nil {
-		return nil, err
+	if tlsConfig.CertData != "" && tlsConfig.CertFile != "" {
+		return nil, errors.New("Cannot specify both certData and certFile properties")
 	}
-	caCertPool := x509.NewCertPool()
-	pemData, err := ioutil.ReadFile(tlsConfig.CaFile)
-	if err != nil {
-		return nil, err
-	}
-	caCertPool.AppendCertsFromPEM(pemData)
 
-	return auth.NewTLSConfigWithCertsAndCAs([]tls.Certificate{cert}, caCertPool, "", true), nil
+	if tlsConfig.KeyData != "" && tlsConfig.KeyFile != "" {
+		return nil, errors.New("Cannot specify both keyData and keyFile properties")
+	}
+
+	if tlsConfig.CaData != "" && tlsConfig.CaFile != "" {
+		return nil, errors.New("Cannot specify both caData and caFile properties")
+	}
+
+	var certBytes []byte
+	var keyBytes []byte
+	var err error
+	var cert tls.Certificate
+
+	if tlsConfig.CertFile != "" {
+		certBytes, err = ioutil.ReadFile(tlsConfig.CertFile)
+		if err != nil {
+			return nil, fmt.Errorf("error reading client certificate file: %w", err)
+		}
+	} else if tlsConfig.CertData != "" {
+		certBytes, err = base64.StdEncoding.DecodeString(tlsConfig.CertData)
+		if err != nil {
+			return nil, fmt.Errorf("client certificate could not be decoded: %w", err)
+		}
+	}
+
+	if tlsConfig.KeyFile != "" {
+		keyBytes, err = ioutil.ReadFile(tlsConfig.KeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("error reading client certificate private key file: %w", err)
+		}
+	} else if tlsConfig.KeyData != "" {
+		keyBytes, err = base64.StdEncoding.DecodeString(tlsConfig.KeyData)
+		if err != nil {
+			return nil, fmt.Errorf("client certificate private key could not be decoded: %w", err)
+		}
+	}
+
+	if len(certBytes) > 0 {
+		cert, err = tls.X509KeyPair(certBytes, keyBytes)
+		if err != nil {
+			return nil, fmt.Errorf("unable to generate x509 key pair: %w", err)
+		}
+	}
+
+	caCertPool := x509.NewCertPool()
+
+	if tlsConfig.CaFile != "" {
+		pemData, err := ioutil.ReadFile(tlsConfig.CaFile)
+		if err != nil {
+			return nil, err
+		}
+		caCertPool.AppendCertsFromPEM(pemData)
+	} else if tlsConfig.CaData != "" {
+		pemData, err := base64.StdEncoding.DecodeString(tlsConfig.CaData)
+		if err != nil {
+			return nil, fmt.Errorf("caData could not be decoded: %w", err)
+		}
+		caCertPool.AppendCertsFromPEM(pemData)
+	}
+
+	return auth.NewTLSConfigWithCertsAndCAs([]tls.Certificate{cert}, caCertPool, "", tlsConfig.EnableHostVerification), nil
 }

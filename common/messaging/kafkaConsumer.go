@@ -25,7 +25,7 @@
 package messaging
 
 import (
-	uberKafka "github.com/uber-go/kafka-client/kafka"
+	temporalKafka "github.com/temporalio/kafka-client/kafka"
 
 	"go.temporal.io/server/common/log"
 )
@@ -33,9 +33,9 @@ import (
 const rcvBufferSize = 2 * 1024
 
 type (
-	// a wrapper of uberKafka.Consumer to let the compiler happy
+	// a wrapper of temporalKafka.Consumer to let the compiler happy
 	kafkaConsumer struct {
-		uConsumer uberKafka.Consumer
+		uConsumer temporalKafka.Consumer
 		logger    log.Logger
 		msgC      chan Message
 		doneC     chan struct{}
@@ -44,7 +44,7 @@ type (
 
 var _ Consumer = (*kafkaConsumer)(nil)
 
-func newKafkaConsumer(uConsumer uberKafka.Consumer, logger log.Logger) Consumer {
+func newKafkaConsumer(uConsumer temporalKafka.Consumer, logger log.Logger) Consumer {
 	return &kafkaConsumer{
 		uConsumer: uConsumer,
 		logger:    logger,
