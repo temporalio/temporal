@@ -27,6 +27,7 @@ package frontend
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"time"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -68,6 +69,7 @@ type (
 	// AdminHandler - gRPC handler interface for adminservice
 	AdminHandler struct {
 		resource.Resource
+		status int32
 
 		numberOfHistoryShards int32
 		params                *resource.BootstrapParams
@@ -97,6 +99,7 @@ func NewAdminHandler(
 	)
 	return &AdminHandler{
 		Resource:              resource,
+		status:                common.DaemonStatusInitialized,
 		numberOfHistoryShards: params.PersistenceConfig.NumHistoryShards,
 		params:                params,
 		config:                config,
@@ -111,15 +114,29 @@ func NewAdminHandler(
 
 // Start starts the handler
 func (adh *AdminHandler) Start() {
-	// Start namespace replication queue cleanup
-	if adh.config.EnableCleanupReplicationTask() {
-		// If the queue does not start, we can still call stop()
-		adh.Resource.GetNamespaceReplicationQueue().Start()
+	if !atomic.CompareAndSwapInt32(
+		&adh.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
+		return
 	}
+
+	// Start namespace replication queue cleanup
+	// If the queue does not start, we can still call stop()
+	adh.Resource.GetNamespaceReplicationQueue().Start()
 }
 
 // Stop stops the handler
 func (adh *AdminHandler) Stop() {
+	if !atomic.CompareAndSwapInt32(
+		&adh.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
+	}
+
 	// Calling stop if the queue does not start is ok
 	adh.Resource.GetNamespaceReplicationQueue().Stop()
 }

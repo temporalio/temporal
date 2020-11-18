@@ -40,6 +40,9 @@ import (
 const (
 	// ReplicationConsumerTypeKafka means consuming replication tasks from kafka.
 	ReplicationConsumerTypeKafka = "kafka"
+	// ReplicationConsumerTypeKafkaToRPC means sending tasks to kafka while receiving from both kafka & rpc
+	//  this should be used for kafka deprecation
+	ReplicationConsumerTypeKafkaToRPC = "kafka-to-rpc"
 	// ReplicationConsumerTypeRPC means pulling source DC for replication tasks.
 	ReplicationConsumerTypeRPC = "rpc"
 )

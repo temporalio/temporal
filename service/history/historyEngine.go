@@ -31,6 +31,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -87,6 +88,7 @@ const (
 
 type (
 	historyEngineImpl struct {
+		status                    int32
 		currentClusterName        string
 		shard                     shard.Context
 		timeSource                clock.TimeSource
@@ -188,6 +190,7 @@ func NewEngineWithShardContext(
 	historyV2Manager := shard.GetHistoryManager()
 	historyCache := newHistoryCache(shard)
 	historyEngImpl := &historyEngineImpl{
+		status:             common.DaemonStatusInitialized,
 		currentClusterName: currentClusterName,
 		shard:              shard,
 		clusterMetadata:    shard.GetClusterMetadata(),
@@ -310,6 +313,14 @@ func NewEngineWithShardContext(
 // Make sure all the components are loaded lazily so start can return immediately.  This is important because
 // ShardController calls start sequentially for all the shards for a given host during startup.
 func (e *historyEngineImpl) Start() {
+	if !atomic.CompareAndSwapInt32(
+		&e.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
+		return
+	}
+
 	e.logger.Info("", tag.LifeCycleStarting)
 	defer e.logger.Info("", tag.LifeCycleStarted)
 
@@ -324,10 +335,10 @@ func (e *historyEngineImpl) Start() {
 	e.registerNamespaceFailoverCallback()
 
 	clusterMetadata := e.shard.GetClusterMetadata()
-	if e.replicatorProcessor != nil &&
-		(clusterMetadata.GetReplicationConsumerConfig().Type != config.ReplicationConsumerTypeRPC ||
-			e.config.EnableKafkaReplication()) {
-		e.replicatorProcessor.Start()
+	if e.replicatorProcessor != nil {
+		if clusterMetadata.GetReplicationConsumerConfig().Type == config.ReplicationConsumerTypeKafka {
+			e.replicatorProcessor.Start()
+		}
 	}
 
 	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
@@ -337,6 +348,14 @@ func (e *historyEngineImpl) Start() {
 
 // Stop the service.
 func (e *historyEngineImpl) Stop() {
+	if !atomic.CompareAndSwapInt32(
+		&e.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
+	}
+
 	e.logger.Info("", tag.LifeCycleStopping)
 	defer e.logger.Info("", tag.LifeCycleStopped)
 
@@ -2795,7 +2814,7 @@ func (e *historyEngineImpl) GetDLQReplicationMessages(
 	sw := e.metricsClient.StartTimer(scope, metrics.GetDLQReplicationMessagesLatency)
 	defer sw.Stop()
 
-	tasks := make([]*replicationspb.ReplicationTask, len(taskInfos))
+	tasks := make([]*replicationspb.ReplicationTask, 0, len(taskInfos))
 	for _, taskInfo := range taskInfos {
 		task, err := e.replicatorProcessor.getTask(ctx, taskInfo)
 		if err != nil {

@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/server/common/convert"
+	serviceConfig "go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
@@ -64,8 +65,8 @@ type (
 	// Handler - gRPC handler interface for historyservice
 	Handler struct {
 		resource.Resource
+		status int32
 
-		shuttingDown            int32
 		controller              *shard.ControllerImpl
 		tokenSerializer         common.TaskTokenSerializer
 		startWG                 sync.WaitGroup
@@ -108,6 +109,7 @@ func NewHandler(
 ) *Handler {
 	handler := &Handler{
 		Resource:        resource,
+		status:          common.DaemonStatusInitialized,
 		config:          config,
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		rateLimiter: quotas.NewDynamicRateLimiter(
@@ -124,11 +126,21 @@ func NewHandler(
 
 // Start starts the handler
 func (h *Handler) Start() {
+	if !atomic.CompareAndSwapInt32(
+		&h.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
+		return
+	}
+
 	if h.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-		var err error
-		h.publisher, err = h.GetMessagingClient().NewProducerWithClusterName(h.GetClusterMetadata().GetCurrentClusterName())
-		if err != nil {
-			h.GetLogger().Fatal("Creating kafka producer failed", tag.Error(err))
+		if h.GetClusterMetadata().GetReplicationConsumerConfig().Type == serviceConfig.ReplicationConsumerTypeKafka {
+			var err error
+			h.publisher, err = h.GetMessagingClient().NewProducerWithClusterName(h.GetClusterMetadata().GetCurrentClusterName())
+			if err != nil {
+				h.GetLogger().Fatal("Creating kafka producer failed", tag.Error(err))
+			}
 		}
 	}
 
@@ -200,7 +212,14 @@ func (h *Handler) Start() {
 
 // Stop stops the handler
 func (h *Handler) Stop() {
-	h.PrepareToStop()
+	if !atomic.CompareAndSwapInt32(
+		&h.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
+	}
+
 	h.replicationTaskFetchers.Stop()
 	if h.queueTaskProcessor != nil {
 		h.queueTaskProcessor.Stop()
@@ -209,13 +228,8 @@ func (h *Handler) Stop() {
 	h.eventNotifier.Stop()
 }
 
-// PrepareToStop starts graceful traffic drain in preparation for shutdown
-func (h *Handler) PrepareToStop() {
-	atomic.StoreInt32(&h.shuttingDown, 1)
-}
-
-func (h *Handler) isShuttingDown() bool {
-	return atomic.LoadInt32(&h.shuttingDown) != 0
+func (h *Handler) isStopped() bool {
+	return atomic.LoadInt32(&h.status) == common.DaemonStatusStopped
 }
 
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
@@ -875,7 +889,7 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -920,7 +934,7 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -962,7 +976,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1027,7 +1041,7 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1066,7 +1080,7 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1105,7 +1119,7 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1143,7 +1157,7 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1183,7 +1197,7 @@ func (h *Handler) ScheduleWorkflowTask(ctx context.Context, request *historyserv
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1226,7 +1240,7 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1272,7 +1286,7 @@ func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyserv
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1304,7 +1318,7 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1347,7 +1361,7 @@ func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.S
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1391,7 +1405,7 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1438,7 +1452,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1494,7 +1508,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1550,7 +1564,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 	wg.Wait()
 	close(tasksChan)
 
-	replicationTasks := make([]*replicationspb.ReplicationTask, len(tasksChan))
+	replicationTasks := make([]*replicationspb.ReplicationTask, 0, len(tasksChan))
 	for task := range tasksChan {
 		replicationTasks = append(replicationTasks, task)
 	}
@@ -1569,7 +1583,7 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1611,7 +1625,7 @@ func (h *Handler) GetDLQMessages(ctx context.Context, request *historyservice.Ge
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1640,7 +1654,7 @@ func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1663,7 +1677,7 @@ func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.
 
 	h.startWG.Wait()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1697,7 +1711,7 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	if h.isShuttingDown() {
+	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 

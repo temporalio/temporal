@@ -210,11 +210,9 @@ func (p *ReplicationTaskProcessorImpl) eventLoop() {
 			))
 
 		case <-cleanupTimer.C:
-			if p.config.EnableCleanupReplicationTask() {
-				if err := p.cleanupReplicationTasks(); err != nil {
-					p.logger.Error("Failed to clean up replication messages.", tag.Error(err))
-					p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupFailure)
-				}
+			if err := p.cleanupReplicationTasks(); err != nil {
+				p.logger.Error("Failed to clean up replication messages.", tag.Error(err))
+				p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupFailure)
 			}
 			cleanupTimer.Reset(backoff.JitDuration(
 				p.config.ReplicationTaskProcessorCleanupInterval(shardID),

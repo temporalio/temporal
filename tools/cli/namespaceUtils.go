@@ -315,7 +315,7 @@ func initializeClusterMetadata(
 	clusterMetadata := serviceConfig.ClusterMetadata
 	return cluster.NewMetadata(
 		logger,
-		dynamicconfig.GetBoolPropertyFn(clusterMetadata.EnableGlobalNamespace),
+		clusterMetadata.EnableGlobalNamespace,
 		clusterMetadata.FailoverVersionIncrement,
 		clusterMetadata.MasterClusterName,
 		clusterMetadata.CurrentClusterName,

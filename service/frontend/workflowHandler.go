@@ -86,8 +86,8 @@ type (
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
 		resource.Resource
+		status int32
 
-		shuttingDown                    int32
 		healthStatus                    int32
 		tokenSerializer                 common.TaskTokenSerializer
 		rateLimiter                     quotas.Policy
@@ -115,6 +115,7 @@ func NewWorkflowHandler(
 ) Handler {
 	handler := &WorkflowHandler{
 		Resource:        resource,
+		status:          common.DaemonStatusInitialized,
 		config:          config,
 		healthStatus:    int32(HealthStatusOK),
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
@@ -160,11 +161,24 @@ func NewWorkflowHandler(
 
 // Start starts the handler
 func (wh *WorkflowHandler) Start() {
+	if !atomic.CompareAndSwapInt32(
+		&wh.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
+		return
+	}
 }
 
 // Stop stops the handler
 func (wh *WorkflowHandler) Stop() {
-	atomic.StoreInt32(&wh.shuttingDown, 1)
+	if !atomic.CompareAndSwapInt32(
+		&wh.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
+	}
 }
 
 // UpdateHealthStatus sets the health status for this rpc handler.
@@ -173,8 +187,8 @@ func (wh *WorkflowHandler) UpdateHealthStatus(status HealthStatus) {
 	atomic.StoreInt32(&wh.healthStatus, int32(status))
 }
 
-func (wh *WorkflowHandler) isShuttingDown() bool {
-	return atomic.LoadInt32(&wh.shuttingDown) != 0
+func (wh *WorkflowHandler) isStopped() bool {
+	return atomic.LoadInt32(&wh.status) == common.DaemonStatusStopped
 }
 
 // GetResource return resource
@@ -223,7 +237,7 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 	scope, sw := wh.startRequestProfile(metrics.FrontendRegisterNamespaceScope)
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -262,7 +276,7 @@ func (wh *WorkflowHandler) DescribeNamespace(ctx context.Context, request *workf
 	scope, sw := wh.startRequestProfile(metrics.FrontendDescribeNamespaceScope)
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -292,7 +306,7 @@ func (wh *WorkflowHandler) ListNamespaces(ctx context.Context, request *workflow
 	scope, sw := wh.startRequestProfile(metrics.FrontendListNamespacesScope)
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -318,7 +332,7 @@ func (wh *WorkflowHandler) UpdateNamespace(ctx context.Context, request *workflo
 	scope, sw := wh.startRequestProfile(metrics.FrontendUpdateNamespaceScope)
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -357,7 +371,7 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 	scope, sw := wh.startRequestProfile(metrics.FrontendDeprecateNamespaceScope)
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -394,7 +408,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendStartWorkflowExecutionScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -515,7 +529,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendGetWorkflowExecutionHistoryScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -907,7 +921,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(ctx context.Context, req
 	)
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -990,7 +1004,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(ctx context.Context, reques
 	)
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1173,7 +1187,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	)
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1229,7 +1243,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRecordActivityTaskHeartbeatByIdScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1376,7 +1390,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 	)
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1431,7 +1445,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRespondActivityTaskCompletedByIdScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1582,7 +1596,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 	)
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1630,7 +1644,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRespondActivityTaskFailedByIdScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1767,7 +1781,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 	)
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1826,7 +1840,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRespondActivityTaskCanceledScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1939,7 +1953,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRequestCancelWorkflowExecutionScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -1987,7 +2001,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendSignalWorkflowExecutionScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -2070,7 +2084,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendSignalWithStartWorkflowExecutionScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -2207,7 +2221,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendResetWorkflowExecutionScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -2255,7 +2269,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendTerminateWorkflowExecutionScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -2302,7 +2316,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendListOpenWorkflowExecutionsScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -2402,7 +2416,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendListClosedWorkflowExecutionsScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -2517,7 +2531,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendListWorkflowExecutionsScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -2580,7 +2594,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendListArchivedWorkflowExecutionsScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -2668,7 +2682,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendScanWorkflowExecutionsScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -2732,7 +2746,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendCountWorkflowExecutionsScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -2785,7 +2799,7 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 	scope, sw := wh.startRequestProfile(metrics.FrontendGetSearchAttributesScope)
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -2840,7 +2854,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 	)
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -2893,7 +2907,7 @@ func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *wo
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendResetStickyTaskQueueScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -2935,7 +2949,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendQueryWorkflowScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -3007,7 +3021,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendDescribeWorkflowExecutionScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -3060,7 +3074,7 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendDescribeTaskQueueScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 
@@ -3140,7 +3154,7 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendListTaskQueuePartitionsScope, request.GetNamespace())
 	defer sw.Stop()
 
-	if wh.isShuttingDown() {
+	if wh.isStopped() {
 		return nil, errShuttingDown
 	}
 

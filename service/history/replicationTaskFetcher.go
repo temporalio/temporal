@@ -99,7 +99,7 @@ func NewReplicationTaskFetchers(
 ) *ReplicationTaskFetchersImpl {
 
 	var fetchers []ReplicationTaskFetcher
-	if consumerConfig.Type == serviceConfig.ReplicationConsumerTypeRPC && config.EnableRPCReplication() {
+	if consumerConfig.Type == serviceConfig.ReplicationConsumerTypeRPC || consumerConfig.Type == serviceConfig.ReplicationConsumerTypeKafkaToRPC {
 		currentCluster := clusterMetadata.GetCurrentClusterName()
 		for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
 			if !info.Enabled {

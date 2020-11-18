@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -611,7 +610,7 @@ func Test_IsSampledForLongerRetention(t *testing.T) {
 func Test_NamespaceCacheEntry_GetNamespaceNotActiveErr(t *testing.T) {
 	clusterMetadata := cluster.NewMetadata(
 		loggerimpl.NewNopLogger(),
-		dynamicconfig.GetBoolPropertyFn(true),
+		true,
 		int64(10),
 		cluster.TestCurrentClusterName,
 		cluster.TestCurrentClusterName,
