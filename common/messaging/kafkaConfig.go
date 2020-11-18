@@ -48,9 +48,11 @@ type (
 
 	// SASLConfig describes the configuration for connecting via SASL for a single Kafka cluster
 	SASLConfig struct {
-		Enabled   bool   `yaml:"enabled"`
-		User      string `yaml:"user"`
-		Password  string `yaml:"password"`
+		Enabled  bool   `yaml:"enabled"`
+		User     string `yaml:"user"`
+		Password string `yaml:"password"`
+
+		// Mechanism only supports the following options: scramsha256 or scramsha512
 		Mechanism string `yaml:"mechanism"`
 	}
 
