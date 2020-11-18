@@ -33,10 +33,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
@@ -94,7 +96,7 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 				ShardId:                0,
 				RangeId:                1,
 				ReplicationAckLevel:    0,
-				ReplicationDlqAckLevel: map[string]int64{"test": persistence.EmptyQueueMessageID},
+				ReplicationDlqAckLevel: map[string]int64{cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID},
 			}},
 		NewDynamicConfigForTest(),
 	)
@@ -105,10 +107,10 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 	s.executionManager = s.mockResource.ExecutionMgr
 	s.shardManager = s.mockResource.ShardMgr
 	s.config = NewDynamicConfigForTest()
-	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return("active").AnyTimes()
+	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.taskExecutors = make(map[string]replicationTaskExecutor)
 	s.taskExecutor = NewMockreplicationTaskExecutor(s.controller)
-	s.sourceCluster = "test"
+	s.sourceCluster = cluster.TestAlternativeClusterName
 	s.taskExecutors[s.sourceCluster] = s.taskExecutor
 
 	s.replicationMessageHandler = newReplicationDLQHandler(
@@ -124,48 +126,80 @@ func (s *replicationDLQHandlerSuite) TearDownTest() {
 
 func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	ctx := context.Background()
-	lastMessageID := int64(1)
-	pageSize := 1
-	pageToken := []byte{}
 
-	resp := &persistence.GetReplicationTasksFromDLQResponse{
-		Tasks: []*persistencespb.ReplicationTaskInfo{
-			&persistencespb.ReplicationTaskInfo{
-				NamespaceId: uuid.New(),
-				WorkflowId:  uuid.New(),
-				RunId:       uuid.New(),
-				TaskId:      0,
-				TaskType:    1,
+	namespaceID := uuid.New()
+	workflowID := uuid.New()
+	runID := uuid.New()
+	taskID := int64(12345)
+	taskType := enumsspb.TASK_TYPE_REPLICATION_HISTORY
+	version := int64(2333)
+	firstEventID := int64(144)
+	nextEventID := int64(233)
+
+	lastMessageID := int64(1394)
+	pageSize := 1
+	pageToken := []byte("some random token")
+
+	dbResp := &persistence.GetReplicationTasksFromDLQResponse{
+		Tasks: []*persistencespb.ReplicationTaskInfo{{
+			NamespaceId:  namespaceID,
+			WorkflowId:   workflowID,
+			RunId:        runID,
+			Version:      version,
+			FirstEventId: firstEventID,
+			NextEventId:  nextEventID,
+			TaskId:       taskID,
+			TaskType:     taskType,
+		}},
+		NextPageToken: pageToken,
+	}
+
+	remoteTask := &replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
+		SourceTaskId: taskID,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
+			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+				TaskId:      taskID,
+				NamespaceId: namespaceID,
+				WorkflowId:  workflowID,
+				RunId:       runID,
+				VersionHistoryItems: []*historyspb.VersionHistoryItem{{
+					Version: version,
+					EventId: nextEventID - 1,
+				}},
+				Events: &commonpb.DataBlob{},
 			},
 		},
 	}
+
 	s.executionManager.On("GetReplicationTasksFromDLQ", &persistence.GetReplicationTasksFromDLQRequest{
 		SourceClusterName: s.sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
-			ReadLevel:     -1,
+			ReadLevel:     persistence.EmptyQueueMessageID,
 			MaxReadLevel:  lastMessageID,
 			BatchSize:     pageSize,
 			NextPageToken: pageToken,
 		},
-	}).Return(resp, nil).Times(1)
+	}).Return(dbResp, nil).Times(1)
 
 	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient).AnyTimes()
-	s.adminClient.EXPECT().
-		GetDLQReplicationMessages(ctx, gomock.Any()).
-		Return(&adminservice.GetDLQReplicationMessagesResponse{}, nil)
+	s.adminClient.EXPECT().GetDLQReplicationMessages(ctx, gomock.Any()).
+		Return(&adminservice.GetDLQReplicationMessagesResponse{
+			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
+		}, nil)
 	tasks, token, err := s.replicationMessageHandler.getMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)
-	s.Nil(token)
-	s.Nil(tasks)
+	s.Equal(pageToken, token)
+	s.Equal([]*replicationspb.ReplicationTask{remoteTask}, tasks)
 }
 
-func (s *replicationDLQHandlerSuite) TestPurgeMessages_OK() {
+func (s *replicationDLQHandlerSuite) TestPurgeMessages() {
 	lastMessageID := int64(1)
 
 	s.executionManager.On("RangeDeleteReplicationTaskFromDLQ",
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
 			SourceClusterName:    s.sourceCluster,
-			ExclusiveBeginTaskID: -1,
+			ExclusiveBeginTaskID: persistence.EmptyQueueMessageID,
 			InclusiveEndTaskID:   lastMessageID,
 		}).Return(nil).Times(1)
 
@@ -173,57 +207,79 @@ func (s *replicationDLQHandlerSuite) TestPurgeMessages_OK() {
 	err := s.replicationMessageHandler.purgeMessages(s.sourceCluster, lastMessageID)
 	s.NoError(err)
 }
-func (s *replicationDLQHandlerSuite) TestMergeMessages_OK() {
+func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 	ctx := context.Background()
-	lastMessageID := int64(1)
-	pageSize := 1
-	pageToken := []byte{}
 
-	resp := &persistence.GetReplicationTasksFromDLQResponse{
-		Tasks: []*persistencespb.ReplicationTaskInfo{
-			{
-				NamespaceId: uuid.New(),
-				WorkflowId:  uuid.New(),
-				RunId:       uuid.New(),
-				TaskType:    0,
-				TaskId:      1,
+	namespaceID := uuid.New()
+	workflowID := uuid.New()
+	runID := uuid.New()
+	taskID := int64(12345)
+	taskType := enumsspb.TASK_TYPE_REPLICATION_HISTORY
+	version := int64(2333)
+	firstEventID := int64(144)
+	nextEventID := int64(233)
+
+	lastMessageID := int64(1394)
+	pageSize := 1
+	pageToken := []byte("some random token")
+
+	dbResp := &persistence.GetReplicationTasksFromDLQResponse{
+		Tasks: []*persistencespb.ReplicationTaskInfo{{
+			NamespaceId:  namespaceID,
+			WorkflowId:   workflowID,
+			RunId:        runID,
+			Version:      version,
+			FirstEventId: firstEventID,
+			NextEventId:  nextEventID,
+			TaskId:       taskID,
+			TaskType:     taskType,
+		}},
+		NextPageToken: pageToken,
+	}
+
+	remoteTask := &replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
+		SourceTaskId: taskID,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
+			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+				TaskId:      taskID,
+				NamespaceId: namespaceID,
+				WorkflowId:  workflowID,
+				RunId:       runID,
+				VersionHistoryItems: []*historyspb.VersionHistoryItem{{
+					Version: version,
+					EventId: nextEventID - 1,
+				}},
+				Events: &commonpb.DataBlob{},
 			},
 		},
 	}
+
 	s.executionManager.On("GetReplicationTasksFromDLQ", &persistence.GetReplicationTasksFromDLQRequest{
 		SourceClusterName: s.sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
-			ReadLevel:     -1,
+			ReadLevel:     persistence.EmptyQueueMessageID,
 			MaxReadLevel:  lastMessageID,
 			BatchSize:     pageSize,
 			NextPageToken: pageToken,
 		},
-	}).Return(resp, nil).Times(1)
+	}).Return(dbResp, nil).Times(1)
 
 	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient).AnyTimes()
-	replicationTask := &replicationspb.ReplicationTask{
-		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
-		SourceTaskId: lastMessageID,
-		Attributes:   &replicationspb.ReplicationTask_HistoryTaskAttributes{},
-	}
-	s.adminClient.EXPECT().
-		GetDLQReplicationMessages(ctx, gomock.Any()).
+	s.adminClient.EXPECT().GetDLQReplicationMessages(ctx, gomock.Any()).
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
-			ReplicationTasks: []*replicationspb.ReplicationTask{
-				replicationTask,
-			},
+			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
 		}, nil)
-	s.taskExecutor.EXPECT().execute(replicationTask, true).Return(0, nil).Times(1)
-	s.executionManager.On("RangeDeleteReplicationTaskFromDLQ",
-		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
-			SourceClusterName:    s.sourceCluster,
-			ExclusiveBeginTaskID: -1,
-			InclusiveEndTaskID:   lastMessageID,
-		}).Return(nil).Times(1)
+	s.taskExecutor.EXPECT().execute(remoteTask, true).Return(0, nil).Times(1)
+	s.executionManager.On("RangeDeleteReplicationTaskFromDLQ", &persistence.RangeDeleteReplicationTaskFromDLQRequest{
+		SourceClusterName:    s.sourceCluster,
+		ExclusiveBeginTaskID: persistence.EmptyQueueMessageID,
+		InclusiveEndTaskID:   lastMessageID,
+	}).Return(nil).Times(1)
 
 	s.shardManager.On("UpdateShard", mock.Anything).Return(nil)
 
 	token, err := s.replicationMessageHandler.mergeMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)
-	s.Nil(token)
+	s.Equal(pageToken, token)
 }
