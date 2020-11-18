@@ -29,6 +29,8 @@ import (
 	"crypto/sha512"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"hash"
 	"io/ioutil"
@@ -243,16 +245,69 @@ func CreateTLSConfig(tlsConfig auth.TLS) (*tls.Config, error) {
 		return nil, nil
 	}
 
-	cert, err := tls.LoadX509KeyPair(tlsConfig.CertFile, tlsConfig.KeyFile)
-	if err != nil {
-		return nil, err
+	if tlsConfig.CertData != "" && tlsConfig.CertFile != "" {
+		return nil, errors.New("Cannot specify both certData and certFile properties")
 	}
-	caCertPool := x509.NewCertPool()
-	pemData, err := ioutil.ReadFile(tlsConfig.CaFile)
-	if err != nil {
-		return nil, err
-	}
-	caCertPool.AppendCertsFromPEM(pemData)
 
-	return auth.NewTLSConfigWithCertsAndCAs([]tls.Certificate{cert}, caCertPool, "", true), nil
+	if tlsConfig.KeyData != "" && tlsConfig.KeyFile != "" {
+		return nil, errors.New("Cannot specify both keyData and keyFile properties")
+	}
+
+	if tlsConfig.CaData != "" && tlsConfig.CaFile != "" {
+		return nil, errors.New("Cannot specify both caData and caFile properties")
+	}
+
+	var certBytes []byte
+	var keyBytes []byte
+	var err error
+	var cert tls.Certificate
+
+	if tlsConfig.CertFile != "" {
+		certBytes, err = ioutil.ReadFile(tlsConfig.CertFile)
+		if err != nil {
+			return nil, fmt.Errorf("error reading client certificate file: %w", err)
+		}
+	} else if tlsConfig.CertData != "" {
+		certBytes, err = base64.StdEncoding.DecodeString(tlsConfig.CertData)
+		if err != nil {
+			return nil, fmt.Errorf("client certificate could not be decoded: %w", err)
+		}
+	}
+
+	if tlsConfig.KeyFile != "" {
+		keyBytes, err = ioutil.ReadFile(tlsConfig.KeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("error reading client certificate private key file: %w", err)
+		}
+	} else if tlsConfig.KeyData != "" {
+		keyBytes, err = base64.StdEncoding.DecodeString(tlsConfig.KeyData)
+		if err != nil {
+			return nil, fmt.Errorf("client certificate private key could not be decoded: %w", err)
+		}
+	}
+
+	if len(certBytes) > 0 {
+		cert, err = tls.X509KeyPair(certBytes, keyBytes)
+		if err != nil {
+			return nil, fmt.Errorf("unable to generate x509 key pair: %w", err)
+		}
+	}
+
+	caCertPool := x509.NewCertPool()
+
+	if tlsConfig.CaFile != "" {
+		pemData, err := ioutil.ReadFile(tlsConfig.CaFile)
+		if err != nil {
+			return nil, err
+		}
+		caCertPool.AppendCertsFromPEM(pemData)
+	} else if tlsConfig.CaData != "" {
+		pemData, err := base64.StdEncoding.DecodeString(tlsConfig.CaData)
+		if err != nil {
+			return nil, fmt.Errorf("caData could not be decoded: %w", err)
+		}
+		caCertPool.AppendCertsFromPEM(pemData)
+	}
+
+	return auth.NewTLSConfigWithCertsAndCAs([]tls.Certificate{cert}, caCertPool, "", tlsConfig.EnableHostVerification), nil
 }
