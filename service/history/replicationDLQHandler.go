@@ -128,7 +128,7 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	}
 
 	remoteAdminClient := r.shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster)
-	taskInfo := make([]*replicationspb.ReplicationTaskInfo, len(resp.Tasks))
+	taskInfo := make([]*replicationspb.ReplicationTaskInfo, 0, len(resp.Tasks))
 	for _, task := range resp.Tasks {
 		taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
 			NamespaceId:  task.GetNamespaceId(),
