@@ -111,7 +111,7 @@ type (
 		// Metrics is the metrics subsystem configuration
 		Metrics *Metrics `yaml:"metrics"`
 		// Settings for authentication and authorization
-		Authorization Authorization `yaml:"security"`
+		Authorization Authorization `yaml:"authorization"`
 	}
 
 	// RootTLS contains all TLS settings for the Temporal server
