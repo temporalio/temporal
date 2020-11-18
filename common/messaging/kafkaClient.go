@@ -104,8 +104,8 @@ func (c *kafkaClient) NewConsumer(app, consumerName string, concurrency int) (Co
 	kafkaClusterNameForTopic := c.config.getKafkaClusterForTopic(topics.Topic)
 	kafkaClusterNameForDLQTopic := c.config.getKafkaClusterForTopic(topics.DLQTopic)
 
-	topic := createtemporalKafkaTopic(topics.Topic, kafkaClusterNameForTopic)
-	dlq := createtemporalKafkaTopic(topics.DLQTopic, kafkaClusterNameForDLQTopic)
+	topic := createTemporalKafkaTopic(topics.Topic, kafkaClusterNameForTopic)
+	dlq := createTemporalKafkaTopic(topics.DLQTopic, kafkaClusterNameForDLQTopic)
 
 	return c.newConsumerHelper(topic, dlq, consumerName, concurrency)
 }
@@ -117,13 +117,13 @@ func (c *kafkaClient) NewConsumerWithClusterName(currentCluster, sourceCluster, 
 	kafkaClusterNameForTopic := c.config.getKafkaClusterForTopic(sourceTopics.Topic)
 	kafkaClusterNameForDLQTopic := c.config.getKafkaClusterForTopic(currentTopics.DLQTopic)
 
-	topic := createtemporalKafkaTopic(sourceTopics.Topic, kafkaClusterNameForTopic)
-	dlq := createtemporalKafkaTopic(currentTopics.DLQTopic, kafkaClusterNameForDLQTopic)
+	topic := createTemporalKafkaTopic(sourceTopics.Topic, kafkaClusterNameForTopic)
+	dlq := createTemporalKafkaTopic(currentTopics.DLQTopic, kafkaClusterNameForDLQTopic)
 
 	return c.newConsumerHelper(topic, dlq, consumerName, concurrency)
 }
 
-func createtemporalKafkaTopic(name, cluster string) *temporalKafka.Topic {
+func createTemporalKafkaTopic(name, cluster string) *temporalKafka.Topic {
 	return &temporalKafka.Topic{
 		Name:    name,
 		Cluster: cluster,
