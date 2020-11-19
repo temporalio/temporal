@@ -827,10 +827,6 @@ const (
 	HistoryRequestCancelWorkflowExecutionScope
 	// HistoryReplicateEventsScope tracks ReplicateEvents API calls received by service
 	HistoryReplicateEventsScope
-	// HistoryReplicateRawEventsScope tracks ReplicateEvents API calls received by service
-	HistoryReplicateRawEventsScope
-	// HistoryReplicateEventsV2Scope tracks ReplicateEvents API calls received by service
-	HistoryReplicateEventsV2Scope
 	// HistorySyncShardStatusScope tracks HistorySyncShardStatus API calls received by service
 	HistorySyncShardStatusScope
 	// HistorySyncActivityScope tracks HistoryActivity API calls received by service
@@ -1422,8 +1418,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRecordChildExecutionCompletedScope:              {operation: "RecordChildExecutionCompleted"},
 		HistoryRequestCancelWorkflowExecutionScope:             {operation: "RequestCancelWorkflowExecution"},
 		HistoryReplicateEventsScope:                            {operation: "ReplicateEvents"},
-		HistoryReplicateRawEventsScope:                         {operation: "ReplicateRawEvents"},
-		HistoryReplicateEventsV2Scope:                          {operation: "ReplicateEventsV2"},
 		HistorySyncShardStatusScope:                            {operation: "SyncShardStatus"},
 		HistorySyncActivityScope:                               {operation: "SyncActivity"},
 		HistoryDescribeMutableStateScope:                       {operation: "DescribeMutableState"},
