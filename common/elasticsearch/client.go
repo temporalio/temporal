@@ -26,9 +26,17 @@ package elasticsearch
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/olivere/elastic"
+	v4 "github.com/olivere/elastic/aws/v4"
 )
 
 type (
@@ -87,17 +95,31 @@ var _ Client = (*elasticWrapper)(nil)
 
 // NewClient create a ES client
 func NewClient(config *Config) (Client, error) {
-	client, err := elastic.NewClient(
+	options := []elastic.ClientOptionFunc{
 		elastic.SetURL(config.URL.String()),
 		elastic.SetSniff(false),
 		elastic.SetBasicAuth(config.Username, config.Password),
 
-		// Disable health check so we don't block client creation if ES happens to be down.
+		// Disable health check so we don't block client creation (and thus temporal server startup)
+		// if the ES instance happens to be down.
 		elastic.SetHealthcheck(false),
 
 		elastic.SetRetrier(elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
-		elastic.SetDecoder(&elastic.NumberDecoder{}), // critical to ensure decode of int64 won't lose precise
-	)
+
+		// critical to ensure decode of int64 won't lose precision
+		elastic.SetDecoder(&elastic.NumberDecoder{}),
+	}
+
+	if config.AWSRequestSigning.Enabled {
+		httpClient, err := getAWSElasticSearchHTTPClient(config.AWSRequestSigning)
+		if err != nil {
+			return nil, err
+		}
+
+		options = append(options, elastic.SetHttpClient(httpClient))
+	}
+
+	client, err := elastic.NewClient(options...)
 
 	if err != nil {
 		return nil, err
@@ -206,4 +228,40 @@ func buildPutMappingBody(root, key, valueType string) map[string]interface{} {
 
 func (s *scrollServiceImpl) Clear(ctx context.Context) error {
 	return s.scrollService.Clear(ctx)
+}
+
+func getAWSElasticSearchHTTPClient(config AWSRequestSigningConfig) (*http.Client, error) {
+	if config.Region == "" {
+		config.Region = os.Getenv("AWS_REGION")
+		if config.Region == "" {
+			return nil, fmt.Errorf("unable to resolve aws region for obtaining aws es signing credentials")
+		}
+	}
+
+	var awsCredentials *credentials.Credentials
+
+	switch strings.ToLower(config.CredentialProvider) {
+	case "static":
+		awsCredentials = credentials.NewStaticCredentials(
+			config.Static.AccessKeyID,
+			config.Static.SecretAccessKey,
+			config.Static.Token,
+		)
+	case "environment":
+		awsCredentials = credentials.NewEnvCredentials()
+	case "aws-sdk-default":
+		awsSession, err := session.NewSession(&aws.Config{
+			Region: &config.Region,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		awsCredentials = awsSession.Config.Credentials
+	default:
+		return nil, fmt.Errorf("unknown aws credential provider specified: %+v. Accepted options are 'static', 'environment' or 'session'", config.CredentialProvider)
+	}
+
+	return v4.NewV4SigningClient(awsCredentials, config.Region), nil
 }
