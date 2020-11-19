@@ -61,7 +61,9 @@ type (
 	AWSStaticCredentialProvider struct {
 		AccessKeyID     string `yaml:"accessKeyID"`
 		SecretAccessKey string `yaml:"secretAccessKey"`
-		Token           string `yaml:"token"`
+
+		// Token only required for temporary security credentials retrieved via STS. Otherwise, this is optional.
+		Token string `yaml:"token"`
 	}
 )
 
