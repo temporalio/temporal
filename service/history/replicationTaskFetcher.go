@@ -61,8 +61,8 @@ type (
 		logger         log.Logger
 		remotePeer     admin.Client
 		rateLimiter    *quotas.DynamicRateLimiter
-		requestChan    chan *request
-		requestByShard map[int32]*request
+		requestChan    chan *replicationTaskRequest
+		requestByShard map[int32]*replicationTaskRequest
 		shutdownChan   chan struct{}
 	}
 	// ReplicationTaskFetcher is responsible for fetching replication messages from remote DC.
@@ -70,7 +70,7 @@ type (
 		common.Daemon
 
 		GetSourceCluster() string
-		GetRequestChan() chan<- *request
+		GetRequestChan() chan<- *replicationTaskRequest
 		GetRateLimiter() *quotas.DynamicRateLimiter
 	}
 
@@ -183,8 +183,8 @@ func newReplicationTaskFetcher(
 		rateLimiter: quotas.NewDynamicRateLimiter(func() float64 {
 			return config.ReplicationTaskProcessorHostQPS()
 		}),
-		requestChan:    make(chan *request, requestChanBufferSize),
-		requestByShard: make(map[int32]*request, requestsMapSize),
+		requestChan:    make(chan *replicationTaskRequest, requestChanBufferSize),
+		requestByShard: make(map[int32]*replicationTaskRequest, requestsMapSize),
 		shutdownChan:   make(chan struct{}),
 	}
 }
@@ -234,10 +234,7 @@ func (f *ReplicationTaskFetcherImpl) fetchTasks() {
 
 		case <-timer.C:
 			// When timer fires, we collect all the requests we have so far and attempt to send them to remote.
-			requests := f.requestByShard
-			f.requestByShard = make(map[int32]*request, requestsMapSize)
-
-			err := f.getMessages(requests)
+			err := f.getMessages()
 			if err != nil {
 				timer.Reset(backoff.JitDuration(
 					f.config.ReplicationTaskFetcherErrorRetryWait(),
@@ -257,7 +254,7 @@ func (f *ReplicationTaskFetcherImpl) fetchTasks() {
 }
 
 func (f *ReplicationTaskFetcherImpl) bufferRequests(
-	request *request,
+	request *replicationTaskRequest,
 ) {
 	// Here we only add the request to map. We will wait until timer fires to send the request to remote.
 	if req, ok := f.requestByShard[request.token.GetShardId()]; ok && req != request {
@@ -270,12 +267,13 @@ func (f *ReplicationTaskFetcherImpl) bufferRequests(
 	f.requestByShard[request.token.GetShardId()] = request
 }
 
-func (f *ReplicationTaskFetcherImpl) getMessages(
-	requests map[int32]*request,
-) error {
+func (f *ReplicationTaskFetcherImpl) getMessages() error {
+	if len(f.requestByShard) == 0 {
+		return nil
+	}
 
-	tokens := make([]*replicationspb.ReplicationToken, 0, len(requests))
-	for _, request := range requests {
+	tokens := make([]*replicationspb.ReplicationToken, 0, len(f.requestByShard))
+	for _, request := range f.requestByShard {
 		tokens = append(tokens, request.token)
 	}
 
@@ -289,18 +287,24 @@ func (f *ReplicationTaskFetcherImpl) getMessages(
 	response, err := f.remotePeer.GetReplicationMessages(ctx, request)
 	if err != nil {
 		f.logger.Error("Failed to get replication tasks", tag.Error(err))
+		for _, req := range f.requestByShard {
+			close(req.respChan)
+		}
+		f.requestByShard = make(map[int32]*replicationTaskRequest, requestsMapSize)
 		return err
 	}
 
-	for shardID, tasks := range response.GetShardMessages() {
-		request, ok := requests[shardID]
-		if !ok {
-			f.logger.Error("No outstanding request found for shardId. Skipping Messages.", tag.ShardID(shardID))
-			continue
-		}
-		request.respChan <- tasks
-		close(request.respChan)
+	shardReplicationTasks := make(map[int32]*replicationspb.ReplicationMessages, len(response.GetShardMessages()))
+	for shardID, resp := range response.GetShardMessages() {
+		shardReplicationTasks[shardID] = resp
 	}
+	for shardID, req := range f.requestByShard {
+		if resp, ok := shardReplicationTasks[shardID]; ok {
+			req.respChan <- resp
+		}
+		close(req.respChan)
+	}
+	f.requestByShard = make(map[int32]*replicationTaskRequest, requestsMapSize)
 	return nil
 }
 
@@ -310,7 +314,7 @@ func (f *ReplicationTaskFetcherImpl) GetSourceCluster() string {
 }
 
 // GetRequestChan returns the request chan for the fetcher
-func (f *ReplicationTaskFetcherImpl) GetRequestChan() chan<- *request {
+func (f *ReplicationTaskFetcherImpl) GetRequestChan() chan<- *replicationTaskRequest {
 	return f.requestChan
 }
 
