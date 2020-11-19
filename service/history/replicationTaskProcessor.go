@@ -90,7 +90,7 @@ type (
 		// recv side
 		maxRxProcessedTaskID int64
 
-		requestChan   chan<- *request
+		requestChan   chan<- *replicationTaskRequest
 		syncShardChan chan *replicationspb.SyncShardStatus
 		shutdownChan  chan struct{}
 	}
@@ -100,7 +100,7 @@ type (
 		common.Daemon
 	}
 
-	request struct {
+	replicationTaskRequest struct {
 		token    *replicationspb.ReplicationToken
 		respChan chan<- *replicationspb.ReplicationMessages
 	}
@@ -142,7 +142,7 @@ func NewReplicationTaskProcessor(
 			return config.ReplicationTaskProcessorShardQPS()
 		}), taskRetryPolicy: taskRetryPolicy,
 		requestChan:          replicationTaskFetcher.GetRequestChan(),
-		syncShardChan:        make(chan *replicationspb.SyncShardStatus),
+		syncShardChan:        make(chan *replicationspb.SyncShardStatus, 1),
 		shutdownChan:         make(chan struct{}),
 		minTxAckedTaskID:     persistence.EmptyQueueMessageID,
 		maxRxProcessedTaskID: persistence.EmptyQueueMessageID,
@@ -233,7 +233,7 @@ func (p *ReplicationTaskProcessorImpl) eventLoop() {
 }
 
 func (p *ReplicationTaskProcessorImpl) pollProcessReplicationTasks() error {
-	taskIterator := collection.NewPagingIterator(p.getPaginationFn())
+	taskIterator := collection.NewPagingIterator(p.paginationFn)
 
 	count := 0
 	for taskIterator.HasNext() && !p.isStopped() {
@@ -410,34 +410,39 @@ func (p *ReplicationTaskProcessorImpl) convertTaskToDLQTask(
 	}
 }
 
-func (p *ReplicationTaskProcessorImpl) getPaginationFn() collection.PaginationFn {
+func (p *ReplicationTaskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error) {
+	respChan := make(chan *replicationspb.ReplicationMessages, 1)
+	p.requestChan <- &replicationTaskRequest{
+		token: &replicationspb.ReplicationToken{
+			ShardId:                p.shard.GetShardID(),
+			LastProcessedMessageId: p.maxRxProcessedTaskID,
+			LastRetrievedMessageId: p.maxRxProcessedTaskID,
+		},
+		respChan: respChan,
+	}
 
-	return func(_ []byte) ([]interface{}, []byte, error) {
-		respChan := make(chan *replicationspb.ReplicationMessages, 1)
-		p.requestChan <- &request{
-			token: &replicationspb.ReplicationToken{
-				ShardId:                p.shard.GetShardID(),
-				LastProcessedMessageId: p.maxRxProcessedTaskID,
-				LastRetrievedMessageId: p.maxRxProcessedTaskID,
-			},
-			respChan: respChan,
+	select {
+	case resp, ok := <-respChan:
+		if !ok {
+			return nil, nil, nil
 		}
 
 		select {
-		case resp, ok := <-respChan:
-			if !ok {
-				return nil, nil, nil
-			}
-			p.syncShardChan <- resp.GetSyncShardStatus()
-			var tasks []interface{}
-			for _, task := range resp.GetReplicationTasks() {
-				tasks = append(tasks, task)
-			}
-			return tasks, nil, nil
+		case p.syncShardChan <- resp.GetSyncShardStatus():
 
-		case <-p.shutdownChan:
-			return nil, nil, nil
+		default:
+			// channel full, it is ok to drop the sync shard status
+			// since sync shard status are periodically updated
 		}
+
+		var tasks []interface{}
+		for _, task := range resp.GetReplicationTasks() {
+			tasks = append(tasks, task)
+		}
+		return tasks, nil, nil
+
+	case <-p.shutdownChan:
+		return nil, nil, nil
 	}
 }
 

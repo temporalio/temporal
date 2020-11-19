@@ -79,7 +79,7 @@ type (
 		mockExecutionManager *mocks.ExecutionManager
 
 		config      *configs.Config
-		requestChan chan *request
+		requestChan chan *replicationTaskRequest
 
 		replicationTaskProcessor *ReplicationTaskProcessorImpl
 	}
@@ -103,6 +103,8 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.config = NewDynamicConfigForTest()
+	s.requestChan = make(chan *replicationTaskRequest, 10)
+
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
@@ -137,7 +139,6 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.requestChan = make(chan *request, 10)
 
 	s.replicationTaskProcessor = NewReplicationTaskProcessor(
 		s.mockShard,
@@ -377,4 +378,86 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 	}).Return(nil).Times(1)
 	err = s.replicationTaskProcessor.cleanupReplicationTasks()
 	s.NoError(err)
+}
+
+func (s *replicationTaskProcessorSuite) TestPaginationFn_Success() {
+	namespaceID := uuid.NewRandom().String()
+	workflowID := uuid.New()
+	runID := uuid.NewRandom().String()
+	events := []*historypb.HistoryEvent{{
+		EventId: 1,
+		Version: 1,
+	}}
+	versionHistory := []*historyspb.VersionHistoryItem{{
+		EventId: 1,
+		Version: 1,
+	}}
+	serializer := s.mockResource.GetPayloadSerializer()
+	data, err := serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	syncShardTask := &replicationspb.SyncShardStatus{
+		StatusTime: timestamp.TimeNowPtrUtc(),
+	}
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
+			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+				NamespaceId: namespaceID,
+				WorkflowId:  workflowID,
+				RunId:       runID,
+				Events: &commonpb.DataBlob{
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+					Data:         data.Data,
+				},
+				VersionHistoryItems: versionHistory,
+			},
+		},
+	}
+
+	requestToken := &replicationspb.ReplicationToken{
+		ShardId:                s.mockShard.GetShardID(),
+		LastProcessedMessageId: s.replicationTaskProcessor.maxRxProcessedTaskID,
+		LastRetrievedMessageId: s.replicationTaskProcessor.maxRxProcessedTaskID,
+	}
+
+	go func() {
+		request := <-s.requestChan
+		s.Equal(requestToken, request.token)
+		request.respChan <- &replicationspb.ReplicationMessages{
+			SyncShardStatus:  syncShardTask,
+			ReplicationTasks: []*replicationspb.ReplicationTask{task},
+		}
+		close(request.respChan)
+	}()
+
+	tasks, _, err := s.replicationTaskProcessor.paginationFn(nil)
+	s.NoError(err)
+	s.Equal(1, len(tasks))
+	s.Equal(task, tasks[0].(*replicationspb.ReplicationTask))
+	s.Equal(syncShardTask, <-s.replicationTaskProcessor.syncShardChan)
+}
+
+func (s *replicationTaskProcessorSuite) TestPaginationFn_Error() {
+	requestToken := &replicationspb.ReplicationToken{
+		ShardId:                s.mockShard.GetShardID(),
+		LastProcessedMessageId: s.replicationTaskProcessor.maxRxProcessedTaskID,
+		LastRetrievedMessageId: s.replicationTaskProcessor.maxRxProcessedTaskID,
+	}
+
+	go func() {
+		request := <-s.requestChan
+		s.Equal(requestToken, request.token)
+		close(request.respChan)
+	}()
+
+	tasks, _, err := s.replicationTaskProcessor.paginationFn(nil)
+	s.NoError(err)
+	s.Empty(tasks)
+	select {
+	case <-s.replicationTaskProcessor.syncShardChan:
+		s.Fail("should not receive any sync shard task")
+	default:
+		// noop
+	}
 }
