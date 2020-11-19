@@ -242,7 +242,7 @@ func (s *ContextImpl) GetClusterReplicationLevel(cluster string) int64 {
 	}
 
 	// New cluster always starts from -1
-	return -1
+	return persistence.EmptyQueueMessageID
 }
 
 func (s *ContextImpl) UpdateClusterReplicationLevel(cluster string, lastTaskID int64) error {

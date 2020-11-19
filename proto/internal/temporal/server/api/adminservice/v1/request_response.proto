@@ -61,8 +61,7 @@ message DescribeHistoryHostRequest {
 
 message DescribeHistoryHostResponse {
     int32 shards_number = 1;
-    repeated int32
-    shard_ids = 2;
+    repeated int32 shard_ids = 2;
     temporal.server.api.namespace.v1.NamespaceCacheInfo namespace_cache = 3;
     string shard_controller_status = 4;
     string address = 5;

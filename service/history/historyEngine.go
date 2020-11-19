@@ -220,8 +220,7 @@ func NewEngineWithShardContext(
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
-	// Only start the replicator processor if valid publisher is passed in
-	if publisher != nil {
+	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicatorProcessor = newReplicatorQueueProcessor(
 			shard,
 			historyEngImpl.historyCache,
