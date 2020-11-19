@@ -643,13 +643,24 @@ func AdminListClusterMembership(c *cli.Context) {
 func AdminDescribeHistoryHost(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
 
-	wid := c.String(FlagWorkflowID)
-	sid := c.Int(FlagShardID)
-	addr := c.String(FlagHistoryAddress)
+	namespace := c.GlobalString(FlagNamespace)
+	workflowID := c.String(FlagWorkflowID)
+	shardID := c.Int(FlagShardID)
+	historyAddr := c.String(FlagHistoryAddress)
 	printFully := c.Bool(FlagPrintFullyDetail)
 
-	if len(wid) == 0 && !c.IsSet(FlagShardID) && len(addr) == 0 {
-		ErrorAndExit("at least one of them is required to provide to lookup host: workflowId, shardId and host address", nil)
+	flagsCount := 0
+	if c.IsSet(FlagShardID) {
+		flagsCount++
+	}
+	if c.GlobalIsSet(FlagNamespace) && c.IsSet(FlagWorkflowID) {
+		flagsCount++
+	}
+	if c.IsSet(FlagHistoryAddress) {
+		flagsCount++
+	}
+	if flagsCount != 1 {
+		ErrorAndExit("must provide one and only one: shard id or namespace & workflow id or host address", nil)
 		return
 	}
 
@@ -657,14 +668,13 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 	defer cancel()
 
 	req := &adminservice.DescribeHistoryHostRequest{}
-	if len(wid) > 0 {
-		req.WorkflowExecution = &commonpb.WorkflowExecution{WorkflowId: wid}
-	}
 	if c.IsSet(FlagShardID) {
-		req.ShardId = int32(sid)
-	}
-	if len(addr) > 0 {
-		req.HostAddress = addr
+		req.ShardId = int32(shardID)
+	} else if c.GlobalIsSet(FlagNamespace) && c.IsSet(FlagWorkflowID) {
+		req.Namespace = namespace
+		req.WorkflowExecution = &commonpb.WorkflowExecution{WorkflowId: workflowID}
+	} else if c.IsSet(FlagHistoryAddress) {
+		req.HostAddress = historyAddr
 	}
 
 	resp, err := adminClient.DescribeHistoryHost(ctx, req)
