@@ -33,10 +33,37 @@ import (
 // Config for connecting to ElasticSearch
 type (
 	Config struct {
-		URL      url.URL           `yaml:"url"` //nolint:govet
-		Username string            `yaml:"username"`
-		Password string            `yaml:"password"`
-		Indices  map[string]string `yaml:"indices"` //nolint:govet
+		URL               url.URL                 `yaml:"url"` //nolint:govet
+		Username          string                  `yaml:"username"`
+		Password          string                  `yaml:"password"`
+		Indices           map[string]string       `yaml:"indices"` //nolint:govet
+		AWSRequestSigning AWSRequestSigningConfig `yaml:"aws-request-signing"`
+	}
+
+	// AWSRequestSigningConfig represents configuration for signing ES requests to AWS
+	AWSRequestSigningConfig struct {
+		Enabled bool   `yaml:"enabled"`
+		Region  string `yaml:"region"`
+
+		// Possible options for CredentialProvider include:
+		//   1) static (fill out static Credential Provider)
+		//   2) environment
+		//		a) AccessKeyID from either AWS_ACCESS_KEY_ID or AWS_ACCESS_KEY environment variable
+		//		b) SecretAccessKey from either AWS_SECRET_ACCESS_KEY or AWS_SECRET_KEY environment variable
+		//   3) aws-sdk-default
+		//		a) Follows aws-go-sdk default credential resolution for session.NewSession
+		CredentialProvider string `yaml:"credentialProvider"`
+
+		Static AWSStaticCredentialProvider `yaml:"static"`
+	}
+
+	// AWSStaticCredentialProvider represents static AWS credentials
+	AWSStaticCredentialProvider struct {
+		AccessKeyID     string `yaml:"accessKeyID"`
+		SecretAccessKey string `yaml:"secretAccessKey"`
+
+		// Token only required for temporary security credentials retrieved via STS. Otherwise, this is optional.
+		Token string `yaml:"token"`
 	}
 )
 
