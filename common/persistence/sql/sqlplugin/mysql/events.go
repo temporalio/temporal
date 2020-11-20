@@ -44,7 +44,8 @@ const (
 	// below are templates for history_tree table
 	addHistoryTreeQuery = `INSERT INTO history_tree (` +
 		`shard_id, tree_id, branch_id, data, data_encoding) ` +
-		`VALUES (:shard_id, :tree_id, :branch_id, :data, :data_encoding) `
+		`VALUES (:shard_id, :tree_id, :branch_id, :data, :data_encoding) ` +
+		`ON DUPLICATE KEY UPDATE data=VALUES(data), data_encoding=VALUES(data_encoding)`
 
 	getHistoryTreeQuery = `SELECT branch_id, data, data_encoding FROM history_tree WHERE shard_id = ? AND tree_id = ? `
 
