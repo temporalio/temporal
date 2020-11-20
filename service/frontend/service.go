@@ -163,7 +163,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		DisallowQuery:                          dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.DisallowQuery, false),
 		SendRawWorkflowHistory:                 dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SendRawWorkflowHistory, false),
 		EnableRPCReplication:                   dc.GetBoolProperty(dynamicconfig.FrontendEnableRPCReplication, false),
-		EnableCleanupReplicationTask:           dc.GetBoolProperty(dynamicconfig.FrontendEnableCleanupReplicationTask, true),
+		EnableCleanupReplicationTask:           dc.GetBoolProperty(dynamicconfig.FrontendEnableCleanupReplicationTask, false),
 		DefaultWorkflowRetryPolicy:             dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
 		DefaultWorkflowExecutionTimeout:        dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowExecutionTimeout, common.DefaultWorkflowExecutionTimeout),
 		DefaultWorkflowRunTimeout:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowRunTimeout, common.DefaultWorkflowRunTimeout),

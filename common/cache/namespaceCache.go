@@ -370,7 +370,7 @@ func (c *namespaceCache) GetNamespaceByID(
 	if id == "" {
 		return nil, serviceerror.NewInvalidArgument("NamespaceID is empty.")
 	}
-	return c.getNamespaceByID(id, true)
+	return c.getNamespaceByID(id)
 }
 
 // GetNamespaceID retrieves namespaceID by using GetNamespace
@@ -390,7 +390,7 @@ func (c *namespaceCache) GetNamespaceName(
 	id string,
 ) (string, error) {
 
-	entry, err := c.getNamespaceByID(id, false)
+	entry, err := c.getNamespaceByID(id)
 	if err != nil {
 		return "", err
 	}
@@ -407,11 +407,12 @@ func (c *namespaceCache) refreshLoop() {
 			return
 		case <-timer.C:
 			for err := c.refreshNamespaces(); err != nil; err = c.refreshNamespaces() {
-				c.logger.Error("Error refreshing namespace cache", tag.Error(err))
-				time.Sleep(NamespaceCacheRefreshFailureRetryInterval)
-
-				if _, opened := <-c.shutdownChan; !opened {
+				select {
+				case <-c.shutdownChan:
 					return
+				default:
+					c.logger.Error("Error refreshing namespace cache", tag.Error(err))
+					time.Sleep(NamespaceCacheRefreshFailureRetryInterval)
 				}
 			}
 		}
@@ -588,31 +589,8 @@ func (c *namespaceCache) getNamespace(
 
 	id, cacheHit := c.cacheNameToID.Load().(Cache).Get(name).(string)
 	if cacheHit {
-		return c.getNamespaceByID(id, true)
+		return c.getNamespaceByID(id)
 	}
-
-	doContinue, err := c.checkAndContinue(name, "")
-	if err != nil {
-		return nil, err
-	}
-	if !doContinue {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("namespace: %v not found", name))
-	}
-
-	c.refreshLock.Lock()
-	defer c.refreshLock.Unlock()
-	id, cacheHit = c.cacheNameToID.Load().(Cache).Get(name).(string)
-	if cacheHit {
-		return c.getNamespaceByID(id, true)
-	}
-	if err := c.refreshNamespacesLocked(); err != nil {
-		return nil, err
-	}
-	id, cacheHit = c.cacheNameToID.Load().(Cache).Get(name).(string)
-	if cacheHit {
-		return c.getNamespaceByID(id, true)
-	}
-	// impossible case
 	return nil, serviceerror.NewNotFound(fmt.Sprintf("namespace: %v not found", name))
 }
 
@@ -620,51 +598,13 @@ func (c *namespaceCache) getNamespace(
 // store and writes it to the cache with an expiry before returning back
 func (c *namespaceCache) getNamespaceByID(
 	id string,
-	deepCopy bool,
 ) (*NamespaceCacheEntry, error) {
 
 	var result *NamespaceCacheEntry
 	entry, cacheHit := c.cacheByID.Load().(Cache).Get(id).(*NamespaceCacheEntry)
 	if cacheHit {
 		entry.RLock()
-		result = entry
-		if deepCopy {
-			result = entry.duplicate()
-		}
-		entry.RUnlock()
-		return result, nil
-	}
-
-	doContinue, err := c.checkAndContinue("", id)
-	if err != nil {
-		return nil, err
-	}
-	if !doContinue {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("namespace ID: %v not found", id))
-	}
-
-	c.refreshLock.Lock()
-	defer c.refreshLock.Unlock()
-	entry, cacheHit = c.cacheByID.Load().(Cache).Get(id).(*NamespaceCacheEntry)
-	if cacheHit {
-		entry.RLock()
-		result = entry
-		if deepCopy {
-			result = entry.duplicate()
-		}
-		entry.RUnlock()
-		return result, nil
-	}
-	if err := c.refreshNamespacesLocked(); err != nil {
-		return nil, err
-	}
-	entry, cacheHit = c.cacheByID.Load().(Cache).Get(id).(*NamespaceCacheEntry)
-	if cacheHit {
-		entry.RLock()
-		result = entry
-		if deepCopy {
-			result = entry.duplicate()
-		}
+		result = entry.duplicate()
 		entry.RUnlock()
 		return result, nil
 	}
