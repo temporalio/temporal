@@ -202,93 +202,6 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 	}, allNamespaces)
 }
 
-func (s *namespaceCacheSuite) TestGetNamespace_NonLoaded_GetByName() {
-	s.clusterMetadata.On("IsGlobalNamespaceEnabled").Return(true)
-	namespaceNotificationVersion := int64(999999) // make this notification version really large for test
-	s.metadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil)
-	namespaceRecord := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{Id: uuid.New(), Name: "some random namespace name", Data: make(map[string]string)},
-			Config: &persistencespb.NamespaceConfig{
-				Retention: timestamp.DurationFromDays(1),
-				BadBinaries: &namespacepb.BadBinaries{
-					Binaries: map[string]*namespacepb.BadBinaryInfo{
-						"abc": {
-							Reason:     "test reason",
-							Operator:   "test operator",
-							CreateTime: timestamp.TimePtr(time.Unix(0, 123).UTC()),
-						},
-					},
-				}},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: cluster.TestCurrentClusterName,
-				Clusters: []string{
-					cluster.TestCurrentClusterName,
-					cluster.TestAlternativeClusterName,
-				},
-			},
-		},
-	}
-	entry := s.buildEntryFromRecord(namespaceRecord)
-
-	s.metadataMgr.On("GetNamespace", &persistence.GetNamespaceRequest{Name: entry.info.Name}).Return(namespaceRecord, nil).Once()
-	s.metadataMgr.On("ListNamespaces", &persistence.ListNamespacesRequest{
-		PageSize:      namespaceCacheRefreshPageSize,
-		NextPageToken: nil,
-	}).Return(&persistence.ListNamespacesResponse{
-		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecord},
-		NextPageToken: nil,
-	}, nil).Once()
-
-	entryByName, err := s.namespaceCache.GetNamespace(namespaceRecord.Namespace.Info.Name)
-	s.Nil(err)
-	s.Equal(entry, entryByName)
-	entryByName, err = s.namespaceCache.GetNamespace(namespaceRecord.Namespace.Info.Name)
-	s.Nil(err)
-	s.Equal(entry, entryByName)
-}
-
-func (s *namespaceCacheSuite) TestGetNamespace_NonLoaded_GetByID() {
-	s.clusterMetadata.On("IsGlobalNamespaceEnabled").Return(true)
-	namespaceNotificationVersion := int64(999999) // make this notification version really large for test
-	s.metadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil)
-	namespaceRecord := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{Id: uuid.New(), Name: "some random namespace name", Data: make(map[string]string)},
-			Config: &persistencespb.NamespaceConfig{
-				Retention: timestamp.DurationFromDays(1),
-				BadBinaries: &namespacepb.BadBinaries{
-					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: cluster.TestCurrentClusterName,
-				Clusters: []string{
-					cluster.TestCurrentClusterName,
-					cluster.TestAlternativeClusterName,
-				},
-			},
-		},
-	}
-	entry := s.buildEntryFromRecord(namespaceRecord)
-
-	s.metadataMgr.On("GetNamespace", &persistence.GetNamespaceRequest{ID: entry.info.Id}).Return(namespaceRecord, nil).Once()
-	s.metadataMgr.On("ListNamespaces", &persistence.ListNamespacesRequest{
-		PageSize:      namespaceCacheRefreshPageSize,
-		NextPageToken: nil,
-	}).Return(&persistence.ListNamespacesResponse{
-		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecord},
-		NextPageToken: nil,
-	}, nil).Once()
-
-	entryByID, err := s.namespaceCache.GetNamespaceByID(namespaceRecord.Namespace.Info.Id)
-	s.Nil(err)
-	s.Equal(entry, entryByID)
-	entryByID, err = s.namespaceCache.GetNamespaceByID(namespaceRecord.Namespace.Info.Id)
-	s.Nil(err)
-	s.Equal(entry, entryByID)
-}
-
 func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 	namespaceNotificationVersion := int64(0)
 	namespaceRecord1 := &persistence.GetNamespaceResponse{
@@ -544,7 +457,6 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 	}
 	entryOld := s.buildEntryFromRecord(namespaceRecordOld)
 
-	s.metadataMgr.On("GetNamespace", &persistence.GetNamespaceRequest{ID: id}).Return(namespaceRecordOld, nil).Maybe()
 	s.metadataMgr.On("ListNamespaces", &persistence.ListNamespacesRequest{
 		PageSize:      namespaceCacheRefreshPageSize,
 		NextPageToken: nil,
@@ -552,6 +464,10 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecordOld},
 		NextPageToken: nil,
 	}, nil).Once()
+
+	// load namespaces
+	s.namespaceCache.Start()
+	defer s.namespaceCache.Stop()
 
 	coroutineCountGet := 1000
 	waitGroup := &sync.WaitGroup{}

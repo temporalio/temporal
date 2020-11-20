@@ -92,7 +92,7 @@ func (s *historyTreeSuite) TestInsert_Success() {
 	s.Equal(1, int(rowsAffected))
 }
 
-func (s *historyTreeSuite) TestInsert_Fail_Duplicate() {
+func (s *historyTreeSuite) TestInsert_Duplicate_Success() {
 	shardID := rand.Int31()
 	treeID := primitives.NewUUID()
 	branchID := primitives.NewUUID()
@@ -105,8 +105,12 @@ func (s *historyTreeSuite) TestInsert_Fail_Duplicate() {
 	s.Equal(1, int(rowsAffected))
 
 	node = s.newRandomTreeRow(shardID, treeID, branchID)
-	_, err = s.store.InsertIntoHistoryTree(newExecutionContext(), &node)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	result, err = s.store.InsertIntoHistoryTree(newExecutionContext(), &node)
+	s.NoError(err)
+	_, err = result.RowsAffected()
+	s.NoError(err)
+	// TODO cannot assert on the number of rows affect
+	//  since MySQL and PostgreSQL have different behavior
 }
 
 func (s *historyTreeSuite) TestInsertSelect() {
