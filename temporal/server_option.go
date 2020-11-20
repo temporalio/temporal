@@ -25,6 +25,7 @@
 package temporal
 
 import (
+	"github.com/uber-go/tally"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/service/config"
@@ -80,5 +81,12 @@ func WithTLSConfigFactory(tlsConfigProvider encryption.TLSConfigProvider) Server
 func WithClaimMapper(claimMapper func(cfg *config.Config) authorization.ClaimMapper) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.claimMapper = claimMapper(s.config)
+	})
+}
+
+// Set custom tally metric reporter
+func WithCustomMetricsReporter(reporter tally.BaseStatsReporter) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.metricsReporter = reporter
 	})
 }
