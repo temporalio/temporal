@@ -45,7 +45,9 @@ const (
 	// below are templates for history_tree table
 	addHistoryTreeQuery = `INSERT INTO history_tree (` +
 		`shard_id, tree_id, branch_id, data, data_encoding) ` +
-		`VALUES (:shard_id, :tree_id, :branch_id, :data, :data_encoding) `
+		`VALUES (:shard_id, :tree_id, :branch_id, :data, :data_encoding) ` +
+		`ON CONFLICT (shard_id, tree_id, branch_id) DO UPDATE ` +
+		`SET data = excluded.data, data_encoding = excluded.data_encoding`
 
 	getHistoryTreeQuery = `SELECT branch_id, data, data_encoding FROM history_tree WHERE shard_id = $1 AND tree_id = $2 `
 
