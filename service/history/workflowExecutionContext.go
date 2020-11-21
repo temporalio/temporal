@@ -481,7 +481,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		}
 		newWorkflowSizeSize := newContext.getHistorySize()
 		startEvents := newWorkflowEventsSeq[0]
-		eventsSize, err := c.persistFirstWorkflowEvents(startEvents)
+		eventsSize, err := c.persistNewWorkflowWorkflowEvents(startEvents)
 		if err != nil {
 			return err
 		}
@@ -720,22 +720,12 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		}
 		newWorkflowSizeSize := newContext.getHistorySize()
 		startEvents := newWorkflowEventsSeq[0]
-		firstEventID := startEvents.Events[0].EventId
-		if firstEventID == common.FirstEventID {
-			eventsSize, err := c.persistFirstWorkflowEvents(startEvents)
-			if err != nil {
-				return err
-			}
-			newWorkflowSizeSize += eventsSize
-			newContext.setHistorySize(newWorkflowSizeSize)
-		} else {
-			eventsSize, err := c.persistNonFirstWorkflowEvents(startEvents)
-			if err != nil {
-				return err
-			}
-			newWorkflowSizeSize += eventsSize
-			newContext.setHistorySize(newWorkflowSizeSize)
+		eventsSize, err := c.persistNewWorkflowWorkflowEvents(startEvents)
+		if err != nil {
+			return err
 		}
+		newWorkflowSizeSize += eventsSize
+		newContext.setHistorySize(newWorkflowSizeSize)
 		newWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
 		}
@@ -911,7 +901,7 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 			// TransactionID is set by shard context
 		},
 	)
-	return int64(size), err
+	return size, err
 }
 
 func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
@@ -940,7 +930,7 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 			// TransactionID is set by shard context
 		},
 	)
-	return int64(size), err
+	return size, err
 }
 
 func (c *workflowExecutionContextImpl) appendHistoryV2EventsWithRetry(
@@ -1247,4 +1237,15 @@ func (c *workflowExecutionContextImpl) enforceSizeCheck() (bool, error) {
 	}
 
 	return false, nil
+}
+
+func (c *workflowExecutionContextImpl) persistNewWorkflowWorkflowEvents(
+	newWorkflowEvents *persistence.WorkflowEvents,
+) (int64, error) {
+
+	firstEventID := newWorkflowEvents.Events[0].EventId
+	if firstEventID == common.FirstEventID {
+		return c.persistFirstWorkflowEvents(newWorkflowEvents)
+	}
+	return c.persistNonFirstWorkflowEvents(newWorkflowEvents)
 }

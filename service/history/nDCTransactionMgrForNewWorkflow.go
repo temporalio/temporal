@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -162,7 +163,8 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		return err
 	}
 
-	targetWorkflowHistorySize, err := targetWorkflow.getContext().persistFirstWorkflowEvents(
+	targetWorkflowHistorySize, err := r.persistNewWorkflowWorkflowEvents(
+		targetWorkflow,
 		targetWorkflowEventsSeq[0],
 	)
 	if err != nil {
@@ -227,7 +229,8 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return err
 	}
 
-	targetWorkflowHistorySize, err := targetWorkflow.getContext().persistFirstWorkflowEvents(
+	targetWorkflowHistorySize, err := r.persistNewWorkflowWorkflowEvents(
+		targetWorkflow,
 		targetWorkflowEventsSeq[0],
 	)
 	if err != nil {
@@ -348,4 +351,16 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) cleanupTransaction(
 	if targetWorkflow != nil {
 		targetWorkflow.getReleaseFn()(err)
 	}
+}
+
+func (r *nDCTransactionMgrForNewWorkflowImpl) persistNewWorkflowWorkflowEvents(
+	targetNewWorkflow nDCWorkflow,
+	targetNewWorkflowEvents *persistence.WorkflowEvents,
+) (int64, error) {
+
+	firstEventID := targetNewWorkflowEvents.Events[0].EventId
+	if firstEventID == common.FirstEventID {
+		return targetNewWorkflow.getContext().persistFirstWorkflowEvents(targetNewWorkflowEvents)
+	}
+	return targetNewWorkflow.getContext().persistNonFirstWorkflowEvents(targetNewWorkflowEvents)
 }
