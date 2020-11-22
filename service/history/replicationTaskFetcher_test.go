@@ -26,6 +26,7 @@ package history
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -52,6 +53,11 @@ type (
 		config                 *configs.Config
 		frontendClient         *adminservicemock.MockAdminServiceClient
 		replicationTaskFetcher *ReplicationTaskFetcherImpl
+	}
+
+	getReplicationMessagesRequestMatcher struct {
+		clusterName string
+		tokens      map[int32]*replicationspb.ReplicationToken
 	}
 )
 
@@ -182,10 +188,10 @@ func (s *replicationTaskFetcherSuite) TestGetMessages_All() {
 	responseByShard := map[int32]*replicationspb.ReplicationMessages{
 		shardID: {},
 	}
-	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(
-		&adminservice.GetReplicationMessagesResponse{
-			ShardMessages: responseByShard,
-		}, nil)
+	s.frontendClient.EXPECT().GetReplicationMessages(
+		gomock.Any(),
+		newGetReplicationMessagesRequestMatcher(replicationMessageRequest),
+	).Return(&adminservice.GetReplicationMessagesResponse{ShardMessages: responseByShard}, nil)
 	s.replicationTaskFetcher.requestByShard = requestByShard
 	err := s.replicationTaskFetcher.getMessages()
 	s.NoError(err)
@@ -228,10 +234,10 @@ func (s *replicationTaskFetcherSuite) TestGetMessages_Partial() {
 	responseByShard := map[int32]*replicationspb.ReplicationMessages{
 		shardID1: {},
 	}
-	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(
-		&adminservice.GetReplicationMessagesResponse{
-			ShardMessages: responseByShard,
-		}, nil)
+	s.frontendClient.EXPECT().GetReplicationMessages(
+		gomock.Any(),
+		newGetReplicationMessagesRequestMatcher(replicationMessageRequest),
+	).Return(&adminservice.GetReplicationMessagesResponse{ShardMessages: responseByShard}, nil)
 	s.replicationTaskFetcher.requestByShard = requestByShard
 	err := s.replicationTaskFetcher.getMessages()
 	s.NoError(err)
@@ -272,13 +278,39 @@ func (s *replicationTaskFetcherSuite) TestGetMessages_Error() {
 		},
 		ClusterName: cluster.TestCurrentClusterName,
 	}
-	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(
-		nil,
-		errors.New("random error"),
-	)
+	s.frontendClient.EXPECT().GetReplicationMessages(
+		gomock.Any(),
+		newGetReplicationMessagesRequestMatcher(replicationMessageRequest),
+	).Return(nil, errors.New("random error"))
 	s.replicationTaskFetcher.requestByShard = requestByShard
 	err := s.replicationTaskFetcher.getMessages()
 	s.Error(err)
 	s.Equal((*replicationspb.ReplicationMessages)(nil), <-respChan1)
 	s.Equal((*replicationspb.ReplicationMessages)(nil), <-respChan2)
+}
+
+func newGetReplicationMessagesRequestMatcher(
+	req *adminservice.GetReplicationMessagesRequest,
+) *getReplicationMessagesRequestMatcher {
+	tokens := make(map[int32]*replicationspb.ReplicationToken)
+	for _, token := range req.Tokens {
+		tokens[token.ShardId] = token
+	}
+	return &getReplicationMessagesRequestMatcher{
+		clusterName: req.ClusterName,
+		tokens:      tokens,
+	}
+}
+
+func (m *getReplicationMessagesRequestMatcher) Matches(x interface{}) bool {
+	req, ok := x.(*adminservice.GetReplicationMessagesRequest)
+	if !ok {
+		return false
+	}
+	return reflect.DeepEqual(m, newGetReplicationMessagesRequestMatcher(req))
+}
+
+func (m *getReplicationMessagesRequestMatcher) String() string {
+	// noop, not used
+	return ""
 }
