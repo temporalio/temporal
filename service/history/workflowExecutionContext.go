@@ -481,7 +481,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		}
 		newWorkflowSizeSize := newContext.getHistorySize()
 		startEvents := newWorkflowEventsSeq[0]
-		eventsSize, err := c.persistNewWorkflowWorkflowEvents(startEvents)
+		eventsSize, err := c.persistNewWorkflowEvents(startEvents)
 		if err != nil {
 			return err
 		}
@@ -720,7 +720,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		}
 		newWorkflowSizeSize := newContext.getHistorySize()
 		startEvents := newWorkflowEventsSeq[0]
-		eventsSize, err := c.persistNewWorkflowWorkflowEvents(startEvents)
+		eventsSize, err := c.persistNewWorkflowEvents(startEvents)
 		if err != nil {
 			return err
 		}
@@ -1239,7 +1239,7 @@ func (c *workflowExecutionContextImpl) enforceSizeCheck() (bool, error) {
 	return false, nil
 }
 
-func (c *workflowExecutionContextImpl) persistNewWorkflowWorkflowEvents(
+func (c *workflowExecutionContextImpl) persistNewWorkflowEvents(
 	newWorkflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
 
