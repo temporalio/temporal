@@ -58,20 +58,22 @@ func (a *interceptor) Interceptor(
 	if a.claimMapper != nil && a.authorizer != nil {
 		var tlsSubject *pkix.Name
 		var authHeaders []string
+		var tlsConnection *credentials.TLSInfo
 
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
 			authHeaders = md["authorization"]
 		}
 		if p, ok := peer.FromContext(ctx); ok {
-			if tlsAuth, ok := p.AuthInfo.(credentials.TLSInfo); ok {
-				if len(tlsAuth.State.VerifiedChains) > 0 && len(tlsAuth.State.VerifiedChains[0]) > 0 {
+			if tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo); ok {
+				tlsConnection = &tlsInfo
+				if len(tlsInfo.State.VerifiedChains) > 0 && len(tlsInfo.State.VerifiedChains[0]) > 0 {
 					// The assumption here is that we only expect a single verified chain of certs (first[0]).
 					// It's unclear how we should handle a situation when more than one chain is presented,
 					// which subject to use. It's okay for us to limit ourselves to one chain.
 					// We can always extend this logic later.
 					// We tale the first element in the chain ([0]) because that's the client cert
 					// (at the beginning of the chain), not intermediary CAs or the root CA (at the end of the chain).
-					tlsSubject = &tlsAuth.State.VerifiedChains[0][0].Subject
+					tlsSubject = &tlsInfo.State.VerifiedChains[0][0].Subject
 				}
 			}
 		}
@@ -82,8 +84,9 @@ func (a *interceptor) Interceptor(
 				authHeader = authHeaders[0]
 			}
 			authInfo := AuthInfo{
-				authToken:  authHeader,
-				tlsSubject: tlsSubject,
+				AuthToken:     authHeader,
+				TLSSubject:    tlsSubject,
+				TLSConnection: tlsConnection,
 			}
 			mappedClaims, err := a.claimMapper.GetClaims(&authInfo)
 			if err != nil {
