@@ -69,11 +69,11 @@ func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 
 	claims := Claims{}
 
-	if authInfo.authToken == "" {
+	if authInfo.AuthToken == "" {
 		return &claims, nil
 	}
 
-	parts := strings.Split(authInfo.authToken, " ")
+	parts := strings.Split(authInfo.AuthToken, " ")
 	if len(parts) != 2 {
 		return nil, serviceerror.NewPermissionDenied("unexpected authorization token format")
 	}

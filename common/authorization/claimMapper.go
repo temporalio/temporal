@@ -29,13 +29,16 @@ package authorization
 import (
 	"crypto/x509/pkix"
 
+	"google.golang.org/grpc/credentials"
+
 	"go.temporal.io/server/common/service/config"
 )
 
 // Authentication information from subject's JWT token or/and mTLS certificate
 type AuthInfo struct {
-	authToken  string
-	tlsSubject *pkix.Name
+	AuthToken     string
+	TlsSubject    *pkix.Name
+	TLSConnection *credentials.TLSInfo
 }
 
 // Converts authorization info of a subject into Temporal claims (permissions) for authorization

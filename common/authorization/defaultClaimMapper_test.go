@@ -130,6 +130,7 @@ func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissions() {
 	authInfo := &AuthInfo{
 		AddBearer(tokenString),
 		nil,
+		nil,
 	}
 	claims, err := s.claimMapper.GetClaims(authInfo)
 	s.NoError(err)
@@ -146,6 +147,7 @@ func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissions() {
 	s.NoError(err)
 	authInfo := &AuthInfo{
 		AddBearer(tokenString),
+		nil,
 		nil,
 	}
 	claims, err := s.claimMapper.GetClaims(authInfo)
