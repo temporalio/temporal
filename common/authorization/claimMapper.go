@@ -37,7 +37,7 @@ import (
 // Authentication information from subject's JWT token or/and mTLS certificate
 type AuthInfo struct {
 	AuthToken     string
-	TlsSubject    *pkix.Name
+	TLSSubject    *pkix.Name
 	TLSConnection *credentials.TLSInfo
 }
 

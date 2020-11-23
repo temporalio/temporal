@@ -85,7 +85,7 @@ func (a *interceptor) Interceptor(
 			}
 			authInfo := AuthInfo{
 				AuthToken:     authHeader,
-				TlsSubject:    tlsSubject,
+				TLSSubject:    tlsSubject,
 				TLSConnection: tlsConnection,
 			}
 			mappedClaims, err := a.claimMapper.GetClaims(&authInfo)
