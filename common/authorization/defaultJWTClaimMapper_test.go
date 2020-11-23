@@ -134,10 +134,10 @@ func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissions() {
 	}
 	claims, err := s.claimMapper.GetClaims(authInfo)
 	s.NoError(err)
-	s.Equal(testSubject, claims.subject)
-	s.Equal(RoleAdmin, claims.system)
-	s.Equal(1, len(claims.namespaces))
-	defaultRole := claims.namespaces[defaultNamespace]
+	s.Equal(testSubject, claims.Subject)
+	s.Equal(RoleAdmin, claims.System)
+	s.Equal(1, len(claims.Namespaces))
+	defaultRole := claims.Namespaces[defaultNamespace]
 	s.Equal(RoleReader, defaultRole)
 }
 
@@ -152,10 +152,10 @@ func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissions() {
 	}
 	claims, err := s.claimMapper.GetClaims(authInfo)
 	s.NoError(err)
-	s.Equal(testSubject, claims.subject)
-	s.Equal(RoleUndefined, claims.system)
-	s.Equal(1, len(claims.namespaces))
-	defaultRole := claims.namespaces[defaultNamespace]
+	s.Equal(testSubject, claims.Subject)
+	s.Equal(RoleUndefined, claims.System)
+	s.Equal(1, len(claims.Namespaces))
+	defaultRole := claims.Namespaces[defaultNamespace]
 	s.Equal(RoleReader|RoleWriter|RoleWorker, defaultRole)
 }
 

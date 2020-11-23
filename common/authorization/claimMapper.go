@@ -56,5 +56,5 @@ func NewNoopClaimMapper(_ *config.Config) ClaimMapper {
 }
 
 func (*noopClaimMapper) GetClaims(_ *AuthInfo) (*Claims, error) {
-	return &Claims{system: RoleAdmin}, nil
+	return &Claims{System: RoleAdmin}, nil
 }

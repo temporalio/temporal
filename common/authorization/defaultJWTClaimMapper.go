@@ -88,7 +88,7 @@ func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 	if !ok {
 		return nil, serviceerror.NewPermissionDenied("unexpected value type of \"sub\" claim")
 	}
-	claims.subject = subject
+	claims.Subject = subject
 	permissions, ok := jwtClaims[a.permissionsClaimName].([]interface{})
 	if ok {
 		err := a.extractPermissions(permissions, &claims)
@@ -113,14 +113,14 @@ func (a *defaultJWTClaimMapper) extractPermissions(permissions []interface{}, cl
 		}
 		namespace := strings.ToLower(parts[0])
 		if strings.EqualFold(namespace, permissionScopeSystem) {
-			claims.system |= permissionToRole(parts[1])
+			claims.System |= permissionToRole(parts[1])
 		} else {
-			if claims.namespaces == nil {
-				claims.namespaces = make(map[string]Role)
+			if claims.Namespaces == nil {
+				claims.Namespaces = make(map[string]Role)
 			}
-			role := claims.namespaces[namespace]
+			role := claims.Namespaces[namespace]
 			role |= permissionToRole(parts[1])
-			claims.namespaces[namespace] = role
+			claims.Namespaces[namespace] = role
 		}
 	}
 	return nil

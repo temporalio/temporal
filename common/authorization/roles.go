@@ -44,9 +44,9 @@ func (b Role) IsValid() bool {
 // Contains identity of the subject and subject's roles at the system level and for individual namespaces
 type Claims struct {
 	// Identity of the subject
-	subject string
+	Subject string
 	// Role within the context of the whole Temporal cluster or a multi-cluster setup
-	system Role
+	System Role
 	// Roles within specific namespaces
-	namespaces map[string]Role
+	Namespaces map[string]Role
 }
