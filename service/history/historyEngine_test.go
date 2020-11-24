@@ -5259,7 +5259,7 @@ func newMutableStateBuilderWithEventV2(
 	runID string,
 ) *mutableStateBuilder {
 
-	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry)
+	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry, time.Now().UTC())
 	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
@@ -5273,7 +5273,7 @@ func newMutableStateBuilderWithVersionHistoriesForTest(
 	runID string,
 ) *mutableStateBuilder {
 
-	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry)
+	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry, time.Now().UTC())
 	msBuilder.UpdateCurrentVersion(version, false)
 	_ = msBuilder.SetHistoryTree(runID)
 

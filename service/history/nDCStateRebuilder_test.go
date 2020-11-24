@@ -73,6 +73,7 @@ type (
 		namespaceID string
 		workflowID  string
 		runID       string
+		now         time.Time
 
 		nDCStateRebuilder *nDCStateRebuilderImpl
 	}
@@ -111,6 +112,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 
 	s.workflowID = "some random workflow ID"
 	s.runID = uuid.New()
+	s.now = time.Now().UTC()
 	s.nDCStateRebuilder = newNDCStateRebuilder(
 		s.mockShard, s.logger,
 	)
@@ -123,7 +125,7 @@ func (s *nDCStateRebuilderSuite) TearDownTest() {
 }
 
 func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {
-	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(testGlobalNamespaceEntry)
+	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(testGlobalNamespaceEntry, s.now)
 	s.NotNil(mutableState)
 	s.NotNil(stateBuilder)
 	s.NotNil(mutableState.GetExecutionInfo().GetVersionHistories())
@@ -243,7 +245,6 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	lastEventID := int64(2)
 	branchToken := []byte("other random branch token")
 	targetBranchToken := []byte("some other random branch token")
-	now := timestamp.TimeNowPtrUtc()
 
 	targetNamespaceID := uuid.New()
 	targetNamespace := "other random namespace name"
@@ -321,11 +322,11 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		1234,
 		s.mockClusterMetadata,
 	), nil).AnyTimes()
-	s.mockTaskRefresher.EXPECT().refreshTasks(*now, gomock.Any()).Return(nil).Times(1)
+	s.mockTaskRefresher.EXPECT().refreshTasks(s.now, gomock.Any()).Return(nil).Times(1)
 
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(
 		context.Background(),
-		now,
+		s.now,
 		definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, s.runID),
 		branchToken,
 		lastEventID,
@@ -347,5 +348,5 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 			[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},
 		),
 	), rebuildMutableState.GetExecutionInfo().GetVersionHistories())
-	s.Equal(rebuildMutableState.GetExecutionInfo().StartTime, now)
+	s.Equal(timestamp.TimeValue(rebuildMutableState.GetExecutionInfo().StartTime), s.now)
 }
