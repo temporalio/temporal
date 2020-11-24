@@ -182,7 +182,7 @@ func newTokenGenerator() *tokenGenerator {
 
 type (
 	CustomClaims struct {
-		Permissions []string `json:"permissions""`
+		Permissions []string `json:"permissions"`
 		jwt.StandardClaims
 	}
 )
