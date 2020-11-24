@@ -29,13 +29,16 @@ package authorization
 import (
 	"crypto/x509/pkix"
 
+	"google.golang.org/grpc/credentials"
+
 	"go.temporal.io/server/common/service/config"
 )
 
 // Authentication information from subject's JWT token or/and mTLS certificate
 type AuthInfo struct {
-	authToken  string
-	tlsSubject *pkix.Name
+	AuthToken     string
+	TLSSubject    *pkix.Name
+	TLSConnection *credentials.TLSInfo
 }
 
 // Converts authorization info of a subject into Temporal claims (permissions) for authorization
@@ -53,5 +56,5 @@ func NewNoopClaimMapper(_ *config.Config) ClaimMapper {
 }
 
 func (*noopClaimMapper) GetClaims(_ *AuthInfo) (*Claims, error) {
-	return &Claims{system: RoleAdmin}, nil
+	return &Claims{System: RoleAdmin}, nil
 }

@@ -45,11 +45,11 @@ func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target 
 	}
 
 	// Check system level permissions
-	if claims.system == RoleAdmin || claims.system == RoleWriter {
+	if claims.System == RoleAdmin || claims.System == RoleWriter {
 		return Result{Decision: DecisionAllow}, nil
 	}
 
-	roles, found := claims.namespaces[target.Namespace]
+	roles, found := claims.Namespaces[target.Namespace]
 	if !found || roles == RoleUndefined {
 		return Result{Decision: DecisionDeny}, nil
 	}

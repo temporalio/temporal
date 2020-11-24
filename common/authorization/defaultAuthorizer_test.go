@@ -34,23 +34,23 @@ import (
 
 var (
 	claimsSystemAdmin = Claims{
-		system: RoleAdmin,
+		System: RoleAdmin,
 	}
 	claimsSystemWriter = Claims{
-		system: RoleWriter,
+		System: RoleWriter,
 	}
 	claimsSystemReader = Claims{
-		system: RoleReader,
+		System: RoleReader,
 	}
 	claimsSystemReaderNamespaceUndefined = Claims{
-		system: RoleReader,
-		namespaces: map[string]Role{
+		System: RoleReader,
+		Namespaces: map[string]Role{
 			"Bar": RoleUndefined,
 		},
 	}
 	claimsSystemUndefinedNamespaceReader = Claims{
-		system: RoleUndefined,
-		namespaces: map[string]Role{
+		System: RoleUndefined,
+		Namespaces: map[string]Role{
 			"Bar": RoleReader,
 		},
 	}
