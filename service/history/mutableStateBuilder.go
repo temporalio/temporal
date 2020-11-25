@@ -255,11 +255,13 @@ func newMutableStateBuilderWithVersionHistories(
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *cache.NamespaceCacheEntry,
-	now time.Time,
+	startTime time.Time,
 ) *mutableStateBuilder {
 
 	s := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry)
-	s.executionInfo.StartTime = timestamp.TimePtr(now)
+	// start time should be set for workflow timeout calculation
+	// NOTE: workflow reset case, this start time is the reset time
+	s.executionInfo.StartTime = timestamp.TimePtr(startTime)
 	s.executionInfo.VersionHistories = versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
 	return s
 }
