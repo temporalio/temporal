@@ -5384,7 +5384,6 @@ func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo)
 		RetryInitialInterval:              sourceInfo.RetryInitialInterval,
 		RetryBackoffCoefficient:           sourceInfo.RetryBackoffCoefficient,
 		RetryMaximumInterval:              sourceInfo.RetryMaximumInterval,
-		RetryExpirationTime:               sourceInfo.RetryExpirationTime,
 		RetryMaximumAttempts:              sourceInfo.RetryMaximumAttempts,
 		RetryNonRetryableErrorTypes:       sourceInfo.RetryNonRetryableErrorTypes,
 		EventBranchToken:                  sourceInfo.EventBranchToken,
@@ -5393,6 +5392,8 @@ func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo)
 		StartVersion:                      sourceInfo.StartVersion,
 		CancelRequestId:                   sourceInfo.CancelRequestId,
 		WorkflowExecutionTimeout:          sourceInfo.WorkflowExecutionTimeout,
+		WorkflowRunExpirationTime:         sourceInfo.WorkflowRunExpirationTime,
+		WorkflowExecutionExpirationTime:   sourceInfo.WorkflowExecutionExpirationTime,
 		HistorySize:                       sourceInfo.HistorySize,
 	}
 }

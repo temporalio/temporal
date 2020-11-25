@@ -1063,7 +1063,7 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 
 	return getBackoffInterval(
 		e.timeSource.Now(),
-		timestamp.TimeValue(info.RetryExpirationTime),
+		timestamp.TimeValue(info.WorkflowExecutionExpirationTime),
 		info.Attempt,
 		info.RetryMaximumAttempts,
 		info.RetryInitialInterval,
@@ -1679,7 +1679,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	} else {
 		req.Attempt = 1
 	}
-	workflowTimeoutTime := timestamp.TimeValue(previousExecutionState.GetExecutionInfo().RetryExpirationTime)
+	workflowTimeoutTime := timestamp.TimeValue(previousExecutionState.GetExecutionInfo().WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {
 		req.WorkflowExecutionExpirationTime = &workflowTimeoutTime
 	}
@@ -1826,8 +1826,24 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 
 	e.executionInfo.Attempt = event.GetAttempt()
 	if !timestamp.TimeValue(event.GetWorkflowExecutionExpirationTime()).IsZero() {
-		e.executionInfo.RetryExpirationTime = event.GetWorkflowExecutionExpirationTime()
+		e.executionInfo.WorkflowExecutionExpirationTime = event.GetWorkflowExecutionExpirationTime()
 	}
+
+	var workflowRunTimeoutTime time.Time
+	workflowRunTimeoutDuration := timestamp.DurationValue(e.executionInfo.WorkflowRunTimeout)
+	// if workflowRunTimeoutDuration == 0 then the workflowRunTimeoutTime will be 0
+	// meaning that there is not workflow run timeout
+	if workflowRunTimeoutDuration != 0 {
+		firstWorkflowTaskDelayDuration := timestamp.DurationValue(event.GetFirstWorkflowTaskBackoff())
+		workflowRunTimeoutDuration = workflowRunTimeoutDuration + firstWorkflowTaskDelayDuration
+		workflowRunTimeoutTime = e.executionInfo.StartTime.Add(workflowRunTimeoutDuration)
+
+		workflowExecutionTimeoutTime := timestamp.TimeValue(e.executionInfo.WorkflowExecutionExpirationTime)
+		if !workflowExecutionTimeoutTime.IsZero() && workflowRunTimeoutTime.After(workflowExecutionTimeoutTime) {
+			workflowRunTimeoutTime = workflowExecutionTimeoutTime
+		}
+	}
+	e.executionInfo.WorkflowRunExpirationTime = timestamp.TimePtr(workflowRunTimeoutTime)
 
 	if event.RetryPolicy != nil {
 		e.executionInfo.HasRetryPolicy = true

@@ -488,7 +488,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	// Reduce runTimeout if it is going to exceed WorkflowExpirationTime
 	// Note that this calculation can produce negative result
 	// handleCommandContinueAsNewWorkflow must handle negative runTimeout value
-	timeoutTime := timestamp.TimeValue(executionInfo.RetryExpirationTime)
+	timeoutTime := timestamp.TimeValue(executionInfo.WorkflowExecutionExpirationTime)
 	if !timeoutTime.IsZero() {
 		runTimeout := timestamp.RoundUp(timeoutTime.Sub(time.Now().UTC()))
 		if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) > 0 {

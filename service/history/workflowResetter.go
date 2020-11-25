@@ -200,7 +200,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 
 	weTimeout := timestamp.DurationValue(executionInfo.WorkflowExecutionTimeout)
 	if weTimeout > 0 {
-		executionInfo.RetryExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
+		executionInfo.WorkflowExecutionExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
 	}
 
 	baseLastEventVersion := resetMutableState.GetCurrentVersion()

@@ -133,22 +133,16 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
 	startEvent *historypb.HistoryEvent,
 ) error {
 
-	attr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	firstWorkflowTaskDelayDuration := timestamp.DurationValue(attr.GetFirstWorkflowTaskBackoff())
-
-	executionInfo := r.mutableState.GetExecutionInfo()
 	startVersion := startEvent.GetVersion()
-
-	runTimeoutDuration := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
-	runTimeoutDuration = runTimeoutDuration + firstWorkflowTaskDelayDuration
-	workflowExpirationTimestamp := now.Add(runTimeoutDuration)
-	wfExpTime := timestamp.TimeValue(executionInfo.RetryExpirationTime)
-	if !wfExpTime.IsZero() && workflowExpirationTimestamp.After(wfExpTime) {
-		workflowExpirationTimestamp = wfExpTime
+	workflowRunExpirationTime := timestamp.TimeValue(r.mutableState.GetExecutionInfo().WorkflowRunExpirationTime)
+	if workflowRunExpirationTime.IsZero() {
+		// this mean infinite timeout
+		return nil
 	}
+
 	r.mutableState.AddTimerTasks(&persistence.WorkflowTimeoutTask{
 		// TaskID is set by shard
-		VisibilityTimestamp: workflowExpirationTimestamp,
+		VisibilityTimestamp: workflowRunExpirationTime,
 		Version:             startVersion,
 	})
 

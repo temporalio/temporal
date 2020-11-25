@@ -105,8 +105,8 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(s.namespaceEntry, nil).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
-		s.logger, testLocalNamespaceEntry)
+	s.msBuilder = newMutableStateBuilderWithVersionHistories(s.mockShard, s.mockEventsCache,
+		s.logger, testLocalNamespaceEntry, time.Now().UTC())
 	s.builder = newHistoryBuilder(s.msBuilder)
 }
 
