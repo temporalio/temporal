@@ -26,6 +26,7 @@ package temporal
 
 import (
 	"fmt"
+	"github.com/uber-go/tally"
 
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -34,13 +35,14 @@ import (
 
 type (
 	serverOptions struct {
-		config            *config.Config
-		authorizer        authorization.Authorizer
-		tlsConfigProvider encryption.TLSConfigProvider
-		claimMapper       authorization.ClaimMapper
-		configDir         string
-		env               string
-		zone              string
+		config            		*config.Config
+		authorizer        		authorization.Authorizer
+		tlsConfigProvider 		encryption.TLSConfigProvider
+		claimMapper       		authorization.ClaimMapper
+		metricsReporter 		tally.BaseStatsReporter
+		configDir         		string
+		env               		string
+		zone              		string
 
 		serviceNames []string
 
@@ -59,7 +61,7 @@ func newServerOptions(opts []ServerOption) *serverOptions {
 	return so
 }
 
-func (so *serverOptions) validate() error {
+func (so *serverOptions) loadAndValidate() error {
 	for _, serviceName := range so.serviceNames {
 		if !isValidService(serviceName) {
 			return fmt.Errorf("invalid service %q in service list %v", serviceName, so.serviceNames)

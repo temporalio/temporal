@@ -25,6 +25,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
@@ -71,9 +72,17 @@ var (
 // If the underlying configuration is
 // valid for multiple reporter types,
 // only one of them will be used for
-// reporting. Currently, m3 is preferred
-// over statsd
-func (c *Metrics) NewScope(logger log.Logger) tally.Scope {
+// reporting.
+//
+// Current priority order is:
+// customReporter > m3 > statsd > prometheus
+func (c *Metrics) NewScope(logger log.Logger, customReporter tally.BaseStatsReporter) tally.Scope {
+	if c == nil {
+		c = &Metrics{}
+	}
+	if customReporter != nil {
+		return c.newCustomReporterScope(logger, customReporter)
+	}
 	if c.M3 != nil {
 		return c.newM3Scope(logger)
 	}
@@ -84,6 +93,29 @@ func (c *Metrics) NewScope(logger log.Logger) tally.Scope {
 		return c.newPrometheusScope(logger)
 	}
 	return tally.NoopScope
+}
+
+func (c *Metrics) newCustomReporterScope(logger log.Logger, customReporter tally.BaseStatsReporter) tally.Scope {
+	options := tally.ScopeOptions{Tags: c.Tags, Prefix: c.Prefix}
+	switch reporter := customReporter.(type) {
+	case tally.StatsReporter:
+		{
+			options.Reporter = reporter
+			fmt.Println("cached")
+		}
+	case tally.CachedStatsReporter:
+		{
+			options.CachedReporter = reporter
+			fmt.Println("cached")
+		}
+	default:
+		{
+			logger.Error("Unsupported metrics reporter type.", tag.ValueType(customReporter))
+			return nil
+		}
+	}
+	scope, _ := tally.NewRootScope(options, time.Second)
+	return scope
 }
 
 // newM3Scope returns a new m3 scope with

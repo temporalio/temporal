@@ -96,7 +96,7 @@ func NewServer(opts ...ServerOption) *Server {
 
 // Start temporal server.
 func (s *Server) Start() error {
-	err := s.so.validate()
+	err := s.so.loadAndValidate()
 	if err != nil {
 		return err
 	}
@@ -150,8 +150,8 @@ func (s *Server) Start() error {
 	)
 
 	var globalMetricsScope tally.Scope
-	if s.so.config.Global.Metrics != nil {
-		globalMetricsScope = s.so.config.Global.Metrics.NewScope(s.logger)
+	if s.so.config.Global.Metrics != nil || s.so.metricsReporter != nil {
+		globalMetricsScope = s.so.config.Global.Metrics.NewScope(s.logger, s.so.metricsReporter)
 	}
 
 	for _, svcName := range s.so.serviceNames {
@@ -260,7 +260,7 @@ func (s *Server) getServiceParams(
 
 	params.DCRedirectionPolicy = s.so.config.DCRedirectionPolicy
 	if metricsScope == nil {
-		metricsScope = svcCfg.Metrics.NewScope(s.logger)
+		metricsScope = svcCfg.Metrics.NewScope(s.logger, s.so.metricsReporter)
 	}
 	params.MetricsScope = metricsScope
 	metricsClient := metrics.NewClient(metricsScope, metrics.GetMetricsServiceIdx(svcName, s.logger))
