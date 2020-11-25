@@ -57,7 +57,7 @@ We'd love your help in making Temporal great. Please review our [contribution gu
 
 If you'd like to work on or propose a new feature, first peruse [feature requests](https://community.temporal.io/c/feature-requests/6) and our [proposals repo](https://github.com/temporalio/proposals) to discover existing active and accepted proposals.
 
-Feel free to join the Temporal [Slack channel](https://join.slack.com/t/temporalio/shared_invite/zt-c1e99p8g-beF7~ZZW2HP6gGStXD8Nuw) to start a discussion or check if a feature has already been discussed.
+Feel free to join the Temporal [Slack channel](https://join.slack.com/t/temporalio/shared_invite/zt-ijmxkn84-7kK9uXqqX1BOomLnbBkK1Q) to start a discussion or check if a feature has already been discussed.
 Once you're sure the proposal is not covered elsewhere, please follow our [proposal instructions](https://github.com/temporalio/proposals#creating-a-new-proposal) or submit a [feature request](https://community.temporal.io/c/feature-requests/6).
 
 ## License
