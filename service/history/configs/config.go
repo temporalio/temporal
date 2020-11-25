@@ -401,7 +401,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		SkipReapplicationByNamespaceId:   dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.SkipReapplicationByNamespaceId, false),
 
 		// TODO remove after 1.5
-		EnableInfiniteTimeout: dc.GetBoolProperty(dynamicconfig.EnableInfiniteTimeout, true),
+		EnableInfiniteTimeout: dc.GetBoolProperty(dynamicconfig.EnableInfiniteTimeout, false),
 	}
 
 	return cfg

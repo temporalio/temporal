@@ -165,7 +165,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		EnableServerVersionCheck:               dc.GetBoolProperty(dynamicconfig.EnableServerVersionCheck, os.Getenv("TEMPORAL_VERSION_CHECK_DISABLED") == ""),
 
 		// TODO remove after 1.5
-		EnableInfiniteTimeout: dc.GetBoolProperty(dynamicconfig.EnableInfiniteTimeout, true),
+		EnableInfiniteTimeout: dc.GetBoolProperty(dynamicconfig.EnableInfiniteTimeout, false),
 	}
 }
 
