@@ -138,6 +138,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -211,6 +212,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -332,6 +334,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -420,6 +423,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -601,6 +605,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -735,6 +740,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -789,6 +795,7 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -916,6 +923,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -1028,6 +1036,7 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           workflowExecution.GetRunId(),
@@ -1086,39 +1095,41 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	createReq := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-				NamespaceId:                 uuid.New(),
-				WorkflowId:                  "get-workflow-test",
-				FirstExecutionRunId:         uuid.New(),
-				ParentNamespaceId:           uuid.New(),
-				ParentWorkflowId:            "get-workflow-test-parent",
-				ParentRunId:                 uuid.New(),
-				InitiatedId:                 rand.Int63(),
-				TaskQueue:                   "get-wf-test-taskqueue",
-				WorkflowTypeName:            "code.uber.internal/test/workflow",
-				WorkflowRunTimeout:          timestamp.DurationFromSeconds(int64(rand.Int31())),
-				DefaultWorkflowTaskTimeout:  timestamp.DurationFromSeconds(int64(rand.Int31())),
-				LastFirstEventId:            common.FirstEventID,
-				LastProcessedEvent:          int64(rand.Int31()),
-				SignalCount:                 rand.Int63(),
-				WorkflowTaskVersion:         int64(rand.Int31()),
-				WorkflowTaskScheduleId:      int64(rand.Int31()),
-				WorkflowTaskStartedId:       int64(rand.Int31()),
-				WorkflowTaskTimeout:         timestamp.DurationFromSeconds(int64(rand.Int31())),
-				Attempt:                     rand.Int31(),
-				HasRetryPolicy:              true,
-				RetryInitialInterval:        timestamp.DurationFromSeconds(int64(rand.Int31())),
-				RetryBackoffCoefficient:     7.78,
-				RetryMaximumInterval:        timestamp.DurationFromSeconds(int64(rand.Int31())),
-				RetryExpirationTime:         timestamp.TimeNowPtrUtc(),
-				RetryMaximumAttempts:        rand.Int31(),
-				RetryNonRetryableErrorTypes: []string{"badRequestError", "accessDeniedError"},
-				CronSchedule:                "* * * * *",
-				AutoResetPoints:             &testResetPoints,
-				SearchAttributes:            testSearchAttr,
-				Memo:                        testMemo,
+				NamespaceId:                     uuid.New(),
+				WorkflowId:                      "get-workflow-test",
+				FirstExecutionRunId:             uuid.New(),
+				ParentNamespaceId:               uuid.New(),
+				ParentWorkflowId:                "get-workflow-test-parent",
+				ParentRunId:                     uuid.New(),
+				InitiatedId:                     rand.Int63(),
+				TaskQueue:                       "get-wf-test-taskqueue",
+				WorkflowTypeName:                "code.uber.internal/test/workflow",
+				WorkflowRunTimeout:              timestamp.DurationFromSeconds(int64(rand.Int31())),
+				DefaultWorkflowTaskTimeout:      timestamp.DurationFromSeconds(int64(rand.Int31())),
+				LastFirstEventId:                common.FirstEventID,
+				LastProcessedEvent:              int64(rand.Int31()),
+				SignalCount:                     rand.Int63(),
+				WorkflowTaskVersion:             int64(rand.Int31()),
+				WorkflowTaskScheduleId:          int64(rand.Int31()),
+				WorkflowTaskStartedId:           int64(rand.Int31()),
+				WorkflowTaskTimeout:             timestamp.DurationFromSeconds(int64(rand.Int31())),
+				Attempt:                         rand.Int31(),
+				HasRetryPolicy:                  true,
+				RetryInitialInterval:            timestamp.DurationFromSeconds(int64(rand.Int31())),
+				RetryBackoffCoefficient:         7.78,
+				RetryMaximumInterval:            timestamp.DurationFromSeconds(int64(rand.Int31())),
+				RetryMaximumAttempts:            rand.Int31(),
+				RetryNonRetryableErrorTypes:     []string{"badRequestError", "accessDeniedError"},
+				CronSchedule:                    "* * * * *",
+				AutoResetPoints:                 &testResetPoints,
+				SearchAttributes:                testSearchAttr,
+				Memo:                            testMemo,
+				WorkflowRunExpirationTime:       timestamp.TimeNowPtrUtc(),
+				WorkflowExecutionExpirationTime: timestamp.TimeNowPtrUtc(),
 				ExecutionStats: &persistencespb.ExecutionStats{
 					HistorySize: int64(rand.Int31()),
 				},
+				StartTime: timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: rand.Int63(),
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -1173,11 +1184,12 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.RetryBackoffCoefficient, info.RetryBackoffCoefficient)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.RetryMaximumAttempts, info.RetryMaximumAttempts)
 	s.EqualValues(createReq.NewWorkflowSnapshot.ExecutionInfo.RetryMaximumInterval, info.RetryMaximumInterval)
-	s.EqualTimes(*createReq.NewWorkflowSnapshot.ExecutionInfo.RetryExpirationTime, *info.RetryExpirationTime)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.CronSchedule, info.CronSchedule)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.RetryNonRetryableErrorTypes, info.RetryNonRetryableErrorTypes)
 	s.Equal(testResetPoints.String(), info.AutoResetPoints.String())
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize, state.ExecutionInfo.ExecutionStats.HistorySize)
+	s.EqualTimes(*createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowRunExpirationTime, *info.WorkflowRunExpirationTime)
+	s.EqualTimes(*createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowExecutionExpirationTime, *info.WorkflowExecutionExpirationTime)
 	saVal, ok := info.SearchAttributes[testSearchAttrKey]
 	s.True(ok)
 	s.True(proto.Equal(testSearchAttrVal, saVal))
@@ -1250,7 +1262,8 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.RetryBackoffCoefficient = 4.45
 	updatedInfo.RetryMaximumInterval = timestamp.DurationFromSeconds(math.MaxInt32)
 	updatedInfo.RetryMaximumAttempts = math.MaxInt32
-	updatedInfo.RetryExpirationTime = timestamp.TimeNowPtrUtc()
+	updatedInfo.WorkflowRunExpirationTime = timestamp.TimeNowPtrUtc()
+	updatedInfo.WorkflowExecutionExpirationTime = timestamp.TimeNowPtrUtc()
 	updatedInfo.RetryNonRetryableErrorTypes = []string{"accessDenied", "badRequest"}
 	searchAttrKey := "env"
 	searchAttrVal := payload.EncodeBytes([]byte("test"))
@@ -1297,8 +1310,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.RetryBackoffCoefficient, info1.RetryBackoffCoefficient)
 	s.Equal(updatedInfo.RetryMaximumInterval, info1.RetryMaximumInterval)
 	s.Equal(updatedInfo.RetryMaximumAttempts, info1.RetryMaximumAttempts)
-	s.EqualTimes(*updatedInfo.RetryExpirationTime, *info1.RetryExpirationTime)
 	s.Equal(updatedInfo.RetryNonRetryableErrorTypes, info1.RetryNonRetryableErrorTypes)
+	s.EqualTimes(*updatedInfo.WorkflowRunExpirationTime, *info1.WorkflowRunExpirationTime)
+	s.EqualTimes(*updatedInfo.WorkflowExecutionExpirationTime, *info1.WorkflowExecutionExpirationTime)
 	searchAttrVal1, ok := info1.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal1)
@@ -1346,8 +1360,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.RetryBackoffCoefficient, info2.RetryBackoffCoefficient)
 	s.Equal(updatedInfo.RetryMaximumInterval, info2.RetryMaximumInterval)
 	s.Equal(updatedInfo.RetryMaximumAttempts, info2.RetryMaximumAttempts)
-	s.EqualTimes(*updatedInfo.RetryExpirationTime, *info2.RetryExpirationTime)
 	s.Equal(updatedInfo.RetryNonRetryableErrorTypes, info2.RetryNonRetryableErrorTypes)
+	s.EqualTimes(*updatedInfo.WorkflowRunExpirationTime, *info2.WorkflowRunExpirationTime)
+	s.EqualTimes(*updatedInfo.WorkflowExecutionExpirationTime, *info2.WorkflowExecutionExpirationTime)
 	searchAttrVal2, ok := info2.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal2)
@@ -1392,8 +1407,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.RetryBackoffCoefficient, info3.RetryBackoffCoefficient)
 	s.Equal(updatedInfo.RetryMaximumInterval, info3.RetryMaximumInterval)
 	s.Equal(updatedInfo.RetryMaximumAttempts, info3.RetryMaximumAttempts)
-	s.EqualTimes(*updatedInfo.RetryExpirationTime, *info3.RetryExpirationTime)
 	s.Equal(updatedInfo.RetryNonRetryableErrorTypes, info3.RetryNonRetryableErrorTypes)
+	s.EqualTimes(*updatedInfo.WorkflowRunExpirationTime, *info3.WorkflowRunExpirationTime)
+	s.EqualTimes(*updatedInfo.WorkflowExecutionExpirationTime, *info3.WorkflowExecutionExpirationTime)
 	searchAttrVal3, ok := info3.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal3)
@@ -1438,8 +1454,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.RetryBackoffCoefficient, info4.RetryBackoffCoefficient)
 	s.Equal(updatedInfo.RetryMaximumInterval, info4.RetryMaximumInterval)
 	s.Equal(updatedInfo.RetryMaximumAttempts, info4.RetryMaximumAttempts)
-	s.EqualTimes(*updatedInfo.RetryExpirationTime, *info4.RetryExpirationTime)
 	s.Equal(updatedInfo.RetryNonRetryableErrorTypes, info4.RetryNonRetryableErrorTypes)
+	s.EqualTimes(*updatedInfo.WorkflowRunExpirationTime, *info4.WorkflowRunExpirationTime)
+	s.EqualTimes(*updatedInfo.WorkflowExecutionExpirationTime, *info4.WorkflowExecutionExpirationTime)
 	searchAttrVal4, ok := info4.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal4)
@@ -3164,7 +3181,6 @@ func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo)
 		DefaultWorkflowTaskTimeout: sourceInfo.DefaultWorkflowTaskTimeout,
 		LastFirstEventId:           sourceInfo.LastFirstEventId,
 		LastProcessedEvent:         sourceInfo.LastProcessedEvent,
-		LastUpdateTime:             sourceInfo.LastUpdateTime,
 		WorkflowTaskVersion:        sourceInfo.WorkflowTaskVersion,
 		WorkflowTaskScheduleId:     sourceInfo.WorkflowTaskScheduleId,
 		WorkflowTaskStartedId:      sourceInfo.WorkflowTaskStartedId,
@@ -3175,6 +3191,8 @@ func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo)
 		ExecutionStats: &persistencespb.ExecutionStats{
 			HistorySize: sourceInfo.ExecutionStats.HistorySize,
 		},
+		StartTime:      sourceInfo.StartTime,
+		LastUpdateTime: sourceInfo.LastUpdateTime,
 	}
 }
 

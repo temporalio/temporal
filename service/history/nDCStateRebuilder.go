@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -54,7 +53,7 @@ type (
 	nDCStateRebuilder interface {
 		rebuild(
 			ctx context.Context,
-			now *time.Time,
+			now time.Time,
 			baseWorkflowIdentifier definition.WorkflowIdentifier,
 			baseBranchToken []byte,
 			baseLastEventID int64,
@@ -104,7 +103,7 @@ func newNDCStateRebuilder(
 
 func (r *nDCStateRebuilderImpl) rebuild(
 	ctx context.Context,
-	now *time.Time,
+	now time.Time,
 	baseWorkflowIdentifier definition.WorkflowIdentifier,
 	baseBranchToken []byte,
 	baseLastEventID int64,
@@ -133,6 +132,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	firstEventBatch := batch.(*historypb.History).Events
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		namespaceEntry,
+		now,
 	)
 	if err := r.applyEvents(targetWorkflowIdentifier, stateBuilder, firstEventBatch, requestID); err != nil {
 		return nil, 0, err
@@ -167,31 +167,30 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		return nil, 0, serviceerror.NewInternal(fmt.Sprintf("nDCStateRebuilder unable to rebuild mutable state to event ID: %v, version: %v", baseLastEventID, baseLastEventVersion))
 	}
 
-	nowValue := timestamp.TimeValue(now)
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
-	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(nowValue, transactionPolicyPassive)
+	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(now, transactionPolicyPassive)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	// refresh tasks to be generated
-	if err := r.taskRefresher.refreshTasks(nowValue, rebuiltMutableState); err != nil {
+	if err := r.taskRefresher.refreshTasks(now, rebuiltMutableState); err != nil {
 		return nil, 0, err
 	}
 
-	// mutable state rebuild should use the same time stamp
-	rebuiltMutableState.GetExecutionInfo().StartTime = &nowValue
 	return rebuiltMutableState, r.rebuiltHistorySize, nil
 }
 
 func (r *nDCStateRebuilderImpl) initializeBuilders(
 	namespaceEntry *cache.NamespaceCacheEntry,
+	now time.Time,
 ) (mutableState, stateBuilder) {
 	resetMutableStateBuilder := newMutableStateBuilderWithVersionHistories(
 		r.shard,
 		r.shard.GetEventsCache(),
 		r.logger,
 		namespaceEntry,
+		now,
 	)
 	stateBuilder := newStateBuilder(
 		r.shard,

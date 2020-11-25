@@ -451,6 +451,7 @@ func (e *historyEngineImpl) createMutableState(
 		e.shard.GetEventsCache(),
 		e.logger,
 		namespaceEntry,
+		e.shard.GetTimeSource().Now(),
 	)
 
 	if err := newMutableState.SetHistoryTree(runID); err != nil {

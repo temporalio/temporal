@@ -1188,7 +1188,6 @@ func (m *sqlExecutionManager) createExecution(
 	}
 
 	// TODO we should set the start time and last update time on business logic layer
-	executionInfo.StartTime = timestamp.TimeNowPtrUtc()
 	executionInfo.LastUpdateTime = executionInfo.StartTime
 
 	row, err := buildExecutionRow(

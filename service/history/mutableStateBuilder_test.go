@@ -110,7 +110,7 @@ func (s *mutableStateSuite) SetupTest() {
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
 
-	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry)
+	s.msBuilder = newMutableStateBuilderWithVersionHistories(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, time.Now().UTC())
 }
 
 func (s *mutableStateSuite) TearDownTest() {

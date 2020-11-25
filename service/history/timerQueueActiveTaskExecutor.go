@@ -493,7 +493,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	retryState := enumspb.RETRY_STATE_TIMEOUT
 	continueAsNewInitiator := enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY
 
-	wfExpTime := timestamp.TimeValue(mutableState.GetExecutionInfo().RetryExpirationTime)
+	wfExpTime := timestamp.TimeValue(mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime)
 	// Retry if WorkflowExpirationTime is not set or workflow is not expired.
 	if wfExpTime.IsZero() || wfExpTime.After(t.shard.GetTimeSource().Now()) {
 		backoffInterval, retryState = mutableState.GetRetryBackoffDuration(timeoutFailure)

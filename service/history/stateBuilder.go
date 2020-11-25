@@ -598,6 +598,7 @@ func (b *stateBuilderImpl) applyEvents(
 					b.shard.GetEventsCache(),
 					b.logger,
 					b.mutableState.GetNamespaceEntry(),
+					timestamp.TimeValue(newRunHistory[0].GetEventTime()),
 				)
 
 				newRunStateBuilder := newStateBuilder(b.shard, b.logger, newRunMutableStateBuilder, b.taskGeneratorProvider)

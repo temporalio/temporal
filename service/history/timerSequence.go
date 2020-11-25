@@ -113,6 +113,12 @@ func (t *timerSequenceImpl) createNextUserTimer() (bool, error) {
 
 	firstTimerTask := sequenceIDs[0]
 
+	// user timer after workflow timeout, skip
+	workflowRunExpirationTime := timestamp.TimeValue(t.mutableState.GetExecutionInfo().WorkflowRunExpirationTime)
+	if !workflowRunExpirationTime.IsZero() && firstTimerTask.timestamp.After(workflowRunExpirationTime) {
+		return false, nil
+	}
+
 	// timer has already been created
 	if firstTimerTask.timerCreated {
 		return false, nil
@@ -145,6 +151,12 @@ func (t *timerSequenceImpl) createNextActivityTimer() (bool, error) {
 	}
 
 	firstTimerTask := sequenceIDs[0]
+
+	// activity timer after workflow timeout, skip
+	workflowRunExpirationTime := timestamp.TimeValue(t.mutableState.GetExecutionInfo().WorkflowRunExpirationTime)
+	if !workflowRunExpirationTime.IsZero() && firstTimerTask.timestamp.After(workflowRunExpirationTime) {
+		return false, nil
+	}
 
 	// timer has already been created
 	if firstTimerTask.timerCreated {
