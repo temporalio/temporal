@@ -524,6 +524,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	targetNamespace string,
 	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	parentInfo *persistencespb.WorkflowExecutionInfo,
+	defaultWorkflowTaskTimeoutFn dynamicconfig.DurationPropertyFnWithNamespaceFilter,
 ) error {
 
 	if err := v.validateCrossNamespaceCall(
@@ -557,6 +558,18 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
 
+	if timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()) < 0 {
+		return serviceerror.NewInvalidArgument("Invalid WorkflowExecutionTimeout.")
+	}
+
+	if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) < 0 {
+		return serviceerror.NewInvalidArgument("Invalid WorkflowRunTimeout.")
+	}
+
+	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) < 0 {
+		return serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeout.")
+	}
+
 	if err := v.validateWorkflowRetryPolicy(attributes); err != nil {
 		return err
 	}
@@ -572,16 +585,46 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	}
 	attributes.TaskQueue = taskQueue
 
-	attributes.WorkflowExecutionTimeout = timestamp.DurationPtr(getWorkflowExecutionTimeout(targetNamespace,
-		timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()), v.config))
+	// TODO remove this if block after 1.5
+	if !v.config.EnableInfiniteTimeout() {
+		attributes.WorkflowExecutionTimeout = timestamp.DurationPtr(
+			common.GetWorkflowExecutionTimeout(
+				timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()),
+			),
+		)
 
-	attributes.WorkflowRunTimeout = timestamp.DurationPtr(getWorkflowRunTimeout(targetNamespace,
-		timestamp.DurationValue(attributes.GetWorkflowRunTimeout()), timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()), v.config))
+		attributes.WorkflowRunTimeout = timestamp.DurationPtr(
+			common.GetWorkflowRunTimeout(
+				timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
+				timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()),
+			),
+		)
+		// Inherit workflow task timeout from parent workflow execution if not provided on command
 
-	// Inherit workflow task timeout from parent workflow execution if not provided on command
-	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) <= 0 {
-		attributes.WorkflowTaskTimeout = parentInfo.DefaultWorkflowTaskTimeout
+		if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) <= 0 {
+			attributes.WorkflowTaskTimeout = parentInfo.DefaultWorkflowTaskTimeout
+		}
+		return nil
 	}
+
+	// workflow execution timeout is left as is
+	//  if workflow execution timeout == 0 -> infinity
+
+	attributes.WorkflowRunTimeout = timestamp.DurationPtr(
+		common.OverrideWorkflowRunTimeout(
+			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
+			timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()),
+		),
+	)
+
+	attributes.WorkflowTaskTimeout = timestamp.DurationPtr(
+		common.OverrideWorkflowTaskTimeout(
+			targetNamespace,
+			timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()),
+			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
+			defaultWorkflowTaskTimeoutFn,
+		),
+	)
 
 	return nil
 }
@@ -617,7 +660,9 @@ func (v *commandAttrValidator) validateTaskQueue(
 	return taskQueue, nil
 }
 
-func (v *commandAttrValidator) validateActivityRetryPolicy(attributes *commandpb.ScheduleActivityTaskCommandAttributes) error {
+func (v *commandAttrValidator) validateActivityRetryPolicy(
+	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
+) error {
 	if attributes.RetryPolicy == nil {
 		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
@@ -627,7 +672,9 @@ func (v *commandAttrValidator) validateActivityRetryPolicy(attributes *commandpb
 	return common.ValidateRetryPolicy(attributes.RetryPolicy)
 }
 
-func (v *commandAttrValidator) validateWorkflowRetryPolicy(attributes *commandpb.StartChildWorkflowExecutionCommandAttributes) error {
+func (v *commandAttrValidator) validateWorkflowRetryPolicy(
+	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
+) error {
 	if attributes.RetryPolicy == nil {
 		// By default, if the user does not explicitly set a retry policy for a Child Workflow, do not perform any retries.
 		return nil

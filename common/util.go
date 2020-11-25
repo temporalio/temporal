@@ -735,53 +735,32 @@ func GetPayloadsMapSize(data map[string]*commonpb.Payloads) int {
 	return size
 }
 
-// GetWorkflowExecutionTimeout gets the default allowed execution timeout or truncates the requested value to the maximum allowed timeout
-func GetWorkflowExecutionTimeout(
-	namespace string,
-	requestedTimeout time.Duration,
-	getDefaultTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter,
-	getMaxAllowedTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter) time.Duration {
+// OverrideWorkflowRunTimeout override the run timeout according to execution timeout
+func OverrideWorkflowRunTimeout(
+	workflowRunTimeout time.Duration,
+	workflowExecutionTimeout time.Duration,
+) time.Duration {
 
-	if requestedTimeout == 0 {
-		requestedTimeout = getDefaultTimeoutFunc(namespace)
+	if workflowExecutionTimeout == 0 {
+		return workflowRunTimeout
+	} else if workflowRunTimeout == 0 {
+		return workflowExecutionTimeout
 	}
-
-	return timestamp.MinDuration(
-		requestedTimeout,
-		getMaxAllowedTimeoutFunc(namespace),
-	)
+	return timestamp.MinDuration(workflowRunTimeout, workflowExecutionTimeout)
 }
 
-// GetWorkflowRunTimeout gets the default allowed run timeout or truncates the requested value to the maximum allowed timeout
-func GetWorkflowRunTimeout(
+// OverrideWorkflowTaskTimeout override the workflow task timeout according to default timeout or max timeout
+func OverrideWorkflowTaskTimeout(
 	namespace string,
-	requestedTimeout time.Duration,
-	executionTimeout time.Duration,
+	taskStartToCloseTimeout time.Duration,
+	workflowRunTimeout time.Duration,
 	getDefaultTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter,
-	getMaxAllowedTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter) time.Duration {
+) time.Duration {
 
-	if requestedTimeout == 0 {
-		requestedTimeout = getDefaultTimeoutFunc(namespace)
+	if taskStartToCloseTimeout == 0 {
+		taskStartToCloseTimeout = getDefaultTimeoutFunc(namespace)
 	}
 
-	return timestamp.MinDuration(
-		timestamp.MinDuration(
-			requestedTimeout,
-			executionTimeout,
-		),
-		getMaxAllowedTimeoutFunc(namespace),
-	)
-}
-
-// GetWorkflowTaskTimeout gets the default allowed execution timeout or truncates the requested value to the maximum allowed timeout
-func GetWorkflowTaskTimeout(
-	namespace string,
-	requestedTimeout time.Duration,
-	getDefaultTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter) time.Duration {
-
-	if requestedTimeout == 0 {
-		return getDefaultTimeoutFunc(namespace)
-	}
-
-	return requestedTimeout
+	taskStartToCloseTimeout = timestamp.MinDuration(taskStartToCloseTimeout, MaxWorkflowTaskStartToCloseTimeout)
+	return timestamp.MinDuration(taskStartToCloseTimeout, workflowRunTimeout)
 }

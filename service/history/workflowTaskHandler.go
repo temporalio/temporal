@@ -743,6 +743,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 				targetNamespace,
 				attr,
 				handler.mutableState.GetExecutionInfo(),
+				handler.config.DefaultWorkflowTaskTimeout,
 			)
 		},
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES,

@@ -143,6 +143,10 @@ func (s *Scavenger) deleteHandlerLog(key *p.TaskQueueKey, state *taskQueueState,
 	}
 }
 
+// TODO https://github.com/temporalio/temporal/issues/1021
+//  there should be more validation logic here
+//  1. if task has valid TTL -> TTL reached -> delete
+//  2. if task has 0 TTL / no TTL -> logic need to additionally check if corresponding workflow still exists
 func IsTaskExpired(t *persistencespb.AllocatedTaskInfo) bool {
 	tExpiry := timestamp.TimeValue(t.Data.ExpiryTime)
 	tEpoch := time.Unix(0, 0).UTC()

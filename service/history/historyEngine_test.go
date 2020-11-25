@@ -5274,7 +5274,7 @@ func newMutableStateBuilderWithVersionHistoriesForTest(
 ) *mutableStateBuilder {
 
 	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry, time.Now().UTC())
-	msBuilder.UpdateCurrentVersion(version, false)
+	_ = msBuilder.UpdateCurrentVersion(version, false)
 	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
@@ -5282,7 +5282,7 @@ func newMutableStateBuilderWithVersionHistoriesForTest(
 
 func createMutableState(ms mutableState) *persistencespb.WorkflowMutableState {
 	builder := ms.(*mutableStateBuilder)
-	builder.FlushBufferedEvents() // nolint:errcheck
+	_ = builder.FlushBufferedEvents() // nolint:errcheck
 	info := copyWorkflowExecutionInfo(builder.executionInfo)
 	state := copyWorkflowExecutionState(builder.executionState)
 	info.ExecutionStats = &persistencespb.ExecutionStats{}
