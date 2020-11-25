@@ -463,6 +463,7 @@ func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
+	enableInfiniteTimeout dynamicconfig.BoolPropertyFn,
 ) error {
 
 	if attributes == nil {
@@ -485,30 +486,60 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	}
 	attributes.TaskQueue = taskQueue
 
-	// Reduce runTimeout if it is going to exceed WorkflowExpirationTime
-	// Note that this calculation can produce negative result
-	// handleCommandContinueAsNewWorkflow must handle negative runTimeout value
-	timeoutTime := timestamp.TimeValue(executionInfo.WorkflowExecutionExpirationTime)
-	if !timeoutTime.IsZero() {
-		runTimeout := timestamp.RoundUp(timeoutTime.Sub(time.Now().UTC()))
-		if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) > 0 {
-			runTimeout = timestamp.MinDuration(runTimeout, timestamp.DurationValue(attributes.GetWorkflowRunTimeout()))
-		} else {
-			runTimeout = timestamp.MinDuration(runTimeout, timestamp.DurationValue(executionInfo.WorkflowRunTimeout))
+	// TODO remove this block after 1.5
+	if !enableInfiniteTimeout() {
+		// Reduce runTimeout if it is going to exceed WorkflowExpirationTime
+		// Note that this calculation can produce negative result
+		// handleCommandContinueAsNewWorkflow must handle negative runTimeout value
+		timeoutTime := timestamp.TimeValue(executionInfo.WorkflowExecutionExpirationTime)
+		if !timeoutTime.IsZero() {
+			runTimeout := timestamp.RoundUp(timeoutTime.Sub(time.Now().UTC()))
+			if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) > 0 {
+				runTimeout = timestamp.MinDuration(runTimeout, timestamp.DurationValue(attributes.GetWorkflowRunTimeout()))
+			} else {
+				runTimeout = timestamp.MinDuration(runTimeout, timestamp.DurationValue(executionInfo.WorkflowRunTimeout))
+			}
+			attributes.WorkflowRunTimeout = &runTimeout
+		} else if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) == 0 {
+			attributes.WorkflowRunTimeout = executionInfo.WorkflowRunTimeout
 		}
-		attributes.WorkflowRunTimeout = &runTimeout
-	} else if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) == 0 {
-		attributes.WorkflowRunTimeout = executionInfo.WorkflowRunTimeout
+
+		// Inherit workflow task timeout from previous execution if not provided on command
+		if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) <= 0 {
+			attributes.WorkflowTaskTimeout = executionInfo.DefaultWorkflowTaskTimeout
+		}
+
+		// Check next run workflow task delay
+		if timestamp.DurationValue(attributes.GetBackoffStartInterval()) < 0 {
+			return serviceerror.NewInvalidArgument("BackoffStartInterval is less than 0.")
+		}
+
+		namespaceEntry, err := v.namespaceCache.GetNamespaceByID(executionInfo.NamespaceId)
+		if err != nil {
+			return err
+		}
+		return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), namespaceEntry.GetInfo().Name)
+	}
+	// TODO remove above block after 1.5
+
+	if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) < 0 {
+		return serviceerror.NewInvalidArgument("Invalid WorkflowRunTimeout.")
 	}
 
-	// Inherit workflow task timeout from previous execution if not provided on command
-	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) <= 0 {
-		attributes.WorkflowTaskTimeout = executionInfo.DefaultWorkflowTaskTimeout
+	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) < 0 {
+		return serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeout.")
 	}
 
-	// Check next run workflow task delay
 	if timestamp.DurationValue(attributes.GetBackoffStartInterval()) < 0 {
-		return serviceerror.NewInvalidArgument("BackoffStartInterval is less than 0.")
+		return serviceerror.NewInvalidArgument("Invalid BackoffStartInterval.")
+	}
+
+	if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) == 0 {
+		attributes.WorkflowRunTimeout = timestamp.DurationPtr(timestamp.DurationValue(executionInfo.WorkflowRunTimeout))
+	}
+
+	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) == 0 {
+		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(timestamp.DurationValue(executionInfo.DefaultWorkflowTaskTimeout))
 	}
 
 	namespaceEntry, err := v.namespaceCache.GetNamespaceByID(executionInfo.NamespaceId)

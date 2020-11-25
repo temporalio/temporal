@@ -647,6 +647,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 			return handler.attrValidator.validateContinueAsNewWorkflowExecutionAttributes(
 				attr,
 				handler.mutableState.GetExecutionInfo(),
+				handler.config.EnableInfiniteTimeout,
 			)
 		},
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES,
@@ -664,15 +665,18 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
-	if timestamp.DurationValue(attr.WorkflowRunTimeout) <= 0 {
-		// TODO(maxim): is workflowTaskCompletedID the correct id?
-		// TODO(maxim): should we introduce new TimeoutTypes (Workflow, Run) for workflows?
-		handler.stopProcessing = true
-		_, err := handler.mutableState.AddTimeoutWorkflowEvent(handler.workflowTaskCompletedID, enumspb.RETRY_STATE_TIMEOUT)
-		return err
+	// TODO remove after 1.5
+	if !handler.config.EnableInfiniteTimeout() {
+		if timestamp.DurationValue(attr.WorkflowRunTimeout) <= 0 {
+			// TODO(maxim): is workflowTaskCompletedID the correct id?
+			// TODO(maxim): should we introduce new TimeoutTypes (Workflow, Run) for workflows?
+			handler.stopProcessing = true
+			_, err := handler.mutableState.AddTimeoutWorkflowEvent(handler.workflowTaskCompletedID, enumspb.RETRY_STATE_TIMEOUT)
+			return err
+		}
+		handler.logger.Debug("!!!! Continued as new without timeout",
+			tag.WorkflowRunID(handler.mutableState.GetExecutionState().RunId))
 	}
-	handler.logger.Debug("!!!! Continued as new without timeout",
-		tag.WorkflowRunID(handler.mutableState.GetExecutionState().RunId))
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {

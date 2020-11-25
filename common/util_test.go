@@ -294,6 +294,18 @@ func TestOverrideWorkflowTaskTimeout_Infinite(t *testing.T) {
 	defaultTimeout = time.Duration(20)
 	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
 	require.Equal(t, time.Duration(10), OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
+
+	taskTimeout = time.Duration(0)
+	runTimeout = time.Duration(0)
+	defaultTimeout = time.Duration(30)
+	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
+	require.Equal(t, time.Duration(30), OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
+
+	taskTimeout = time.Duration(0)
+	runTimeout = time.Duration(0)
+	defaultTimeout = MaxWorkflowTaskStartToCloseTimeout + time.Duration(1)
+	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
+	require.Equal(t, MaxWorkflowTaskStartToCloseTimeout, OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
 }
 
 func TestOverrideWorkflowTaskTimeout_Finite(t *testing.T) {

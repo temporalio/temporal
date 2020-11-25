@@ -762,5 +762,10 @@ func OverrideWorkflowTaskTimeout(
 	}
 
 	taskStartToCloseTimeout = timestamp.MinDuration(taskStartToCloseTimeout, MaxWorkflowTaskStartToCloseTimeout)
+
+	if workflowRunTimeout == 0 {
+		return taskStartToCloseTimeout
+	}
+
 	return timestamp.MinDuration(taskStartToCloseTimeout, workflowRunTimeout)
 }

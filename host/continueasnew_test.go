@@ -591,7 +591,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -617,7 +617,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 
 	// Process ChildExecution Started event and all generations of child executions
 	for i := 0; i < 11; i++ {
-		s.Logger.Warn("workflow task", tag.Counter(i))
+		s.Logger.Info("workflow task", tag.Counter(i))
 		_, err = poller.PollAndProcessWorkflowTask(false, false)
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
@@ -675,7 +675,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -701,7 +701,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 
 	// Process ChildExecution Started event and all generations of child executions
 	for i := 0; i < 11; i++ {
-		s.Logger.Warn("workflow task", tag.Counter(i))
+		s.Logger.Info("workflow task", tag.Counter(i))
 		_, err = poller.PollAndProcessWorkflowTask(false, false)
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
