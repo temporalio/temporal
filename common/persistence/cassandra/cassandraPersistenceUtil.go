@@ -400,7 +400,6 @@ func createExecution(
 	runID := executionState.RunId
 
 	// TODO we should set the start time and last update time on business logic layer
-	executionInfo.StartTime = timestamp.UnixOrZeroTimePtr(p.DBTimestampToUnixNano(cqlNowTimestampMillis))
 	executionInfo.LastUpdateTime = timestamp.UnixOrZeroTimePtr(p.DBTimestampToUnixNano(cqlNowTimestampMillis))
 
 	executionDatablob, err := serialization.WorkflowExecutionInfoToBlob(executionInfo)

@@ -345,7 +345,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	)
 	resetMutableState, resetHistorySize, err := r.newStateRebuilder().rebuild(
 		ctx,
-		timestamp.TimePtr(r.shard.GetTimeSource().Now()),
+		r.shard.GetTimeSource().Now(),
 		definition.NewWorkflowIdentifier(
 			namespaceID,
 			workflowID,

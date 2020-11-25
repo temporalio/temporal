@@ -64,6 +64,7 @@ type (
 
 	mutableStateProvider func(
 		namespaceEntry *cache.NamespaceCacheEntry,
+		startTime time.Time,
 		logger log.Logger,
 	) mutableState
 
@@ -177,6 +178,7 @@ func newNDCHistoryReplicator(
 		},
 		newMutableState: func(
 			namespaceEntry *cache.NamespaceCacheEntry,
+			startTime time.Time,
 			logger log.Logger,
 		) mutableState {
 			return newMutableStateBuilderWithVersionHistories(
@@ -184,6 +186,7 @@ func newNDCHistoryReplicator(
 				shard.GetEventsCache(),
 				logger,
 				namespaceEntry,
+				startTime,
 			)
 		},
 	}
@@ -309,7 +312,7 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 		return err
 	}
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
-	mutableState := r.newMutableState(namespaceEntry, task.getLogger())
+	mutableState := r.newMutableState(namespaceEntry, timestamp.TimeValue(task.getFirstEvent().GetEventTime()), task.getLogger())
 	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
 
 	// use state builder for workflow mutable state mutation
@@ -646,7 +649,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 
 	resetMutableState, err := workflowResetter.resetWorkflow(
 		ctx,
-		timestamp.TimePtr(task.getEventTime()),
+		task.getEventTime(),
 		baseEventID,
 		baseEventVersion,
 		task.getFirstEvent().GetEventId(),

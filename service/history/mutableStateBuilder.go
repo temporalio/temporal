@@ -255,9 +255,13 @@ func newMutableStateBuilderWithVersionHistories(
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *cache.NamespaceCacheEntry,
+	startTime time.Time,
 ) *mutableStateBuilder {
 
 	s := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry)
+	// start time should be set for workflow timeout calculation
+	// NOTE: workflow reset case, this start time is the reset time
+	s.executionInfo.StartTime = timestamp.TimePtr(startTime)
 	s.executionInfo.VersionHistories = versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
 	return s
 }
@@ -1752,7 +1756,8 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
 		parentNamespaceID,
 		execution,
 		request.GetRequestId(),
-		event); err != nil {
+		event,
+	); err != nil {
 		return nil, err
 	}
 	// TODO merge active & passive task generation
@@ -1823,6 +1828,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	if !timestamp.TimeValue(event.GetWorkflowExecutionExpirationTime()).IsZero() {
 		e.executionInfo.RetryExpirationTime = event.GetWorkflowExecutionExpirationTime()
 	}
+
 	if event.RetryPolicy != nil {
 		e.executionInfo.HasRetryPolicy = true
 		e.executionInfo.RetryBackoffCoefficient = event.RetryPolicy.GetBackoffCoefficient()
@@ -3297,6 +3303,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 		e.shard.GetEventsCache(),
 		e.logger,
 		e.namespaceEntry,
+		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
 	)
 
 	if _, err = newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(

@@ -138,6 +138,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -211,6 +212,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -332,6 +334,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -420,6 +423,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -601,6 +605,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -735,6 +740,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -789,6 +795,7 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -916,6 +923,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 				LastFirstEventId:           common.FirstEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -1028,6 +1036,7 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           workflowExecution.GetRunId(),
@@ -1119,6 +1128,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				ExecutionStats: &persistencespb.ExecutionStats{
 					HistorySize: int64(rand.Int31()),
 				},
+				StartTime: timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: rand.Int63(),
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -3164,7 +3174,6 @@ func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo)
 		DefaultWorkflowTaskTimeout: sourceInfo.DefaultWorkflowTaskTimeout,
 		LastFirstEventId:           sourceInfo.LastFirstEventId,
 		LastProcessedEvent:         sourceInfo.LastProcessedEvent,
-		LastUpdateTime:             sourceInfo.LastUpdateTime,
 		WorkflowTaskVersion:        sourceInfo.WorkflowTaskVersion,
 		WorkflowTaskScheduleId:     sourceInfo.WorkflowTaskScheduleId,
 		WorkflowTaskStartedId:      sourceInfo.WorkflowTaskStartedId,
@@ -3175,6 +3184,8 @@ func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo)
 		ExecutionStats: &persistencespb.ExecutionStats{
 			HistorySize: sourceInfo.ExecutionStats.HistorySize,
 		},
+		StartTime:      sourceInfo.StartTime,
+		LastUpdateTime: sourceInfo.LastUpdateTime,
 	}
 }
 
