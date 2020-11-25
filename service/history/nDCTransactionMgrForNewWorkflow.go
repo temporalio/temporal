@@ -163,7 +163,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		return err
 	}
 
-	targetWorkflowHistorySize, err := r.persistNewWorkflowEvents(
+	targetWorkflowHistorySize, err := r.persistNewNDCWorkflowEvents(
 		targetWorkflow,
 		targetWorkflowEventsSeq[0],
 	)
@@ -229,7 +229,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return err
 	}
 
-	targetWorkflowHistorySize, err := r.persistNewWorkflowEvents(
+	targetWorkflowHistorySize, err := r.persistNewNDCWorkflowEvents(
 		targetWorkflow,
 		targetWorkflowEventsSeq[0],
 	)
@@ -353,7 +353,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) cleanupTransaction(
 	}
 }
 
-func (r *nDCTransactionMgrForNewWorkflowImpl) persistNewWorkflowEvents(
+func (r *nDCTransactionMgrForNewWorkflowImpl) persistNewNDCWorkflowEvents(
 	targetNewWorkflow nDCWorkflow,
 	targetNewWorkflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
