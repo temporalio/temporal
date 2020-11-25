@@ -1025,7 +1025,7 @@ func (e *historyEngineImpl) getMutableState(
 	}
 	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
 	if versionHistories != nil {
-		retResp.VersionHistories = versionHistories
+		retResp.VersionHistories = versionhistory.CopyVersionHistories(versionHistories)
 	}
 	return
 }

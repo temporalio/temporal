@@ -137,7 +137,7 @@ func FindLCAVersionHistoryItemAndIndex(h *historyspb.VersionHistories, incomingH
 			versionHistoryItem = item
 		}
 	}
-	return versionHistoryItem, versionHistoryIndex, nil
+	return CopyVersionHistoryItem(versionHistoryItem), versionHistoryIndex, nil
 }
 
 // FindFirstVersionHistoryIndexByVersionHistoryItem find the first VersionHistory index which contains the given version history item.
