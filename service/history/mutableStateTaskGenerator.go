@@ -136,6 +136,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
 	startVersion := startEvent.GetVersion()
 	workflowRunExpirationTime := timestamp.TimeValue(r.mutableState.GetExecutionInfo().WorkflowRunExpirationTime)
 	if workflowRunExpirationTime.IsZero() {
+		// this mean infinite timeout
 		return nil
 	}
 

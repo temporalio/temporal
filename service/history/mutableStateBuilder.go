@@ -1831,9 +1831,9 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 
 	var workflowRunTimeoutTime time.Time
 	workflowRunTimeoutDuration := timestamp.DurationValue(e.executionInfo.WorkflowRunTimeout)
-	if workflowRunTimeoutDuration == 0 {
-		// noop
-	} else {
+	// if workflowRunTimeoutDuration == 0 then the workflowRunTimeoutTime will be 0
+	// meaning that there is not workflow run timeout
+	if workflowRunTimeoutDuration != 0 {
 		firstWorkflowTaskDelayDuration := timestamp.DurationValue(event.GetFirstWorkflowTaskBackoff())
 		workflowRunTimeoutDuration = workflowRunTimeoutDuration + firstWorkflowTaskDelayDuration
 		workflowRunTimeoutTime = e.executionInfo.StartTime.Add(workflowRunTimeoutDuration)
