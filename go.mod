@@ -18,6 +18,7 @@ require (
 	github.com/cch123/elasticsql v1.0.1
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13
 	github.com/emirpasic/gods v0.0.0-20190624094223-e689965507ab
 	github.com/fatih/color v1.10.0
@@ -32,7 +33,7 @@ require (
 	github.com/iancoleman/strcase v0.1.2
 	github.com/jmoiron/sqlx v1.2.1-0.20200615141059-0794cb1f47ee
 	github.com/jonboulle/clockwork v0.2.2
-	github.com/klauspost/compress v1.11.2 // indirect
+	github.com/klauspost/compress v1.11.3 // indirect
 	github.com/lib/pq v1.8.0
 	github.com/m3db/prometheus_client_golang v0.8.1
 	github.com/m3db/prometheus_client_model v0.1.0 // indirect
@@ -44,21 +45,20 @@ require (
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.4
 	github.com/olivere/elastic v6.2.35+incompatible
-	github.com/onsi/ginkgo v1.10.3 // indirect
-	github.com/onsi/gomega v1.7.1 // indirect
 	github.com/pborman/uuid v1.2.1
 	github.com/pierrec/lz4 v2.6.0+incompatible // indirect
 	github.com/robfig/cron v1.2.0
 	github.com/sirupsen/logrus v1.7.0 // indirect
 	github.com/stretchr/testify v1.6.1
+	github.com/temporalio/kafka-client v0.2.3-0.20201118205213-e4dff30fc573
 	github.com/temporalio/ringpop-go v0.0.0-20200708034907-1e016ebb537a
 	github.com/uber-common/bark v1.3.0 // indirect
-	github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9
 	github.com/uber-go/tally v3.3.17+incompatible
 	github.com/uber/tchannel-go v1.20.1
 	github.com/urfave/cli v1.22.5
 	github.com/urfave/cli/v2 v2.3.0
 	github.com/valyala/fastjson v1.6.1
+	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.temporal.io/api v1.2.0
 	go.temporal.io/sdk v1.2.0
@@ -66,7 +66,8 @@ require (
 	go.uber.org/atomic v1.7.0
 	go.uber.org/multierr v1.6.0
 	go.uber.org/zap v1.16.0
-	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897 // indirect
+	golang.org/x/crypto v0.0.0-20201117144127-c1f2f97bffc9 // indirect
+	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b // indirect
 	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
 	golang.org/x/sys v0.0.0-20201106081118-db71ae66460a // indirect
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e

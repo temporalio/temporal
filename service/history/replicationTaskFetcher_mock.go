@@ -32,6 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+
 	quotas "go.temporal.io/server/common/quotas"
 )
 
@@ -97,10 +98,10 @@ func (mr *MockReplicationTaskFetcherMockRecorder) GetSourceCluster() *gomock.Cal
 }
 
 // GetRequestChan mocks base method.
-func (m *MockReplicationTaskFetcher) GetRequestChan() chan<- *request {
+func (m *MockReplicationTaskFetcher) GetRequestChan() chan<- *replicationTaskRequest {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRequestChan")
-	ret0, _ := ret[0].(chan<- *request)
+	ret0, _ := ret[0].(chan<- *replicationTaskRequest)
 	return ret0
 }
 

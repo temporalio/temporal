@@ -26,9 +26,11 @@ package history
 
 import (
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
@@ -38,6 +40,7 @@ import (
 
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -60,21 +63,23 @@ type (
 	replicationTaskProcessorSuite struct {
 		suite.Suite
 		*require.Assertions
-		controller *gomock.Controller
 
-		mockResource            *resource.Test
-		mockShard               *shard.ContextTest
-		mockEngine              *MockEngine
-		config                  *configs.Config
-		historyClient           *historyservicemock.MockHistoryServiceClient
-		replicationTaskFetcher  *MockReplicationTaskFetcher
-		mockNamespaceCache      *cache.MockNamespaceCache
-		mockClientBean          *client.MockBean
-		adminClient             *adminservicemock.MockAdminServiceClient
-		clusterMetadata         *cluster.MockMetadata
-		executionManager        *mocks.ExecutionManager
-		requestChan             chan *request
-		replicationTaskExecutor *MockreplicationTaskExecutor
+		controller                  *gomock.Controller
+		mockResource                *resource.Test
+		mockShard                   *shard.ContextTest
+		mockEngine                  *MockEngine
+		mockNamespaceCache          *cache.MockNamespaceCache
+		mockClientBean              *client.MockBean
+		mockAdminClient             *adminservicemock.MockAdminServiceClient
+		mockClusterMetadata         *cluster.MockMetadata
+		mockHistoryClient           *historyservicemock.MockHistoryServiceClient
+		mockReplicationTaskExecutor *MockreplicationTaskExecutor
+		mockReplicationTaskFetcher  *MockReplicationTaskFetcher
+
+		mockExecutionManager *mocks.ExecutionManager
+
+		config      *configs.Config
+		requestChan chan *replicationTaskRequest
 
 		replicationTaskProcessor *ReplicationTaskProcessorImpl
 	}
@@ -98,6 +103,8 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.config = NewDynamicConfigForTest()
+	s.requestChan = make(chan *replicationTaskRequest, 10)
+
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
@@ -105,37 +112,41 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 				ShardId:          0,
 				RangeId:          1,
 				TransferAckLevel: 0,
-			}},
+				ClusterReplicationLevel: map[string]int64{
+					cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
+				},
+			},
+		},
 		s.config,
 	)
 	s.mockEngine = NewMockEngine(s.controller)
 	s.mockResource = s.mockShard.Resource
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockClientBean = s.mockResource.ClientBean
-	s.adminClient = s.mockResource.RemoteAdminClient
-	s.clusterMetadata = s.mockResource.ClusterMetadata
-	s.executionManager = s.mockResource.ExecutionMgr
-	s.replicationTaskExecutor = NewMockreplicationTaskExecutor(s.controller)
-	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
-	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.requestChan = make(chan *request, 10)
-
-	s.replicationTaskFetcher = NewMockReplicationTaskFetcher(s.controller)
+	s.mockAdminClient = s.mockResource.RemoteAdminClient
+	s.mockClusterMetadata = s.mockResource.ClusterMetadata
+	s.mockExecutionManager = s.mockResource.ExecutionMgr
+	s.mockReplicationTaskExecutor = NewMockreplicationTaskExecutor(s.controller)
+	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
+	s.mockReplicationTaskFetcher = NewMockReplicationTaskFetcher(s.controller)
 	rateLimiter := quotas.NewDynamicRateLimiter(func() float64 {
 		return 100
 	})
-	s.replicationTaskFetcher.EXPECT().GetSourceCluster().Return("standby").AnyTimes()
-	s.replicationTaskFetcher.EXPECT().GetRequestChan().Return(s.requestChan).AnyTimes()
-	s.replicationTaskFetcher.EXPECT().GetRateLimiter().Return(rateLimiter).AnyTimes()
-	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return("active").AnyTimes()
+	s.mockReplicationTaskFetcher.EXPECT().GetSourceCluster().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	s.mockReplicationTaskFetcher.EXPECT().GetRequestChan().Return(s.requestChan).AnyTimes()
+	s.mockReplicationTaskFetcher.EXPECT().GetRateLimiter().Return(rateLimiter).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+
+	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 
 	s.replicationTaskProcessor = NewReplicationTaskProcessor(
 		s.mockShard,
 		s.mockEngine,
 		s.config,
 		metricsClient,
-		s.replicationTaskFetcher,
-		s.replicationTaskExecutor,
+		s.mockReplicationTaskFetcher,
+		s.mockReplicationTaskExecutor,
 	)
 }
 
@@ -144,19 +155,18 @@ func (s *replicationTaskProcessorSuite) TearDownTest() {
 	s.mockResource.Finish(s.T())
 }
 
-func (s *replicationTaskProcessorSuite) TestSendFetchMessageRequest() {
-	s.replicationTaskProcessor.sendFetchMessageRequest()
-	requestMessage := <-s.requestChan
-
-	s.Equal(int32(0), requestMessage.token.GetShardId())
-	s.Equal(int64(-1), requestMessage.token.GetLastProcessedMessageId())
-	s.Equal(int64(-1), requestMessage.token.GetLastRetrievedMessageId())
+func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus_Stale() {
+	now := timestamp.TimePtr(time.Now().Add(-2 * dropSyncShardTaskTimeThreshold))
+	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationspb.SyncShardStatus{
+		StatusTime: now,
+	})
+	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
+func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus_Success() {
 	now := timestamp.TimeNowPtrUtc()
 	s.mockEngine.EXPECT().SyncShardStatus(gomock.Any(), &historyservice.SyncShardStatusRequest{
-		SourceCluster: "standby",
+		SourceCluster: cluster.TestAlternativeClusterName,
 		ShardId:       0,
 		StatusTime:    now,
 	}).Return(nil).Times(1)
@@ -167,7 +177,108 @@ func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
 	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivityReplicationTask() {
+func (s *replicationTaskProcessorSuite) TestHandleReplicationTask_SyncActivity() {
+	namespaceID := uuid.NewRandom().String()
+	workflowID := uuid.New()
+	runID := uuid.NewRandom().String()
+	attempt := int32(2)
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
+				NamespaceId: namespaceID,
+				WorkflowId:  workflowID,
+				RunId:       runID,
+				Attempt:     attempt,
+			},
+		},
+	}
+
+	s.mockReplicationTaskExecutor.EXPECT().execute(task, false).Return(0, nil).Times(1)
+	err := s.replicationTaskProcessor.handleReplicationTask(task)
+	s.NoError(err)
+}
+
+func (s *replicationTaskProcessorSuite) TestHandleReplicationTask_History() {
+	namespaceID := uuid.NewRandom().String()
+	workflowID := uuid.New()
+	runID := uuid.NewRandom().String()
+	events := []*historypb.HistoryEvent{{
+		EventId: 1,
+		Version: 1,
+	}}
+	versionHistory := []*historyspb.VersionHistoryItem{{
+		EventId: 1,
+		Version: 1,
+	}}
+	serializer := s.mockResource.GetPayloadSerializer()
+	data, err := serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
+			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+				NamespaceId: namespaceID,
+				WorkflowId:  workflowID,
+				RunId:       runID,
+				Events: &commonpb.DataBlob{
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+					Data:         data.Data,
+				},
+				VersionHistoryItems: versionHistory,
+			},
+		},
+	}
+
+	s.mockReplicationTaskExecutor.EXPECT().execute(task, false).Return(0, nil).Times(1)
+	err = s.replicationTaskProcessor.handleReplicationTask(task)
+	s.NoError(err)
+}
+
+func (s *replicationTaskProcessorSuite) TestHandleReplicationDLQTask_SyncActivity() {
+	namespaceID := uuid.NewRandom().String()
+	workflowID := uuid.New()
+	runID := uuid.NewRandom().String()
+	request := &persistence.PutReplicationTaskToDLQRequest{
+		SourceClusterName: cluster.TestAlternativeClusterName,
+		TaskInfo: &persistencespb.ReplicationTaskInfo{
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
+			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+		},
+	}
+
+	s.mockExecutionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
+	err := s.replicationTaskProcessor.handleReplicationDLQTask(request)
+	s.NoError(err)
+}
+
+func (s *replicationTaskProcessorSuite) TestHandleReplicationDLQTask_History() {
+	namespaceID := uuid.NewRandom().String()
+	workflowID := uuid.New()
+	runID := uuid.NewRandom().String()
+
+	request := &persistence.PutReplicationTaskToDLQRequest{
+		SourceClusterName: cluster.TestAlternativeClusterName,
+		TaskInfo: &persistencespb.ReplicationTaskInfo{
+			NamespaceId:  namespaceID,
+			WorkflowId:   workflowID,
+			RunId:        runID,
+			TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
+			FirstEventId: 1,
+			NextEventId:  1,
+			Version:      1,
+		},
+	}
+
+	s.mockExecutionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
+	err := s.replicationTaskProcessor.handleReplicationDLQTask(request)
+	s.NoError(err)
+}
+
+func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_SyncActivity() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
@@ -181,7 +292,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
-		SourceClusterName: "standby",
+		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
@@ -189,38 +300,45 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		},
 	}
-	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
-	err := s.replicationTaskProcessor.putReplicationTaskToDLQ(task)
+
+	dlqTask, err := s.replicationTaskProcessor.convertTaskToDLQTask(task)
 	s.NoError(err)
+	s.Equal(request, dlqTask)
 }
 
-func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2ReplicationTask() {
+func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_History() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
-	events := []*historypb.HistoryEvent{
-		{
-			EventId: 1,
-			Version: 1,
-		},
-	}
+	events := []*historypb.HistoryEvent{{
+		EventId: 1,
+		Version: 1,
+	}}
+	versionHistory := []*historyspb.VersionHistoryItem{{
+		EventId: 1,
+		Version: 1,
+	}}
 	serializer := s.mockResource.GetPayloadSerializer()
 	data, err := serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
+
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
-			NamespaceId: namespaceID,
-			WorkflowId:  workflowID,
-			RunId:       runID,
-			Events: &commonpb.DataBlob{
-				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-				Data:         data.Data,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
+			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+				NamespaceId: namespaceID,
+				WorkflowId:  workflowID,
+				RunId:       runID,
+				Events: &commonpb.DataBlob{
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+					Data:         data.Data,
+				},
+				VersionHistoryItems: versionHistory,
 			},
-		}},
+		},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
-		SourceClusterName: "standby",
+		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId:  namespaceID,
 			WorkflowId:   workflowID,
@@ -231,7 +349,115 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 			Version:      1,
 		},
 	}
-	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
-	err = s.replicationTaskProcessor.putReplicationTaskToDLQ(task)
+
+	dlqTask, err := s.replicationTaskProcessor.convertTaskToDLQTask(task)
 	s.NoError(err)
+	s.Equal(request, dlqTask)
+}
+
+func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Noop() {
+	ackedTaskID := int64(12345)
+	s.mockResource.ShardMgr.On("UpdateShard", mock.Anything).Return(nil).Times(1)
+	err := s.mockShard.UpdateClusterReplicationLevel(cluster.TestAlternativeClusterName, ackedTaskID)
+	s.NoError(err)
+
+	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID
+	err = s.replicationTaskProcessor.cleanupReplicationTasks()
+	s.NoError(err)
+}
+
+func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
+	ackedTaskID := int64(12345)
+	s.mockResource.ShardMgr.On("UpdateShard", mock.Anything).Return(nil).Times(1)
+	err := s.mockShard.UpdateClusterReplicationLevel(cluster.TestAlternativeClusterName, ackedTaskID)
+	s.NoError(err)
+
+	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID - 1
+	s.mockExecutionManager.On("RangeCompleteReplicationTask", &persistence.RangeCompleteReplicationTaskRequest{
+		InclusiveEndTaskID: ackedTaskID,
+	}).Return(nil).Times(1)
+	err = s.replicationTaskProcessor.cleanupReplicationTasks()
+	s.NoError(err)
+}
+
+func (s *replicationTaskProcessorSuite) TestPaginationFn_Success() {
+	namespaceID := uuid.NewRandom().String()
+	workflowID := uuid.New()
+	runID := uuid.NewRandom().String()
+	events := []*historypb.HistoryEvent{{
+		EventId: 1,
+		Version: 1,
+	}}
+	versionHistory := []*historyspb.VersionHistoryItem{{
+		EventId: 1,
+		Version: 1,
+	}}
+	serializer := s.mockResource.GetPayloadSerializer()
+	data, err := serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	syncShardTask := &replicationspb.SyncShardStatus{
+		StatusTime: timestamp.TimeNowPtrUtc(),
+	}
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
+			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+				NamespaceId: namespaceID,
+				WorkflowId:  workflowID,
+				RunId:       runID,
+				Events: &commonpb.DataBlob{
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+					Data:         data.Data,
+				},
+				VersionHistoryItems: versionHistory,
+			},
+		},
+	}
+
+	requestToken := &replicationspb.ReplicationToken{
+		ShardId:                s.mockShard.GetShardID(),
+		LastProcessedMessageId: s.replicationTaskProcessor.maxRxProcessedTaskID,
+		LastRetrievedMessageId: s.replicationTaskProcessor.maxRxProcessedTaskID,
+	}
+
+	go func() {
+		request := <-s.requestChan
+		s.Equal(requestToken, request.token)
+		request.respChan <- &replicationspb.ReplicationMessages{
+			SyncShardStatus:  syncShardTask,
+			ReplicationTasks: []*replicationspb.ReplicationTask{task},
+		}
+		close(request.respChan)
+	}()
+
+	tasks, _, err := s.replicationTaskProcessor.paginationFn(nil)
+	s.NoError(err)
+	s.Equal(1, len(tasks))
+	s.Equal(task, tasks[0].(*replicationspb.ReplicationTask))
+	s.Equal(syncShardTask, <-s.replicationTaskProcessor.syncShardChan)
+}
+
+func (s *replicationTaskProcessorSuite) TestPaginationFn_Error() {
+	requestToken := &replicationspb.ReplicationToken{
+		ShardId:                s.mockShard.GetShardID(),
+		LastProcessedMessageId: s.replicationTaskProcessor.maxRxProcessedTaskID,
+		LastRetrievedMessageId: s.replicationTaskProcessor.maxRxProcessedTaskID,
+	}
+
+	go func() {
+		request := <-s.requestChan
+		s.Equal(requestToken, request.token)
+		close(request.respChan)
+	}()
+
+	tasks, _, err := s.replicationTaskProcessor.paginationFn(nil)
+	s.NoError(err)
+	s.Empty(tasks)
+	select {
+	case <-s.replicationTaskProcessor.syncShardChan:
+		s.Fail("should not receive any sync shard task")
+	default:
+		// noop
+	}
 }

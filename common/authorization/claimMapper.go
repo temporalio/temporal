@@ -22,41 +22,39 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination authority_mock.go -self_package go.temporal.io/server/common/authorization
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination claim_mapper_mock.go -self_package go.temporal.io/server/common/authorization
 
 package authorization
 
-import "context"
+import (
+	"crypto/x509/pkix"
 
-const (
-	// DecisionDeny means auth decision is deny
-	DecisionDeny Decision = iota + 1
-	// DecisionAllow means auth decision is allow
-	DecisionAllow
+	"google.golang.org/grpc/credentials"
+
+	"go.temporal.io/server/common/service/config"
 )
 
-type (
-	// Attributes is input for authority to make decision.
-	// It can be extended in future if required auth on resources like WorkflowType and TaskQueue
-	CallTarget struct {
-		APIName   string
-		Namespace string
-	}
-
-	// Result is result from authority.
-	Result struct {
-		Decision Decision
-	}
-
-	// Decision is enum type for auth decision
-	Decision int
-)
-
-// Authorizer is an interface for authorization
-type Authorizer interface {
-	Authorize(ctx context.Context, caller *Claims, target *CallTarget) (Result, error)
+// Authentication information from subject's JWT token or/and mTLS certificate
+type AuthInfo struct {
+	AuthToken     string
+	TLSSubject    *pkix.Name
+	TLSConnection *credentials.TLSInfo
 }
 
-type requestWithNamespace interface {
-	GetNamespace() string
+// Converts authorization info of a subject into Temporal claims (permissions) for authorization
+type ClaimMapper interface {
+	GetClaims(authInfo *AuthInfo) (*Claims, error)
+}
+
+// No-op claim mapper that gives system level admin permission to everybody
+type noopClaimMapper struct{}
+
+var _ ClaimMapper = (*noopClaimMapper)(nil)
+
+func NewNoopClaimMapper(_ *config.Config) ClaimMapper {
+	return &noopClaimMapper{}
+}
+
+func (*noopClaimMapper) GetClaims(_ *AuthInfo) (*Claims, error) {
+	return &Claims{System: RoleAdmin}, nil
 }

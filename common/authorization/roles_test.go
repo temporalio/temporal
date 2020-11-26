@@ -22,41 +22,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination authority_mock.go -self_package go.temporal.io/server/common/authorization
-
 package authorization
 
-import "context"
-
-const (
-	// DecisionDeny means auth decision is deny
-	DecisionDeny Decision = iota + 1
-	// DecisionAllow means auth decision is allow
-	DecisionAllow
+import (
+	"testing"
 )
 
-type (
-	// Attributes is input for authority to make decision.
-	// It can be extended in future if required auth on resources like WorkflowType and TaskQueue
-	CallTarget struct {
-		APIName   string
-		Namespace string
-	}
-
-	// Result is result from authority.
-	Result struct {
-		Decision Decision
-	}
-
-	// Decision is enum type for auth decision
-	Decision int
-)
-
-// Authorizer is an interface for authorization
-type Authorizer interface {
-	Authorize(ctx context.Context, caller *Claims, target *CallTarget) (Result, error)
+func TestInvalidRoles(t *testing.T) {
+	testInvalid(t, 32)
+	testInvalid(t, 33)
+	testInvalid(t, 64)
+	testInvalid(t, 125)
 }
 
-type requestWithNamespace interface {
-	GetNamespace() string
+func TestValidRoles(t *testing.T) {
+	testValid(t, RoleUndefined)
+	testValid(t, RoleWorker)
+	testValid(t, RoleReader)
+	testValid(t, RoleWriter)
+	testValid(t, RoleAdmin)
+	testValid(t, RoleWorker|RoleReader)
+	testValid(t, RoleWorker|RoleWriter)
+	testValid(t, RoleWorker|RoleAdmin)
+	testValid(t, RoleWorker|RoleReader|RoleWriter)
+	testValid(t, RoleWorker|RoleReader|RoleAdmin)
+	testValid(t, RoleWorker|RoleReader|RoleWriter|RoleAdmin)
+	testValid(t, RoleReader|RoleWriter)
+	testValid(t, RoleReader|RoleAdmin)
+	testValid(t, RoleReader|RoleWriter|RoleAdmin)
+}
+
+func testValid(t *testing.T, value Role) {
+	if !value.IsValid() {
+		t.Errorf("Valid role value %d reported as invalid.", value)
+	}
+}
+func testInvalid(t *testing.T, value Role) {
+	if value.IsValid() {
+		t.Errorf("Invalid role value %d reported as valid.", value)
+	}
 }

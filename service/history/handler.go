@@ -1308,7 +1308,7 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 		return nil, errShuttingDown
 	}
 
-	scope := metrics.HistoryReplicateEventsV2Scope
+	scope := metrics.HistoryReplicateEventsScope
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()

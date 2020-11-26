@@ -480,8 +480,6 @@ func (m *sqlHistoryV2Manager) GetHistoryTree(
 		return nil, err
 	}
 
-	branches := make([]*persistencespb.HistoryBranch, 0)
-
 	rows, err := m.db.SelectFromHistoryTree(ctx, sqlplugin.HistoryTreeSelectFilter{
 		TreeID:  treeID,
 		ShardID: *request.ShardID,
@@ -489,6 +487,7 @@ func (m *sqlHistoryV2Manager) GetHistoryTree(
 	if err == sql.ErrNoRows || (err == nil && len(rows) == 0) {
 		return &p.GetHistoryTreeResponse{}, nil
 	}
+	branches := make([]*persistencespb.HistoryBranch, 0, len(rows))
 	for _, row := range rows {
 		treeInfo, err := serialization.HistoryTreeInfoFromBlob(row.Data, row.DataEncoding)
 		if err != nil {

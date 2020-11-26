@@ -22,41 +22,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination authority_mock.go -self_package go.temporal.io/server/common/authorization
-
 package authorization
 
-import "context"
+type Role int16
 
+// User authz within the context of an entity, such as system, namespace or workflow.
+// User may have any combination of these authz within each context, except for RoleUndefined, as a bitmask.
 const (
-	// DecisionDeny means auth decision is deny
-	DecisionDeny Decision = iota + 1
-	// DecisionAllow means auth decision is allow
-	DecisionAllow
+	RoleWorker = Role(1 << iota)
+	RoleReader
+	RoleWriter
+	RoleAdmin
+	RoleUndefined = Role(0)
 )
 
-type (
-	// Attributes is input for authority to make decision.
-	// It can be extended in future if required auth on resources like WorkflowType and TaskQueue
-	CallTarget struct {
-		APIName   string
-		Namespace string
-	}
-
-	// Result is result from authority.
-	Result struct {
-		Decision Decision
-	}
-
-	// Decision is enum type for auth decision
-	Decision int
-)
-
-// Authorizer is an interface for authorization
-type Authorizer interface {
-	Authorize(ctx context.Context, caller *Claims, target *CallTarget) (Result, error)
+// Checks if the provided role bitmask represents a valid combination of authz
+func (b Role) IsValid() bool {
+	return b&^(RoleWorker|RoleReader|RoleWriter|RoleAdmin) == 0
 }
 
-type requestWithNamespace interface {
-	GetNamespace() string
+// Contains identity of the subject and subject's roles at the system level and for individual namespaces
+type Claims struct {
+	// Identity of the subject
+	Subject string
+	// Role within the context of the whole Temporal cluster or a multi-cluster setup
+	System Role
+	// Roles within specific namespaces
+	Namespaces map[string]Role
 }

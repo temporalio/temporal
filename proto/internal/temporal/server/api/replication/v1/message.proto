@@ -126,7 +126,7 @@ message HistoryMetadataTaskAttributes {
 
 message SyncShardStatusTaskAttributes {
     string source_cluster = 1;
-    int64 shard_id = 2;
+    int32 shard_id = 2;
     google.protobuf.Timestamp status_time = 3 [(gogoproto.stdtime) = true];
 }
 

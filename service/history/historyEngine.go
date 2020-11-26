@@ -220,8 +220,7 @@ func NewEngineWithShardContext(
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
-	// Only start the replicator processor if valid publisher is passed in
-	if publisher != nil {
+	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicatorProcessor = newReplicatorQueueProcessor(
 			shard,
 			historyEngImpl.historyCache,
@@ -452,6 +451,7 @@ func (e *historyEngineImpl) createMutableState(
 		e.shard.GetEventsCache(),
 		e.logger,
 		namespaceEntry,
+		e.shard.GetTimeSource().Now(),
 	)
 
 	if err := newMutableState.SetHistoryTree(runID); err != nil {
@@ -1025,7 +1025,7 @@ func (e *historyEngineImpl) getMutableState(
 	}
 	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
 	if versionHistories != nil {
-		retResp.VersionHistories = versionHistories
+		retResp.VersionHistories = versionhistory.CopyVersionHistories(versionHistories)
 	}
 	return
 }

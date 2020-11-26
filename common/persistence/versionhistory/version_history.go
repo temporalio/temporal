@@ -48,8 +48,7 @@ func CopyVersionHistory(v *historyspb.VersionHistory) *historyspb.VersionHistory
 
 	var items []*historyspb.VersionHistoryItem
 	for _, item := range v.Items {
-		itemCopy := *item
-		items = append(items, &itemCopy)
+		items = append(items, CopyVersionHistoryItem(item))
 	}
 
 	return NewVersionHistory(token, items)
@@ -88,8 +87,7 @@ func SetVersionHistoryBranchToken(v *historyspb.VersionHistory, branchToken []by
 // AddOrUpdateVersionHistoryItem updates the VersionHistory with new VersionHistoryItem.
 func AddOrUpdateVersionHistoryItem(v *historyspb.VersionHistory, item *historyspb.VersionHistoryItem) error {
 	if len(v.Items) == 0 {
-		itemCopy := *item
-		v.Items = []*historyspb.VersionHistoryItem{&itemCopy}
+		v.Items = []*historyspb.VersionHistoryItem{CopyVersionHistoryItem(item)}
 		return nil
 	}
 
@@ -104,8 +102,7 @@ func AddOrUpdateVersionHistoryItem(v *historyspb.VersionHistory, item *historysp
 
 	if item.Version > lastItem.Version {
 		// Add a new history
-		itemCopy := *item
-		v.Items = append(v.Items, &itemCopy)
+		v.Items = append(v.Items, CopyVersionHistoryItem(item))
 	} else {
 		// item.Version == lastItem.Version && item.EventID > lastItem.EventID
 		// Update event ID
@@ -141,7 +138,7 @@ func FindLCAVersionHistoryItem(v *historyspb.VersionHistory, remote *historyspb.
 
 		if localVersionItem.Version == remoteVersionItem.Version {
 			if localVersionItem.GetEventId() > remoteVersionItem.GetEventId() {
-				return remoteVersionItem, nil
+				return CopyVersionHistoryItem(remoteVersionItem), nil
 			}
 			return localVersionItem, nil
 		} else if localVersionItem.Version > remoteVersionItem.Version {
@@ -164,7 +161,7 @@ func IsLCAVersionHistoryItemAppendable(v *historyspb.VersionHistory, lcaItem *hi
 		panic("lcaItem is nil")
 	}
 
-	return *v.Items[len(v.Items)-1] == *lcaItem
+	return IsEqualVersionHistoryItem(v.Items[len(v.Items)-1], lcaItem)
 }
 
 // GetFirstVersionHistoryItem return the first VersionHistoryItem.
@@ -172,7 +169,7 @@ func GetFirstVersionHistoryItem(v *historyspb.VersionHistory) (*historyspb.Versi
 	if len(v.Items) == 0 {
 		return nil, serviceerror.NewInvalidArgument("version history is empty.")
 	}
-	return v.Items[0], nil
+	return CopyVersionHistoryItem(v.Items[0]), nil
 }
 
 // GetLastVersionHistoryItem return the last VersionHistoryItem.
@@ -180,7 +177,7 @@ func GetLastVersionHistoryItem(v *historyspb.VersionHistory) (*historyspb.Versio
 	if len(v.Items) == 0 {
 		return nil, serviceerror.NewInvalidArgument("version history is empty.")
 	}
-	return v.Items[len(v.Items)-1], nil
+	return CopyVersionHistoryItem(v.Items[len(v.Items)-1]), nil
 }
 
 // GetVersionHistoryEventVersion return the corresponding event version of an event ID.

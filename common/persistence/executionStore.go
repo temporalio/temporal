@@ -150,7 +150,6 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		RetryInitialInterval:              info.RetryInitialInterval,
 		RetryBackoffCoefficient:           info.RetryBackoffCoefficient,
 		RetryMaximumInterval:              info.RetryMaximumInterval,
-		RetryExpirationTime:               info.RetryExpirationTime,
 		RetryMaximumAttempts:              info.RetryMaximumAttempts,
 		RetryNonRetryableErrorTypes:       info.RetryNonRetryableErrorTypes,
 		EventBranchToken:                  info.EventBranchToken,
@@ -163,6 +162,8 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		HistorySize:                       info.HistorySize,
 		CancelRequestId:                   info.CancelRequestId,
 		VersionHistories:                  info.VersionHistories,
+		WorkflowRunExpirationTime:         info.WorkflowRunExpirationTime,
+		WorkflowExecutionExpirationTime:   info.WorkflowExecutionExpirationTime,
 	}
 
 	if newInfo.AutoResetPoints == nil {
@@ -271,13 +272,14 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		RetryInitialInterval:              info.RetryInitialInterval,
 		RetryBackoffCoefficient:           info.RetryBackoffCoefficient,
 		RetryMaximumInterval:              info.RetryMaximumInterval,
-		RetryExpirationTime:               info.RetryExpirationTime,
 		RetryMaximumAttempts:              info.RetryMaximumAttempts,
 		RetryNonRetryableErrorTypes:       info.RetryNonRetryableErrorTypes,
 		EventBranchToken:                  info.EventBranchToken,
 		CronSchedule:                      info.CronSchedule,
 		Memo:                              info.Memo,
 		SearchAttributes:                  info.SearchAttributes,
+		WorkflowRunExpirationTime:         info.WorkflowRunExpirationTime,
+		WorkflowExecutionExpirationTime:   info.WorkflowExecutionExpirationTime,
 
 		ExecutionStats:   info.ExecutionStats,
 		VersionHistories: info.VersionHistories,

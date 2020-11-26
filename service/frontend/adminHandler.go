@@ -270,8 +270,22 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	scope, sw := adh.startRequestProfile(metrics.AdminDescribeHistoryHostScope)
 	defer sw.Stop()
 
-	if request == nil || request.WorkflowExecution == nil {
+	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	flagsCount := 0
+	if request.ShardId != 0 {
+		flagsCount++
+	}
+	if len(request.Namespace) != 0 && request.WorkflowExecution != nil {
+		flagsCount++
+	}
+	if len(request.GetHostAddress()) > 0 {
+		flagsCount++
+	}
+	if flagsCount != 1 {
+		return nil, serviceerror.NewInvalidArgument("must provide one and only one: shard id or namespace & workflow id or host address")
 	}
 
 	var err error

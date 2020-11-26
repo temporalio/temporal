@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -144,7 +145,7 @@ func (r *nDCConflictResolverImpl) rebuild(
 
 	rebuildMutableState, rebuiltHistorySize, err := r.stateRebuilder.rebuild(
 		ctx,
-		executionInfo.StartTime,
+		timestamp.TimeValue(executionInfo.StartTime),
 		workflowIdentifier,
 		replayVersionHistory.GetBranchToken(),
 		lastItem.GetEventId(),

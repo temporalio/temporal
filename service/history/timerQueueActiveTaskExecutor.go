@@ -441,17 +441,19 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		Name: activityInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	scheduleToStartTimeout := activityInfo.ScheduleToStartTimeout
+	scheduleToStartTimeout := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)
 
 	release(nil) // release earlier as we don't need the lock anymore
 
-	_, retError = t.shard.GetService().GetMatchingClient().AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
+	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
+	defer cancel()
+	_, retError = t.shard.GetService().GetMatchingClient().AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId:            targetNamespaceID,
 		SourceNamespaceId:      namespaceID,
 		Execution:              execution,
 		TaskQueue:              taskQueue,
 		ScheduleId:             scheduledID,
-		ScheduleToStartTimeout: scheduleToStartTimeout,
+		ScheduleToStartTimeout: timestamp.DurationPtr(scheduleToStartTimeout),
 	})
 
 	return retError
@@ -493,7 +495,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	retryState := enumspb.RETRY_STATE_TIMEOUT
 	continueAsNewInitiator := enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY
 
-	wfExpTime := timestamp.TimeValue(mutableState.GetExecutionInfo().RetryExpirationTime)
+	wfExpTime := timestamp.TimeValue(mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime)
 	// Retry if WorkflowExpirationTime is not set or workflow is not expired.
 	if wfExpTime.IsZero() || wfExpTime.After(t.shard.GetTimeSource().Now()) {
 		backoffInterval, retryState = mutableState.GetRetryBackoffDuration(timeoutFailure)

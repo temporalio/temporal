@@ -22,41 +22,36 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination authority_mock.go -self_package go.temporal.io/server/common/authorization
-
 package authorization
 
 import "context"
 
-const (
-	// DecisionDeny means auth decision is deny
-	DecisionDeny Decision = iota + 1
-	// DecisionAllow means auth decision is allow
-	DecisionAllow
-)
+type defaultAuthorizer struct{}
 
-type (
-	// Attributes is input for authority to make decision.
-	// It can be extended in future if required auth on resources like WorkflowType and TaskQueue
-	CallTarget struct {
-		APIName   string
-		Namespace string
-	}
-
-	// Result is result from authority.
-	Result struct {
-		Decision Decision
-	}
-
-	// Decision is enum type for auth decision
-	Decision int
-)
-
-// Authorizer is an interface for authorization
-type Authorizer interface {
-	Authorize(ctx context.Context, caller *Claims, target *CallTarget) (Result, error)
+// NewDefaultAuthorizer creates a default authorizer
+func NewDefaultAuthorizer() Authorizer {
+	return &defaultAuthorizer{}
 }
 
-type requestWithNamespace interface {
-	GetNamespace() string
+func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target *CallTarget) (Result, error) {
+
+	// TODO: This is a temporary workaround to allow calls to system namespace and
+	// calls with no namespace to pass through. When handling of mTLS data is added,
+	// we should remove "temporal-system" from here. Handling of call with
+	// no namespace will need to be performed at the API level, so that data would
+	// be filtered based of caller's permissions to namespaces and system.
+	if target.Namespace == "temporal-system" || target.Namespace == "" {
+		return Result{Decision: DecisionAllow}, nil
+	}
+
+	// Check system level permissions
+	if claims.System == RoleAdmin || claims.System == RoleWriter {
+		return Result{Decision: DecisionAllow}, nil
+	}
+
+	roles, found := claims.Namespaces[target.Namespace]
+	if !found || roles == RoleUndefined {
+		return Result{Decision: DecisionDeny}, nil
+	}
+	return Result{Decision: DecisionAllow}, nil
 }

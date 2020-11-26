@@ -335,6 +335,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
 				EventBranchToken:           branchToken,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           workflowExecution.GetRunId(),
@@ -405,6 +406,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 				WorkflowTaskStartedId:  common.EmptyEventID,
 				WorkflowTaskTimeout:    timestamp.DurationFromSeconds(1),
 				ExecutionStats:         &persistencespb.ExecutionStats{},
+				StartTime:              timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -447,6 +449,7 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
 				ExecutionStats:             &persistencespb.ExecutionStats{},
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			ExecutionState: &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 				RunId:           workflowExecution.GetRunId(),
@@ -549,6 +552,7 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *persistencespb.WorkflowEx
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
 				AutoResetPoints:            prevResetPoints,
+				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{

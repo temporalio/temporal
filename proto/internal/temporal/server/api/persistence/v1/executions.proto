@@ -102,7 +102,7 @@ message WorkflowExecutionInfo {
     google.protobuf.Duration retry_maximum_interval = 37 [(gogoproto.stdduration) = true];
     int32 retry_maximum_attempts = 38;
     double retry_backoff_coefficient = 39;
-    google.protobuf.Timestamp retry_expiration_time = 40 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp workflow_execution_expiration_time = 40 [(gogoproto.stdtime) = true];
     repeated string retry_non_retryable_error_types = 41;
     bool has_retry_policy = 42;
     string cron_schedule = 43;
@@ -119,6 +119,7 @@ message WorkflowExecutionInfo {
     temporal.server.api.history.v1.VersionHistories version_histories = 54;
     string first_execution_run_id = 55;
     ExecutionStats execution_stats = 56;
+    google.protobuf.Timestamp workflow_run_expiration_time = 57 [(gogoproto.stdtime) = true];
 }
 
 message ExecutionStats {

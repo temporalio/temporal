@@ -288,7 +288,10 @@ func (s *Service) Start() {
 		opts,
 		grpc.ChainUnaryInterceptor(
 			rpc.ServiceErrorInterceptor,
-			authorization.NewAuthorizationInterceptor(s.params.Authorizer, s.Resource.GetMetricsClient())))
+			authorization.NewAuthorizationInterceptor(
+				s.params.ClaimMapper,
+				s.params.Authorizer,
+				s.Resource.GetMetricsClient())))
 	s.server = grpc.NewServer(opts...)
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
