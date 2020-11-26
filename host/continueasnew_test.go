@@ -353,7 +353,6 @@ GetHistoryLoop:
 		s.Logger.Info("Workflow execution timedout.  Printing history for last run:")
 		common.PrettyPrintHistory(h, s.Logger)
 
-		s.True(timestamp.DurationValue(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout()) < 5*time.Second)
 		workflowComplete = true
 		break GetHistoryLoop
 	}
