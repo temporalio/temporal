@@ -38,3 +38,13 @@ func NewVersionHistoryItem(eventID int64, version int64) *historyspb.VersionHist
 
 	return &historyspb.VersionHistoryItem{EventId: eventID, Version: version}
 }
+
+// CopyVersionHistoryItem create a new instance of VersionHistoryItem.
+func CopyVersionHistoryItem(item *historyspb.VersionHistoryItem) *historyspb.VersionHistoryItem {
+	return NewVersionHistoryItem(item.EventId, item.Version)
+}
+
+// IsEqualVersionHistoryItem checks whether version history items are equal
+func IsEqualVersionHistoryItem(item1 *historyspb.VersionHistoryItem, item2 *historyspb.VersionHistoryItem) bool {
+	return item1.EventId == item2.EventId && item1.Version == item2.Version
+}
