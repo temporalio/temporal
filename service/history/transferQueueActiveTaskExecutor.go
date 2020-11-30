@@ -159,7 +159,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 		return err
 	}
 
-	timeout := timestamp.MinDuration(timestamp.DurationValue(ai.ScheduleToStartTimeout), common.MaxTaskTimeout)
+	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
@@ -197,29 +197,35 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	runTimeoutSeconds := int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds())
-	taskTimeoutSeconds := common.MinInt64(runTimeoutSeconds, common.MaxTaskTimeoutSeconds)
 
 	// NOTE: previously this section check whether mutable state has enabled
 	// sticky workflowTask, if so convert the workflowTask to a sticky workflowTask.
 	// that logic has a bug which timer task for that sticky workflowTask is not generated
 	// the correct logic should check whether the workflow task is a sticky workflowTask
 	// task or not.
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: task.TaskQueue,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	var taskQueue *taskqueuepb.TaskQueue
+	var taskScheduleToStartTimeoutSeconds = int64(0)
 	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
 		// this workflowTask is an sticky workflowTask
 		// there shall already be an timer set
-		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
-		taskTimeoutSeconds = int64(timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout).Seconds())
+		taskQueue = &taskqueuepb.TaskQueue{
+			Name: task.TaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+		}
+		taskScheduleToStartTimeoutSeconds = int64(timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout).Seconds())
+	} else {
+		taskQueue = &taskqueuepb.TaskQueue{
+			Name: task.TaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		}
+		workflowRunTimeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
+		taskScheduleToStartTimeoutSeconds = int64(workflowRunTimeout.Round(time.Second).Seconds())
 	}
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushWorkflowTask(task, taskQueue, timestamp.DurationFromSeconds(taskTimeoutSeconds))
+	return t.pushWorkflowTask(task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds))
 }
 
 func (t *transferQueueActiveTaskExecutor) processCloseExecution(

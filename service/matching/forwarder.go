@@ -134,13 +134,16 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 
 	var err error
 
-	// todo: Vet recomputing ScheduleToStart and rechecking expiry here
-	newScheduleToStartTimeout := time.Until(timestamp.TimeValue(task.event.Data.ExpiryTime))
-
-	// Todo - should we noop expired tasks? This will be moot once history stamp absolute time
-	/*if newScheduleToStartTimeout <= 0 {
-		return nil
-	}*/
+	var expirationDuration time.Duration
+	expirationTime := timestamp.TimeValue(task.event.Data.ExpiryTime)
+	if expirationTime.IsZero() {
+		// noop
+	} else {
+		expirationDuration = time.Until(expirationTime)
+		if expirationDuration <= 0 {
+			return nil
+		}
+	}
 
 	switch fwdr.taskQueueID.taskType {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
@@ -153,7 +156,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			},
 			ScheduleId:             task.event.Data.GetScheduleId(),
 			Source:                 task.source,
-			ScheduleToStartTimeout: &newScheduleToStartTimeout,
+			ScheduleToStartTimeout: &expirationDuration,
 			ForwardedSource:        fwdr.taskQueueID.name,
 		})
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
@@ -167,7 +170,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			},
 			ScheduleId:             task.event.Data.GetScheduleId(),
 			Source:                 task.source,
-			ScheduleToStartTimeout: &newScheduleToStartTimeout,
+			ScheduleToStartTimeout: &expirationDuration,
 			ForwardedSource:        fwdr.taskQueueID.name,
 		})
 	default:

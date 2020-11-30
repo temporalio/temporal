@@ -27,6 +27,7 @@ package history
 import (
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
@@ -167,8 +168,25 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		}
 
 		executionInfo := mutableState.GetExecutionInfo()
-		workflowTimeout := int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds())
-		wtTimeout := common.MinInt64(workflowTimeout, common.MaxTaskTimeoutSeconds)
+
+		var taskQueue *taskqueuepb.TaskQueue
+		var taskScheduleToStartTimeoutSeconds = int64(0)
+		if mutableState.GetExecutionInfo().TaskQueue != transferTask.TaskQueue {
+			// this workflowTask is an sticky workflowTask
+			// there shall already be an timer set
+			taskQueue = &taskqueuepb.TaskQueue{
+				Name: transferTask.TaskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+			}
+			taskScheduleToStartTimeoutSeconds = int64(timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout).Seconds())
+		} else {
+			taskQueue = &taskqueuepb.TaskQueue{
+				Name: transferTask.TaskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			}
+			workflowRunTimeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
+			taskScheduleToStartTimeoutSeconds = int64(workflowRunTimeout.Round(time.Second).Seconds())
+		}
 
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), wtInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
@@ -177,8 +195,8 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 
 		if wtInfo.StartedID == common.EmptyEventID {
 			return newPushWorkflowTaskToMatchingInfo(
-				wtTimeout,
-				taskqueuepb.TaskQueue{Name: transferTask.TaskQueue},
+				taskScheduleToStartTimeoutSeconds,
+				*taskQueue,
 			), nil
 		}
 
@@ -524,10 +542,10 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 	}
 
 	pushActivityInfo := postActionInfo.(*pushActivityTaskToMatchingInfo)
-	timeout := common.MinInt64(int64(pushActivityInfo.activityTaskScheduleToStartTimeout), common.MaxTaskTimeoutSeconds)
+	timeout := pushActivityInfo.activityTaskScheduleToStartTimeout
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		task.(*persistencespb.TransferTaskInfo),
-		timestamp.DurationFromSeconds(timeout),
+		&timeout,
 	)
 }
 
@@ -542,7 +560,7 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 	}
 
 	pushwtInfo := postActionInfo.(*pushWorkflowTaskToMatchingInfo)
-	timeout := common.MinInt64(pushwtInfo.workflowTaskScheduleToStartTimeout, common.MaxTaskTimeoutSeconds)
+	timeout := pushwtInfo.workflowTaskScheduleToStartTimeout
 	return t.transferQueueTaskExecutorBase.pushWorkflowTask(
 		task.(*persistencespb.TransferTaskInfo),
 		&pushwtInfo.taskqueue,

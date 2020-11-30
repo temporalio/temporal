@@ -70,13 +70,13 @@ var keys = map[Key]string{
 	EnableNamespaceNotActiveAutoForwarding: "system.enableNamespaceNotActiveAutoForwarding",
 	TransactionSizeLimit:                   "system.transactionSizeLimit",
 	MinRetentionDays:                       "system.minRetentionDays",
-	MaxWorkflowTaskTimeout:                 "system.maxWorkflowTaskTimeout",
 	DisallowQuery:                          "system.disallowQuery",
 	EnableBatcher:                          "worker.enableBatcher",
 	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
 	EnableStickyQuery:                      "system.enableStickyQuery",
 	EnablePriorityTaskProcessor:            "system.enablePriorityTaskProcessor",
 	EnableAuthorization:                    "system.enableAuthorization",
+	EnableInfiniteTimeout:                  "system.enableInfiniteTimeout",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -230,10 +230,6 @@ var keys = map[Key]string{
 	EmitShardDiffLog:                                       "history.emitShardDiffLog",
 	HistoryThrottledLogRPS:                                 "history.throttledLogRPS",
 	StickyTTL:                                              "history.stickyTTL",
-	DefaultWorkflowExecutionTimeout:                        "history.defaultWorkflowExecutionTimeout",
-	DefaultWorkflowRunTimeout:                              "history.defaultWorkflowRunTimeout",
-	MaxWorkflowExecutionTimeout:                            "history.maximumWorkflowExecutionTimeout",
-	MaxWorkflowRunTimeout:                                  "history.maximumWorkflowRunTimeout",
 	WorkflowTaskHeartbeatTimeout:                           "history.workflowTaskHeartbeatTimeout",
 	DefaultWorkflowTaskTimeout:                             "history.defaultWorkflowTaskTimeout",
 	ParentClosePolicyThreshold:                             "history.parentClosePolicyThreshold",
@@ -343,14 +339,15 @@ const (
 	TransactionSizeLimit
 	// MinRetentionDays is the minimal allowed retention days for namespace
 	MinRetentionDays
-	// MaxWorkflowTaskTimeout  is the maximum allowed workflow task start to close timeout
-	MaxWorkflowTaskTimeout
 	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery
 	// EnablePriorityTaskProcessor is the key for enabling priority task processor
 	EnablePriorityTaskProcessor
 	// EnableAuthorization is the key to enable authorization for a namespace
 	EnableAuthorization
+	// EnableInfiniteTimeout is the key to enable infinite timeout
+	// TODO remove after 1.5
+	EnableInfiniteTimeout
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning
@@ -667,14 +664,6 @@ const (
 	StickyTTL
 	// WorkflowTaskHeartbeatTimeout for workflow task heartbeat
 	WorkflowTaskHeartbeatTimeout
-	// DefaultWorkflowExecutionTimeout for a workflow execution
-	DefaultWorkflowExecutionTimeout
-	// DefaultWorkflowRunTimeout for a workflow run
-	DefaultWorkflowRunTimeout
-	// MaxWorkflowExecutionTimeout maximum allowed workflow execution timeout
-	MaxWorkflowExecutionTimeout
-	// MaxWorkflowRunTimeout maximum allowed workflow run timeout
-	MaxWorkflowRunTimeout
 	// DefaultWorkflowTaskTimeout for a workflow task
 	DefaultWorkflowTaskTimeout
 

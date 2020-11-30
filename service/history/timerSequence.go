@@ -275,11 +275,16 @@ func (t *timerSequenceImpl) getActivityScheduleToStartTimeout(
 		return nil
 	}
 
-	startTimeout := timestamp.TimeValue(activityInfo.ScheduledTime).Add(timestamp.DurationValue(activityInfo.ScheduleToStartTimeout))
+	scheduleToStartDuration := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)
+	if scheduleToStartDuration == 0 {
+		return nil
+	}
+
+	timeoutTime := timestamp.TimeValue(activityInfo.ScheduledTime).Add(scheduleToStartDuration)
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,
-		timestamp:    startTimeout,
+		timestamp:    timeoutTime,
 		timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		timerCreated: (activityInfo.TimerTaskStatus & timerTaskStatusCreatedScheduleToStart) > 0,
 		attempt:      activityInfo.Attempt,
@@ -295,11 +300,16 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 		return nil
 	}
 
-	closeTimeout := timestamp.TimeValue(activityInfo.ScheduledTime).Add(timestamp.DurationValue(activityInfo.ScheduleToCloseTimeout))
+	scheduleToCloseDuration := timestamp.DurationValue(activityInfo.ScheduleToCloseTimeout)
+	if scheduleToCloseDuration == 0 {
+		return nil
+	}
+
+	timeoutTime := timestamp.TimeValue(activityInfo.ScheduledTime).Add(scheduleToCloseDuration)
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,
-		timestamp:    closeTimeout,
+		timestamp:    timeoutTime,
 		timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		timerCreated: (activityInfo.TimerTaskStatus & timerTaskStatusCreatedScheduleToClose) > 0,
 		attempt:      activityInfo.Attempt,
@@ -320,11 +330,16 @@ func (t *timerSequenceImpl) getActivityStartToCloseTimeout(
 		return nil
 	}
 
-	closeTimeout := timestamp.TimeValue(activityInfo.StartedTime).Add(timestamp.DurationValue(activityInfo.StartToCloseTimeout))
+	startToCloseDuration := timestamp.DurationValue(activityInfo.StartToCloseTimeout)
+	if startToCloseDuration == 0 {
+		return nil
+	}
+
+	timeoutTime := timestamp.TimeValue(activityInfo.StartedTime).Add(startToCloseDuration)
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,
-		timestamp:    closeTimeout,
+		timestamp:    timeoutTime,
 		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: (activityInfo.TimerTaskStatus & timerTaskStatusCreatedStartToClose) > 0,
 		attempt:      activityInfo.Attempt,
@@ -346,7 +361,8 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 	}
 
 	// not heartbeat timeout configured
-	if activityInfo.HeartbeatTimeout != nil && *activityInfo.HeartbeatTimeout <= 0 {
+	heartbeatDuration := timestamp.DurationValue(activityInfo.HeartbeatTimeout)
+	if heartbeatDuration == 0 {
 		return nil
 	}
 
@@ -360,7 +376,7 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 		lastHeartbeat = timestamp.TimeValue(activityInfo.LastHeartbeatUpdateTime)
 	}
 
-	heartbeatTimeout := lastHeartbeat.Add(timestamp.DurationValue(activityInfo.HeartbeatTimeout))
+	heartbeatTimeout := lastHeartbeat.Add(heartbeatDuration)
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,

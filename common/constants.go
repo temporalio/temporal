@@ -62,10 +62,6 @@ const (
 	WorkerServiceName = "worker"
 )
 
-// MaxTaskTimeout is maximum task timeout allowed. 366 days in seconds
-const MaxTaskTimeout = MaxTaskTimeoutSeconds * time.Second
-const MaxTaskTimeoutSeconds = 31622400
-
 const (
 	// GetHistoryMaxPageSize is the max page size for get history
 	GetHistoryMaxPageSize = 100
@@ -108,19 +104,11 @@ const (
 )
 
 const (
-	// DefaultWorkflowExecutionTimeout is the Default Workflow Execution timeout applied to a Workflow when
-	// this value is not explicitly set by the user on a Start Workflow request
-	// Intention is 10 years
-	DefaultWorkflowExecutionTimeout = 24 * 365 * 10 * time.Hour
-
-	// DefaultWorkflowRunTimeout is the Default Workflow Run timeout applied to a Workflow when
-	// this value is not explicitly set by the user on a Start Workflow request
-	// Intention is 10 years
-	DefaultWorkflowRunTimeout = 24 * 365 * 10 * time.Hour
-
 	// DefaultWorkflowTaskTimeout sets the Default Workflow Task timeout for a Workflow
-	// when the value is not explicitly set by the user. Intention is 10 seconds.
 	DefaultWorkflowTaskTimeout = 10 * time.Second
+
+	// MaxWorkflowTaskStartToCloseTimeout sets the Max Workflow Task start to close timeout for a Workflow
+	MaxWorkflowTaskStartToCloseTimeout = 120 * time.Second
 )
 
 const (

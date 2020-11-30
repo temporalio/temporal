@@ -244,14 +244,20 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
+	var expirationTime *time.Time
 	now := timestamp.TimePtr(time.Now().UTC())
-	expiry := now.Add(timestamp.DurationValue(addRequest.GetScheduleToStartTimeout()))
+	expirationDuration := timestamp.DurationValue(addRequest.GetScheduleToStartTimeout())
+	if expirationDuration == 0 {
+		// noop
+	} else {
+		expirationTime = timestamp.TimePtr(now.Add(expirationDuration))
+	}
 	taskInfo := &persistencespb.TaskInfo{
 		NamespaceId: namespaceID,
 		RunId:       addRequest.Execution.GetRunId(),
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),
-		ExpiryTime:  &expiry,
+		ExpiryTime:  expirationTime,
 		CreateTime:  now,
 	}
 
@@ -290,15 +296,21 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
+	var expirationTime *time.Time
 	now := timestamp.TimePtr(time.Now().UTC())
-	expiry := now.Add(timestamp.DurationValue(addRequest.GetScheduleToStartTimeout()))
+	expirationDuration := timestamp.DurationValue(addRequest.GetScheduleToStartTimeout())
+	if expirationDuration == 0 {
+		// noop
+	} else {
+		expirationTime = timestamp.TimePtr(now.Add(expirationDuration))
+	}
 	taskInfo := &persistencespb.TaskInfo{
 		NamespaceId: sourceNamespaceID,
 		RunId:       runID,
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),
 		CreateTime:  now,
-		ExpiryTime:  &expiry,
+		ExpiryTime:  expirationTime,
 	}
 
 	return tlMgr.AddTask(hCtx.Context, addTaskParams{
