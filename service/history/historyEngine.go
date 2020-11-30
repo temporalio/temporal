@@ -2555,34 +2555,30 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 	metricsScope int,
 ) {
 	namespace := namespaceEntry.GetInfo().Name
-	executionTimeout := getWorkflowExecutionTimeout(namespace, timestamp.DurationValue(request.GetWorkflowExecutionTimeout()), e.config)
-	if executionTimeout != timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) {
-		request.WorkflowExecutionTimeout = timestamp.DurationPtr(executionTimeout)
-		e.metricsClient.Scope(
-			metricsScope,
-			metrics.NamespaceTag(namespace),
-		).IncCounter(metrics.WorkflowExecutionTimeoutOverrideCount)
-	}
 
-	runTimeout := getWorkflowRunTimeout(namespace, timestamp.DurationValue(request.GetWorkflowRunTimeout()), executionTimeout, e.config)
-	if runTimeout != timestamp.DurationValue(request.GetWorkflowRunTimeout()) {
-		request.WorkflowRunTimeout = &runTimeout
+	// workflow execution timeout is left as is
+	//  if workflow execution timeout == 0 -> infinity
+
+	workflowRunTimeout := common.OverrideWorkflowRunTimeout(
+		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
+		timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
+	)
+	if workflowRunTimeout != timestamp.DurationValue(request.GetWorkflowRunTimeout()) {
+		request.WorkflowRunTimeout = timestamp.DurationPtr(workflowRunTimeout)
 		e.metricsClient.Scope(
 			metricsScope,
 			metrics.NamespaceTag(namespace),
 		).IncCounter(metrics.WorkflowRunTimeoutOverrideCount)
 	}
 
-	taskTimeout := timestamp.DurationValue(request.GetWorkflowTaskTimeout())
-	if taskTimeout == 0 {
-		taskTimeout = timestamp.RoundUp(e.config.DefaultWorkflowTaskTimeout(namespace))
-	}
-	maxTaskTimeout := timestamp.RoundUp(e.config.MaxWorkflowTaskTimeout(namespace))
-	taskTimeout = timestamp.MinDuration(taskTimeout, maxTaskTimeout)
-	taskTimeout = timestamp.MinDuration(taskTimeout, runTimeout)
-
-	if taskTimeout != timestamp.DurationValue(request.GetWorkflowTaskTimeout()) {
-		request.WorkflowTaskTimeout = &taskTimeout
+	workflowTaskStartToCloseTimeout := common.OverrideWorkflowTaskTimeout(
+		request.GetNamespace(),
+		timestamp.DurationValue(request.GetWorkflowTaskTimeout()),
+		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
+		e.config.DefaultWorkflowTaskTimeout,
+	)
+	if workflowTaskStartToCloseTimeout != timestamp.DurationValue(request.GetWorkflowTaskTimeout()) {
+		request.WorkflowTaskTimeout = timestamp.DurationPtr(workflowTaskStartToCloseTimeout)
 		e.metricsClient.Scope(
 			metricsScope,
 			metrics.NamespaceTag(namespace),

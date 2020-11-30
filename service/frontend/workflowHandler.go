@@ -3735,7 +3735,8 @@ func (wh *WorkflowHandler) validateRetryPolicy(namespace string, retryPolicy *co
 
 func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 	scope metrics.Scope,
-	request *workflowservice.StartWorkflowExecutionRequest) error {
+	request *workflowservice.StartWorkflowExecutionRequest,
+) error {
 	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
 		return wh.error(errInvalidWorkflowExecutionTimeoutSeconds, scope)
 	}
@@ -3748,39 +3749,42 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 		return wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
-	request.WorkflowExecutionTimeout = timestamp.DurationPtr(
-		common.GetWorkflowExecutionTimeout(
-			request.GetNamespace(),
-			timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
-			wh.config.DefaultWorkflowExecutionTimeout,
-			wh.config.MaxWorkflowExecutionTimeout,
-		),
-	)
+	// TODO remove this if block after 1.5
+	if !wh.config.EnableInfiniteTimeout() {
+		// TODO remove the 3 functions below
+		//  BEGIN
+		request.WorkflowExecutionTimeout = timestamp.DurationPtr(
+			common.GetWorkflowExecutionTimeout(
+				timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
+			),
+		)
 
-	request.WorkflowRunTimeout = timestamp.DurationPtr(
-		common.GetWorkflowRunTimeout(
-			request.GetNamespace(),
-			timestamp.DurationValue(request.GetWorkflowRunTimeout()),
-			timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
-			wh.config.DefaultWorkflowRunTimeout,
-			wh.config.MaxWorkflowRunTimeout,
-		),
-	)
+		request.WorkflowRunTimeout = timestamp.DurationPtr(
+			common.GetWorkflowRunTimeout(
+				timestamp.DurationValue(request.GetWorkflowRunTimeout()),
+				timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
+			),
+		)
 
-	request.WorkflowTaskTimeout = timestamp.DurationPtr(
-		common.GetWorkflowTaskTimeout(
-			request.GetNamespace(),
-			timestamp.DurationValue(request.GetWorkflowTaskTimeout()),
-			wh.config.DefaultWorkflowTaskTimeout,
-		),
-	)
+		request.WorkflowTaskTimeout = timestamp.DurationPtr(
+			common.GetWorkflowTaskTimeout(
+				request.GetNamespace(),
+				timestamp.DurationValue(request.GetWorkflowTaskTimeout()),
+				timestamp.DurationValue(request.GetWorkflowRunTimeout()),
+				wh.config.DefaultWorkflowTaskTimeout,
+			),
+		)
+		// TODO remove the 3 functions above
+		//  END
+	}
 
 	return nil
 }
 
 func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	scope metrics.Scope,
-	request *workflowservice.SignalWithStartWorkflowExecutionRequest) error {
+	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
+) error {
 	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
 		return wh.error(errInvalidWorkflowExecutionTimeoutSeconds, scope)
 	}
@@ -3793,32 +3797,35 @@ func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 		return wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
-	request.WorkflowExecutionTimeout = timestamp.DurationPtr(
-		common.GetWorkflowExecutionTimeout(
-			request.GetNamespace(),
-			timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
-			wh.config.DefaultWorkflowExecutionTimeout,
-			wh.config.MaxWorkflowExecutionTimeout,
-		),
-	)
+	// TODO remove this if block after 1.5
+	if !wh.config.EnableInfiniteTimeout() {
+		// TODO remove the 3 functions below
+		//  BEGIN
+		request.WorkflowExecutionTimeout = timestamp.DurationPtr(
+			common.GetWorkflowExecutionTimeout(
+				timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
+			),
+		)
 
-	request.WorkflowRunTimeout = timestamp.DurationPtr(
-		common.GetWorkflowRunTimeout(
-			request.GetNamespace(),
-			timestamp.DurationValue(request.GetWorkflowRunTimeout()),
-			timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
-			wh.config.DefaultWorkflowRunTimeout,
-			wh.config.MaxWorkflowRunTimeout,
-		),
-	)
+		request.WorkflowRunTimeout = timestamp.DurationPtr(
+			common.GetWorkflowRunTimeout(
+				timestamp.DurationValue(request.GetWorkflowRunTimeout()),
+				timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
+			),
+		)
 
-	request.WorkflowTaskTimeout = timestamp.DurationPtr(
-		common.GetWorkflowTaskTimeout(
-			request.GetNamespace(),
-			timestamp.DurationValue(request.GetWorkflowTaskTimeout()),
-			wh.config.DefaultWorkflowTaskTimeout,
-		),
-	)
+		request.WorkflowTaskTimeout = timestamp.DurationPtr(
+			common.GetWorkflowTaskTimeout(
+				request.GetNamespace(),
+				timestamp.DurationValue(request.GetWorkflowTaskTimeout()),
+				timestamp.DurationValue(request.GetWorkflowRunTimeout()),
+				wh.config.DefaultWorkflowTaskTimeout,
+			),
+		)
+		// TODO remove the 3 functions above
+		//  END
+
+	}
 
 	return nil
 }

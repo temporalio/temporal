@@ -25,8 +25,6 @@
 package history
 
 import (
-	"time"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -37,7 +35,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/configs"
 )
 
 type workflowContext interface {
@@ -228,25 +225,6 @@ func terminateWorkflow(
 		terminateIdentity,
 	)
 	return err
-}
-
-func getWorkflowExecutionTimeout(namespace string, requestedTimeout time.Duration, serviceConfig *configs.Config) time.Duration {
-	return common.GetWorkflowExecutionTimeout(
-		namespace,
-		requestedTimeout,
-		serviceConfig.DefaultWorkflowExecutionTimeout,
-		serviceConfig.MaxWorkflowExecutionTimeout,
-	)
-}
-
-func getWorkflowRunTimeout(namespace string, requestedTimeout, executionTimeout time.Duration, serviceConfig *configs.Config) time.Duration {
-	return common.GetWorkflowRunTimeout(
-		namespace,
-		requestedTimeout,
-		executionTimeout,
-		serviceConfig.DefaultWorkflowRunTimeout,
-		serviceConfig.MaxWorkflowRunTimeout,
-	)
 }
 
 // FindAutoResetPoint returns the auto reset point

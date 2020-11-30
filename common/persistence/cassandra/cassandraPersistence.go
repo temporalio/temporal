@@ -166,13 +166,6 @@ workflow_state = ? ` +
 		`visibility_ts, task_id, checksum, checksum_encoding) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS `
 
-	templateCreateWorkflowExecutionWithReplicationQuery = `INSERT INTO executions (` +
-		`shard_id, namespace_id, workflow_id, run_id, type, ` +
-		`execution, execution_encoding, execution_state, execution_state_encoding, replication_metadata, replication_metadata_encoding, ` +
-		`next_event_id, visibility_ts, task_id, checksum, checksum_encoding) ` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?` +
-		`, ?, ?, ?, ?, ?) IF NOT EXISTS `
-
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, namespace_id, workflow_id, run_id, transfer, transfer_encoding, visibility_ts, task_id) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -239,25 +232,6 @@ workflow_state = ? ` +
 		`, execution_encoding = ? ` +
 		`, execution_state = ? ` +
 		`, execution_state_encoding = ? ` +
-		`, next_event_id = ? ` +
-		`, checksum = ? ` +
-		`, checksum_encoding = ? ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and namespace_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ? `
-
-	templateUpdateWorkflowExecutionWithReplicationQuery = `UPDATE executions ` +
-		`SET execution = ? ` +
-		`, execution_encoding = ? ` +
-		`, execution_state = ? ` +
-		`, execution_state_encoding = ? ` +
-		`, replication_metadata = ? ` +
-		`, replication_metadata_encoding = ? ` +
 		`, next_event_id = ? ` +
 		`, checksum = ? ` +
 		`, checksum_encoding = ? ` +
@@ -946,7 +920,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
 	defer func() {
 		if iter != nil {
-			iter.Close()
+			_ = iter.Close()
 		}
 	}()
 
@@ -1339,7 +1313,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
 	defer func() {
 		if iter != nil {
-			iter.Close()
+			_ = iter.Close()
 		}
 	}()
 
@@ -1475,7 +1449,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
 	defer func() {
 		if iter != nil {
-			iter.Close()
+			_ = iter.Close()
 		}
 	}()
 
@@ -1555,10 +1529,6 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 				StartVersion:     &types.Int64Value{Value: executionInfo.StartVersion},
 				LastWriteVersion: &types.Int64Value{Value: lastWriteVersion},
 			})
-		if err != nil {
-			return err
-		}
-
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err))
 		}
@@ -1644,7 +1614,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
 	defer func() {
 		if iter != nil {
-			iter.Close()
+			_ = iter.Close()
 		}
 	}()
 
@@ -2382,13 +2352,6 @@ func (d *cassandraPersistence) DeleteTaskQueue(request *p.DeleteTaskQueueRequest
 	return nil
 }
 
-func MintAllocatedTaskInfo(taskID *int64, info *persistencespb.TaskInfo) *persistencespb.AllocatedTaskInfo {
-	return &persistencespb.AllocatedTaskInfo{
-		Data:   info,
-		TaskId: *taskID,
-	}
-}
-
 // From TaskManager interface
 func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.CreateTasksResponse, error) {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
@@ -2403,7 +2366,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 			return nil, serviceerror.NewInternal(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
 		}
 
-		if ttl <= 0 {
+		if ttl <= 0 || ttl > maxCassandraTTL {
 			batch.Query(templateCreateTaskQuery,
 				namespaceID,
 				taskQueue,
@@ -2413,10 +2376,6 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				datablob.Data,
 				datablob.EncodingType.String())
 		} else {
-			if ttl > maxCassandraTTL {
-				ttl = maxCassandraTTL
-			}
-
 			batch.Query(templateCreateTaskWithTTLQuery,
 				namespaceID,
 				taskQueue,

@@ -99,8 +99,10 @@ func (w *taskWriter) isStopped() bool {
 	return atomic.LoadInt64(&w.stopped) == 1
 }
 
-func (w *taskWriter) appendTask(execution *commonpb.WorkflowExecution,
-	taskInfo *persistencespb.TaskInfo) (*persistence.CreateTasksResponse, error) {
+func (w *taskWriter) appendTask(
+	execution *commonpb.WorkflowExecution,
+	taskInfo *persistencespb.TaskInfo,
+) (*persistence.CreateTasksResponse, error) {
 
 	if w.isStopped() {
 		return nil, errShutdown

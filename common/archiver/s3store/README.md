@@ -34,13 +34,13 @@ You can query the visibility store by using the `tctl workflow listarchived` com
 The syntax for the query is based on SQL
 
 Supported column names are
-- WorkflowID *String*
+- WorkflowId *String*
 - WorkflowTypeName *String*
 - StartTime *Date*
 - CloseTime *Date*
 - SearchPrecision *String - Day, Hour, Minute, Second*
 
-WorkflowID or WorkflowTypeName is required. If filtering on date use StartTime or CloseTime in combination with SearchPrecision.
+WorkflowId or WorkflowTypeName is required. If filtering on date use StartTime or CloseTime in combination with SearchPrecision.
 
 Searching for a record will be done in times in the UTC timezone
 
@@ -55,7 +55,7 @@ it will search all records starting from `2020-01-21T00:00:00Z` to `2020-01-21T5
 
 *Searches for all records done in day 2020-01-21 with the specified workflow id*
 
-`./tctl --ns samples-namespace workflow listarchived -q "StartTime = '2020-01-21T00:00:00Z' AND WorkflowID='workflow-id' AND SearchPrecision='Day'"`
+`./tctl --ns samples-namespace workflow listarchived -q "StartTime = '2020-01-21T00:00:00Z' AND WorkflowId='workflow-id' AND SearchPrecision='Day'"`
 ## Storage in S3
 Workflow runs are stored in s3 using the following structure
 ```
