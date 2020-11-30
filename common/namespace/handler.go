@@ -280,7 +280,7 @@ func (d *HandlerImpl) RegisterNamespace(
 		tag.WorkflowNamespaceID(namespaceResponse.ID),
 	)
 
-	return nil, nil
+	return &workflowservice.RegisterNamespaceResponse{}, nil
 }
 
 // ListNamespaces list all namespaces
