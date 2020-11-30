@@ -286,7 +286,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		IsGlobalNamespace:                isGlobalNamespace1,
 	})
 	s.NoError(err)
-	s.Nil(registerResp)
+	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 
 	namespace2 := s.getRandomNamespace()
 	description2 := "some random description 2"
@@ -316,7 +316,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		IsGlobalNamespace:                isGlobalNamespace2,
 	})
 	s.NoError(err)
-	s.Nil(registerResp)
+	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 
 	namespaces := map[string]*workflowservice.DescribeNamespaceResponse{}
 	pagesize := int32(1)
@@ -410,7 +410,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod
 	}
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
 	s.NoError(err)
-	s.Nil(registerResp)
+	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 
 	updateRequest := &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
