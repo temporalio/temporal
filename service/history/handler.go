@@ -47,7 +47,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
@@ -1512,24 +1511,23 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 		return nil, errShuttingDown
 	}
 
-	taskInfoPerExecution := map[definition.WorkflowIdentifier][]*replicationspb.ReplicationTaskInfo{}
+	taskInfoPerShard := map[int32][]*replicationspb.ReplicationTaskInfo{}
 	// do batch based on workflow ID and run ID
 	for _, taskInfo := range request.GetTaskInfos() {
-		identity := definition.NewWorkflowIdentifier(
+		shardID := h.config.GetShardID(
 			taskInfo.GetNamespaceId(),
 			taskInfo.GetWorkflowId(),
-			taskInfo.GetRunId(),
 		)
-		if _, ok := taskInfoPerExecution[identity]; !ok {
-			taskInfoPerExecution[identity] = []*replicationspb.ReplicationTaskInfo{}
+		if _, ok := taskInfoPerShard[shardID]; !ok {
+			taskInfoPerShard[shardID] = []*replicationspb.ReplicationTaskInfo{}
 		}
-		taskInfoPerExecution[identity] = append(taskInfoPerExecution[identity], taskInfo)
+		taskInfoPerShard[shardID] = append(taskInfoPerShard[shardID], taskInfo)
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(len(taskInfoPerExecution))
+	wg.Add(len(taskInfoPerShard))
 	tasksChan := make(chan *replicationspb.ReplicationTask, len(request.GetTaskInfos()))
-	handleTaskInfoPerExecution := func(taskInfos []*replicationspb.ReplicationTaskInfo) {
+	handleTaskInfoPerShard := func(taskInfos []*replicationspb.ReplicationTaskInfo) {
 		defer wg.Done()
 		if len(taskInfos) == 0 {
 			return
@@ -1558,8 +1556,8 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 		}
 	}
 
-	for _, replicationTaskInfos := range taskInfoPerExecution {
-		go handleTaskInfoPerExecution(replicationTaskInfos)
+	for _, replicationTaskInfos := range taskInfoPerShard {
+		go handleTaskInfoPerShard(replicationTaskInfos)
 	}
 	wg.Wait()
 	close(tasksChan)

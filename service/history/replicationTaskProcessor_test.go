@@ -345,7 +345,7 @@ func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_History() {
 			RunId:        runID,
 			TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
 			FirstEventId: 1,
-			NextEventId:  1,
+			NextEventId:  2,
 			Version:      1,
 		},
 	}
