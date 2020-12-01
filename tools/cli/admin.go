@@ -777,6 +777,10 @@ func newAdminDLQCommands() []cli.Command {
 					Name:  FlagDLQTypeWithAlias,
 					Usage: "Type of DLQ to manage. (Options: namespace, history)",
 				},
+				cli.StringFlag{
+					Name:  FlagCluster,
+					Usage: "Source cluster",
+				},
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
 					Usage: "ShardId",
@@ -807,6 +811,10 @@ func newAdminDLQCommands() []cli.Command {
 					Name:  FlagDLQTypeWithAlias,
 					Usage: "Type of DLQ to manage. (Options: namespace, history)",
 				},
+				cli.StringFlag{
+					Name:  FlagCluster,
+					Usage: "Source cluster",
+				},
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
 					Usage: "ShardId",
@@ -828,6 +836,10 @@ func newAdminDLQCommands() []cli.Command {
 				cli.StringFlag{
 					Name:  FlagDLQTypeWithAlias,
 					Usage: "Type of DLQ to manage. (Options: namespace, history)",
+				},
+				cli.StringFlag{
+					Name:  FlagCluster,
+					Usage: "Source cluster",
 				},
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
