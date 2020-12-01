@@ -332,6 +332,7 @@ func (p *ReplicationTaskProcessorImpl) handleReplicationDLQTask(
 	_ = p.hostRateLimiter.Wait(ctx)
 
 	p.logger.Info("enqueue replication task to DLQ",
+		tag.ShardID(p.shard.GetShardID()),
 		tag.WorkflowNamespaceID(request.TaskInfo.GetNamespaceId()),
 		tag.WorkflowID(request.TaskInfo.GetWorkflowId()),
 		tag.WorkflowRunID(request.TaskInfo.GetRunId()),

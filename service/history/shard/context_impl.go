@@ -1125,7 +1125,7 @@ func acquireShard(
 		// EntityNotExistsError error
 		shardInfo = &persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: int32(shardItem.shardID),
+				ShardId: shardItem.shardID,
 			},
 		}
 		return shardItem.GetShardManager().CreateShard(&persistence.CreateShardRequest{ShardInfo: shardInfo.ShardInfo})
