@@ -51,6 +51,8 @@ func AdminGetDLQMessages(c *cli.Context) {
 
 	adminClient := cFactory.AdminClient(c)
 	dlqType := getRequiredOption(c, FlagDLQType)
+	sourceCluster := getRequiredOption(c, FlagCluster)
+	shardID := getRequiredIntOption(c, FlagShardID)
 	outputFile := getOutputFile(c.String(FlagOutputFilename))
 	defer outputFile.Close()
 
@@ -66,6 +68,8 @@ func AdminGetDLQMessages(c *cli.Context) {
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 		resp, err := adminClient.GetDLQMessages(ctx, &adminservice.GetDLQMessagesRequest{
 			Type:                  toQueueType(dlqType),
+			SourceCluster:         sourceCluster,
+			ShardId:               int32(shardID),
 			InclusiveEndMessageId: lastMessageID,
 			MaximumPageSize:       defaultPageSize,
 			NextPageToken:         paginationToken,
@@ -110,6 +114,8 @@ func AdminPurgeDLQMessages(c *cli.Context) {
 	defer cancel()
 
 	dlqType := getRequiredOption(c, FlagDLQType)
+	sourceCluster := getRequiredOption(c, FlagCluster)
+	shardID := getRequiredIntOption(c, FlagShardID)
 
 	var lastMessageID int64
 	if c.IsSet(FlagLastMessageID) {
@@ -121,6 +127,8 @@ func AdminPurgeDLQMessages(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
 	if _, err := adminClient.PurgeDLQMessages(ctx, &adminservice.PurgeDLQMessagesRequest{
 		Type:                  toQueueType(dlqType),
+		SourceCluster:         sourceCluster,
+		ShardId:               int32(shardID),
 		InclusiveEndMessageId: lastMessageID,
 	}); err != nil {
 		ErrorAndExit("Failed to purge dlq", nil)
@@ -134,6 +142,8 @@ func AdminMergeDLQMessages(c *cli.Context) {
 	defer cancel()
 
 	dlqType := getRequiredOption(c, FlagDLQType)
+	sourceCluster := getRequiredOption(c, FlagCluster)
+	shardID := getRequiredIntOption(c, FlagShardID)
 
 	var lastMessageID int64
 	if c.IsSet(FlagLastMessageID) {
@@ -145,6 +155,8 @@ func AdminMergeDLQMessages(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
 	request := &adminservice.MergeDLQMessagesRequest{
 		Type:                  toQueueType(dlqType),
+		SourceCluster:         sourceCluster,
+		ShardId:               int32(shardID),
 		InclusiveEndMessageId: lastMessageID,
 		MaximumPageSize:       defaultPageSize,
 	}

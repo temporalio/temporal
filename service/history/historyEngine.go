@@ -156,6 +156,8 @@ var (
 	ErrEmptyHistoryRawEventBatch = serviceerror.NewInvalidArgument("encounter empty history batch")
 	// ErrSizeExceedsLimit is error indicating workflow execution has exceeded system defined limit
 	ErrSizeExceedsLimit = serviceerror.NewResourceExhausted(common.FailureReasonSizeExceedsLimit)
+	// ErrUnknownCluster is error indicating unknown cluster
+	ErrUnknownCluster = serviceerror.NewInvalidArgument("unknown cluster")
 
 	// FailedWorkflowStatuses is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
@@ -2949,6 +2951,11 @@ func (e *historyEngineImpl) GetDLQMessages(
 	request *historyservice.GetDLQMessagesRequest,
 ) (*historyservice.GetDLQMessagesResponse, error) {
 
+	_, ok := e.clusterMetadata.GetAllClusterInfo()[request.GetSourceCluster()]
+	if !ok {
+		return nil, ErrUnknownCluster
+	}
+
 	tasks, token, err := e.replicationDLQHandler.getMessages(
 		ctx,
 		request.GetSourceCluster(),
@@ -2971,6 +2978,11 @@ func (e *historyEngineImpl) PurgeDLQMessages(
 	request *historyservice.PurgeDLQMessagesRequest,
 ) error {
 
+	_, ok := e.clusterMetadata.GetAllClusterInfo()[request.GetSourceCluster()]
+	if !ok {
+		return ErrUnknownCluster
+	}
+
 	return e.replicationDLQHandler.purgeMessages(
 		request.GetSourceCluster(),
 		request.GetInclusiveEndMessageId(),
@@ -2981,6 +2993,11 @@ func (e *historyEngineImpl) MergeDLQMessages(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,
 ) (*historyservice.MergeDLQMessagesResponse, error) {
+
+	_, ok := e.clusterMetadata.GetAllClusterInfo()[request.GetSourceCluster()]
+	if !ok {
+		return nil, ErrUnknownCluster
+	}
 
 	token, err := e.replicationDLQHandler.mergeMessages(
 		ctx,
