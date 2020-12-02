@@ -141,7 +141,7 @@ func (s *Server) Start() error {
 
 	clusterMetadata := cluster.NewMetadata(
 		s.logger,
-		dc.GetBoolProperty(dynamicconfig.EnableGlobalNamespace, s.so.config.ClusterMetadata.EnableGlobalNamespace),
+		s.so.config.ClusterMetadata.EnableGlobalNamespace,
 		s.so.config.ClusterMetadata.FailoverVersionIncrement,
 		s.so.config.ClusterMetadata.MasterClusterName,
 		s.so.config.ClusterMetadata.CurrentClusterName,

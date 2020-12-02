@@ -83,8 +83,6 @@ type (
 		ReplicationTaskMaxRetryDuration    dynamicconfig.DurationPropertyFn
 		ReplicationTaskContextTimeout      dynamicconfig.DurationPropertyFn
 		ReReplicationContextTimeout        dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
-		EnableRPCReplication               dynamicconfig.BoolPropertyFn
-		EnableKafkaReplication             dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -132,8 +130,8 @@ func (r *Replicator) Start() error {
 		}
 
 		if clusterName != currentClusterName {
-			if replicationConsumerConfig.Type == config.ReplicationConsumerTypeRPC && r.config.EnableRPCReplication() {
-				processor := newNamespaceReplicationMessageProcessor(
+			if replicationConsumerConfig.Type == config.ReplicationConsumerTypeRPC || replicationConsumerConfig.Type == config.ReplicationConsumerTypeKafkaToRPC {
+				r.namespaceProcessors = append(r.namespaceProcessors, newNamespaceReplicationMessageProcessor(
 					clusterName,
 					r.logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
 					r.clientBean.GetRemoteAdminClient(clusterName),
@@ -142,9 +140,10 @@ func (r *Replicator) Start() error {
 					r.hostInfo,
 					r.serviceResolver,
 					r.namespaceReplicationQueue,
-				)
-				r.namespaceProcessors = append(r.namespaceProcessors, processor)
-			} else {
+				))
+			}
+
+			if replicationConsumerConfig.Type == config.ReplicationConsumerTypeKafka || replicationConsumerConfig.Type == config.ReplicationConsumerTypeKafkaToRPC {
 				r.createKafkaProcessors(currentClusterName, clusterName)
 			}
 		}
