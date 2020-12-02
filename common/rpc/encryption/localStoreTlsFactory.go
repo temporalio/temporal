@@ -142,24 +142,56 @@ func newServerTLSConfig(
 		return nil, err
 	}
 
-	if tlsConfig != nil && perHostCertProviderFactory != nil {
-		tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
-			perHostCertProvider, err := perHostCertProviderFactory.GetCertProvider(c.ServerName)
-			if err != nil {
-				return nil, err
-			}
+	if tlsConfig != nil {
+		if perHostCertProviderFactory != nil {
+			tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
+				perHostCertProvider, err := perHostCertProviderFactory.GetCertProvider(c.ServerName)
+				if err != nil {
+					return nil, err
+				}
 
-			// If there are no special TLS settings for the specific host name being requested,
-			// returning nil here will fallback to the default, top-level TLS config
-			if perHostCertProvider == nil {
-				return nil, nil
-			}
+				// If there are no special TLS settings for the specific host name being requested,
+				// returning nil here will fallback to the default, top-level TLS config
+				if perHostCertProvider == nil {
+					return nil, nil
+				}
 
-			return getServerTLSConfigFromCertProvider(perHostCertProvider)
+				config, err := getServerTLSConfigFromCertProvider(perHostCertProvider)
+				if err != nil {
+					return nil, err
+				}
+
+				config.VerifyConnection = func(c tls.ConnectionState) error {
+					return verifyCert(c, perHostCertProvider)
+				}
+				return config, nil
+			}
+		} else {
+			tlsConfig.VerifyConnection = func(c tls.ConnectionState) error {
+				return verifyCert(c, certProvider)
+			}
 		}
 	}
 
 	return tlsConfig, nil
+}
+
+func verifyCert(c tls.ConnectionState, certProvider CertProvider) error {
+	cas, err := certProvider.FetchClientCAs()
+	if err != nil {
+		return err
+	}
+	opts := x509.VerifyOptions{
+		Roots: cas,
+	}
+	if len(c.VerifiedChains) == 0 || len(c.VerifiedChains[0]) == 0 {
+		return fmt.Errorf("unexpected TLS connection state: no verified certificate chains")
+	}
+	_, err = c.VerifiedChains[0][0].Verify(opts)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func getServerTLSConfigFromCertProvider(certProvider CertProvider) (*tls.Config, error) {
