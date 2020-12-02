@@ -82,13 +82,14 @@ func (b *historyBuilder) HasTransientEvents() bool {
 // originalRunID is the runID when the WorkflowExecutionStarted event is written
 // firstRunID is the very first runID along the chain of ContinueAsNew and Reset
 func (b *historyBuilder) AddWorkflowExecutionStartedEvent(
+	startTime time.Time,
 	request *historyservice.StartWorkflowExecutionRequest,
 	previousExecution *persistencespb.WorkflowExecutionInfo,
 	previousExecutionState *persistencespb.WorkflowExecutionState,
 	firstRunID string,
 	originalRunID string,
 ) *historypb.HistoryEvent {
-	event := b.newWorkflowExecutionStartedEvent(request, previousExecution, previousExecutionState, firstRunID, originalRunID)
+	event := b.newWorkflowExecutionStartedEvent(startTime, request, previousExecution, previousExecutionState, firstRunID, originalRunID)
 
 	return b.addEventToHistory(event)
 }
@@ -587,6 +588,7 @@ func (b *historyBuilder) addTransientEvent(
 }
 
 func (b *historyBuilder) newWorkflowExecutionStartedEvent(
+	startTime time.Time,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	previousExecution *persistencespb.WorkflowExecutionInfo,
 	previousExecutionState *persistencespb.WorkflowExecutionState,
@@ -597,6 +599,9 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	resetPoints := previousExecution.GetAutoResetPoints()
 	request := startRequest.StartRequest
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
+	// need to override the start event timestamp
+	// since workflow start time is set by mutable state initialization
+	historyEvent.EventTime = timestamp.TimePtr(startTime)
 	attributes := &historypb.WorkflowExecutionStartedEventAttributes{
 		WorkflowType:                    request.WorkflowType,
 		TaskQueue:                       request.TaskQueue,
