@@ -1225,6 +1225,10 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 	for k, v := range shardInfo.ClusterReplicationLevel {
 		clusterReplicationLevel[k] = v
 	}
+	clusterReplicationDLQLevel := make(map[string]int64)
+	for k, v := range shardInfo.ReplicationDlqAckLevel {
+		clusterReplicationDLQLevel[k] = v
+	}
 	shardInfoCopy := &persistence.ShardInfoWithFailover{
 		ShardInfo: &persistencespb.ShardInfo{
 			ShardId:                      shardInfo.GetShardId(),
@@ -1238,6 +1242,7 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 			ClusterTimerAckLevel:         clusterTimerAckLevel,
 			NamespaceNotificationVersion: shardInfo.NamespaceNotificationVersion,
 			ClusterReplicationLevel:      clusterReplicationLevel,
+			ReplicationDlqAckLevel:       clusterReplicationDLQLevel,
 			UpdateTime:                   shardInfo.UpdateTime,
 		},
 		TransferFailoverLevels: transferFailoverLevels,

@@ -117,14 +117,16 @@ func NewReplicationTaskProcessor(
 ) *ReplicationTaskProcessorImpl {
 	shardID := shard.GetShardID()
 	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID))
-	taskRetryPolicy.SetBackoffCoefficient(taskErrorRetryBackoffCoefficient)
-	taskRetryPolicy.SetMaximumInterval(taskErrorRetryMaxInterval)
+	taskRetryPolicy.SetBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID))
+	taskRetryPolicy.SetMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(shardID))
 	taskRetryPolicy.SetMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID))
+	taskRetryPolicy.SetExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(shardID))
 
 	dlqRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID))
-	dlqRetryPolicy.SetBackoffCoefficient(taskErrorRetryBackoffCoefficient)
-	dlqRetryPolicy.SetMaximumInterval(taskErrorRetryMaxInterval)
+	dlqRetryPolicy.SetBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID))
+	dlqRetryPolicy.SetMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(shardID))
 	dlqRetryPolicy.SetMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID))
+	dlqRetryPolicy.SetExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(shardID))
 
 	return &ReplicationTaskProcessorImpl{
 		currentCluster:          shard.GetClusterMetadata().GetCurrentClusterName(),
@@ -388,6 +390,8 @@ func (p *ReplicationTaskProcessorImpl) convertTaskToDLQTask(
 		}
 		firstEvent := events[0]
 		lastEvent := events[len(events)-1]
+		// NOTE: last event vs next event, next event ID is exclusive
+		nextEventID := lastEvent.GetEventId() + 1
 
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
@@ -398,7 +402,7 @@ func (p *ReplicationTaskProcessorImpl) convertTaskToDLQTask(
 				TaskId:       replicationTask.GetSourceTaskId(),
 				TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
 				FirstEventId: firstEvent.GetEventId(),
-				NextEventId:  lastEvent.GetEventId(),
+				NextEventId:  nextEventID,
 				Version:      firstEvent.GetVersion(),
 			},
 		}, nil

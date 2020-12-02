@@ -236,7 +236,10 @@ var keys = map[Key]string{
 	ReplicationTaskFetcherTimerJitterCoefficient:           "history.ReplicationTaskFetcherTimerJitterCoefficient",
 	ReplicationTaskFetcherErrorRetryWait:                   "history.ReplicationTaskFetcherErrorRetryWait",
 	ReplicationTaskProcessorErrorRetryWait:                 "history.ReplicationTaskProcessorErrorRetryWait",
+	ReplicationTaskProcessorErrorRetryBackoffCoefficient:   "history.ReplicationTaskProcessorErrorRetryBackoffCoefficient",
+	ReplicationTaskProcessorErrorRetryMaxInterval:          "history.ReplicationTaskProcessorErrorRetryMaxInterval",
 	ReplicationTaskProcessorErrorRetryMaxAttempts:          "history.ReplicationTaskProcessorErrorRetryMaxAttempts",
+	ReplicationTaskProcessorErrorRetryExpiration:           "history.ReplicationTaskProcessorErrorRetryExpiration",
 	ReplicationTaskProcessorNoTaskInitialWait:              "history.ReplicationTaskProcessorNoTaskInitialWait",
 	ReplicationTaskProcessorCleanupInterval:                "history.ReplicationTaskProcessorCleanupInterval",
 	ReplicationTaskProcessorCleanupJitterCoefficient:       "history.ReplicationTaskProcessorCleanupJitterCoefficient",
@@ -735,8 +738,14 @@ const (
 	ReplicationTaskFetcherErrorRetryWait
 	// ReplicationTaskProcessorErrorRetryWait is the initial retry wait when we see errors in applying replication tasks
 	ReplicationTaskProcessorErrorRetryWait
+	// ReplicationTaskProcessorErrorRetryBackoffCoefficient is the retry wait backoff time coefficient
+	ReplicationTaskProcessorErrorRetryBackoffCoefficient
+	// ReplicationTaskProcessorErrorRetryMaxInterval is the retry wait backoff max duration
+	ReplicationTaskProcessorErrorRetryMaxInterval
 	// ReplicationTaskProcessorErrorRetryMaxAttempts is the max retry attempts for applying replication tasks
 	ReplicationTaskProcessorErrorRetryMaxAttempts
+	// ReplicationTaskProcessorErrorRetryExpiration is the max retry duration for applying replication tasks
+	ReplicationTaskProcessorErrorRetryExpiration
 	// ReplicationTaskProcessorNoTaskInitialWait is the wait time when not ask is returned
 	ReplicationTaskProcessorNoTaskInitialWait
 	// ReplicationTaskProcessorCleanupInterval determines how frequently the cleanup replication queue
