@@ -181,6 +181,9 @@ func verifyCert(c tls.ConnectionState, certProvider CertProvider) error {
 	if err != nil {
 		return err
 	}
+	if cas == nil {
+		return nil // no CAs configured
+	}
 	opts := x509.VerifyOptions{
 		Roots: cas,
 	}
