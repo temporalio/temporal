@@ -54,9 +54,8 @@ type (
 		mockResource   *resource.Test
 		frontendClient *adminservicemock.MockAdminServiceClient
 
-		config   *configs.Config
-		logger   log.Logger
-		workerID int
+		config *configs.Config
+		logger log.Logger
 
 		replicationTaskFetcher *ReplicationTaskFetcherImpl
 	}
@@ -88,7 +87,6 @@ func (s *replicationTaskFetcherSuite) SetupTest() {
 	s.frontendClient = s.mockResource.RemoteAdminClient
 	s.logger = log.NewNoop()
 	s.config = NewDynamicConfigForTest()
-	s.workerID = 0
 	s.config.ReplicationTaskFetcherParallelism = dynamicconfig.GetIntPropertyFn(1)
 
 	s.replicationTaskFetcher = newReplicationTaskFetcher(
@@ -117,7 +115,7 @@ func (s *replicationTaskFetcherSuite) TestBufferRequests_NoDuplicate() {
 		respChan: respChan,
 	}
 
-	s.replicationTaskFetcher.bufferRequests(s.workerID, shardRequest)
+	s.replicationTaskFetcher.workers[0].bufferRequests(shardRequest)
 
 	select {
 	case <-respChan:
@@ -126,9 +124,9 @@ func (s *replicationTaskFetcherSuite) TestBufferRequests_NoDuplicate() {
 		// noop
 	}
 
-	s.Equal(map[int]map[int32]*replicationTaskRequest{
-		s.workerID: {shardID: shardRequest},
-	}, s.replicationTaskFetcher.workerToRequestByShard)
+	s.Equal(map[int32]*replicationTaskRequest{
+		shardID: shardRequest,
+	}, s.replicationTaskFetcher.workers[0].requestByShard)
 }
 
 func (s *replicationTaskFetcherSuite) TestBufferRequests_Duplicate() {
@@ -154,8 +152,8 @@ func (s *replicationTaskFetcherSuite) TestBufferRequests_Duplicate() {
 		respChan: respChan2,
 	}
 
-	s.replicationTaskFetcher.bufferRequests(s.workerID, shardRequest1)
-	s.replicationTaskFetcher.bufferRequests(s.workerID, shardRequest2)
+	s.replicationTaskFetcher.workers[0].bufferRequests(shardRequest1)
+	s.replicationTaskFetcher.workers[0].bufferRequests(shardRequest2)
 
 	_, ok := <-respChan1
 	s.False(ok)
@@ -167,9 +165,9 @@ func (s *replicationTaskFetcherSuite) TestBufferRequests_Duplicate() {
 		// noop
 	}
 
-	s.Equal(map[int]map[int32]*replicationTaskRequest{
-		s.workerID: {shardID: shardRequest2},
-	}, s.replicationTaskFetcher.workerToRequestByShard)
+	s.Equal(map[int32]*replicationTaskRequest{
+		shardID: shardRequest2,
+	}, s.replicationTaskFetcher.workers[0].requestByShard)
 }
 
 func (s *replicationTaskFetcherSuite) TestGetMessages_All() {
@@ -200,8 +198,8 @@ func (s *replicationTaskFetcherSuite) TestGetMessages_All() {
 		gomock.Any(),
 		newGetReplicationMessagesRequestMatcher(replicationMessageRequest),
 	).Return(&adminservice.GetReplicationMessagesResponse{ShardMessages: responseByShard}, nil)
-	s.replicationTaskFetcher.workerToRequestByShard[s.workerID] = requestByShard
-	err := s.replicationTaskFetcher.getMessages(s.workerID)
+	s.replicationTaskFetcher.workers[0].requestByShard = requestByShard
+	err := s.replicationTaskFetcher.workers[0].getMessages()
 	s.NoError(err)
 	s.Equal(responseByShard[shardID], <-respChan)
 }
@@ -246,8 +244,8 @@ func (s *replicationTaskFetcherSuite) TestGetMessages_Partial() {
 		gomock.Any(),
 		newGetReplicationMessagesRequestMatcher(replicationMessageRequest),
 	).Return(&adminservice.GetReplicationMessagesResponse{ShardMessages: responseByShard}, nil)
-	s.replicationTaskFetcher.workerToRequestByShard[s.workerID] = requestByShard
-	err := s.replicationTaskFetcher.getMessages(s.workerID)
+	s.replicationTaskFetcher.workers[0].requestByShard = requestByShard
+	err := s.replicationTaskFetcher.workers[0].getMessages()
 	s.NoError(err)
 	s.Equal(responseByShard[shardID1], <-respChan1)
 	s.Equal((*replicationspb.ReplicationMessages)(nil), <-respChan2)
@@ -290,8 +288,8 @@ func (s *replicationTaskFetcherSuite) TestGetMessages_Error() {
 		gomock.Any(),
 		newGetReplicationMessagesRequestMatcher(replicationMessageRequest),
 	).Return(nil, errors.New("random error"))
-	s.replicationTaskFetcher.workerToRequestByShard[s.workerID] = requestByShard
-	err := s.replicationTaskFetcher.getMessages(s.workerID)
+	s.replicationTaskFetcher.workers[0].requestByShard = requestByShard
+	err := s.replicationTaskFetcher.workers[0].getMessages()
 	s.Error(err)
 	s.Equal((*replicationspb.ReplicationMessages)(nil), <-respChan1)
 	s.Equal((*replicationspb.ReplicationMessages)(nil), <-respChan2)
@@ -300,8 +298,7 @@ func (s *replicationTaskFetcherSuite) TestGetMessages_Error() {
 func (s *replicationTaskFetcherSuite) TestConcurrentFetchAndProcess_Success() {
 	numShards := 1024
 
-	s.workerID = 16
-	s.config.ReplicationTaskFetcherParallelism = dynamicconfig.GetIntPropertyFn(1)
+	s.config.ReplicationTaskFetcherParallelism = dynamicconfig.GetIntPropertyFn(8)
 
 	s.replicationTaskFetcher = newReplicationTaskFetcher(
 		s.logger,
@@ -345,8 +342,7 @@ func (s *replicationTaskFetcherSuite) TestConcurrentFetchAndProcess_Success() {
 func (s *replicationTaskFetcherSuite) TestConcurrentFetchAndProcess_Error() {
 	numShards := 1024
 
-	s.workerID = 16
-	s.config.ReplicationTaskFetcherParallelism = dynamicconfig.GetIntPropertyFn(1)
+	s.config.ReplicationTaskFetcherParallelism = dynamicconfig.GetIntPropertyFn(8)
 
 	s.replicationTaskFetcher = newReplicationTaskFetcher(
 		s.logger,
