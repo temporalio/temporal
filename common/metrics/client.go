@@ -59,6 +59,7 @@ func NewClient(scope tally.Scope, serviceIdx ServiceIdx) Client {
 	for idx, def := range ScopeDefs[Common] {
 		scopeTags := map[string]string{
 			OperationTagName: def.operation,
+			"namespace":      "all",
 		}
 		mergeMapToRight(def.tags, scopeTags)
 		metricsClient.childScopes[idx] = scope.Tagged(scopeTags)
@@ -67,6 +68,7 @@ func NewClient(scope tally.Scope, serviceIdx ServiceIdx) Client {
 	for idx, def := range ScopeDefs[serviceIdx] {
 		scopeTags := map[string]string{
 			OperationTagName: def.operation,
+			"namespace":      "all",
 		}
 		mergeMapToRight(def.tags, scopeTags)
 		metricsClient.childScopes[idx] = scope.Tagged(scopeTags)

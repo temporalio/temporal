@@ -158,7 +158,7 @@ func (h *Handler) AddActivityTask(
 	defer sw.Stop()
 
 	if request.GetForwardedSource() != "" {
-		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
+		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
@@ -191,7 +191,7 @@ func (h *Handler) AddWorkflowTask(
 	defer sw.Stop()
 
 	if request.GetForwardedSource() != "" {
-		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
+		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
@@ -222,7 +222,7 @@ func (h *Handler) PollActivityTaskQueue(
 	defer sw.Stop()
 
 	if request.GetForwardedSource() != "" {
-		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
+		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
@@ -258,7 +258,7 @@ func (h *Handler) PollWorkflowTaskQueue(
 	defer sw.Stop()
 
 	if request.GetForwardedSource() != "" {
-		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
+		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
@@ -294,7 +294,7 @@ func (h *Handler) QueryWorkflow(
 	defer sw.Stop()
 
 	if request.GetForwardedSource() != "" {
-		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
+		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
@@ -406,4 +406,13 @@ func (h *Handler) namespaceName(id string) string {
 		return ""
 	}
 	return entry.GetInfo().Name
+}
+
+func (h *Handler) reportForwardedPerTaskQueueCounter(hCtx *handlerContext, namespaceId string) {
+	hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
+	h.GetMetricsClient().
+		Scope(metrics.MatchingAddWorkflowTaskScope).
+		Tagged(metrics.NamespaceTag(h.namespaceName(namespaceId))).
+		Tagged(metrics.ServiceRoleTag(metrics.MatchingRoleTagValue)).
+		IncCounter(metrics.MatchingClientForwardedCounter)
 }
