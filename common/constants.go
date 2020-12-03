@@ -64,7 +64,7 @@ const (
 
 const (
 	// GetHistoryMaxPageSize is the max page size for get history
-	GetHistoryMaxPageSize = 100
+	GetHistoryMaxPageSize = 256
 	// ReadDLQMessagesPageSize is the max page size for read DLQ messages
 	ReadDLQMessagesPageSize = 1000
 )

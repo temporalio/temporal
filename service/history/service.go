@@ -184,7 +184,6 @@ func (s *Service) Stop() {
 	remainingTime = s.sleep(shardOwnershipTransferDelay, remainingTime)
 
 	s.GetLogger().Info("ShutdownHandler: No longer taking rpc requests")
-	s.handler.PrepareToStop()
 	remainingTime = s.sleep(gracePeriod, remainingTime)
 
 	// TODO: Change this to GracefulStop when integration tests are refactored.

@@ -31,10 +31,10 @@ import (
 )
 
 const (
-	postgreSQLSSLMode     = "sslmode"
-	postgreSQLSSLModeNoop = "disable"
-	postgreSQLSSLModeCA   = "verify-ca"
-	postgreSQLSSLModeFull = "verify-full"
+	postgreSQLSSLMode        = "sslmode"
+	postgreSQLSSLModeNoop    = "disable"
+	postgreSQLSSLModeRequire = "require"
+	postgreSQLSSLModeFull    = "verify-full"
 
 	postgreSQLSSLHost = "host"
 
@@ -47,7 +47,7 @@ func dsnTSL(cfg *config.SQL) url.Values {
 	sslParams := url.Values{}
 	if cfg.TLS != nil && cfg.TLS.Enabled {
 		if !cfg.TLS.EnableHostVerification {
-			sslParams.Set(postgreSQLSSLMode, postgreSQLSSLModeCA)
+			sslParams.Set(postgreSQLSSLMode, postgreSQLSSLModeRequire)
 		} else {
 			sslParams.Set(postgreSQLSSLMode, postgreSQLSSLModeFull)
 			sslParams.Set(postgreSQLSSLHost, cfg.TLS.ServerName)

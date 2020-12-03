@@ -50,7 +50,7 @@ services:
 clusterMetadata:
   enableGlobalNamespace: true
   replicationConsumer:
-    type: kafka
+    type: rpc
   failoverVersionIncrement: 10
   masterClusterName: "active"
   currentClusterName: "standby"
@@ -66,7 +66,7 @@ clusterMetadata:
       rpcName: "frontend"
       rpcAddress: "localhost:8233"
     other:
-      enabled: true
+      enabled: false
       initialFailoverVersion: 3
       rpcName: "frontend"
       rpcAddress: "localhost:9233"
