@@ -52,19 +52,13 @@ const (
 )
 
 type (
-	// ReplicationTaskFetcherImpl is the implementation of fetching replication messages.
-	ReplicationTaskFetcherImpl struct {
-		status         int32
-		currentCluster string
-		sourceCluster  string
-		config         *configs.Config
-		logger         log.Logger
-		remotePeer     admin.Client
-		rateLimiter    *quotas.DynamicRateLimiter
-		requestChan    chan *replicationTaskRequest
-		requestByShard map[int32]*replicationTaskRequest
-		shutdownChan   chan struct{}
+	// ReplicationTaskFetchers is a group of fetchers, one per source DC.
+	ReplicationTaskFetchers interface {
+		common.Daemon
+
+		GetFetchers() []ReplicationTaskFetcher
 	}
+
 	// ReplicationTaskFetcher is responsible for fetching replication messages from remote DC.
 	ReplicationTaskFetcher interface {
 		common.Daemon
@@ -74,18 +68,41 @@ type (
 		GetRateLimiter() *quotas.DynamicRateLimiter
 	}
 
-	// ReplicationTaskFetchers is a group of fetchers, one per source DC.
-	ReplicationTaskFetchers interface {
-		common.Daemon
-
-		GetFetchers() []ReplicationTaskFetcher
-	}
-
 	// ReplicationTaskFetchersImpl is a group of fetchers, one per source DC.
 	ReplicationTaskFetchersImpl struct {
 		status   int32
 		logger   log.Logger
 		fetchers []ReplicationTaskFetcher
+	}
+
+	// ReplicationTaskFetcherImpl is the implementation of fetching replication messages.
+	ReplicationTaskFetcherImpl struct {
+		status         int32
+		currentCluster string
+		sourceCluster  string
+		config         *configs.Config
+		numWorker      int
+		logger         log.Logger
+		remotePeer     admin.Client
+		rateLimiter    *quotas.DynamicRateLimiter
+		requestChan    chan *replicationTaskRequest
+		shutdownChan   chan struct{}
+
+		workers map[int]*replicationTaskFetcherWorker
+	}
+
+	replicationTaskFetcherWorker struct {
+		status         int32
+		currentCluster string
+		sourceCluster  string
+		config         *configs.Config
+		logger         log.Logger
+		remotePeer     admin.Client
+		rateLimiter    *quotas.DynamicRateLimiter
+		requestChan    chan *replicationTaskRequest
+		shutdownChan   chan struct{}
+
+		requestByShard map[int32]*replicationTaskRequest
 	}
 )
 
@@ -172,20 +189,39 @@ func newReplicationTaskFetcher(
 	config *configs.Config,
 	sourceFrontend admin.Client,
 ) *ReplicationTaskFetcherImpl {
+	numWorker := config.ReplicationTaskFetcherParallelism()
+	requestChan := make(chan *replicationTaskRequest, requestChanBufferSize)
+	shutdownChan := make(chan struct{})
+	rateLimiter := quotas.NewDynamicRateLimiter(func() float64 {
+		return config.ReplicationTaskProcessorHostQPS()
+	})
+
+	workers := make(map[int]*replicationTaskFetcherWorker)
+	for i := 0; i < numWorker; i++ {
+		workers[i] = newReplicationTaskFetcherWorker(
+			logger,
+			sourceCluster,
+			currentCluster,
+			config,
+			sourceFrontend,
+			rateLimiter,
+			requestChan,
+			shutdownChan,
+		)
+	}
 
 	return &ReplicationTaskFetcherImpl{
 		status:         common.DaemonStatusInitialized,
 		config:         config,
+		numWorker:      numWorker,
 		logger:         logger.WithTags(tag.ClusterName(sourceCluster)),
 		remotePeer:     sourceFrontend,
 		currentCluster: currentCluster,
 		sourceCluster:  sourceCluster,
-		rateLimiter: quotas.NewDynamicRateLimiter(func() float64 {
-			return config.ReplicationTaskProcessorHostQPS()
-		}),
-		requestChan:    make(chan *replicationTaskRequest, requestChanBufferSize),
-		requestByShard: make(map[int32]*replicationTaskRequest, requestsMapSize),
-		shutdownChan:   make(chan struct{}),
+		rateLimiter:    rateLimiter,
+		requestChan:    requestChan,
+		shutdownChan:   shutdownChan,
+		workers:        workers,
 	}
 }
 
@@ -199,8 +235,8 @@ func (f *ReplicationTaskFetcherImpl) Start() {
 		return
 	}
 
-	for i := 0; i < f.config.ReplicationTaskFetcherParallelism(); i++ {
-		go f.fetchTasks()
+	for _, worker := range f.workers {
+		worker.Start()
 	}
 	f.logger.Info("Replication task fetcher started.")
 }
@@ -216,11 +252,81 @@ func (f *ReplicationTaskFetcherImpl) Stop() {
 	}
 
 	close(f.shutdownChan)
+	for _, worker := range f.workers {
+		worker.Stop()
+	}
 	f.logger.Info("Replication task fetcher stopped.")
 }
 
+// GetSourceCluster returns the source cluster for the fetcher
+func (f *ReplicationTaskFetcherImpl) GetSourceCluster() string {
+	return f.sourceCluster
+}
+
+// GetRequestChan returns the request chan for the fetcher
+func (f *ReplicationTaskFetcherImpl) GetRequestChan() chan<- *replicationTaskRequest {
+	return f.requestChan
+}
+
+// GetRateLimiter returns the host level rate limiter for the fetcher
+func (f *ReplicationTaskFetcherImpl) GetRateLimiter() *quotas.DynamicRateLimiter {
+	return f.rateLimiter
+}
+
+func newReplicationTaskFetcherWorker(
+	logger log.Logger,
+	sourceCluster string,
+	currentCluster string,
+	config *configs.Config,
+	sourceFrontend admin.Client,
+	rateLimiter *quotas.DynamicRateLimiter,
+	requestChan chan *replicationTaskRequest,
+	shutdownChan chan struct{},
+) *replicationTaskFetcherWorker {
+	return &replicationTaskFetcherWorker{
+		status:         common.DaemonStatusInitialized,
+		currentCluster: currentCluster,
+		sourceCluster:  sourceCluster,
+		config:         config,
+		logger:         logger,
+		remotePeer:     sourceFrontend,
+		rateLimiter:    rateLimiter,
+		requestChan:    requestChan,
+		shutdownChan:   shutdownChan,
+
+		requestByShard: make(map[int32]*replicationTaskRequest, requestsMapSize),
+	}
+}
+
+// Start starts the fetcher worker
+func (f *replicationTaskFetcherWorker) Start() {
+	if !atomic.CompareAndSwapInt32(
+		&f.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
+		return
+	}
+
+	go f.fetchTasks()
+	f.logger.Info("Replication task fetcher worker started.")
+}
+
+// Stop stops the fetcher worker
+func (f *replicationTaskFetcherWorker) Stop() {
+	if !atomic.CompareAndSwapInt32(
+		&f.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
+	}
+
+	f.logger.Info("Replication task fetcher worker stopped.")
+}
+
 // fetchTasks collects getReplicationTasks request from shards and send out aggregated request to source frontend.
-func (f *ReplicationTaskFetcherImpl) fetchTasks() {
+func (f *replicationTaskFetcherWorker) fetchTasks() {
 	timer := time.NewTimer(backoff.JitDuration(
 		f.config.ReplicationTaskFetcherAggregationInterval(),
 		f.config.ReplicationTaskFetcherTimerJitterCoefficient(),
@@ -253,9 +359,10 @@ func (f *ReplicationTaskFetcherImpl) fetchTasks() {
 	}
 }
 
-func (f *ReplicationTaskFetcherImpl) bufferRequests(
+func (f *replicationTaskFetcherWorker) bufferRequests(
 	request *replicationTaskRequest,
 ) {
+
 	// Here we only add the request to map. We will wait until timer fires to send the request to remote.
 	if req, ok := f.requestByShard[request.token.GetShardId()]; ok && req != request {
 		// since this replication task fetcher is per host
@@ -264,16 +371,20 @@ func (f *ReplicationTaskFetcherImpl) bufferRequests(
 		// if shard moved from this host, to this host.
 		close(req.respChan)
 	}
+
 	f.requestByShard[request.token.GetShardId()] = request
 }
 
-func (f *ReplicationTaskFetcherImpl) getMessages() error {
-	if len(f.requestByShard) == 0 {
+func (f *replicationTaskFetcherWorker) getMessages() error {
+
+	requestByShard := f.requestByShard
+	if len(requestByShard) == 0 {
 		return nil
 	}
+	f.requestByShard = make(map[int32]*replicationTaskRequest, requestsMapSize)
 
-	tokens := make([]*replicationspb.ReplicationToken, 0, len(f.requestByShard))
-	for _, request := range f.requestByShard {
+	tokens := make([]*replicationspb.ReplicationToken, 0, len(requestByShard))
+	for _, request := range requestByShard {
 		tokens = append(tokens, request.token)
 	}
 
@@ -287,10 +398,9 @@ func (f *ReplicationTaskFetcherImpl) getMessages() error {
 	response, err := f.remotePeer.GetReplicationMessages(ctx, request)
 	if err != nil {
 		f.logger.Error("Failed to get replication tasks", tag.Error(err))
-		for _, req := range f.requestByShard {
+		for _, req := range requestByShard {
 			close(req.respChan)
 		}
-		f.requestByShard = make(map[int32]*replicationTaskRequest, requestsMapSize)
 		return err
 	}
 
@@ -298,27 +408,11 @@ func (f *ReplicationTaskFetcherImpl) getMessages() error {
 	for shardID, resp := range response.GetShardMessages() {
 		shardReplicationTasks[shardID] = resp
 	}
-	for shardID, req := range f.requestByShard {
+	for shardID, req := range requestByShard {
 		if resp, ok := shardReplicationTasks[shardID]; ok {
 			req.respChan <- resp
 		}
 		close(req.respChan)
 	}
-	f.requestByShard = make(map[int32]*replicationTaskRequest, requestsMapSize)
 	return nil
-}
-
-// GetSourceCluster returns the source cluster for the fetcher
-func (f *ReplicationTaskFetcherImpl) GetSourceCluster() string {
-	return f.sourceCluster
-}
-
-// GetRequestChan returns the request chan for the fetcher
-func (f *ReplicationTaskFetcherImpl) GetRequestChan() chan<- *replicationTaskRequest {
-	return f.requestChan
-}
-
-// GetRateLimiter returns the host level rate limiter for the fetcher
-func (f *ReplicationTaskFetcherImpl) GetRateLimiter() *quotas.DynamicRateLimiter {
-	return f.rateLimiter
 }
