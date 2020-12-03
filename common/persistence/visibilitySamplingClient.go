@@ -161,6 +161,26 @@ func (p *visibilitySamplingClient) UpsertWorkflowExecution(request *UpsertWorkfl
 	return nil
 }
 
+func (p *visibilitySamplingClient) UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequestV2) error {
+	namespace := request.Namespace
+	namespaceID := request.NamespaceID
+
+	rateLimiter := p.rateLimitersForClosed.getRateLimiter(namespace, numOfPriorityForClosed, p.config.VisibilityClosedMaxQPS(namespace))
+	if ok, _ := rateLimiter.GetToken(0, 1); ok {
+		return p.persistence.UpsertWorkflowExecutionV2(request)
+	}
+
+	p.logger.Info("Request for upsert workflow is sampled",
+		tag.WorkflowNamespaceID(namespaceID),
+		tag.WorkflowNamespace(namespace),
+		tag.WorkflowType(request.WorkflowTypeName),
+		tag.WorkflowID(request.Execution.GetWorkflowId()),
+		tag.WorkflowRunID(request.Execution.GetRunId()),
+	)
+	p.metricClient.IncCounter(metrics.PersistenceUpsertWorkflowExecutionScope, metrics.PersistenceSampledCounter)
+	return nil
+}
+
 func (p *visibilitySamplingClient) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
 	namespace := request.Namespace
 

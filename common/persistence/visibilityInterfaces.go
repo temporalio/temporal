@@ -91,6 +91,25 @@ type (
 		SearchAttributes   map[string]*commonpb.Payload
 	}
 
+	// UpsertWorkflowExecutionRequest is used to upsert workflow execution
+	UpsertWorkflowExecutionRequestV2 struct {
+		NamespaceID        string
+		Namespace          string // not persisted, used as config filter key
+		Execution          commonpb.WorkflowExecution
+		WorkflowTypeName   string
+		StartTimestamp     int64
+		ExecutionTimestamp int64
+		RunTimeout         int64 // not persisted, used for cassandra ttl
+		TaskID             int64 // not persisted, used as condition update version for ES
+		Status             enumspb.WorkflowExecutionStatus
+		Memo               *commonpb.Memo
+		TaskQueue          string
+		SearchAttributes   map[string]*commonpb.Payload
+		CloseTimestamp     int64
+		HistoryLength      int64
+		RetentionSeconds   int64
+	}
+
 	// ListWorkflowExecutionsRequest is used to list executions in a namespace
 	ListWorkflowExecutionsRequest struct {
 		NamespaceID       string
@@ -183,6 +202,7 @@ type (
 		RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error
 		RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error
 		UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error
+		UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequestV2) error
 		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error)
 		ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error)

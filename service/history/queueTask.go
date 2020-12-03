@@ -82,6 +82,13 @@ type (
 		ackMgr          queueAckMgr
 		redispatchQueue collection.Queue
 	}
+
+	visibilityQueueTask struct {
+		*queueTaskBase
+
+		ackMgr          queueAckMgr
+		redispatchQueue collection.Queue
+	}
 )
 
 func newTimerQueueTask(
@@ -125,6 +132,34 @@ func newTransferQueueTask(
 	ackMgr queueAckMgr,
 ) queueTask {
 	return &transferQueueTask{
+		queueTaskBase: newQueueTaskBase(
+			shard,
+			taskInfo,
+			scope,
+			logger,
+			taskFilter,
+			taskExecutor,
+			timeSource,
+			maxRetryCount,
+		),
+		ackMgr:          ackMgr,
+		redispatchQueue: redispatchQueue,
+	}
+}
+
+func newVisibilityQueueTask(
+	shard shard.Context,
+	taskInfo queueTaskInfo,
+	scope metrics.Scope,
+	logger log.Logger,
+	taskFilter taskFilter,
+	taskExecutor queueTaskExecutor,
+	redispatchQueue collection.Queue,
+	timeSource clock.TimeSource,
+	maxRetryCount dynamicconfig.IntPropertyFn,
+	ackMgr queueAckMgr,
+) queueTask {
+	return &visibilityQueueTask{
 		queueTaskBase: newQueueTaskBase(
 			shard,
 			taskInfo,
@@ -203,6 +238,24 @@ func (t *transferQueueTask) Nack() {
 
 func (t *transferQueueTask) GetQueueType() queueType {
 	return transferQueueType
+}
+
+func (t *visibilityQueueTask) Ack() {
+	t.queueTaskBase.Ack()
+
+	t.ackMgr.completeQueueTask(t.GetTaskId())
+}
+
+func (t *visibilityQueueTask) Nack() {
+	t.queueTaskBase.Nack()
+
+	// don't move redispatchQueue to queueTaskBase as we need to
+	// redispatch visibilityQueueTask, not queueTaskBase
+	t.redispatchQueue.Add(t)
+}
+
+func (t *visibilityQueueTask) GetQueueType() queueType {
+	return visibilityQueueType
 }
 
 func (t *queueTaskBase) Execute() error {

@@ -102,6 +102,12 @@ type (
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
 		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
 
+		// Visibility task related methods
+		GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error)
+		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
+		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
+		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
+
 		// Replication task related methods
 		GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error)
 		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
@@ -151,6 +157,7 @@ type (
 		RecordWorkflowExecutionStarted(request *InternalRecordWorkflowExecutionStartedRequest) error
 		RecordWorkflowExecutionClosed(request *InternalRecordWorkflowExecutionClosedRequest) error
 		UpsertWorkflowExecution(request *InternalUpsertWorkflowExecutionRequest) error
+		UpsertWorkflowExecutionV2(request *InternalUpsertWorkflowExecutionRequestV2) error
 		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
@@ -512,6 +519,25 @@ type (
 		Memo               *commonpb.DataBlob
 		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
+	}
+
+	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
+	InternalUpsertWorkflowExecutionRequestV2 struct {
+		NamespaceID        string
+		WorkflowID         string
+		RunID              string
+		WorkflowTypeName   string
+		StartTimestamp     int64
+		ExecutionTimestamp int64
+		RunTimeout         int64
+		Status             enumspb.WorkflowExecutionStatus
+		TaskID             int64
+		Memo               *commonpb.DataBlob
+		TaskQueue          string
+		SearchAttributes   map[string]*commonpb.Payload
+		CloseTimestamp     int64
+		HistoryLength      int64
+		RetentionSeconds   int64
 	}
 
 	// InternalCreateNamespaceRequest is used to create the namespace

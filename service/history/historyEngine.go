@@ -99,6 +99,7 @@ type (
 		visibilityMgr             persistence.VisibilityManager
 		txProcessor               transferQueueProcessor
 		timerProcessor            timerQueueProcessor
+		visibilityProcessor       visibilityQueueProcessor
 		nDCReplicator             nDCHistoryReplicator
 		nDCActivityReplicator     nDCActivityReplicator
 		replicatorProcessor       ReplicatorQueueProcessor
@@ -223,6 +224,7 @@ func NewEngineWithShardContext(
 
 	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
+	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
@@ -328,6 +330,7 @@ func (e *historyEngineImpl) Start() {
 
 	e.txProcessor.Start()
 	e.timerProcessor.Start()
+	e.visibilityProcessor.Start()
 
 	// failover callback will try to create a failover queue processor to scan all inflight tasks
 	// if domain needs to be failovered. However, in the multicursor queue logic, the scan range
@@ -363,6 +366,7 @@ func (e *historyEngineImpl) Stop() {
 
 	e.txProcessor.Stop()
 	e.timerProcessor.Stop()
+	e.visibilityProcessor.Stop()
 	if e.replicatorProcessor != nil {
 		e.replicatorProcessor.Stop()
 	}
@@ -389,7 +393,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 	// Namespace change notification follows the following steps, order matters
 	// 1. lock all task processing.
 	// 2. namespace changes visible to everyone (Note: lock of task processing prevents task processing logic seeing the namespace changes).
-	// 3. failover min and max task levels are calaulated, then update to shard.
+	// 3. failover min and max task levels are calculated, then update to shard.
 	// 4. failover start & task processing unlock & shard namespace version notification update. (order does not matter for this discussion)
 	//
 	// The above guarantees that task created during the failover will be processed.
@@ -2516,8 +2520,7 @@ func (e *historyEngineImpl) NotifyNewVisibilityTasks(
 ) {
 
 	if len(tasks) > 0 {
-		// TODO (alex): add visibility processor
-		// e.visibilityProcessor.NotifyNewTask()
+		e.visibilityProcessor.NotifyNewTask(tasks)
 	}
 }
 

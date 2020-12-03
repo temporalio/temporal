@@ -576,6 +576,42 @@ const (
 	TransferProcessorEnablePriorityTaskProcessor
 	// TransferProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
 	TransferProcessorVisibilityArchivalTimeLimit
+
+	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
+	VisibilityTaskBatchSize
+	// VisibilityProcessorFailoverMaxPollRPS is max poll rate per second for visibilityQueueProcessor
+	VisibilityProcessorFailoverMaxPollRPS
+	// VisibilityProcessorMaxPollRPS is max poll rate per second for visibilityQueueProcessor
+	VisibilityProcessorMaxPollRPS
+	// VisibilityTaskWorkerCount is number of worker for visibilityQueueProcessor
+	VisibilityTaskWorkerCount
+	// VisibilityTaskMaxRetryCount is max times of retry for visibilityQueueProcessor
+	VisibilityTaskMaxRetryCount
+	// VisibilityProcessorCompleteVisibilityFailureRetryCount is times of retry for failure
+	VisibilityProcessorCompleteVisibilityFailureRetryCount
+	// VisibilityProcessorUpdateShardTaskCount is update shard count for visibilityQueueProcessor
+	VisibilityProcessorUpdateShardTaskCount
+	// VisibilityProcessorMaxPollInterval max poll interval for visibilityQueueProcessor
+	VisibilityProcessorMaxPollInterval
+	// VisibilityProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
+	VisibilityProcessorMaxPollIntervalJitterCoefficient
+	// VisibilityProcessorUpdateAckInterval is update interval for visibilityQueueProcessor
+	VisibilityProcessorUpdateAckInterval
+	// VisibilityProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
+	VisibilityProcessorUpdateAckIntervalJitterCoefficient
+	// VisibilityProcessorCompleteTaskInterval is complete timer interval for visibilityQueueProcessor
+	VisibilityProcessorCompleteTaskInterval
+	// VisibilityProcessorRedispatchInterval is the redispatch interval for visibilityQueueProcessor
+	VisibilityProcessorRedispatchInterval
+	// VisibilityProcessorRedispatchIntervalJitterCoefficient is the redispatch interval jitter coefficient
+	VisibilityProcessorRedispatchIntervalJitterCoefficient
+	// VisibilityProcessorMaxRedispatchQueueSize is the threshold of the number of tasks in the redispatch queue for visibilityQueueProcessor
+	VisibilityProcessorMaxRedispatchQueueSize
+	// VisibilityProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for visibilityQueueProcessor
+	VisibilityProcessorEnablePriorityTaskProcessor
+	// VisibilityProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
+	VisibilityProcessorVisibilityArchivalTimeLimit
+
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize
 	// ReplicatorTaskWorkerCount is number of worker for ReplicatorProcessor

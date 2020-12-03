@@ -64,6 +64,7 @@ func NewTestContext(
 		throttledLogger:           resource.GetThrottledLogger(),
 		transferSequenceNumber:    1,
 		transferMaxReadLevel:      0,
+		visibilityMaxReadLevel:    0,
 		maxTransferSequenceNumber: 100000,
 		timerMaxReadLevelMap:      make(map[string]time.Time),
 		remoteClusterCurrentTime:  make(map[string]time.Time),

@@ -775,9 +775,7 @@ func createVisibilityTasks(
 
 		// TODO (alex): add type specific properties or remove entire switch
 		switch task.GetType() {
-		case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
-		case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-		case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
+		case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
 		case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknow visibility task type: %v", task.GetType()))

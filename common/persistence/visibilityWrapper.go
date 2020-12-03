@@ -109,6 +109,14 @@ func (v *visibilityManagerWrapper) UpsertWorkflowExecution(request *UpsertWorkfl
 	return v.esVisibilityManager.UpsertWorkflowExecution(request)
 }
 
+func (v *visibilityManagerWrapper) UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequestV2) error {
+	if v.esVisibilityManager == nil { // return operation not support
+		return v.visibilityManager.UpsertWorkflowExecutionV2(request)
+	}
+
+	return v.esVisibilityManager.UpsertWorkflowExecutionV2(request)
+}
+
 func (v *visibilityManagerWrapper) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
 	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
 	return manager.ListOpenWorkflowExecutions(request)

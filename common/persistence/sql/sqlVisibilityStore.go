@@ -120,6 +120,12 @@ func (s *sqlVisibilityStore) UpsertWorkflowExecution(
 	return nil
 }
 
+func (s *sqlVisibilityStore) UpsertWorkflowExecutionV2(
+	_ *p.InternalUpsertWorkflowExecutionRequestV2,
+) error {
+	return nil
+}
+
 func (s *sqlVisibilityStore) ListOpenWorkflowExecutions(
 	request *p.ListWorkflowExecutionsRequest,
 ) (*p.InternalListWorkflowExecutionsResponse, error) {

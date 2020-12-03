@@ -38,7 +38,7 @@ type (
 
 	// metricDefinition contains the definition for a metric
 	metricDefinition struct {
-		//nolint
+		// nolint
 		metricType       MetricType    // metric type
 		metricName       MetricName    // metric name
 		metricRollupName MetricName    // optional. if non-empty, this name must be used for rolled-up version of this metric
@@ -687,13 +687,13 @@ const (
 	AdminResendReplicationTasksScope
 	// AdminRemoveTaskScope is the metric scope for admin.AdminRemoveTaskScope
 	AdminRemoveTaskScope
-	//AdminCloseShardTaskScope is the metric scope for admin.AdminRemoveTaskScope
+	// AdminCloseShardTaskScope is the metric scope for admin.AdminRemoveTaskScope
 	AdminCloseShardTaskScope
-	//AdminReadDLQMessagesScope is the metric scope for admin.AdminReadDLQMessagesScope
+	// AdminReadDLQMessagesScope is the metric scope for admin.AdminReadDLQMessagesScope
 	AdminReadDLQMessagesScope
-	//AdminPurgeDLQMessagesScope is the metric scope for admin.AdminPurgeDLQMessagesScope
+	// AdminPurgeDLQMessagesScope is the metric scope for admin.AdminPurgeDLQMessagesScope
 	AdminPurgeDLQMessagesScope
-	//AdminMergeDLQMessagesScope is the metric scope for admin.AdminMergeDLQMessagesScope
+	// AdminMergeDLQMessagesScope is the metric scope for admin.AdminMergeDLQMessagesScope
 	AdminMergeDLQMessagesScope
 
 	NumAdminScopes
@@ -895,6 +895,14 @@ const (
 	TransferStandbyTaskRecordWorkflowStartedScope
 	// TransferStandbyTaskUpsertWorkflowSearchAttributesScope is the scope used for upsert search attributes processing by transfer queue processor
 	TransferStandbyTaskUpsertWorkflowSearchAttributesScope
+
+	// VisibilityQueueProcessorScope is the scope used by all metric emitted by visibility queue processor
+	VisibilityQueueProcessorScope
+	// VisibilityTaskUpsertExecutionScope is the scope used for upsert search attributes processing by visibility queue processor
+	VisibilityTaskUpsertExecutionScope
+	// VisibilityTaskDeleteExecutionScope is the scope used for delete by visibility queue processor
+	VisibilityTaskDeleteExecutionScope
+
 	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
 	TimerQueueProcessorScope
 	// TimerActiveQueueProcessorScope is the scope used by all metric emitted by timer queue processor
@@ -1453,47 +1461,52 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TransferStandbyTaskRecordWorkflowStartedScope:          {operation: "TransferStandbyTaskRecordWorkflowStarted"},
 		TransferStandbyTaskResetWorkflowScope:                  {operation: "TransferStandbyTaskResetWorkflow"},
 		TransferStandbyTaskUpsertWorkflowSearchAttributesScope: {operation: "TransferStandbyTaskUpsertWorkflowSearchAttributes"},
-		TimerQueueProcessorScope:                               {operation: "TimerQueueProcessor"},
-		TimerActiveQueueProcessorScope:                         {operation: "TimerActiveQueueProcessor"},
-		TimerStandbyQueueProcessorScope:                        {operation: "TimerStandbyQueueProcessor"},
-		TimerActiveTaskActivityTimeoutScope:                    {operation: "TimerActiveTaskActivityTimeout"},
-		TimerActiveTaskWorkflowTaskTimeoutScope:                {operation: "TimerActiveTaskWorkflowTaskTimeout"},
-		TimerActiveTaskUserTimerScope:                          {operation: "TimerActiveTaskUserTimer"},
-		TimerActiveTaskWorkflowTimeoutScope:                    {operation: "TimerActiveTaskWorkflowTimeout"},
-		TimerActiveTaskActivityRetryTimerScope:                 {operation: "TimerActiveTaskActivityRetryTimer"},
-		TimerActiveTaskWorkflowBackoffTimerScope:               {operation: "TimerActiveTaskWorkflowBackoffTimer"},
-		TimerActiveTaskDeleteHistoryEventScope:                 {operation: "TimerActiveTaskDeleteHistoryEvent"},
-		TimerStandbyTaskActivityTimeoutScope:                   {operation: "TimerStandbyTaskActivityTimeout"},
-		TimerStandbyTaskWorkflowTaskTimeoutScope:               {operation: "TimerStandbyTaskWorkflowTaskTimeout"},
-		TimerStandbyTaskUserTimerScope:                         {operation: "TimerStandbyTaskUserTimer"},
-		TimerStandbyTaskWorkflowTimeoutScope:                   {operation: "TimerStandbyTaskWorkflowTimeout"},
-		TimerStandbyTaskActivityRetryTimerScope:                {operation: "TimerStandbyTaskActivityRetryTimer"},
-		TimerStandbyTaskWorkflowBackoffTimerScope:              {operation: "TimerStandbyTaskWorkflowBackoffTimer"},
-		TimerStandbyTaskDeleteHistoryEventScope:                {operation: "TimerStandbyTaskDeleteHistoryEvent"},
-		HistoryEventNotificationScope:                          {operation: "HistoryEventNotification"},
-		ReplicatorQueueProcessorScope:                          {operation: "ReplicatorQueueProcessor"},
-		ReplicatorTaskHistoryScope:                             {operation: "ReplicatorTaskHistory"},
-		ReplicatorTaskSyncActivityScope:                        {operation: "ReplicatorTaskSyncActivity"},
-		ReplicateHistoryEventsScope:                            {operation: "ReplicateHistoryEvents"},
-		ShardInfoScope:                                         {operation: "ShardInfo"},
-		WorkflowContextScope:                                   {operation: "WorkflowContext"},
-		HistoryCacheGetAndCreateScope:                          {operation: "HistoryCacheGetAndCreate", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
-		HistoryCacheGetOrCreateScope:                           {operation: "HistoryCacheGetOrCreate", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
-		HistoryCacheGetOrCreateCurrentScope:                    {operation: "HistoryCacheGetOrCreateCurrent", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
-		HistoryCacheGetCurrentExecutionScope:                   {operation: "HistoryCacheGetCurrentExecution", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
-		EventsCacheGetEventScope:                               {operation: "EventsCacheGetEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
-		EventsCachePutEventScope:                               {operation: "EventsCachePutEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
-		EventsCacheDeleteEventScope:                            {operation: "EventsCacheDeleteEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
-		EventsCacheGetFromStoreScope:                           {operation: "EventsCacheGetFromStore", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
-		ExecutionSizeStatsScope:                                {operation: "ExecutionStats", tags: map[string]string{StatsTypeTagName: SizeStatsTypeTagValue}},
-		ExecutionCountStatsScope:                               {operation: "ExecutionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
-		SessionSizeStatsScope:                                  {operation: "SessionStats", tags: map[string]string{StatsTypeTagName: SizeStatsTypeTagValue}},
-		SessionCountStatsScope:                                 {operation: "SessionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
-		WorkflowCompletionStatsScope:                           {operation: "CompletionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
-		ArchiverClientScope:                                    {operation: "ArchiverClient"},
-		ReplicationTaskFetcherScope:                            {operation: "ReplicationTaskFetcher"},
-		ReplicationTaskCleanupScope:                            {operation: "ReplicationTaskCleanup"},
-		ReplicationDLQStatsScope:                               {operation: "ReplicationDLQStats"},
+
+		VisibilityQueueProcessorScope:      {operation: "VisibilityQueueProcessorScope"},
+		VisibilityTaskUpsertExecutionScope: {operation: "VisibilityTaskUpsertExecutionScope"},
+		VisibilityTaskDeleteExecutionScope: {operation: "VisibilityTaskDeleteExecutionScope"},
+
+		TimerQueueProcessorScope:                  {operation: "TimerQueueProcessor"},
+		TimerActiveQueueProcessorScope:            {operation: "TimerActiveQueueProcessor"},
+		TimerStandbyQueueProcessorScope:           {operation: "TimerStandbyQueueProcessor"},
+		TimerActiveTaskActivityTimeoutScope:       {operation: "TimerActiveTaskActivityTimeout"},
+		TimerActiveTaskWorkflowTaskTimeoutScope:   {operation: "TimerActiveTaskWorkflowTaskTimeout"},
+		TimerActiveTaskUserTimerScope:             {operation: "TimerActiveTaskUserTimer"},
+		TimerActiveTaskWorkflowTimeoutScope:       {operation: "TimerActiveTaskWorkflowTimeout"},
+		TimerActiveTaskActivityRetryTimerScope:    {operation: "TimerActiveTaskActivityRetryTimer"},
+		TimerActiveTaskWorkflowBackoffTimerScope:  {operation: "TimerActiveTaskWorkflowBackoffTimer"},
+		TimerActiveTaskDeleteHistoryEventScope:    {operation: "TimerActiveTaskDeleteHistoryEvent"},
+		TimerStandbyTaskActivityTimeoutScope:      {operation: "TimerStandbyTaskActivityTimeout"},
+		TimerStandbyTaskWorkflowTaskTimeoutScope:  {operation: "TimerStandbyTaskWorkflowTaskTimeout"},
+		TimerStandbyTaskUserTimerScope:            {operation: "TimerStandbyTaskUserTimer"},
+		TimerStandbyTaskWorkflowTimeoutScope:      {operation: "TimerStandbyTaskWorkflowTimeout"},
+		TimerStandbyTaskActivityRetryTimerScope:   {operation: "TimerStandbyTaskActivityRetryTimer"},
+		TimerStandbyTaskWorkflowBackoffTimerScope: {operation: "TimerStandbyTaskWorkflowBackoffTimer"},
+		TimerStandbyTaskDeleteHistoryEventScope:   {operation: "TimerStandbyTaskDeleteHistoryEvent"},
+		HistoryEventNotificationScope:             {operation: "HistoryEventNotification"},
+		ReplicatorQueueProcessorScope:             {operation: "ReplicatorQueueProcessor"},
+		ReplicatorTaskHistoryScope:                {operation: "ReplicatorTaskHistory"},
+		ReplicatorTaskSyncActivityScope:           {operation: "ReplicatorTaskSyncActivity"},
+		ReplicateHistoryEventsScope:               {operation: "ReplicateHistoryEvents"},
+		ShardInfoScope:                            {operation: "ShardInfo"},
+		WorkflowContextScope:                      {operation: "WorkflowContext"},
+		HistoryCacheGetAndCreateScope:             {operation: "HistoryCacheGetAndCreate", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
+		HistoryCacheGetOrCreateScope:              {operation: "HistoryCacheGetOrCreate", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
+		HistoryCacheGetOrCreateCurrentScope:       {operation: "HistoryCacheGetOrCreateCurrent", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
+		HistoryCacheGetCurrentExecutionScope:      {operation: "HistoryCacheGetCurrentExecution", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
+		EventsCacheGetEventScope:                  {operation: "EventsCacheGetEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
+		EventsCachePutEventScope:                  {operation: "EventsCachePutEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
+		EventsCacheDeleteEventScope:               {operation: "EventsCacheDeleteEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
+		EventsCacheGetFromStoreScope:              {operation: "EventsCacheGetFromStore", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
+		ExecutionSizeStatsScope:                   {operation: "ExecutionStats", tags: map[string]string{StatsTypeTagName: SizeStatsTypeTagValue}},
+		ExecutionCountStatsScope:                  {operation: "ExecutionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
+		SessionSizeStatsScope:                     {operation: "SessionStats", tags: map[string]string{StatsTypeTagName: SizeStatsTypeTagValue}},
+		SessionCountStatsScope:                    {operation: "SessionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
+		WorkflowCompletionStatsScope:              {operation: "CompletionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
+		ArchiverClientScope:                       {operation: "ArchiverClient"},
+		ReplicationTaskFetcherScope:               {operation: "ReplicationTaskFetcher"},
+		ReplicationTaskCleanupScope:               {operation: "ReplicationTaskCleanup"},
+		ReplicationDLQStatsScope:                  {operation: "ReplicationDLQStats"},
 	},
 	// Matching Scope Names
 	Matching: {

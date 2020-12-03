@@ -28,10 +28,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
@@ -277,7 +275,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 
 	if err == nil {
 		// retention in namespace config is in days, convert to seconds
-		retentionSeconds = int64(namespaceEntry.GetRetentionDays(workflowID)) * int64(secondsInDay)
+		retentionSeconds = int64(timestamp.DurationFromDays(namespaceEntry.GetRetentionDays(workflowID)).Seconds())
 		namespace = namespaceEntry.GetInfo().Name
 		// if sampled for longer retention is enabled, only record those sampled events
 		if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
@@ -341,51 +339,6 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		return err
 	}
 	return nil
-}
-
-// Argument startEvent is to save additional call of msBuilder.GetStartEvent
-func getWorkflowExecutionTimestamp(
-	msBuilder mutableState,
-	startEvent *historypb.HistoryEvent,
-) time.Time {
-	// Use value 0 to represent workflows that don't need backoff. Since ES doesn't support
-	// comparison between two field, we need a value to differentiate them from cron workflows
-	// or later runs of a workflow that needs retry.
-	executionTimestamp := time.Unix(0, 0).UTC()
-	if startEvent == nil {
-		return executionTimestamp
-	}
-
-	if backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff()); backoffDuration != 0 {
-		startTime := timestamp.TimeValue(startEvent.GetEventTime())
-		executionTimestamp = startTime.Add(backoffDuration)
-	}
-	return executionTimestamp
-}
-
-func getWorkflowMemo(
-	memo map[string]*commonpb.Payload,
-) *commonpb.Memo {
-
-	if memo == nil {
-		return nil
-	}
-	return &commonpb.Memo{Fields: memo}
-}
-
-func copySearchAttributes(
-	input map[string]*commonpb.Payload,
-) map[string]*commonpb.Payload {
-
-	if input == nil {
-		return nil
-	}
-
-	result := make(map[string]*commonpb.Payload)
-	for k, v := range input {
-		result[k] = proto.Clone(v).(*commonpb.Payload)
-	}
-	return result
 }
 
 func isWorkflowNotExistError(err error) bool {

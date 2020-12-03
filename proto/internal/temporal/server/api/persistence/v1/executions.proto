@@ -180,6 +180,7 @@ message VisibilityTaskInfo {
     temporal.server.api.enums.v1.TaskType task_type = 4;
     int64 version = 5;
     int64 task_id = 6;
+    google.protobuf.Timestamp visibility_time = 7 [(gogoproto.stdtime) = true];
 }
 
 // timer column

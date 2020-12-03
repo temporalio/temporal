@@ -362,3 +362,17 @@ func (_m *VisibilityManager) UpsertWorkflowExecution(request *persistence.Upsert
 
 	return r0
 }
+
+// UpsertWorkflowExecution provides a mock function with given fields: request
+func (_m *VisibilityManager) UpsertWorkflowExecutionV2(request *persistence.UpsertWorkflowExecutionRequestV2) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.UpsertWorkflowExecutionRequestV2) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}

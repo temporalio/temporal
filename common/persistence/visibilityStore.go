@@ -118,6 +118,27 @@ func (v *visibilityManagerImpl) UpsertWorkflowExecution(request *UpsertWorkflowE
 	return v.persistence.UpsertWorkflowExecution(req)
 }
 
+func (v *visibilityManagerImpl) UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequestV2) error {
+	req := &InternalUpsertWorkflowExecutionRequestV2{
+		NamespaceID:        request.NamespaceID,
+		WorkflowID:         request.Execution.GetWorkflowId(),
+		RunID:              request.Execution.GetRunId(),
+		WorkflowTypeName:   request.WorkflowTypeName,
+		StartTimestamp:     request.StartTimestamp,
+		ExecutionTimestamp: request.ExecutionTimestamp,
+		Status:             request.Status,
+		RunTimeout:         request.RunTimeout,
+		TaskID:             request.TaskID,
+		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
+		TaskQueue:          request.TaskQueue,
+		SearchAttributes:   request.SearchAttributes,
+		CloseTimestamp:     request.CloseTimestamp,
+		HistoryLength:      request.HistoryLength,
+		RetentionSeconds:   request.RetentionSeconds,
+	}
+	return v.persistence.UpsertWorkflowExecutionV2(req)
+}
+
 func (v *visibilityManagerImpl) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
 	internalResp, err := v.persistence.ListOpenWorkflowExecutions(request)
 	if err != nil {

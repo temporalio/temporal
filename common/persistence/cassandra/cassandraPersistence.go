@@ -485,6 +485,27 @@ workflow_state = ? ` +
 		`and task_id > ? ` +
 		`and task_id <= ?`
 
+	templateGetVisibilityTaskQuery = `SELECT visibility_task, visibility_task_encoding ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
+
+	templateGetVisibilityTasksQuery = `SELECT visibility_task, visibility_task_encoding ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id > ? ` +
+		`and task_id <= ?`
+
 	templateGetReplicationTaskQuery = `SELECT replication, replication_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -516,6 +537,25 @@ workflow_state = ? ` +
 		`and task_id = ?`
 
 	templateRangeCompleteTransferTaskQuery = `DELETE FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id > ? ` +
+		`and task_id <= ?`
+
+	templateCompleteVisibilityTaskQuery = `DELETE FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ?`
+
+	templateRangeCompleteVisibilityTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and namespace_id = ? ` +
@@ -1942,6 +1982,75 @@ func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksReque
 	return response, nil
 }
 
+func (d *cassandraPersistence) GetVisibilityTask(request *p.GetVisibilityTaskRequest) (*p.GetVisibilityTaskResponse, error) {
+	shardID := d.shardID
+	taskID := request.TaskID
+	query := d.session.Query(templateGetVisibilityTaskQuery,
+		shardID,
+		rowTypeVisibilityTask,
+		rowTypeVisibilityTaskNamespaceID,
+		rowTypeVisibilityTaskWorkflowID,
+		rowTypeVisibilityTaskRunID,
+		defaultVisibilityTimestamp,
+		taskID)
+
+	var data []byte
+	var encoding string
+	if err := query.Scan(&data, &encoding); err != nil {
+		return nil, convertCommonErrors("GetVisibilityTask", err)
+	}
+
+	info, err := serialization.VisibilityTaskInfoFromBlob(data, encoding)
+
+	if err != nil {
+		return nil, convertCommonErrors("GetVisibilityTask", err)
+	}
+
+	return &p.GetVisibilityTaskResponse{VisibilityTaskInfo: info}, nil
+}
+
+func (d *cassandraPersistence) GetVisibilityTasks(request *p.GetVisibilityTasksRequest) (*p.GetVisibilityTasksResponse, error) {
+
+	// Reading Visibility tasks need to be quorum level consistent, otherwise we could lose task
+	query := d.session.Query(templateGetVisibilityTasksQuery,
+		d.shardID,
+		rowTypeVisibilityTask,
+		rowTypeVisibilityTaskNamespaceID,
+		rowTypeVisibilityTaskWorkflowID,
+		rowTypeVisibilityTaskRunID,
+		defaultVisibilityTimestamp,
+		request.ReadLevel,
+		request.MaxReadLevel,
+	).PageSize(request.BatchSize).PageState(request.NextPageToken)
+
+	iter := query.Iter()
+	if iter == nil {
+		return nil, serviceerror.NewInternal("GetVisibilityTasks operation failed.  Not able to create query iterator.")
+	}
+
+	response := &p.GetVisibilityTasksResponse{}
+	var data []byte
+	var encoding string
+
+	for iter.Scan(&data, &encoding) {
+		t, err := serialization.VisibilityTaskInfoFromBlob(data, encoding)
+		if err != nil {
+			return nil, convertCommonErrors("GetVisibilityTasks", err)
+		}
+
+		response.Tasks = append(response.Tasks, t)
+	}
+	nextPageToken := iter.PageState()
+	response.NextPageToken = make([]byte, len(nextPageToken))
+	copy(response.NextPageToken, nextPageToken)
+
+	if err := iter.Close(); err != nil {
+		return nil, convertCommonErrors("GetVisibilityTasks", err)
+	}
+
+	return response, nil
+}
+
 func (d *cassandraPersistence) GetReplicationTask(request *p.GetReplicationTaskRequest) (*p.GetReplicationTaskResponse, error) {
 	shardID := d.shardID
 	taskID := request.TaskID
@@ -2059,6 +2168,50 @@ func (d *cassandraPersistence) RangeCompleteTransferTask(request *p.RangeComplet
 			return serviceerror.NewResourceExhausted(fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err))
 		}
 		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err))
+	}
+
+	return nil
+}
+
+func (d *cassandraPersistence) CompleteVisibilityTask(request *p.CompleteVisibilityTaskRequest) error {
+	query := d.session.Query(templateCompleteVisibilityTaskQuery,
+		d.shardID,
+		rowTypeVisibilityTask,
+		rowTypeVisibilityTaskNamespaceID,
+		rowTypeVisibilityTaskWorkflowID,
+		rowTypeVisibilityTaskRunID,
+		defaultVisibilityTimestamp,
+		request.TaskID)
+
+	err := query.Exec()
+	if err != nil {
+		if isThrottlingError(err) {
+			return serviceerror.NewResourceExhausted(fmt.Sprintf("CompleteVisibilityTask operation failed. Error: %v", err))
+		}
+		return serviceerror.NewInternal(fmt.Sprintf("CompleteVisibilityTask operation failed. Error: %v", err))
+	}
+
+	return nil
+}
+
+func (d *cassandraPersistence) RangeCompleteVisibilityTask(request *p.RangeCompleteVisibilityTaskRequest) error {
+	query := d.session.Query(templateRangeCompleteVisibilityTaskQuery,
+		d.shardID,
+		rowTypeVisibilityTask,
+		rowTypeVisibilityTaskNamespaceID,
+		rowTypeVisibilityTaskWorkflowID,
+		rowTypeVisibilityTaskRunID,
+		defaultVisibilityTimestamp,
+		request.ExclusiveBeginTaskID,
+		request.InclusiveEndTaskID,
+	)
+
+	err := query.Exec()
+	if err != nil {
+		if isThrottlingError(err) {
+			return serviceerror.NewResourceExhausted(fmt.Sprintf("RangeCompleteVisibilityTask operation failed. Error: %v", err))
+		}
+		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteVisibilityTask operation failed. Error: %v", err))
 	}
 
 	return nil

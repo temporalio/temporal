@@ -37,8 +37,6 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/server/common/convert"
-
 	"github.com/cch123/elasticsql"
 	"github.com/olivere/elastic"
 	"github.com/valyala/fastjson"
@@ -49,26 +47,37 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	indexerspb "go.temporal.io/server/api/indexer/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
-	es "go.temporal.io/server/common/elasticsearch"
+	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
-	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/service/config"
 )
 
 const (
 	esPersistenceName = "elasticsearch"
+
+	esDocIDDelimiter = "~"
+	esDocType        = "_doc"
+
+	versionTypeExternal = "external"
 )
 
 type (
 	esVisibilityStore struct {
-		esClient es.Client
-		index    string
-		producer messaging.Producer
-		logger   log.Logger
-		config   *config.VisibilityConfig
+		esClient      elasticsearch.Client
+		index         string
+		producer      messaging.Producer
+		logger        log.Logger
+		config        *config.VisibilityConfig
+		metricsClient metrics.Client
+		esProcessor   ESProcessor
+		esIndexName   string
 	}
 
 	esVisibilityPageToken struct {
@@ -97,20 +106,29 @@ type (
 	}
 )
 
-var _ p.VisibilityStore = (*esVisibilityStore)(nil)
+var _ persistence.VisibilityStore = (*esVisibilityStore)(nil)
 
 var (
 	oneMilliSecondInNano = int64(1000)
 )
 
 // NewElasticSearchVisibilityStore create a visibility store connecting to ElasticSearch
-func NewElasticSearchVisibilityStore(esClient es.Client, index string, producer messaging.Producer, config *config.VisibilityConfig, logger log.Logger) p.VisibilityStore {
+func NewElasticSearchVisibilityStore(esClient elasticsearch.Client, index string, producer messaging.Producer, config *config.VisibilityConfig, logger log.Logger, metricsClient metrics.Client) persistence.VisibilityStore {
+	esProcessor, err := NewESProcessorAndStart(dynamicConfig, esClient, logger, metricsClient)
+	if err != nil {
+		logger.Info("", tag.LifeCycleStartFailed, tag.Error(err))
+		return err
+	}
+
 	return &esVisibilityStore{
-		esClient: esClient,
-		index:    index,
-		producer: producer,
-		logger:   logger.WithTags(tag.ComponentESVisibilityManager),
-		config:   config,
+		esClient:      esClient,
+		index:         index,
+		producer:      producer,
+		logger:        logger.WithTags(tag.ComponentESVisibilityManager),
+		config:        config,
+		metricsClient: metricsClient,
+		esProcessor:   esProcessor,
+		esIndexName:   exIndexName,
 	}
 }
 
@@ -120,7 +138,8 @@ func (v *esVisibilityStore) GetName() string {
 	return esPersistenceName
 }
 
-func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
+// Deprecated.
+func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *persistence.InternalRecordWorkflowExecutionStartedRequest) error {
 	v.checkProducer()
 	msg := getVisibilityMessage(
 		request.NamespaceID,
@@ -139,7 +158,8 @@ func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRe
 	return v.producer.Publish(msg)
 }
 
-func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
+// Deprecated.
+func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *persistence.InternalRecordWorkflowExecutionClosedRequest) error {
 	v.checkProducer()
 	msg := getVisibilityMessageForCloseExecution(
 		request.NamespaceID,
@@ -160,7 +180,8 @@ func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRec
 	return v.producer.Publish(msg)
 }
 
-func (v *esVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWorkflowExecutionRequest) error {
+// Deprecated.
+func (v *esVisibilityStore) UpsertWorkflowExecution(request *persistence.InternalUpsertWorkflowExecutionRequest) error {
 	v.checkProducer()
 	msg := getVisibilityMessage(
 		request.NamespaceID,
@@ -179,20 +200,81 @@ func (v *esVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWor
 	return v.producer.Publish(msg)
 }
 
+func (v *esVisibilityStore) UpsertWorkflowExecutionV2(request *persistence.InternalUpsertWorkflowExecutionRequestV2) error {
+	docID := request.WorkflowID + esDocIDDelimiter + request.RunID
+
+	doc := v.generateESDoc(request)
+	req := elastic.NewBulkIndexRequest().
+		Index(v.esIndexName).
+		Type(esDocType).
+		Id(docID).
+		VersionType(versionTypeExternal).
+		Version(request.TaskID).
+		Doc(doc)
+
+	v.esProcessor.Add(req)
+	return nil
+}
+
+func (p *esVisibilityStore) generateESDoc(request *persistence.InternalUpsertWorkflowExecutionRequestV2) map[string]interface{} {
+	doc := make(map[string]interface{})
+	doc[definition.NamespaceID] = request.NamespaceID
+	doc[definition.WorkflowID] = request.WorkflowID
+	doc[definition.RunID] = request.RunID
+	doc[definition.WorkflowType] = request.WorkflowTypeName
+	doc[definition.StartTime] = request.StartTimestamp
+	doc[definition.ExecutionTime] = request.ExecutionTimestamp
+	doc[definition.CloseTime] = request.CloseTimestamp
+	doc[definition.ExecutionStatus] = request.Status
+	doc[definition.HistoryLength] = request.HistoryLength
+	doc[definition.Memo] = request.Memo
+	doc[definition.TaskQueue] = request.TaskQueue
+
+	attr := make(map[string]interface{})
+	for fieldName, fieldPayload := range request.SearchAttributes {
+		if !p.isValidFieldToES(fieldName) {
+			p.logger.Error("Unregistered field.", tag.ESField(fieldName))
+			p.metricsClient.IncCounter(metrics.IndexProcessorScope, metrics.IndexProcessorCorruptedData)
+			continue
+		}
+		var fieldValue interface{}
+		// This will work only if search attributes are serialized using JSON.
+		err := payload.Decode(fieldPayload, &fieldValue)
+		if err != nil {
+			p.logger.Error("Error when decode search attribute payload.", tag.Error(err), tag.ESField(fieldName))
+			p.metricsClient.IncCounter(metrics.IndexProcessorScope, metrics.IndexProcessorCorruptedData)
+		}
+		attr[fieldName] = fieldValue
+	}
+	doc[definition.Attr] = attr
+
+	return doc
+}
+
+func (p *esVisibilityStore) isValidFieldToES(field string) bool {
+	if _, ok := p.config.ValidSearchAttributes()[field]; ok {
+		return true
+	}
+	if field == definition.Memo || field == definition.KafkaKey || field == definition.Encoding {
+		return true
+	}
+	return false
+}
+
 func (v *esVisibilityStore) ListOpenWorkflowExecutions(
-	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+	request *persistence.ListWorkflowExecutionsRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(elasticsearch.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
 	searchResult, err := v.getSearchResult(request, token, query, true)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutions failed. Error: %v", err))
 	}
 
-	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
 		startTime := rec.StartTime.UnixNano()
 		return request.EarliestStartTime <= startTime && startTime <= request.LatestStartTime
 	}
@@ -201,20 +283,20 @@ func (v *esVisibilityStore) ListOpenWorkflowExecutions(
 }
 
 func (v *esVisibilityStore) ListClosedWorkflowExecutions(
-	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+	request *persistence.ListWorkflowExecutionsRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
-	executionStatusQuery := elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+	executionStatusQuery := elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(elasticsearch.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
 	searchResult, err := v.getSearchResult(request, token, executionStatusQuery, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutions failed. Error: %v", err))
 	}
 
-	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
 		closeTime := rec.CloseTime.UnixNano()
 		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
 	}
@@ -223,21 +305,21 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutions(
 }
 
 func (v *esVisibilityStore) ListOpenWorkflowExecutionsByType(
-	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+	request *persistence.ListWorkflowExecutionsByTypeRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.WorkflowType, request.WorkflowTypeName)).
-		Must(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(elasticsearch.WorkflowType, request.WorkflowTypeName)).
+		Must(elastic.NewMatchQuery(elasticsearch.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByType failed. Error: %v", err))
 	}
 
-	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
 		startTime := rec.StartTime.UnixNano()
 		return request.EarliestStartTime <= startTime && startTime <= request.LatestStartTime
 	}
@@ -246,21 +328,21 @@ func (v *esVisibilityStore) ListOpenWorkflowExecutionsByType(
 }
 
 func (v *esVisibilityStore) ListClosedWorkflowExecutionsByType(
-	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+	request *persistence.ListWorkflowExecutionsByTypeRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.WorkflowType, request.WorkflowTypeName)).
-		MustNot(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(elasticsearch.WorkflowType, request.WorkflowTypeName)).
+		MustNot(elastic.NewMatchQuery(elasticsearch.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByType failed. Error: %v", err))
 	}
 
-	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
 		closeTime := rec.CloseTime.UnixNano()
 		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
 	}
@@ -269,21 +351,21 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByType(
 }
 
 func (v *esVisibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
-	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+	request *persistence.ListWorkflowExecutionsByWorkflowIDRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.WorkflowID, request.WorkflowID)).
-		Must(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(elasticsearch.WorkflowID, request.WorkflowID)).
+		Must(elastic.NewMatchQuery(elasticsearch.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID failed. Error: %v", err))
 	}
 
-	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
 		startTime := rec.StartTime.UnixNano()
 		return request.EarliestStartTime <= startTime && startTime <= request.LatestStartTime
 	}
@@ -292,21 +374,21 @@ func (v *esVisibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 }
 
 func (v *esVisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
-	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+	request *persistence.ListWorkflowExecutionsByWorkflowIDRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.WorkflowID, request.WorkflowID)).
-		MustNot(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(elasticsearch.WorkflowID, request.WorkflowID)).
+		MustNot(elastic.NewMatchQuery(elasticsearch.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID failed. Error: %v", err))
 	}
 
-	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
 		closeTime := rec.CloseTime.UnixNano()
 		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
 	}
@@ -315,20 +397,20 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 }
 
 func (v *esVisibilityStore) ListClosedWorkflowExecutionsByStatus(
-	request *p.ListClosedWorkflowExecutionsByStatusRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+	request *persistence.ListClosedWorkflowExecutionsByStatusRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.ExecutionStatus, int32(request.Status)))
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(elasticsearch.ExecutionStatus, int32(request.Status)))
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %v", err))
 	}
 
-	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
 		closeTime := rec.CloseTime.UnixNano()
 		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
 	}
@@ -337,20 +419,20 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByStatus(
 }
 
 func (v *esVisibilityStore) GetClosedWorkflowExecution(
-	request *p.GetClosedWorkflowExecutionRequest) (*p.InternalGetClosedWorkflowExecutionResponse, error) {
+	request *persistence.GetClosedWorkflowExecutionRequest) (*persistence.InternalGetClosedWorkflowExecutionResponse, error) {
 
-	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
-	executionStatusQuery := elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
-	matchWorkflowIDQuery := elastic.NewMatchQuery(es.WorkflowID, request.Execution.GetWorkflowId())
+	matchNamespaceQuery := elastic.NewMatchQuery(elasticsearch.NamespaceID, request.NamespaceID)
+	executionStatusQuery := elastic.NewMatchQuery(elasticsearch.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	matchWorkflowIDQuery := elastic.NewMatchQuery(elasticsearch.WorkflowID, request.Execution.GetWorkflowId())
 	boolQuery := elastic.NewBoolQuery().Must(matchNamespaceQuery).MustNot(executionStatusQuery).Must(matchWorkflowIDQuery)
 	rid := request.Execution.GetRunId()
 	if rid != "" {
-		matchRunIDQuery := elastic.NewMatchQuery(es.RunID, rid)
+		matchRunIDQuery := elastic.NewMatchQuery(elasticsearch.RunID, rid)
 		boolQuery = boolQuery.Must(matchRunIDQuery)
 	}
 
 	ctx := context.Background()
-	params := &es.SearchParameters{
+	params := &elasticsearch.SearchParameters{
 		Index: v.index,
 		Query: boolQuery,
 	}
@@ -359,7 +441,7 @@ func (v *esVisibilityStore) GetClosedWorkflowExecution(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetClosedWorkflowExecution failed. Error: %v", err))
 	}
 
-	response := &p.InternalGetClosedWorkflowExecutionResponse{}
+	response := &persistence.InternalGetClosedWorkflowExecutionResponse{}
 	actualHits := searchResult.Hits.Hits
 	if len(actualHits) == 0 {
 		return response, nil
@@ -369,7 +451,7 @@ func (v *esVisibilityStore) GetClosedWorkflowExecution(
 	return response, nil
 }
 
-func (v *esVisibilityStore) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
+func (v *esVisibilityStore) DeleteWorkflowExecution(request *persistence.VisibilityDeleteWorkflowExecutionRequest) error {
 	v.checkProducer()
 	msg := getVisibilityMessageForDeletion(
 		request.NamespaceID,
@@ -381,7 +463,7 @@ func (v *esVisibilityStore) DeleteWorkflowExecution(request *p.VisibilityDeleteW
 }
 
 func (v *esVisibilityStore) ListWorkflowExecutions(
-	request *p.ListWorkflowExecutionsRequestV2) (*p.InternalListWorkflowExecutionsResponse, error) {
+	request *persistence.ListWorkflowExecutionsRequestV2) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
 	checkPageSize(request)
 
@@ -405,7 +487,7 @@ func (v *esVisibilityStore) ListWorkflowExecutions(
 }
 
 func (v *esVisibilityStore) ScanWorkflowExecutions(
-	request *p.ListWorkflowExecutionsRequestV2) (*p.InternalListWorkflowExecutionsResponse, error) {
+	request *persistence.ListWorkflowExecutionsRequestV2) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
 	checkPageSize(request)
 
@@ -416,7 +498,7 @@ func (v *esVisibilityStore) ScanWorkflowExecutions(
 
 	ctx := context.Background()
 	var searchResult *elastic.SearchResult
-	var scrollService es.ScrollService
+	var scrollService elasticsearch.ScrollService
 	if len(token.ScrollID) == 0 { // first call
 		var queryDSL string
 		queryDSL, err = getESQueryDSLForScan(request)
@@ -439,8 +521,8 @@ func (v *esVisibilityStore) ScanWorkflowExecutions(
 	return v.getScanWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, searchResult.ScrollId, isLastPage)
 }
 
-func (v *esVisibilityStore) CountWorkflowExecutions(request *p.CountWorkflowExecutionsRequest) (
-	*p.CountWorkflowExecutionsResponse, error) {
+func (v *esVisibilityStore) CountWorkflowExecutions(request *persistence.CountWorkflowExecutionsRequest) (
+	*persistence.CountWorkflowExecutionsResponse, error) {
 
 	queryDSL, err := getESQueryDSLForCount(request)
 	if err != nil {
@@ -453,7 +535,7 @@ func (v *esVisibilityStore) CountWorkflowExecutions(request *p.CountWorkflowExec
 		return nil, serviceerror.NewInternal(fmt.Sprintf("CountWorkflowExecutions failed. Error: %v", err))
 	}
 
-	response := &p.CountWorkflowExecutionsResponse{Count: count}
+	response := &persistence.CountWorkflowExecutionsResponse{Count: count}
 	return response, nil
 }
 
@@ -486,7 +568,7 @@ var (
 	}
 )
 
-func getESQueryDSLForScan(request *p.ListWorkflowExecutionsRequestV2) (string, error) {
+func getESQueryDSLForScan(request *persistence.ListWorkflowExecutionsRequestV2) (string, error) {
 	sql := getSQLFromListRequest(request)
 	dsl, err := getCustomizedDSLFromSQL(sql, request.NamespaceID)
 	if err != nil {
@@ -498,7 +580,7 @@ func getESQueryDSLForScan(request *p.ListWorkflowExecutionsRequestV2) (string, e
 	return dsl.String(), nil
 }
 
-func getESQueryDSLForCount(request *p.CountWorkflowExecutionsRequest) (string, error) {
+func getESQueryDSLForCount(request *persistence.CountWorkflowExecutionsRequest) (string, error) {
 	sql := getSQLFromCountRequest(request)
 	dsl, err := getCustomizedDSLFromSQL(sql, request.NamespaceID)
 	if err != nil {
@@ -513,7 +595,7 @@ func getESQueryDSLForCount(request *p.CountWorkflowExecutionsRequest) (string, e
 	return dsl.String(), nil
 }
 
-func (v *esVisibilityStore) getESQueryDSL(request *p.ListWorkflowExecutionsRequestV2, token *esVisibilityPageToken) (string, error) {
+func (v *esVisibilityStore) getESQueryDSL(request *persistence.ListWorkflowExecutionsRequestV2, token *esVisibilityPageToken) (string, error) {
 	sql := getSQLFromListRequest(request)
 	dsl, err := getCustomizedDSLFromSQL(sql, request.NamespaceID)
 	if err != nil {
@@ -540,7 +622,7 @@ func (v *esVisibilityStore) getESQueryDSL(request *p.ListWorkflowExecutionsReque
 	return dslStr, nil
 }
 
-func getSQLFromListRequest(request *p.ListWorkflowExecutionsRequestV2) string {
+func getSQLFromListRequest(request *persistence.ListWorkflowExecutionsRequestV2) string {
 	var sql string
 	query := strings.TrimSpace(request.Query)
 	if query == "" {
@@ -553,7 +635,7 @@ func getSQLFromListRequest(request *p.ListWorkflowExecutionsRequestV2) string {
 	return sql
 }
 
-func getSQLFromCountRequest(request *p.CountWorkflowExecutionsRequest) string {
+func getSQLFromCountRequest(request *persistence.CountWorkflowExecutionsRequest) string {
 	var sql string
 	if strings.TrimSpace(request.Query) == "" {
 		sql = "select * from dummy"
@@ -723,15 +805,15 @@ func (v *esVisibilityStore) getNextPageToken(token []byte) (*esVisibilityPageTok
 	return result, nil
 }
 
-func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsRequest, token *esVisibilityPageToken,
+func (v *esVisibilityStore) getSearchResult(request *persistence.ListWorkflowExecutionsRequest, token *esVisibilityPageToken,
 	boolQuery *elastic.BoolQuery, overStartTime bool) (*elastic.SearchResult, error) {
 
-	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
+	matchNamespaceQuery := elastic.NewMatchQuery(elasticsearch.NamespaceID, request.NamespaceID)
 	var rangeQuery *elastic.RangeQuery
 	if overStartTime {
-		rangeQuery = elastic.NewRangeQuery(es.StartTime)
+		rangeQuery = elastic.NewRangeQuery(elasticsearch.StartTime)
 	} else {
-		rangeQuery = elastic.NewRangeQuery(es.CloseTime)
+		rangeQuery = elastic.NewRangeQuery(elasticsearch.CloseTime)
 	}
 	// ElasticSearch v6 is unable to precisely compare time, have to manually add resolution 1ms to time range.
 	// Also has to use string instead of int64 to avoid data conversion issue,
@@ -756,18 +838,18 @@ func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsReq
 	query = query.Must(matchNamespaceQuery).Filter(rangeQuery)
 
 	ctx := context.Background()
-	params := &es.SearchParameters{
+	params := &elasticsearch.SearchParameters{
 		Index:    v.index,
 		Query:    query,
 		From:     token.From,
 		PageSize: request.PageSize,
 	}
 	if overStartTime {
-		params.Sorter = append(params.Sorter, elastic.NewFieldSort(es.StartTime).Desc())
+		params.Sorter = append(params.Sorter, elastic.NewFieldSort(elasticsearch.StartTime).Desc())
 	} else {
-		params.Sorter = append(params.Sorter, elastic.NewFieldSort(es.CloseTime).Desc())
+		params.Sorter = append(params.Sorter, elastic.NewFieldSort(elasticsearch.CloseTime).Desc())
 	}
-	params.Sorter = append(params.Sorter, elastic.NewFieldSort(es.RunID).Desc())
+	params.Sorter = append(params.Sorter, elastic.NewFieldSort(elasticsearch.RunID).Desc())
 
 	if shouldSearchAfter(token) {
 		params.SearchAfter = []interface{}{token.SortValue, token.TieBreaker}
@@ -778,13 +860,13 @@ func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsReq
 
 func (v *esVisibilityStore) getScanWorkflowExecutionsResponse(searchHits *elastic.SearchHits,
 	token *esVisibilityPageToken, pageSize int, scrollID string, isLastPage bool) (
-	*p.InternalListWorkflowExecutionsResponse, error) {
+	*persistence.InternalListWorkflowExecutionsResponse, error) {
 
-	response := &p.InternalListWorkflowExecutionsResponse{}
+	response := &persistence.InternalListWorkflowExecutionsResponse{}
 	actualHits := searchHits.Hits
 	numOfActualHits := len(actualHits)
 
-	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0)
+	response.Executions = make([]*persistence.VisibilityWorkflowExecutionInfo, 0)
 	for i := 0; i < numOfActualHits; i++ {
 		workflowExecutionInfo := v.convertSearchResultToVisibilityRecord(actualHits[i])
 		response.Executions = append(response.Executions, workflowExecutionInfo)
@@ -803,13 +885,13 @@ func (v *esVisibilityStore) getScanWorkflowExecutionsResponse(searchHits *elasti
 }
 
 func (v *esVisibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.SearchHits,
-	token *esVisibilityPageToken, pageSize int, isRecordValid func(rec *p.VisibilityWorkflowExecutionInfo) bool) (*p.InternalListWorkflowExecutionsResponse, error) {
+	token *esVisibilityPageToken, pageSize int, isRecordValid func(rec *persistence.VisibilityWorkflowExecutionInfo) bool) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
-	response := &p.InternalListWorkflowExecutionsResponse{}
+	response := &persistence.InternalListWorkflowExecutionsResponse{}
 	actualHits := searchHits.Hits
 	numOfActualHits := len(actualHits)
 
-	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0)
+	response.Executions = make([]*persistence.VisibilityWorkflowExecutionInfo, 0)
 	for i := 0; i < numOfActualHits; i++ {
 		workflowExecutionInfo := v.convertSearchResultToVisibilityRecord(actualHits[i])
 		if isRecordValid == nil || isRecordValid(workflowExecutionInfo) {
@@ -865,7 +947,7 @@ func (v *esVisibilityStore) serializePageToken(token *esVisibilityPageToken) ([]
 	return data, nil
 }
 
-func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.SearchHit) *p.VisibilityWorkflowExecutionInfo {
+func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.SearchHit) *persistence.VisibilityWorkflowExecutionInfo {
 	var source *visibilityRecord
 	err := json.Unmarshal(*hit.Source, &source)
 	if err != nil { // log and skip error
@@ -874,13 +956,13 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 		return nil
 	}
 
-	record := &p.VisibilityWorkflowExecutionInfo{
+	record := &persistence.VisibilityWorkflowExecutionInfo{
 		WorkflowID:       source.WorkflowID,
 		RunID:            source.RunID,
 		TypeName:         source.WorkflowType,
 		StartTime:        time.Unix(0, source.StartTime).UTC(),
 		ExecutionTime:    time.Unix(0, source.ExecutionTime).UTC(),
-		Memo:             p.NewDataBlob(source.Memo, source.Encoding),
+		Memo:             persistence.NewDataBlob(source.Memo, source.Encoding),
 		TaskQueue:        source.TaskQueue,
 		SearchAttributes: source.Attr,
 		Status:           source.ExecutionStatus,
@@ -900,21 +982,21 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 
 	msgType := enumsspb.MESSAGE_TYPE_INDEX
 	fields := map[string]*indexerspb.Field{
-		es.WorkflowType:    {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: workflowTypeName}},
-		es.StartTime:       {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: startTimeUnixNano}},
-		es.ExecutionTime:   {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: executionTimeUnixNano}},
-		es.TaskQueue:       {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: taskQueue}},
-		es.ExecutionStatus: {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: int64(status)}},
+		elasticsearch.WorkflowType:    {Type: elasticsearch.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: workflowTypeName}},
+		elasticsearch.StartTime:       {Type: elasticsearch.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: startTimeUnixNano}},
+		elasticsearch.ExecutionTime:   {Type: elasticsearch.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: executionTimeUnixNano}},
+		elasticsearch.TaskQueue:       {Type: elasticsearch.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: taskQueue}},
+		elasticsearch.ExecutionStatus: {Type: elasticsearch.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: int64(status)}},
 	}
 	if len(memo) != 0 {
-		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
-		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: memoEncoding.String()}}
+		fields[elasticsearch.Memo] = &indexerspb.Field{Type: elasticsearch.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
+		fields[elasticsearch.Encoding] = &indexerspb.Field{Type: elasticsearch.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: memoEncoding.String()}}
 	}
 	for k, v := range searchAttributes {
 		// TODO: current implementation assumes that payload is JSON.
 		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
 		data := v.GetData() // content must always be JSON
-		fields[k] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: data}}
+		fields[k] = &indexerspb.Field{Type: elasticsearch.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: data}}
 	}
 
 	msg := &indexerspb.Message{
@@ -935,23 +1017,23 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 
 	msgType := enumsspb.MESSAGE_TYPE_INDEX
 	fields := map[string]*indexerspb.Field{
-		es.WorkflowType:    {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: workflowTypeName}},
-		es.StartTime:       {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: startTimeUnixNano}},
-		es.ExecutionTime:   {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: executionTimeUnixNano}},
-		es.CloseTime:       {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: endTimeUnixNano}},
-		es.ExecutionStatus: {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: int64(status)}},
-		es.HistoryLength:   {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: historyLength}},
-		es.TaskQueue:       {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: taskQueue}},
+		elasticsearch.WorkflowType:    {Type: elasticsearch.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: workflowTypeName}},
+		elasticsearch.StartTime:       {Type: elasticsearch.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: startTimeUnixNano}},
+		elasticsearch.ExecutionTime:   {Type: elasticsearch.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: executionTimeUnixNano}},
+		elasticsearch.CloseTime:       {Type: elasticsearch.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: endTimeUnixNano}},
+		elasticsearch.ExecutionStatus: {Type: elasticsearch.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: int64(status)}},
+		elasticsearch.HistoryLength:   {Type: elasticsearch.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: historyLength}},
+		elasticsearch.TaskQueue:       {Type: elasticsearch.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: taskQueue}},
 	}
 	if len(memo) != 0 {
-		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
-		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: encoding.String()}}
+		fields[elasticsearch.Memo] = &indexerspb.Field{Type: elasticsearch.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
+		fields[elasticsearch.Encoding] = &indexerspb.Field{Type: elasticsearch.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: encoding.String()}}
 	}
 	for k, v := range searchAttributes {
 		// TODO: current implementation assumes that payload is JSON.
 		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
 		data := v.GetData() // content must always be JSON
-		fields[k] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: data}}
+		fields[k] = &indexerspb.Field{Type: elasticsearch.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: data}}
 	}
 
 	msg := &indexerspb.Message{
@@ -977,7 +1059,7 @@ func getVisibilityMessageForDeletion(namespaceID, workflowID, runID string, docV
 	return msg
 }
 
-func checkPageSize(request *p.ListWorkflowExecutionsRequestV2) {
+func checkPageSize(request *persistence.ListWorkflowExecutionsRequestV2) {
 	if request.PageSize == 0 {
 		request.PageSize = 1000
 	}

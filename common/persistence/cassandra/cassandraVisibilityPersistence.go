@@ -296,6 +296,11 @@ func (v *cassandraVisibilityPersistence) UpsertWorkflowExecution(
 	return nil
 }
 
+func (v *cassandraVisibilityPersistence) UpsertWorkflowExecutionV2(
+	_ *p.InternalUpsertWorkflowExecutionRequestV2) error {
+	return nil
+}
+
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 	request *p.ListWorkflowExecutionsRequest,
 ) (*p.InternalListWorkflowExecutionsResponse, error) {

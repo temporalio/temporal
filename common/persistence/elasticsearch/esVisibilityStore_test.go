@@ -34,6 +34,7 @@ import (
 	"testing"
 
 	"go.temporal.io/server/common/convert"
+	metricsmocks "go.temporal.io/server/common/metrics/mocks"
 
 	"github.com/olivere/elastic"
 	"github.com/stretchr/testify/mock"
@@ -61,9 +62,10 @@ type ESVisibilitySuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
-	visibilityStore *esVisibilityStore
-	mockESClient    *esMocks.Client
-	mockProducer    *mocks.KafkaProducer
+	visibilityStore   *esVisibilityStore
+	mockESClient      *esMocks.Client
+	mockProducer      *mocks.KafkaProducer
+	mockMetricsClient *metricsmocks.Client
 }
 
 var (
@@ -112,8 +114,10 @@ func (s *ESVisibilitySuite) SetupTest() {
 		ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
 	}
 
+	s.mockMetricsClient = &metricsmocks.Client{}
+
 	s.mockProducer = &mocks.KafkaProducer{}
-	mgr := NewElasticSearchVisibilityStore(s.mockESClient, testIndex, s.mockProducer, config, loggerimpl.NewNopLogger())
+	mgr := NewElasticSearchVisibilityStore(s.mockESClient, testIndex, s.mockProducer, config, loggerimpl.NewNopLogger(), s.mockMetricsClient)
 	s.visibilityStore = mgr.(*esVisibilityStore)
 }
 

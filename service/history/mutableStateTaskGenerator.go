@@ -503,7 +503,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowSearchAttrTasks(
 		return nil
 	}
 
-	r.mutableState.AddVisibilityTasks(&persistence.UpsertWorkflowSearchAttributesVisibilityTask{
+	r.mutableState.AddVisibilityTasks(&persistence.UpsertExecutionVisibilityTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		Version:             currentVersion, // task processing does not check this version

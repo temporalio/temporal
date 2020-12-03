@@ -96,6 +96,20 @@ func (p *visibilityMetricsClient) UpsertWorkflowExecution(request *p.UpsertWorkf
 	return err
 }
 
+func (p *visibilityMetricsClient) UpsertWorkflowExecutionV2(request *p.UpsertWorkflowExecutionRequestV2) error {
+	p.metricClient.IncCounter(metrics.ElasticsearchUpsertWorkflowExecutionScope, metrics.ElasticsearchRequests)
+
+	sw := p.metricClient.StartTimer(metrics.ElasticsearchUpsertWorkflowExecutionScope, metrics.ElasticsearchLatency)
+	err := p.persistence.UpsertWorkflowExecutionV2(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.ElasticsearchUpsertWorkflowExecutionScope, err)
+	}
+
+	return err
+}
+
 func (p *visibilityMetricsClient) ListOpenWorkflowExecutions(request *p.ListWorkflowExecutionsRequest) (*p.ListWorkflowExecutionsResponse, error) {
 	p.metricClient.IncCounter(metrics.ElasticsearchListOpenWorkflowExecutionsScope, metrics.ElasticsearchRequests)
 

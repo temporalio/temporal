@@ -122,6 +122,24 @@ type Config struct {
 	TransferProcessorEnablePriorityTaskProcessor         dynamicconfig.BoolPropertyFn
 	TransferProcessorVisibilityArchivalTimeLimit         dynamicconfig.DurationPropertyFn
 
+	// VisibilityQueueProcessor settings
+	VisibilityTaskBatchSize                                dynamicconfig.IntPropertyFn
+	VisibilityTaskWorkerCount                              dynamicconfig.IntPropertyFn
+	VisibilityTaskMaxRetryCount                            dynamicconfig.IntPropertyFn
+	VisibilityProcessorCompleteTaskFailureRetryCount       dynamicconfig.IntPropertyFn
+	VisibilityProcessorFailoverMaxPollRPS                  dynamicconfig.IntPropertyFn
+	VisibilityProcessorMaxPollRPS                          dynamicconfig.IntPropertyFn
+	VisibilityProcessorMaxPollInterval                     dynamicconfig.DurationPropertyFn
+	VisibilityProcessorMaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
+	VisibilityProcessorUpdateAckInterval                   dynamicconfig.DurationPropertyFn
+	VisibilityProcessorUpdateAckIntervalJitterCoefficient  dynamicconfig.FloatPropertyFn
+	VisibilityProcessorCompleteTaskInterval                dynamicconfig.DurationPropertyFn
+	VisibilityProcessorRedispatchInterval                  dynamicconfig.DurationPropertyFn
+	VisibilityProcessorRedispatchIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+	VisibilityProcessorMaxRedispatchQueueSize              dynamicconfig.IntPropertyFn
+	VisibilityProcessorEnablePriorityTaskProcessor         dynamicconfig.BoolPropertyFn
+	VisibilityProcessorVisibilityArchivalTimeLimit         dynamicconfig.DurationPropertyFn
+
 	// ReplicatorQueueProcessor settings
 	ReplicatorTaskBatchSize                                dynamicconfig.IntPropertyFn
 	ReplicatorTaskWorkerCount                              dynamicconfig.IntPropertyFn
@@ -316,6 +334,23 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		TransferProcessorMaxRedispatchQueueSize:              dc.GetIntProperty(dynamicconfig.TransferProcessorMaxRedispatchQueueSize, 10000),
 		TransferProcessorEnablePriorityTaskProcessor:         dc.GetBoolProperty(dynamicconfig.TransferProcessorEnablePriorityTaskProcessor, false),
 		TransferProcessorVisibilityArchivalTimeLimit:         dc.GetDurationProperty(dynamicconfig.TransferProcessorVisibilityArchivalTimeLimit, 200*time.Millisecond),
+
+		VisibilityTaskBatchSize:                                dc.GetIntProperty(dynamicconfig.VisibilityTaskBatchSize, 100),
+		VisibilityProcessorFailoverMaxPollRPS:                  dc.GetIntProperty(dynamicconfig.VisibilityProcessorFailoverMaxPollRPS, 1),
+		VisibilityProcessorMaxPollRPS:                          dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxPollRPS, 20),
+		VisibilityTaskWorkerCount:                              dc.GetIntProperty(dynamicconfig.VisibilityTaskWorkerCount, 10),
+		VisibilityTaskMaxRetryCount:                            dc.GetIntProperty(dynamicconfig.VisibilityTaskMaxRetryCount, 100),
+		VisibilityProcessorCompleteTaskFailureRetryCount:       dc.GetIntProperty(dynamicconfig.VisibilityProcessorCompleteVisibilityFailureRetryCount, 10),
+		VisibilityProcessorMaxPollInterval:                     dc.GetDurationProperty(dynamicconfig.VisibilityProcessorMaxPollInterval, 1*time.Minute),
+		VisibilityProcessorMaxPollIntervalJitterCoefficient:    dc.GetFloat64Property(dynamicconfig.VisibilityProcessorMaxPollIntervalJitterCoefficient, 0.15),
+		VisibilityProcessorUpdateAckInterval:                   dc.GetDurationProperty(dynamicconfig.VisibilityProcessorUpdateAckInterval, 30*time.Second),
+		VisibilityProcessorUpdateAckIntervalJitterCoefficient:  dc.GetFloat64Property(dynamicconfig.VisibilityProcessorUpdateAckIntervalJitterCoefficient, 0.15),
+		VisibilityProcessorCompleteTaskInterval:                dc.GetDurationProperty(dynamicconfig.VisibilityProcessorCompleteTaskInterval, 60*time.Second),
+		VisibilityProcessorRedispatchInterval:                  dc.GetDurationProperty(dynamicconfig.VisibilityProcessorRedispatchInterval, 5*time.Second),
+		VisibilityProcessorRedispatchIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.VisibilityProcessorRedispatchIntervalJitterCoefficient, 0.15),
+		VisibilityProcessorMaxRedispatchQueueSize:              dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxRedispatchQueueSize, 10000),
+		VisibilityProcessorEnablePriorityTaskProcessor:         dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnablePriorityTaskProcessor, false),
+		VisibilityProcessorVisibilityArchivalTimeLimit:         dc.GetDurationProperty(dynamicconfig.VisibilityProcessorVisibilityArchivalTimeLimit, 200*time.Millisecond),
 
 		ReplicatorTaskBatchSize:                                dc.GetIntProperty(dynamicconfig.ReplicatorTaskBatchSize, 100),
 		ReplicatorTaskWorkerCount:                              dc.GetIntProperty(dynamicconfig.ReplicatorTaskWorkerCount, 10),

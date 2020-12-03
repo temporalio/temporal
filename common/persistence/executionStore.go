@@ -552,6 +552,31 @@ func (m *executionManagerImpl) RangeCompleteTransferTask(
 	return m.persistence.RangeCompleteTransferTask(request)
 }
 
+// Visibility task related methods
+func (m *executionManagerImpl) GetVisibilityTask(
+	request *GetVisibilityTaskRequest,
+) (*GetVisibilityTaskResponse, error) {
+	return m.persistence.GetVisibilityTask(request)
+}
+
+func (m *executionManagerImpl) GetVisibilityTasks(
+	request *GetVisibilityTasksRequest,
+) (*GetVisibilityTasksResponse, error) {
+	return m.persistence.GetVisibilityTasks(request)
+}
+
+func (m *executionManagerImpl) CompleteVisibilityTask(
+	request *CompleteVisibilityTaskRequest,
+) error {
+	return m.persistence.CompleteVisibilityTask(request)
+}
+
+func (m *executionManagerImpl) RangeCompleteVisibilityTask(
+	request *RangeCompleteVisibilityTaskRequest,
+) error {
+	return m.persistence.RangeCompleteVisibilityTask(request)
+}
+
 // Replication task related methods
 func (m *executionManagerImpl) GetReplicationTask(
 	request *GetReplicationTaskRequest,

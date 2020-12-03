@@ -40,7 +40,7 @@ import (
 func NewESVisibilityManager(indexName string, esClient es.Client, config *config.VisibilityConfig,
 	producer messaging.Producer, metricsClient metrics.Client, log log.Logger) p.VisibilityManager {
 
-	visibilityFromESStore := NewElasticSearchVisibilityStore(esClient, indexName, producer, config, log)
+	visibilityFromESStore := NewElasticSearchVisibilityStore(esClient, indexName, producer, config, log, metricsClient)
 	visibilityFromES := p.NewVisibilityManagerImpl(visibilityFromESStore, log)
 
 	if config != nil {
