@@ -74,9 +74,9 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(
 		&s.frontendClientConfig,
 		func() (*tls.Config, error) {
-			return newClientTLSConfig(s.internodeCertProvider, s.frontendCertProvider)
+			return newClientTLSConfig(s.frontendCertProvider, s.frontendCertProvider)
 		},
-		s.internodeCertProvider.GetSettings().IsEnabled(),
+		s.frontendCertProvider.GetSettings().IsEnabled(),
 	)
 }
 
