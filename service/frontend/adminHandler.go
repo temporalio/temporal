@@ -443,8 +443,11 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	size := rawHistoryResponse.Size
 	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
 	// namespaces along with the individual namespaces stats
-	adh.GetMetricsClient().RecordTimer(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.HistorySize, time.Duration(size))
-	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
+	adh.GetMetricsClient().
+		Scope(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
+		RecordTimer(metrics.HistorySize, time.Duration(size))
+	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
+		RecordTimer(metrics.HistorySize, time.Duration(size))
 
 	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,

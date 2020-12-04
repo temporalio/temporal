@@ -24,7 +24,9 @@
 
 package metrics
 
-import "github.com/uber-go/tally"
+import (
+	"github.com/uber-go/tally"
+)
 
 // types used/defined by the package
 type (
