@@ -505,7 +505,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		namespaceID,
 		request.GetWorkflowId(),
 		"",
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("StartWorkflowExecution"),
 	); err != nil {
@@ -1022,7 +1022,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(ctx context.Context, reques
 		namespaceId,
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondWorkflowTaskFailed"),
 	); err != nil {
@@ -1201,7 +1201,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		namespaceId,
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeat"),
 	); err != nil {
@@ -1308,7 +1308,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		namespaceID,
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeatById"),
 	); err != nil {
@@ -1404,7 +1404,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 		namespaceId,
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskCompleted"),
 	); err != nil {
@@ -1513,7 +1513,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		namespaceID,
 		taskToken.GetWorkflowId(),
 		runID,
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskCompletedById"),
 	); err != nil {
@@ -1614,7 +1614,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 		namespaceID,
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
 	); err != nil {
@@ -1711,7 +1711,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		namespaceID,
 		taskToken.GetWorkflowId(),
 		runID,
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
 	); err != nil {
@@ -1799,7 +1799,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		namespaceID,
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskCanceled"),
 	); err != nil {
@@ -1907,7 +1907,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		namespaceID,
 		taskToken.GetWorkflowId(),
 		runID,
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskCanceledById"),
 	); err != nil {
@@ -2055,7 +2055,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		namespaceID,
 		request.GetWorkflowExecution().GetWorkflowId(),
 		request.GetWorkflowExecution().GetRunId(),
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("SignalWorkflowExecution"),
 	); err != nil {
@@ -2173,7 +2173,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		namespaceID,
 		request.GetWorkflowId(),
 		"",
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("SignalWithStartWorkflowExecution"),
 	); err != nil {
@@ -2187,7 +2187,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		namespaceID,
 		request.GetWorkflowId(),
 		"",
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("SignalWithStartWorkflowExecution"),
 	); err != nil {
@@ -2868,7 +2868,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 		queryTaskToken.GetNamespaceId(),
 		"",
 		"",
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondQueryTaskCompleted"),
 	); err != nil {
@@ -2997,7 +2997,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		namespaceID,
 		request.GetExecution().GetWorkflowId(),
 		request.GetExecution().GetRunId(),
-		scope,
+		scope.Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("QueryWorkflow")); err != nil {
 		return nil, wh.error(err, scope)
@@ -3283,7 +3283,8 @@ func (wh *WorkflowHandler) getHistory(
 		return nil, nil, err
 	}
 
-	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
+	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
+		RecordTimer(metrics.HistorySize, time.Duration(size))
 
 	isLastPage := len(nextPageToken) == 0
 	if err := wh.verifyHistoryIsComplete(
