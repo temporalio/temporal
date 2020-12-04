@@ -296,6 +296,8 @@ func (s *Server) getServiceParams(
 		if params.ClusterMetadata.GetReplicationConsumerConfig().Type == config.ReplicationConsumerTypeKafka ||
 			params.ClusterMetadata.GetReplicationConsumerConfig().Type == config.ReplicationConsumerTypeKafkaToRPC {
 			params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), s.logger, metricsScope, true, isAdvancedVisEnabled)
+		} else if isAdvancedVisEnabled {
+			params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), s.logger, metricsScope, false, isAdvancedVisEnabled)
 		} else {
 			params.MessagingClient = nil
 		}
