@@ -131,6 +131,17 @@ task_id > ? AND
 task_id <= ?
 ORDER BY task_id LIMIT ?`
 
+	createVisibilityTasksQuery = `INSERT INTO visibility_tasks(shard_id, task_id, data, data_encoding) 
+ VALUES(:shard_id, :task_id, :data, :data_encoding)`
+
+	getVisibilityTaskQuery = `SELECT task_id, data, data_encoding 
+ FROM visibility_tasks WHERE shard_id = ? AND task_id = ?`
+	getVisibilityTasksQuery = `SELECT task_id, data, data_encoding 
+ FROM visibility_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ? ORDER BY shard_id, task_id`
+
+	deleteVisibilityTaskQuery      = `DELETE FROM visibility_tasks WHERE shard_id = ? AND task_id = ?`
+	rangeDeleteVisibilityTaskQuery = `DELETE FROM visibility_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ?`
+
 	bufferedEventsColumns     = `shard_id, namespace_id, workflow_id, run_id, data, data_encoding`
 	createBufferedEventsQuery = `INSERT INTO buffered_events(` + bufferedEventsColumns + `)
 VALUES (:shard_id, :namespace_id, :workflow_id, :run_id, :data, :data_encoding)`
@@ -688,6 +699,77 @@ func (mdb *db) RangeDeleteFromReplicationDLQTasks(
 	return mdb.conn.ExecContext(ctx,
 		rangeDeleteReplicationTaskFromDLQQuery,
 		filter.SourceClusterName,
+		filter.ShardID,
+		filter.MinTaskID,
+		filter.MaxTaskID,
+	)
+}
+
+// InsertIntoVisibilityTasks inserts one or more rows into visibility_tasks table
+func (mdb *db) InsertIntoVisibilityTasks(
+	ctx context.Context,
+	rows []sqlplugin.VisibilityTasksRow,
+) (sql.Result, error) {
+	return mdb.conn.NamedExecContext(ctx,
+		createVisibilityTasksQuery,
+		rows,
+	)
+}
+
+// SelectFromVisibilityTasks reads one or more rows from visibility_tasks table
+func (mdb *db) SelectFromVisibilityTasks(
+	ctx context.Context,
+	filter sqlplugin.VisibilityTasksFilter,
+) ([]sqlplugin.VisibilityTasksRow, error) {
+	var rows []sqlplugin.VisibilityTasksRow
+	if err := mdb.conn.SelectContext(ctx,
+		&rows,
+		getVisibilityTaskQuery,
+		filter.ShardID,
+		filter.TaskID,
+	); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// RangeSelectFromVisibilityTasks reads one or more rows from visibility_tasks table
+func (mdb *db) RangeSelectFromVisibilityTasks(
+	ctx context.Context,
+	filter sqlplugin.VisibilityTasksRangeFilter,
+) ([]sqlplugin.VisibilityTasksRow, error) {
+	var rows []sqlplugin.VisibilityTasksRow
+	if err := mdb.conn.SelectContext(ctx,
+		&rows,
+		getVisibilityTasksQuery,
+		filter.ShardID,
+		filter.MinTaskID,
+		filter.MaxTaskID,
+	); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// DeleteFromVisibilityTasks deletes one or more rows from visibility_tasks table
+func (mdb *db) DeleteFromVisibilityTasks(
+	ctx context.Context,
+	filter sqlplugin.VisibilityTasksFilter,
+) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		deleteVisibilityTaskQuery,
+		filter.ShardID,
+		filter.TaskID,
+	)
+}
+
+// RangeDeleteFromVisibilityTasks deletes one or more rows from visibility_tasks table
+func (mdb *db) RangeDeleteFromVisibilityTasks(
+	ctx context.Context,
+	filter sqlplugin.VisibilityTasksRangeFilter,
+) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		rangeDeleteVisibilityTaskQuery,
 		filter.ShardID,
 		filter.MinTaskID,
 		filter.MaxTaskID,
