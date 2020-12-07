@@ -100,6 +100,7 @@ type (
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		RunTimeout         int64 // not persisted, used for cassandra ttl
+		ShardID            int32 // not persisted, used as condition update version for ES
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Status             enumspb.WorkflowExecutionStatus
 		Memo               *commonpb.Memo
@@ -212,6 +213,7 @@ type (
 		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error)
 		GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error
+		DeleteWorkflowExecutionV2(request *VisibilityDeleteWorkflowExecutionRequest) error
 		ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		ScanWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)

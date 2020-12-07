@@ -1121,6 +1121,20 @@ func (p *visibilityPersistenceClient) DeleteWorkflowExecution(request *Visibilit
 	return err
 }
 
+func (p *visibilityPersistenceClient) DeleteWorkflowExecutionV2(request *VisibilityDeleteWorkflowExecutionRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceVisibilityDeleteWorkflowExecutionScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceVisibilityDeleteWorkflowExecutionScope, metrics.PersistenceLatency)
+	err := p.persistence.DeleteWorkflowExecutionV2(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceVisibilityDeleteWorkflowExecutionScope, err)
+	}
+
+	return err
+}
+
 func (p *visibilityPersistenceClient) ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceListWorkflowExecutionsScope, metrics.PersistenceRequests)
 

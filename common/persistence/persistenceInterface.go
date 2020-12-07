@@ -167,6 +167,7 @@ type (
 		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*InternalListWorkflowExecutionsResponse, error)
 		GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*InternalGetClosedWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error
+		DeleteWorkflowExecutionV2(request *VisibilityDeleteWorkflowExecutionRequest) error
 		ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
 		ScanWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
 		CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)
@@ -531,6 +532,7 @@ type (
 		ExecutionTimestamp int64
 		RunTimeout         int64
 		Status             enumspb.WorkflowExecutionStatus
+		ShardID            int32
 		TaskID             int64
 		Memo               *commonpb.DataBlob
 		TaskQueue          string

@@ -298,6 +298,7 @@ func (v *cassandraVisibilityPersistence) UpsertWorkflowExecution(
 
 func (v *cassandraVisibilityPersistence) UpsertWorkflowExecutionV2(
 	_ *p.InternalUpsertWorkflowExecutionRequestV2) error {
+	// TODO (alex): combine RecordWorkflowExecutionClosed + RecordWorkflowExecutionStarted + UpsertWorkflowExecution here
 	return nil
 }
 
@@ -579,6 +580,11 @@ func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
 
 // DeleteWorkflowExecution is a no-op since deletes are auto-handled by cassandra TTLs
 func (v *cassandraVisibilityPersistence) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
+	return nil
+}
+
+// DeleteWorkflowExecutionV2 is a no-op since deletes are auto-handled by cassandra TTLs
+func (v *cassandraVisibilityPersistence) DeleteWorkflowExecutionV2(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
 	return nil
 }
 

@@ -27,29 +27,32 @@ package elasticsearch
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/olivere/elastic"
 	"github.com/uber-go/tally"
 
-	indexerspb "go.temporal.io/server/api/indexer/v1"
 	"go.temporal.io/server/common/collection"
-	es "go.temporal.io/server/common/elasticsearch"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 )
 
 type (
-	// ESProcessor is interface for elastic search bulk processor
-	ESProcessor interface {
+	// Processor is interface for elastic search bulk processor
+	Processor interface {
+		// Start processor and return error if failed.
+		Start() error
 		// Stop processor and clean up
-		Stop()
+		Stop() error
 		// Add request to bulk, and record kafka message in map with provided key
 		// This call will be blocked when downstream has issues
-		Add(request elastic.BulkableRequest, key string, kafkaMsg messaging.Message)
+		Add(request elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool)
 	}
 
 	// ElasticBulkProcessor is interface for elastic.BulkProcessor
@@ -63,22 +66,23 @@ type (
 		Flush() error
 	}
 
-	// esProcessorImpl implements ESProcessor, it's an agent of elastic.BulkProcessor
+	// esProcessorImpl implements Processor, it's an agent of elastic.BulkProcessor
 	esProcessorImpl struct {
-		processor     ElasticBulkProcessor
-		mapToKafkaMsg collection.ConcurrentTxMap // used to map ES request to kafka message
-		config        *Config
-		logger        log.Logger
-		metricsClient metrics.Client
+		bulkProcessor           ElasticBulkProcessor
+		bulkProcessorParameters *elasticsearch.BulkProcessorParameters
+		client                  elasticsearch.Client
+		mapToAckChan            collection.ConcurrentTxMap // used to map ES request to ack channel
+		logger                  log.Logger
+		metricsClient           metrics.Client
 	}
 
-	kafkaMessageWithMetrics struct { // value of esProcessorImpl.mapToKafkaMsg
-		message        messaging.Message
-		swFromAddToAck *tally.Stopwatch // metric from message add to process, to message ack/nack
+	chanWithStopwatch struct { // value of esProcessorImpl.mapToAckChan
+		ackCh             chan<- bool
+		addToAckStopwatch *tally.Stopwatch // metric from message add to process, to message ack/nack
 	}
 )
 
-var _ ESProcessor = (*esProcessorImpl)(nil)
+var _ Processor = (*esProcessorImpl)(nil)
 var _ ElasticBulkProcessor = (*elastic.BulkProcessor)(nil)
 
 const (
@@ -88,64 +92,80 @@ const (
 	visibilityProcessorName         = "visibility-processor"
 )
 
-// NewESProcessorAndStart create new ESProcessor and start
-func NewESProcessorAndStart(
-	config *Config,
-	client es.Client,
+// NewProcessor create new esProcessorImpl
+func NewProcessor(
+	cfg *ProcessorConfig,
+	client elasticsearch.Client,
 	logger log.Logger,
-	metricsClient metrics.Client) (ESProcessor, error) {
+	metricsClient metrics.Client,
+) *esProcessorImpl {
+
 	p := &esProcessorImpl{
-		config:        config,
+		client:        client,
 		logger:        logger.WithTags(tag.ComponentIndexerESProcessor),
 		metricsClient: metricsClient,
+		mapToAckChan:  collection.NewShardedConcurrentTxMap(1024, func(key interface{}) uint32 { return hashFn(key, cfg.IndexerConcurrency()) }),
+		bulkProcessorParameters: &elasticsearch.BulkProcessorParameters{
+			Name:          visibilityProcessorName,
+			NumOfWorkers:  cfg.ESProcessorNumOfWorkers(),
+			BulkActions:   cfg.ESProcessorBulkActions(),
+			BulkSize:      cfg.ESProcessorBulkSize(),
+			FlushInterval: cfg.ESProcessorFlushInterval(),
+			Backoff:       elastic.NewExponentialBackoff(esProcessorInitialRetryInterval, esProcessorMaxRetryInterval),
+		},
 	}
+	p.bulkProcessorParameters.AfterFunc = p.bulkAfterAction
+	p.bulkProcessorParameters.BeforeFunc = p.bulkBeforeAction
+	return p
+}
 
-	params := &es.BulkProcessorParameters{
-		Name:          visibilityProcessorName,
-		NumOfWorkers:  config.ESProcessorNumOfWorkers(),
-		BulkActions:   config.ESProcessorBulkActions(),
-		BulkSize:      config.ESProcessorBulkSize(),
-		FlushInterval: config.ESProcessorFlushInterval(),
-		Backoff:       elastic.NewExponentialBackoff(esProcessorInitialRetryInterval, esProcessorMaxRetryInterval),
-		BeforeFunc:    p.bulkBeforeAction,
-		AfterFunc:     p.bulkAfterAction,
-	}
-	processor, err := client.RunBulkProcessor(context.Background(), params)
+func (p *esProcessorImpl) Start() error {
+	var err error
+	p.bulkProcessor, err = p.client.RunBulkProcessor(context.Background(), p.bulkProcessorParameters)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	return nil
+}
+
+func (p *esProcessorImpl) Stop() error {
+	return p.bulkProcessor.Stop()
+}
+
+func hashFn(key interface{}, numOfShards int) uint32 {
+	id, ok := key.(string)
+	if !ok {
+		return 0
 	}
 
-	p.processor = processor
-	p.mapToKafkaMsg = collection.NewShardedConcurrentTxMap(1024, p.hashFn)
-	return p, nil
+	idBytes := []byte(id)
+	hash := farm.Hash32(idBytes)
+	return hash % uint32(numOfShards)
 }
 
-func (p *esProcessorImpl) Stop() {
-	_ = p.processor.Stop()
-	p.mapToKafkaMsg = nil
-}
-
-// Add an ES request, and an map item for kafka message
-func (p *esProcessorImpl) Add(request elastic.BulkableRequest, key string, kafkaMsg messaging.Message) {
+// Add request to bulk, and record ack channel message in map with provided key
+func (p *esProcessorImpl) Add(request elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 	actionWhenFoundDuplicates := func(key interface{}, value interface{}) error {
-		return kafkaMsg.Ack()
+		ackCh <- true
+		return nil
 	}
+
 	sw := p.metricsClient.StartTimer(metrics.ESProcessorScope, metrics.ESProcessorProcessMsgLatency)
-	mapVal := newKafkaMessageWithMetrics(kafkaMsg, &sw)
-	_, isDup, _ := p.mapToKafkaMsg.PutOrDo(key, mapVal, actionWhenFoundDuplicates)
+	chWithStopwatch := newChanWithStopwatch(ackCh, &sw)
+	_, isDup, _ := p.mapToAckChan.PutOrDo(visibilityTaskKey, chWithStopwatch, actionWhenFoundDuplicates)
 	if isDup {
 		return
 	}
-	p.processor.Add(request)
+	p.bulkProcessor.Add(request)
 }
 
 // bulkBeforeAction is triggered before bulk processor commit
-func (p *esProcessorImpl) bulkBeforeAction(executionID int64, requests []elastic.BulkableRequest) {
+func (p *esProcessorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableRequest) {
 	p.metricsClient.AddCounter(metrics.ESProcessorScope, metrics.ESProcessorRequests, int64(len(requests)))
 }
 
 // bulkAfterAction is triggered after bulk processor commit
-func (p *esProcessorImpl) bulkAfterAction(id int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
+func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
 	if err != nil {
 		// This happens after configured retry, which means something bad happens on cluster or index
 		// When cluster back to live, processor will re-commit those failure requests
@@ -160,21 +180,21 @@ func (p *esProcessorImpl) bulkAfterAction(id int64, requests []elastic.BulkableR
 
 	responseItems := response.Items
 	for i := 0; i < len(requests); i++ {
-		key := p.getKeyForKafkaMsg(requests[i])
-		if key == "" {
+		visibilityTaskKey := p.getVisibilityTaskKey(requests[i])
+		if visibilityTaskKey == "" {
 			continue
 		}
 		responseItem := responseItems[i]
 		for _, resp := range responseItem {
 			switch {
 			case isResponseSuccess(resp.Status):
-				p.ackKafkaMsg(key)
+				p.sendToAckChan(visibilityTaskKey, true)
 			case !isResponseRetryable(resp.Status):
-				wid, rid, namespaceID := p.getMsgWithInfo(key)
+				wid, rid, namespaceID := p.getDocIDs(requests[i])
 				p.logger.Error("ES request failed.",
 					tag.ESResponseStatus(resp.Status), tag.ESResponseError(getErrorMsgFromESResp(resp)), tag.WorkflowID(wid), tag.WorkflowRunID(rid),
 					tag.WorkflowNamespaceID(namespaceID))
-				p.nackKafkaMsg(key)
+				p.sendToAckChan(visibilityTaskKey, false)
 			default: // bulk processor will retry
 				p.logger.Info("ES request retried.", tag.ESResponseStatus(resp.Status))
 				p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorRetries)
@@ -183,68 +203,29 @@ func (p *esProcessorImpl) bulkAfterAction(id int64, requests []elastic.BulkableR
 	}
 }
 
-func (p *esProcessorImpl) ackKafkaMsg(key string) {
-	p.ackKafkaMsgHelper(key, false)
-}
-
-func (p *esProcessorImpl) nackKafkaMsg(key string) {
-	p.ackKafkaMsgHelper(key, true)
-}
-
-func (p *esProcessorImpl) ackKafkaMsgHelper(key string, nack bool) {
-	kafkaMsg, ok := p.getKafkaMsg(key)
+func (p *esProcessorImpl) sendToAckChan(visibilityTaskKey string, ack bool) {
+	ackCh, ok := p.getAckChan(visibilityTaskKey)
 	if !ok {
 		return
 	}
+	ackCh <- ack
 
-	if nack {
-		kafkaMsg.Nack()
-	} else {
-		kafkaMsg.Ack()
-	}
-
-	p.mapToKafkaMsg.Remove(key)
+	p.mapToAckChan.Remove(visibilityTaskKey)
 }
 
-func (p *esProcessorImpl) getKafkaMsg(key string) (kafkaMsg *kafkaMessageWithMetrics, ok bool) {
-	msg, ok := p.mapToKafkaMsg.Get(key)
+func (p *esProcessorImpl) getAckChan(visibilityTaskKey string) (chan<- bool, bool) {
+	msg, ok := p.mapToAckChan.Get(visibilityTaskKey)
 	if !ok {
-		return // duplicate kafka message
+		return nil, false
 	}
-	kafkaMsg, ok = msg.(*kafkaMessageWithMetrics)
+	chWithStopwatch, ok := msg.(*chanWithStopwatch)
 	if !ok { // must be bug in code and bad deployment
-		p.logger.Fatal("Message is not kafka message.", tag.ESKey(key))
+		p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", msg, &chanWithStopwatch{}), tag.ESKey(visibilityTaskKey))
 	}
-	return kafkaMsg, ok
+	return chWithStopwatch.ackCh, ok
 }
 
-func (p *esProcessorImpl) getMsgWithInfo(key string) (wid string, rid string, namespaceID string) {
-	kafkaMsg, ok := p.getKafkaMsg(key)
-	if !ok {
-		return
-	}
-
-	var msg indexerspb.Message
-	if err := p.msgEncoder.Decode(kafkaMsg.message.Value(), &msg); err != nil {
-		p.logger.Error("failed to deserialize kafka message.", tag.Error(err))
-		return
-	}
-	return msg.GetWorkflowId(), msg.GetRunId(), msg.GetNamespaceId()
-}
-
-func (p *esProcessorImpl) hashFn(key interface{}) uint32 {
-	id, ok := key.(string)
-	if !ok {
-		return 0
-	}
-	numOfShards := p.config.IndexerConcurrency()
-
-	idBytes := []byte(id)
-	hash := farm.Hash32(idBytes)
-	return hash % uint32(numOfShards)
-}
-
-func (p *esProcessorImpl) getKeyForKafkaMsg(request elastic.BulkableRequest) string {
+func (p *esProcessorImpl) getVisibilityTaskKey(request elastic.BulkableRequest) string {
 	req, err := request.Source()
 	if err != nil {
 		p.logger.Error("Get request source err.", tag.Error(err), tag.ESRequest(request.String()))
@@ -261,15 +242,15 @@ func (p *esProcessorImpl) getKeyForKafkaMsg(request elastic.BulkableRequest) str
 			return ""
 		}
 
-		k, ok := body[es.KafkaKey]
+		k, ok := body[definition.VisibilityTaskKey]
 		if !ok {
 			// must be bug in code and bad deployment, check processor that add es requests
-			panic("KafkaKey not found")
+			panic("VisibilityTaskKey not found")
 		}
 		key, ok = k.(string)
 		if !ok {
 			// must be bug in code and bad deployment, check processor that add es requests
-			panic("KafkaKey is not string")
+			panic("VisibilityTaskKey is not string")
 		}
 	} else { // delete requests
 		var body map[string]map[string]interface{}
@@ -292,6 +273,56 @@ func (p *esProcessorImpl) getKeyForKafkaMsg(request elastic.BulkableRequest) str
 		key, _ = k.(string)
 	}
 	return key
+}
+
+func (p *esProcessorImpl) getDocIDs(request elastic.BulkableRequest) (workflowID string, runID string, namespaceID string) {
+	// TODO (alex): This need to be combined with getVisibilityTaskKey
+	req, err := request.Source()
+	if err != nil {
+		p.logger.Error("Get request source err.", tag.Error(err), tag.ESRequest(request.String()))
+		p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorCorruptedData)
+		return
+	}
+
+	if len(req) == 2 { // index or update requests
+		var body map[string]interface{}
+		if err := json.Unmarshal([]byte(req[1]), &body); err != nil {
+			p.logger.Error("Unmarshal index request body err.", tag.Error(err))
+			p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorCorruptedData)
+			return
+		}
+
+		wID, _ := body[definition.WorkflowID]
+		workflowID, _ = wID.(string)
+
+		rID, _ := body[definition.RunID]
+		runID, _ = rID.(string)
+
+		nID, _ := body[definition.NamespaceID]
+		namespaceID, _ = nID.(string)
+	} else { // delete requests
+		var body map[string]map[string]interface{}
+		if err := json.Unmarshal([]byte(req[0]), &body); err != nil {
+			p.logger.Error("Unmarshal delete request body err.", tag.Error(err))
+			p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorCorruptedData)
+			return
+		}
+
+		opMap, ok := body["delete"]
+		if !ok {
+			return
+		}
+		id, _ := opMap["_id"]
+		docID, _ := id.(string)
+		wrIDs := strings.Split(docID, delimiter)
+		if len(wrIDs) > 0 {
+			workflowID = wrIDs[0]
+		}
+		if len(wrIDs) > 1 {
+			runID = wrIDs[1]
+		}
+	}
+	return
 }
 
 // 409 - Version Conflict
@@ -326,23 +357,23 @@ func getErrorMsgFromESResp(resp *elastic.BulkResponseItem) string {
 	return errMsg
 }
 
-func newKafkaMessageWithMetrics(kafkaMsg messaging.Message, stopwatch *tally.Stopwatch) *kafkaMessageWithMetrics {
-	return &kafkaMessageWithMetrics{
-		message:        kafkaMsg,
-		swFromAddToAck: stopwatch,
+func newChanWithStopwatch(ackCh chan<- bool, stopwatch *tally.Stopwatch) *chanWithStopwatch {
+	return &chanWithStopwatch{
+		ackCh:             ackCh,
+		addToAckStopwatch: stopwatch,
 	}
 }
 
-func (km *kafkaMessageWithMetrics) Ack() {
-	km.message.Ack() //nolint:errcheck
-	if km.swFromAddToAck != nil {
-		km.swFromAddToAck.Stop()
+func (km *chanWithStopwatch) Ack() {
+	km.ackCh <- true
+	if km.addToAckStopwatch != nil {
+		km.addToAckStopwatch.Stop()
 	}
 }
 
-func (km *kafkaMessageWithMetrics) Nack() {
-	km.message.Nack() //nolint:errcheck
-	if km.swFromAddToAck != nil {
-		km.swFromAddToAck.Stop()
+func (km *chanWithStopwatch) Nack() {
+	km.ackCh <- false
+	if km.addToAckStopwatch != nil {
+		km.addToAckStopwatch.Stop()
 	}
 }

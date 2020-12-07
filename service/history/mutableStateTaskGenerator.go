@@ -174,7 +174,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 			Version:             currentVersion,
 		})
 	} else {
-		r.mutableState.AddVisibilityTasks(&persistence.CloseExecutionVisibilityTask{
+		r.mutableState.AddVisibilityTasks(&persistence.UpsertExecutionVisibilityTask{
 			// TaskID is set by shard
 			VisibilityTimestamp: now,
 			Version:             currentVersion,
@@ -250,7 +250,7 @@ func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
 		return nil
 	}
 
-	r.mutableState.AddVisibilityTasks(&persistence.StartExecutionVisibilityTask{
+	r.mutableState.AddVisibilityTasks(&persistence.UpsertExecutionVisibilityTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		Version:             startVersion,

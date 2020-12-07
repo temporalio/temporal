@@ -256,7 +256,8 @@ type (
 		// MaxQPS is overall max QPS
 		MaxQPS dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
 		// ValidSearchAttributes is legal indexed keys that can be used in list APIs
-		ValidSearchAttributes dynamicconfig.MapPropertyFn `yaml:"-" json:"-"`
+		ValidSearchAttributes    dynamicconfig.MapPropertyFn `yaml:"-" json:"-"`
+		ESProcessorFlushInterval dynamicconfig.DurationPropertyFn
 	}
 
 	// Cassandra contains configuration to connect to Cassandra cluster

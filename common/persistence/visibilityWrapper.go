@@ -166,6 +166,14 @@ func (v *visibilityManagerWrapper) DeleteWorkflowExecution(request *VisibilityDe
 	return v.visibilityManager.DeleteWorkflowExecution(request)
 }
 
+func (v *visibilityManagerWrapper) DeleteWorkflowExecutionV2(request *VisibilityDeleteWorkflowExecutionRequest) error {
+	if v.esVisibilityManager != nil {
+		if err := v.esVisibilityManager.DeleteWorkflowExecutionV2(request); err != nil {
+			return err
+		}
+	}
+	return v.visibilityManager.DeleteWorkflowExecutionV2(request)
+}
 func (v *visibilityManagerWrapper) ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {
 	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
 	return manager.ListWorkflowExecutions(request)

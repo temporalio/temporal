@@ -164,6 +164,16 @@ const (
 	PersistenceCompleteTransferTaskScope
 	// PersistenceRangeCompleteTransferTaskScope tracks CompleteTransferTasks calls made by service to persistence layer
 	PersistenceRangeCompleteTransferTaskScope
+
+	// PersistenceGetVisibilityTaskScope tracks GetVisibilityTask calls made by service to persistence layer
+	PersistenceGetVisibilityTaskScope
+	// PersistenceGetVisibilityTasksScope tracks GetVisibilityTasks calls made by service to persistence layer
+	PersistenceGetVisibilityTasksScope
+	// PersistenceCompleteVisibilityTaskScope tracks CompleteVisibilityTasks calls made by service to persistence layer
+	PersistenceCompleteVisibilityTaskScope
+	// PersistenceRangeCompleteVisibilityTaskScope tracks CompleteVisibilityTasks calls made by service to persistence layer
+	PersistenceRangeCompleteVisibilityTaskScope
+
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
 	PersistenceGetReplicationTaskScope
 	// PersistenceGetReplicationTasksScope tracks GetReplicationTasks calls made by service to persistence layer
@@ -1092,6 +1102,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetTransferTasksScope:                         {operation: "GetTransferTasks"},
 		PersistenceCompleteTransferTaskScope:                     {operation: "CompleteTransferTask"},
 		PersistenceRangeCompleteTransferTaskScope:                {operation: "RangeCompleteTransferTask"},
+		PersistenceGetVisibilityTaskScope:                        {operation: "GetVisibilityTask"},
+		PersistenceGetVisibilityTasksScope:                       {operation: "GetVisibilityTasks"},
+		PersistenceCompleteVisibilityTaskScope:                   {operation: "CompleteVisibilityTask"},
+		PersistenceRangeCompleteVisibilityTaskScope:              {operation: "RangeCompleteVisibilityTask"},
 		PersistenceGetReplicationTaskScope:                       {operation: "GetReplicationTask"},
 		PersistenceGetReplicationTasksScope:                      {operation: "GetReplicationTasks"},
 		PersistenceCompleteReplicationTaskScope:                  {operation: "CompleteReplicationTask"},

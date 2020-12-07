@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
@@ -80,12 +81,44 @@ func NewService(
 
 		var visibilityFromES persistence.VisibilityManager
 		if params.ESConfig != nil {
-			visibilityProducer, err := params.MessagingClient.NewProducer(common.VisibilityAppName)
-			if err != nil {
-				logger.Fatal("Creating visibility producer failed", tag.Error(err))
+			visibilityIndexName := params.ESConfig.Indices[common.VisibilityAppName]
+
+			var visibilityProducer messaging.Producer
+			var esProcessor espersistence.Processor
+			if serviceConfig.DisableKafkaForVisibility() {
+				esProcessorConfig := &espersistence.ProcessorConfig{
+					IndexerConcurrency:       serviceConfig.IndexerConcurrency,
+					ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
+					ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
+					ESProcessorBulkSize:      serviceConfig.ESProcessorBulkSize,
+					ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
+					ValidSearchAttributes:    serviceConfig.ValidSearchAttributes,
+				}
+
+				esProcessor = espersistence.NewProcessor(esProcessorConfig, params.ESClient, logger, params.MetricsClient)
+				err := esProcessor.Start()
+				if err != nil {
+					logger.Fatal("Unable to start elastic search processor.", tag.LifeCycleStartFailed, tag.Error(err))
+				}
+			} else {
+				var err error
+				visibilityProducer, err = params.MessagingClient.NewProducer(common.VisibilityAppName)
+				if err != nil {
+					logger.Fatal("Creating visibility producer failed", tag.Error(err))
+				}
 			}
-			visibilityFromES = espersistence.NewESVisibilityManager("", nil, nil, visibilityProducer,
-				params.MetricsClient, logger)
+
+			visibilityConfigForES := &config.VisibilityConfig{
+				EnableSampling:           serviceConfig.EnableVisibilitySampling,
+				VisibilityOpenMaxQPS:     serviceConfig.VisibilityOpenMaxQPS,
+				VisibilityClosedMaxQPS:   serviceConfig.VisibilityClosedMaxQPS,
+				VisibilityListMaxQPS:     serviceConfig.ESVisibilityListMaxQPS,
+				ESIndexMaxResultWindow:   serviceConfig.ESIndexMaxResultWindow,
+				MaxQPS:                   serviceConfig.PersistenceMaxQPS,
+				ValidSearchAttributes:    serviceConfig.ValidSearchAttributes,
+				ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
+			}
+			visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, visibilityProducer, esProcessor, params.MetricsClient, logger)
 		}
 		return persistence.NewVisibilityManagerWrapper(
 			visibilityFromDB,

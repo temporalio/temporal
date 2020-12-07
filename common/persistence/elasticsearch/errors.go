@@ -25,17 +25,38 @@
 package elasticsearch
 
 import (
-	"go.temporal.io/server/common/service/dynamicconfig"
+	"fmt"
+	"time"
 )
 
 type (
-	// ProcessorConfig contains all configs for processor
-	ProcessorConfig struct {
-		IndexerConcurrency       dynamicconfig.IntPropertyFn
-		ESProcessorNumOfWorkers  dynamicconfig.IntPropertyFn
-		ESProcessorBulkActions   dynamicconfig.IntPropertyFn // max number of requests in bulk
-		ESProcessorBulkSize      dynamicconfig.IntPropertyFn // max total size of bytes in bulk
-		ESProcessorFlushInterval dynamicconfig.DurationPropertyFn
-		ValidSearchAttributes    dynamicconfig.MapPropertyFn
+	VisibilityTaskNAckError struct {
+		VisibilityTaskKey string
+	}
+
+	VisibilityTaskAckTimeoutError struct {
+		VisibilityTaskKey string
+		Timeout           time.Duration
 	}
 )
+
+func newVisibilityTaskNAckError(visibilityTaskKey string) *VisibilityTaskNAckError {
+	return &VisibilityTaskNAckError{
+		VisibilityTaskKey: visibilityTaskKey,
+	}
+}
+
+func (v *VisibilityTaskNAckError) Error() string {
+	return fmt.Sprintf("visibility task %s wasn't acknowledged", v.VisibilityTaskKey)
+}
+
+func newVisibilityTaskAckTimeoutError(visibilityTaskKey string, timeout time.Duration) *VisibilityTaskAckTimeoutError {
+	return &VisibilityTaskAckTimeoutError{
+		VisibilityTaskKey: visibilityTaskKey,
+		Timeout:           timeout,
+	}
+}
+
+func (v *VisibilityTaskAckTimeoutError) Error() string {
+	return fmt.Sprintf("visibility task %s acknowledge timedout after %v", v.VisibilityTaskKey, v.Timeout)
+}

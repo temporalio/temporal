@@ -44,6 +44,8 @@ const (
 	BinaryChecksums = "BinaryChecksums"
 	TaskQueue       = "TaskQueue"
 
+	VisibilityTaskKey = "VisibilityTaskKey"
+
 	CustomStringField     = "CustomStringField"
 	CustomKeywordField    = "CustomKeywordField"
 	CustomIntField        = "CustomIntField"

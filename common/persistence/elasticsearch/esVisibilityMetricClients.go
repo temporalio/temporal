@@ -278,6 +278,20 @@ func (p *visibilityMetricsClient) DeleteWorkflowExecution(request *p.VisibilityD
 	return err
 }
 
+func (p *visibilityMetricsClient) DeleteWorkflowExecutionV2(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
+	p.metricClient.IncCounter(metrics.ElasticsearchDeleteWorkflowExecutionsScope, metrics.ElasticsearchRequests)
+
+	sw := p.metricClient.StartTimer(metrics.ElasticsearchDeleteWorkflowExecutionsScope, metrics.ElasticsearchLatency)
+	err := p.persistence.DeleteWorkflowExecutionV2(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.ElasticsearchDeleteWorkflowExecutionsScope, err)
+	}
+
+	return err
+}
+
 func (p *visibilityMetricsClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
 	case *serviceerror.InvalidArgument:

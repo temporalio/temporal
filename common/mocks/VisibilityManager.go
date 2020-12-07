@@ -77,6 +77,20 @@ func (_m *VisibilityManager) DeleteWorkflowExecution(request *persistence.Visibi
 	return r0
 }
 
+// DeleteWorkflowExecution provides a mock function with given fields: request
+func (_m *VisibilityManager) DeleteWorkflowExecutionV2(request *persistence.VisibilityDeleteWorkflowExecutionRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.VisibilityDeleteWorkflowExecutionRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // GetClosedWorkflowExecution provides a mock function with given fields: request
 func (_m *VisibilityManager) GetClosedWorkflowExecution(request *persistence.GetClosedWorkflowExecutionRequest) (*persistence.GetClosedWorkflowExecutionResponse, error) {
 	ret := _m.Called(request)

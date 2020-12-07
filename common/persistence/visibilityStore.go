@@ -128,6 +128,7 @@ func (v *visibilityManagerImpl) UpsertWorkflowExecutionV2(request *UpsertWorkflo
 		ExecutionTimestamp: request.ExecutionTimestamp,
 		Status:             request.Status,
 		RunTimeout:         request.RunTimeout,
+		ShardID:            request.ShardID,
 		TaskID:             request.TaskID,
 		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
 		TaskQueue:          request.TaskQueue,
@@ -205,6 +206,10 @@ func (v *visibilityManagerImpl) GetClosedWorkflowExecution(request *GetClosedWor
 
 func (v *visibilityManagerImpl) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {
 	return v.persistence.DeleteWorkflowExecution(request)
+}
+
+func (v *visibilityManagerImpl) DeleteWorkflowExecutionV2(request *VisibilityDeleteWorkflowExecutionRequest) error {
+	return v.persistence.DeleteWorkflowExecutionV2(request)
 }
 
 func (v *visibilityManagerImpl) ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {

@@ -759,6 +759,8 @@ const (
 	ExecutionsScannerEnabled
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher
+	// EnableIndexer decides whether start indexer in our worker
+	EnableIndexer
 	// EnableParentClosePolicyWorker decides whether or not enable system workers for processing parent close policy task
 	EnableParentClosePolicyWorker
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace

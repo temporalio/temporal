@@ -123,6 +123,7 @@ func (s *sqlVisibilityStore) UpsertWorkflowExecution(
 func (s *sqlVisibilityStore) UpsertWorkflowExecutionV2(
 	_ *p.InternalUpsertWorkflowExecutionRequestV2,
 ) error {
+	// TODO (alex): copy from RecordWorkflowExecutionStarted + RecordWorkflowExecutionClosed + UpsertWorkflowExecution
 	return nil
 }
 
@@ -325,6 +326,12 @@ func (s *sqlVisibilityStore) DeleteWorkflowExecution(
 		return serviceerror.NewInternal(err.Error())
 	}
 	return nil
+}
+
+func (s *sqlVisibilityStore) DeleteWorkflowExecutionV2(
+	request *p.VisibilityDeleteWorkflowExecutionRequest,
+) error {
+	return s.DeleteWorkflowExecution(request)
 }
 
 func (s *sqlVisibilityStore) ListWorkflowExecutions(

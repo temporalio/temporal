@@ -59,7 +59,7 @@ type esProcessorSuite struct {
 
 var (
 	testIndex     = "test-index"
-	testType      = esDocType
+	testType      = docType
 	testID        = "test-doc-id"
 	testStopWatch = metrics.NopStopwatch()
 	testScope     = metrics.ESProcessorScope
@@ -95,7 +95,7 @@ func (s *esProcessorSuite) SetupTest() {
 		msgEncoder:    codec.NewJSONPBEncoder(),
 	}
 	p.mapToKafkaMsg = collection.NewShardedConcurrentTxMap(1024, p.hashFn)
-	p.processor = s.mockBulkProcessor
+	p.bulkProcessor = s.mockBulkProcessor
 
 	s.esProcessor = p
 
@@ -213,7 +213,7 @@ func (s *esProcessorSuite) TestBulkAfterActionX() {
 	}
 
 	mockKafkaMsg := &msgMocks.Message{}
-	mapVal := newKafkaMessageWithMetrics(mockKafkaMsg, &testStopWatch)
+	mapVal := newChanWithStopwatch(mockKafkaMsg, &testStopWatch)
 	s.esProcessor.mapToKafkaMsg.Put(testKey, mapVal)
 	mockKafkaMsg.On("Ack").Return(nil).Once()
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
@@ -253,7 +253,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 	payload := s.getEncodedMsg(wid, rid, namespaceID)
 
 	mockKafkaMsg := &msgMocks.Message{}
-	mapVal := newKafkaMessageWithMetrics(mockKafkaMsg, &testStopWatch)
+	mapVal := newChanWithStopwatch(mockKafkaMsg, &testStopWatch)
 	s.esProcessor.mapToKafkaMsg.Put(testKey, mapVal)
 	mockKafkaMsg.On("Nack").Return(nil).Once()
 	mockKafkaMsg.On("Value").Return(payload).Once()
@@ -351,7 +351,7 @@ func (s *esProcessorSuite) TestGetMsgWithInfo() {
 
 	mockKafkaMsg := &msgMocks.Message{}
 	mockKafkaMsg.On("Value").Return(payload).Once()
-	mapVal := newKafkaMessageWithMetrics(mockKafkaMsg, &testStopWatch)
+	mapVal := newChanWithStopwatch(mockKafkaMsg, &testStopWatch)
 	s.esProcessor.mapToKafkaMsg.Put(testKey, mapVal)
 	wid, rid, namespaceID := s.esProcessor.getMsgWithInfo(testKey)
 	s.Equal(testWid, wid)
@@ -363,7 +363,7 @@ func (s *esProcessorSuite) TestGetMsgInfo_Error() {
 	testKey := "test-key"
 	mockKafkaMsg := &msgMocks.Message{}
 	mockKafkaMsg.On("Value").Return([]byte{}).Once()
-	mapVal := newKafkaMessageWithMetrics(mockKafkaMsg, &testStopWatch)
+	mapVal := newChanWithStopwatch(mockKafkaMsg, &testStopWatch)
 	s.esProcessor.mapToKafkaMsg.Put(testKey, mapVal)
 	wid, rid, namespaceID := s.esProcessor.getMsgWithInfo(testKey)
 	s.Equal("", wid)
@@ -373,18 +373,18 @@ func (s *esProcessorSuite) TestGetMsgInfo_Error() {
 
 func (s *esProcessorSuite) TestGetKeyForKafkaMsg() {
 	request := elastic.NewBulkIndexRequest()
-	s.PanicsWithValue("KafkaKey not found", func() { s.esProcessor.getKeyForKafkaMsg(request) })
+	s.PanicsWithValue("KafkaKey not found", func() { s.esProcessor.getVisibilityTaskKey(request) })
 
 	m := map[string]interface{}{
 		es.KafkaKey: 1,
 	}
 	request.Doc(m)
-	s.PanicsWithValue("KafkaKey is not string", func() { s.esProcessor.getKeyForKafkaMsg(request) })
+	s.PanicsWithValue("KafkaKey is not string", func() { s.esProcessor.getVisibilityTaskKey(request) })
 
 	testKey := "test-key"
 	m[es.KafkaKey] = testKey
 	request.Doc(m)
-	s.Equal(testKey, s.esProcessor.getKeyForKafkaMsg(request))
+	s.Equal(testKey, s.esProcessor.getVisibilityTaskKey(request))
 }
 
 func (s *esProcessorSuite) TestGetKeyForKafkaMsg_Delete() {
@@ -400,11 +400,11 @@ func (s *esProcessorSuite) TestGetKeyForKafkaMsg_Delete() {
 	_, ok := body["delete"]
 	s.True(ok)
 
-	s.PanicsWithValue("_id not found in request opMap", func() { s.esProcessor.getKeyForKafkaMsg(request) })
+	s.PanicsWithValue("_id not found in request opMap", func() { s.esProcessor.getVisibilityTaskKey(request) })
 
 	id := "id"
 	request.Id(id)
-	key := s.esProcessor.getKeyForKafkaMsg(request)
+	key := s.esProcessor.getVisibilityTaskKey(request)
 	s.Equal(id, key)
 }
 

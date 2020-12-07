@@ -746,6 +746,13 @@ func (p *visibilityRateLimitedPersistenceClient) DeleteWorkflowExecution(request
 	return p.persistence.DeleteWorkflowExecution(request)
 }
 
+func (p *visibilityRateLimitedPersistenceClient) DeleteWorkflowExecutionV2(request *VisibilityDeleteWorkflowExecutionRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+	return p.persistence.DeleteWorkflowExecutionV2(request)
+}
+
 func (p *visibilityRateLimitedPersistenceClient) ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded

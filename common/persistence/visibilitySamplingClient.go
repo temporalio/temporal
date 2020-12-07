@@ -266,6 +266,10 @@ func (p *visibilitySamplingClient) DeleteWorkflowExecution(request *VisibilityDe
 	return p.persistence.DeleteWorkflowExecution(request)
 }
 
+func (p *visibilitySamplingClient) DeleteWorkflowExecutionV2(request *VisibilityDeleteWorkflowExecutionRequest) error {
+	return p.persistence.DeleteWorkflowExecutionV2(request)
+}
+
 func (p *visibilitySamplingClient) ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {
 	return p.persistence.ListWorkflowExecutions(request)
 }

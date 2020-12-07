@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -120,6 +121,10 @@ func (t *visibilityQueueTaskExecutor) execute(
 	}
 }
 
+// processUpsertExecution combines former
+// 		processCloseExecution
+//		processRecordWorkflowStarted
+//		processUpsertWorkflowSearchAttributes
 func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	task *persistencespb.VisibilityTaskInfo,
 ) (retError error) {
@@ -132,7 +137,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := context.loadWorkflowExecution()
+	ms, err := context.loadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
@@ -143,7 +148,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 
 	// verify task version for RecordWorkflowStarted.
 	// upsert doesn't require verifyTask, because it is just a sync of mutableState.
-	startVersion, err := mutableState.GetStartVersion()
+	startVersion, err := ms.GetStartVersion()
 	if err != nil {
 		return err
 	}
@@ -152,25 +157,25 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 		return err
 	}
 
-	executionInfo := mutableState.GetExecutionInfo()
-	startEvent, err := mutableState.GetStartEvent()
+	executionInfo := ms.GetExecutionInfo()
+	startEvent, err := ms.GetStartEvent()
 	if err != nil {
 		return err
 	}
 
-	executionStatus := mutableState.GetExecutionState().GetStatus()
+	executionStatus := ms.GetExecutionState().GetStatus()
 	closeTime := time.Unix(0, 0).UTC()
 	if executionStatus != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		completionEvent, err := mutableState.GetCompletionEvent()
+		completionEvent, err := ms.GetCompletionEvent()
 		if err != nil {
 			return err
 		}
 		closeTime = timestamp.TimeValue(completionEvent.GetEventTime())
 	}
 
-	workflowHistoryLength := mutableState.GetNextEventID() - 1
+	workflowHistoryLength := ms.GetNextEventID() - 1
 
-	executionTime := getWorkflowExecutionTime(mutableState, startEvent)
+	executionTime := getWorkflowExecutionTime(ms, startEvent)
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
@@ -198,6 +203,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 		StartTimestamp:     timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
 		ExecutionTimestamp: executionTime.UnixNano(),
 		RunTimeout:         int64(timestamp.DurationValue(executionInfo.GetWorkflowRunTimeout()).Round(time.Second).Seconds()),
+		ShardID:            t.shard.GetShardID(),
 		TaskID:             task.GetTaskId(),
 		Status:             executionStatus,
 		Memo:               getWorkflowMemo(executionInfo.GetMemo()),
@@ -215,7 +221,17 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	task *persistencespb.VisibilityTaskInfo,
 ) (retError error) {
-	return nil
+	op := func() error {
+		request := &persistence.VisibilityDeleteWorkflowExecutionRequest{
+			NamespaceID: task.GetNamespaceId(),
+			WorkflowID:  task.GetWorkflowId(),
+			RunID:       task.GetRunId(),
+			TaskID:      task.GetTaskId(),
+		}
+		// TODO: expose GetVisibilityManager method on shardContext interface
+		return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecutionV2(request) // delete from db
+	}
+	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 // TO REMOVE: ------------------------------------------------
@@ -650,13 +666,13 @@ func getWorkflowExecutionTime(
 }
 
 func getWorkflowMemo(
-	memo map[string]*commonpb.Payload,
+	memoFields map[string]*commonpb.Payload,
 ) *commonpb.Memo {
 
-	if memo == nil {
+	if memoFields == nil {
 		return nil
 	}
-	return &commonpb.Memo{Fields: memo}
+	return &commonpb.Memo{Fields: memoFields}
 }
 
 func copySearchAttributes(

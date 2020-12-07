@@ -30,10 +30,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-
-	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
@@ -199,9 +198,10 @@ func NewService(
 				VisibilityListMaxQPS:   serviceConfig.ESVisibilityListMaxQPS,
 				ESIndexMaxResultWindow: serviceConfig.ESIndexMaxResultWindow,
 				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
+				EnableSampling:         serviceConfig.EnableVisibilitySampling,
 			}
 			visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
-				nil, params.MetricsClient, logger)
+				nil, nil, params.MetricsClient, logger)
 		}
 		return persistence.NewVisibilityManagerWrapper(
 			visibilityFromDB,

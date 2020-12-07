@@ -60,11 +60,10 @@ import (
 )
 
 const (
-	esPersistenceName = "elasticsearch"
+	persistenceName = "elasticsearch"
 
-	esDocIDDelimiter = "~"
-	esDocType        = "_doc"
-
+	delimiter           = "~"
+	docType             = "_doc"
 	versionTypeExternal = "external"
 )
 
@@ -72,12 +71,15 @@ type (
 	esVisibilityStore struct {
 		esClient      elasticsearch.Client
 		index         string
-		producer      messaging.Producer
 		logger        log.Logger
 		config        *config.VisibilityConfig
 		metricsClient metrics.Client
-		esProcessor   ESProcessor
-		esIndexName   string
+
+		processor              Processor
+		processorFlushInterval time.Duration
+
+		// Deprecated.
+		producer messaging.Producer
 	}
 
 	esVisibilityPageToken struct {
@@ -113,29 +115,37 @@ var (
 )
 
 // NewElasticSearchVisibilityStore create a visibility store connecting to ElasticSearch
-func NewElasticSearchVisibilityStore(esClient elasticsearch.Client, index string, producer messaging.Producer, config *config.VisibilityConfig, logger log.Logger, metricsClient metrics.Client) persistence.VisibilityStore {
-	esProcessor, err := NewESProcessorAndStart(dynamicConfig, esClient, logger, metricsClient)
-	if err != nil {
-		logger.Info("", tag.LifeCycleStartFailed, tag.Error(err))
-		return err
-	}
+func NewElasticSearchVisibilityStore(
+	esClient elasticsearch.Client,
+	index string,
+	producer messaging.Producer,
+	processor Processor,
+	cfg *config.VisibilityConfig,
+	logger log.Logger,
+	metricsClient metrics.Client,
+) *esVisibilityStore {
 
 	return &esVisibilityStore{
-		esClient:      esClient,
-		index:         index,
-		producer:      producer,
-		logger:        logger.WithTags(tag.ComponentESVisibilityManager),
-		config:        config,
-		metricsClient: metricsClient,
-		esProcessor:   esProcessor,
-		esIndexName:   exIndexName,
+		esClient:               esClient,
+		index:                  index,
+		producer:               producer,
+		processor:              processor,
+		processorFlushInterval: cfg.ESProcessorFlushInterval(),
+		logger:                 logger.WithTags(tag.ComponentESVisibilityManager),
+		config:                 cfg,
+		metricsClient:          metricsClient,
 	}
 }
 
-func (v *esVisibilityStore) Close() {}
+func (v *esVisibilityStore) Close() {
+	if v.processor != nil {
+		err := v.processor.Stop()
+		v.logger.Error("Unable to stop elastic search processor.", tag.LifeCycleStopFailed, tag.Error(err))
+	}
+}
 
 func (v *esVisibilityStore) GetName() string {
-	return esPersistenceName
+	return persistenceName
 }
 
 // Deprecated.
@@ -201,64 +211,106 @@ func (v *esVisibilityStore) UpsertWorkflowExecution(request *persistence.Interna
 }
 
 func (v *esVisibilityStore) UpsertWorkflowExecutionV2(request *persistence.InternalUpsertWorkflowExecutionRequestV2) error {
-	docID := request.WorkflowID + esDocIDDelimiter + request.RunID
+	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
 
-	doc := v.generateESDoc(request)
-	req := elastic.NewBulkIndexRequest().
-		Index(v.esIndexName).
-		Type(esDocType).
-		Id(docID).
+	doc := v.generateESDoc(request, visibilityTaskKey)
+	bulkInsertRequest := elastic.NewBulkIndexRequest().
+		Index(v.index).
+		Type(docType).
+		Id(getDocID(request.WorkflowID, request.RunID)).
 		VersionType(versionTypeExternal).
 		Version(request.TaskID).
 		Doc(doc)
 
-	v.esProcessor.Add(req)
-	return nil
+	return v.addBulkRequestAndWait(bulkInsertRequest, visibilityTaskKey)
 }
 
-func (p *esVisibilityStore) generateESDoc(request *persistence.InternalUpsertWorkflowExecutionRequestV2) map[string]interface{} {
-	doc := make(map[string]interface{})
-	doc[definition.NamespaceID] = request.NamespaceID
-	doc[definition.WorkflowID] = request.WorkflowID
-	doc[definition.RunID] = request.RunID
-	doc[definition.WorkflowType] = request.WorkflowTypeName
-	doc[definition.StartTime] = request.StartTimestamp
-	doc[definition.ExecutionTime] = request.ExecutionTimestamp
-	doc[definition.CloseTime] = request.CloseTimestamp
-	doc[definition.ExecutionStatus] = request.Status
-	doc[definition.HistoryLength] = request.HistoryLength
-	doc[definition.Memo] = request.Memo
-	doc[definition.TaskQueue] = request.TaskQueue
+func (v *esVisibilityStore) DeleteWorkflowExecutionV2(request *persistence.VisibilityDeleteWorkflowExecutionRequest) error {
+	docID := getDocID(request.WorkflowID, request.RunID)
+
+	bulkDeleteRequest := elastic.NewBulkDeleteRequest().
+		Index(v.index).
+		Type(docType).
+		Id(docID).
+		VersionType(versionTypeExternal).
+		Version(request.TaskID)
+
+	return v.addBulkRequestAndWait(bulkDeleteRequest, docID)
+}
+
+func getDocID(workflowID string, runID string) string {
+	return fmt.Sprintf("%s%s%s", workflowID, delimiter, runID)
+}
+
+func getVisibilityTaskKey(shardID int32, taskID int64) string {
+	return fmt.Sprintf("%d%s%d", shardID, delimiter, taskID)
+}
+
+func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest elastic.BulkableRequest, visibilityTaskKey string) error {
+	v.checkProcessor()
+
+	ch := make(chan bool)
+	v.processor.Add(bulkRequest, visibilityTaskKey, ch)
+	// Processor must flush bulks every v.processorFlushInterval.
+	// 1.2 is to allow some buffer to process bulk and respond with ack.
+	timeoutInterval := time.Duration(float64(v.processorFlushInterval) * 1.2)
+	timeoutTimer := time.NewTimer(timeoutInterval)
+	select {
+	case ack := <-ch:
+		timeoutTimer.Stop()
+		if !ack {
+			return newVisibilityTaskNAckError(visibilityTaskKey)
+		}
+		return nil
+	case <-timeoutTimer.C:
+		return newVisibilityTaskAckTimeoutError(visibilityTaskKey, timeoutInterval)
+	}
+}
+
+func (v *esVisibilityStore) generateESDoc(request *persistence.InternalUpsertWorkflowExecutionRequestV2, visibilityTaskKey string) map[string]interface{} {
+	doc := map[string]interface{}{
+		definition.VisibilityTaskKey: visibilityTaskKey,
+		definition.NamespaceID:       request.NamespaceID,
+		definition.WorkflowID:        request.WorkflowID,
+		definition.RunID:             request.RunID,
+		definition.WorkflowType:      request.WorkflowTypeName,
+		definition.StartTime:         request.StartTimestamp,
+		definition.ExecutionTime:     request.ExecutionTimestamp,
+		definition.CloseTime:         request.CloseTimestamp,
+		definition.ExecutionStatus:   request.Status,
+		definition.HistoryLength:     request.HistoryLength,
+		definition.TaskQueue:         request.TaskQueue,
+	}
+
+	if len(request.Memo.GetData()) > 0 {
+		doc[definition.Memo] = request.Memo.GetData()
+		doc[definition.Encoding] = request.Memo.GetEncodingType().String()
+	}
 
 	attr := make(map[string]interface{})
-	for fieldName, fieldPayload := range request.SearchAttributes {
-		if !p.isValidFieldToES(fieldName) {
-			p.logger.Error("Unregistered field.", tag.ESField(fieldName))
-			p.metricsClient.IncCounter(metrics.IndexProcessorScope, metrics.IndexProcessorCorruptedData)
+	for searchAttributeName, searchAttributePayload := range request.SearchAttributes {
+		if !v.isValidSearchAttribute(searchAttributeName) {
+			v.logger.Error("Unregistered field.", tag.ESField(searchAttributeName))
+			v.metricsClient.IncCounter(metrics.IndexProcessorScope, metrics.IndexProcessorCorruptedData)
 			continue
 		}
-		var fieldValue interface{}
-		// This will work only if search attributes are serialized using JSON.
-		err := payload.Decode(fieldPayload, &fieldValue)
+		var searchAttributeValue interface{}
+		// payload.Decode will set value and type only if search attributes are serialized using JSON.
+		err := payload.Decode(searchAttributePayload, &searchAttributeValue)
 		if err != nil {
-			p.logger.Error("Error when decode search attribute payload.", tag.Error(err), tag.ESField(fieldName))
-			p.metricsClient.IncCounter(metrics.IndexProcessorScope, metrics.IndexProcessorCorruptedData)
+			v.logger.Error("Error when decode search attribute payload.", tag.Error(err), tag.ESField(searchAttributeName))
+			v.metricsClient.IncCounter(metrics.IndexProcessorScope, metrics.IndexProcessorCorruptedData)
 		}
-		attr[fieldName] = fieldValue
+		attr[searchAttributeName] = searchAttributeValue
 	}
 	doc[definition.Attr] = attr
 
 	return doc
 }
 
-func (p *esVisibilityStore) isValidFieldToES(field string) bool {
-	if _, ok := p.config.ValidSearchAttributes()[field]; ok {
-		return true
-	}
-	if field == definition.Memo || field == definition.KafkaKey || field == definition.Encoding {
-		return true
-	}
-	return false
+func (v *esVisibilityStore) isValidSearchAttribute(searchAttribute string) bool {
+	_, ok := v.config.ValidSearchAttributes()[searchAttribute]
+	return ok
 }
 
 func (v *esVisibilityStore) ListOpenWorkflowExecutions(
@@ -788,6 +840,13 @@ func (v *esVisibilityStore) checkProducer() {
 	if v.producer == nil {
 		// must be bug, check history setup
 		panic("message producer is nil")
+	}
+}
+
+func (v *esVisibilityStore) checkProcessor() {
+	if v.processor == nil {
+		// must be bug, check history setup
+		panic("elastic search processor is nil")
 	}
 }
 
