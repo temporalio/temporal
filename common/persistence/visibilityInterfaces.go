@@ -200,8 +200,11 @@ type (
 	VisibilityManager interface {
 		Closeable
 		GetName() string
+		// Deprecated.
 		RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error
+		// Deprecated.
 		RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error
+		// Deprecated.
 		UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error
 		UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequestV2) error
 		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error)
@@ -212,6 +215,7 @@ type (
 		ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error)
 		GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error)
+		// Deprecated.
 		DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error
 		DeleteWorkflowExecutionV2(request *VisibilityDeleteWorkflowExecutionRequest) error
 		ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)

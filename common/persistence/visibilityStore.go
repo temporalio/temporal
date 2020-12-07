@@ -64,6 +64,7 @@ func (v *visibilityManagerImpl) GetName() string {
 	return v.persistence.GetName()
 }
 
+// Deprecated.
 func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {
 	req := &InternalRecordWorkflowExecutionStartedRequest{
 		NamespaceID:        request.NamespaceID,
@@ -81,6 +82,7 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWo
 	return v.persistence.RecordWorkflowExecutionStarted(req)
 }
 
+// Deprecated.
 func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
 	req := &InternalRecordWorkflowExecutionClosedRequest{
 		NamespaceID:        request.NamespaceID,
@@ -101,6 +103,7 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWor
 	return v.persistence.RecordWorkflowExecutionClosed(req)
 }
 
+// Deprecated.
 func (v *visibilityManagerImpl) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
 	req := &InternalUpsertWorkflowExecutionRequest{
 		NamespaceID:        request.NamespaceID,
@@ -204,6 +207,7 @@ func (v *visibilityManagerImpl) GetClosedWorkflowExecution(request *GetClosedWor
 	return v.convertInternalGetResponse(internalResp), nil
 }
 
+// Deprecated.
 func (v *visibilityManagerImpl) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {
 	return v.persistence.DeleteWorkflowExecution(request)
 }

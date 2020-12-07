@@ -154,8 +154,11 @@ type (
 	VisibilityStore interface {
 		Closeable
 		GetName() string
+		// Deprecated.
 		RecordWorkflowExecutionStarted(request *InternalRecordWorkflowExecutionStartedRequest) error
+		// Deprecated.
 		RecordWorkflowExecutionClosed(request *InternalRecordWorkflowExecutionClosedRequest) error
+		// Deprecated.
 		UpsertWorkflowExecution(request *InternalUpsertWorkflowExecutionRequest) error
 		UpsertWorkflowExecutionV2(request *InternalUpsertWorkflowExecutionRequestV2) error
 		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
@@ -166,6 +169,7 @@ type (
 		ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*InternalListWorkflowExecutionsResponse, error)
 		GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*InternalGetClosedWorkflowExecutionResponse, error)
+		// Deprecated.
 		DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error
 		DeleteWorkflowExecutionV2(request *VisibilityDeleteWorkflowExecutionRequest) error
 		ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
