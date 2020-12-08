@@ -308,6 +308,80 @@ func (_m *ExecutionManager) RangeCompleteTransferTask(request *persistence.Range
 	return r0
 }
 
+// GetVisibilityTask provides a mock function with given fields: request
+func (_m *ExecutionManager) GetVisibilityTask(request *persistence.GetVisibilityTaskRequest) (*persistence.GetVisibilityTaskResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.GetVisibilityTaskResponse
+	if rf, ok := ret.Get(0).(func(*persistence.GetVisibilityTaskRequest) *persistence.GetVisibilityTaskResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.GetVisibilityTaskResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.GetVisibilityTaskRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetVisibilityTasks provides a mock function with given fields: request
+func (_m *ExecutionManager) GetVisibilityTasks(request *persistence.GetVisibilityTasksRequest) (*persistence.GetVisibilityTasksResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.GetVisibilityTasksResponse
+	if rf, ok := ret.Get(0).(func(*persistence.GetVisibilityTasksRequest) *persistence.GetVisibilityTasksResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.GetVisibilityTasksResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.GetVisibilityTasksRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// CompleteVisibilityTask provides a mock function with given fields: request
+func (_m *ExecutionManager) CompleteVisibilityTask(request *persistence.CompleteVisibilityTaskRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.CompleteVisibilityTaskRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// RangeCompleteVisibilityTask provides a mock function with given fields: request
+func (_m *ExecutionManager) RangeCompleteVisibilityTask(request *persistence.RangeCompleteVisibilityTaskRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.RangeCompleteVisibilityTaskRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // GetReplicationTask provides a mock function with given fields: request
 func (_m *ExecutionManager) GetReplicationTask(request *persistence.GetReplicationTaskRequest) (*persistence.GetReplicationTaskResponse, error) {
 	ret := _m.Called(request)
