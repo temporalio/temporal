@@ -304,6 +304,13 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 
 	if lastReadTaskID == persistence.EmptyQueueMessageID {
 		lastReadTaskID = p.shard.GetClusterReplicationLevel(pollingCluster)
+	} else {
+		if err := p.shard.UpdateClusterReplicationLevel(
+			pollingCluster,
+			lastReadTaskID,
+		); err != nil {
+			p.logger.Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
+		}
 	}
 
 	taskInfoList, hasMore, err := p.readTasksWithBatchSize(lastReadTaskID, p.fetchTasksBatchSize)
@@ -351,13 +358,6 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 		metrics.ReplicationTasksReturned,
 		time.Duration(len(replicationTasks)),
 	)
-
-	if err := p.shard.UpdateClusterReplicationLevel(
-		pollingCluster,
-		lastReadTaskID,
-	); err != nil {
-		p.logger.Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
-	}
 
 	return &replicationspb.ReplicationMessages{
 		ReplicationTasks:       replicationTasks,

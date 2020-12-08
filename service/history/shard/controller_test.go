@@ -142,6 +142,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 							cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 						},
 						ClusterReplicationLevel: map[string]int64{},
+						ReplicationDlqAckLevel:  map[string]int64{},
 					},
 				}, nil).Once()
 			s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
@@ -162,6 +163,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 						cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 					},
 					ClusterReplicationLevel: map[string]int64{},
+					ReplicationDlqAckLevel:  map[string]int64{},
 				},
 				PreviousRangeID: 5,
 			}).Return(nil).Once()
@@ -222,6 +224,7 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 							cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 						},
 						ClusterReplicationLevel: map[string]int64{},
+						ReplicationDlqAckLevel:  map[string]int64{},
 					},
 				}, nil).Once()
 			s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
@@ -242,6 +245,7 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 						cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 					},
 					ClusterReplicationLevel: map[string]int64{},
+					ReplicationDlqAckLevel:  map[string]int64{},
 				},
 				PreviousRangeID: 5,
 			}).Return(nil).Once()
@@ -309,6 +313,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 						cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 					},
 					ClusterReplicationLevel: map[string]int64{},
+					ReplicationDlqAckLevel:  map[string]int64{},
 				},
 			}, nil).Once()
 		s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
@@ -329,6 +334,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 					cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 				},
 				ClusterReplicationLevel: map[string]int64{},
+				ReplicationDlqAckLevel:  map[string]int64{},
 			},
 			PreviousRangeID: 5,
 		}).Return(nil).Once()
@@ -381,6 +387,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 						cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 					},
 					ClusterReplicationLevel: map[string]int64{},
+					ReplicationDlqAckLevel:  map[string]int64{},
 				},
 			}, nil).Once()
 		s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
@@ -401,6 +408,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 					cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 				},
 				ClusterReplicationLevel: map[string]int64{},
+				ReplicationDlqAckLevel:  map[string]int64{},
 			},
 			PreviousRangeID: 5,
 		}).Return(nil).Once()
@@ -588,6 +596,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 					cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 				},
 				ClusterReplicationLevel: map[string]int64{},
+				ReplicationDlqAckLevel:  map[string]int64{},
 			},
 		}, nil).Once()
 	s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
@@ -608,6 +617,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 				cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 			},
 			ClusterReplicationLevel: map[string]int64{},
+			ReplicationDlqAckLevel:  map[string]int64{},
 		},
 		PreviousRangeID: currentRangeID,
 	}).Return(nil).Once()

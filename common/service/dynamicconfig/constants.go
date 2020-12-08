@@ -59,7 +59,6 @@ var keys = map[Key]string{
 	testGetBoolPropertyFilteredByTaskQueueInfoKey:     "testGetBoolPropertyFilteredByTaskQueueInfoKey",
 
 	// system settings
-	EnableGlobalNamespace:                  "system.enableGlobalNamespace",
 	EnableVisibilitySampling:               "system.enableVisibilitySampling",
 	AdvancedVisibilityWritingMode:          "system.advancedVisibilityWritingMode",
 	EnableReadVisibilityFromES:             "system.enableReadVisibilityFromES",
@@ -105,8 +104,6 @@ var keys = map[Key]string{
 	EnableClientVersionCheck:              "frontend.enableClientVersionCheck",
 	ValidSearchAttributes:                 "frontend.validSearchAttributes",
 	SendRawWorkflowHistory:                "frontend.sendRawWorkflowHistory",
-	FrontendEnableRPCReplication:          "frontend.enableRPCReplication",
-	FrontendEnableCleanupReplicationTask:  "frontend.enableCleanupReplicationTask",
 	SearchAttributesNumberOfKeysLimit:     "frontend.searchAttributesNumberOfKeysLimit",
 	SearchAttributesSizeOfValueLimit:      "frontend.searchAttributesSizeOfValueLimit",
 	SearchAttributesTotalSizeLimit:        "frontend.searchAttributesTotalSizeLimit",
@@ -238,7 +235,10 @@ var keys = map[Key]string{
 	ReplicationTaskFetcherTimerJitterCoefficient:           "history.ReplicationTaskFetcherTimerJitterCoefficient",
 	ReplicationTaskFetcherErrorRetryWait:                   "history.ReplicationTaskFetcherErrorRetryWait",
 	ReplicationTaskProcessorErrorRetryWait:                 "history.ReplicationTaskProcessorErrorRetryWait",
+	ReplicationTaskProcessorErrorRetryBackoffCoefficient:   "history.ReplicationTaskProcessorErrorRetryBackoffCoefficient",
+	ReplicationTaskProcessorErrorRetryMaxInterval:          "history.ReplicationTaskProcessorErrorRetryMaxInterval",
 	ReplicationTaskProcessorErrorRetryMaxAttempts:          "history.ReplicationTaskProcessorErrorRetryMaxAttempts",
+	ReplicationTaskProcessorErrorRetryExpiration:           "history.ReplicationTaskProcessorErrorRetryExpiration",
 	ReplicationTaskProcessorNoTaskInitialWait:              "history.ReplicationTaskProcessorNoTaskInitialWait",
 	ReplicationTaskProcessorCleanupInterval:                "history.ReplicationTaskProcessorCleanupInterval",
 	ReplicationTaskProcessorCleanupJitterCoefficient:       "history.ReplicationTaskProcessorCleanupJitterCoefficient",
@@ -246,9 +246,6 @@ var keys = map[Key]string{
 	ReplicationTaskProcessorStartWaitJitterCoefficient:     "history.ReplicationTaskProcessorStartWaitJitterCoefficient",
 	ReplicationTaskProcessorHostQPS:                        "history.ReplicationTaskProcessorHostQPS",
 	ReplicationTaskProcessorShardQPS:                       "history.ReplicationTaskProcessorShardQPS",
-	HistoryEnableRPCReplication:                            "history.EnableRPCReplication",
-	HistoryEnableKafkaReplication:                          "history.EnableKafkaReplication",
-	HistoryEnableCleanupReplicationTask:                    "history.EnableCleanupReplicationTask",
 	MaxBufferedQueryCount:                                  "history.MaxBufferedQueryCount",
 	MutableStateChecksumGenProbability:                     "history.mutableStateChecksumGenProbability",
 	MutableStateChecksumVerifyProbability:                  "history.mutableStateChecksumVerifyProbability",
@@ -271,8 +268,6 @@ var keys = map[Key]string{
 	WorkerReplicationTaskMaxRetryDuration:           "worker.replicationTaskMaxRetryDuration",
 	WorkerReplicationTaskContextDuration:            "worker.replicationTaskContextDuration",
 	WorkerReReplicationContextTimeout:               "worker.workerReReplicationContextTimeout",
-	WorkerEnableRPCReplication:                      "worker.enableWorkerRPCReplication",
-	WorkerEnableKafkaReplication:                    "worker.enableKafkaReplication",
 	WorkerIndexerConcurrency:                        "worker.indexerConcurrency",
 	WorkerESProcessorNumOfWorkers:                   "worker.ESProcessorNumOfWorkers",
 	WorkerESProcessorBulkActions:                    "worker.ESProcessorBulkActions",
@@ -311,8 +306,6 @@ const (
 	testGetBoolPropertyFilteredByNamespaceIDKey
 	testGetBoolPropertyFilteredByTaskQueueInfoKey
 
-	// EnableGlobalNamespace is key for enable global namespace
-	EnableGlobalNamespace
 	// EnableVisibilitySampling is key for enable visibility sampling
 	EnableVisibilitySampling
 	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
@@ -398,10 +391,6 @@ const (
 	ValidSearchAttributes
 	// SendRawWorkflowHistory is whether to enable raw history retrieving
 	SendRawWorkflowHistory
-	// FrontendEnableRPCReplication is a feature flag for rpc replication
-	FrontendEnableRPCReplication
-	// FrontendEnableCleanupReplicationTask is a feature flag for rpc replication cleanup
-	FrontendEnableCleanupReplicationTask
 	// SearchAttributesNumberOfKeysLimit is the limit of number of keys
 	SearchAttributesNumberOfKeysLimit
 	// SearchAttributesSizeOfValueLimit is the size limit of each value
@@ -692,10 +681,6 @@ const (
 	WorkerReplicationTaskContextDuration
 	// WorkerReReplicationContextTimeout is the context timeout for end to end  re-replication process
 	WorkerReReplicationContextTimeout
-	// WorkerEnableRPCReplication is the feature flag for RPC replication
-	WorkerEnableRPCReplication
-	// WorkerEnableKafkaReplication is the feature flag for kafka replication
-	WorkerEnableKafkaReplication
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time
 	WorkerIndexerConcurrency
 	// WorkerESProcessorNumOfWorkers is num of workers for esProcessor
@@ -749,8 +734,14 @@ const (
 	ReplicationTaskFetcherErrorRetryWait
 	// ReplicationTaskProcessorErrorRetryWait is the initial retry wait when we see errors in applying replication tasks
 	ReplicationTaskProcessorErrorRetryWait
+	// ReplicationTaskProcessorErrorRetryBackoffCoefficient is the retry wait backoff time coefficient
+	ReplicationTaskProcessorErrorRetryBackoffCoefficient
+	// ReplicationTaskProcessorErrorRetryMaxInterval is the retry wait backoff max duration
+	ReplicationTaskProcessorErrorRetryMaxInterval
 	// ReplicationTaskProcessorErrorRetryMaxAttempts is the max retry attempts for applying replication tasks
 	ReplicationTaskProcessorErrorRetryMaxAttempts
+	// ReplicationTaskProcessorErrorRetryExpiration is the max retry duration for applying replication tasks
+	ReplicationTaskProcessorErrorRetryExpiration
 	// ReplicationTaskProcessorNoTaskInitialWait is the wait time when not ask is returned
 	ReplicationTaskProcessorNoTaskInitialWait
 	// ReplicationTaskProcessorCleanupInterval determines how frequently the cleanup replication queue
@@ -765,12 +756,6 @@ const (
 	ReplicationTaskProcessorHostQPS
 	// ReplicationTaskProcessorShardQPS is the qps of task processing rate limiter on shard level
 	ReplicationTaskProcessorShardQPS
-	// HistoryEnableRPCReplication is the feature flag for RPC replication
-	HistoryEnableRPCReplication
-	// HistoryEnableKafkaReplication is the migration flag for Kafka replication
-	HistoryEnableKafkaReplication
-	// HistoryEnableCleanupReplicationTask is the migration flag for Kafka replication
-	HistoryEnableCleanupReplicationTask
 	// EnableConsistentQuery indicates if consistent query is enabled for the cluster
 	MaxBufferedQueryCount
 	// MutableStateChecksumGenProbability is the probability [0-100] that checksum will be generated for mutable state

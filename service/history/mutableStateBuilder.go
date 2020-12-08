@@ -1690,7 +1690,14 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		parentNamespaceID = parentExecutionInfo.GetNamespaceId()
 	}
 
-	event := e.hBuilder.AddWorkflowExecutionStartedEvent(req, previousExecutionInfo, previousExecutionState.GetExecutionState(), firstRunID, execution.GetRunId())
+	event := e.hBuilder.AddWorkflowExecutionStartedEvent(
+		*e.executionInfo.StartTime,
+		req,
+		previousExecutionInfo,
+		previousExecutionState.GetExecutionState(),
+		firstRunID,
+		execution.GetRunId(),
+	)
 	if err := e.ReplicateWorkflowExecutionStartedEvent(
 		parentNamespaceID,
 		execution,
@@ -1746,7 +1753,14 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
 		return nil, e.createInternalServerError(opTag)
 	}
 
-	event := e.hBuilder.AddWorkflowExecutionStartedEvent(startRequest, nil, nil, execution.GetRunId(), execution.GetRunId())
+	event := e.hBuilder.AddWorkflowExecutionStartedEvent(
+		*e.executionInfo.StartTime,
+		startRequest,
+		nil,
+		nil,
+		execution.GetRunId(),
+		execution.GetRunId(),
+	)
 
 	var parentNamespaceID string
 	if startRequest.ParentExecutionInfo != nil {

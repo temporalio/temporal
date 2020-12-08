@@ -126,6 +126,7 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	if err != nil {
 		return nil, ackLevel, nil, err
 	}
+	pageToken = resp.NextPageToken
 
 	remoteAdminClient := r.shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster)
 	taskInfo := make([]*replicationspb.ReplicationTaskInfo, 0, len(resp.Tasks))
@@ -142,6 +143,11 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 			ScheduledId:  task.GetScheduledId(),
 		})
 	}
+
+	if len(taskInfo) == 0 {
+		return nil, ackLevel, pageToken, nil
+	}
+
 	dlqResponse, err := remoteAdminClient.GetDLQReplicationMessages(
 		ctx,
 		&adminservice.GetDLQReplicationMessagesRequest{
@@ -151,7 +157,8 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	if err != nil {
 		return nil, ackLevel, nil, err
 	}
-	return dlqResponse.ReplicationTasks, ackLevel, resp.NextPageToken, nil
+
+	return dlqResponse.ReplicationTasks, ackLevel, pageToken, nil
 }
 
 func (r *replicationDLQHandlerImpl) purgeMessages(

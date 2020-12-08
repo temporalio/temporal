@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/config/ringpop"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/service/frontend"
@@ -141,7 +142,7 @@ func (s *Server) Start() error {
 
 	clusterMetadata := cluster.NewMetadata(
 		s.logger,
-		dc.GetBoolProperty(dynamicconfig.EnableGlobalNamespace, s.so.config.ClusterMetadata.EnableGlobalNamespace),
+		s.so.config.ClusterMetadata.EnableGlobalNamespace,
 		s.so.config.ClusterMetadata.FailoverVersionIncrement,
 		s.so.config.ClusterMetadata.MasterClusterName,
 		s.so.config.ClusterMetadata.CurrentClusterName,
@@ -292,7 +293,14 @@ func (s *Server) getServiceParams(
 	)()
 	isAdvancedVisEnabled := advancedVisMode != common.AdvancedVisibilityWritingModeOff
 	if clusterMetadata.IsGlobalNamespaceEnabled() {
-		params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), s.logger, metricsScope, true, isAdvancedVisEnabled)
+		if params.ClusterMetadata.GetReplicationConsumerConfig().Type == config.ReplicationConsumerTypeKafka ||
+			params.ClusterMetadata.GetReplicationConsumerConfig().Type == config.ReplicationConsumerTypeKafkaToRPC {
+			params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), s.logger, metricsScope, true, isAdvancedVisEnabled)
+		} else if isAdvancedVisEnabled {
+			params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), s.logger, metricsScope, false, isAdvancedVisEnabled)
+		} else {
+			params.MessagingClient = nil
+		}
 	} else if isAdvancedVisEnabled {
 		params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), s.logger, metricsScope, false, isAdvancedVisEnabled)
 	} else {

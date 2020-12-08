@@ -27,6 +27,7 @@ package frontend
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"time"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -68,6 +69,7 @@ type (
 	// AdminHandler - gRPC handler interface for adminservice
 	AdminHandler struct {
 		resource.Resource
+		status int32
 
 		numberOfHistoryShards int32
 		params                *resource.BootstrapParams
@@ -97,6 +99,7 @@ func NewAdminHandler(
 	)
 	return &AdminHandler{
 		Resource:              resource,
+		status:                common.DaemonStatusInitialized,
 		numberOfHistoryShards: params.PersistenceConfig.NumHistoryShards,
 		params:                params,
 		config:                config,
@@ -111,15 +114,29 @@ func NewAdminHandler(
 
 // Start starts the handler
 func (adh *AdminHandler) Start() {
-	// Start namespace replication queue cleanup
-	if adh.config.EnableCleanupReplicationTask() {
-		// If the queue does not start, we can still call stop()
-		adh.Resource.GetNamespaceReplicationQueue().Start()
+	if !atomic.CompareAndSwapInt32(
+		&adh.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
+		return
 	}
+
+	// Start namespace replication queue cleanup
+	// If the queue does not start, we can still call stop()
+	adh.Resource.GetNamespaceReplicationQueue().Start()
 }
 
 // Stop stops the handler
 func (adh *AdminHandler) Stop() {
+	if !atomic.CompareAndSwapInt32(
+		&adh.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
+	}
+
 	// Calling stop if the queue does not start is ok
 	adh.Resource.GetNamespaceReplicationQueue().Stop()
 }
@@ -426,8 +443,11 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	size := rawHistoryResponse.Size
 	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
 	// namespaces along with the individual namespaces stats
-	adh.GetMetricsClient().RecordTimer(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.HistorySize, time.Duration(size))
-	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
+	adh.GetMetricsClient().
+		Scope(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
+		RecordTimer(metrics.HistorySize, time.Duration(size))
+	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
+		RecordTimer(metrics.HistorySize, time.Duration(size))
 
 	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,

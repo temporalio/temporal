@@ -24,7 +24,9 @@
 
 package metrics
 
-import "github.com/uber-go/tally"
+import (
+	"github.com/uber-go/tally"
+)
 
 // types used/defined by the package
 type (
@@ -2264,7 +2266,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		SyncThrottlePerTaskQueueCounter:           {metricName: "sync_throttle_count_per_tl", metricRollupName: "sync_throttle_count"},
 		BufferThrottlePerTaskQueueCounter:         {metricName: "buffer_throttle_count_per_tl", metricRollupName: "buffer_throttle_count"},
 		ExpiredTasksPerTaskQueueCounter:           {metricName: "tasks_expired_per_tl", metricRollupName: "tasks_expired"},
-		ForwardedPerTaskQueueCounter:              {metricName: "forwarded_per_tl", metricRollupName: "forwarded"},
+		ForwardedPerTaskQueueCounter:              {metricName: "forwarded_per_tl"},
 		ForwardTaskCallsPerTaskQueue:              {metricName: "forward_task_calls_per_tl", metricRollupName: "forward_task_calls"},
 		ForwardTaskErrorsPerTaskQueue:             {metricName: "forward_task_errors_per_tl", metricRollupName: "forward_task_errors"},
 		ForwardQueryCallsPerTaskQueue:             {metricName: "forward_query_calls_per_tl", metricRollupName: "forward_query_calls"},

@@ -101,8 +101,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		},
 	}
 	config := &Config{
-		EnableAdminProtection:        dynamicconfig.GetBoolPropertyFn(false),
-		EnableCleanupReplicationTask: dynamicconfig.GetBoolPropertyFn(false),
+		EnableAdminProtection: dynamicconfig.GetBoolPropertyFn(false),
 	}
 	s.handler = NewAdminHandler(s.mockResource, params, config)
 	s.handler.Start()
@@ -571,9 +570,8 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Permission() {
 	ctx := context.Background()
 	handler := s.handler
 	handler.config = &Config{
-		EnableAdminProtection:        dynamicconfig.GetBoolPropertyFn(true),
-		AdminOperationToken:          dynamicconfig.GetStringPropertyFn(common.DefaultAdminOperationToken),
-		EnableCleanupReplicationTask: dynamicconfig.GetBoolPropertyFn(false),
+		EnableAdminProtection: dynamicconfig.GetBoolPropertyFn(true),
+		AdminOperationToken:   dynamicconfig.GetStringPropertyFn(common.DefaultAdminOperationToken),
 	}
 
 	type test struct {

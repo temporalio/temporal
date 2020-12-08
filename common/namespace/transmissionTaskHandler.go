@@ -32,7 +32,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
 )
 
@@ -41,9 +40,15 @@ import (
 type (
 	// Replicator is the interface which can replicate the namespace
 	Replicator interface {
-		HandleTransmissionTask(namespaceOperation enumsspb.NamespaceOperation, info *persistencespb.NamespaceInfo,
-			config *persistencespb.NamespaceConfig, replicationConfig *persistencespb.NamespaceReplicationConfig,
-			configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error
+		HandleTransmissionTask(
+			namespaceOperation enumsspb.NamespaceOperation,
+			info *persistencespb.NamespaceInfo,
+			config *persistencespb.NamespaceConfig,
+			replicationConfig *persistencespb.NamespaceReplicationConfig,
+			configVersion int64,
+			failoverVersion int64,
+			isGlobalNamespaceEnabled bool,
+		) error
 	}
 
 	namespaceReplicatorImpl struct {
@@ -53,7 +58,10 @@ type (
 )
 
 // NewNamespaceReplicator create a new instance of namespace replicator
-func NewNamespaceReplicator(replicationMessageSink messaging.Producer, logger log.Logger) Replicator {
+func NewNamespaceReplicator(
+	replicationMessageSink messaging.Producer,
+	logger log.Logger,
+) Replicator {
 	return &namespaceReplicatorImpl{
 		replicationMessageSink: replicationMessageSink,
 		logger:                 logger,
@@ -61,12 +69,17 @@ func NewNamespaceReplicator(replicationMessageSink messaging.Producer, logger lo
 }
 
 // HandleTransmissionTask handle transmission of the namespace replication task
-func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(namespaceOperation enumsspb.NamespaceOperation,
-	info *persistencespb.NamespaceInfo, config *persistencespb.NamespaceConfig, replicationConfig *persistencespb.NamespaceReplicationConfig,
-	configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error {
+func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
+	namespaceOperation enumsspb.NamespaceOperation,
+	info *persistencespb.NamespaceInfo,
+	config *persistencespb.NamespaceConfig,
+	replicationConfig *persistencespb.NamespaceReplicationConfig,
+	configVersion int64,
+	failoverVersion int64,
+	isGlobalNamespaceEnabled bool,
+) error {
 
 	if !isGlobalNamespaceEnabled {
-		namespaceReplicator.logger.Warn("Should not replicate non global namespace", tag.WorkflowNamespaceID(info.Id))
 		return nil
 	}
 
@@ -109,7 +122,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 func (namespaceReplicator *namespaceReplicatorImpl) convertClusterReplicationConfigToProto(
 	input []string,
 ) []*replicationpb.ClusterReplicationConfig {
-	output := []*replicationpb.ClusterReplicationConfig{}
+	output := make([]*replicationpb.ClusterReplicationConfig, 0, len(input))
 	for _, clusterName := range input {
 		output = append(output, &replicationpb.ClusterReplicationConfig{ClusterName: clusterName})
 	}

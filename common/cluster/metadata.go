@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -62,8 +61,7 @@ type (
 	metadataImpl struct {
 		logger log.Logger
 		// EnableGlobalNamespace whether the global namespace is enabled,
-		// this attr should be discarded when cross DC is made public
-		enableGlobalNamespace dynamicconfig.BoolPropertyFn
+		enableGlobalNamespace bool
 		// failoverVersionIncrement is the increment of each cluster's version when failover happen
 		failoverVersionIncrement int64
 		// masterClusterName is the name of the master cluster, only the master cluster can register / update namespace
@@ -83,7 +81,7 @@ type (
 // NewMetadata create a new instance of Metadata
 func NewMetadata(
 	logger log.Logger,
-	enableGlobalNamespace dynamicconfig.BoolPropertyFn,
+	enableGlobalNamespace bool,
 	failoverVersionIncrement int64,
 	masterClusterName string,
 	currentClusterName string,
@@ -145,7 +143,7 @@ func NewMetadata(
 // IsGlobalNamespaceEnabled whether the global namespace is enabled,
 // this attr should be discarded when cross DC is made public
 func (metadata *metadataImpl) IsGlobalNamespaceEnabled() bool {
-	return metadata.enableGlobalNamespace()
+	return metadata.enableGlobalNamespace
 }
 
 // GetNextFailoverVersion return the next failover version based on input
