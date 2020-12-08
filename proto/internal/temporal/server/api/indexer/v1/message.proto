@@ -25,6 +25,7 @@ option go_package = "go.temporal.io/server/api/indexer/v1;indexer";
 
 import "temporal/server/api/enums/v1/indexer.proto";
 
+// Deprecated. Remove with kafka removal.
 message Field {
     temporal.server.api.enums.v1.FieldType type = 1;
     oneof data {

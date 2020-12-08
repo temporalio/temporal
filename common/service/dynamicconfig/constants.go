@@ -71,6 +71,7 @@ var keys = map[Key]string{
 	MinRetentionDays:                       "system.minRetentionDays",
 	DisallowQuery:                          "system.disallowQuery",
 	EnableBatcher:                          "worker.enableBatcher",
+	EnableIndexer:                          "worker.enableIndexer",
 	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
 	EnableStickyQuery:                      "system.enableStickyQuery",
 	EnablePriorityTaskProcessor:            "system.enablePriorityTaskProcessor",

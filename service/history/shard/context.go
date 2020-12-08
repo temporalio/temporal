@@ -78,10 +78,6 @@ type (
 		GetTransferClusterAckLevel(cluster string) int64
 		UpdateTransferClusterAckLevel(cluster string, ackLevel int64) error
 
-		// GenerateVisibilityTaskID() (int64, error)
-		// GenerateVisibilityTaskIDs(number int) ([]int64, error)
-		// UpdateVisibilityMaxReadLevel(cluster string) time.Time
-
 		GetVisibilityMaxReadLevel() int64
 		GetVisibilityAckLevel() int64
 		UpdateVisibilityAckLevel(ackLevel int64) error

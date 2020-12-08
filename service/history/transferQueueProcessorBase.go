@@ -50,7 +50,7 @@ type (
 )
 
 const (
-	// TODO (alex): change to default
+	// TODO (alex): change to "default"?
 	defaultNamespace = "defaultNamespace"
 )
 

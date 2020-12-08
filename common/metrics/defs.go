@@ -908,11 +908,11 @@ const (
 
 	// VisibilityQueueProcessorScope is the scope used by all metric emitted by visibility queue processor
 	VisibilityQueueProcessorScope
-	// VisibilityTaskStartExecutionScope is the scope used for upsert search attributes processing by visibility queue processor
+	// VisibilityTaskStartExecutionScope is the scope used for start execution processing by visibility queue processor
 	VisibilityTaskStartExecutionScope
-	// VisibilityTaskUpsertExecutionScope is the scope used for upsert search attributes processing by visibility queue processor
+	// VisibilityTaskUpsertExecutionScope is the scope used for upsert execution processing by visibility queue processor
 	VisibilityTaskUpsertExecutionScope
-	// VisibilityTaskCloseExecutionScope is the scope used for upsert search attributes processing by visibility queue processor
+	// VisibilityTaskCloseExecutionScope is the scope used for close execution attributes processing by visibility queue processor
 	VisibilityTaskCloseExecutionScope
 	// VisibilityTaskDeleteExecutionScope is the scope used for delete by visibility queue processor
 	VisibilityTaskDeleteExecutionScope

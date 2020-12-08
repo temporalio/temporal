@@ -31,6 +31,7 @@ enum MessageType {
     MESSAGE_TYPE_DELETE = 2;
 }
 
+// Deprecated. Remove with kafka removal.
 enum FieldType {
     FIELD_TYPE_UNSPECIFIED = 0;
     FIELD_TYPE_STRING = 1;
