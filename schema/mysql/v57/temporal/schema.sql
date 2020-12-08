@@ -4,7 +4,7 @@ CREATE TABLE namespaces(
   name VARCHAR(255) UNIQUE NOT NULL,
   notification_version BIGINT NOT NULL,
   --
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
   is_global TINYINT(1) NOT NULL,
   PRIMARY KEY(partition_id, id)
@@ -22,7 +22,7 @@ CREATE TABLE shards (
   shard_id INT NOT NULL,
   --
   range_id BIGINT NOT NULL,
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
   PRIMARY KEY (shard_id)
 );
@@ -31,7 +31,7 @@ CREATE TABLE transfer_tasks(
   shard_id INT NOT NULL,
   task_id BIGINT NOT NULL,
   --
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
   PRIMARY KEY (shard_id, task_id)
 );
@@ -44,9 +44,9 @@ CREATE TABLE executions(
   --
   next_event_id BIGINT NOT NULL,
   last_write_version BIGINT NOT NULL,
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
-  state BLOB NOT NULL,
+  state MEDIUMBLOB NOT NULL,
   state_encoding VARCHAR(16) NOT NULL,
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id)
 );
@@ -82,7 +82,7 @@ CREATE TABLE tasks (
   task_queue_id VARBINARY(272) NOT NULL,
   task_id BIGINT NOT NULL,
   --
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
   PRIMARY KEY (range_hash, task_queue_id, task_id)
 );
@@ -92,7 +92,7 @@ CREATE TABLE task_queues (
   task_queue_id VARBINARY(272) NOT NULL,
   --
   range_id BIGINT NOT NULL,
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
   PRIMARY KEY (range_hash, task_queue_id)
 );
@@ -101,7 +101,7 @@ CREATE TABLE replication_tasks (
   shard_id INT NOT NULL,
   task_id BIGINT NOT NULL,
   --
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
   PRIMARY KEY (shard_id, task_id)
 );
@@ -111,7 +111,7 @@ CREATE TABLE replication_tasks_dlq (
   shard_id INT NOT NULL,
   task_id BIGINT NOT NULL,
   --
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
   PRIMARY KEY (source_cluster_name, shard_id, task_id)
 );
@@ -121,7 +121,7 @@ CREATE TABLE timer_tasks (
   visibility_timestamp DATETIME(6) NOT NULL,
   task_id BIGINT NOT NULL,
   --
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
   PRIMARY KEY (shard_id, visibility_timestamp, task_id)
 );
@@ -134,7 +134,7 @@ CREATE TABLE activity_info_maps (
   run_id BINARY(16) NOT NULL,
   schedule_id BIGINT NOT NULL,
 --
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16),
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, schedule_id)
 );
@@ -146,7 +146,7 @@ CREATE TABLE timer_info_maps (
   run_id BINARY(16) NOT NULL,
   timer_id VARCHAR(255) NOT NULL,
 --
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16),
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, timer_id)
 );
@@ -158,7 +158,7 @@ CREATE TABLE child_execution_info_maps (
   run_id BINARY(16) NOT NULL,
   initiated_id BIGINT NOT NULL,
 --
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16),
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, initiated_id)
 );
@@ -170,7 +170,7 @@ CREATE TABLE request_cancel_info_maps (
   run_id BINARY(16) NOT NULL,
   initiated_id BIGINT NOT NULL,
 --
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16),
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, initiated_id)
 );
@@ -182,7 +182,7 @@ CREATE TABLE signal_info_maps (
   run_id BINARY(16) NOT NULL,
   initiated_id BIGINT NOT NULL,
 --
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16),
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, initiated_id)
 );
@@ -216,7 +216,7 @@ CREATE TABLE history_tree (
   tree_id        BINARY(16) NOT NULL,
   branch_id      BINARY(16) NOT NULL,
   --
-  data           BLOB NOT NULL,
+  data           MEDIUMBLOB NOT NULL,
   data_encoding  VARCHAR(16) NOT NULL,
   PRIMARY KEY (shard_id, tree_id, branch_id)
 );
@@ -224,23 +224,23 @@ CREATE TABLE history_tree (
 CREATE TABLE queue (
   queue_type        INT NOT NULL,
   message_id        BIGINT NOT NULL,
-  message_payload   BLOB NOT NULL,
+  message_payload   MEDIUMBLOB NOT NULL,
   message_encoding  VARCHAR(16) NOT NULL,
   PRIMARY KEY(queue_type, message_id)
 );
 
 CREATE TABLE queue_metadata (
   queue_type     INT NOT NULL,
-  data           BLOB NOT NULL,
+  data           MEDIUMBLOB NOT NULL,
   data_encoding  VARCHAR(16) NOT NULL,
   PRIMARY KEY(queue_type)
 );
 
 CREATE TABLE cluster_metadata (
   metadata_partition        INT NOT NULL,
-  data                      BLOB NOT NULL,
+  data                      MEDIUMBLOB NOT NULL,
   data_encoding             VARCHAR(16) NOT NULL,
-  immutable_data            BLOB NOT NULL,
+  immutable_data            MEDIUMBLOB NOT NULL,
   immutable_data_encoding   VARCHAR(16) NOT NULL,
   version                   BIGINT NOT NULL,
   PRIMARY KEY(metadata_partition)
