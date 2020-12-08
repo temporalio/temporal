@@ -243,7 +243,7 @@ type (
 		Version             int64
 	}
 
-	// Deprecated. CloseExecutionTask identifies a transfer task for deletion of execution
+	// CloseExecutionTask identifies a transfer task for deletion of execution
 	CloseExecutionTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64

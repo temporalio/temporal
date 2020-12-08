@@ -288,7 +288,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		archiveVisibility = clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
 	}
 
-	if recordWorkflowClose {
+	if !t.config.DisableKafkaForVisibility() && recordWorkflowClose {
 		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 			NamespaceID: namespaceID,
 			Namespace:   namespace,

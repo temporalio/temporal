@@ -167,13 +167,13 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 	currentVersion := r.mutableState.GetCurrentVersion()
 	executionInfo := r.mutableState.GetExecutionInfo()
 
-	if !r.disableKafkaForVisibility {
-		r.mutableState.AddTransferTasks(&persistence.CloseExecutionTask{
-			// TaskID is set by shard
-			VisibilityTimestamp: now,
-			Version:             currentVersion,
-		})
-	} else {
+	r.mutableState.AddTransferTasks(&persistence.CloseExecutionTask{
+		// TaskID is set by shard
+		VisibilityTimestamp: now,
+		Version:             currentVersion,
+	})
+
+	if r.disableKafkaForVisibility {
 		r.mutableState.AddVisibilityTasks(&persistence.UpsertExecutionVisibilityTask{
 			// TaskID is set by shard
 			VisibilityTimestamp: now,
@@ -240,6 +240,7 @@ func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
 ) error {
 
 	startVersion := startEvent.GetVersion()
+	executionInfo := r.mutableState.GetExecutionInfo()
 
 	if !r.disableKafkaForVisibility {
 		r.mutableState.AddTransferTasks(&persistence.RecordWorkflowStartedTask{
@@ -248,6 +249,15 @@ func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
 			Version:             startVersion,
 		})
 		return nil
+	}
+
+	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(executionInfo.NamespaceId)
+	if err == nil {
+		// if sampled for longer retention is enabled, only record those sampled events
+		if namespaceEntry.IsSampledForLongerRetentionEnabled(executionInfo.WorkflowId) &&
+			!namespaceEntry.IsSampledForLongerRetention(executionInfo.WorkflowId) {
+			return nil
+		}
 	}
 
 	r.mutableState.AddVisibilityTasks(&persistence.UpsertExecutionVisibilityTask{
