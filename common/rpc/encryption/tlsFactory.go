@@ -44,8 +44,16 @@ type (
 	CertProvider interface {
 		FetchServerCertificate() (*tls.Certificate, error)
 		FetchClientCAs() (*x509.CertPool, error)
-		FetchServerRootCAsForClient() (*x509.CertPool, error)
 		GetSettings() *config.GroupTLS
+	}
+
+	// ClientCertProvider is an interface to load raw TLS/X509 primitives for configuring clients.
+	ClientCertProvider interface {
+		FetchClientCertificate() (*tls.Certificate, error)
+		FetchWorkerCertificate() (*tls.Certificate, error)
+		FetchServerRootCAsForClient(isWorker bool) (*x509.CertPool, error)
+		ServerName(isWorker bool) string
+		DisableHostVerification(isWorker bool) bool
 	}
 
 	// PerHostCertProviderFactory creates a CertProvider in the context of a specific Domain.
@@ -54,28 +62,9 @@ type (
 	}
 
 	tlsConfigConstructor func() (*tls.Config, error)
-
-	providerType string
-)
-
-const (
-	providerTypeLocalStore providerType = "localstore"
-	providerTypeSelfSigned providerType = "selfsigned"
 )
 
 // NewTLSConfigProviderFromConfig creates a new TLS Config provider from RootTLS config
 func NewTLSConfigProviderFromConfig(encryptionSettings config.RootTLS) (TLSConfigProvider, error) {
-	/* if || encryptionSettings.Provider == ""  {
-		return nil, nil
-	}
-	*/
-
-	/*switch providerType(encryptionSettings.Provider) {
-	case providerTypeSelfSigned:
-		return NewSelfSignedTlsFactory(encryptionSettings, hostname)
-	case providerTypeLocalStore:*/
 	return NewLocalStoreTlsProvider(&encryptionSettings)
-	//}
-
-	//return nil, fmt.Errorf("unknown provider: %v", encryptionSettings.Provider)
 }

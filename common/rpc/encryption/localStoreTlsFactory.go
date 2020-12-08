@@ -39,8 +39,10 @@ type localStoreTlsProvider struct {
 
 	settings *config.RootTLS
 
-	internodeCertProvider CertProvider
-	frontendCertProvider  CertProvider
+	internodeCertProvider       CertProvider
+	internodeClientCertProvider ClientCertProvider
+	frontendCertProvider        CertProvider
+	workerCertProvider          ClientCertProvider
 
 	frontendPerHostCertProviderFactory PerHostCertProviderFactory
 
@@ -51,9 +53,22 @@ type localStoreTlsProvider struct {
 }
 
 func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS) (TLSConfigProvider, error) {
+	internodeProvider := &localStoreCertProvider{tlsSettings: &tlsConfig.Internode}
+	var workerProvider ClientCertProvider
+	if tlsConfig.SystemWorker.CertFile != "" || tlsConfig.SystemWorker.CertData != "" { // explcit system worker config
+		workerProvider = &localStoreCertProvider{workerTLSSettings: &tlsConfig.SystemWorker}
+	} else { // legacy implicit system worker config case
+		internodeWorkerProvider := &localStoreCertProvider{tlsSettings: &tlsConfig.Internode}
+		internodeWorkerProvider.isLegacyWorkerConfig = true
+		internodeWorkerProvider.legacyWorkerSettings = &tlsConfig.Frontend.Client
+		workerProvider = internodeWorkerProvider
+	}
+
 	return &localStoreTlsProvider{
-		internodeCertProvider:              &localStoreCertProvider{tlsSettings: &tlsConfig.Internode},
+		internodeCertProvider:              internodeProvider,
+		internodeClientCertProvider:        internodeProvider,
 		frontendCertProvider:               &localStoreCertProvider{tlsSettings: &tlsConfig.Frontend},
+		workerCertProvider:                 workerProvider,
 		frontendPerHostCertProviderFactory: newLocalStorePerHostCertProviderFactory(tlsConfig.Frontend.PerHostOverrides),
 		RWMutex:                            sync.RWMutex{},
 		settings:                           tlsConfig,
@@ -64,7 +79,8 @@ func (s *localStoreTlsProvider) GetInternodeClientConfig() (*tls.Config, error) 
 	return s.getOrCreateConfig(
 		&s.internodeClientConfig,
 		func() (*tls.Config, error) {
-			return newClientTLSConfig(s.internodeCertProvider, s.internodeCertProvider)
+			return newClientTLSConfig(s.internodeClientCertProvider,
+				s.internodeCertProvider.GetSettings().Server.RequireClientAuth, false)
 		},
 		s.internodeCertProvider.GetSettings().IsEnabled(),
 	)
@@ -74,7 +90,8 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(
 		&s.frontendClientConfig,
 		func() (*tls.Config, error) {
-			return newClientTLSConfig(s.internodeCertProvider, s.frontendCertProvider)
+			return newClientTLSConfig(s.workerCertProvider,
+				s.frontendCertProvider.GetSettings().Server.RequireClientAuth, true)
 		},
 		s.internodeCertProvider.GetSettings().IsEnabled(),
 	)
@@ -193,17 +210,23 @@ func getServerTLSConfigFromCertProvider(certProvider CertProvider) (*tls.Config,
 	return auth.NewTLSConfigWithClientAuthAndCAs(clientAuthType, []tls.Certificate{*serverCert}, clientCaPool), nil
 }
 
-func newClientTLSConfig(clientProvider CertProvider, remoteProvider CertProvider) (*tls.Config, error) {
+func newClientTLSConfig(clientProvider ClientCertProvider, isAuthRequired bool, isWorker bool) (*tls.Config, error) {
 	// Optional ServerCA for client if not already trusted by host
-	serverCa, err := remoteProvider.FetchServerRootCAsForClient()
+	serverCa, err := clientProvider.FetchServerRootCAsForClient(isWorker)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load client ca: %v", err)
 	}
 
 	// mTLS enabled, present certificate
 	var clientCerts []tls.Certificate
-	if remoteProvider.GetSettings().Server.RequireClientAuth {
-		cert, err := clientProvider.FetchServerCertificate()
+	if isAuthRequired {
+		var cert *tls.Certificate
+		var err error
+		if isWorker {
+			cert, err = clientProvider.FetchWorkerCertificate()
+		} else {
+			cert, err = clientProvider.FetchClientCertificate()
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -217,7 +240,7 @@ func newClientTLSConfig(clientProvider CertProvider, remoteProvider CertProvider
 	return auth.NewTLSConfigWithCertsAndCAs(
 		clientCerts,
 		serverCa,
-		remoteProvider.GetSettings().Client.ServerName,
-		!remoteProvider.GetSettings().Client.DisableHostVerification,
+		clientProvider.ServerName(isWorker),
+		!clientProvider.DisableHostVerification(isWorker),
 	), nil
 }
