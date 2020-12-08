@@ -640,12 +640,30 @@ func (p *visibilityRateLimitedPersistenceClient) RecordWorkflowExecutionStarted(
 	return err
 }
 
+func (p *visibilityRateLimitedPersistenceClient) RecordWorkflowExecutionStartedV2(request *RecordWorkflowExecutionStartedRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.RecordWorkflowExecutionStartedV2(request)
+	return err
+}
+
 func (p *visibilityRateLimitedPersistenceClient) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
 	err := p.persistence.RecordWorkflowExecutionClosed(request)
+	return err
+}
+
+func (p *visibilityRateLimitedPersistenceClient) RecordWorkflowExecutionClosedV2(request *RecordWorkflowExecutionClosedRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.RecordWorkflowExecutionClosedV2(request)
 	return err
 }
 
@@ -658,7 +676,7 @@ func (p *visibilityRateLimitedPersistenceClient) UpsertWorkflowExecution(request
 	return err
 }
 
-func (p *visibilityRateLimitedPersistenceClient) UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequestV2) error {
+func (p *visibilityRateLimitedPersistenceClient) UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}

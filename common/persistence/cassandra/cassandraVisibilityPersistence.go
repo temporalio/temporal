@@ -170,7 +170,12 @@ func (v *cassandraVisibilityPersistence) Close() {
 	}
 }
 
-func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
+// Deprecated.
+func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
+	return v.RecordWorkflowExecutionStartedV2(request)
+}
+
+func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStartedV2(
 	request *p.InternalRecordWorkflowExecutionStartedRequest) error {
 	ttl := request.RunTimeout + openExecutionTTLBuffer
 	var query *gocql.Query
@@ -215,7 +220,12 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 	return nil
 }
 
-func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
+// Deprecated.
+func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
+	return v.RecordWorkflowExecutionClosedV2(request)
+}
+
+func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosedV2(
 	request *p.InternalRecordWorkflowExecutionClosedRequest) error {
 	batch := v.session.NewBatch(gocql.LoggedBatch)
 
@@ -291,14 +301,13 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 	return nil
 }
 
+// Deprecated.
 func (v *cassandraVisibilityPersistence) UpsertWorkflowExecution(
 	_ *p.InternalUpsertWorkflowExecutionRequest) error {
 	return nil
 }
 
-func (v *cassandraVisibilityPersistence) UpsertWorkflowExecutionV2(
-	_ *p.InternalUpsertWorkflowExecutionRequestV2) error {
-	// TODO (alex): combine RecordWorkflowExecutionClosed + RecordWorkflowExecutionStarted + UpsertWorkflowExecution here
+func (v *cassandraVisibilityPersistence) UpsertWorkflowExecutionV2(request *p.InternalUpsertWorkflowExecutionRequest) error {
 	return nil
 }
 

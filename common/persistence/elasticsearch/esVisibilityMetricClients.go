@@ -68,11 +68,39 @@ func (p *visibilityMetricsClient) RecordWorkflowExecutionStarted(request *p.Reco
 	return err
 }
 
+func (p *visibilityMetricsClient) RecordWorkflowExecutionStartedV2(request *p.RecordWorkflowExecutionStartedRequest) error {
+	p.metricClient.IncCounter(metrics.ElasticsearchRecordWorkflowExecutionStartedScope, metrics.ElasticsearchRequests)
+
+	sw := p.metricClient.StartTimer(metrics.ElasticsearchRecordWorkflowExecutionStartedScope, metrics.ElasticsearchLatency)
+	err := p.persistence.RecordWorkflowExecutionStartedV2(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.ElasticsearchRecordWorkflowExecutionStartedScope, err)
+	}
+
+	return err
+}
+
 func (p *visibilityMetricsClient) RecordWorkflowExecutionClosed(request *p.RecordWorkflowExecutionClosedRequest) error {
 	p.metricClient.IncCounter(metrics.ElasticsearchRecordWorkflowExecutionClosedScope, metrics.ElasticsearchRequests)
 
 	sw := p.metricClient.StartTimer(metrics.ElasticsearchRecordWorkflowExecutionClosedScope, metrics.ElasticsearchLatency)
 	err := p.persistence.RecordWorkflowExecutionClosed(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.ElasticsearchRecordWorkflowExecutionClosedScope, err)
+	}
+
+	return err
+}
+
+func (p *visibilityMetricsClient) RecordWorkflowExecutionClosedV2(request *p.RecordWorkflowExecutionClosedRequest) error {
+	p.metricClient.IncCounter(metrics.ElasticsearchRecordWorkflowExecutionClosedScope, metrics.ElasticsearchRequests)
+
+	sw := p.metricClient.StartTimer(metrics.ElasticsearchRecordWorkflowExecutionClosedScope, metrics.ElasticsearchLatency)
+	err := p.persistence.RecordWorkflowExecutionClosedV2(request)
 	sw.Stop()
 
 	if err != nil {
@@ -96,7 +124,7 @@ func (p *visibilityMetricsClient) UpsertWorkflowExecution(request *p.UpsertWorkf
 	return err
 }
 
-func (p *visibilityMetricsClient) UpsertWorkflowExecutionV2(request *p.UpsertWorkflowExecutionRequestV2) error {
+func (p *visibilityMetricsClient) UpsertWorkflowExecutionV2(request *p.UpsertWorkflowExecutionRequest) error {
 	p.metricClient.IncCounter(metrics.ElasticsearchUpsertWorkflowExecutionScope, metrics.ElasticsearchRequests)
 
 	sw := p.metricClient.StartTimer(metrics.ElasticsearchUpsertWorkflowExecutionScope, metrics.ElasticsearchLatency)

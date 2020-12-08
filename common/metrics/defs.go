@@ -908,8 +908,12 @@ const (
 
 	// VisibilityQueueProcessorScope is the scope used by all metric emitted by visibility queue processor
 	VisibilityQueueProcessorScope
+	// VisibilityTaskStartExecutionScope is the scope used for upsert search attributes processing by visibility queue processor
+	VisibilityTaskStartExecutionScope
 	// VisibilityTaskUpsertExecutionScope is the scope used for upsert search attributes processing by visibility queue processor
 	VisibilityTaskUpsertExecutionScope
+	// VisibilityTaskCloseExecutionScope is the scope used for upsert search attributes processing by visibility queue processor
+	VisibilityTaskCloseExecutionScope
 	// VisibilityTaskDeleteExecutionScope is the scope used for delete by visibility queue processor
 	VisibilityTaskDeleteExecutionScope
 
@@ -1477,7 +1481,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TransferStandbyTaskUpsertWorkflowSearchAttributesScope: {operation: "TransferStandbyTaskUpsertWorkflowSearchAttributes"},
 
 		VisibilityQueueProcessorScope:      {operation: "VisibilityQueueProcessorScope"},
+		VisibilityTaskStartExecutionScope:  {operation: "VisibilityTaskStartExecutionScope"},
 		VisibilityTaskUpsertExecutionScope: {operation: "VisibilityTaskUpsertExecutionScope"},
+		VisibilityTaskCloseExecutionScope:  {operation: "VisibilityTaskCloseExecutionScope"},
 		VisibilityTaskDeleteExecutionScope: {operation: "VisibilityTaskDeleteExecutionScope"},
 
 		TimerQueueProcessorScope:                  {operation: "TimerQueueProcessor"},

@@ -85,6 +85,22 @@ func (v *visibilityManagerWrapper) RecordWorkflowExecutionStarted(request *Recor
 	}
 }
 
+func (v *visibilityManagerWrapper) RecordWorkflowExecutionStartedV2(request *RecordWorkflowExecutionStartedRequest) error {
+	switch v.advancedVisWritingMode() {
+	case common.AdvancedVisibilityWritingModeOff:
+		return v.visibilityManager.RecordWorkflowExecutionStartedV2(request)
+	case common.AdvancedVisibilityWritingModeOn:
+		return v.esVisibilityManager.RecordWorkflowExecutionStartedV2(request)
+	case common.AdvancedVisibilityWritingModeDual:
+		if err := v.esVisibilityManager.RecordWorkflowExecutionStartedV2(request); err != nil {
+			return err
+		}
+		return v.visibilityManager.RecordWorkflowExecutionStartedV2(request)
+	default:
+		return serviceerror.NewInternal(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()))
+	}
+}
+
 func (v *visibilityManagerWrapper) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
 	switch v.advancedVisWritingMode() {
 	case common.AdvancedVisibilityWritingModeOff:
@@ -101,6 +117,22 @@ func (v *visibilityManagerWrapper) RecordWorkflowExecutionClosed(request *Record
 	}
 }
 
+func (v *visibilityManagerWrapper) RecordWorkflowExecutionClosedV2(request *RecordWorkflowExecutionClosedRequest) error {
+	switch v.advancedVisWritingMode() {
+	case common.AdvancedVisibilityWritingModeOff:
+		return v.visibilityManager.RecordWorkflowExecutionClosedV2(request)
+	case common.AdvancedVisibilityWritingModeOn:
+		return v.esVisibilityManager.RecordWorkflowExecutionClosedV2(request)
+	case common.AdvancedVisibilityWritingModeDual:
+		if err := v.esVisibilityManager.RecordWorkflowExecutionClosedV2(request); err != nil {
+			return err
+		}
+		return v.visibilityManager.RecordWorkflowExecutionClosedV2(request)
+	default:
+		return serviceerror.NewInternal(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()))
+	}
+}
+
 func (v *visibilityManagerWrapper) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
 	if v.esVisibilityManager == nil { // return operation not support
 		return v.visibilityManager.UpsertWorkflowExecution(request)
@@ -109,7 +141,7 @@ func (v *visibilityManagerWrapper) UpsertWorkflowExecution(request *UpsertWorkfl
 	return v.esVisibilityManager.UpsertWorkflowExecution(request)
 }
 
-func (v *visibilityManagerWrapper) UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequestV2) error {
+func (v *visibilityManagerWrapper) UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequest) error {
 	if v.esVisibilityManager == nil { // return operation not support
 		return v.visibilityManager.UpsertWorkflowExecutionV2(request)
 	}

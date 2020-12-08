@@ -181,22 +181,23 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	}
 
 	request := &persistence.RecordWorkflowExecutionStartedRequest{
-		NamespaceID: namespaceID,
-		Namespace:   namespace,
-		Execution: commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
+		VisibilityRequestBase: &persistence.VisibilityRequestBase{
+			NamespaceID: namespaceID,
+			Namespace:   namespace,
+			Execution: commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+			WorkflowTypeName:   workflowTypeName,
+			StartTimestamp:     startTimeUnixNano,
+			ExecutionTimestamp: executionTimeUnixNano,
+			TaskID:             taskID,
+			Memo:               visibilityMemo,
+			TaskQueue:          taskQueue,
+			SearchAttributes:   searchAttributes,
 		},
-		WorkflowTypeName:   workflowTypeName,
-		StartTimestamp:     startTimeUnixNano,
-		ExecutionTimestamp: executionTimeUnixNano,
-		RunTimeout:         int64(timestamp.DurationValue(runTimeout).Round(time.Second).Seconds()),
-		TaskID:             taskID,
-		Memo:               visibilityMemo,
-		TaskQueue:          taskQueue,
-		SearchAttributes:   searchAttributes,
+		RunTimeout: int64(timestamp.DurationValue(runTimeout).Round(time.Second).Seconds()),
 	}
-
 	return t.visibilityMgr.RecordWorkflowExecutionStarted(request)
 }
 
@@ -226,21 +227,23 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	}
 
 	request := &persistence.UpsertWorkflowExecutionRequest{
-		NamespaceID: namespaceID,
-		Namespace:   namespace,
-		Execution: commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
+		VisibilityRequestBase: &persistence.VisibilityRequestBase{
+			NamespaceID: namespaceID,
+			Namespace:   namespace,
+			Execution: commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+			WorkflowTypeName:   workflowTypeName,
+			StartTimestamp:     startTimeUnixNano,
+			ExecutionTimestamp: executionTimeUnixNano,
+			TaskID:             taskID,
+			Status:             status,
+			Memo:               visibilityMemo,
+			TaskQueue:          taskQueue,
+			SearchAttributes:   searchAttributes,
 		},
-		WorkflowTypeName:   workflowTypeName,
-		StartTimestamp:     startTimeUnixNano,
-		ExecutionTimestamp: executionTimeUnixNano,
-		WorkflowTimeout:    int64(timestamp.DurationValue(workflowTimeout).Round(time.Second).Seconds()),
-		TaskID:             taskID,
-		Status:             status,
-		Memo:               visibilityMemo,
-		TaskQueue:          taskQueue,
-		SearchAttributes:   searchAttributes,
+		WorkflowTimeout: int64(timestamp.DurationValue(workflowTimeout).Round(time.Second).Seconds()),
 	}
 
 	return t.visibilityMgr.UpsertWorkflowExecution(request)
@@ -290,23 +293,25 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 
 	if !t.config.DisableKafkaForVisibility() && recordWorkflowClose {
 		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
-			NamespaceID: namespaceID,
-			Namespace:   namespace,
-			Execution: commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
+			VisibilityRequestBase: &persistence.VisibilityRequestBase{
+				NamespaceID: namespaceID,
+				Namespace:   namespace,
+				Execution: commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      runID,
+				},
+				WorkflowTypeName:   workflowTypeName,
+				StartTimestamp:     startTime.UnixNano(),
+				ExecutionTimestamp: executionTime.UnixNano(),
+				Status:             status,
+				TaskID:             taskID,
+				Memo:               visibilityMemo,
+				TaskQueue:          taskQueue,
+				SearchAttributes:   searchAttributes,
 			},
-			WorkflowTypeName:   workflowTypeName,
-			StartTimestamp:     startTime.UnixNano(),
-			ExecutionTimestamp: executionTime.UnixNano(),
-			CloseTimestamp:     endTime.UnixNano(),
-			Status:             status,
-			HistoryLength:      historyLength,
-			RetentionSeconds:   retentionSeconds,
-			TaskID:             taskID,
-			Memo:               visibilityMemo,
-			TaskQueue:          taskQueue,
-			SearchAttributes:   searchAttributes,
+			CloseTimestamp:   endTime.UnixNano(),
+			HistoryLength:    historyLength,
+			RetentionSeconds: retentionSeconds,
 		}); err != nil {
 			return err
 		}

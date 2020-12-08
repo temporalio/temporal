@@ -356,8 +356,12 @@ func getVisibilityTaskMetricsScope(
 	taskType enumsspb.TaskType,
 ) int {
 	switch taskType {
+	case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
+		return metrics.VisibilityTaskStartExecutionScope
 	case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
 		return metrics.VisibilityTaskUpsertExecutionScope
+	case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
+		return metrics.VisibilityTaskCloseExecutionScope
 	case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
 		return metrics.VisibilityTaskDeleteExecutionScope
 	default:

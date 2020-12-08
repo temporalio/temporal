@@ -953,11 +953,39 @@ func (p *visibilityPersistenceClient) RecordWorkflowExecutionStarted(request *Re
 	return err
 }
 
+func (p *visibilityPersistenceClient) RecordWorkflowExecutionStartedV2(request *RecordWorkflowExecutionStartedRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceRecordWorkflowExecutionStartedScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceRecordWorkflowExecutionStartedScope, metrics.PersistenceLatency)
+	err := p.persistence.RecordWorkflowExecutionStartedV2(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceRecordWorkflowExecutionStartedScope, err)
+	}
+
+	return err
+}
+
 func (p *visibilityPersistenceClient) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
 	p.metricClient.IncCounter(metrics.PersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceLatency)
 	err := p.persistence.RecordWorkflowExecutionClosed(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceRecordWorkflowExecutionClosedScope, err)
+	}
+
+	return err
+}
+
+func (p *visibilityPersistenceClient) RecordWorkflowExecutionClosedV2(request *RecordWorkflowExecutionClosedRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceLatency)
+	err := p.persistence.RecordWorkflowExecutionClosedV2(request)
 	sw.Stop()
 
 	if err != nil {
@@ -981,7 +1009,7 @@ func (p *visibilityPersistenceClient) UpsertWorkflowExecution(request *UpsertWor
 	return err
 }
 
-func (p *visibilityPersistenceClient) UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequestV2) error {
+func (p *visibilityPersistenceClient) UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequest) error {
 	p.metricClient.IncCounter(metrics.PersistenceUpsertWorkflowExecutionScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceUpsertWorkflowExecutionScope, metrics.PersistenceLatency)

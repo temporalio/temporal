@@ -772,15 +772,6 @@ func createVisibilityTasks(
 
 	for _, task := range visibilityTasks {
 		version := task.GetVersion()
-
-		// TODO (alex): add type specific properties or remove entire switch
-		switch task.GetType() {
-		case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
-		case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
-		default:
-			return serviceerror.NewInternal(fmt.Sprintf("Unknow visibility task type: %v", task.GetType()))
-		}
-
 		datablob, err := serialization.VisibilityTaskInfoToBlob(&persistencespb.VisibilityTaskInfo{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,

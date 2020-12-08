@@ -364,6 +364,13 @@ type (
 		NewRunBranchToken   []byte
 	}
 
+	// StartExecutionVisibilityTask identifies a visibility task for start workflow execution.
+	StartExecutionVisibilityTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
+	}
+
 	// UpsertExecutionVisibilityTask identifies a visibility task for upsert workflow execution search attributes.
 	UpsertExecutionVisibilityTask struct {
 		VisibilityTimestamp time.Time
@@ -371,6 +378,13 @@ type (
 		// this version is not used by task processing for validation,
 		// instead, the version is used by elastic search
 		Version int64
+	}
+
+	// CloseExecutionVisibilityTask identifies a visibility task for close workflow execution.
+	CloseExecutionVisibilityTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
 	}
 
 	// DeleteExecutionVisibilityTask identifies a visibility task for deletion of execution.
@@ -1954,73 +1968,143 @@ func (a *HistoryReplicationTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the upsert search attributes transfer task
-func (u *UpsertExecutionVisibilityTask) GetType() enumsspb.TaskType {
+func (t *StartExecutionVisibilityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION
+}
+
+// GetVersion returns the version of the upsert search attributes transfer task
+func (t *StartExecutionVisibilityTask) GetVersion() int64 {
+	return t.Version
+}
+
+// SetVersion returns the version of the upsert search attributes transfer task
+func (t *StartExecutionVisibilityTask) SetVersion(version int64) {
+	t.Version = version
+}
+
+// GetTaskID returns the sequence ID of the signal transfer task.
+func (t *StartExecutionVisibilityTask) GetTaskID() int64 {
+	return t.TaskID
+}
+
+// SetTaskID sets the sequence ID of the signal transfer task.
+func (t *StartExecutionVisibilityTask) SetTaskID(id int64) {
+	t.TaskID = id
+}
+
+// GetVisibilityTime get the visibility timestamp
+func (t *StartExecutionVisibilityTask) GetVisibilityTimestamp() time.Time {
+	return t.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp set the visibility timestamp
+func (t *StartExecutionVisibilityTask) SetVisibilityTimestamp(timestamp time.Time) {
+	t.VisibilityTimestamp = timestamp
+}
+
+// GetType returns the type of the upsert search attributes transfer task
+func (t *UpsertExecutionVisibilityTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION
 }
 
 // GetVersion returns the version of the upsert search attributes transfer task
-func (u *UpsertExecutionVisibilityTask) GetVersion() int64 {
-	return u.Version
+func (t *UpsertExecutionVisibilityTask) GetVersion() int64 {
+	return t.Version
 }
 
 // SetVersion returns the version of the upsert search attributes transfer task
-func (u *UpsertExecutionVisibilityTask) SetVersion(version int64) {
-	u.Version = version
+func (t *UpsertExecutionVisibilityTask) SetVersion(version int64) {
+	t.Version = version
 }
 
 // GetTaskID returns the sequence ID of the signal transfer task.
-func (u *UpsertExecutionVisibilityTask) GetTaskID() int64 {
-	return u.TaskID
+func (t *UpsertExecutionVisibilityTask) GetTaskID() int64 {
+	return t.TaskID
 }
 
 // SetTaskID sets the sequence ID of the signal transfer task.
-func (u *UpsertExecutionVisibilityTask) SetTaskID(id int64) {
-	u.TaskID = id
+func (t *UpsertExecutionVisibilityTask) SetTaskID(id int64) {
+	t.TaskID = id
 }
 
 // GetVisibilityTime get the visibility timestamp
-func (u *UpsertExecutionVisibilityTask) GetVisibilityTimestamp() time.Time {
-	return u.VisibilityTimestamp
+func (t *UpsertExecutionVisibilityTask) GetVisibilityTimestamp() time.Time {
+	return t.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp set the visibility timestamp
+func (t *UpsertExecutionVisibilityTask) SetVisibilityTimestamp(timestamp time.Time) {
+	t.VisibilityTimestamp = timestamp
 }
 
 // GetType returns the type of the upsert search attributes transfer task
-func (u *DeleteExecutionVisibilityTask) GetType() enumsspb.TaskType {
+func (t *CloseExecutionVisibilityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION
+}
+
+// GetVersion returns the version of the upsert search attributes transfer task
+func (t *CloseExecutionVisibilityTask) GetVersion() int64 {
+	return t.Version
+}
+
+// SetVersion returns the version of the upsert search attributes transfer task
+func (t *CloseExecutionVisibilityTask) SetVersion(version int64) {
+	t.Version = version
+}
+
+// GetTaskID returns the sequence ID of the signal transfer task.
+func (t *CloseExecutionVisibilityTask) GetTaskID() int64 {
+	return t.TaskID
+}
+
+// SetTaskID sets the sequence ID of the signal transfer task.
+func (t *CloseExecutionVisibilityTask) SetTaskID(id int64) {
+	t.TaskID = id
+}
+
+// GetVisibilityTime get the visibility timestamp
+func (t *CloseExecutionVisibilityTask) GetVisibilityTimestamp() time.Time {
+	return t.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp set the visibility timestamp
+func (t *CloseExecutionVisibilityTask) SetVisibilityTimestamp(timestamp time.Time) {
+	t.VisibilityTimestamp = timestamp
+}
+
+// GetType returns the type of the upsert search attributes transfer task
+func (t *DeleteExecutionVisibilityTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION
 }
 
 // GetVersion returns the version of the upsert search attributes transfer task
-func (u *DeleteExecutionVisibilityTask) GetVersion() int64 {
-	return u.Version
+func (t *DeleteExecutionVisibilityTask) GetVersion() int64 {
+	return t.Version
 }
 
 // SetVersion returns the version of the upsert search attributes transfer task
-func (u *DeleteExecutionVisibilityTask) SetVersion(version int64) {
-	u.Version = version
+func (t *DeleteExecutionVisibilityTask) SetVersion(version int64) {
+	t.Version = version
 }
 
 // GetTaskID returns the sequence ID of the signal transfer task.
-func (u *DeleteExecutionVisibilityTask) GetTaskID() int64 {
-	return u.TaskID
+func (t *DeleteExecutionVisibilityTask) GetTaskID() int64 {
+	return t.TaskID
 }
 
 // SetTaskID sets the sequence ID of the signal transfer task.
-func (u *DeleteExecutionVisibilityTask) SetTaskID(id int64) {
-	u.TaskID = id
+func (t *DeleteExecutionVisibilityTask) SetTaskID(id int64) {
+	t.TaskID = id
 }
 
 // GetVisibilityTime get the visibility timestamp
-func (u *DeleteExecutionVisibilityTask) GetVisibilityTimestamp() time.Time {
-	return u.VisibilityTimestamp
+func (t *DeleteExecutionVisibilityTask) GetVisibilityTimestamp() time.Time {
+	return t.VisibilityTimestamp
 }
 
 // SetVisibilityTimestamp set the visibility timestamp
-func (u *DeleteExecutionVisibilityTask) SetVisibilityTimestamp(timestamp time.Time) {
-	u.VisibilityTimestamp = timestamp
-}
-
-// SetVisibilityTimestamp set the visibility timestamp
-func (u *UpsertExecutionVisibilityTask) SetVisibilityTimestamp(timestamp time.Time) {
-	u.VisibilityTimestamp = timestamp
+func (t *DeleteExecutionVisibilityTask) SetVisibilityTimestamp(timestamp time.Time) {
+	t.VisibilityTimestamp = timestamp
 }
 
 // GetType returns the type of the history replication task

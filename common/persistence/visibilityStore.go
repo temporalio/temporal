@@ -67,80 +67,73 @@ func (v *visibilityManagerImpl) GetName() string {
 // Deprecated.
 func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {
 	req := &InternalRecordWorkflowExecutionStartedRequest{
-		NamespaceID:        request.NamespaceID,
-		WorkflowID:         request.Execution.GetWorkflowId(),
-		RunID:              request.Execution.GetRunId(),
-		WorkflowTypeName:   request.WorkflowTypeName,
-		StartTimestamp:     request.StartTimestamp,
-		ExecutionTimestamp: request.ExecutionTimestamp,
-		RunTimeout:         request.RunTimeout,
-		TaskID:             request.TaskID,
-		TaskQueue:          request.TaskQueue,
-		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
-		SearchAttributes:   request.SearchAttributes,
+		InternalVisibilityRequestBase: v.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
+		RunTimeout:                    request.RunTimeout,
 	}
 	return v.persistence.RecordWorkflowExecutionStarted(req)
+}
+
+func (v *visibilityManagerImpl) RecordWorkflowExecutionStartedV2(request *RecordWorkflowExecutionStartedRequest) error {
+	req := &InternalRecordWorkflowExecutionStartedRequest{
+		InternalVisibilityRequestBase: v.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
+		RunTimeout:                    request.RunTimeout,
+	}
+	return v.persistence.RecordWorkflowExecutionStartedV2(req)
 }
 
 // Deprecated.
 func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
 	req := &InternalRecordWorkflowExecutionClosedRequest{
-		NamespaceID:        request.NamespaceID,
-		WorkflowID:         request.Execution.GetWorkflowId(),
-		RunID:              request.Execution.GetRunId(),
-		WorkflowTypeName:   request.WorkflowTypeName,
-		StartTimestamp:     request.StartTimestamp,
-		ExecutionTimestamp: request.ExecutionTimestamp,
-		TaskID:             request.TaskID,
-		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
-		TaskQueue:          request.TaskQueue,
-		SearchAttributes:   request.SearchAttributes,
-		CloseTimestamp:     request.CloseTimestamp,
-		Status:             request.Status,
-		HistoryLength:      request.HistoryLength,
-		RetentionSeconds:   request.RetentionSeconds,
+		InternalVisibilityRequestBase: v.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
+		CloseTimestamp:                request.CloseTimestamp,
+		HistoryLength:                 request.HistoryLength,
+		RetentionSeconds:              request.RetentionSeconds,
 	}
 	return v.persistence.RecordWorkflowExecutionClosed(req)
+}
+
+func (v *visibilityManagerImpl) RecordWorkflowExecutionClosedV2(request *RecordWorkflowExecutionClosedRequest) error {
+	req := &InternalRecordWorkflowExecutionClosedRequest{
+		InternalVisibilityRequestBase: v.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
+		CloseTimestamp:                request.CloseTimestamp,
+		HistoryLength:                 request.HistoryLength,
+		RetentionSeconds:              request.RetentionSeconds,
+	}
+	return v.persistence.RecordWorkflowExecutionClosedV2(req)
 }
 
 // Deprecated.
 func (v *visibilityManagerImpl) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
 	req := &InternalUpsertWorkflowExecutionRequest{
-		NamespaceID:        request.NamespaceID,
-		WorkflowID:         request.Execution.GetWorkflowId(),
-		RunID:              request.Execution.GetRunId(),
-		WorkflowTypeName:   request.WorkflowTypeName,
-		StartTimestamp:     request.StartTimestamp,
-		ExecutionTimestamp: request.ExecutionTimestamp,
-		TaskID:             request.TaskID,
-		Status:             request.Status,
-		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
-		TaskQueue:          request.TaskQueue,
-		SearchAttributes:   request.SearchAttributes,
+		InternalVisibilityRequestBase: v.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
+		WorkflowTimeout:               request.WorkflowTimeout,
 	}
 	return v.persistence.UpsertWorkflowExecution(req)
 }
 
-func (v *visibilityManagerImpl) UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequestV2) error {
-	req := &InternalUpsertWorkflowExecutionRequestV2{
+func (v *visibilityManagerImpl) UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequest) error {
+	req := &InternalUpsertWorkflowExecutionRequest{
+		InternalVisibilityRequestBase: v.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
+		WorkflowTimeout:               request.WorkflowTimeout,
+	}
+	return v.persistence.UpsertWorkflowExecutionV2(req)
+}
+
+func (v *visibilityManagerImpl) newInternalVisibilityRequestBase(request *VisibilityRequestBase) *InternalVisibilityRequestBase {
+	return &InternalVisibilityRequestBase{
 		NamespaceID:        request.NamespaceID,
 		WorkflowID:         request.Execution.GetWorkflowId(),
 		RunID:              request.Execution.GetRunId(),
 		WorkflowTypeName:   request.WorkflowTypeName,
 		StartTimestamp:     request.StartTimestamp,
-		ExecutionTimestamp: request.ExecutionTimestamp,
 		Status:             request.Status,
-		RunTimeout:         request.RunTimeout,
-		ShardID:            request.ShardID,
+		ExecutionTimestamp: request.ExecutionTimestamp,
 		TaskID:             request.TaskID,
-		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
+		ShardID:            request.ShardID,
 		TaskQueue:          request.TaskQueue,
+		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
 		SearchAttributes:   request.SearchAttributes,
-		CloseTimestamp:     request.CloseTimestamp,
-		HistoryLength:      request.HistoryLength,
-		RetentionSeconds:   request.RetentionSeconds,
 	}
-	return v.persistence.UpsertWorkflowExecutionV2(req)
 }
 
 func (v *visibilityManagerImpl) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {

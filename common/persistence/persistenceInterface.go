@@ -156,11 +156,13 @@ type (
 		GetName() string
 		// Deprecated.
 		RecordWorkflowExecutionStarted(request *InternalRecordWorkflowExecutionStartedRequest) error
+		RecordWorkflowExecutionStartedV2(request *InternalRecordWorkflowExecutionStartedRequest) error
 		// Deprecated.
 		RecordWorkflowExecutionClosed(request *InternalRecordWorkflowExecutionClosedRequest) error
+		RecordWorkflowExecutionClosedV2(request *InternalRecordWorkflowExecutionClosedRequest) error
 		// Deprecated.
 		UpsertWorkflowExecution(request *InternalUpsertWorkflowExecutionRequest) error
-		UpsertWorkflowExecutionV2(request *InternalUpsertWorkflowExecutionRequestV2) error
+		UpsertWorkflowExecutionV2(request *InternalUpsertWorkflowExecutionRequest) error
 		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
@@ -478,72 +480,40 @@ type (
 	}
 
 	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
-	InternalRecordWorkflowExecutionStartedRequest struct {
+	InternalVisibilityRequestBase struct {
 		NamespaceID        string
 		WorkflowID         string
 		RunID              string
 		WorkflowTypeName   string
 		StartTimestamp     int64
+		Status             enumspb.WorkflowExecutionStatus
 		ExecutionTimestamp int64
-		RunTimeout         int64
 		TaskID             int64
+		ShardID            int32
 		Memo               *commonpb.DataBlob
 		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
+	}
+
+	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
+	InternalRecordWorkflowExecutionStartedRequest struct {
+		*InternalVisibilityRequestBase
+		RunTimeout int64
 	}
 
 	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
 	InternalRecordWorkflowExecutionClosedRequest struct {
-		NamespaceID        string
-		WorkflowID         string
-		RunID              string
-		WorkflowTypeName   string
-		StartTimestamp     int64
-		ExecutionTimestamp int64
-		TaskID             int64
-		Memo               *commonpb.DataBlob
-		TaskQueue          string
-		SearchAttributes   map[string]*commonpb.Payload
-		CloseTimestamp     int64
-		Status             enumspb.WorkflowExecutionStatus
-		HistoryLength      int64
-		RetentionSeconds   int64
+		*InternalVisibilityRequestBase
+		CloseTimestamp   int64
+		HistoryLength    int64
+		RetentionSeconds int64
 	}
 
 	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
 	InternalUpsertWorkflowExecutionRequest struct {
-		NamespaceID        string
-		WorkflowID         string
-		RunID              string
-		WorkflowTypeName   string
-		StartTimestamp     int64
-		ExecutionTimestamp int64
-		Status             enumspb.WorkflowExecutionStatus
-		WorkflowTimeout    int64
-		TaskID             int64
-		Memo               *commonpb.DataBlob
-		TaskQueue          string
-		SearchAttributes   map[string]*commonpb.Payload
-	}
-
-	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
-	InternalUpsertWorkflowExecutionRequestV2 struct {
-		NamespaceID        string
-		WorkflowID         string
-		RunID              string
-		WorkflowTypeName   string
-		StartTimestamp     int64
-		ExecutionTimestamp int64
-		RunTimeout         int64
-		Status             enumspb.WorkflowExecutionStatus
-		ShardID            int32
-		TaskID             int64
-		Memo               *commonpb.DataBlob
-		TaskQueue          string
-		SearchAttributes   map[string]*commonpb.Payload
-		CloseTimestamp     int64
-		HistoryLength      int64
-		RetentionSeconds   int64
+		*InternalVisibilityRequestBase
+		// TODO (alex): not used, remove
+		WorkflowTimeout int64
 	}
 
 	// InternalCreateNamespaceRequest is used to create the namespace

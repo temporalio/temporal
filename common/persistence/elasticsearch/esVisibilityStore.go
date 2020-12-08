@@ -168,6 +168,13 @@ func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *persistence.
 	return v.producer.Publish(msg)
 }
 
+func (v *esVisibilityStore) RecordWorkflowExecutionStartedV2(request *persistence.InternalRecordWorkflowExecutionStartedRequest) error {
+	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
+	doc := v.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+
+	return v.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
+}
+
 // Deprecated.
 func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *persistence.InternalRecordWorkflowExecutionClosedRequest) error {
 	v.checkProducer()
@@ -190,6 +197,16 @@ func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *persistence.I
 	return v.producer.Publish(msg)
 }
 
+func (v *esVisibilityStore) RecordWorkflowExecutionClosedV2(request *persistence.InternalRecordWorkflowExecutionClosedRequest) error {
+	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
+	doc := v.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+
+	doc[definition.CloseTime] = request.CloseTimestamp
+	doc[definition.HistoryLength] = request.HistoryLength
+
+	return v.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
+}
+
 // Deprecated.
 func (v *esVisibilityStore) UpsertWorkflowExecution(request *persistence.InternalUpsertWorkflowExecutionRequest) error {
 	v.checkProducer()
@@ -210,19 +227,11 @@ func (v *esVisibilityStore) UpsertWorkflowExecution(request *persistence.Interna
 	return v.producer.Publish(msg)
 }
 
-func (v *esVisibilityStore) UpsertWorkflowExecutionV2(request *persistence.InternalUpsertWorkflowExecutionRequestV2) error {
+func (v *esVisibilityStore) UpsertWorkflowExecutionV2(request *persistence.InternalUpsertWorkflowExecutionRequest) error {
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
+	doc := v.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 
-	doc := v.generateESDoc(request, visibilityTaskKey)
-	bulkInsertRequest := elastic.NewBulkIndexRequest().
-		Index(v.index).
-		Type(docType).
-		Id(getDocID(request.WorkflowID, request.RunID)).
-		VersionType(versionTypeExternal).
-		Version(request.TaskID).
-		Doc(doc)
-
-	return v.addBulkRequestAndWait(bulkInsertRequest, visibilityTaskKey)
+	return v.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
 
 func (v *esVisibilityStore) DeleteWorkflowExecutionV2(request *persistence.VisibilityDeleteWorkflowExecutionRequest) error {
@@ -246,6 +255,22 @@ func getVisibilityTaskKey(shardID int32, taskID int64) string {
 	return fmt.Sprintf("%d%s%d", shardID, delimiter, taskID)
 }
 
+func (v *esVisibilityStore) addBulkIndexRequestAndWait(
+	request *persistence.InternalVisibilityRequestBase,
+	esDoc map[string]interface{},
+	visibilityTaskKey string,
+) error {
+	bulkRequest := elastic.NewBulkIndexRequest().
+		Index(v.index).
+		Type(docType).
+		Id(getDocID(request.WorkflowID, request.RunID)).
+		VersionType(versionTypeExternal).
+		Version(request.TaskID).
+		Doc(esDoc)
+
+	return v.addBulkRequestAndWait(bulkRequest, visibilityTaskKey)
+}
+
 func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest elastic.BulkableRequest, visibilityTaskKey string) error {
 	v.checkProcessor()
 
@@ -253,6 +278,7 @@ func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest elastic.BulkableRe
 	v.processor.Add(bulkRequest, visibilityTaskKey, ch)
 	// Processor must flush bulks every v.processorFlushInterval.
 	// 1.2 is to allow some buffer to process bulk and respond with ack.
+	// TODO (alex): change to +process timeout?
 	timeoutInterval := time.Duration(float64(v.processorFlushInterval) * 1.2)
 	timeoutTimer := time.NewTimer(timeoutInterval)
 	select {
@@ -267,7 +293,7 @@ func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest elastic.BulkableRe
 	}
 }
 
-func (v *esVisibilityStore) generateESDoc(request *persistence.InternalUpsertWorkflowExecutionRequestV2, visibilityTaskKey string) map[string]interface{} {
+func (v *esVisibilityStore) generateESDoc(request *persistence.InternalVisibilityRequestBase, visibilityTaskKey string) map[string]interface{} {
 	doc := map[string]interface{}{
 		definition.VisibilityTaskKey: visibilityTaskKey,
 		definition.NamespaceID:       request.NamespaceID,
@@ -276,9 +302,7 @@ func (v *esVisibilityStore) generateESDoc(request *persistence.InternalUpsertWor
 		definition.WorkflowType:      request.WorkflowTypeName,
 		definition.StartTime:         request.StartTimestamp,
 		definition.ExecutionTime:     request.ExecutionTimestamp,
-		definition.CloseTime:         request.CloseTimestamp,
 		definition.ExecutionStatus:   request.Status,
-		definition.HistoryLength:     request.HistoryLength,
 		definition.TaskQueue:         request.TaskQueue,
 	}
 

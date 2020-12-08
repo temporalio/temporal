@@ -109,8 +109,12 @@ func (t *visibilityQueueTaskExecutor) execute(
 	}
 
 	switch task.GetTaskType() {
+	case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
+		return t.processStartExecution(task)
 	case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
 		return t.processUpsertExecution(task)
+	case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
+		return t.processCloseExecution(task)
 	case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
 		return t.processDeleteExecution(task)
 	default:
@@ -118,101 +122,348 @@ func (t *visibilityQueueTaskExecutor) execute(
 	}
 }
 
-// processUpsertExecution combines former
-// 		processCloseExecution
-//		processRecordWorkflowStarted
-//		processUpsertWorkflowSearchAttributes
+func (t *visibilityQueueTaskExecutor) processStartExecution(
+	task *persistencespb.VisibilityTaskInfo,
+) (retError error) {
+
+	return t.processStartOrUpsertExecution(task, true)
+}
+
 func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	task *persistencespb.VisibilityTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+	return t.processStartOrUpsertExecution(task, false)
+}
+
+func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
+	task *persistencespb.VisibilityTaskInfo,
+	isStartExecution bool,
+) (retError error) {
+
+	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
+		task.GetNamespaceId(),
+		commonpb.WorkflowExecution{
+			WorkflowId: task.GetWorkflowId(),
+			RunId:      task.GetRunId(),
+		},
 	)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	ms, err := context.loadWorkflowExecution()
+	mutableState, err := weContext.loadWorkflowExecution()
 	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
-			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
-			return nil
-		}
 		return err
+	}
+	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+		return nil
 	}
 
 	// verify task version for RecordWorkflowStarted.
 	// upsert doesn't require verifyTask, because it is just a sync of mutableState.
-	startVersion, err := ms.GetStartVersion()
-	if err != nil {
-		return err
-	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), startVersion, task.Version, task)
-	if err != nil || !ok {
-		return err
-	}
-
-	executionInfo := ms.GetExecutionInfo()
-	startEvent, err := ms.GetStartEvent()
-	if err != nil {
-		return err
-	}
-
-	executionStatus := ms.GetExecutionState().GetStatus()
-	closeTime := time.Unix(0, 0).UTC()
-	if executionStatus != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		completionEvent, err := ms.GetCompletionEvent()
+	if isStartExecution {
+		startVersion, err := mutableState.GetStartVersion()
 		if err != nil {
 			return err
 		}
-		closeTime = timestamp.TimeValue(completionEvent.GetEventTime())
+		ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), startVersion, task.Version, task)
+		if err != nil || !ok {
+			return err
+		}
 	}
 
-	workflowHistoryLength := ms.GetNextEventID() - 1
+	executionInfo := mutableState.GetExecutionInfo()
+	executionState := mutableState.GetExecutionState()
+	runTimeout := executionInfo.WorkflowRunTimeout
+	wfTypeName := executionInfo.WorkflowTypeName
 
-	executionTime := getWorkflowExecutionTime(ms, startEvent)
+	startEvent, err := mutableState.GetStartEvent()
+	if err != nil {
+		return err
+	}
+	startTimestamp := timestamp.TimeValue(startEvent.GetEventTime())
+	executionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
+	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
+	// TODO (alex): remove copy?
+	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
+
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
+	if isStartExecution {
+		return t.recordStartExecution(
+			task.GetNamespaceId(),
+			task.GetWorkflowId(),
+			task.GetRunId(),
+			wfTypeName,
+			startTimestamp.UnixNano(),
+			executionTimestamp.UnixNano(),
+			runTimeout,
+			task.GetTaskId(),
+			executionState.GetStatus(),
+			executionInfo.TaskQueue,
+			visibilityMemo,
+			searchAttr,
+		)
+	}
+	return t.upsertExecution(
+		task.GetNamespaceId(),
+		task.GetWorkflowId(),
+		task.GetRunId(),
+		wfTypeName,
+		startTimestamp.UnixNano(),
+		executionTimestamp.UnixNano(),
+		runTimeout,
+		task.GetTaskId(),
+		executionState.GetStatus(),
+		executionInfo.TaskQueue,
+		visibilityMemo,
+		searchAttr,
+	)
+}
+func (t *visibilityQueueTaskExecutor) recordStartExecution(
+	namespaceID string,
+	workflowID string,
+	runID string,
+	workflowTypeName string,
+	startTimeUnixNano int64,
+	executionTimeUnixNano int64,
+	runTimeout *time.Duration,
+	taskID int64,
+	status enumspb.WorkflowExecutionStatus,
+	taskQueue string,
+	visibilityMemo *commonpb.Memo,
+	searchAttributes map[string]*commonpb.Payload,
+) error {
+
 	namespace := defaultNamespace
-	retentionSeconds := int64(0)
-	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(task.GetNamespaceId())
+
+	if namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID); err != nil {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
+			return err
+		}
+	} else {
+		namespace = namespaceEntry.GetInfo().Name
+		// if sampled for longer retention is enabled, only record those sampled events
+		if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
+			!namespaceEntry.IsSampledForLongerRetention(workflowID) {
+			return nil
+		}
+	}
+
+	request := &persistence.RecordWorkflowExecutionStartedRequest{
+		VisibilityRequestBase: &persistence.VisibilityRequestBase{
+			NamespaceID: namespaceID,
+			Namespace:   namespace,
+			Execution: commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+			WorkflowTypeName:   workflowTypeName,
+			StartTimestamp:     startTimeUnixNano,
+			ExecutionTimestamp: executionTimeUnixNano,
+			TaskID:             taskID,
+			Status:             status,
+			ShardID:            t.shard.GetShardID(),
+			Memo:               visibilityMemo,
+			TaskQueue:          taskQueue,
+			SearchAttributes:   searchAttributes,
+		},
+		RunTimeout: int64(timestamp.DurationValue(runTimeout).Round(time.Second).Seconds()),
+	}
+	return t.visibilityMgr.RecordWorkflowExecutionStartedV2(request)
+}
+
+func (t *visibilityQueueTaskExecutor) upsertExecution(
+	namespaceID string,
+	workflowID string,
+	runID string,
+	workflowTypeName string,
+	startTimeUnixNano int64,
+	executionTimeUnixNano int64,
+	workflowTimeout *time.Duration,
+	taskID int64,
+	status enumspb.WorkflowExecutionStatus,
+	taskQueue string,
+	visibilityMemo *commonpb.Memo,
+	searchAttributes map[string]*commonpb.Payload,
+) error {
+
+	namespace := defaultNamespace
+	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
 	} else {
-		namespace = namespaceEntry.GetInfo().GetName()
-		retentionSeconds = int64(timestamp.DurationFromDays(namespaceEntry.GetRetentionDays(task.GetWorkflowId())).Seconds())
+		namespace = namespaceEntry.GetInfo().Name
 	}
 
-	request := &persistence.UpsertWorkflowExecutionRequestV2{
-		NamespaceID: task.GetNamespaceId(),
-		Namespace:   namespace,
-		Execution: commonpb.WorkflowExecution{
-			WorkflowId: task.GetWorkflowId(),
-			RunId:      task.GetRunId(),
+	request := &persistence.UpsertWorkflowExecutionRequest{
+		VisibilityRequestBase: &persistence.VisibilityRequestBase{
+			NamespaceID: namespaceID,
+			Namespace:   namespace,
+			Execution: commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+			WorkflowTypeName:   workflowTypeName,
+			StartTimestamp:     startTimeUnixNano,
+			ExecutionTimestamp: executionTimeUnixNano,
+			TaskID:             taskID,
+			ShardID:            t.shard.GetShardID(),
+			Status:             status,
+			Memo:               visibilityMemo,
+			TaskQueue:          taskQueue,
+			SearchAttributes:   searchAttributes,
 		},
-		WorkflowTypeName:   executionInfo.GetWorkflowTypeName(),
-		StartTimestamp:     timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
-		ExecutionTimestamp: executionTime.UnixNano(),
-		RunTimeout:         int64(timestamp.DurationValue(executionInfo.GetWorkflowRunTimeout()).Round(time.Second).Seconds()),
-		ShardID:            t.shard.GetShardID(),
-		TaskID:             task.GetTaskId(),
-		Status:             executionStatus,
-		Memo:               getWorkflowMemo(executionInfo.GetMemo()),
-		TaskQueue:          executionInfo.TaskQueue,
-		// TODO (alex): remove copy?
-		SearchAttributes: copySearchAttributes(executionInfo.GetSearchAttributes()),
-		CloseTimestamp:   closeTime.UnixNano(),
-		HistoryLength:    workflowHistoryLength,
-		RetentionSeconds: retentionSeconds,
+		WorkflowTimeout: int64(timestamp.DurationValue(workflowTimeout).Round(time.Second).Seconds()),
 	}
 
 	return t.visibilityMgr.UpsertWorkflowExecutionV2(request)
+}
+
+func (t *visibilityQueueTaskExecutor) processCloseExecution(
+	task *persistencespb.VisibilityTaskInfo,
+) (retError error) {
+
+	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
+		task.GetNamespaceId(),
+		commonpb.WorkflowExecution{
+			WorkflowId: task.GetWorkflowId(),
+			RunId:      task.GetRunId(),
+		},
+	)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := weContext.loadWorkflowExecution()
+	if err != nil {
+		return err
+	}
+	if mutableState == nil || mutableState.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	lastWriteVersion, err := mutableState.GetLastWriteVersion()
+	if err != nil {
+		return err
+	}
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), lastWriteVersion, task.Version, task)
+	if err != nil || !ok {
+		return err
+	}
+
+	executionInfo := mutableState.GetExecutionInfo()
+	executionState := mutableState.GetExecutionState()
+	completionEvent, err := mutableState.GetCompletionEvent()
+	if err != nil {
+		return err
+	}
+	wfCloseTime := timestamp.TimeValue(completionEvent.GetEventTime())
+
+	workflowTypeName := executionInfo.WorkflowTypeName
+	workflowCloseTime := wfCloseTime
+	workflowStatus := executionState.Status
+	workflowHistoryLength := mutableState.GetNextEventID() - 1
+
+	startEvent, err := mutableState.GetStartEvent()
+	if err != nil {
+		return err
+	}
+	workflowStartTime := timestamp.TimeValue(startEvent.GetEventTime())
+	workflowExecutionTime := getWorkflowExecutionTime(mutableState, startEvent)
+	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
+	searchAttr := executionInfo.SearchAttributes
+
+	// release the context lock since we no longer need mutable state builder and
+	// the rest of logic is making RPC call, which takes time.
+	release(nil)
+	return t.recordCloseExecution(
+		task.GetNamespaceId(),
+		task.GetWorkflowId(),
+		task.GetRunId(),
+		workflowTypeName,
+		workflowStartTime,
+		workflowExecutionTime,
+		workflowCloseTime,
+		workflowStatus,
+		workflowHistoryLength,
+		task.GetTaskId(),
+		visibilityMemo,
+		executionInfo.TaskQueue,
+		searchAttr,
+	)
+}
+
+func (t *visibilityQueueTaskExecutor) recordCloseExecution(
+	namespaceID string,
+	workflowID string,
+	runID string,
+	workflowTypeName string,
+	startTime time.Time,
+	executionTime time.Time,
+	endTime time.Time,
+	status enumspb.WorkflowExecutionStatus,
+	historyLength int64,
+	taskID int64,
+	visibilityMemo *commonpb.Memo,
+	taskQueue string,
+	searchAttributes map[string]*commonpb.Payload,
+) error {
+
+	// Record closing in visibility store
+	retentionSeconds := int64(0)
+	namespace := defaultNamespace
+	recordWorkflowClose := true
+
+	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	if err != nil && !isWorkflowNotExistError(err) {
+		return err
+	}
+
+	if err == nil {
+		// retention in namespace config is in days, convert to seconds
+		retentionSeconds = int64(timestamp.DurationFromDays(namespaceEntry.GetRetentionDays(workflowID)).Seconds())
+		namespace = namespaceEntry.GetInfo().Name
+		// if sampled for longer retention is enabled, only record those sampled events
+		if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
+			!namespaceEntry.IsSampledForLongerRetention(workflowID) {
+			recordWorkflowClose = false
+		}
+	}
+
+	if recordWorkflowClose {
+		return t.visibilityMgr.RecordWorkflowExecutionClosedV2(&persistence.RecordWorkflowExecutionClosedRequest{
+			VisibilityRequestBase: &persistence.VisibilityRequestBase{
+				NamespaceID: namespaceID,
+				Namespace:   namespace,
+				Execution: commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      runID,
+				},
+				WorkflowTypeName:   workflowTypeName,
+				StartTimestamp:     startTime.UnixNano(),
+				ExecutionTimestamp: executionTime.UnixNano(),
+				Status:             status,
+				TaskID:             taskID,
+				ShardID:            t.shard.GetShardID(),
+				Memo:               visibilityMemo,
+				TaskQueue:          taskQueue,
+				SearchAttributes:   searchAttributes,
+			},
+			CloseTimestamp:   endTime.UnixNano(),
+			HistoryLength:    historyLength,
+			RetentionSeconds: retentionSeconds,
+		})
+	}
+
+	return nil
 }
 
 func (t *visibilityQueueTaskExecutor) processDeleteExecution(
@@ -229,16 +480,6 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecutionV2(request) // delete from db
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-func (t *visibilityQueueTaskExecutor) getNamespaceIDAndWorkflowExecution(
-	task *persistencespb.VisibilityTaskInfo,
-) (string, commonpb.WorkflowExecution) {
-
-	return task.GetNamespaceId(), commonpb.WorkflowExecution{
-		WorkflowId: task.GetWorkflowId(),
-		RunId:      task.GetRunId(),
-	}
 }
 
 // Argument startEvent is to save additional call of msBuilder.GetStartEvent

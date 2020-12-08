@@ -62,7 +62,11 @@ func NewSQLVisibilityStore(
 	}, nil
 }
 
-func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(
+func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
+	return s.RecordWorkflowExecutionStartedV2(request)
+}
+
+func (s *sqlVisibilityStore) RecordWorkflowExecutionStartedV2(
 	request *p.InternalRecordWorkflowExecutionStartedRequest,
 ) error {
 	ctx, cancel := newVisibilityContext()
@@ -82,7 +86,11 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(
 	return err
 }
 
-func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(
+func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
+	return s.RecordWorkflowExecutionClosedV2(request)
+}
+
+func (s *sqlVisibilityStore) RecordWorkflowExecutionClosedV2(
 	request *p.InternalRecordWorkflowExecutionClosedRequest,
 ) error {
 	ctx, cancel := newVisibilityContext()
@@ -120,10 +128,7 @@ func (s *sqlVisibilityStore) UpsertWorkflowExecution(
 	return nil
 }
 
-func (s *sqlVisibilityStore) UpsertWorkflowExecutionV2(
-	_ *p.InternalUpsertWorkflowExecutionRequestV2,
-) error {
-	// TODO (alex): copy from RecordWorkflowExecutionStarted + RecordWorkflowExecutionClosed + UpsertWorkflowExecution
+func (s *sqlVisibilityStore) UpsertWorkflowExecutionV2(_ *p.InternalUpsertWorkflowExecutionRequest) error {
 	return nil
 }
 
