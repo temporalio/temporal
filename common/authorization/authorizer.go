@@ -52,9 +52,6 @@ type (
 	Result struct {
 		Decision Decision
 	}
-
-	// Decision is enum type for auth decision
-	Decision int
 )
 
 // @@@SNIPSTART temporal-common-authorization-authorizer-interface
