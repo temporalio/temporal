@@ -426,7 +426,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		VisibilityProcessorMaxPollRPS:                          dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxPollRPS, 20),
 		VisibilityTaskWorkerCount:                              dc.GetIntProperty(dynamicconfig.VisibilityTaskWorkerCount, 10),
 		VisibilityTaskMaxRetryCount:                            dc.GetIntProperty(dynamicconfig.VisibilityTaskMaxRetryCount, 100),
-		VisibilityProcessorCompleteTaskFailureRetryCount:       dc.GetIntProperty(dynamicconfig.VisibilityProcessorCompleteVisibilityFailureRetryCount, 10),
+		VisibilityProcessorCompleteTaskFailureRetryCount:       dc.GetIntProperty(dynamicconfig.VisibilityProcessorCompleteTaskFailureRetryCount, 10),
 		VisibilityProcessorMaxPollInterval:                     dc.GetDurationProperty(dynamicconfig.VisibilityProcessorMaxPollInterval, 1*time.Minute),
 		VisibilityProcessorMaxPollIntervalJitterCoefficient:    dc.GetFloat64Property(dynamicconfig.VisibilityProcessorMaxPollIntervalJitterCoefficient, 0.15),
 		VisibilityProcessorUpdateAckInterval:                   dc.GetDurationProperty(dynamicconfig.VisibilityProcessorUpdateAckInterval, 30*time.Second),
