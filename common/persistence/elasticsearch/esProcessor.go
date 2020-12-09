@@ -22,6 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination esProcessor_mock.go
 package elasticsearch
 
 import (
@@ -74,6 +75,7 @@ type (
 		mapToAckChan            collection.ConcurrentTxMap // used to map ES request to ack channel
 		logger                  log.Logger
 		metricsClient           metrics.Client
+		indexerConcurrency      uint32
 	}
 
 	chanWithStopwatch struct { // value of esProcessorImpl.mapToAckChan
@@ -101,10 +103,10 @@ func NewProcessor(
 ) *esProcessorImpl {
 
 	p := &esProcessorImpl{
-		client:        client,
-		logger:        logger.WithTags(tag.ComponentIndexerESProcessor),
-		metricsClient: metricsClient,
-		mapToAckChan:  collection.NewShardedConcurrentTxMap(1024, func(key interface{}) uint32 { return hashFn(key, cfg.IndexerConcurrency()) }),
+		client:             client,
+		logger:             logger.WithTags(tag.ComponentIndexerESProcessor),
+		metricsClient:      metricsClient,
+		indexerConcurrency: uint32(cfg.IndexerConcurrency()),
 		bulkProcessorParameters: &elasticsearch.BulkProcessorParameters{
 			Name:          visibilityProcessorName,
 			NumOfWorkers:  cfg.ESProcessorNumOfWorkers(),
@@ -121,30 +123,34 @@ func NewProcessor(
 
 func (p *esProcessorImpl) Start() error {
 	var err error
+	p.mapToAckChan = collection.NewShardedConcurrentTxMap(1024, p.hashFn)
 	p.bulkProcessor, err = p.client.RunBulkProcessor(context.Background(), p.bulkProcessorParameters)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (p *esProcessorImpl) Stop() error {
-	return p.bulkProcessor.Stop()
+	err := p.bulkProcessor.Stop()
+	p.mapToAckChan = nil
+	p.bulkProcessor = nil
+	return err
 }
 
-func hashFn(key interface{}, numOfShards int) uint32 {
+func (p *esProcessorImpl) hashFn(key interface{}) uint32 {
 	id, ok := key.(string)
 	if !ok {
 		return 0
 	}
-
 	idBytes := []byte(id)
 	hash := farm.Hash32(idBytes)
-	return hash % uint32(numOfShards)
+	return hash % p.indexerConcurrency
 }
 
 // Add request to bulk, and record ack channel message in map with provided key
 func (p *esProcessorImpl) Add(request elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+	if cap(ackCh) < 1 {
+		panic("ackCh must be buffered channel (length should be 1 or more)")
+	}
+
 	actionWhenFoundDuplicates := func(key interface{}, value interface{}) error {
 		ackCh <- true
 		return nil

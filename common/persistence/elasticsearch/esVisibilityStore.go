@@ -274,15 +274,15 @@ func (v *esVisibilityStore) addBulkIndexRequestAndWait(
 func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest elastic.BulkableRequest, visibilityTaskKey string) error {
 	v.checkProcessor()
 
-	ch := make(chan bool)
-	v.processor.Add(bulkRequest, visibilityTaskKey, ch)
+	ackCh := make(chan bool, 1)
+	v.processor.Add(bulkRequest, visibilityTaskKey, ackCh)
 	// Processor must flush bulks every v.processorFlushInterval.
 	// 1.2 is to allow some buffer to process bulk and respond with ack.
 	// TODO (alex): change to +process timeout?
 	timeoutInterval := time.Duration(float64(v.processorFlushInterval) * 1.2)
 	timeoutTimer := time.NewTimer(timeoutInterval)
 	select {
-	case ack := <-ch:
+	case ack := <-ackCh:
 		timeoutTimer.Stop()
 		if !ack {
 			return newVisibilityTaskNAckError(visibilityTaskKey)

@@ -32,10 +32,9 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
-	"go.temporal.io/server/common/convert"
-	metricsmocks "go.temporal.io/server/common/metrics/mocks"
-
+	"github.com/golang/mock/gomock"
 	"github.com/olivere/elastic"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -47,10 +46,12 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	indexerspb "go.temporal.io/server/api/indexer/v1"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	es "go.temporal.io/server/common/elasticsearch"
 	esMocks "go.temporal.io/server/common/elasticsearch/mocks"
 	"go.temporal.io/server/common/log/loggerimpl"
+	metricsmocks "go.temporal.io/server/common/metrics/mocks"
 	"go.temporal.io/server/common/mocks"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/service/config"
@@ -59,12 +60,13 @@ import (
 
 type ESVisibilitySuite struct {
 	suite.Suite
-	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-	// not merely log an error
+	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 	*require.Assertions
+	controller        *gomock.Controller
 	visibilityStore   *esVisibilityStore
 	mockESClient      *esMocks.Client
 	mockProducer      *mocks.KafkaProducer
+	mockProcessor     *MockProcessor
 	mockMetricsClient *metricsmocks.Client
 }
 
@@ -110,25 +112,29 @@ func (s *ESVisibilitySuite) SetupTest() {
 
 	s.mockESClient = &esMocks.Client{}
 	config := &config.VisibilityConfig{
-		ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(3),
-		ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
+		ESIndexMaxResultWindow:   dynamicconfig.GetIntPropertyFn(3),
+		ValidSearchAttributes:    dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
+		ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Second),
 	}
 
 	s.mockMetricsClient = &metricsmocks.Client{}
-
 	s.mockProducer = &mocks.KafkaProducer{}
-	mgr := NewElasticSearchVisibilityStore(s.mockESClient, testIndex, s.mockProducer, config, loggerimpl.NewNopLogger(), s.mockMetricsClient)
-	s.visibilityStore = mgr.(*esVisibilityStore)
+	s.controller = gomock.NewController(s.T())
+	s.mockProcessor = NewMockProcessor(s.controller)
+	s.visibilityStore = NewElasticSearchVisibilityStore(s.mockESClient, testIndex, s.mockProducer, s.mockProcessor, config, loggerimpl.NewNopLogger(), s.mockMetricsClient)
 }
 
 func (s *ESVisibilitySuite) TearDownTest() {
 	s.mockESClient.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	// test non-empty request fields match
-	request := &p.InternalRecordWorkflowExecutionStartedRequest{}
+	request := &p.InternalRecordWorkflowExecutionStartedRequest{
+		InternalVisibilityRequestBase: &p.InternalVisibilityRequestBase{},
+	}
 	request.NamespaceID = "namespaceID"
 	request.WorkflowID = "wid"
 	request.RunID = "rid"
@@ -158,7 +164,9 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 	// test empty request
 	request := &p.InternalRecordWorkflowExecutionStartedRequest{
-		Memo: &commonpb.DataBlob{},
+		InternalVisibilityRequestBase: &p.InternalVisibilityRequestBase{
+			Memo: &commonpb.DataBlob{},
+		},
 	}
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexerspb.Message) bool {
 		s.Equal(enumsspb.MESSAGE_TYPE_INDEX, input.GetMessageType())
@@ -174,7 +182,9 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	// test non-empty request fields match
-	request := &p.InternalRecordWorkflowExecutionClosedRequest{}
+	request := &p.InternalRecordWorkflowExecutionClosedRequest{
+		InternalVisibilityRequestBase: &p.InternalVisibilityRequestBase{},
+	}
 	request.NamespaceID = "namespaceID"
 	request.WorkflowID = "wid"
 	request.RunID = "rid"
@@ -210,7 +220,9 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 	// test empty request
 	request := &p.InternalRecordWorkflowExecutionClosedRequest{
-		Memo: &commonpb.DataBlob{},
+		InternalVisibilityRequestBase: &p.InternalVisibilityRequestBase{
+			Memo: &commonpb.DataBlob{},
+		},
 	}
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexerspb.Message) bool {
 		s.Equal(enumsspb.MESSAGE_TYPE_INDEX, input.GetMessageType())

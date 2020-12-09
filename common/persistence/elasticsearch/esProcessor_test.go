@@ -36,15 +36,14 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
-	indexerspb "go.temporal.io/server/api/indexer/v1"
-	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/definition"
 	es "go.temporal.io/server/common/elasticsearch"
 	esMocks "go.temporal.io/server/common/elasticsearch/mocks"
 	"go.temporal.io/server/common/log/loggerimpl"
 	msgMocks "go.temporal.io/server/common/messaging/mocks"
 	"go.temporal.io/server/common/metrics"
-	mmocks "go.temporal.io/server/common/metrics/mocks"
+	metricsmocks "go.temporal.io/server/common/metrics/mocks"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/service/worker/indexer/mocks"
 )
@@ -53,12 +52,11 @@ type esProcessorSuite struct {
 	suite.Suite
 	esProcessor       *esProcessorImpl
 	mockBulkProcessor *mocks.ElasticBulkProcessor
-	mockMetricClient  *mmocks.Client
+	mockMetricClient  *metricsmocks.Client
 	mockESClient      *esMocks.Client
 }
 
 var (
-	testIndex     = "test-index"
 	testType      = docType
 	testID        = "test-doc-id"
 	testStopWatch = metrics.NopStopwatch()
@@ -75,31 +73,24 @@ func (s *esProcessorSuite) SetupSuite() {
 }
 
 func (s *esProcessorSuite) SetupTest() {
-	config := &Config{
+	zapLogger, err := zap.NewDevelopment()
+	s.Require().NoError(err)
+
+	cfg := &ProcessorConfig{
 		IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
 		ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
 		ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
 		ESProcessorBulkSize:      dynamicconfig.GetIntPropertyFn(2 << 20),
 		ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
-	s.mockMetricClient = &mmocks.Client{}
+	s.mockMetricClient = &metricsmocks.Client{}
 	s.mockBulkProcessor = &mocks.ElasticBulkProcessor{}
-
-	zapLogger, err := zap.NewDevelopment()
-	s.Require().NoError(err)
-
-	p := &esProcessorImpl{
-		config:        config,
-		logger:        loggerimpl.NewLogger(zapLogger),
-		metricsClient: s.mockMetricClient,
-		msgEncoder:    codec.NewJSONPBEncoder(),
-	}
-	p.mapToKafkaMsg = collection.NewShardedConcurrentTxMap(1024, p.hashFn)
-	p.bulkProcessor = s.mockBulkProcessor
-
-	s.esProcessor = p
-
 	s.mockESClient = &esMocks.Client{}
+	s.esProcessor = NewProcessor(cfg, s.mockESClient, loggerimpl.NewLogger(zapLogger), s.mockMetricClient)
+
+	// esProcessor.Start mock
+	s.esProcessor.mapToAckChan = collection.NewShardedConcurrentTxMap(1024, s.esProcessor.hashFn)
+	s.esProcessor.bulkProcessor = s.mockBulkProcessor
 }
 
 func (s *esProcessorSuite) TearDownTest() {
@@ -109,16 +100,18 @@ func (s *esProcessorSuite) TearDownTest() {
 }
 
 func (s *esProcessorSuite) TestNewESProcessorAndStart() {
-	config := &Config{
+	config := &ProcessorConfig{
+		IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
 		ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
 		ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
 		ESProcessorBulkSize:      dynamicconfig.GetIntPropertyFn(2 << 20),
 		ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
-	processorName := "test-processor"
+
+	p := NewProcessor(config, s.mockESClient, s.esProcessor.logger, &metricsmocks.Client{})
 
 	s.mockESClient.On("RunBulkProcessor", mock.Anything, mock.MatchedBy(func(input *es.BulkProcessorParameters) bool {
-		s.Equal(processorName, input.Name)
+		s.Equal(visibilityProcessorName, input.Name)
 		s.Equal(config.ESProcessorNumOfWorkers(), input.NumOfWorkers)
 		s.Equal(config.ESProcessorBulkActions(), input.BulkActions)
 		s.Equal(config.ESProcessorBulkSize(), input.BulkSize)
@@ -127,62 +120,83 @@ func (s *esProcessorSuite) TestNewESProcessorAndStart() {
 		s.NotNil(input.AfterFunc)
 		return true
 	})).Return(&elastic.BulkProcessor{}, nil).Once()
-	p, err := NewESProcessorAndStart(config, s.mockESClient, processorName, s.esProcessor.logger, &mmocks.Client{}, codec.NewJSONPBEncoder())
+
+	err := p.Start()
 	s.NoError(err)
+	s.NotNil(p.mapToAckChan)
+	s.NotNil(p.bulkProcessor)
 
-	processor, ok := p.(*esProcessorImpl)
-	s.True(ok)
-	s.NotNil(processor.mapToKafkaMsg)
-
-	p.Stop()
+	// TODO (alex): remove?
+	err = p.Stop()
+	s.NoError(err)
+	s.Nil(p.mapToAckChan)
+	s.Nil(p.bulkProcessor)
 }
 
 func (s *esProcessorSuite) TestStop() {
 	s.mockBulkProcessor.On("Stop").Return(nil).Once()
-	s.esProcessor.Stop()
-	s.Nil(s.esProcessor.mapToKafkaMsg)
+	err := s.esProcessor.Stop()
+	s.NoError(err)
+	s.Nil(s.esProcessor.mapToAckChan)
+	s.Nil(s.esProcessor.bulkProcessor)
 }
 
 func (s *esProcessorSuite) TestAdd() {
 	request := elastic.NewBulkIndexRequest()
-	mockKafkaMsg := &msgMocks.Message{}
-	key := "test-key"
-	s.Equal(0, s.esProcessor.mapToKafkaMsg.Len())
+	visibilityTaskKey := "test-key"
+	ackCh := make(chan bool, 1)
+	s.Equal(0, s.esProcessor.mapToAckChan.Len())
 
 	s.mockBulkProcessor.On("Add", request).Return().Once()
 	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
-	s.esProcessor.Add(request, key, mockKafkaMsg)
-	s.Equal(1, s.esProcessor.mapToKafkaMsg.Len())
-	mockKafkaMsg.AssertExpectations(s.T())
+
+	s.esProcessor.Add(request, visibilityTaskKey, ackCh)
+	s.Equal(1, s.esProcessor.mapToAckChan.Len())
+	select {
+	case <-ackCh:
+		s.Fail("request shouldn't be acknowledged")
+	default:
+	}
 
 	// handle duplicate
-	mockKafkaMsg.On("Ack").Return(nil).Once()
 	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
-	s.esProcessor.Add(request, key, mockKafkaMsg)
-	s.Equal(1, s.esProcessor.mapToKafkaMsg.Len())
-	mockKafkaMsg.AssertExpectations(s.T())
+	s.esProcessor.Add(request, visibilityTaskKey, ackCh)
+	s.Equal(1, s.esProcessor.mapToAckChan.Len())
+	select {
+	case ack := <-ackCh:
+		s.True(ack)
+	default:
+		s.Fail("request should be acknowledged due to duplicate key")
+	}
 }
 
 func (s *esProcessorSuite) TestAdd_ConcurrentAdd() {
 	request := elastic.NewBulkIndexRequest()
-	mockKafkaMsg := &msgMocks.Message{}
 	key := "test-key"
+	duplicates := 100
+	ackCh := make(chan bool, duplicates-1)
+	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Times(duplicates)
 
 	addFunc := func(wg *sync.WaitGroup) {
-		s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
-		s.esProcessor.Add(request, key, mockKafkaMsg)
+		s.esProcessor.Add(request, key, ackCh)
 		wg.Done()
 	}
-	duplicates := 5
 	wg := &sync.WaitGroup{}
 	wg.Add(duplicates)
 	s.mockBulkProcessor.On("Add", request).Return().Once()
-	mockKafkaMsg.On("Ack").Return(nil).Times(duplicates - 1)
 	for i := 0; i < duplicates; i++ {
-		addFunc(wg)
+		go addFunc(wg)
 	}
 	wg.Wait()
-	mockKafkaMsg.AssertExpectations(s.T())
+	for i := 0; i < duplicates-1; i++ {
+		ack := <-ackCh
+		s.True(ack)
+	}
+	select {
+	case <-ackCh:
+		s.Fail("there should be no more acknowledged requests")
+	default:
+	}
 }
 
 func (s *esProcessorSuite) TestBulkAfterActionX() {
@@ -194,7 +208,7 @@ func (s *esProcessorSuite) TestBulkAfterActionX() {
 		Id(testID).
 		VersionType(versionTypeExternal).
 		Version(version).
-		Doc(map[string]interface{}{es.KafkaKey: testKey})
+		Doc(map[string]interface{}{definition.VisibilityTaskKey: testKey})
 	requests := []elastic.BulkableRequest{request}
 
 	mSuccess := map[string]*elastic.BulkResponseItem{
@@ -212,24 +226,38 @@ func (s *esProcessorSuite) TestBulkAfterActionX() {
 		Items:  []map[string]*elastic.BulkResponseItem{mSuccess},
 	}
 
-	mockKafkaMsg := &msgMocks.Message{}
-	mapVal := newChanWithStopwatch(mockKafkaMsg, &testStopWatch)
-	s.esProcessor.mapToKafkaMsg.Put(testKey, mapVal)
-	mockKafkaMsg.On("Ack").Return(nil).Once()
+	ackCh := make(chan bool, 1)
+	mapVal := newChanWithStopwatch(ackCh, &testStopWatch)
+	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
-	mockKafkaMsg.AssertExpectations(s.T())
+	select {
+	case ack := <-ackCh:
+		s.True(ack)
+	default:
+		s.Fail("request should be acknowledged")
+	}
 }
 
 func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 	version := int64(3)
 	testKey := "testKey"
+
+	wid := "test-workflowID"
+	rid := "test-runID"
+	namespaceID := "test-namespaceID"
+
 	request := elastic.NewBulkIndexRequest().
 		Index(testIndex).
 		Type(testType).
 		Id(testID).
 		VersionType(versionTypeExternal).
 		Version(version).
-		Doc(map[string]interface{}{es.KafkaKey: testKey})
+		Doc(map[string]interface{}{
+			definition.VisibilityTaskKey: testKey,
+			definition.NamespaceID:       namespaceID,
+			definition.WorkflowID:        wid,
+			definition.RunID:             rid,
+		})
 	requests := []elastic.BulkableRequest{request}
 
 	mFailed := map[string]*elastic.BulkResponseItem{
@@ -247,18 +275,16 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 		Items:  []map[string]*elastic.BulkResponseItem{mFailed},
 	}
 
-	wid := "test-workflowID"
-	rid := "test-runID"
-	namespaceID := "test-namespaceID"
-	payload := s.getEncodedMsg(wid, rid, namespaceID)
-
-	mockKafkaMsg := &msgMocks.Message{}
-	mapVal := newChanWithStopwatch(mockKafkaMsg, &testStopWatch)
-	s.esProcessor.mapToKafkaMsg.Put(testKey, mapVal)
-	mockKafkaMsg.On("Nack").Return(nil).Once()
-	mockKafkaMsg.On("Value").Return(payload).Once()
+	ackCh := make(chan bool, 1)
+	mapVal := newChanWithStopwatch(ackCh, &testStopWatch)
+	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
-	mockKafkaMsg.AssertExpectations(s.T())
+	select {
+	case ack := <-ackCh:
+		s.False(ack)
+	default:
+		s.Fail("request should be acknowledged")
+	}
 }
 
 func (s *esProcessorSuite) TestBulkAfterAction_Error() {
@@ -293,37 +319,47 @@ func (s *esProcessorSuite) TestBulkAfterAction_Error() {
 func (s *esProcessorSuite) TestAckKafkaMsg() {
 	key := "test-key"
 	// no msg in map, nothing called
-	s.esProcessor.ackKafkaMsg(key)
+	s.esProcessor.sendToAckChan(key, true)
 
 	request := elastic.NewBulkIndexRequest()
-	mockKafkaMsg := &msgMocks.Message{}
 	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
 	s.mockBulkProcessor.On("Add", request).Return().Once()
-	s.esProcessor.Add(request, key, mockKafkaMsg)
-	s.Equal(1, s.esProcessor.mapToKafkaMsg.Len())
+	ackCh := make(chan bool, 1)
+	s.esProcessor.Add(request, key, ackCh)
+	s.Equal(1, s.esProcessor.mapToAckChan.Len())
 
-	mockKafkaMsg.On("Ack").Return(nil).Once()
-	s.esProcessor.ackKafkaMsg(key)
-	mockKafkaMsg.AssertExpectations(s.T())
-	s.Equal(0, s.esProcessor.mapToKafkaMsg.Len())
+	s.esProcessor.sendToAckChan(key, true)
+	select {
+	case ack := <-ackCh:
+		s.True(ack)
+	default:
+		s.Fail("request should be acknowledged")
+	}
+	s.Equal(0, s.esProcessor.mapToAckChan.Len())
 }
 
 func (s *esProcessorSuite) TestNackKafkaMsg() {
 	key := "test-key-nack"
 	// no msg in map, nothing called
-	s.esProcessor.nackKafkaMsg(key)
+	s.esProcessor.sendToAckChan(key, false)
 
 	request := elastic.NewBulkIndexRequest()
 	mockKafkaMsg := &msgMocks.Message{}
 	s.mockBulkProcessor.On("Add", request).Return().Once()
 	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
-	s.esProcessor.Add(request, key, mockKafkaMsg)
-	s.Equal(1, s.esProcessor.mapToKafkaMsg.Len())
+	ackCh := make(chan bool, 1)
+	s.esProcessor.Add(request, key, ackCh)
+	s.Equal(1, s.esProcessor.mapToAckChan.Len())
 
 	mockKafkaMsg.On("Nack").Return(nil).Once()
-	s.esProcessor.nackKafkaMsg(key)
-	mockKafkaMsg.AssertExpectations(s.T())
-	s.Equal(0, s.esProcessor.mapToKafkaMsg.Len())
+	s.esProcessor.sendToAckChan(key, false)
+	select {
+	case ack := <-ackCh:
+		s.False(ack)
+	default:
+		s.Fail("request should be not acknowledged")
+	}
+	s.Equal(0, s.esProcessor.mapToAckChan.Len())
 }
 
 func (s *esProcessorSuite) TestHashFn() {
@@ -331,58 +367,61 @@ func (s *esProcessorSuite) TestHashFn() {
 	s.NotEqual(uint32(0), s.esProcessor.hashFn("test"))
 }
 
-func (s *esProcessorSuite) getEncodedMsg(wid string, rid string, namespaceID string) []byte {
-	indexMsg := &indexerspb.Message{
-		NamespaceId: namespaceID,
-		WorkflowId:  wid,
-		RunId:       rid,
-	}
-	payload, err := s.esProcessor.msgEncoder.Encode(indexMsg)
-	s.NoError(err)
-	return payload
-}
-
-func (s *esProcessorSuite) TestGetMsgWithInfo() {
+// func (s *esProcessorSuite) getEncodedMsg(wid string, rid string, namespaceID string) []byte {
+// 	indexMsg := &indexerspb.Message{
+// 		NamespaceId: namespaceID,
+// 		WorkflowId:  wid,
+// 		RunId:       rid,
+// 	}
+// 	payload, err := s.esProcessor.msgEncoder.Encode(indexMsg)
+// 	s.NoError(err)
+// 	return payload
+// }
+//
+func (s *esProcessorSuite) TestGetDocIDs() {
 	testKey := "test-key"
 	testWid := "test-workflowID"
 	testRid := "test-runID"
 	testNamespaceid := "test-namespaceID"
-	payload := s.getEncodedMsg(testWid, testRid, testNamespaceid)
 
-	mockKafkaMsg := &msgMocks.Message{}
-	mockKafkaMsg.On("Value").Return(payload).Once()
-	mapVal := newChanWithStopwatch(mockKafkaMsg, &testStopWatch)
-	s.esProcessor.mapToKafkaMsg.Put(testKey, mapVal)
-	wid, rid, namespaceID := s.esProcessor.getMsgWithInfo(testKey)
+	request := elastic.NewBulkIndexRequest().
+		Doc(map[string]interface{}{
+			definition.VisibilityTaskKey: testKey,
+			definition.NamespaceID:       testNamespaceid,
+			definition.WorkflowID:        testWid,
+			definition.RunID:             testRid,
+		})
+
+	wid, rid, namespaceID := s.esProcessor.getDocIDs(request)
 	s.Equal(testWid, wid)
 	s.Equal(testRid, rid)
 	s.Equal(testNamespaceid, namespaceID)
 }
 
-func (s *esProcessorSuite) TestGetMsgInfo_Error() {
+func (s *esProcessorSuite) TestGetDocIDs_Error() {
 	testKey := "test-key"
-	mockKafkaMsg := &msgMocks.Message{}
-	mockKafkaMsg.On("Value").Return([]byte{}).Once()
-	mapVal := newChanWithStopwatch(mockKafkaMsg, &testStopWatch)
-	s.esProcessor.mapToKafkaMsg.Put(testKey, mapVal)
-	wid, rid, namespaceID := s.esProcessor.getMsgWithInfo(testKey)
+	request := elastic.NewBulkIndexRequest().
+		Doc(map[string]interface{}{
+			definition.VisibilityTaskKey: testKey,
+		})
+	wid, rid, namespaceID := s.esProcessor.getDocIDs(request)
 	s.Equal("", wid)
 	s.Equal("", rid)
 	s.Equal("", namespaceID)
 }
 
-func (s *esProcessorSuite) TestGetKeyForKafkaMsg() {
+func (s *esProcessorSuite) TestGetVisibilityTaskKey() {
 	request := elastic.NewBulkIndexRequest()
-	s.PanicsWithValue("KafkaKey not found", func() { s.esProcessor.getVisibilityTaskKey(request) })
+	s.PanicsWithValue("VisibilityTaskKey not found", func() { s.esProcessor.getVisibilityTaskKey(request) })
 
 	m := map[string]interface{}{
-		es.KafkaKey: 1,
+		definition.VisibilityTaskKey: 1,
 	}
 	request.Doc(m)
-	s.PanicsWithValue("KafkaKey is not string", func() { s.esProcessor.getVisibilityTaskKey(request) })
+	s.PanicsWithValue("VisibilityTaskKey is not string", func() { s.esProcessor.getVisibilityTaskKey(request) })
 
 	testKey := "test-key"
-	m[es.KafkaKey] = testKey
+	m[definition.VisibilityTaskKey] = testKey
 	request.Doc(m)
 	s.Equal(testKey, s.esProcessor.getVisibilityTaskKey(request))
 }
