@@ -99,7 +99,7 @@ func (s *esProcessorSuite) TearDownTest() {
 	s.mockESClient.AssertExpectations(s.T())
 }
 
-func (s *esProcessorSuite) TestNewESProcessorAndStart() {
+func (s *esProcessorSuite) TestNewESProcessorAndStartStop() {
 	config := &ProcessorConfig{
 		IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
 		ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
@@ -125,17 +125,9 @@ func (s *esProcessorSuite) TestNewESProcessorAndStart() {
 	s.NotNil(p.mapToAckChan)
 	s.NotNil(p.bulkProcessor)
 
-	// TODO (alex): remove?
 	p.Stop()
 	s.Nil(p.mapToAckChan)
 	s.Nil(p.bulkProcessor)
-}
-
-func (s *esProcessorSuite) TestStop() {
-	s.mockBulkProcessor.On("Stop").Return(nil).Once()
-	s.esProcessor.Stop()
-	s.Nil(s.esProcessor.mapToAckChan)
-	s.Nil(s.esProcessor.bulkProcessor)
 }
 
 func (s *esProcessorSuite) TestAdd() {

@@ -1986,15 +1986,18 @@ func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStar
 	executionTimestamp := timestamp.TimeValue(startEvent.GetEventTime()).Add(backoffSeconds)
 
 	return &persistence.RecordWorkflowExecutionStartedRequest{
-		Namespace:          namespace,
-		NamespaceID:        task.GetNamespaceId(),
-		Execution:          *execution,
-		WorkflowTypeName:   executionInfo.WorkflowTypeName,
-		StartTimestamp:     timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
-		ExecutionTimestamp: executionTimestamp.UnixNano(),
-		RunTimeout:         int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
-		TaskID:             task.GetTaskId(),
-		TaskQueue:          task.TaskQueue,
+		VisibilityRequestBase: &p.VisibilityRequestBase{
+
+			Namespace:          namespace,
+			NamespaceID:        task.GetNamespaceId(),
+			Execution:          *execution,
+			WorkflowTypeName:   executionInfo.WorkflowTypeName,
+			StartTimestamp:     timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
+			ExecutionTimestamp: executionTimestamp.UnixNano(),
+			TaskID:             task.GetTaskId(),
+			TaskQueue:          task.TaskQueue,
+		},
+		RunTimeout: int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 	}
 }
 
@@ -2117,15 +2120,17 @@ func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttribu
 	executionInfo := mutableState.GetExecutionInfo()
 
 	return &persistence.UpsertWorkflowExecutionRequest{
-		Namespace:        namespace,
-		NamespaceID:      task.GetNamespaceId(),
-		Execution:        *execution,
-		WorkflowTypeName: executionInfo.WorkflowTypeName,
-		StartTimestamp:   timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
-		WorkflowTimeout:  int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
-		TaskID:           task.GetTaskId(),
-		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		TaskQueue:        task.TaskQueue,
+		VisibilityRequestBase: &p.VisibilityRequestBase{
+			Namespace:        namespace,
+			NamespaceID:      task.GetNamespaceId(),
+			Execution:        *execution,
+			WorkflowTypeName: executionInfo.WorkflowTypeName,
+			StartTimestamp:   timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
+			TaskID:           task.GetTaskId(),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			TaskQueue:        task.TaskQueue,
+		},
+		WorkflowTimeout: int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 	}
 }
 

@@ -59,11 +59,9 @@ func (m *MockProcessor) EXPECT() *MockProcessorMockRecorder {
 }
 
 // Start mocks base method.
-func (m *MockProcessor) Start() error {
+func (m *MockProcessor) Start() {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Start")
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "Start")
 }
 
 // Start indicates an expected call of Start.
@@ -73,11 +71,9 @@ func (mr *MockProcessorMockRecorder) Start() *gomock.Call {
 }
 
 // Stop mocks base method.
-func (m *MockProcessor) Stop() error {
+func (m *MockProcessor) Stop() {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Stop")
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "Stop")
 }
 
 // Stop indicates an expected call of Stop.

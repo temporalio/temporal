@@ -1122,17 +1122,19 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 	executionState := mutableState.GetExecutionState()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", &persistence.RecordWorkflowExecutionStartedRequest{
-		NamespaceID: testNamespaceID,
-		Namespace:   testNamespace,
-		Execution: commonpb.WorkflowExecution{
-			WorkflowId: executionInfo.WorkflowId,
-			RunId:      executionState.RunId,
+		VisibilityRequestBase: &persistence.VisibilityRequestBase{
+			NamespaceID: testNamespaceID,
+			Namespace:   testNamespace,
+			Execution: commonpb.WorkflowExecution{
+				WorkflowId: executionInfo.WorkflowId,
+				RunId:      executionState.RunId,
+			},
+			WorkflowTypeName: executionInfo.WorkflowTypeName,
+			StartTimestamp:   timestamp.TimeValue(event.GetEventTime()).UnixNano(),
+			TaskID:           taskID,
+			TaskQueue:        taskQueueName,
 		},
-		WorkflowTypeName: executionInfo.WorkflowTypeName,
-		StartTimestamp:   timestamp.TimeValue(event.GetEventTime()).UnixNano(),
-		RunTimeout:       int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
-		TaskID:           taskID,
-		TaskQueue:        taskQueueName,
+		RunTimeout: int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 	}).Return(nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, *now)
@@ -1187,18 +1189,20 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 	executionState := mutableState.GetExecutionState()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.On("UpsertWorkflowExecution", &persistence.UpsertWorkflowExecutionRequest{
-		NamespaceID: testNamespaceID,
-		Namespace:   testNamespace,
-		Execution: commonpb.WorkflowExecution{
-			WorkflowId: executionInfo.WorkflowId,
-			RunId:      executionState.RunId,
+		VisibilityRequestBase: &persistence.VisibilityRequestBase{
+			NamespaceID: testNamespaceID,
+			Namespace:   testNamespace,
+			Execution: commonpb.WorkflowExecution{
+				WorkflowId: executionInfo.WorkflowId,
+				RunId:      executionState.RunId,
+			},
+			WorkflowTypeName: executionInfo.WorkflowTypeName,
+			StartTimestamp:   timestamp.TimeValue(event.GetEventTime()).UnixNano(),
+			TaskID:           taskID,
+			TaskQueue:        taskQueueName,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
-		WorkflowTypeName: executionInfo.WorkflowTypeName,
-		StartTimestamp:   timestamp.TimeValue(event.GetEventTime()).UnixNano(),
-		WorkflowTimeout:  int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
-		TaskID:           taskID,
-		TaskQueue:        taskQueueName,
-		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		WorkflowTimeout: int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 	}).Return(nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, *now)
