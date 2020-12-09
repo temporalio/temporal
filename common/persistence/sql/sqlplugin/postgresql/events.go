@@ -85,11 +85,14 @@ func (pdb *db) SelectFromHistoryNode(
 		filter.MaxNodeID,
 		filter.PageSize,
 	)
+	if err != nil {
+		return nil, err
+	}
 	// NOTE: since we let txn_id multiple by -1 when inserting, we have to revert it back here
 	for index := range rows {
 		rows[index].TxnID = -rows[index].TxnID
 	}
-	return rows, err
+	return rows, nil
 }
 
 // DeleteFromHistoryNode deletes one or more rows from history_node table

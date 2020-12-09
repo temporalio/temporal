@@ -260,5 +260,5 @@ func (mdb *db) SelectFromVisibility(
 			rows[i].CloseTime = &closeTime
 		}
 	}
-	return rows, err
+	return rows, nil
 }
