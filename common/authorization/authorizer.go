@@ -35,14 +35,19 @@ const (
 	DecisionAllow
 )
 
-type (
-	// Attributes is input for authority to make decision.
-	// It can be extended in future if required auth on resources like WorkflowType and TaskQueue
-	CallTarget struct {
-		APIName   string
-		Namespace string
-	}
+// @@@SNIPSTART temporal-common-authorization-authorizer-calltarget
+// CallTarget attributes are input for authority to make decision.
+// It can be extended in future if required auth on resources like WorkflowType and TaskQueue
+type CallTarget struct {
+	// The `APIName` field must be a string of the API name.
+	// Example: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution".
+	APIName   string
+	// If a Namespace is not being targeted, `Namespace` can be set to an empty string.
+	Namespace string
+}
+// @@@SNIPEND
 
+type (
 	// Result is result from authority.
 	Result struct {
 		Decision Decision
@@ -52,10 +57,12 @@ type (
 	Decision int
 )
 
+// @@@SNIPSTART temporal-common-authorization-authorizer-interface
 // Authorizer is an interface for authorization
 type Authorizer interface {
 	Authorize(ctx context.Context, caller *Claims, target *CallTarget) (Result, error)
 }
+// @@@SNIPEND
 
 type requestWithNamespace interface {
 	GetNamespace() string
