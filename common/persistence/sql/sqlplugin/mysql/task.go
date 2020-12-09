@@ -129,7 +129,7 @@ func (mdb *db) SelectFromTasks(
 	if err != nil {
 		return nil, err
 	}
-	return rows, err
+	return rows, nil
 }
 
 // DeleteFromTasks deletes one or more rows from tasks table

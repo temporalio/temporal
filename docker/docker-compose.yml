@@ -5,7 +5,7 @@ services:
     ports:
       - "9042:9042"
   temporal:
-    image: temporalio/auto-setup:${SERVER_TAG:-1.3.0}
+    image: temporalio/auto-setup:${SERVER_TAG:-1.4.0}
     ports:
       - "7233:7233"
     volumes:
@@ -16,7 +16,7 @@ services:
     depends_on:
       - cassandra
   temporal-admin-tools:
-    image: temporalio/admin-tools:${SERVER_TAG:-1.3.0}
+    image: temporalio/admin-tools:${SERVER_TAG:-1.4.0}
     stdin_open: true
     tty: true
     environment:
@@ -24,7 +24,7 @@ services:
     depends_on:
       - temporal
   temporal-web:
-    image: temporalio/web:${WEB_TAG:-1.3.1}
+    image: temporalio/web:${WEB_TAG:-1.4.0}
     environment:
       - "TEMPORAL_GRPC_ENDPOINT=temporal:7233"
       - "TEMPORAL_PERMIT_WRITE_API=true"

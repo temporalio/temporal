@@ -67,6 +67,7 @@ type (
 		HistoryTimerTask
 		HistoryReplicationTask
 		HistoryReplicationDLQTask
+		HistoryVisibilityTask
 	}
 
 	// AdminCRUD defines admin operations for CLI and test suites
