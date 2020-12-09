@@ -457,7 +457,7 @@ func (mdb *db) SelectFromTimerTasks(
 	for i := range rows {
 		rows[i].VisibilityTimestamp = mdb.converter.FromMySQLDateTime(rows[i].VisibilityTimestamp)
 	}
-	return rows, err
+	return rows, nil
 }
 
 // RangeSelectFromTimerTasks reads one or more rows from timer_tasks table

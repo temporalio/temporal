@@ -396,7 +396,7 @@ func (pdb *db) RangeSelectFromTransferTasks(
 	if err != nil {
 		return nil, err
 	}
-	return rows, err
+	return rows, nil
 }
 
 // DeleteFromTransferTasks deletes one or more rows from transfer_tasks table
@@ -457,7 +457,7 @@ func (pdb *db) SelectFromTimerTasks(
 	for i := range rows {
 		rows[i].VisibilityTimestamp = pdb.converter.FromPostgreSQLDateTime(rows[i].VisibilityTimestamp)
 	}
-	return rows, err
+	return rows, nil
 }
 
 // RangeSelectFromTimerTasks reads one or more rows from timer_tasks table
@@ -484,7 +484,7 @@ func (pdb *db) RangeSelectFromTimerTasks(
 	for i := range rows {
 		rows[i].VisibilityTimestamp = pdb.converter.FromPostgreSQLDateTime(rows[i].VisibilityTimestamp)
 	}
-	return rows, err
+	return rows, nil
 }
 
 // DeleteFromTimerTasks deletes one or more rows from timer_tasks table
@@ -751,7 +751,7 @@ func (pdb *db) RangeSelectFromVisibilityTasks(
 	if err != nil {
 		return nil, err
 	}
-	return rows, err
+	return rows, nil
 }
 
 // DeleteFromVisibilityTasks deletes one or more rows from visibility_tasks table
