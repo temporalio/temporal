@@ -102,7 +102,7 @@ CREATE TABLE timer_tasks (
   visibility_timestamp DATETIME(6) NOT NULL,
   task_id BIGINT NOT NULL,
   --
-  data BLOB NOT NULL,
+  data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
   PRIMARY KEY (shard_id, visibility_timestamp, task_id)
 );
