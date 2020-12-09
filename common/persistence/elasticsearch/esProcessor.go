@@ -30,12 +30,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/olivere/elastic"
 	"github.com/uber-go/tally"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/elasticsearch"
@@ -47,10 +49,8 @@ import (
 type (
 	// Processor is interface for elastic search bulk processor
 	Processor interface {
-		// Start processor and return error if failed.
-		Start() error
-		// Stop processor and clean up
-		Stop() error
+		common.Daemon
+
 		// Add request to bulk, and record kafka message in map with provided key
 		// This call will be blocked when downstream has issues
 		Add(request elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool)
@@ -69,6 +69,7 @@ type (
 
 	// esProcessorImpl implements Processor, it's an agent of elastic.BulkProcessor
 	esProcessorImpl struct {
+		status                  int32
 		bulkProcessor           ElasticBulkProcessor
 		bulkProcessorParameters *elasticsearch.BulkProcessorParameters
 		client                  elasticsearch.Client
@@ -103,6 +104,7 @@ func NewProcessor(
 ) *esProcessorImpl {
 
 	p := &esProcessorImpl{
+		status:             common.DaemonStatusInitialized,
 		client:             client,
 		logger:             logger.WithTags(tag.ComponentIndexerESProcessor),
 		metricsClient:      metricsClient,
@@ -121,18 +123,38 @@ func NewProcessor(
 	return p
 }
 
-func (p *esProcessorImpl) Start() error {
+func (p *esProcessorImpl) Start() {
+	if !atomic.CompareAndSwapInt32(
+		&p.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
+		return
+	}
+
 	var err error
 	p.mapToAckChan = collection.NewShardedConcurrentTxMap(1024, p.hashFn)
 	p.bulkProcessor, err = p.client.RunBulkProcessor(context.Background(), p.bulkProcessorParameters)
-	return err
+	if err != nil {
+		p.logger.Fatal("Unable to start Elastic Search processor.", tag.LifeCycleStartFailed, tag.Error(err))
+	}
 }
 
-func (p *esProcessorImpl) Stop() error {
+func (p *esProcessorImpl) Stop() {
+	if !atomic.CompareAndSwapInt32(
+		&p.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
+	}
+
 	err := p.bulkProcessor.Stop()
+	if err != nil {
+		p.logger.Fatal("Unable to stop Elastic Search processor.", tag.LifeCycleStopFailed, tag.Error(err))
+	}
 	p.mapToAckChan = nil
 	p.bulkProcessor = nil
-	return err
 }
 
 func (p *esProcessorImpl) hashFn(key interface{}) uint32 {

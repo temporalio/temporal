@@ -1,9 +1,8 @@
 {
   "CurrVersion": "1.2",
   "MinCompatibleVersion": "1.0",
-  "Description": "Schema update to deprecate Kafka",
+  "Description": "schema update for RPC replication",
   "SchemaUpdateCqlFiles": [
-    "queue.cql",
-    "visibility.cql"
+    "queue.cql"
   ]
 }

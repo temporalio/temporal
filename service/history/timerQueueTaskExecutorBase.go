@@ -26,7 +26,6 @@ package history
 
 import (
 	"context"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -124,6 +123,10 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 	msBuilder mutableState,
 ) error {
 
+	if err := t.deleteWorkflowVisibility(task, workflowContext, msBuilder); err != nil {
+		return err
+	}
+
 	if err := t.deleteCurrentWorkflowExecution(task); err != nil {
 		return err
 	}
@@ -136,9 +139,6 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 		return err
 	}
 
-	if err := t.deleteWorkflowVisibility(task, workflowContext, msBuilder); err != nil {
-		return err
-	}
 	// calling clear here to force accesses of mutable state to read database
 	// if this is not called then callers will get mutable state even though its been removed from database
 	workflowContext.clear()
@@ -188,23 +188,26 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 		return err
 	}
 
+	// delete visibility record here regardless if it's been archived inline or not
+	// since the entire record is included as part of the archive request.
+	if err := t.deleteWorkflowVisibility(task, workflowContext, msBuilder); err != nil {
+		return err
+	}
+
 	if err := t.deleteCurrentWorkflowExecution(task); err != nil {
 		return err
 	}
+
 	if err := t.deleteWorkflowExecution(task); err != nil {
 		return err
 	}
+
 	// delete workflow history if history archival is not needed or history as been archived inline
 	if resp.HistoryArchivedInline {
 		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteHistoryInlineCount)
 		if err := t.deleteWorkflowHistory(task, msBuilder); err != nil {
 			return err
 		}
-	}
-	// delete visibility record here regardless if it's been archived inline or not
-	// since the entire record is included as part of the archive request.
-	if err := t.deleteWorkflowVisibility(task, workflowContext, msBuilder); err != nil {
-		return err
 	}
 	// calling clear here to force accesses of mutable state to read database
 	// if this is not called then callers will get mutable state even though its been removed from database
@@ -279,7 +282,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 		return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	}
 
-	now := time.Now().UTC()
+	now := t.shard.GetTimeSource().Now()
 	msBuilder.AddVisibilityTasks(&persistence.DeleteExecutionVisibilityTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,

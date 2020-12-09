@@ -30,7 +30,6 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
@@ -111,14 +110,10 @@ func newVisibilityQueueProcessor(
 		MetricScope:                         metrics.VisibilityQueueProcessorScope,
 	}
 	visibilityTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
-		_, ok := taskInfo.(*persistencespb.VisibilityTaskInfo)
-		if !ok {
-			return false, errUnexpectedQueueTask
-		}
 		return true, nil
 	}
 	maxReadAckLevel := func() int64 {
-		return shard.GetVisibilityMaxReadLevel()
+		return shard.GetTransferMaxReadLevel()
 	}
 	updateVisibilityAckLevel := func(ackLevel int64) error {
 		return shard.UpdateVisibilityAckLevel(ackLevel)

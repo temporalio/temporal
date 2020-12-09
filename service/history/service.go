@@ -96,10 +96,7 @@ func NewService(
 				}
 
 				esProcessor = espersistence.NewProcessor(esProcessorConfig, params.ESClient, logger, params.MetricsClient)
-				err := esProcessor.Start()
-				if err != nil {
-					logger.Fatal("Unable to start elastic search processor.", tag.LifeCycleStartFailed, tag.Error(err))
-				}
+				esProcessor.Start()
 			} else {
 				var err error
 				visibilityProducer, err = params.MessagingClient.NewProducer(common.VisibilityAppName)

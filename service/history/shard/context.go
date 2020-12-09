@@ -78,7 +78,6 @@ type (
 		GetTransferClusterAckLevel(cluster string) int64
 		UpdateTransferClusterAckLevel(cluster string, ackLevel int64) error
 
-		GetVisibilityMaxReadLevel() int64
 		GetVisibilityAckLevel() int64
 		UpdateVisibilityAckLevel(ackLevel int64) error
 

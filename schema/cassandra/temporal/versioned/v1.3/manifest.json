@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.3",
+  "MinCompatibleVersion": "1.0",
+  "Description": "Schema update to deprecate Kafka",
+  "SchemaUpdateCqlFiles": [
+    "visibility.cql"
+  ]
+}

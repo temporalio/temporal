@@ -75,7 +75,6 @@ type (
 		transferSequenceNumber    int64
 		maxTransferSequenceNumber int64
 		transferMaxReadLevel      int64
-		visibilityMaxReadLevel    int64
 		timerMaxReadLevelMap      map[string]time.Time // cluster -> timerMaxReadLevel
 
 		// exist only in memory
@@ -183,12 +182,6 @@ func (s *ContextImpl) UpdateTransferClusterAckLevel(cluster string, ackLevel int
 	return s.updateShardInfoLocked()
 }
 
-func (s *ContextImpl) GetVisibilityMaxReadLevel() int64 {
-	s.RLock()
-	defer s.RUnlock()
-
-	return s.visibilityMaxReadLevel
-}
 func (s *ContextImpl) GetVisibilityAckLevel() int64 {
 	s.RLock()
 	defer s.RUnlock()

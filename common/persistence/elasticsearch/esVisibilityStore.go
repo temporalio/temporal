@@ -139,8 +139,7 @@ func NewElasticSearchVisibilityStore(
 
 func (v *esVisibilityStore) Close() {
 	if v.processor != nil {
-		err := v.processor.Stop()
-		v.logger.Error("Unable to stop elastic search processor.", tag.LifeCycleStopFailed, tag.Error(err))
+		v.processor.Stop()
 	}
 }
 
@@ -281,9 +280,10 @@ func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest elastic.BulkableRe
 	// TODO (alex): change to +process timeout?
 	timeoutInterval := time.Duration(float64(v.processorFlushInterval) * 1.2)
 	timeoutTimer := time.NewTimer(timeoutInterval)
+	defer timeoutTimer.Stop()
+
 	select {
 	case ack := <-ackCh:
-		timeoutTimer.Stop()
 		if !ack {
 			return newVisibilityTaskNAckError(visibilityTaskKey)
 		}

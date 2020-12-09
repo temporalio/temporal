@@ -121,22 +121,19 @@ func (s *esProcessorSuite) TestNewESProcessorAndStart() {
 		return true
 	})).Return(&elastic.BulkProcessor{}, nil).Once()
 
-	err := p.Start()
-	s.NoError(err)
+	p.Start()
 	s.NotNil(p.mapToAckChan)
 	s.NotNil(p.bulkProcessor)
 
 	// TODO (alex): remove?
-	err = p.Stop()
-	s.NoError(err)
+	p.Stop()
 	s.Nil(p.mapToAckChan)
 	s.Nil(p.bulkProcessor)
 }
 
 func (s *esProcessorSuite) TestStop() {
 	s.mockBulkProcessor.On("Stop").Return(nil).Once()
-	err := s.esProcessor.Stop()
-	s.NoError(err)
+	s.esProcessor.Stop()
 	s.Nil(s.esProcessor.mapToAckChan)
 	s.Nil(s.esProcessor.bulkProcessor)
 }

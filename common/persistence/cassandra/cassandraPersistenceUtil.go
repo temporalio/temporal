@@ -771,16 +771,14 @@ func createVisibilityTasks(
 ) error {
 
 	for _, task := range visibilityTasks {
-		version := task.GetVersion()
 		datablob, err := serialization.VisibilityTaskInfoToBlob(&persistencespb.VisibilityTaskInfo{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
 			TaskId:      task.GetTaskID(),
 			TaskType:    task.GetType(),
-			Version:     version,
+			Version:     task.GetVersion(),
 		})
-
 		if err != nil {
 			return err
 		}
@@ -865,7 +863,6 @@ func createTimerTasks(
 			TaskId:              task.GetTaskID(),
 			VisibilityTime:      &goTs,
 		})
-
 		if err != nil {
 			return err
 		}
