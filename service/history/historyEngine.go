@@ -224,7 +224,9 @@ func NewEngineWithShardContext(
 
 	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
-	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
+	if config.DisableKafkaForVisibility() {
+		historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
+	}
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
@@ -330,7 +332,9 @@ func (e *historyEngineImpl) Start() {
 
 	e.txProcessor.Start()
 	e.timerProcessor.Start()
-	e.visibilityProcessor.Start()
+	if e.visibilityProcessor != nil {
+		e.visibilityProcessor.Start()
+	}
 
 	// failover callback will try to create a failover queue processor to scan all inflight tasks
 	// if domain needs to be failovered. However, in the multicursor queue logic, the scan range
@@ -366,7 +370,9 @@ func (e *historyEngineImpl) Stop() {
 
 	e.txProcessor.Stop()
 	e.timerProcessor.Stop()
-	e.visibilityProcessor.Stop()
+	if e.visibilityProcessor != nil {
+		e.visibilityProcessor.Stop()
+	}
 	if e.replicatorProcessor != nil {
 		e.replicatorProcessor.Stop()
 	}
@@ -2519,7 +2525,7 @@ func (e *historyEngineImpl) NotifyNewVisibilityTasks(
 	tasks []persistence.Task,
 ) {
 
-	if len(tasks) > 0 {
+	if len(tasks) > 0 && e.visibilityProcessor != nil {
 		e.visibilityProcessor.NotifyNewTask(tasks)
 	}
 }
