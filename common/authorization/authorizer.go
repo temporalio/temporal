@@ -36,7 +36,7 @@ const (
 )
 
 // @@@SNIPSTART temporal-common-authorization-authorizer-calltarget
-// CallTarget attributes are input for authority to make decision.
+// CallTarget is input for authorizer to make decision.
 // It can be extended in future if required auth on resources like WorkflowType and TaskQueue
 type CallTarget struct {
 	// The `APIName` field must be a string of the API name.
