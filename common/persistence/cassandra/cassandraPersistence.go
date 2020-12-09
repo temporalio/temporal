@@ -485,7 +485,7 @@ workflow_state = ? ` +
 		`and task_id > ? ` +
 		`and task_id <= ?`
 
-	templateGetVisibilityTaskQuery = `SELECT visibility_task, visibility_task_encoding ` +
+	templateGetVisibilityTaskQuery = `SELECT visibility_task_data, visibility_task_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -495,7 +495,7 @@ workflow_state = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
-	templateGetVisibilityTasksQuery = `SELECT visibility_task, visibility_task_encoding ` +
+	templateGetVisibilityTasksQuery = `SELECT visibility_task_data, visibility_task_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +

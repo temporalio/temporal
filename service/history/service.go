@@ -68,9 +68,10 @@ func NewService(
 
 	params.PersistenceConfig.HistoryMaxConns = serviceConfig.HistoryMgrNumConns()
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityOpenMaxQPS:   serviceConfig.VisibilityOpenMaxQPS,
-		VisibilityClosedMaxQPS: serviceConfig.VisibilityClosedMaxQPS,
-		EnableSampling:         serviceConfig.EnableVisibilitySampling,
+		VisibilityOpenMaxQPS:     serviceConfig.VisibilityOpenMaxQPS,
+		VisibilityClosedMaxQPS:   serviceConfig.VisibilityClosedMaxQPS,
+		EnableSampling:           serviceConfig.EnableVisibilitySampling,
+		ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
 	}
 
 	visibilityManagerInitializer := func(

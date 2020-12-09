@@ -26,6 +26,7 @@ package cli
 
 import (
 	"strings"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
@@ -289,8 +290,9 @@ func initializeMetadataMgr(
 
 	pConfig := serviceConfig.Persistence
 	pConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityListMaxQPS: dynamicconfig.GetIntPropertyFilteredByNamespace(dependencyMaxQPS),
-		EnableSampling:       dynamicconfig.GetBoolPropertyFn(false), // not used by namespace operation
+		VisibilityListMaxQPS:     dynamicconfig.GetIntPropertyFilteredByNamespace(dependencyMaxQPS),
+		EnableSampling:           dynamicconfig.GetBoolPropertyFn(false), // not used by namespace operation
+		ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Second),
 	}
 	pFactory := client.NewFactory(
 		&pConfig,

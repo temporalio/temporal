@@ -149,9 +149,9 @@ func newVisibilityQueueProcessor(
 		shutdownChan:       make(chan struct{}),
 		queueTaskProcessor: queueTaskProcessor,
 
-		queueAckMgr:        nil,
-		queueProcessorBase: nil,
-		executionManager:   nil,
+		queueAckMgr:        nil, // is set bellow
+		queueProcessorBase: nil, // is set bellow
+		executionManager:   shard.GetExecutionManager(),
 	}
 
 	queueAckMgr := newQueueAckMgr(

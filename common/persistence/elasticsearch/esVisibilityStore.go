@@ -75,8 +75,7 @@ type (
 		config        *config.VisibilityConfig
 		metricsClient metrics.Client
 
-		processor              Processor
-		processorFlushInterval time.Duration
+		processor Processor
 
 		// Deprecated.
 		producer messaging.Producer
@@ -126,14 +125,13 @@ func NewElasticSearchVisibilityStore(
 ) *esVisibilityStore {
 
 	return &esVisibilityStore{
-		esClient:               esClient,
-		index:                  index,
-		producer:               producer,
-		processor:              processor,
-		processorFlushInterval: cfg.ESProcessorFlushInterval(),
-		logger:                 logger.WithTags(tag.ComponentESVisibilityManager),
-		config:                 cfg,
-		metricsClient:          metricsClient,
+		esClient:      esClient,
+		index:         index,
+		producer:      producer,
+		processor:     processor,
+		logger:        logger.WithTags(tag.ComponentESVisibilityManager),
+		config:        cfg,
+		metricsClient: metricsClient,
 	}
 }
 
@@ -278,7 +276,7 @@ func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest elastic.BulkableRe
 	// Processor must flush bulks every v.processorFlushInterval.
 	// 1.2 is to allow some buffer to process bulk and respond with ack.
 	// TODO (alex): change to +process timeout?
-	timeoutInterval := time.Duration(float64(v.processorFlushInterval) * 1.2)
+	timeoutInterval := time.Duration(float64(v.config.ESProcessorFlushInterval()) * 1.2)
 	timeoutTimer := time.NewTimer(timeoutInterval)
 	defer timeoutTimer.Stop()
 
@@ -871,6 +869,10 @@ func (v *esVisibilityStore) checkProcessor() {
 	if v.processor == nil {
 		// must be bug, check history setup
 		panic("elastic search processor is nil")
+	}
+	if v.config.ESProcessorFlushInterval == nil {
+		// must be bug, check history setup
+		panic("ESProcessorFlushInterval in config is nil")
 	}
 }
 
