@@ -30,6 +30,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/common/task"
 )
@@ -421,7 +422,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		EnableDropStuckTaskByNamespaceID: dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.EnableDropStuckTaskByNamespaceID, false),
 		SkipReapplicationByNamespaceId:   dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.SkipReapplicationByNamespaceId, false),
 
-		// Visibility related
+		// ===== Visibility related =====
 		VisibilityTaskBatchSize:                                dc.GetIntProperty(dynamicconfig.VisibilityTaskBatchSize, 100),
 		VisibilityProcessorFailoverMaxPollRPS:                  dc.GetIntProperty(dynamicconfig.VisibilityProcessorFailoverMaxPollRPS, 1),
 		VisibilityProcessorMaxPollRPS:                          dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxPollRPS, 20),
@@ -439,7 +440,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		VisibilityProcessorEnablePriorityTaskProcessor:         dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnablePriorityTaskProcessor, false),
 		VisibilityProcessorVisibilityArchivalTimeLimit:         dc.GetDurationProperty(dynamicconfig.VisibilityProcessorVisibilityArchivalTimeLimit, 200*time.Millisecond),
 
-		DisableKafkaForVisibility:         dc.GetBoolProperty(dynamicconfig.DisableKafkaForVisibility, false),
+		DisableKafkaForVisibility: dc.GetBoolProperty(dynamicconfig.DisableKafkaForVisibility, false),
+
 		ValidSearchAttributes:             dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
 		SearchAttributesNumberOfKeysLimit: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
