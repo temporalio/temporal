@@ -256,7 +256,8 @@ type (
 		// MaxQPS is overall max QPS
 		MaxQPS dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
 		// ValidSearchAttributes is legal indexed keys that can be used in list APIs
-		ValidSearchAttributes    dynamicconfig.MapPropertyFn      `yaml:"-" json:"-"`
+		ValidSearchAttributes dynamicconfig.MapPropertyFn `yaml:"-" json:"-"`
+		// ESProcessorFlushInterval is interval used by elastic search bulk processor to flush its buffer.
 		ESProcessorFlushInterval dynamicconfig.DurationPropertyFn `yaml:"-" json:"-"`
 	}
 
@@ -266,7 +267,7 @@ type (
 		Hosts string `yaml:"hosts" validate:"nonzero"`
 		// Port is the cassandra port used for connection by gocql client
 		Port int `yaml:"port"`
-		// User is the cassandra user used for authentication by gocql clientconvertSearchAttributes
+		// User is the cassandra user used for authentication by gocql client
 		User string `yaml:"user"`
 		// Password is the cassandra password used for authentication by gocql client
 		Password string `yaml:"password"`

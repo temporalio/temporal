@@ -645,13 +645,13 @@ func createTransferTasks(
 			targetWorkflowID = task.(*p.StartChildExecutionTask).TargetWorkflowID
 			scheduleID = task.(*p.StartChildExecutionTask).InitiatedID
 
-		case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
+		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
+			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 			// No explicit property needs to be set
 
-		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
-			enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
+		case enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
 			enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-			// No explicit property needs to be set
+			// TODO (alex): remove
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknow transfer type: %v", task.GetType()))

@@ -1987,7 +1987,6 @@ func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStar
 
 	return &persistence.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &p.VisibilityRequestBase{
-
 			Namespace:          namespace,
 			NamespaceID:        task.GetNamespaceId(),
 			Execution:          *execution,

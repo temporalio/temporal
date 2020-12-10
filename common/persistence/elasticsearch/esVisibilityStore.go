@@ -74,8 +74,7 @@ type (
 		logger        log.Logger
 		config        *config.VisibilityConfig
 		metricsClient metrics.Client
-
-		processor Processor
+		processor     Processor
 
 		// Deprecated.
 		producer messaging.Producer
@@ -136,6 +135,7 @@ func NewElasticSearchVisibilityStore(
 }
 
 func (v *esVisibilityStore) Close() {
+	// TODO (alex): esVisibilityStore shouldn't Stop processor. Processor should be stopped where it is created.
 	if v.processor != nil {
 		v.processor.Stop()
 	}
@@ -872,7 +872,7 @@ func (v *esVisibilityStore) checkProcessor() {
 	}
 	if v.config.ESProcessorFlushInterval == nil {
 		// must be bug, check history setup
-		panic("ESProcessorFlushInterval in config is nil")
+		panic("config.ESProcessorFlushInterval is nil")
 	}
 }
 

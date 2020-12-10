@@ -54,15 +54,13 @@ type (
 		SearchAttributes   map[string]*commonpb.Payload
 	}
 
-	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly
-	// started execution
+	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly started execution
 	RecordWorkflowExecutionStartedRequest struct {
 		*VisibilityRequestBase
 		RunTimeout int64 // not persisted, used for cassandra ttl
 	}
 
-	// RecordWorkflowExecutionClosedRequest is used to add a record of a newly
-	// closed execution
+	// RecordWorkflowExecutionClosedRequest is used to add a record of a closed execution
 	RecordWorkflowExecutionClosedRequest struct {
 		*VisibilityRequestBase
 		CloseTimestamp   int64
