@@ -779,6 +779,14 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 
+	// ScheduleToCloseTimeout can be 0, meaning no timeout
+	//  however, SDK cannot handle ScheduleToCloseTimeout being 0
+	//  so need to override
+	scheduleToCloseTimeout := timestamp.DurationValue(attributes.ScheduleToCloseTimeout)
+	if scheduleToCloseTimeout == 0 {
+		scheduleToCloseTimeout = timestamp.DurationValue(attributes.StartToCloseTimeout)
+	}
+
 	return &matchingservice.PollActivityTaskQueueResponse{
 		ActivityId:                  attributes.ActivityId,
 		ActivityType:                attributes.ActivityType,
@@ -787,12 +795,12 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		WorkflowExecution:           task.workflowExecution(),
 		CurrentAttemptScheduledTime: historyResponse.CurrentAttemptScheduledTime,
 		ScheduledTime:               scheduledEvent.EventTime,
-		ScheduleToCloseTimeout:      attributes.ScheduleToCloseTimeout,
+		ScheduleToCloseTimeout:      timestamp.DurationPtr(scheduleToCloseTimeout),
 		StartedTime:                 historyResponse.StartedTime,
 		StartToCloseTimeout:         attributes.StartToCloseTimeout,
 		HeartbeatTimeout:            attributes.HeartbeatTimeout,
 		TaskToken:                   serializedToken,
-		Attempt:                     int32(taskToken.ScheduleAttempt),
+		Attempt:                     taskToken.ScheduleAttempt,
 		HeartbeatDetails:            historyResponse.HeartbeatDetails,
 		WorkflowType:                historyResponse.WorkflowType,
 		WorkflowNamespace:           historyResponse.WorkflowNamespace,
