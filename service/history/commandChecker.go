@@ -579,6 +579,28 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	}
 	attributes.TaskQueue = taskQueue
 
+	// TODO remove this if block after 1.5
+	if !v.config.EnableInfiniteTimeout() {
+		attributes.WorkflowExecutionTimeout = timestamp.DurationPtr(
+			common.GetWorkflowExecutionTimeout(
+				timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()),
+			),
+		)
+
+		attributes.WorkflowRunTimeout = timestamp.DurationPtr(
+			common.GetWorkflowRunTimeout(
+				timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
+				timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()),
+			),
+		)
+		// Inherit workflow task timeout from parent workflow execution if not provided on command
+
+		if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) <= 0 {
+			attributes.WorkflowTaskTimeout = parentInfo.DefaultWorkflowTaskTimeout
+		}
+		return nil
+	}
+
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity
 

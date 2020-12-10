@@ -235,6 +235,10 @@ type Config struct {
 
 	EnableDropStuckTaskByNamespaceID dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
 	SkipReapplicationByNamespaceId   dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
+
+	// EnableInfiniteTimeout enable infinite workflow timeout
+	// TODO remove after 1.5
+	EnableInfiniteTimeout dynamicconfig.BoolPropertyFn
 }
 
 const (
@@ -396,6 +400,9 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 
 		EnableDropStuckTaskByNamespaceID: dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.EnableDropStuckTaskByNamespaceID, false),
 		SkipReapplicationByNamespaceId:   dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.SkipReapplicationByNamespaceId, false),
+
+		// TODO remove after 1.5
+		EnableInfiniteTimeout: dc.GetBoolProperty(dynamicconfig.EnableInfiniteTimeout, false),
 	}
 
 	return cfg
