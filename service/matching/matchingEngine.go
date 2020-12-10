@@ -781,9 +781,9 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 
 	// REMOVE THE CODE BELOW HERE after 1.10
 
-	// ScheduleToCloseTimeout can be 0, meaning no timeout
-	// however, SDK cannot handle ScheduleToCloseTimeout being 0
-	// so need to override
+	// TODO ScheduleToCloseTimeout can be 0, meaning no timeout
+	//  however, SDK cannot handle ScheduleToCloseTimeout being 0
+	//  so need to override
 	scheduleToCloseTimeout := timestamp.DurationValue(attributes.ScheduleToCloseTimeout)
 	if scheduleToCloseTimeout == 0 {
 		scheduleToCloseTimeout = timestamp.DurationValue(attributes.StartToCloseTimeout)
