@@ -41,7 +41,6 @@ import (
 	es "go.temporal.io/server/common/elasticsearch"
 	esMocks "go.temporal.io/server/common/elasticsearch/mocks"
 	"go.temporal.io/server/common/log/loggerimpl"
-	msgMocks "go.temporal.io/server/common/messaging/mocks"
 	"go.temporal.io/server/common/metrics"
 	metricsmocks "go.temporal.io/server/common/metrics/mocks"
 	"go.temporal.io/server/common/service/dynamicconfig"
@@ -188,7 +187,7 @@ func (s *esProcessorSuite) TestAdd_ConcurrentAdd() {
 	}
 }
 
-func (s *esProcessorSuite) TestBulkAfterActionX() {
+func (s *esProcessorSuite) TestBulkAfterAction_Ack() {
 	version := int64(3)
 	testKey := "testKey"
 	request := elastic.NewBulkIndexRequest().
@@ -305,7 +304,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Error() {
 	s.esProcessor.bulkAfterAction(0, requests, response, errors.New("some error"))
 }
 
-func (s *esProcessorSuite) TestAckKafkaMsg() {
+func (s *esProcessorSuite) TestAckChan() {
 	key := "test-key"
 	// no msg in map, nothing called
 	s.esProcessor.sendToAckChan(key, true)
@@ -327,20 +326,18 @@ func (s *esProcessorSuite) TestAckKafkaMsg() {
 	s.Equal(0, s.esProcessor.mapToAckChan.Len())
 }
 
-func (s *esProcessorSuite) TestNackKafkaMsg() {
+func (s *esProcessorSuite) TestNackChan() {
 	key := "test-key-nack"
 	// no msg in map, nothing called
 	s.esProcessor.sendToAckChan(key, false)
 
 	request := elastic.NewBulkIndexRequest()
-	mockKafkaMsg := &msgMocks.Message{}
 	s.mockBulkProcessor.On("Add", request).Return().Once()
 	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
 	ackCh := make(chan bool, 1)
 	s.esProcessor.Add(request, key, ackCh)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
 
-	mockKafkaMsg.On("Nack").Return(nil).Once()
 	s.esProcessor.sendToAckChan(key, false)
 	select {
 	case ack := <-ackCh:
