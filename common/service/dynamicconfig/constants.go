@@ -75,7 +75,6 @@ var keys = map[Key]string{
 	EnableStickyQuery:                      "system.enableStickyQuery",
 	EnablePriorityTaskProcessor:            "system.enablePriorityTaskProcessor",
 	EnableAuthorization:                    "system.enableAuthorization",
-	EnableInfiniteTimeout:                  "system.enableInfiniteTimeout",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -338,9 +337,6 @@ const (
 	EnablePriorityTaskProcessor
 	// EnableAuthorization is the key to enable authorization for a namespace
 	EnableAuthorization
-	// EnableInfiniteTimeout is the key to enable infinite timeout
-	// TODO remove after 1.5
-	EnableInfiniteTimeout
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning
