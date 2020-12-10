@@ -281,5 +281,5 @@ func (pdb *db) SelectFromVisibility(
 		//  come with lots of trailing spaces, probably due to the CHAR(64) type
 		rows[i].RunID = strings.TrimSpace(rows[i].RunID)
 	}
-	return rows, err
+	return rows, nil
 }

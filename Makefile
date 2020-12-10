@@ -257,7 +257,7 @@ buf-lint:
 
 buf-build:
 	@printf $(COLOR) "Build image.bin with buf..."
-	@(cd $(PROTO_ROOT) && buf image build -o image.bin)
+	@(cd $(PROTO_ROOT) && buf build -o image.bin)
 
 buf-breaking:
 	@printf $(COLOR) "Run buf breaking changes check against image.bin..."

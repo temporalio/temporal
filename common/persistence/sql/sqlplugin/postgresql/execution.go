@@ -131,6 +131,17 @@ task_id > $3 AND
 task_id <= $4
 ORDER BY task_id LIMIT $5`
 
+	createVisibilityTasksQuery = `INSERT INTO visibility_tasks(shard_id, task_id, data, data_encoding) 
+ VALUES(:shard_id, :task_id, :data, :data_encoding)`
+
+	getVisibilityTaskQuery = `SELECT task_id, data, data_encoding 
+ FROM visibility_tasks WHERE shard_id = $1 AND task_id = $2`
+	getVisibilityTasksQuery = `SELECT task_id, data, data_encoding 
+ FROM visibility_tasks WHERE shard_id = $1 AND task_id > $2 AND task_id <= $3 ORDER BY shard_id, task_id`
+
+	deleteVisibilityTaskQuery      = `DELETE FROM visibility_tasks WHERE shard_id = $1 AND task_id = $2`
+	rangeDeleteVisibilityTaskQuery = `DELETE FROM visibility_tasks WHERE shard_id = $1 AND task_id > $2 AND task_id <= $3`
+
 	bufferedEventsColumns     = `shard_id, namespace_id, workflow_id, run_id, data, data_encoding`
 	createBufferedEventsQuery = `INSERT INTO buffered_events(` + bufferedEventsColumns + `)
 VALUES (:shard_id, :namespace_id, :workflow_id, :run_id, :data, :data_encoding)`
@@ -385,7 +396,7 @@ func (pdb *db) RangeSelectFromTransferTasks(
 	if err != nil {
 		return nil, err
 	}
-	return rows, err
+	return rows, nil
 }
 
 // DeleteFromTransferTasks deletes one or more rows from transfer_tasks table
@@ -446,7 +457,7 @@ func (pdb *db) SelectFromTimerTasks(
 	for i := range rows {
 		rows[i].VisibilityTimestamp = pdb.converter.FromPostgreSQLDateTime(rows[i].VisibilityTimestamp)
 	}
-	return rows, err
+	return rows, nil
 }
 
 // RangeSelectFromTimerTasks reads one or more rows from timer_tasks table
@@ -473,7 +484,7 @@ func (pdb *db) RangeSelectFromTimerTasks(
 	for i := range rows {
 		rows[i].VisibilityTimestamp = pdb.converter.FromPostgreSQLDateTime(rows[i].VisibilityTimestamp)
 	}
-	return rows, err
+	return rows, nil
 }
 
 // DeleteFromTimerTasks deletes one or more rows from timer_tasks table
@@ -689,6 +700,79 @@ func (pdb *db) RangeDeleteFromReplicationDLQTasks(
 	return pdb.conn.ExecContext(ctx,
 		rangeDeleteReplicationTaskFromDLQQuery,
 		filter.SourceClusterName,
+		filter.ShardID,
+		filter.MinTaskID,
+		filter.MaxTaskID,
+	)
+}
+
+// InsertIntoVisibilityTasks inserts one or more rows into visibility_tasks table
+func (pdb *db) InsertIntoVisibilityTasks(
+	ctx context.Context,
+	rows []sqlplugin.VisibilityTasksRow,
+) (sql.Result, error) {
+	return pdb.conn.NamedExecContext(ctx,
+		createVisibilityTasksQuery,
+		rows,
+	)
+}
+
+// SelectFromVisibilityTasks reads one or more rows from visibility_tasks table
+func (pdb *db) SelectFromVisibilityTasks(
+	ctx context.Context,
+	filter sqlplugin.VisibilityTasksFilter,
+) ([]sqlplugin.VisibilityTasksRow, error) {
+	var rows []sqlplugin.VisibilityTasksRow
+	err := pdb.conn.SelectContext(ctx,
+		&rows,
+		getVisibilityTaskQuery,
+		filter.ShardID,
+		filter.TaskID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// RangeSelectFromVisibilityTasks reads one or more rows from visibility_tasks table
+func (pdb *db) RangeSelectFromVisibilityTasks(
+	ctx context.Context,
+	filter sqlplugin.VisibilityTasksRangeFilter,
+) ([]sqlplugin.VisibilityTasksRow, error) {
+	var rows []sqlplugin.VisibilityTasksRow
+	err := pdb.conn.SelectContext(ctx,
+		&rows,
+		getVisibilityTasksQuery,
+		filter.ShardID,
+		filter.MinTaskID,
+		filter.MaxTaskID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// DeleteFromVisibilityTasks deletes one or more rows from visibility_tasks table
+func (pdb *db) DeleteFromVisibilityTasks(
+	ctx context.Context,
+	filter sqlplugin.VisibilityTasksFilter,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx,
+		deleteVisibilityTaskQuery,
+		filter.ShardID,
+		filter.TaskID,
+	)
+}
+
+// RangeDeleteFromVisibilityTasks deletes one or more rows from visibility_tasks table
+func (pdb *db) RangeDeleteFromVisibilityTasks(
+	ctx context.Context,
+	filter sqlplugin.VisibilityTasksRangeFilter,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx,
+		rangeDeleteVisibilityTaskQuery,
 		filter.ShardID,
 		filter.MinTaskID,
 		filter.MaxTaskID,

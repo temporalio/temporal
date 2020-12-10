@@ -27,15 +27,6 @@ CREATE TABLE shards (
   PRIMARY KEY (shard_id)
 );
 
-CREATE TABLE transfer_tasks(
-  shard_id INTEGER NOT NULL,
-  task_id BIGINT NOT NULL,
-  --
-  data BYTEA NOT NULL,
-  data_encoding VARCHAR(16) NOT NULL,
-  PRIMARY KEY (shard_id, task_id)
-);
-
 CREATE TABLE executions(
   shard_id INTEGER NOT NULL,
   namespace_id BYTEA NOT NULL,
@@ -97,6 +88,25 @@ CREATE TABLE task_queues (
   PRIMARY KEY (range_hash, task_queue_id)
 );
 
+CREATE TABLE transfer_tasks(
+  shard_id INTEGER NOT NULL,
+  task_id BIGINT NOT NULL,
+  --
+  data BYTEA NOT NULL,
+  data_encoding VARCHAR(16) NOT NULL,
+  PRIMARY KEY (shard_id, task_id)
+);
+
+CREATE TABLE timer_tasks (
+  shard_id INTEGER NOT NULL,
+  visibility_timestamp TIMESTAMP NOT NULL,
+  task_id BIGINT NOT NULL,
+  --
+  data BYTEA NOT NULL,
+  data_encoding VARCHAR(16) NOT NULL,
+  PRIMARY KEY (shard_id, visibility_timestamp, task_id)
+);
+
 CREATE TABLE replication_tasks (
   shard_id INTEGER NOT NULL,
   task_id BIGINT NOT NULL,
@@ -116,14 +126,13 @@ CREATE TABLE replication_tasks_dlq (
   PRIMARY KEY (source_cluster_name, shard_id, task_id)
 );
 
-CREATE TABLE timer_tasks (
+CREATE TABLE visibility_tasks(
   shard_id INTEGER NOT NULL,
-  visibility_timestamp TIMESTAMP NOT NULL,
   task_id BIGINT NOT NULL,
   --
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
-  PRIMARY KEY (shard_id, visibility_timestamp, task_id)
+  PRIMARY KEY (shard_id, task_id)
 );
 
 CREATE TABLE activity_info_maps (
