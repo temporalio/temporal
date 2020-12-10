@@ -947,7 +947,7 @@ func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes,
 	}
 	ctx, cancel := newContext(c)
 	defer cancel()
-	validSearchAttributes, err := wfClient.GetSearchAttributes(ctx, nil)
+	validSearchAttributes, err := wfClient.GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
 	if err != nil {
 		ErrorAndExit("Error when get search attributes", err)
 	}
