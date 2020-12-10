@@ -779,6 +779,16 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 
+	// REMOVE THE CODE BELOW HERE after 1.10
+
+	// TODO ScheduleToCloseTimeout can be 0, meaning no timeout
+	//  however, SDK cannot handle ScheduleToCloseTimeout being 0
+	//  so need to override
+	scheduleToCloseTimeout := timestamp.DurationValue(attributes.ScheduleToCloseTimeout)
+	if scheduleToCloseTimeout == 0 {
+		scheduleToCloseTimeout = timestamp.DurationValue(attributes.StartToCloseTimeout)
+	}
+
 	return &matchingservice.PollActivityTaskQueueResponse{
 		ActivityId:                  attributes.ActivityId,
 		ActivityType:                attributes.ActivityType,
@@ -787,16 +797,40 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		WorkflowExecution:           task.workflowExecution(),
 		CurrentAttemptScheduledTime: historyResponse.CurrentAttemptScheduledTime,
 		ScheduledTime:               scheduledEvent.EventTime,
-		ScheduleToCloseTimeout:      attributes.ScheduleToCloseTimeout,
+		ScheduleToCloseTimeout:      timestamp.DurationPtr(scheduleToCloseTimeout),
 		StartedTime:                 historyResponse.StartedTime,
 		StartToCloseTimeout:         attributes.StartToCloseTimeout,
 		HeartbeatTimeout:            attributes.HeartbeatTimeout,
 		TaskToken:                   serializedToken,
-		Attempt:                     int32(taskToken.ScheduleAttempt),
+		Attempt:                     taskToken.ScheduleAttempt,
 		HeartbeatDetails:            historyResponse.HeartbeatDetails,
 		WorkflowType:                historyResponse.WorkflowType,
 		WorkflowNamespace:           historyResponse.WorkflowNamespace,
 	}
+
+	// REMOVE THE CODE ABOVE HERE after 1.10
+	// UNCOMMENT THE CODE BELOW after 1.10 for original behavior
+
+	//return &matchingservice.PollActivityTaskQueueResponse{
+	//	ActivityId:                  attributes.ActivityId,
+	//	ActivityType:                attributes.ActivityType,
+	//	Header:                      attributes.Header,
+	//	Input:                       attributes.Input,
+	//	WorkflowExecution:           task.workflowExecution(),
+	//	CurrentAttemptScheduledTime: historyResponse.CurrentAttemptScheduledTime,
+	//	ScheduledTime:               scheduledEvent.EventTime,
+	//	ScheduleToCloseTimeout:      attributes.ScheduleToCloseTimeout,
+	//	StartedTime:                 historyResponse.StartedTime,
+	//	StartToCloseTimeout:         attributes.StartToCloseTimeout,
+	//	HeartbeatTimeout:            attributes.HeartbeatTimeout,
+	//	TaskToken:                   serializedToken,
+	//	Attempt:                     taskToken.ScheduleAttempt,
+	//	HeartbeatDetails:            historyResponse.HeartbeatDetails,
+	//	WorkflowType:                historyResponse.WorkflowType,
+	//	WorkflowNamespace:           historyResponse.WorkflowNamespace,
+	//}
+
+	// UNCOMMENT THE CODE ABOVE after 1.10 for original behavior
 }
 
 func (e *matchingEngineImpl) recordWorkflowTaskStarted(
