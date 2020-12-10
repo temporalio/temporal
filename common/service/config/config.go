@@ -184,9 +184,9 @@ type (
 
 	// WorkerTLS contains TLS configuration for system workers within the Temporal Cluster to connect to Temporal frontend.
 	WorkerTLS struct {
-		// The path to the file containing the PEM-encoded public key of the certificate to use.
+		// The path to the file containing the PEM-encoded public key of the client certificate to use by system workers.
 		CertFile string `yaml:"certFile"`
-		// The path to the file containing the PEM-encoded private key of the certificate to use.
+		// The path to the file containing the PEM-encoded private key of the client certificate to use by system workers.
 		KeyFile string `yaml:"keyFile"`
 		// Base64 equivalents of the above artifacts.
 		// You cannot specify both a Data and a File for the same artifact (e.g. setting CertFile and CertData)
