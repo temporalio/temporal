@@ -36,7 +36,7 @@ const (
 )
 
 type (
-	// Attributes is input for authority to make decision.
+	// CallTarget is input for authorizer to make decision.
 	// It can be extended in future if required auth on resources like WorkflowType and TaskQueue
 	CallTarget struct {
 		APIName   string

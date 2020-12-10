@@ -123,6 +123,8 @@ type (
 		Internode GroupTLS `yaml:"internode"`
 		// Frontend controls SDK Client to Frontend communication TLS settings.
 		Frontend GroupTLS `yaml:"frontend"`
+		// SystemWorker controls TLS setting for System Workers connecting to Frontend.
+		SystemWorker WorkerTLS `yaml:"systemWorker"`
 	}
 
 	// GroupTLS contains an instance client and server TLS settings
@@ -178,6 +180,21 @@ type (
 		// Optional - A list of base64 PEM-encoded public keys of the Certificate Authorities that are used to validate the server's TLS certificate.
 		// You cannot specify both RootCAFiles and RootCAData
 		RootCAData []string `yaml:"rootCaData"`
+	}
+
+	// WorkerTLS contains TLS configuration for system workers within the Temporal Cluster to connect to Temporal frontend.
+	WorkerTLS struct {
+		// The path to the file containing the PEM-encoded public key of the client certificate to use by system workers.
+		CertFile string `yaml:"certFile"`
+		// The path to the file containing the PEM-encoded private key of the client certificate to use by system workers.
+		KeyFile string `yaml:"keyFile"`
+		// Base64 equivalents of the above artifacts.
+		// You cannot specify both a Data and a File for the same artifact (e.g. setting CertFile and CertData)
+		CertData string `yaml:"certData"`
+		KeyData  string `yaml:"keyData"`
+
+		// Client TLS settings for system workers
+		Client ClientTLS `yaml:"client"`
 	}
 
 	// Membership contains config items related to the membership layer of temporal
