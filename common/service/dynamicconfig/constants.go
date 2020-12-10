@@ -294,6 +294,7 @@ var keys = map[Key]string{
 	WorkerESProcessorBulkActions:                    "worker.ESProcessorBulkActions",
 	WorkerESProcessorBulkSize:                       "worker.ESProcessorBulkSize",
 	WorkerESProcessorFlushInterval:                  "worker.ESProcessorFlushInterval",
+	WorkerESProcessorAckTimeout:                     "worker.ESProcessorAckTimeout",
 	EnableArchivalCompression:                       "worker.EnableArchivalCompression",
 	WorkerHistoryPageSize:                           "worker.WorkerHistoryPageSize",
 	WorkerTargetArchivalBlobSize:                    "worker.WorkerTargetArchivalBlobSize",
@@ -751,6 +752,9 @@ const (
 	WorkerESProcessorBulkSize
 	// WorkerESProcessorFlushInterval is flush interval for esProcessor
 	WorkerESProcessorFlushInterval
+	// WorkerESProcessorAckTimeout is the timeout that store will wait to get ack signal from ES processor.
+	// Should be at least WorkerESProcessorFlushInterval+<time to process request>.
+	WorkerESProcessorAckTimeout
 	// EnableArchivalCompression indicates whether blobs are compressed before they are archived
 	EnableArchivalCompression
 	// WorkerHistoryPageSize indicates the page size of history fetched from persistence for archival

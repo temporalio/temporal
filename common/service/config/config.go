@@ -257,8 +257,9 @@ type (
 		MaxQPS dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
 		// ValidSearchAttributes is legal indexed keys that can be used in list APIs
 		ValidSearchAttributes dynamicconfig.MapPropertyFn `yaml:"-" json:"-"`
-		// ESProcessorFlushInterval is interval used by elastic search bulk processor to flush its buffer.
-		ESProcessorFlushInterval dynamicconfig.DurationPropertyFn `yaml:"-" json:"-"`
+		// ESProcessorAckTimeout is the timeout that store will wait to get ack signal from ES processor.
+		// Should be at least ESProcessorFlushInterval+<time to process request>.
+		ESProcessorAckTimeout dynamicconfig.DurationPropertyFn `yaml:"-" json:"-"`
 	}
 
 	// Cassandra contains configuration to connect to Cassandra cluster

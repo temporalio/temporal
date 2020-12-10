@@ -68,10 +68,9 @@ func NewService(
 
 	params.PersistenceConfig.HistoryMaxConns = serviceConfig.HistoryMgrNumConns()
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityOpenMaxQPS:     serviceConfig.VisibilityOpenMaxQPS,
-		VisibilityClosedMaxQPS:   serviceConfig.VisibilityClosedMaxQPS,
-		EnableSampling:           serviceConfig.EnableVisibilitySampling,
-		ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
+		VisibilityOpenMaxQPS:   serviceConfig.VisibilityOpenMaxQPS,
+		VisibilityClosedMaxQPS: serviceConfig.VisibilityClosedMaxQPS,
+		EnableSampling:         serviceConfig.EnableVisibilitySampling,
 	}
 
 	visibilityManagerInitializer := func(
@@ -107,14 +106,14 @@ func NewService(
 			}
 
 			visibilityConfigForES := &config.VisibilityConfig{
-				EnableSampling:           serviceConfig.EnableVisibilitySampling,
-				VisibilityOpenMaxQPS:     serviceConfig.VisibilityOpenMaxQPS,
-				VisibilityClosedMaxQPS:   serviceConfig.VisibilityClosedMaxQPS,
-				VisibilityListMaxQPS:     serviceConfig.ESVisibilityListMaxQPS,
-				ESIndexMaxResultWindow:   serviceConfig.ESIndexMaxResultWindow,
-				MaxQPS:                   serviceConfig.PersistenceMaxQPS,
-				ValidSearchAttributes:    serviceConfig.ValidSearchAttributes,
-				ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
+				EnableSampling:         serviceConfig.EnableVisibilitySampling,
+				VisibilityOpenMaxQPS:   serviceConfig.VisibilityOpenMaxQPS,
+				VisibilityClosedMaxQPS: serviceConfig.VisibilityClosedMaxQPS,
+				VisibilityListMaxQPS:   serviceConfig.ESVisibilityListMaxQPS,
+				ESIndexMaxResultWindow: serviceConfig.ESIndexMaxResultWindow,
+				MaxQPS:                 serviceConfig.PersistenceMaxQPS,
+				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
+				ESProcessorAckTimeout:  serviceConfig.ESProcessorAckTimeout,
 			}
 			visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, visibilityProducer, esProcessor, params.MetricsClient, logger)
 		}

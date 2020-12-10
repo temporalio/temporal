@@ -273,12 +273,8 @@ func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest elastic.BulkableRe
 
 	ackCh := make(chan bool, 1)
 	v.processor.Add(bulkRequest, visibilityTaskKey, ackCh)
-	// Processor must flush bulks every v.processorFlushInterval.
-	// 1.2 is to allow some buffer to process bulk and respond with ack.
-	// TODO (alex): change to +process timeout?
-	timeoutInterval := time.Duration(float64(v.config.ESProcessorFlushInterval()) * 1.2)
-	timeoutTimer := time.NewTimer(timeoutInterval)
-	defer timeoutTimer.Stop()
+	ackTimeoutTimer := time.NewTimer(v.config.ESProcessorAckTimeout())
+	defer ackTimeoutTimer.Stop()
 
 	select {
 	case ack := <-ackCh:
@@ -286,8 +282,8 @@ func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest elastic.BulkableRe
 			return newVisibilityTaskNAckError(visibilityTaskKey)
 		}
 		return nil
-	case <-timeoutTimer.C:
-		return newVisibilityTaskAckTimeoutError(visibilityTaskKey, timeoutInterval)
+	case <-ackTimeoutTimer.C:
+		return newVisibilityTaskAckTimeoutError(visibilityTaskKey, v.config.ESProcessorAckTimeout())
 	}
 }
 
@@ -870,9 +866,9 @@ func (v *esVisibilityStore) checkProcessor() {
 		// must be bug, check history setup
 		panic("elastic search processor is nil")
 	}
-	if v.config.ESProcessorFlushInterval == nil {
+	if v.config.ESProcessorAckTimeout == nil {
 		// must be bug, check history setup
-		panic("config.ESProcessorFlushInterval is nil")
+		panic("config.ESProcessorAckTimeout is nil")
 	}
 }
 

@@ -290,9 +290,9 @@ func initializeMetadataMgr(
 
 	pConfig := serviceConfig.Persistence
 	pConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityListMaxQPS:     dynamicconfig.GetIntPropertyFilteredByNamespace(dependencyMaxQPS),
-		EnableSampling:           dynamicconfig.GetBoolPropertyFn(false), // not used by namespace operation
-		ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Second),
+		VisibilityListMaxQPS:  dynamicconfig.GetIntPropertyFilteredByNamespace(dependencyMaxQPS),
+		EnableSampling:        dynamicconfig.GetBoolPropertyFn(false), // not used by namespace operation
+		ESProcessorAckTimeout: dynamicconfig.GetDurationPropertyFn(5 * time.Second),
 	}
 	pFactory := client.NewFactory(
 		&pConfig,
