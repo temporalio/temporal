@@ -56,10 +56,6 @@ func getBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
 
-	if maxAttempts == 0 && expirationTime.IsZero() {
-		return backoff.NoBackoff, enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET
-	}
-
 	// currentAttemptCounterValue starts from 1.
 	// maxAttempts is the total attempts, including initial (non-retry) attempt.
 	// At this point we are about to make next attempt and all calculations in this func are for this next attempt.
