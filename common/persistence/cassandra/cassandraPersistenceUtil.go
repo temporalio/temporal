@@ -772,12 +772,13 @@ func createVisibilityTasks(
 
 	for _, task := range visibilityTasks {
 		datablob, err := serialization.VisibilityTaskInfoToBlob(&persistencespb.VisibilityTaskInfo{
-			NamespaceId: namespaceID,
-			WorkflowId:  workflowID,
-			RunId:       runID,
-			TaskId:      task.GetTaskID(),
-			TaskType:    task.GetType(),
-			Version:     task.GetVersion(),
+			NamespaceId:    namespaceID,
+			WorkflowId:     workflowID,
+			RunId:          runID,
+			TaskId:         task.GetTaskID(),
+			TaskType:       task.GetType(),
+			Version:        task.GetVersion(),
+			VisibilityTime: timestamp.TimePtr(task.GetVisibilityTimestamp()),
 		})
 		if err != nil {
 			return err

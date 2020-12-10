@@ -546,6 +546,8 @@ func applyTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("applyTasks failed. Failed to create transfer tasks. Error: %v", err))
 	}
 
+	// TODO (alex): add createVisibilityTasks ?
+
 	if err := createReplicationTasks(ctx,
 		tx,
 		replicationTasks,
