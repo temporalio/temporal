@@ -151,12 +151,16 @@ func (s *localStoreCertProvider) FetchServerRootCAsForClient(isWorker bool) (*x5
 	return s.serverCAs, nil
 }
 
-func (s *localStoreCertProvider) FetchClientCertificate() (*tls.Certificate, error) {
-	return s.FetchCertificate(&s.clientCert, s.tlsSettings.Server.CertFile, s.tlsSettings.Server.CertData,
-		s.tlsSettings.Server.KeyFile, s.tlsSettings.Server.KeyData)
+func (s *localStoreCertProvider) FetchClientCertificate(isWorker bool) (*tls.Certificate, error) {
+	if isWorker {
+		return s.fetchWorkerCertificate()
+	} else {
+		return s.FetchCertificate(&s.clientCert, s.tlsSettings.Server.CertFile, s.tlsSettings.Server.CertData,
+			s.tlsSettings.Server.KeyFile, s.tlsSettings.Server.KeyData)
+	}
 }
 
-func (s *localStoreCertProvider) FetchWorkerCertificate() (*tls.Certificate, error) {
+func (s *localStoreCertProvider) fetchWorkerCertificate() (*tls.Certificate, error) {
 	if s.isLegacyWorkerConfig {
 		return s.FetchCertificate(&s.clientCert, s.tlsSettings.Server.CertFile, s.tlsSettings.Server.CertData,
 			s.tlsSettings.Server.KeyFile, s.tlsSettings.Server.KeyData)

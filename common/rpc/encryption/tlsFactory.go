@@ -49,8 +49,7 @@ type (
 
 	// ClientCertProvider is an interface to load raw TLS/X509 primitives for configuring clients.
 	ClientCertProvider interface {
-		FetchClientCertificate() (*tls.Certificate, error)
-		FetchWorkerCertificate() (*tls.Certificate, error)
+		FetchClientCertificate(isWorker bool) (*tls.Certificate, error)
 		FetchServerRootCAsForClient(isWorker bool) (*x509.CertPool, error)
 		ServerName(isWorker bool) string
 		DisableHostVerification(isWorker bool) bool

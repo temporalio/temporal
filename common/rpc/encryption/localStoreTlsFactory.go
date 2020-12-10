@@ -220,13 +220,7 @@ func newClientTLSConfig(clientProvider ClientCertProvider, isAuthRequired bool, 
 	// mTLS enabled, present certificate
 	var clientCerts []tls.Certificate
 	if isAuthRequired {
-		var cert *tls.Certificate
-		var err error
-		if isWorker {
-			cert, err = clientProvider.FetchWorkerCertificate()
-		} else {
-			cert, err = clientProvider.FetchClientCertificate()
-		}
+		cert, err := clientProvider.FetchClientCertificate(isWorker)
 		if err != nil {
 			return nil, err
 		}
