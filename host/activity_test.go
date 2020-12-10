@@ -561,6 +561,111 @@ func (s *integrationSuite) TestActivityRetry() {
 	s.True(activityExecutedCount == 2)
 }
 
+func (s *integrationSuite) TestActivityRetry_Infinite() {
+	id := "integration-activity-retry-test"
+	wt := "integration-activity-retry-type"
+	tl := "integration-activity-retry-taskqueue"
+	identity := "worker1"
+	activityName := "activity_retry"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	workflowComplete := false
+	activitiesScheduled := false
+
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		if !activitiesScheduled {
+			activitiesScheduled = true
+
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId:          "A",
+						ActivityType:        &commonpb.ActivityType{Name: activityName},
+						TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+						Input:               payloads.EncodeString("1"),
+						StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+						RetryPolicy: &commonpb.RetryPolicy{
+							MaximumAttempts:    0,
+							BackoffCoefficient: 1,
+						},
+					}},
+			}}, nil
+		}
+
+		workflowComplete = true
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Done"),
+				},
+			},
+		}}, nil
+	}
+
+	activityExecutedCount := 0
+	activityExecutedLimit := 4
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+		s.Equal(id, execution.GetWorkflowId())
+		s.Equal(activityName, activityType.GetName())
+
+		var err error
+		if activityExecutedCount < activityExecutedLimit {
+			err = errors.New("retry-error")
+		} else if activityExecutedCount == activityExecutedLimit {
+			err = nil
+		}
+		activityExecutedCount++
+		return nil, false, err
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.True(err == nil, err)
+
+	for i := 0; i <= activityExecutedLimit; i++ {
+		err = poller.PollAndProcessActivityTask(false)
+		s.NoError(err)
+	}
+
+	_, err = poller.PollAndProcessWorkflowTaskWithoutRetry(false, false)
+	s.NoError(err)
+	s.True(workflowComplete)
+}
+
 func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	id := "integration-heartbeat-timeout-test"
 	wt := "integration-heartbeat-timeout-test-type"

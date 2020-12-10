@@ -2208,7 +2208,13 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		ai.RetryMaximumInterval = attributes.RetryPolicy.GetMaximumInterval()
 		ai.RetryMaximumAttempts = attributes.RetryPolicy.GetMaximumAttempts()
 		ai.RetryNonRetryableErrorTypes = attributes.RetryPolicy.NonRetryableErrorTypes
-		ai.RetryExpirationTime = timestamp.TimePtr(timestamp.TimeValue(ai.ScheduledTime).Add(timestamp.DurationValue(scheduleToCloseTimeout)))
+		if timestamp.DurationValue(scheduleToCloseTimeout) > 0 {
+			ai.RetryExpirationTime = timestamp.TimePtr(
+				timestamp.TimeValue(ai.ScheduledTime).Add(timestamp.DurationValue(scheduleToCloseTimeout)),
+			)
+		} else {
+			ai.RetryExpirationTime = timestamp.TimePtr(time.Time{})
+		}
 	}
 
 	e.pendingActivityInfoIDs[scheduleEventID] = ai
