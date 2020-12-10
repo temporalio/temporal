@@ -313,7 +313,7 @@ func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBa
 			continue
 		}
 		var searchAttributeValue interface{}
-		// payload.Decode will set value and type only if search attributes are serialized using JSON.
+		// payload.Decode will set value and type to interface{} only if search attributes are serialized using JSON.
 		err := payload.Decode(searchAttributePayload, &searchAttributeValue)
 		if err != nil {
 			v.logger.Error("Error when decode search attribute payload.", tag.Error(err), tag.ESField(searchAttributeName))

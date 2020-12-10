@@ -27,6 +27,7 @@ package elasticsearch
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 
 	"github.com/golang/mock/gomock"
 	"github.com/olivere/elastic"
@@ -35,24 +36,30 @@ import (
 
 	"go.temporal.io/server/common/definition"
 	es "go.temporal.io/server/common/elasticsearch"
+	"go.temporal.io/server/common/payload"
 	p "go.temporal.io/server/common/persistence"
 )
 
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2() {
 	// test non-empty request fields match
 	request := &p.InternalRecordWorkflowExecutionStartedRequest{
-		InternalVisibilityRequestBase: &p.InternalVisibilityRequestBase{},
+		InternalVisibilityRequestBase: &p.InternalVisibilityRequestBase{
+			NamespaceID:        "namespaceID",
+			WorkflowID:         "wid",
+			RunID:              "rid",
+			WorkflowTypeName:   "wfType",
+			StartTimestamp:     int64(123),
+			ExecutionTimestamp: int64(321),
+			TaskID:             int64(111),
+			ShardID:            2208,
+			Memo:               p.NewDataBlob([]byte("test bytes"), enumspb.ENCODING_TYPE_PROTO3.String()),
+			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			TaskQueue:          "task-queue-name",
+			SearchAttributes: map[string]*commonpb.Payload{
+				definition.CustomStringField: payload.EncodeString("alex"),
+			},
+		},
 	}
-	request.NamespaceID = "namespaceID"
-	request.WorkflowID = "wid"
-	request.RunID = "rid"
-	request.WorkflowTypeName = "wfType"
-	request.StartTimestamp = int64(123)
-	request.ExecutionTimestamp = int64(321)
-	request.TaskID = int64(111)
-	request.ShardID = 2208
-	memoBytes := []byte(`test bytes`)
-	request.Memo = p.NewDataBlob(memoBytes, enumspb.ENCODING_TYPE_PROTO3.String())
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
 		Do(func(bulkRequest elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
@@ -73,18 +80,25 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2() {
 			s.Equal(request.WorkflowID, body[definition.WorkflowID])
 			s.Equal(request.RunID, body[definition.RunID])
 			s.Equal(request.WorkflowTypeName, body[definition.WorkflowType])
-			s.Equal(request.StartTimestamp, int64(body[definition.StartTime].(float64)))
-			s.Equal(request.ExecutionTimestamp, int64(body[definition.ExecutionTime].(float64)))
+			s.EqualValues(request.StartTimestamp, body[definition.StartTime])
+			s.EqualValues(request.ExecutionTimestamp, body[definition.ExecutionTime])
+			s.Equal(request.TaskQueue, body[definition.TaskQueue])
+			s.EqualValues(request.Status, body[definition.ExecutionStatus])
+
 			memoFromBody, err := base64.StdEncoding.DecodeString(body[definition.Memo].(string))
 			s.NoError(err)
-			s.Equal(memoBytes, memoFromBody)
+			s.Equal(request.Memo.Data, memoFromBody)
 			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[definition.Encoding])
+
+			searchAttributes := body[definition.Attr].(map[string]interface{})
+			// %q because request has JSON encoded string.
+			s.EqualValues(request.SearchAttributes[definition.CustomStringField].Data, fmt.Sprintf("%q", searchAttributes[definition.CustomStringField]))
 
 			var opBody map[string]map[string]interface{}
 			err = json.Unmarshal([]byte(req[0]), &opBody)
 			s.NoError(err)
 			opMap := opBody["index"]
-			s.Equal(request.TaskID, int64(opMap["version"].(float64)))
+			s.EqualValues(request.TaskID, opMap["version"])
 			s.Equal(versionTypeExternal, opMap["version_type"])
 			s.Equal(docType, opMap["_type"])
 			s.Equal("wid~rid", opMap["_id"])
@@ -127,7 +141,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2_EmptyRequest() 
 			err = json.Unmarshal([]byte(req[0]), &opBody)
 			s.NoError(err)
 			opMap := opBody["index"]
-			s.Equal(request.TaskID, int64(opMap["version"].(float64)))
+			s.EqualValues(request.TaskID, opMap["version"])
 			s.Equal(versionTypeExternal, opMap["version_type"])
 			s.Equal(docType, opMap["_type"])
 			s.Equal("~", opMap["_id"])
@@ -141,21 +155,25 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2_EmptyRequest() 
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2() {
 	// test non-empty request fields match
 	request := &p.InternalRecordWorkflowExecutionClosedRequest{
-		InternalVisibilityRequestBase: &p.InternalVisibilityRequestBase{},
+		InternalVisibilityRequestBase: &p.InternalVisibilityRequestBase{
+			NamespaceID:        "namespaceID",
+			WorkflowID:         "wid",
+			RunID:              "rid",
+			WorkflowTypeName:   "wfType",
+			StartTimestamp:     int64(123),
+			ExecutionTimestamp: int64(321),
+			TaskID:             int64(111),
+			ShardID:            2208,
+			Memo:               p.NewDataBlob([]byte("test bytes"), enumspb.ENCODING_TYPE_PROTO3.String()),
+			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			TaskQueue:          "task-queue-name",
+			SearchAttributes: map[string]*commonpb.Payload{
+				definition.CustomStringField: payload.EncodeString("alex"),
+			},
+		},
+		CloseTimestamp: int64(1978),
+		HistoryLength:  int64(20),
 	}
-	request.NamespaceID = "namespaceID"
-	request.WorkflowID = "wid"
-	request.RunID = "rid"
-	request.WorkflowTypeName = "wfType"
-	request.StartTimestamp = int64(123)
-	request.ExecutionTimestamp = int64(321)
-	request.TaskID = int64(111)
-	request.ShardID = 2208
-	memoBytes := []byte(`test bytes`)
-	request.Memo = p.NewDataBlob(memoBytes, enumspb.ENCODING_TYPE_PROTO3.String())
-	request.CloseTimestamp = int64(999)
-	request.Status = enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
-	request.HistoryLength = int64(20)
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
 		Do(func(bulkRequest elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
@@ -176,21 +194,21 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2() {
 			s.Equal(request.WorkflowID, body[definition.WorkflowID])
 			s.Equal(request.RunID, body[definition.RunID])
 			s.Equal(request.WorkflowTypeName, body[definition.WorkflowType])
-			s.Equal(request.StartTimestamp, int64(body[definition.StartTime].(float64)))
-			s.Equal(request.ExecutionTimestamp, int64(body[definition.ExecutionTime].(float64)))
+			s.EqualValues(request.StartTimestamp, body[definition.StartTime])
+			s.EqualValues(request.ExecutionTimestamp, body[definition.ExecutionTime])
 			memoFromBody, err := base64.StdEncoding.DecodeString(body[definition.Memo].(string))
 			s.NoError(err)
-			s.Equal(memoBytes, memoFromBody)
+			s.Equal(request.Memo.Data, memoFromBody)
 			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[definition.Encoding])
-			s.Equal(request.CloseTimestamp, int64(body[definition.CloseTime].(float64)))
+			s.EqualValues(request.CloseTimestamp, body[definition.CloseTime])
 			s.EqualValues(request.Status, body[definition.ExecutionStatus])
-			s.Equal(request.HistoryLength, int64(body[definition.HistoryLength].(float64)))
+			s.EqualValues(request.HistoryLength, body[definition.HistoryLength])
 
 			var opBody map[string]map[string]interface{}
 			err = json.Unmarshal([]byte(req[0]), &opBody)
 			s.NoError(err)
 			opMap := opBody["index"]
-			s.Equal(request.TaskID, int64(opMap["version"].(float64)))
+			s.EqualValues(request.TaskID, opMap["version"])
 			s.Equal(versionTypeExternal, opMap["version_type"])
 			s.Equal(docType, opMap["_type"])
 			s.Equal("wid~rid", opMap["_id"])
@@ -233,7 +251,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2_EmptyRequest() {
 			err = json.Unmarshal([]byte(req[0]), &opBody)
 			s.NoError(err)
 			opMap := opBody["index"]
-			s.Equal(request.TaskID, int64(opMap["version"].(float64)))
+			s.EqualValues(request.TaskID, opMap["version"])
 			s.Equal(versionTypeExternal, opMap["version_type"])
 			s.Equal(docType, opMap["_type"])
 			s.Equal("~", opMap["_id"])
@@ -241,5 +259,71 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2_EmptyRequest() {
 		})
 
 	err := s.visibilityStore.RecordWorkflowExecutionClosedV2(request)
+	s.NoError(err)
+}
+
+func (s *ESVisibilitySuite) TestDeleteExecutionV2() {
+	// test non-empty request fields match
+	request := &p.VisibilityDeleteWorkflowExecutionRequest{
+		NamespaceID: "namespaceID",
+		RunID:       "rid",
+		WorkflowID:  "wid",
+		TaskID:      int64(111),
+	}
+
+	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
+		Do(func(bulkRequest elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+			s.NotNil(ackCh)
+			s.Equal(1, cap(ackCh))
+			s.Equal(0, len(ackCh))
+			ackCh <- true
+
+			s.Equal("wid~rid", visibilityTaskKey)
+
+			req, err := bulkRequest.Source()
+			s.NoError(err)
+
+			var opBody map[string]map[string]interface{}
+			err = json.Unmarshal([]byte(req[0]), &opBody)
+			s.NoError(err)
+			opMap := opBody["delete"]
+			s.EqualValues(request.TaskID, opMap["version"])
+			s.Equal(versionTypeExternal, opMap["version_type"])
+			s.Equal(docType, opMap["_type"])
+			s.Equal("wid~rid", opMap["_id"])
+			s.Equal("test-index", opMap["_index"])
+		})
+
+	err := s.visibilityStore.DeleteWorkflowExecutionV2(request)
+	s.NoError(err)
+}
+
+func (s *ESVisibilitySuite) TestDeleteExecutionV2_EmptyRequest() {
+	// test empty request
+	request := &p.VisibilityDeleteWorkflowExecutionRequest{}
+
+	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
+		Do(func(bulkRequest elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+			s.NotNil(ackCh)
+			s.Equal(1, cap(ackCh))
+			s.Equal(0, len(ackCh))
+			ackCh <- true
+
+			s.Equal("~", visibilityTaskKey)
+
+			req, err := bulkRequest.Source()
+			s.NoError(err)
+
+			var opBody map[string]map[string]interface{}
+			err = json.Unmarshal([]byte(req[0]), &opBody)
+			s.NoError(err)
+			opMap := opBody["delete"]
+			s.Equal(versionTypeExternal, opMap["version_type"])
+			s.Equal(docType, opMap["_type"])
+			s.Equal("~", opMap["_id"])
+			s.Equal("test-index", opMap["_index"])
+		})
+
+	err := s.visibilityStore.DeleteWorkflowExecutionV2(request)
 	s.NoError(err)
 }
