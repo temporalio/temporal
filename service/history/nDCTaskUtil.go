@@ -180,9 +180,9 @@ func initializeLoggerForTask(
 		taskLogger = taskLogger.WithTags(
 			tag.WorkflowTimeoutType(task.TimeoutType),
 		)
-	case *persistencespb.TransferTaskInfo:
-		// noop
-	case *persistence.ReplicationTaskInfoWrapper:
+	case *persistencespb.TransferTaskInfo,
+		*persistencespb.VisibilityTaskInfo,
+		*persistence.ReplicationTaskInfoWrapper:
 		// noop
 	default:
 		taskLogger.Error(fmt.Sprintf("Unknown queue task type: %v", task))

@@ -87,11 +87,13 @@ func (s *VisibilitySamplingSuite) TearDownTest() {
 
 func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionStarted() {
 	request := &p.RecordWorkflowExecutionStartedRequest{
-		NamespaceID:      testNamespaceUUID,
-		Namespace:        testNamespace,
-		Execution:        testWorkflowExecution,
-		WorkflowTypeName: testWorkflowTypeName,
-		StartTimestamp:   time.Now().UnixNano(),
+		VisibilityRequestBase: &p.VisibilityRequestBase{
+			NamespaceID:      testNamespaceUUID,
+			Namespace:        testNamespace,
+			Execution:        testWorkflowExecution,
+			WorkflowTypeName: testWorkflowTypeName,
+			StartTimestamp:   time.Now().UnixNano(),
+		},
 	}
 	s.persistence.On("RecordWorkflowExecutionStarted", request).Return(nil).Once()
 	s.NoError(s.client.RecordWorkflowExecutionStarted(request))
@@ -103,18 +105,22 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionStarted() {
 
 func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionClosed() {
 	request := &p.RecordWorkflowExecutionClosedRequest{
-		NamespaceID:      testNamespaceUUID,
-		Namespace:        testNamespace,
-		Execution:        testWorkflowExecution,
-		WorkflowTypeName: testWorkflowTypeName,
-		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		VisibilityRequestBase: &p.VisibilityRequestBase{
+			NamespaceID:      testNamespaceUUID,
+			Namespace:        testNamespace,
+			Execution:        testWorkflowExecution,
+			WorkflowTypeName: testWorkflowTypeName,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
 	}
 	request2 := &p.RecordWorkflowExecutionClosedRequest{
-		NamespaceID:      testNamespaceUUID,
-		Namespace:        testNamespace,
-		Execution:        testWorkflowExecution,
-		WorkflowTypeName: testWorkflowTypeName,
-		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		VisibilityRequestBase: &p.VisibilityRequestBase{
+			NamespaceID:      testNamespaceUUID,
+			Namespace:        testNamespace,
+			Execution:        testWorkflowExecution,
+			WorkflowTypeName: testWorkflowTypeName,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		},
 	}
 
 	s.persistence.On("RecordWorkflowExecutionClosed", request).Return(nil).Once()

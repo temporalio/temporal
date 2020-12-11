@@ -130,4 +130,5 @@ const (
 	transferQueueType queueType = iota + 1
 	timerQueueType
 	replicationQueueType
+	visibilityQueueType
 )

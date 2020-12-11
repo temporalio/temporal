@@ -39,56 +39,39 @@ import (
 // purposes.
 
 type (
-
-	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly
-	// started execution
-	RecordWorkflowExecutionStartedRequest struct {
+	VisibilityRequestBase struct {
 		NamespaceID        string
 		Namespace          string // not persisted, used as config filter key
 		Execution          commonpb.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
+		Status             enumspb.WorkflowExecutionStatus
 		ExecutionTimestamp int64
-		RunTimeout         int64 // not persisted, used for cassandra ttl
 		TaskID             int64 // not persisted, used as condition update version for ES
+		ShardID            int32 // not persisted
 		Memo               *commonpb.Memo
 		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
 	}
 
-	// RecordWorkflowExecutionClosedRequest is used to add a record of a newly
-	// closed execution
+	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly started execution
+	RecordWorkflowExecutionStartedRequest struct {
+		*VisibilityRequestBase
+		RunTimeout int64 // not persisted, used for cassandra ttl
+	}
+
+	// RecordWorkflowExecutionClosedRequest is used to add a record of a closed execution
 	RecordWorkflowExecutionClosedRequest struct {
-		NamespaceID        string
-		Namespace          string // not persisted, used as config filter key
-		Execution          commonpb.WorkflowExecution
-		WorkflowTypeName   string
-		StartTimestamp     int64
-		ExecutionTimestamp int64
-		CloseTimestamp     int64
-		Status             enumspb.WorkflowExecutionStatus
-		HistoryLength      int64
-		RetentionSeconds   int64
-		TaskID             int64 // not persisted, used as condition update version for ES
-		Memo               *commonpb.Memo
-		TaskQueue          string
-		SearchAttributes   map[string]*commonpb.Payload
+		*VisibilityRequestBase
+		CloseTimestamp   int64
+		HistoryLength    int64
+		RetentionSeconds int64
 	}
 
 	// UpsertWorkflowExecutionRequest is used to upsert workflow execution
 	UpsertWorkflowExecutionRequest struct {
-		NamespaceID        string
-		Namespace          string // not persisted, used as config filter key
-		Execution          commonpb.WorkflowExecution
-		WorkflowTypeName   string
-		StartTimestamp     int64
-		ExecutionTimestamp int64
-		WorkflowTimeout    int64 // not persisted, used for cassandra ttl
-		TaskID             int64 // not persisted, used as condition update version for ES
-		Status             enumspb.WorkflowExecutionStatus
-		Memo               *commonpb.Memo
-		TaskQueue          string
-		SearchAttributes   map[string]*commonpb.Payload
+		*VisibilityRequestBase
+		WorkflowTimeout int64 // not persisted, used for cassandra ttl
 	}
 
 	// ListWorkflowExecutionsRequest is used to list executions in a namespace
@@ -180,9 +163,15 @@ type (
 	VisibilityManager interface {
 		Closeable
 		GetName() string
+		// Deprecated.
 		RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error
+		RecordWorkflowExecutionStartedV2(request *RecordWorkflowExecutionStartedRequest) error
+		// Deprecated.
 		RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error
+		RecordWorkflowExecutionClosedV2(request *RecordWorkflowExecutionClosedRequest) error
+		// Deprecated.
 		UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error
+		UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequest) error
 		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error)
 		ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error)
@@ -191,7 +180,9 @@ type (
 		ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error)
 		GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error)
+		// Deprecated.
 		DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error
+		DeleteWorkflowExecutionV2(request *VisibilityDeleteWorkflowExecutionRequest) error
 		ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		ScanWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)

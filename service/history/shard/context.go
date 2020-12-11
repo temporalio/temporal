@@ -78,6 +78,9 @@ type (
 		GetTransferClusterAckLevel(cluster string) int64
 		UpdateTransferClusterAckLevel(cluster string, ackLevel int64) error
 
+		GetVisibilityAckLevel() int64
+		UpdateVisibilityAckLevel(ackLevel int64) error
+
 		GetReplicatorAckLevel() int64
 		UpdateReplicatorAckLevel(ackLevel int64) error
 		GetReplicatorDLQAckLevel(sourceCluster string) int64

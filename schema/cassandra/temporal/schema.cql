@@ -25,6 +25,8 @@ CREATE TABLE executions (
   replication_encoding           text,
   timer                          blob,
   timer_encoding                 text,
+  visibility_task_data           blob,
+  visibility_task_encoding       text,
   next_event_id                  bigint,  -- This is needed to make conditional updates on session history
   range_id                       bigint,  -- Increasing sequence identifier for transfer queue, checkpointed into shard info
   activity_map                   map<bigint, blob>,

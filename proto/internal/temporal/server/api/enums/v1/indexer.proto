@@ -24,12 +24,14 @@ package temporal.server.api.enums.v1;
 
 option go_package = "go.temporal.io/server/api/enums/v1;enums";
 
+// Deprecated. Remove with kafka removal.
 enum MessageType {
     MESSAGE_TYPE_UNSPECIFIED = 0;
     MESSAGE_TYPE_INDEX = 1;
     MESSAGE_TYPE_DELETE = 2;
 }
 
+// Deprecated. Remove with kafka removal.
 enum FieldType {
     FIELD_TYPE_UNSPECIFIED = 0;
     FIELD_TYPE_STRING = 1;

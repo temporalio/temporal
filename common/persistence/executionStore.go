@@ -427,6 +427,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		TransferTasks:    input.TransferTasks,
 		ReplicationTasks: input.ReplicationTasks,
 		TimerTasks:       input.TimerTasks,
+		VisibilityTasks:  input.VisibilityTasks,
 
 		Condition: input.Condition,
 		Checksum:  input.Checksum,
@@ -463,6 +464,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		TransferTasks:    input.TransferTasks,
 		ReplicationTasks: input.ReplicationTasks,
 		TimerTasks:       input.TimerTasks,
+		VisibilityTasks:  input.VisibilityTasks,
 
 		Condition: input.Condition,
 		Checksum:  input.Checksum,
@@ -548,6 +550,31 @@ func (m *executionManagerImpl) RangeCompleteTransferTask(
 	request *RangeCompleteTransferTaskRequest,
 ) error {
 	return m.persistence.RangeCompleteTransferTask(request)
+}
+
+// Visibility task related methods
+func (m *executionManagerImpl) GetVisibilityTask(
+	request *GetVisibilityTaskRequest,
+) (*GetVisibilityTaskResponse, error) {
+	return m.persistence.GetVisibilityTask(request)
+}
+
+func (m *executionManagerImpl) GetVisibilityTasks(
+	request *GetVisibilityTasksRequest,
+) (*GetVisibilityTasksResponse, error) {
+	return m.persistence.GetVisibilityTasks(request)
+}
+
+func (m *executionManagerImpl) CompleteVisibilityTask(
+	request *CompleteVisibilityTaskRequest,
+) error {
+	return m.persistence.CompleteVisibilityTask(request)
+}
+
+func (m *executionManagerImpl) RangeCompleteVisibilityTask(
+	request *RangeCompleteVisibilityTaskRequest,
+) error {
+	return m.persistence.RangeCompleteVisibilityTask(request)
 }
 
 // Replication task related methods

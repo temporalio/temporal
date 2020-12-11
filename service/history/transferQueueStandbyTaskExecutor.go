@@ -247,7 +247,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, err
 		}
 		workflowStartTime := timestamp.TimeValue(startEvent.GetEventTime())
-		workflowExecutionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
+		workflowExecutionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
 		visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 		searchAttr := executionInfo.SearchAttributes
 
@@ -454,7 +454,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 		return err
 	}
 	startTime := timestamp.TimeValue(startEvent.GetEventTime())
-	executionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
+	executionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
 

@@ -25,8 +25,6 @@
 package history
 
 import (
-	"time"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -52,8 +50,7 @@ type (
 )
 
 const (
-	secondsInDay = int32(24 * time.Hour / time.Second)
-
+	// TODO (alex): change to "default"?
 	defaultNamespace = "defaultNamespace"
 )
 

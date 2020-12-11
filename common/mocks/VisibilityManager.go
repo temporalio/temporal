@@ -77,6 +77,20 @@ func (_m *VisibilityManager) DeleteWorkflowExecution(request *persistence.Visibi
 	return r0
 }
 
+// DeleteWorkflowExecution provides a mock function with given fields: request
+func (_m *VisibilityManager) DeleteWorkflowExecutionV2(request *persistence.VisibilityDeleteWorkflowExecutionRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.VisibilityDeleteWorkflowExecutionRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // GetClosedWorkflowExecution provides a mock function with given fields: request
 func (_m *VisibilityManager) GetClosedWorkflowExecution(request *persistence.GetClosedWorkflowExecutionRequest) (*persistence.GetClosedWorkflowExecutionResponse, error) {
 	ret := _m.Called(request)
@@ -312,8 +326,36 @@ func (_m *VisibilityManager) RecordWorkflowExecutionClosed(request *persistence.
 	return r0
 }
 
+// RecordWorkflowExecutionClosedV2 provides a mock function with given fields: request
+func (_m *VisibilityManager) RecordWorkflowExecutionClosedV2(request *persistence.RecordWorkflowExecutionClosedRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.RecordWorkflowExecutionClosedRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // RecordWorkflowExecutionStarted provides a mock function with given fields: request
 func (_m *VisibilityManager) RecordWorkflowExecutionStarted(request *persistence.RecordWorkflowExecutionStartedRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.RecordWorkflowExecutionStartedRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// RecordWorkflowExecutionStartedV2 provides a mock function with given fields: request
+func (_m *VisibilityManager) RecordWorkflowExecutionStartedV2(request *persistence.RecordWorkflowExecutionStartedRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
@@ -351,6 +393,20 @@ func (_m *VisibilityManager) ScanWorkflowExecutions(request *persistence.ListWor
 
 // UpsertWorkflowExecution provides a mock function with given fields: request
 func (_m *VisibilityManager) UpsertWorkflowExecution(request *persistence.UpsertWorkflowExecutionRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.UpsertWorkflowExecutionRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpsertWorkflowExecution provides a mock function with given fields: request
+func (_m *VisibilityManager) UpsertWorkflowExecutionV2(request *persistence.UpsertWorkflowExecutionRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error

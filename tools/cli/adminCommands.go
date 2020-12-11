@@ -433,6 +433,13 @@ func AdminDescribeTask(c *cli.Context) {
 			ErrorAndExit("Failed to get Transfer Task", err)
 		}
 		prettyPrintJSONObject(task)
+	} else if category == enumsspb.TASK_CATEGORY_VISIBILITY {
+		req := &persistence.GetVisibilityTaskRequest{ShardID: sid, TaskID: int64(tid)}
+		task, err := executionManager.GetVisibilityTask(req)
+		if err != nil {
+			ErrorAndExit("Failed to get visibility task", err)
+		}
+		prettyPrintJSONObject(task)
 	} else {
 		ErrorAndExit("Failed to describe task", fmt.Errorf("Unrecognized task type, task_type=%v", category))
 	}
@@ -462,6 +469,24 @@ func AdminListTasks(c *cli.Context) {
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
 			response, err := executionManager.GetTransferTasks(req)
+			if err != nil {
+				return nil, nil, err
+			}
+			token := response.NextPageToken
+
+			var items []interface{}
+			for _, task := range response.Tasks {
+				items = append(items, task)
+			}
+			return items, token, nil
+		}
+		paginate(c, paginationFunc)
+	} else if category == enumsspb.TASK_CATEGORY_VISIBILITY {
+		req := &persistence.GetVisibilityTasksRequest{}
+
+		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+			req.NextPageToken = paginationToken
+			response, err := executionManager.GetVisibilityTasks(req)
 			if err != nil {
 				return nil, nil, err
 			}

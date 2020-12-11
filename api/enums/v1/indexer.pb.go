@@ -46,6 +46,7 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+// Deprecated. Remove with kafka removal.
 type MessageType int32
 
 const (
@@ -70,6 +71,7 @@ func (MessageType) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_5f4b8ce5d6f2b050, []int{0}
 }
 
+// Deprecated. Remove with kafka removal.
 type FieldType int32
 
 const (

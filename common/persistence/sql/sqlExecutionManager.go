@@ -376,16 +376,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 
 	switch request.Mode {
 	case p.UpdateWorkflowModeBypassCurrent:
-		if err := assertNotCurrentExecution(ctx,
-			tx,
-			shardID,
-			namespaceID,
-			workflowID,
-			runID,
-		); err != nil {
-			return err
-		}
-
+		// do nothing
 	case p.UpdateWorkflowModeUpdateCurrent:
 		if newWorkflow != nil {
 			lastWriteVersion := newWorkflow.LastWriteVersion
@@ -601,16 +592,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 
 	switch request.Mode {
 	case p.ConflictResolveWorkflowModeBypassCurrent:
-		if err := assertNotCurrentExecution(ctx,
-			tx,
-			shardID,
-			namespaceID,
-			workflowID,
-			primitives.MustParseUUID(resetWorkflow.ExecutionState.RunId),
-		); err != nil {
-			return err
-		}
-
+		// do nothing
 	case p.ConflictResolveWorkflowModeUpdateCurrent:
 		executionState := resetWorkflow.ExecutionState
 		lastWriteVersion := resetWorkflow.LastWriteVersion
@@ -848,6 +830,93 @@ func (m *sqlExecutionManager) RangeCompleteTransferTask(
 		MaxTaskID: request.InclusiveEndTaskID,
 	}); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err))
+	}
+	return nil
+}
+
+func (m *sqlExecutionManager) GetVisibilityTask(
+	request *persistence.GetVisibilityTaskRequest,
+) (*persistence.GetVisibilityTaskResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	rows, err := m.db.SelectFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksFilter{
+		ShardID: request.ShardID,
+		TaskID:  request.TaskID,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetVisibilityTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
+		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetVisibilityTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
+	}
+
+	if len(rows) == 0 {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetVisibilityTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+	}
+
+	VisibilityRow := rows[0]
+	VisibilityInfo, err := serialization.VisibilityTaskInfoFromBlob(VisibilityRow.Data, VisibilityRow.DataEncoding)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &persistence.GetVisibilityTaskResponse{VisibilityTaskInfo: VisibilityInfo}
+
+	return resp, nil
+}
+
+func (m *sqlExecutionManager) GetVisibilityTasks(
+	request *p.GetVisibilityTasksRequest,
+) (*p.GetVisibilityTasksResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	rows, err := m.db.RangeSelectFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
+		ShardID:   m.shardID,
+		MinTaskID: request.ReadLevel,
+		MaxTaskID: request.MaxReadLevel,
+	})
+	if err != nil {
+		if err != sql.ErrNoRows {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetVisibilityTasks operation failed. Select failed. Error: %v", err))
+		}
+	}
+	resp := &p.GetVisibilityTasksResponse{Tasks: make([]*persistencespb.VisibilityTaskInfo, len(rows))}
+	for i, row := range rows {
+		info, err := serialization.VisibilityTaskInfoFromBlob(row.Data, row.DataEncoding)
+		if err != nil {
+			return nil, err
+		}
+		resp.Tasks[i] = info
+	}
+
+	return resp, nil
+}
+
+func (m *sqlExecutionManager) CompleteVisibilityTask(
+	request *p.CompleteVisibilityTaskRequest,
+) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	if _, err := m.db.DeleteFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksFilter{
+		ShardID: m.shardID,
+		TaskID:  request.TaskID,
+	}); err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("CompleteVisibilityTask operation failed. Error: %v", err))
+	}
+	return nil
+}
+
+func (m *sqlExecutionManager) RangeCompleteVisibilityTask(
+	request *p.RangeCompleteVisibilityTaskRequest,
+) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	if _, err := m.db.RangeDeleteFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
+		ShardID:   m.shardID,
+		MinTaskID: request.ExclusiveBeginTaskID,
+		MaxTaskID: request.InclusiveEndTaskID,
+	}); err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteVisibilityTask operation failed. Error: %v", err))
 	}
 	return nil
 }

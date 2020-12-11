@@ -382,6 +382,11 @@ install-schema-postgresql: temporal-sql-tool
 	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal_visibility setup-schema -v 0.0
 	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal_visibility update-schema -d ./schema/postgresql/v96/visibility/versioned
 
+install-schema-es:
+	@printf $(COLOR) "Install Elasticsearch schema..."
+	curl -X PUT "http://127.0.0.1:9200/_template/temporal-visibility-template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/index_template.json
+	curl -X PUT "http://127.0.0.1:9200/temporal-visibility-dev"
+
 install-schema-cdc: temporal-cassandra-tool
 	@printf $(COLOR)  "Set up temporal_active key space..."
 	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_active --rf 1
@@ -416,6 +421,9 @@ stop-dependencies:
 
 start: temporal-server
 	./temporal-server start
+
+start-es: temporal-server
+	./temporal-server --zone es start
 
 start-cdc-active: temporal-server
 	./temporal-server --zone active start
