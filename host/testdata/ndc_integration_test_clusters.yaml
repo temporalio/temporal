@@ -41,7 +41,7 @@
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1
-    disablekafkaforvisibility: true
+    disablekafkaforvisibility: false
   messagingclientconfig:
     usemock: false
     kafkaconfig:
@@ -116,7 +116,7 @@
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1
-    disablekafkaforvisibility: true
+    disablekafkaforvisibility: false
   messagingclientconfig:
     usemock: false
     kafkaconfig:
@@ -191,7 +191,7 @@
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1
-    disablekafkaforvisibility: true
+    disablekafkaforvisibility: false
   messagingclientconfig:
     usemock: false
     kafkaconfig:

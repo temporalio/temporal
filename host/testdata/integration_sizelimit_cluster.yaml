@@ -7,7 +7,7 @@ historyconfig:
   numhistoryhosts: 1
   historycountlimiterror: 20
   historycountlimitwarn: 10
-  disablekafkaforvisibility: true
+  disablekafkaforvisibility: false
 workerconfig:
   enablearchiver: false
   enablereplicator: false
