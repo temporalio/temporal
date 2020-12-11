@@ -259,7 +259,8 @@ func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager, 
 			for k := range set {
 				bootstrapHostPorts = append(bootstrapHostPorts, k)
 			}
-			log.Info(fmt.Sprintf("bootstrap hosts fetched %+v", bootstrapHostPorts))
+
+			log.Info("bootstrap hosts fetched", tag.BootstrapHostPorts(strings.Join(bootstrapHostPorts, ",")))
 			return bootstrapHostPorts, nil
 		}
 
