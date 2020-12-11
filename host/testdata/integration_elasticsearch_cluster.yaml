@@ -19,7 +19,7 @@ messagingclientconfig:
 historyconfig:
   numhistoryshards: 4
   numhistoryhosts: 1
-  disablekafkaforvisibility: false
+  disablekafkaforvisibility: true
 workerconfig:
   enablearchiver: false
   enablereplicator: false
