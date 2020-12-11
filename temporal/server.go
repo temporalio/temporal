@@ -32,6 +32,8 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 
@@ -42,6 +44,7 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/elasticsearch"
+	"go.temporal.io/server/common/log"
 	l "go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
@@ -50,6 +53,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -135,9 +139,20 @@ func (s *Server) Start() error {
 	// This call performs a config check against the configured persistence store for immutable cluster metadata.
 	// If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
 	// This is to keep this check hidden from independent downstream daemons and keep this in a single place.
-	err = s.immutableClusterMetadataInitialization(dc)
-	if err != nil {
+	logger := s.logger.WithTags(tag.ComponentMetadataInitializer)
+	factory := persistenceClient.NewFactory(
+		&s.so.config.Persistence,
+		dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 3000),
+		nil,
+		s.so.config.ClusterMetadata.CurrentClusterName,
+		nil,
+		logger,
+	)
+	if err := s.immutableClusterMetadataInitialization(factory, logger); err != nil {
 		return fmt.Errorf("unable to initialize cluster metadata: %w", err)
+	}
+	if err := s.initNamespaces(factory); err != nil {
+		return fmt.Errorf("unable to initialize namespaces: %w", err)
 	}
 
 	clusterMetadata := cluster.NewMetadata(
@@ -377,16 +392,10 @@ func (s *Server) validate() error {
 	return nil
 }
 
-func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collection) error {
-	logger := s.logger.WithTags(tag.ComponentMetadataInitializer)
-	factory := persistenceClient.NewFactory(
-		&s.so.config.Persistence,
-		dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 3000),
-		nil,
-		s.so.config.ClusterMetadata.CurrentClusterName,
-		nil,
-		logger,
-	)
+func (s *Server) immutableClusterMetadataInitialization(
+	factory persistenceClient.Factory,
+	logger log.Logger,
+) error {
 
 	clusterMetadataManager, err := factory.NewClusterMetadataManager()
 	if err != nil {
@@ -431,15 +440,73 @@ func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collec
 		}
 	}
 
+	return nil
+}
+
+func (s *Server) initNamespaces(
+	factory persistenceClient.Factory,
+) error {
+
 	metadataManager, err := factory.NewMetadataManager()
 	if err != nil {
 		return fmt.Errorf("error initializing metadata manager: %w", err)
 	}
 	defer metadataManager.Close()
-	if err = metadataManager.InitializeSystemNamespaces(s.so.config.ClusterMetadata.CurrentClusterName); err != nil {
+
+	currentClusterName := s.so.config.ClusterMetadata.CurrentClusterName
+	if err = metadataManager.InitializeSystemNamespaces(
+		currentClusterName,
+	); err != nil {
 		return fmt.Errorf("unable to register system namespace: %w", err)
 	}
+
+	if err := s.initNonProdNamespace(
+		metadataManager,
+		currentClusterName,
+		common.DefaultNamespace,
+	); err != nil {
+		return fmt.Errorf("unable to register namespace: %v, %w", common.DefaultNamespace, err)
+	}
+
 	return nil
+}
+
+func (s *Server) initNonProdNamespace(
+	metadataManager persistence.MetadataManager,
+	currentClusterName string,
+	namespaceName string,
+) error {
+	_, err := metadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:          uuid.New(),
+				Name:        namespaceName,
+				State:       enumspb.NAMESPACE_STATE_REGISTERED,
+				Description: "Non production namespace",
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention:               timestamp.DurationPtr(common.DefaultNamespaceRetentionDays),
+				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
+				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: currentClusterName,
+				Clusters:          persistence.GetOrUseDefaultClusters(currentClusterName, nil),
+			},
+			FailoverVersion:             common.EmptyVersion,
+			FailoverNotificationVersion: -1,
+		},
+		IsGlobalNamespace: false,
+	})
+
+	switch err.(type) {
+	case nil:
+		return nil
+	case *serviceerror.NamespaceAlreadyExists:
+		return nil
+	default:
+		return err
+	}
 }
 
 func (s *Server) logImmutableMismatch(logger l.Logger, key string, ignored interface{}, value interface{}) {

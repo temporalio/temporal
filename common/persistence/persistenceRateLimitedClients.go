@@ -587,6 +587,14 @@ func (p *metadataRateLimitedPersistenceClient) GetMetadata() (*GetMetadataRespon
 	return response, err
 }
 
+func (p *metadataRateLimitedPersistenceClient) InitializeSystemNamespaces(currentClusterName string) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	return p.persistence.InitializeSystemNamespaces(currentClusterName)
+}
+
 func (p *metadataRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
@@ -936,11 +944,4 @@ func (c *clusterMetadataRateLimitedPersistenceClient) SaveClusterMetadata(reques
 		return false, ErrPersistenceLimitExceeded
 	}
 	return c.persistence.SaveClusterMetadata(request)
-}
-
-func (c *metadataRateLimitedPersistenceClient) InitializeSystemNamespaces(currentClusterName string) error {
-	if ok := c.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-	return c.persistence.InitializeSystemNamespaces(currentClusterName)
 }

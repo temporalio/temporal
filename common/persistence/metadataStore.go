@@ -174,12 +174,14 @@ func (m *metadataManagerImpl) InitializeSystemNamespaces(currentClusterName stri
 		IsGlobalNamespace: false,
 	})
 
-	if err != nil {
-		if _, ok := err.(*serviceerror.NamespaceAlreadyExists); !ok {
-			return err
-		}
+	switch err.(type) {
+	case nil:
+		return nil
+	case *serviceerror.NamespaceAlreadyExists:
+		return nil
+	default:
+		return err
 	}
-	return nil
 }
 
 func (m *metadataManagerImpl) GetMetadata() (*GetMetadataResponse, error) {

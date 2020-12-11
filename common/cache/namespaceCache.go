@@ -273,10 +273,10 @@ func (c *namespaceCache) Start() {
 
 // Start start the background refresh of namespace
 func (c *namespaceCache) Stop() {
-
 	if !atomic.CompareAndSwapInt32(&c.status, namespaceCacheStarted, namespaceCacheStopped) {
 		return
 	}
+
 	close(c.shutdownChan)
 }
 
