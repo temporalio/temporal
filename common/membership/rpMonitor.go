@@ -118,7 +118,7 @@ func (rpo *ringpopMonitor) Start() {
 	}
 
 	rpo.rp.Start(
-		func() ([]string, error) { return fetchCurrentBootstrapHostports(rpo.metadataManager) },
+		func() ([]string, error) { return fetchCurrentBootstrapHostports(rpo.metadataManager, rpo.logger) },
 		healthyHostLastHeartbeatCutoff/2)
 
 	labels, err := rpo.rp.Labels()
@@ -230,7 +230,7 @@ func (rpo *ringpopMonitor) startHeartbeat(broadcastHostport string) error {
 	return err
 }
 
-func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager) ([]string, error) {
+func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager, log log.Logger) ([]string, error) {
 	pageSize := 1000
 	set := make(map[string]struct{})
 
@@ -259,6 +259,7 @@ func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager) 
 			for k := range set {
 				bootstrapHostPorts = append(bootstrapHostPorts, k)
 			}
+			log.Info(fmt.Sprintf("bootstrap hosts fetched %+v", bootstrapHostPorts))
 			return bootstrapHostPorts, nil
 		}
 
