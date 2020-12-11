@@ -30,14 +30,13 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
-
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -281,7 +280,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		return err
 	}
 	workflowStartTime := timestamp.TimeValue(startEvent.GetEventTime())
-	workflowExecutionTime := getWorkflowExecutionTimestamp(mutableState, startEvent)
+	workflowExecutionTime := getWorkflowExecutionTime(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := executionInfo.SearchAttributes
 	namespace := mutableState.GetNamespaceEntry().GetInfo().Name
@@ -695,7 +694,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 		return err
 	}
 	startTimestamp := timestamp.TimeValue(startEvent.GetEventTime())
-	executionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
+	executionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
 

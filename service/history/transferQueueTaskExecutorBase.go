@@ -28,24 +28,21 @@ import (
 	"context"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	m "go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/primitives/timestamp"
-
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/worker/archiver"
@@ -183,22 +180,23 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	}
 
 	request := &persistence.RecordWorkflowExecutionStartedRequest{
-		NamespaceID: namespaceID,
-		Namespace:   namespace,
-		Execution: commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
+		VisibilityRequestBase: &persistence.VisibilityRequestBase{
+			NamespaceID: namespaceID,
+			Namespace:   namespace,
+			Execution: commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+			WorkflowTypeName:   workflowTypeName,
+			StartTimestamp:     startTimeUnixNano,
+			ExecutionTimestamp: executionTimeUnixNano,
+			TaskID:             taskID,
+			Memo:               visibilityMemo,
+			TaskQueue:          taskQueue,
+			SearchAttributes:   searchAttributes,
 		},
-		WorkflowTypeName:   workflowTypeName,
-		StartTimestamp:     startTimeUnixNano,
-		ExecutionTimestamp: executionTimeUnixNano,
-		RunTimeout:         int64(timestamp.DurationValue(runTimeout).Round(time.Second).Seconds()),
-		TaskID:             taskID,
-		Memo:               visibilityMemo,
-		TaskQueue:          taskQueue,
-		SearchAttributes:   searchAttributes,
+		RunTimeout: int64(timestamp.DurationValue(runTimeout).Round(time.Second).Seconds()),
 	}
-
 	return t.visibilityMgr.RecordWorkflowExecutionStarted(request)
 }
 
@@ -228,21 +226,23 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	}
 
 	request := &persistence.UpsertWorkflowExecutionRequest{
-		NamespaceID: namespaceID,
-		Namespace:   namespace,
-		Execution: commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
+		VisibilityRequestBase: &persistence.VisibilityRequestBase{
+			NamespaceID: namespaceID,
+			Namespace:   namespace,
+			Execution: commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+			WorkflowTypeName:   workflowTypeName,
+			StartTimestamp:     startTimeUnixNano,
+			ExecutionTimestamp: executionTimeUnixNano,
+			TaskID:             taskID,
+			Status:             status,
+			Memo:               visibilityMemo,
+			TaskQueue:          taskQueue,
+			SearchAttributes:   searchAttributes,
 		},
-		WorkflowTypeName:   workflowTypeName,
-		StartTimestamp:     startTimeUnixNano,
-		ExecutionTimestamp: executionTimeUnixNano,
-		WorkflowTimeout:    int64(timestamp.DurationValue(workflowTimeout).Round(time.Second).Seconds()),
-		TaskID:             taskID,
-		Status:             status,
-		Memo:               visibilityMemo,
-		TaskQueue:          taskQueue,
-		SearchAttributes:   searchAttributes,
+		WorkflowTimeout: int64(timestamp.DurationValue(workflowTimeout).Round(time.Second).Seconds()),
 	}
 
 	return t.visibilityMgr.UpsertWorkflowExecution(request)
@@ -277,7 +277,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 
 	if err == nil {
 		// retention in namespace config is in days, convert to seconds
-		retentionSeconds = int64(namespaceEntry.GetRetentionDays(workflowID)) * int64(secondsInDay)
+		retentionSeconds = int64(timestamp.DurationFromDays(namespaceEntry.GetRetentionDays(workflowID)).Seconds())
 		namespace = namespaceEntry.GetInfo().Name
 		// if sampled for longer retention is enabled, only record those sampled events
 		if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
@@ -290,25 +290,27 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		archiveVisibility = clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
 	}
 
-	if recordWorkflowClose {
+	if !t.config.DisableKafkaForVisibility() && recordWorkflowClose {
 		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
-			NamespaceID: namespaceID,
-			Namespace:   namespace,
-			Execution: commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
+			VisibilityRequestBase: &persistence.VisibilityRequestBase{
+				NamespaceID: namespaceID,
+				Namespace:   namespace,
+				Execution: commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      runID,
+				},
+				WorkflowTypeName:   workflowTypeName,
+				StartTimestamp:     startTime.UnixNano(),
+				ExecutionTimestamp: executionTime.UnixNano(),
+				Status:             status,
+				TaskID:             taskID,
+				Memo:               visibilityMemo,
+				TaskQueue:          taskQueue,
+				SearchAttributes:   searchAttributes,
 			},
-			WorkflowTypeName:   workflowTypeName,
-			StartTimestamp:     startTime.UnixNano(),
-			ExecutionTimestamp: executionTime.UnixNano(),
-			CloseTimestamp:     endTime.UnixNano(),
-			Status:             status,
-			HistoryLength:      historyLength,
-			RetentionSeconds:   retentionSeconds,
-			TaskID:             taskID,
-			Memo:               visibilityMemo,
-			TaskQueue:          taskQueue,
-			SearchAttributes:   searchAttributes,
+			CloseTimestamp:   endTime.UnixNano(),
+			HistoryLength:    historyLength,
+			RetentionSeconds: retentionSeconds,
 		}); err != nil {
 			return err
 		}
@@ -341,51 +343,6 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		return err
 	}
 	return nil
-}
-
-// Argument startEvent is to save additional call of msBuilder.GetStartEvent
-func getWorkflowExecutionTimestamp(
-	msBuilder mutableState,
-	startEvent *historypb.HistoryEvent,
-) time.Time {
-	// Use value 0 to represent workflows that don't need backoff. Since ES doesn't support
-	// comparison between two field, we need a value to differentiate them from cron workflows
-	// or later runs of a workflow that needs retry.
-	executionTimestamp := time.Unix(0, 0).UTC()
-	if startEvent == nil {
-		return executionTimestamp
-	}
-
-	if backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff()); backoffDuration != 0 {
-		startTime := timestamp.TimeValue(startEvent.GetEventTime())
-		executionTimestamp = startTime.Add(backoffDuration)
-	}
-	return executionTimestamp
-}
-
-func getWorkflowMemo(
-	memo map[string]*commonpb.Payload,
-) *commonpb.Memo {
-
-	if memo == nil {
-		return nil
-	}
-	return &commonpb.Memo{Fields: memo}
-}
-
-func copySearchAttributes(
-	input map[string]*commonpb.Payload,
-) map[string]*commonpb.Payload {
-
-	if input == nil {
-		return nil
-	}
-
-	result := make(map[string]*commonpb.Payload)
-	for k, v := range input {
-		result[k] = proto.Clone(v).(*commonpb.Payload)
-	}
-	return result
 }
 
 func isWorkflowNotExistError(err error) bool {

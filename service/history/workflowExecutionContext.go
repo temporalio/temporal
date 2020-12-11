@@ -421,6 +421,7 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 		newWorkflow.TransferTasks,
 		newWorkflow.ReplicationTasks,
 		newWorkflow.TimerTasks,
+		newWorkflow.VisibilityTasks,
 	)
 	return nil
 }
@@ -569,12 +570,14 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		resetWorkflow.TransferTasks,
 		resetWorkflow.ReplicationTasks,
 		resetWorkflow.TimerTasks,
+		resetWorkflow.VisibilityTasks,
 	)
 	if newWorkflow != nil {
 		c.notifyTasks(
 			newWorkflow.TransferTasks,
 			newWorkflow.ReplicationTasks,
 			newWorkflow.TimerTasks,
+			newWorkflow.VisibilityTasks,
 		)
 	}
 	if currentWorkflow != nil {
@@ -582,6 +585,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 			currentWorkflow.TransferTasks,
 			currentWorkflow.ReplicationTasks,
 			currentWorkflow.TimerTasks,
+			currentWorkflow.VisibilityTasks,
 		)
 	}
 
@@ -783,6 +787,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		currentWorkflow.TransferTasks,
 		currentWorkflow.ReplicationTasks,
 		currentWorkflow.TimerTasks,
+		currentWorkflow.VisibilityTasks,
 	)
 
 	// notify new workflow tasks
@@ -791,6 +796,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 			newWorkflow.TransferTasks,
 			newWorkflow.ReplicationTasks,
 			newWorkflow.TimerTasks,
+			newWorkflow.VisibilityTasks,
 		)
 	}
 
@@ -822,10 +828,12 @@ func (c *workflowExecutionContextImpl) notifyTasks(
 	transferTasks []persistence.Task,
 	replicationTasks []persistence.Task,
 	timerTasks []persistence.Task,
+	visibilityTasks []persistence.Task,
 ) {
 	c.engine.NotifyNewTransferTasks(transferTasks)
 	c.engine.NotifyNewReplicationTasks(replicationTasks)
 	c.engine.NotifyNewTimerTasks(timerTasks)
+	c.engine.NotifyNewVisibilityTasks(visibilityTasks)
 }
 
 func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(

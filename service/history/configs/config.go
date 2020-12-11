@@ -179,12 +179,6 @@ type Config struct {
 	HistoryCountLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 	HistoryCountLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
-	ValidSearchAttributes             dynamicconfig.MapPropertyFn
-	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
-	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
-	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
-
 	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
 	// none is configured on the Activity by the user.
 	DefaultActivityRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
@@ -235,6 +229,41 @@ type Config struct {
 
 	EnableDropStuckTaskByNamespaceID dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
 	SkipReapplicationByNamespaceId   dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
+
+	// ===== Visibility related =====
+	// VisibilityQueueProcessor settings
+	VisibilityTaskBatchSize                                dynamicconfig.IntPropertyFn
+	VisibilityTaskWorkerCount                              dynamicconfig.IntPropertyFn
+	VisibilityTaskMaxRetryCount                            dynamicconfig.IntPropertyFn
+	VisibilityProcessorCompleteTaskFailureRetryCount       dynamicconfig.IntPropertyFn
+	VisibilityProcessorFailoverMaxPollRPS                  dynamicconfig.IntPropertyFn
+	VisibilityProcessorMaxPollRPS                          dynamicconfig.IntPropertyFn
+	VisibilityProcessorMaxPollInterval                     dynamicconfig.DurationPropertyFn
+	VisibilityProcessorMaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
+	VisibilityProcessorUpdateAckInterval                   dynamicconfig.DurationPropertyFn
+	VisibilityProcessorUpdateAckIntervalJitterCoefficient  dynamicconfig.FloatPropertyFn
+	VisibilityProcessorCompleteTaskInterval                dynamicconfig.DurationPropertyFn
+	VisibilityProcessorRedispatchInterval                  dynamicconfig.DurationPropertyFn
+	VisibilityProcessorRedispatchIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+	VisibilityProcessorMaxRedispatchQueueSize              dynamicconfig.IntPropertyFn
+	VisibilityProcessorEnablePriorityTaskProcessor         dynamicconfig.BoolPropertyFn
+	VisibilityProcessorVisibilityArchivalTimeLimit         dynamicconfig.DurationPropertyFn
+
+	DisableKafkaForVisibility dynamicconfig.BoolPropertyFn
+
+	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
+	ValidSearchAttributes             dynamicconfig.MapPropertyFn
+	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
+	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ESVisibilityListMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ESIndexMaxResultWindow            dynamicconfig.IntPropertyFn
+	IndexerConcurrency                dynamicconfig.IntPropertyFn
+	ESProcessorNumOfWorkers           dynamicconfig.IntPropertyFn
+	ESProcessorBulkActions            dynamicconfig.IntPropertyFn // max number of requests in bulk
+	ESProcessorBulkSize               dynamicconfig.IntPropertyFn // max total size of bytes in bulk
+	ESProcessorFlushInterval          dynamicconfig.DurationPropertyFn
+	ESProcessorAckTimeout             dynamicconfig.DurationPropertyFn
 }
 
 const (
@@ -363,14 +392,10 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		ThrottledLogRPS:   dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 4),
 		EnableStickyQuery: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableStickyQuery, true),
 
-		DefaultActivityRetryPolicy:        dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultActivityRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
-		DefaultWorkflowRetryPolicy:        dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
-		ValidSearchAttributes:             dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
-		SearchAttributesNumberOfKeysLimit: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
-		SearchAttributesSizeOfValueLimit:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
-		SearchAttributesTotalSizeLimit:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
-		StickyTTL:                         dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.StickyTTL, time.Hour*24*365),
-		WorkflowTaskHeartbeatTimeout:      dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.WorkflowTaskHeartbeatTimeout, time.Minute*30),
+		DefaultActivityRetryPolicy:   dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultActivityRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
+		DefaultWorkflowRetryPolicy:   dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
+		StickyTTL:                    dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.StickyTTL, time.Hour*24*365),
+		WorkflowTaskHeartbeatTimeout: dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.WorkflowTaskHeartbeatTimeout, time.Minute*30),
 
 		ReplicationTaskFetcherParallelism:            dc.GetIntProperty(dynamicconfig.ReplicationTaskFetcherParallelism, 4),
 		ReplicationTaskFetcherAggregationInterval:    dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherAggregationInterval, 2*time.Second),
@@ -396,6 +421,39 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 
 		EnableDropStuckTaskByNamespaceID: dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.EnableDropStuckTaskByNamespaceID, false),
 		SkipReapplicationByNamespaceId:   dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.SkipReapplicationByNamespaceId, false),
+
+		// ===== Visibility related =====
+		VisibilityTaskBatchSize:                                dc.GetIntProperty(dynamicconfig.VisibilityTaskBatchSize, 100),
+		VisibilityProcessorFailoverMaxPollRPS:                  dc.GetIntProperty(dynamicconfig.VisibilityProcessorFailoverMaxPollRPS, 1),
+		VisibilityProcessorMaxPollRPS:                          dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxPollRPS, 20),
+		VisibilityTaskWorkerCount:                              dc.GetIntProperty(dynamicconfig.VisibilityTaskWorkerCount, 10),
+		VisibilityTaskMaxRetryCount:                            dc.GetIntProperty(dynamicconfig.VisibilityTaskMaxRetryCount, 100),
+		VisibilityProcessorCompleteTaskFailureRetryCount:       dc.GetIntProperty(dynamicconfig.VisibilityProcessorCompleteTaskFailureRetryCount, 10),
+		VisibilityProcessorMaxPollInterval:                     dc.GetDurationProperty(dynamicconfig.VisibilityProcessorMaxPollInterval, 1*time.Minute),
+		VisibilityProcessorMaxPollIntervalJitterCoefficient:    dc.GetFloat64Property(dynamicconfig.VisibilityProcessorMaxPollIntervalJitterCoefficient, 0.15),
+		VisibilityProcessorUpdateAckInterval:                   dc.GetDurationProperty(dynamicconfig.VisibilityProcessorUpdateAckInterval, 30*time.Second),
+		VisibilityProcessorUpdateAckIntervalJitterCoefficient:  dc.GetFloat64Property(dynamicconfig.VisibilityProcessorUpdateAckIntervalJitterCoefficient, 0.15),
+		VisibilityProcessorCompleteTaskInterval:                dc.GetDurationProperty(dynamicconfig.VisibilityProcessorCompleteTaskInterval, 60*time.Second),
+		VisibilityProcessorRedispatchInterval:                  dc.GetDurationProperty(dynamicconfig.VisibilityProcessorRedispatchInterval, 5*time.Second),
+		VisibilityProcessorRedispatchIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.VisibilityProcessorRedispatchIntervalJitterCoefficient, 0.15),
+		VisibilityProcessorMaxRedispatchQueueSize:              dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxRedispatchQueueSize, 10000),
+		VisibilityProcessorEnablePriorityTaskProcessor:         dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnablePriorityTaskProcessor, false),
+		VisibilityProcessorVisibilityArchivalTimeLimit:         dc.GetDurationProperty(dynamicconfig.VisibilityProcessorVisibilityArchivalTimeLimit, 200*time.Millisecond),
+
+		DisableKafkaForVisibility: dc.GetBoolProperty(dynamicconfig.DisableKafkaForVisibility, false),
+
+		ValidSearchAttributes:             dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
+		SearchAttributesNumberOfKeysLimit: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
+		SearchAttributesSizeOfValueLimit:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
+		SearchAttributesTotalSizeLimit:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
+		ESVisibilityListMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendESVisibilityListMaxQPS, 10),
+		ESIndexMaxResultWindow:            dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
+		IndexerConcurrency:                dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 100),
+		ESProcessorNumOfWorkers:           dc.GetIntProperty(dynamicconfig.WorkerESProcessorNumOfWorkers, 1),
+		ESProcessorBulkActions:            dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkActions, 1000),
+		ESProcessorBulkSize:               dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 2<<24), // 16MB
+		ESProcessorFlushInterval:          dc.GetDurationProperty(dynamicconfig.WorkerESProcessorFlushInterval, 1*time.Second),
+		ESProcessorAckTimeout:             dc.GetDurationProperty(dynamicconfig.WorkerESProcessorAckTimeout, 5*time.Second),
 	}
 
 	return cfg

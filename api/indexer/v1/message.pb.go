@@ -52,6 +52,7 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+// Deprecated. Remove with kafka removal.
 type Field struct {
 	Type v1.FieldType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.FieldType" json:"type,omitempty"`
 	// Types that are valid to be assigned to Data:
@@ -171,6 +172,7 @@ func (*Field) XXX_OneofWrappers() []interface{} {
 	}
 }
 
+// Deprecated. Remove with kafka removal.
 type Message struct {
 	MessageType v1.MessageType    `protobuf:"varint,1,opt,name=message_type,json=messageType,proto3,enum=temporal.server.api.enums.v1.MessageType" json:"message_type,omitempty"`
 	NamespaceId string            `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`

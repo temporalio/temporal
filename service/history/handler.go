@@ -727,6 +727,10 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 		err = executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
 			TaskID: request.GetTaskId(),
 		})
+	case enumsspb.TASK_CATEGORY_VISIBILITY:
+		err = executionMgr.CompleteVisibilityTask(&persistence.CompleteVisibilityTaskRequest{
+			TaskID: request.GetTaskId(),
+		})
 	case enumsspb.TASK_CATEGORY_TIMER:
 		err = executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
 			VisibilityTimestamp: timestamp.TimeValue(request.GetVisibilityTime()),

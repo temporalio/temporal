@@ -71,6 +71,7 @@ type (
 		ThrottledLogRPS               dynamicconfig.IntPropertyFn
 		PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
 		EnableBatcher                 dynamicconfig.BoolPropertyFn
+		EnableIndexer                 dynamicconfig.BoolPropertyFn
 		EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
 	}
 )
@@ -142,6 +143,7 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 			ClusterMetadata:     params.ClusterMetadata,
 		},
 		EnableBatcher:                 dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
+		EnableIndexer:                 dc.GetBoolProperty(dynamicconfig.EnableIndexer, true),
 		EnableParentClosePolicyWorker: dc.GetBoolProperty(dynamicconfig.EnableParentClosePolicyWorker, true),
 		ThrottledLogRPS:               dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
 		PersistenceGlobalMaxQPS:       dc.GetIntProperty(dynamicconfig.WorkerPersistenceGlobalMaxQPS, 0),
@@ -150,7 +152,7 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 		dynamicconfig.AdvancedVisibilityWritingMode,
 		common.GetDefaultAdvancedVisibilityWritingMode(params.PersistenceConfig.IsAdvancedVisibilityConfigExist()),
 	)
-	if advancedVisWritingMode() != common.AdvancedVisibilityWritingModeOff {
+	if config.EnableIndexer() && advancedVisWritingMode() != common.AdvancedVisibilityWritingModeOff {
 		config.IndexerCfg = &indexer.Config{
 			IndexerConcurrency:       dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 100),
 			ESProcessorNumOfWorkers:  dc.GetIntProperty(dynamicconfig.WorkerESProcessorNumOfWorkers, 1),

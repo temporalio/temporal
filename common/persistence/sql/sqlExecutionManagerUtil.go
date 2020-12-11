@@ -546,6 +546,8 @@ func applyTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("applyTasks failed. Failed to create transfer tasks. Error: %v", err))
 	}
 
+	// TODO (alex): add createVisibilityTasks ?
+
 	if err := createReplicationTasks(ctx,
 		tx,
 		replicationTasks,
@@ -984,29 +986,6 @@ func createTimerTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("createTimerTasks failed. Inserted %v instead of %v rows into timer_tasks. Error: %v", rowsAffected, len(timerTasks), err))
 	}
 	return nil
-}
-
-func assertNotCurrentExecution(
-	ctx context.Context,
-	tx sqlplugin.Tx,
-	shardID int32,
-	namespaceID primitives.UUID,
-	workflowID string,
-	runID primitives.UUID,
-) error {
-	currentRow, err := tx.LockCurrentExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
-		ShardID:     shardID,
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-	})
-	if err != nil {
-		if err == sql.ErrNoRows {
-			// allow bypassing no current record
-			return nil
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("assertCurrentExecution failed. Unable to load current record. Error: %v", err))
-	}
-	return assertRunIDMismatch(runID, currentRow.RunID)
 }
 
 func assertRunIDAndUpdateCurrentExecution(

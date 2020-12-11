@@ -36,7 +36,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/olivere/elastic"
-	v4 "github.com/olivere/elastic/aws/v4"
+	elasticaws "github.com/olivere/elastic/aws/v4"
 )
 
 type (
@@ -263,5 +263,5 @@ func getAWSElasticSearchHTTPClient(config AWSRequestSigningConfig) (*http.Client
 		return nil, fmt.Errorf("unknown aws credential provider specified: %+v. Accepted options are 'static', 'environment' or 'session'", config.CredentialProvider)
 	}
 
-	return v4.NewV4SigningClient(awsCredentials, config.Region), nil
+	return elasticaws.NewV4SigningClient(awsCredentials, config.Region), nil
 }

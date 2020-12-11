@@ -312,6 +312,24 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetTransferTasks(request
 	return response, err
 }
 
+func (p *workflowExecutionRateLimitedPersistenceClient) GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+
+	response, err := p.persistence.GetVisibilityTask(request)
+	return response, err
+}
+
+func (p *workflowExecutionRateLimitedPersistenceClient) GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+
+	response, err := p.persistence.GetVisibilityTasks(request)
+	return response, err
+}
+
 func (p *workflowExecutionRateLimitedPersistenceClient) GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
@@ -345,6 +363,24 @@ func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteTransferTas
 	}
 
 	err := p.persistence.RangeCompleteTransferTask(request)
+	return err
+}
+
+func (p *workflowExecutionRateLimitedPersistenceClient) CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.CompleteVisibilityTask(request)
+	return err
+}
+
+func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.RangeCompleteVisibilityTask(request)
 	return err
 }
 
@@ -604,6 +640,15 @@ func (p *visibilityRateLimitedPersistenceClient) RecordWorkflowExecutionStarted(
 	return err
 }
 
+func (p *visibilityRateLimitedPersistenceClient) RecordWorkflowExecutionStartedV2(request *RecordWorkflowExecutionStartedRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.RecordWorkflowExecutionStartedV2(request)
+	return err
+}
+
 func (p *visibilityRateLimitedPersistenceClient) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
@@ -613,12 +658,30 @@ func (p *visibilityRateLimitedPersistenceClient) RecordWorkflowExecutionClosed(r
 	return err
 }
 
+func (p *visibilityRateLimitedPersistenceClient) RecordWorkflowExecutionClosedV2(request *RecordWorkflowExecutionClosedRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.RecordWorkflowExecutionClosedV2(request)
+	return err
+}
+
 func (p *visibilityRateLimitedPersistenceClient) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
 	err := p.persistence.UpsertWorkflowExecution(request)
+	return err
+}
+
+func (p *visibilityRateLimitedPersistenceClient) UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.UpsertWorkflowExecutionV2(request)
 	return err
 }
 
@@ -699,6 +762,13 @@ func (p *visibilityRateLimitedPersistenceClient) DeleteWorkflowExecution(request
 		return ErrPersistenceLimitExceeded
 	}
 	return p.persistence.DeleteWorkflowExecution(request)
+}
+
+func (p *visibilityRateLimitedPersistenceClient) DeleteWorkflowExecutionV2(request *VisibilityDeleteWorkflowExecutionRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+	return p.persistence.DeleteWorkflowExecutionV2(request)
 }
 
 func (p *visibilityRateLimitedPersistenceClient) ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {

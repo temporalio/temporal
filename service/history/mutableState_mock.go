@@ -2348,6 +2348,22 @@ func (mr *MockmutableStateMockRecorder) AddTimerTasks(timerTasks ...interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTimerTasks", reflect.TypeOf((*MockmutableState)(nil).AddTimerTasks), timerTasks...)
 }
 
+// AddVisibilityTasks mocks base method.
+func (m *MockmutableState) AddVisibilityTasks(visibilityTasks ...persistence0.Task) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{}
+	for _, a := range visibilityTasks {
+		varargs = append(varargs, a)
+	}
+	m.ctrl.Call(m, "AddVisibilityTasks", varargs...)
+}
+
+// AddVisibilityTasks indicates an expected call of AddVisibilityTasks.
+func (mr *MockmutableStateMockRecorder) AddVisibilityTasks(visibilityTasks ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddVisibilityTasks", reflect.TypeOf((*MockmutableState)(nil).AddVisibilityTasks), visibilityTasks...)
+}
+
 // SetUpdateCondition mocks base method.
 func (m *MockmutableState) SetUpdateCondition(arg0 int64) {
 	m.ctrl.T.Helper()

@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"time"
 
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
@@ -43,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
+	metricsmocks "go.temporal.io/server/common/metrics/mocks"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -171,12 +173,25 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		if err != nil {
 			return nil, err
 		}
+
+		esProcessorConfig := &pes.ProcessorConfig{
+			IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
+			ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
+			ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
+			ESProcessorBulkSize:      dynamicconfig.GetIntPropertyFn(2 << 20),
+			ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
+			ValidSearchAttributes:    dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
+		}
+		esProcessor := pes.NewProcessor(esProcessorConfig, esClient, logger, &metricsmocks.Client{})
+		esProcessor.Start()
+
 		visConfig := &config.VisibilityConfig{
 			VisibilityListMaxQPS:   dynamicconfig.GetIntPropertyFilteredByNamespace(2000),
 			ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(defaultTestValueOfESIndexMaxResultWindow),
 			ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
+			ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(5 * time.Second),
 		}
-		esVisibilityStore := pes.NewElasticSearchVisibilityStore(esClient, indexName, visProducer, visConfig, logger)
+		esVisibilityStore := pes.NewElasticSearchVisibilityStore(esClient, indexName, visProducer, esProcessor, visConfig, logger, &metricsmocks.Client{})
 		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, logger)
 	}
 	visibilityMgr := persistence.NewVisibilityManagerWrapper(testBase.VisibilityMgr, esVisibilityMgr,
