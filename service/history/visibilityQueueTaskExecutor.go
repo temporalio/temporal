@@ -110,9 +110,9 @@ func (t *visibilityQueueTaskExecutor) execute(
 
 	switch task.GetTaskType() {
 	case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
-		return t.processStartExecution(task)
+		return t.processStartOrUpsertExecution(task, true)
 	case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
-		return t.processUpsertExecution(task)
+		return t.processStartOrUpsertExecution(task, false)
 	case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
 		return t.processCloseExecution(task)
 	case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
@@ -120,20 +120,6 @@ func (t *visibilityQueueTaskExecutor) execute(
 	default:
 		return errUnknownVisibilityTask
 	}
-}
-
-func (t *visibilityQueueTaskExecutor) processStartExecution(
-	task *persistencespb.VisibilityTaskInfo,
-) (retError error) {
-
-	return t.processStartOrUpsertExecution(task, true)
-}
-
-func (t *visibilityQueueTaskExecutor) processUpsertExecution(
-	task *persistencespb.VisibilityTaskInfo,
-) (retError error) {
-
-	return t.processStartOrUpsertExecution(task, false)
 }
 
 func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
