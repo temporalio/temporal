@@ -847,12 +847,12 @@ func QueryLevel(s time.Time) Tag {
 	return newTimeTag("query-level", s)
 }
 
-// QueryLevel returns tag for query level
+// MinQueryLevel returns tag for query level
 func MinQueryLevel(s time.Time) Tag {
 	return newTimeTag("min-query-level", s)
 }
 
-// QueryLevel returns tag for query level
+// MaxQueryLevel returns tag for query level
 func MaxQueryLevel(s time.Time) Tag {
 	return newTimeTag("max-query-level", s)
 }
@@ -860,4 +860,9 @@ func MaxQueryLevel(s time.Time) Tag {
 // TaskQueueInfo returns tag for task queue info
 func TaskQueueInfo(s interface{}) Tag {
 	return newObjectTag("task-queue-info", s)
+}
+
+// BootstrapHostPorts returns tag for bootstrap host ports
+func BootstrapHostPorts(s string) Tag {
+	return newStringTag("bootstrap-hostports", s)
 }
