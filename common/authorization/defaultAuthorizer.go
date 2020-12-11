@@ -43,12 +43,16 @@ func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target 
 	if target.Namespace == "temporal-system" || target.Namespace == "" {
 		return Result{Decision: DecisionAllow}, nil
 	}
-
+	if claims == nil {
+		return Result{Decision: DecisionDeny}, nil
+	}
 	// Check system level permissions
 	if claims.System == RoleAdmin || claims.System == RoleWriter {
 		return Result{Decision: DecisionAllow}, nil
 	}
-
+	if claims.Namespaces == nil {
+		return Result{Decision: DecisionDeny}, nil
+	}
 	roles, found := claims.Namespaces[target.Namespace]
 	if !found || roles == RoleUndefined {
 		return Result{Decision: DecisionDeny}, nil
