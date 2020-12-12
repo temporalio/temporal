@@ -562,6 +562,17 @@ func applyTasks(
 		return err
 	}
 
+	if err := createTimerTasks(
+		batch,
+		timerTasks,
+		shardID,
+		namespaceID,
+		workflowID,
+		runID,
+	); err != nil {
+		return err
+	}
+
 	if err := createReplicationTasks(
 		batch,
 		replicationTasks,
@@ -584,14 +595,7 @@ func applyTasks(
 		return err
 	}
 
-	return createTimerTasks(
-		batch,
-		timerTasks,
-		shardID,
-		namespaceID,
-		workflowID,
-		runID,
-	)
+	return nil
 }
 
 func createTransferTasks(
@@ -782,6 +786,23 @@ func createVisibilityTasks(
 		})
 		if err != nil {
 			return err
+		}
+
+		switch task.GetType() {
+		case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
+			// noop
+
+		case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
+			// noop
+
+		case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
+			// noop
+
+		case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
+			// noop
+
+		default:
+			return serviceerror.NewInternal(fmt.Sprintf("createVisibilityTasks failed. Unknow visibility type: %v", task.GetType()))
 		}
 
 		batch.Query(templateCreateVisibilityTaskQuery,
