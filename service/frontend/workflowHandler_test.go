@@ -1389,26 +1389,50 @@ func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 
 func (s *workflowHandlerSuite) TestTokenNamespaceEnforcementDisabled() {
 	wh := s.setupTokenNamespaceTest("wrong-namespace", false)
-	req := s.newRespondActivityTaskCompletedRequest(uuid.New())
-	resp, err := wh.RespondActivityTaskCompleted(context.Background(), req)
+	req1 := s.newRespondActivityTaskCompletedRequest(uuid.New())
+	resp1, err := wh.RespondActivityTaskCompleted(context.Background(), req1)
 	s.NoError(err)
-	s.NotNil(resp)
+	s.NotNil(resp1)
+	req2 := s.newRespondActivityTaskFailedRequest(uuid.New())
+	resp2, err := wh.RespondActivityTaskFailed(context.Background(), req2)
+	s.NoError(err)
+	s.NotNil(resp2)
+	req3 := s.newRespondActivityTaskCanceledRequest(uuid.New())
+	resp3, err := wh.RespondActivityTaskCanceled(context.Background(), req3)
+	s.NoError(err)
+	s.NotNil(resp3)
 }
 
 func (s *workflowHandlerSuite) TestTokenNamespaceEnforcementEnabledMismatch() {
 	wh := s.setupTokenNamespaceTest("wrong-namespace", true)
-	req := s.newRespondActivityTaskCompletedRequest(uuid.New())
-	resp, err := wh.RespondActivityTaskCompleted(context.Background(), req)
+	req1 := s.newRespondActivityTaskCompletedRequest(uuid.New())
+	resp1, err := wh.RespondActivityTaskCompleted(context.Background(), req1)
 	s.Error(err)
-	s.Nil(resp)
+	s.Nil(resp1)
+	req2 := s.newRespondActivityTaskFailedRequest(uuid.New())
+	resp2, err := wh.RespondActivityTaskFailed(context.Background(), req2)
+	s.Error(err)
+	s.Nil(resp2)
+	req3 := s.newRespondActivityTaskCanceledRequest(uuid.New())
+	resp3, err := wh.RespondActivityTaskCanceled(context.Background(), req3)
+	s.Error(err)
+	s.Nil(resp3)
 }
 
 func (s *workflowHandlerSuite) TestTokenNamespaceEnforcementEnabledMatch() {
 	wh := s.setupTokenNamespaceTest(s.testNamespace, true)
-	req := s.newRespondActivityTaskCompletedRequest(uuid.New())
-	resp, err := wh.RespondActivityTaskCompleted(context.Background(), req)
+	req1 := s.newRespondActivityTaskCompletedRequest(uuid.New())
+	resp1, err := wh.RespondActivityTaskCompleted(context.Background(), req1)
 	s.NoError(err)
-	s.NotNil(resp)
+	s.NotNil(resp1)
+	req2 := s.newRespondActivityTaskFailedRequest(uuid.New())
+	resp2, err := wh.RespondActivityTaskFailed(context.Background(), req2)
+	s.NoError(err)
+	s.NotNil(resp2)
+	req3 := s.newRespondActivityTaskCanceledRequest(uuid.New())
+	resp3, err := wh.RespondActivityTaskCanceled(context.Background(), req3)
+	s.NoError(err)
+	s.NotNil(resp3)
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
@@ -1416,14 +1440,31 @@ func (s *workflowHandlerSuite) newConfig() *Config {
 }
 
 func (s *workflowHandlerSuite) newRespondActivityTaskCompletedRequest(tokenNamespaceId string) *workflowservice.RespondActivityTaskCompletedRequest {
-	token, _ := s.tokenSerializer.Serialize(&tokenspb.Task{
-		NamespaceId: tokenNamespaceId,
-	})
-
 	return &workflowservice.RespondActivityTaskCompletedRequest{
 		Namespace: s.testNamespace,
-		TaskToken: token,
+		TaskToken: s.newSerializedToken(tokenNamespaceId),
 	}
+}
+
+func (s *workflowHandlerSuite) newRespondActivityTaskFailedRequest(tokenNamespaceId string) *workflowservice.RespondActivityTaskFailedRequest {
+	return &workflowservice.RespondActivityTaskFailedRequest{
+		Namespace: s.testNamespace,
+		TaskToken: s.newSerializedToken(tokenNamespaceId),
+	}
+}
+
+func (s *workflowHandlerSuite) newRespondActivityTaskCanceledRequest(tokenNamespaceId string) *workflowservice.RespondActivityTaskCanceledRequest {
+	return &workflowservice.RespondActivityTaskCanceledRequest{
+		Namespace: s.testNamespace,
+		TaskToken: s.newSerializedToken(tokenNamespaceId),
+	}
+}
+
+func (s *workflowHandlerSuite) newSerializedToken(namespaceId string) []byte {
+	token, _ := s.tokenSerializer.Serialize(&tokenspb.Task{
+		NamespaceId: namespaceId,
+	})
+	return token
 }
 
 func newNamespaceCacheEntry(namespaceName string) *cache.NamespaceCacheEntry {
@@ -1436,6 +1477,8 @@ func newNamespaceCacheEntry(namespaceName string) *cache.NamespaceCacheEntry {
 func (s *workflowHandlerSuite) setupTokenNamespaceTest(tokenNamespace string, enforce bool) *WorkflowHandler {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(newNamespaceCacheEntry(tokenNamespace), nil).AnyTimes()
 	s.mockHistoryClient.EXPECT().RespondActivityTaskCompleted(context.Background(), gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().RespondActivityTaskFailed(context.Background(), gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().RespondActivityTaskCanceled(context.Background(), gomock.Any()).Return(nil, nil).AnyTimes()
 	cfg := s.newConfig()
 	cfg.EnableTokenNamespaceEnforcement = dynamicconfig.GetBoolPropertyFn(enforce)
 	return s.getWorkflowHandler(cfg)
