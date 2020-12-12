@@ -78,6 +78,7 @@ var (
 	errDLQTypeIsNotSupported                              = serviceerror.NewInvalidArgument("The DLQ type is not supported.")
 	errFailureMustHaveApplicationFailureInfo              = serviceerror.NewInvalidArgument("Failure must have ApplicationFailureInfo.")
 	errStatusFilterMustBeNotRunning                       = serviceerror.NewInvalidArgument("StatusFilter must be specified and must be not Running.")
+	errTokenNamespaceMismatch                             = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
 	errShuttingDown                                       = serviceerror.NewInternal("Shutting down")
 
 	errFailedUpdateDynamicConfig = serviceerror.NewInternal("Failed to update dynamic config, err: %v.")

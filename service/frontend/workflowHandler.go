@@ -27,6 +27,7 @@ package frontend
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -1349,7 +1350,9 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 // created for the workflow so new commands could be made.  Use the 'taskToken' provided as response of
 // PollActivityTaskQueue API call for completion. It fails with 'NotFoundFailure' if the taskToken is not valid
 // anymore due to activity timeout.
-func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedRequest) (_ *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
+func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context,
+	request *workflowservice.RespondActivityTaskCompletedRequest) (_ *workflowservice.RespondActivityTaskCompletedResponse,
+	retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskCompletedScope)
@@ -1384,14 +1387,19 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
+	namespaceName := namespaceEntry.GetInfo().Name
 	scope, sw := wh.startRequestProfileWithNamespace(
 		metrics.FrontendRespondActivityTaskCompletedScope,
-		namespaceEntry.GetInfo().Name,
+		namespaceName,
 	)
 	defer sw.Stop()
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
+	}
+
+	if err := wh.checkNamespaceMatch(request.Namespace, namespaceName, scope); err != nil {
+		return nil, err
 	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
@@ -1590,14 +1598,19 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 		return nil, wh.error(errFailureMustHaveApplicationFailureInfo, scope)
 	}
 
+	namespaceName := namespaceEntry.GetInfo().Name
 	scope, sw := wh.startRequestProfileWithNamespace(
 		metrics.FrontendRespondActivityTaskFailedScope,
-		namespaceEntry.GetInfo().Name,
+		namespaceName,
 	)
 	defer sw.Stop()
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
+	}
+
+	if err := wh.checkNamespaceMatch(request.Namespace, namespaceName, scope); err != nil {
+		return nil, err
 	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
@@ -1775,14 +1788,19 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		return nil, wh.error(err, scope)
 	}
 
+	namespaceName := namespaceEntry.GetInfo().Name
 	scope, sw := wh.startRequestProfileWithNamespace(
 		metrics.FrontendRespondActivityTaskCanceledScope,
-		namespaceEntry.GetInfo().Name,
+		namespaceName,
 	)
 	defer sw.Stop()
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
+	}
+
+	if err := wh.checkNamespaceMatch(request.Namespace, namespaceName, scope); err != nil {
+		return nil, err
 	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
@@ -3783,5 +3801,12 @@ func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 		return wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
+	return nil
+}
+
+func (wh *WorkflowHandler) checkNamespaceMatch(requestNamespace string, tokenNamespace string, scope metrics.Scope) error {
+	if !strings.EqualFold(requestNamespace, tokenNamespace) {
+		return wh.error(errTokenNamespaceMismatch, scope)
+	}
 	return nil
 }
