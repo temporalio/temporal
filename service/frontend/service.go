@@ -112,6 +112,9 @@ type Config struct {
 
 	// EnableServerVersionCheck disables periodic version checking performed by the frontend
 	EnableServerVersionCheck dynamicconfig.BoolPropertyFn
+
+	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
+	EnableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -153,6 +156,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		DefaultWorkflowRetryPolicy:             dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
 		DefaultWorkflowTaskTimeout:             dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		EnableServerVersionCheck:               dc.GetBoolProperty(dynamicconfig.EnableServerVersionCheck, os.Getenv("TEMPORAL_VERSION_CHECK_DISABLED") == ""),
+		EnableTokenNamespaceEnforcement:        dc.GetBoolProperty(dynamicconfig.EnableTokenNamespaceEnforcement, false),
 	}
 }
 

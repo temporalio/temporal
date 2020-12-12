@@ -3805,6 +3805,9 @@ func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 }
 
 func (wh *WorkflowHandler) checkNamespaceMatch(requestNamespace string, tokenNamespace string, scope metrics.Scope) error {
+	if !wh.config.EnableTokenNamespaceEnforcement() {
+		return nil
+	}
 	if !strings.EqualFold(requestNamespace, tokenNamespace) {
 		return wh.error(errTokenNamespaceMismatch, scope)
 	}
