@@ -884,7 +884,9 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 // event in the history for that session.  Use the 'taskToken' provided as response of PollWorkflowTaskQueue API call
 // for completing the WorkflowTask.
 // The response could contain a new workflow task if there is one or if the request asking for one.
-func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(ctx context.Context, request *workflowservice.RespondWorkflowTaskCompletedRequest) (_ *workflowservice.RespondWorkflowTaskCompletedResponse, retError error) {
+func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(ctx context.Context,
+	request *workflowservice.RespondWorkflowTaskCompletedRequest) (_ *workflowservice.RespondWorkflowTaskCompletedResponse,
+	retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondWorkflowTaskCompletedScope)
@@ -917,13 +919,19 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(ctx context.Context, req
 		return nil, wh.error(err, scope)
 	}
 
+	namespaceName := namespaceEntry.GetInfo().Name
 	scope, sw := wh.startRequestProfileWithNamespace(
-		metrics.FrontendRespondWorkflowTaskCompletedScope, namespaceEntry.GetInfo().Name,
+		metrics.FrontendRespondWorkflowTaskCompletedScope,
+		namespaceName,
 	)
 	defer sw.Stop()
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
+	}
+
+	if err := wh.checkNamespaceMatch(request.Namespace, namespaceName, scope); err != nil {
+		return nil, err
 	}
 
 	histResp, err := wh.GetHistoryClient().RespondWorkflowTaskCompleted(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
@@ -968,7 +976,9 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(ctx context.Context, req
 // WorkflowTaskFailedEvent written to the history and a new WorkflowTask created.  This API can be used by client to
 // either clear sticky taskqueue or report any panics during WorkflowTask processing.  Temporal will only append first
 // WorkflowTaskFailed event to the history of workflow execution for consecutive failures.
-func (wh *WorkflowHandler) RespondWorkflowTaskFailed(ctx context.Context, request *workflowservice.RespondWorkflowTaskFailedRequest) (_ *workflowservice.RespondWorkflowTaskFailedResponse, retError error) {
+func (wh *WorkflowHandler) RespondWorkflowTaskFailed(ctx context.Context,
+	request *workflowservice.RespondWorkflowTaskFailedRequest) (_ *workflowservice.RespondWorkflowTaskFailedResponse,
+	retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondWorkflowTaskFailedScope)
@@ -1000,13 +1010,19 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(ctx context.Context, reques
 		return nil, wh.error(err, scope)
 	}
 
+	namespaceName := namespaceEntry.GetInfo().Name
 	scope, sw := wh.startRequestProfileWithNamespace(
-		metrics.FrontendRespondWorkflowTaskFailedScope, namespaceEntry.GetInfo().Name,
+		metrics.FrontendRespondWorkflowTaskFailedScope,
+		namespaceName,
 	)
 	defer sw.Stop()
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
+	}
+
+	if err := wh.checkNamespaceMatch(request.Namespace, namespaceName, scope); err != nil {
+		return nil, err
 	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
@@ -1562,7 +1578,9 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 // created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
 // PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 // anymore due to activity timeout.
-func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, request *workflowservice.RespondActivityTaskFailedRequest) (_ *workflowservice.RespondActivityTaskFailedResponse, retError error) {
+func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context,
+	request *workflowservice.RespondActivityTaskFailedRequest) (_ *workflowservice.RespondActivityTaskFailedResponse,
+	retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskFailedScope)
@@ -2835,7 +2853,9 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 // RespondQueryTaskCompleted is called by application worker to complete a QueryTask (which is a WorkflowTask for query)
 // as a result of 'PollWorkflowTaskQueue' API call. Completing a QueryTask will unblock the client call to 'QueryWorkflow'
 // API and return the query result to client as a response to 'QueryWorkflow' API call.
-func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, request *workflowservice.RespondQueryTaskCompletedRequest) (_ *workflowservice.RespondQueryTaskCompletedResponse, retError error) {
+func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context,
+	request *workflowservice.RespondQueryTaskCompletedRequest) (_ *workflowservice.RespondQueryTaskCompletedResponse,
+	retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondQueryTaskCompletedScope)
@@ -2866,14 +2886,19 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 		return nil, wh.error(err, scope)
 	}
 
+	namespaceName := namespaceEntry.GetInfo().Name
 	scope, sw := wh.startRequestProfileWithNamespace(
 		metrics.FrontendRespondQueryTaskCompletedScope,
-		namespaceEntry.GetInfo().Name,
+		namespaceName,
 	)
 	defer sw.Stop()
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
+	}
+
+	if err := wh.checkNamespaceMatch(request.Namespace, namespaceName, scope); err != nil {
+		return nil, err
 	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
