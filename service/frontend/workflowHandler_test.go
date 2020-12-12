@@ -47,6 +47,7 @@ import (
 
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -61,6 +62,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/dynamicconfig"
 	dc "go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -93,6 +95,8 @@ type (
 		mockArchiverProvider   *provider.MockArchiverProvider
 		mockHistoryArchiver    *archiver.HistoryArchiverMock
 		mockVisibilityArchiver *archiver.VisibilityArchiverMock
+
+		tokenSerializer common.TaskTokenSerializer
 
 		testNamespace   string
 		testNamespaceID string
@@ -134,9 +138,10 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockHistoryArchiver = &archiver.HistoryArchiverMock{}
 	s.mockVisibilityArchiver = &archiver.VisibilityArchiverMock{}
 
+	s.tokenSerializer = common.NewProtoTaskTokenSerializer()
+
 	mockMonitor := s.mockResource.MembershipMonitor
 	mockMonitor.EXPECT().GetMemberCount(common.FrontendServiceName).Return(5, nil).AnyTimes()
-
 }
 
 func (s *workflowHandlerSuite) TearDownTest() {
@@ -1382,8 +1387,58 @@ func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	}
 }
 
+func (s *workflowHandlerSuite) TestTokenNamespaceEnforcementDisabled() {
+	wh := s.setupTokenNamespaceTest("wrong-namespace", false)
+	req := s.newRespondActivityTaskCompletedRequest(uuid.New())
+	resp, err := wh.RespondActivityTaskCompleted(context.Background(), req)
+	s.NoError(err)
+	s.NotNil(resp)
+}
+
+func (s *workflowHandlerSuite) TestTokenNamespaceEnforcementEnabledMismatch() {
+	wh := s.setupTokenNamespaceTest("wrong-namespace", true)
+	req := s.newRespondActivityTaskCompletedRequest(uuid.New())
+	resp, err := wh.RespondActivityTaskCompleted(context.Background(), req)
+	s.Error(err)
+	s.Nil(resp)
+}
+
+func (s *workflowHandlerSuite) TestTokenNamespaceEnforcementEnabledMatch() {
+	wh := s.setupTokenNamespaceTest(s.testNamespace, true)
+	req := s.newRespondActivityTaskCompletedRequest(uuid.New())
+	resp, err := wh.RespondActivityTaskCompleted(context.Background(), req)
+	s.NoError(err)
+	s.NotNil(resp)
+}
+
 func (s *workflowHandlerSuite) newConfig() *Config {
 	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.mockResource.GetLogger()), numHistoryShards, false)
+}
+
+func (s *workflowHandlerSuite) newRespondActivityTaskCompletedRequest(tokenNamespaceId string) *workflowservice.RespondActivityTaskCompletedRequest {
+	token, _ := s.tokenSerializer.Serialize(&tokenspb.Task{
+		NamespaceId: tokenNamespaceId,
+	})
+
+	return &workflowservice.RespondActivityTaskCompletedRequest{
+		Namespace: s.testNamespace,
+		TaskToken: token,
+	}
+}
+
+func newNamespaceCacheEntry(namespaceName string) *cache.NamespaceCacheEntry {
+	info := &persistencespb.NamespaceInfo{
+		Name: namespaceName,
+	}
+	return cache.NewLocalNamespaceCacheEntryForTest(info, nil, "", nil)
+}
+
+func (s *workflowHandlerSuite) setupTokenNamespaceTest(tokenNamespace string, enforce bool) *WorkflowHandler {
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(newNamespaceCacheEntry(tokenNamespace), nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().RespondActivityTaskCompleted(context.Background(), gomock.Any()).Return(nil, nil).AnyTimes()
+	cfg := s.newConfig()
+	cfg.EnableTokenNamespaceEnforcement = dynamicconfig.GetBoolPropertyFn(enforce)
+	return s.getWorkflowHandler(cfg)
 }
 
 func updateRequest(
