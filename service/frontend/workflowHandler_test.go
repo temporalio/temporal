@@ -1388,51 +1388,46 @@ func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 }
 
 func (s *workflowHandlerSuite) TestTokenNamespaceEnforcementDisabled() {
-	wh := s.setupTokenNamespaceTest("wrong-namespace", false)
-	req1 := s.newRespondActivityTaskCompletedRequest(uuid.New())
-	resp1, err := wh.RespondActivityTaskCompleted(context.Background(), req1)
-	s.NoError(err)
-	s.NotNil(resp1)
-	req2 := s.newRespondActivityTaskFailedRequest(uuid.New())
-	resp2, err := wh.RespondActivityTaskFailed(context.Background(), req2)
-	s.NoError(err)
-	s.NotNil(resp2)
-	req3 := s.newRespondActivityTaskCanceledRequest(uuid.New())
-	resp3, err := wh.RespondActivityTaskCanceled(context.Background(), req3)
-	s.NoError(err)
-	s.NotNil(resp3)
+	s.executeTokenTestCases("wrong-namespace", false, false, false)
 }
 
 func (s *workflowHandlerSuite) TestTokenNamespaceEnforcementEnabledMismatch() {
-	wh := s.setupTokenNamespaceTest("wrong-namespace", true)
-	req1 := s.newRespondActivityTaskCompletedRequest(uuid.New())
-	resp1, err := wh.RespondActivityTaskCompleted(context.Background(), req1)
-	s.Error(err)
-	s.Nil(resp1)
-	req2 := s.newRespondActivityTaskFailedRequest(uuid.New())
-	resp2, err := wh.RespondActivityTaskFailed(context.Background(), req2)
-	s.Error(err)
-	s.Nil(resp2)
-	req3 := s.newRespondActivityTaskCanceledRequest(uuid.New())
-	resp3, err := wh.RespondActivityTaskCanceled(context.Background(), req3)
-	s.Error(err)
-	s.Nil(resp3)
+	s.executeTokenTestCases("wrong-namespace", true, true, true)
 }
 
 func (s *workflowHandlerSuite) TestTokenNamespaceEnforcementEnabledMatch() {
-	wh := s.setupTokenNamespaceTest(s.testNamespace, true)
+	s.executeTokenTestCases(s.testNamespace, true, true, true)
+}
+
+func (s *workflowHandlerSuite) executeTokenTestCases(tokenNamesoace string, enforceNamespaceMatch bool,
+	isErrorExpected bool, isNilExpected bool) {
+	wh := s.setupTokenNamespaceTest(tokenNamesoace, enforceNamespaceMatch)
+
 	req1 := s.newRespondActivityTaskCompletedRequest(uuid.New())
 	resp1, err := wh.RespondActivityTaskCompleted(context.Background(), req1)
-	s.NoError(err)
-	s.NotNil(resp1)
+	s.checkResponse(err, resp1, isErrorExpected, isNilExpected)
+
 	req2 := s.newRespondActivityTaskFailedRequest(uuid.New())
 	resp2, err := wh.RespondActivityTaskFailed(context.Background(), req2)
-	s.NoError(err)
-	s.NotNil(resp2)
+	s.checkResponse(err, resp2, isErrorExpected, isNilExpected)
+
 	req3 := s.newRespondActivityTaskCanceledRequest(uuid.New())
 	resp3, err := wh.RespondActivityTaskCanceled(context.Background(), req3)
-	s.NoError(err)
-	s.NotNil(resp3)
+	s.checkResponse(err, resp3, isErrorExpected, isNilExpected)
+}
+
+func (s *workflowHandlerSuite) checkResponse(err error, response interface{},
+	isErrorExpected bool, isNilExpected bool) {
+	if isErrorExpected {
+		s.Error(err)
+	} else {
+		s.NoError(err)
+	}
+	if isNilExpected {
+		s.Nil(response)
+	} else {
+		s.NotNil(response)
+	}
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
