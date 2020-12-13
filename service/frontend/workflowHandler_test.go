@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -85,6 +86,7 @@ type (
 		mockNamespaceCache  *cache.MockNamespaceCache
 		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata *cluster.MockMetadata
+		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
 
 		mockProducer           *mocks.KafkaProducer
 		mockMessagingClient    messaging.Client
@@ -132,6 +134,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockVisibilityMgr = s.mockResource.VisibilityMgr
 	s.mockArchivalMetadata = s.mockResource.ArchivalMetadata
 	s.mockArchiverProvider = s.mockResource.ArchiverProvider
+	s.mockMatchingClient = s.mockResource.MatchingClient
 
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
@@ -1396,24 +1399,37 @@ func (s *workflowHandlerSuite) TestTokenNamespaceEnforcementEnabledMismatch() {
 }
 
 func (s *workflowHandlerSuite) TestTokenNamespaceEnforcementEnabledMatch() {
-	s.executeTokenTestCases(s.testNamespace, true, true, true)
+	s.executeTokenTestCases(s.testNamespace, true, false, false)
 }
 
-func (s *workflowHandlerSuite) executeTokenTestCases(tokenNamesoace string, enforceNamespaceMatch bool,
+func (s *workflowHandlerSuite) executeTokenTestCases(tokenNamespace string, enforceNamespaceMatch bool,
 	isErrorExpected bool, isNilExpected bool) {
-	wh := s.setupTokenNamespaceTest(tokenNamesoace, enforceNamespaceMatch)
+	ctx := context.Background()
+	wh := s.setupTokenNamespaceTest(tokenNamespace, enforceNamespaceMatch)
 
 	req1 := s.newRespondActivityTaskCompletedRequest(uuid.New())
-	resp1, err := wh.RespondActivityTaskCompleted(context.Background(), req1)
+	resp1, err := wh.RespondActivityTaskCompleted(ctx, req1)
 	s.checkResponse(err, resp1, isErrorExpected, isNilExpected)
 
 	req2 := s.newRespondActivityTaskFailedRequest(uuid.New())
-	resp2, err := wh.RespondActivityTaskFailed(context.Background(), req2)
+	resp2, err := wh.RespondActivityTaskFailed(ctx, req2)
 	s.checkResponse(err, resp2, isErrorExpected, isNilExpected)
 
 	req3 := s.newRespondActivityTaskCanceledRequest(uuid.New())
-	resp3, err := wh.RespondActivityTaskCanceled(context.Background(), req3)
+	resp3, err := wh.RespondActivityTaskCanceled(ctx, req3)
 	s.checkResponse(err, resp3, isErrorExpected, isNilExpected)
+
+	req4 := s.newRespondWorkflowTaskCompletedRequest(uuid.New())
+	resp4, err := wh.RespondWorkflowTaskCompleted(ctx, req4)
+	s.checkResponse(err, resp4, isErrorExpected, isNilExpected)
+
+	req5 := s.newRespondWorkflowTaskFailedRequest(uuid.New())
+	resp5, err := wh.RespondWorkflowTaskFailed(ctx, req5)
+	s.checkResponse(err, resp5, isErrorExpected, isNilExpected)
+
+	req6 := s.newRespondQueryTaskCompletedRequest(uuid.New())
+	resp6, err := wh.RespondQueryTaskCompleted(ctx, req6)
+	s.checkResponse(err, resp6, isErrorExpected, isNilExpected)
 }
 
 func (s *workflowHandlerSuite) checkResponse(err error, response interface{},
@@ -1455,9 +1471,39 @@ func (s *workflowHandlerSuite) newRespondActivityTaskCanceledRequest(tokenNamesp
 	}
 }
 
+func (s *workflowHandlerSuite) newRespondWorkflowTaskCompletedRequest(tokenNamespaceId string) *workflowservice.RespondWorkflowTaskCompletedRequest {
+	return &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: s.testNamespace,
+		TaskToken: s.newSerializedToken(tokenNamespaceId),
+	}
+}
+
+func (s *workflowHandlerSuite) newRespondWorkflowTaskFailedRequest(tokenNamespaceId string) *workflowservice.RespondWorkflowTaskFailedRequest {
+	return &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: s.testNamespace,
+		TaskToken: s.newSerializedToken(tokenNamespaceId),
+	}
+}
+
+func (s *workflowHandlerSuite) newRespondQueryTaskCompletedRequest(tokenNamespaceId string) *workflowservice.RespondQueryTaskCompletedRequest {
+	return &workflowservice.RespondQueryTaskCompletedRequest{
+		Namespace: s.testNamespace,
+		TaskToken: s.newSerializedQueryTaskToken(tokenNamespaceId),
+	}
+}
+
 func (s *workflowHandlerSuite) newSerializedToken(namespaceId string) []byte {
 	token, _ := s.tokenSerializer.Serialize(&tokenspb.Task{
 		NamespaceId: namespaceId,
+	})
+	return token
+}
+
+func (s *workflowHandlerSuite) newSerializedQueryTaskToken(namespaceId string) []byte {
+	token, _ := s.tokenSerializer.SerializeQueryTaskToken(&tokenspb.QueryTask{
+		NamespaceId: namespaceId,
+		TaskQueue:   "some-task-queue",
+		TaskId:      "some-task-id",
 	})
 	return token
 }
@@ -1471,9 +1517,13 @@ func newNamespaceCacheEntry(namespaceName string) *cache.NamespaceCacheEntry {
 
 func (s *workflowHandlerSuite) setupTokenNamespaceTest(tokenNamespace string, enforce bool) *WorkflowHandler {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(newNamespaceCacheEntry(tokenNamespace), nil).AnyTimes()
-	s.mockHistoryClient.EXPECT().RespondActivityTaskCompleted(context.Background(), gomock.Any()).Return(nil, nil).AnyTimes()
-	s.mockHistoryClient.EXPECT().RespondActivityTaskFailed(context.Background(), gomock.Any()).Return(nil, nil).AnyTimes()
-	s.mockHistoryClient.EXPECT().RespondActivityTaskCanceled(context.Background(), gomock.Any()).Return(nil, nil).AnyTimes()
+	ctx := context.Background()
+	s.mockHistoryClient.EXPECT().RespondActivityTaskCompleted(ctx, gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().RespondActivityTaskFailed(ctx, gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().RespondActivityTaskCanceled(ctx, gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().RespondWorkflowTaskCompleted(ctx, gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().RespondWorkflowTaskFailed(ctx, gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockMatchingClient.EXPECT().RespondQueryTaskCompleted(ctx, gomock.Any()).Return(nil, nil).AnyTimes()
 	cfg := s.newConfig()
 	cfg.EnableTokenNamespaceEnforcement = dynamicconfig.GetBoolPropertyFn(enforce)
 	return s.getWorkflowHandler(cfg)
