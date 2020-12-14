@@ -36,6 +36,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -58,6 +59,8 @@ type (
 		mockVisibilityManager *mocks.VisibilityManager
 		mockHistoryV2Manager  *mocks.HistoryV2Manager
 		mockArchivalClient    *archiver.ClientMock
+		mockNamespaceCache    *cache.MockNamespaceCache
+		mockClusterMetadata   *cluster.MockMetadata
 
 		timerQueueTaskExecutorBase *timerQueueTaskExecutorBase
 	}
@@ -100,6 +103,8 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) SetupTest() {
 	s.mockVisibilityManager = s.mockShard.Resource.VisibilityMgr
 	s.mockHistoryV2Manager = s.mockShard.Resource.HistoryMgr
 	s.mockArchivalClient = &archiver.ClientMock{}
+	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 
 	logger := s.mockShard.GetLogger()
 
@@ -135,21 +140,15 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestDeleteWorkflow_NoErr() {
 	}
 
 	s.mockWorkflowExecutionContext.EXPECT().clear().Times(1)
-	s.mockWorkflowExecutionContext.EXPECT().updateWorkflowExecutionWithNew(
-		gomock.Any(),
-		persistence.UpdateWorkflowModeBypassCurrent,
-		nil, // no new workflow
-		nil, // no new workflow
-		transactionPolicyPassive,
-		nil,
-	).Times(1)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testGlobalNamespaceEntry, nil).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockExecutionManager.On("AddTasks", mock.Anything).Return(nil).Once()
 
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockHistoryV2Manager.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
 	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil).Times(1)
-	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil).AnyTimes()
-	s.mockMutableState.EXPECT().AddVisibilityTasks(gomock.Any()).Times(1)
 
 	err := s.timerQueueTaskExecutorBase.deleteWorkflow(task, s.mockWorkflowExecutionContext, s.mockMutableState)
 	s.NoError(err)
@@ -160,19 +159,13 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestArchiveHistory_NoErr_InlineArchi
 		HistorySize: 1024,
 	}, nil).Times(1)
 	s.mockWorkflowExecutionContext.EXPECT().clear().Times(1)
-	s.mockWorkflowExecutionContext.EXPECT().updateWorkflowExecutionWithNew(
-		gomock.Any(),
-		persistence.UpdateWorkflowModeBypassCurrent,
-		nil, // no new workflow
-		nil, // no new workflow
-		transactionPolicyPassive,
-		nil,
-	).Times(1)
-
 	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil).Times(1)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil).Times(1)
 	s.mockMutableState.EXPECT().GetNextEventID().Return(int64(101)).Times(1)
-	s.mockMutableState.EXPECT().AddVisibilityTasks(gomock.Any()).Times(1)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testGlobalNamespaceEntry, nil).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockExecutionManager.On("AddTasks", mock.Anything).Return(nil).Once()
 
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
