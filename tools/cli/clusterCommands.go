@@ -62,8 +62,8 @@ func GetSearchAttributes(c *cli.Context) {
 	table.Render()
 }
 
-// CheckHealth check frontend health.
-func CheckHealth(c *cli.Context) {
+// HealthCheck check frontend health.
+func HealthCheck(c *cli.Context) {
 	healthClient := cFactory.HealthClient(c)
 	ctx, cancel := newContext(c)
 	defer cancel()

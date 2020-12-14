@@ -29,10 +29,10 @@ import "github.com/urfave/cli"
 func newClusterCommands() []cli.Command {
 	return []cli.Command{
 		{
-			Name:  "check-health",
+			Name:  "health",
 			Usage: "check health of frontend service.",
 			Action: func(c *cli.Context) {
-				CheckHealth(c)
+				HealthCheck(c)
 			},
 		},
 		{
