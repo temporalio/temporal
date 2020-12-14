@@ -37,6 +37,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/auth"
@@ -48,6 +49,7 @@ type ClientFactory interface {
 	FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient
 	AdminClient(c *cli.Context) adminservice.AdminServiceClient
 	SDKClient(c *cli.Context, namespace string) sdkclient.Client
+	HealthClient(c *cli.Context) healthpb.HealthClient
 }
 
 type clientFactory struct {
@@ -73,14 +75,14 @@ func (b *clientFactory) FrontendClient(c *cli.Context) workflowservice.WorkflowS
 	return workflowservice.NewWorkflowServiceClient(connection)
 }
 
-// AdminClient builds an admin client (based on server side thrift interface)
+// AdminClient builds an admin client.
 func (b *clientFactory) AdminClient(c *cli.Context) adminservice.AdminServiceClient {
 	connection, _ := b.createGRPCConnection(c)
 
 	return adminservice.NewAdminServiceClient(connection)
 }
 
-// AdminClient builds an admin client (based on server side thrift interface)
+// SDKClient builds an SDK client.
 func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Client {
 	hostPort := c.GlobalString(FlagAddress)
 	if hostPort == "" {
@@ -106,6 +108,13 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 	}
 
 	return sdkClient
+}
+
+// HealthClient builds a health client.
+func (b *clientFactory) HealthClient(c *cli.Context) healthpb.HealthClient {
+	connection, _ := b.createGRPCConnection(c)
+
+	return healthpb.NewHealthClient(connection)
 }
 
 func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, error) {

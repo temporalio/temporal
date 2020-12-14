@@ -25,11 +25,13 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"sort"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 // GetSearchAttributes get valid search attributes
@@ -54,4 +56,28 @@ func GetSearchAttributes(c *cli.Context) {
 	sort.Sort(byKey(rows))
 	table.AppendBulk(rows)
 	table.Render()
+}
+
+// CheckHealth check frontend health.
+func CheckHealth(c *cli.Context) {
+	healthClient := cFactory.HealthClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	request := &healthpb.HealthCheckRequest{
+		Service: "temporal.api.workflowservice.v1.WorkflowService",
+	}
+	resp, err := healthClient.Check(ctx, request)
+
+	if err != nil {
+		ErrorAndExit("Failed to get health check status.", err)
+	}
+
+	fmt.Printf("%s: ", request.GetService())
+	if resp.Status != healthpb.HealthCheckResponse_SERVING {
+		fmt.Println(colorRed(resp.Status))
+		osExit(1)
+	}
+
+	fmt.Println(colorGreen(resp.Status))
 }
