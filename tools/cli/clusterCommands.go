@@ -34,6 +34,10 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
+const (
+	fullWorkflowServiceName = "temporal.api.workflowservice.v1.WorkflowService"
+)
+
 // GetSearchAttributes get valid search attributes
 func GetSearchAttributes(c *cli.Context) {
 	wfClient := getWorkflowClientWithOptionalNamespace(c)
@@ -65,12 +69,12 @@ func CheckHealth(c *cli.Context) {
 	defer cancel()
 
 	request := &healthpb.HealthCheckRequest{
-		Service: "temporal.api.workflowservice.v1.WorkflowService",
+		Service: fullWorkflowServiceName,
 	}
 	resp, err := healthClient.Check(ctx, request)
 
 	if err != nil {
-		ErrorAndExit("Failed to get health check status.", err)
+		ErrorAndExit(fmt.Sprintf("Failed to get %q health check status.", request.GetService()), err)
 	}
 
 	fmt.Printf("%s: ", request.GetService())

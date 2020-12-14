@@ -30,7 +30,7 @@ func newClusterCommands() []cli.Command {
 	return []cli.Command{
 		{
 			Name:  "check-health",
-			Usage: "check health check of frontend service.",
+			Usage: "check health of frontend service.",
 			Action: func(c *cli.Context) {
 				CheckHealth(c)
 			},
