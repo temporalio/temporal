@@ -36,13 +36,13 @@ const (
 )
 
 // @@@SNIPSTART temporal-common-authorization-authorizer-calltarget
-// CallTarget is input for authorizer to make decision.
-// It can be extended in future if required auth on resources like WorkflowType and TaskQueue
+// CallTarget is contains information for Authorizer to make a decision.
+// It can be extended to include resources like WorkflowType and TaskQueue
 type CallTarget struct {
-	// The `APIName` field must be a string of the API name.
+	// APIName must be the full API function name.
 	// Example: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution".
 	APIName   string
-	// If a Namespace is not being targeted, `Namespace` can be set to an empty string.
+	// If a Namespace is not being targeted this be set to an empty string.
 	Namespace string
 }
 // @@@SNIPEND
@@ -52,10 +52,13 @@ type (
 	Result struct {
 		Decision Decision
 	}
+
+	// Decision is enum type for auth decision
+	Decision int
 )
 
 // @@@SNIPSTART temporal-common-authorization-authorizer-interface
-// Authorizer is an interface for authorization
+// Authorizer is an interface for implementing authorization logic
 type Authorizer interface {
 	Authorize(ctx context.Context, caller *Claims, target *CallTarget) (Result, error)
 }
