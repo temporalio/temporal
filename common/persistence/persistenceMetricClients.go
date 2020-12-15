@@ -366,6 +366,20 @@ func (p *workflowExecutionPersistenceClient) ListConcreteExecutions(request *Lis
 	return response, err
 }
 
+func (p *workflowExecutionPersistenceClient) AddTasks(request *AddTasksRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceAddTasksScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceAddTasksScope, metrics.PersistenceLatency)
+	err := p.persistence.AddTasks(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceGetTransferTaskScope, err)
+	}
+
+	return err
+}
+
 func (p *workflowExecutionPersistenceClient) GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetTransferTaskScope, metrics.PersistenceRequests)
 

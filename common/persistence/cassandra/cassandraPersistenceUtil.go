@@ -155,8 +155,8 @@ func applyWorkflowMutationBatch(
 		workflowID,
 		runID,
 		workflowMutation.TransferTasks,
-		workflowMutation.ReplicationTasks,
 		workflowMutation.TimerTasks,
+		workflowMutation.ReplicationTasks,
 		workflowMutation.VisibilityTasks,
 	)
 }
@@ -267,8 +267,8 @@ func applyWorkflowSnapshotBatchAsReset(
 		workflowID,
 		runID,
 		workflowSnapshot.TransferTasks,
-		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.TimerTasks,
+		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.VisibilityTasks,
 	)
 }
@@ -375,8 +375,8 @@ func applyWorkflowSnapshotBatchAsNew(
 		workflowID,
 		runID,
 		workflowSnapshot.TransferTasks,
-		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.TimerTasks,
+		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.VisibilityTasks,
 	)
 }
@@ -546,8 +546,8 @@ func applyTasks(
 	workflowID string,
 	runID string,
 	transferTasks []p.Task,
-	replicationTasks []p.Task,
 	timerTasks []p.Task,
+	replicationTasks []p.Task,
 	visibilityTasks []p.Task,
 ) error {
 

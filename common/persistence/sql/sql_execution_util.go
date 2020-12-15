@@ -99,8 +99,8 @@ func applyWorkflowMutationTx(
 		workflowID,
 		runID,
 		workflowMutation.TransferTasks,
-		workflowMutation.ReplicationTasks,
 		workflowMutation.TimerTasks,
+		workflowMutation.ReplicationTasks,
 		workflowMutation.VisibilityTasks,
 	); err != nil {
 		return err
@@ -257,8 +257,8 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID,
 		workflowSnapshot.TransferTasks,
-		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.TimerTasks,
+		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.VisibilityTasks,
 	); err != nil {
 		return err
@@ -445,8 +445,8 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowID,
 		runID,
 		workflowSnapshot.TransferTasks,
-		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.TimerTasks,
+		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.VisibilityTasks,
 	); err != nil {
 		return err
@@ -535,8 +535,8 @@ func applyTasks(
 	workflowID string,
 	runID string,
 	transferTasks []p.Task,
-	replicationTasks []p.Task,
 	timerTasks []p.Task,
+	replicationTasks []p.Task,
 	visibilityTasks []p.Task,
 ) error {
 
