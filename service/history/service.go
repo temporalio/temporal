@@ -106,12 +106,7 @@ func NewService(
 			}
 
 			visibilityConfigForES := &config.VisibilityConfig{
-				EnableSampling:         serviceConfig.EnableVisibilitySampling,
-				VisibilityOpenMaxQPS:   serviceConfig.VisibilityOpenMaxQPS,
-				VisibilityClosedMaxQPS: serviceConfig.VisibilityClosedMaxQPS,
-				VisibilityListMaxQPS:   serviceConfig.ESVisibilityListMaxQPS,
 				ESIndexMaxResultWindow: serviceConfig.ESIndexMaxResultWindow,
-				MaxQPS:                 serviceConfig.PersistenceMaxQPS,
 				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
 				ESProcessorAckTimeout:  serviceConfig.ESProcessorAckTimeout,
 			}

@@ -1061,6 +1061,29 @@ func createVisibilityTasks(
 	return nil
 }
 
+func assertNotCurrentExecution(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	shardID int32,
+	namespaceID primitives.UUID,
+	workflowID string,
+	runID primitives.UUID,
+) error {
+	currentRow, err := tx.LockCurrentExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// allow bypassing no current record
+			return nil
+		}
+		return serviceerror.NewInternal(fmt.Sprintf("assertCurrentExecution failed. Unable to load current record. Error: %v", err))
+	}
+	return assertRunIDMismatch(runID, currentRow.RunID)
+}
+
 func assertRunIDAndUpdateCurrentExecution(
 	ctx context.Context,
 	tx sqlplugin.Tx,

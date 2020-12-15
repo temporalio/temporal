@@ -1249,7 +1249,13 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 
 	switch request.Mode {
 	case p.UpdateWorkflowModeBypassCurrent:
-		// do nothing
+		if err := d.assertNotCurrentExecution(
+			namespaceID,
+			workflowID,
+			runID); err != nil {
+			return err
+		}
+
 	case p.UpdateWorkflowModeUpdateCurrent:
 		if newWorkflow != nil {
 			newLastWriteVersion := newWorkflow.LastWriteVersion
@@ -1539,7 +1545,13 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 
 	switch request.Mode {
 	case p.ConflictResolveWorkflowModeBypassCurrent:
-		// do nothing
+		if err := d.assertNotCurrentExecution(
+			namespaceID,
+			workflowID,
+			resetWorkflow.ExecutionState.RunId); err != nil {
+			return err
+		}
+
 	case p.ConflictResolveWorkflowModeUpdateCurrent:
 		executionInfo := resetWorkflow.ExecutionInfo
 		executionState := resetWorkflow.ExecutionState
@@ -1755,6 +1767,30 @@ GetFailureReasonLoop:
 		Msg: fmt.Sprintf("Failed to reset mutable state. ShardId: %v, RangeId: %v, Condition: %v, Request Current RunId: %v, columns: (%v)",
 			d.shardID, requestRangeID, requestCondition, requestConditionalRunID, strings.Join(columns, ",")),
 	}
+}
+
+func (d *cassandraPersistence) assertNotCurrentExecution(
+	namespaceID string,
+	workflowID string,
+	runID string,
+) error {
+
+	if resp, err := d.GetCurrentExecution(&p.GetCurrentExecutionRequest{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+	}); err != nil {
+		if _, ok := err.(*serviceerror.NotFound); ok {
+			// allow bypassing no current record
+			return nil
+		}
+		return err
+	} else if resp.RunID == runID {
+		return &p.ConditionFailedError{
+			Msg: fmt.Sprintf("Assertion on current record failed. Current run ID is not expected: %v", resp.RunID),
+		}
+	}
+
+	return nil
 }
 
 func (d *cassandraPersistence) DeleteWorkflowExecution(request *p.DeleteWorkflowExecutionRequest) error {

@@ -444,6 +444,34 @@ func (mr *MockContextMockRecorder) UpdateTransferClusterAckLevel(cluster, ackLev
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTransferClusterAckLevel", reflect.TypeOf((*MockContext)(nil).UpdateTransferClusterAckLevel), cluster, ackLevel)
 }
 
+// GetVisibilityAckLevel mocks base method.
+func (m *MockContext) GetVisibilityAckLevel() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVisibilityAckLevel")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetVisibilityAckLevel indicates an expected call of GetVisibilityAckLevel.
+func (mr *MockContextMockRecorder) GetVisibilityAckLevel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityAckLevel", reflect.TypeOf((*MockContext)(nil).GetVisibilityAckLevel))
+}
+
+// UpdateVisibilityAckLevel mocks base method.
+func (m *MockContext) UpdateVisibilityAckLevel(ackLevel int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateVisibilityAckLevel", ackLevel)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateVisibilityAckLevel indicates an expected call of UpdateVisibilityAckLevel.
+func (mr *MockContextMockRecorder) UpdateVisibilityAckLevel(ackLevel interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateVisibilityAckLevel", reflect.TypeOf((*MockContext)(nil).UpdateVisibilityAckLevel), ackLevel)
+}
+
 // GetReplicatorAckLevel mocks base method.
 func (m *MockContext) GetReplicatorAckLevel() int64 {
 	m.ctrl.T.Helper()
@@ -754,17 +782,31 @@ func (mr *MockContextMockRecorder) ResetWorkflowExecution(request interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).ResetWorkflowExecution), request)
 }
 
-// AppendHistoryV2Events mocks base method.
-func (m *MockContext) AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, namespaceID string, execution v1.WorkflowExecution) (int, error) {
+// AddTasks mocks base method.
+func (m *MockContext) AddTasks(request *persistence.AddTasksRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppendHistoryV2Events", request, namespaceID, execution)
+	ret := m.ctrl.Call(m, "AddTasks", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddTasks indicates an expected call of AddTasks.
+func (mr *MockContextMockRecorder) AddTasks(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockContext)(nil).AddTasks), request)
+}
+
+// AppendHistoryEvents mocks base method.
+func (m *MockContext) AppendHistoryEvents(request *persistence.AppendHistoryNodesRequest, namespaceID string, execution v1.WorkflowExecution) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendHistoryEvents", request, namespaceID, execution)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// AppendHistoryV2Events indicates an expected call of AppendHistoryV2Events.
-func (mr *MockContextMockRecorder) AppendHistoryV2Events(request, namespaceID, execution interface{}) *gomock.Call {
+// AppendHistoryEvents indicates an expected call of AppendHistoryEvents.
+func (mr *MockContextMockRecorder) AppendHistoryEvents(request, namespaceID, execution interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryV2Events", reflect.TypeOf((*MockContext)(nil).AppendHistoryV2Events), request, namespaceID, execution)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryEvents", reflect.TypeOf((*MockContext)(nil).AppendHistoryEvents), request, namespaceID, execution)
 }

@@ -370,7 +370,16 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 
 	switch request.Mode {
 	case p.UpdateWorkflowModeBypassCurrent:
-		// do nothing
+		if err := assertNotCurrentExecution(ctx,
+			tx,
+			shardID,
+			namespaceID,
+			workflowID,
+			runID,
+		); err != nil {
+			return err
+		}
+
 	case p.UpdateWorkflowModeUpdateCurrent:
 		if newWorkflow != nil {
 			lastWriteVersion := newWorkflow.LastWriteVersion
@@ -586,7 +595,16 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 
 	switch request.Mode {
 	case p.ConflictResolveWorkflowModeBypassCurrent:
-		// do nothing
+		if err := assertNotCurrentExecution(ctx,
+			tx,
+			shardID,
+			namespaceID,
+			workflowID,
+			primitives.MustParseUUID(resetWorkflow.ExecutionState.RunId),
+		); err != nil {
+			return err
+		}
+
 	case p.ConflictResolveWorkflowModeUpdateCurrent:
 		executionState := resetWorkflow.ExecutionState
 		lastWriteVersion := resetWorkflow.LastWriteVersion
