@@ -571,7 +571,9 @@ Update_Loop:
 	return nil, ErrMaxAttemptsExceeded
 }
 
-func (s *ContextImpl) ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error {
+func (s *ContextImpl) ResetWorkflowExecution(
+	request *persistence.ResetWorkflowExecutionRequest,
+) error {
 
 	namespaceID := request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId
 	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
@@ -761,8 +763,64 @@ Reset_Loop:
 	return ErrMaxAttemptsExceeded
 }
 
-func (s *ContextImpl) AppendHistoryV2Events(
-	request *persistence.AppendHistoryNodesRequest, namespaceID string, execution commonpb.WorkflowExecution) (int, error) {
+func (s *ContextImpl) AddTasks(
+	request *persistence.AddTasksRequest,
+) error {
+	namespaceID := request.NamespaceID
+	workflowID := request.WorkflowID
+
+	// do not try to get namespace cache within shard lock
+	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	if err != nil {
+		return err
+	}
+
+	s.Lock()
+	defer s.Unlock()
+
+	transferMaxReadLevel := int64(0)
+	if err := s.allocateTaskIDsLocked(
+		namespaceEntry,
+		workflowID,
+		request.TransferTasks,
+		request.ReplicationTasks,
+		request.TimerTasks,
+		request.VisibilityTasks,
+		&transferMaxReadLevel,
+	); err != nil {
+		return err
+	}
+	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
+
+	request.RangeID = s.getRangeID()
+	err = s.executionManager.AddTasks(request)
+	switch err.(type) {
+	case nil:
+		return nil
+	case *persistence.TimeoutError:
+		// noop
+
+	case *serviceerror.ResourceExhausted:
+		// noop
+
+	case *persistence.ShardOwnershipLostError:
+		s.closeShard()
+
+	default:
+		if err := s.renewRangeLocked(false); err != nil {
+			// At this point we have no choice but to unload the shard, so that it
+			// gets a new RangeID when it's reloaded.
+			s.closeShard()
+		}
+	}
+	return err
+}
+
+func (s *ContextImpl) AppendHistoryEvents(
+	request *persistence.AppendHistoryNodesRequest,
+	namespaceID string,
+	execution commonpb.WorkflowExecution,
+) (int, error) {
 
 	// NOTE: do not use generateNextTransferTaskIDLocked since
 	// generateNextTransferTaskIDLocked is not guarded by lock

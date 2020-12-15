@@ -99,8 +99,8 @@ func applyWorkflowMutationTx(
 		workflowID,
 		runID,
 		workflowMutation.TransferTasks,
-		workflowMutation.ReplicationTasks,
 		workflowMutation.TimerTasks,
+		workflowMutation.ReplicationTasks,
 		workflowMutation.VisibilityTasks,
 	); err != nil {
 		return err
@@ -257,8 +257,8 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID,
 		workflowSnapshot.TransferTasks,
-		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.TimerTasks,
+		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.VisibilityTasks,
 	); err != nil {
 		return err
@@ -445,8 +445,8 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowID,
 		runID,
 		workflowSnapshot.TransferTasks,
-		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.TimerTasks,
+		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.VisibilityTasks,
 	); err != nil {
 		return err
@@ -535,8 +535,8 @@ func applyTasks(
 	workflowID string,
 	runID string,
 	transferTasks []p.Task,
-	replicationTasks []p.Task,
 	timerTasks []p.Task,
+	replicationTasks []p.Task,
 	visibilityTasks []p.Task,
 ) error {
 
@@ -1059,6 +1059,29 @@ func createVisibilityTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("createTransferTasks failed. Inserted %v instead of %v rows into transfer_tasks. Error: %v", rowsAffected, len(visibilityTasksRows), err))
 	}
 	return nil
+}
+
+func assertNotCurrentExecution(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	shardID int32,
+	namespaceID primitives.UUID,
+	workflowID string,
+	runID primitives.UUID,
+) error {
+	currentRow, err := tx.LockCurrentExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// allow bypassing no current record
+			return nil
+		}
+		return serviceerror.NewInternal(fmt.Sprintf("assertCurrentExecution failed. Unable to load current record. Error: %v", err))
+	}
+	return assertRunIDMismatch(runID, currentRow.RunID)
 }
 
 func assertRunIDAndUpdateCurrentExecution(

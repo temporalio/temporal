@@ -123,7 +123,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 	msBuilder mutableState,
 ) error {
 
-	if err := t.deleteWorkflowVisibility(task, workflowContext, msBuilder); err != nil {
+	if err := t.deleteWorkflowVisibility(task); err != nil {
 		return err
 	}
 
@@ -190,7 +190,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 
 	// delete visibility record here regardless if it's been archived inline or not
 	// since the entire record is included as part of the archive request.
-	if err := t.deleteWorkflowVisibility(task, workflowContext, msBuilder); err != nil {
+	if err := t.deleteWorkflowVisibility(task); err != nil {
 		return err
 	}
 
@@ -264,8 +264,6 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 	task *persistencespb.TimerTaskInfo,
-	workflowContext workflowExecutionContext,
-	msBuilder mutableState,
 ) error {
 
 	if !t.config.DisableKafkaForVisibility() {
@@ -282,21 +280,22 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 		return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	}
 
-	now := t.shard.GetTimeSource().Now()
-	msBuilder.AddVisibilityTasks(&persistence.DeleteExecutionVisibilityTask{
-		// TaskID is set by shard
-		VisibilityTimestamp: now,
-		Version:             task.GetVersion(),
-	})
+	return t.shard.AddTasks(&persistence.AddTasksRequest{
+		// RangeID is set by shard
 
-	return workflowContext.updateWorkflowExecutionWithNew(
-		now,
-		persistence.UpdateWorkflowModeBypassCurrent,
-		nil, // no new workflow
-		nil, // no new workflow
-		transactionPolicyPassive,
-		nil,
-	)
+		NamespaceID: task.GetNamespaceId(),
+		WorkflowID:  task.GetWorkflowId(),
+		RunID:       task.GetRunId(),
+
+		TransferTasks:    nil,
+		TimerTasks:       nil,
+		ReplicationTasks: nil,
+		VisibilityTasks: []persistence.Task{&persistence.DeleteExecutionVisibilityTask{
+			// TaskID is set by shard
+			VisibilityTimestamp: t.shard.GetTimeSource().Now(),
+			Version:             task.GetVersion(),
+		}},
+	})
 }
 
 func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(

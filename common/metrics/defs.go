@@ -156,6 +156,8 @@ const (
 	PersistenceGetCurrentExecutionScope
 	// PersistenceListConcreteExecutionsScope tracks ListConcreteExecutions calls made by service to persistence layer
 	PersistenceListConcreteExecutionsScope
+	// PersistenceAddTasksScope tracks AddTasks calls made by service to persistence layer
+	PersistenceAddTasksScope
 	// PersistenceGetTransferTaskScope tracks GetTransferTask calls made by service to persistence layer
 	PersistenceGetTransferTaskScope
 	// PersistenceGetTransferTasksScope tracks GetTransferTasks calls made by service to persistence layer
@@ -1102,6 +1104,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceDeleteCurrentWorkflowExecutionScope:           {operation: "DeleteCurrentWorkflowExecution"},
 		PersistenceGetCurrentExecutionScope:                      {operation: "GetCurrentExecution"},
 		PersistenceListConcreteExecutionsScope:                   {operation: "ListConcreteExecutions"},
+		PersistenceAddTasksScope:                                 {operation: "AddTasks"},
 		PersistenceGetTransferTaskScope:                          {operation: "GetTransferTask"},
 		PersistenceGetTransferTasksScope:                         {operation: "GetTransferTasks"},
 		PersistenceCompleteTransferTaskScope:                     {operation: "CompleteTransferTask"},
