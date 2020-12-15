@@ -112,6 +112,7 @@ var keys = map[Key]string{
 	VisibilityArchivalQueryMaxRangeInDays: "frontend.visibilityArchivalQueryMaxRangeInDays",
 	VisibilityArchivalQueryMaxQPS:         "frontend.visibilityArchivalQueryMaxQPS",
 	EnableServerVersionCheck:              "frontend.enableServerVersionCheck",
+	EnableTokenNamespaceEnforcement:       "frontend.enableTokenNamespaceEnforcement",
 
 	// matching settings
 	MatchingRPS:                             "matching.rps",
@@ -427,6 +428,8 @@ const (
 	VisibilityArchivalQueryMaxQPS
 	// EnableServerVersionCheck is a flag that controls whether or not periodic version checking is enabled
 	EnableServerVersionCheck
+	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
+	EnableTokenNamespaceEnforcement
 
 	// key for matching
 
