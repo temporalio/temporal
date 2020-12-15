@@ -527,6 +527,12 @@ func (m *executionManagerImpl) ListConcreteExecutions(
 	return newResponse, nil
 }
 
+func (m *executionManagerImpl) AddTasks(
+	request *AddTasksRequest,
+) error {
+	return m.persistence.AddTasks(request)
+}
+
 // Transfer task related methods
 func (m *executionManagerImpl) GetTransferTask(
 	request *GetTransferTaskRequest,

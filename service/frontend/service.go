@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
@@ -198,7 +199,6 @@ func NewService(
 				VisibilityListMaxQPS:   serviceConfig.ESVisibilityListMaxQPS,
 				ESIndexMaxResultWindow: serviceConfig.ESIndexMaxResultWindow,
 				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
-				EnableSampling:         serviceConfig.EnableVisibilitySampling,
 			}
 			visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
 				nil, nil, params.MetricsClient, logger)
@@ -281,6 +281,9 @@ func (s *Service) Start() {
 
 	s.adminHandler = NewAdminHandler(s, s.params, s.config)
 	adminservice.RegisterAdminServiceServer(s.server, s.adminHandler)
+
+	reflection.Register(s.server)
+
 	s.versionChecker = NewVersionChecker(s, s.params, s.config)
 
 	// must start resource first

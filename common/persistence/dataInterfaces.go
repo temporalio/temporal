@@ -423,6 +423,20 @@ type (
 		PreviousRangeID int64
 	}
 
+	// AddTasksRequest is used to write new tasks
+	AddTasksRequest struct {
+		RangeID int64
+
+		NamespaceID string
+		WorkflowID  string
+		RunID       string
+
+		TransferTasks    []Task
+		TimerTasks       []Task
+		ReplicationTasks []Task
+		VisibilityTasks  []Task
+	}
+
 	// CreateWorkflowExecutionRequest is used to write a new workflow execution
 	CreateWorkflowExecutionRequest struct {
 		RangeID int64
@@ -1213,19 +1227,25 @@ type (
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
 
-		// Transfer task related methods
+		// Scan operations
+		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error)
+
+		// Tasks related APIs
+		AddTasks(request *AddTasksRequest) error
+
+		// transfer tasks
 		GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error)
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
 		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
 
-		// Visibility task related methods
-		GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error)
-		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
-		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
-		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
+		// timer tasks
+		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
+		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
+		CompleteTimerTask(request *CompleteTimerTaskRequest) error
+		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
 
-		// Replication task related methods
+		// replication tasks
 		GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error)
 		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
 		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
@@ -1235,14 +1255,11 @@ type (
 		DeleteReplicationTaskFromDLQ(request *DeleteReplicationTaskFromDLQRequest) error
 		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
 
-		// Timer related methods.
-		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
-		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
-		CompleteTimerTask(request *CompleteTimerTaskRequest) error
-		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
-
-		// Scan operations
-		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error)
+		// visibility tasks
+		GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error)
+		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
+		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
+		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
 	}
 
 	// ExecutionManagerFactory creates an instance of ExecutionManager for a given shard

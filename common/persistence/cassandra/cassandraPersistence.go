@@ -1249,7 +1249,13 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 
 	switch request.Mode {
 	case p.UpdateWorkflowModeBypassCurrent:
-		// do nothing
+		if err := d.assertNotCurrentExecution(
+			namespaceID,
+			workflowID,
+			runID); err != nil {
+			return err
+		}
+
 	case p.UpdateWorkflowModeUpdateCurrent:
 		if newWorkflow != nil {
 			newLastWriteVersion := newWorkflow.LastWriteVersion
@@ -1539,7 +1545,13 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 
 	switch request.Mode {
 	case p.ConflictResolveWorkflowModeBypassCurrent:
-		// do nothing
+		if err := d.assertNotCurrentExecution(
+			namespaceID,
+			workflowID,
+			resetWorkflow.ExecutionState.RunId); err != nil {
+			return err
+		}
+
 	case p.ConflictResolveWorkflowModeUpdateCurrent:
 		executionInfo := resetWorkflow.ExecutionInfo
 		executionState := resetWorkflow.ExecutionState
@@ -1757,6 +1769,30 @@ GetFailureReasonLoop:
 	}
 }
 
+func (d *cassandraPersistence) assertNotCurrentExecution(
+	namespaceID string,
+	workflowID string,
+	runID string,
+) error {
+
+	if resp, err := d.GetCurrentExecution(&p.GetCurrentExecutionRequest{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+	}); err != nil {
+		if _, ok := err.(*serviceerror.NotFound); ok {
+			// allow bypassing no current record
+			return nil
+		}
+		return err
+	} else if resp.RunID == runID {
+		return &p.ConditionFailedError{
+			Msg: fmt.Sprintf("Assertion on current record failed. Current run ID is not expected: %v", resp.RunID),
+		}
+	}
+
+	return nil
+}
+
 func (d *cassandraPersistence) DeleteWorkflowExecution(request *p.DeleteWorkflowExecutionRequest) error {
 	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
 		d.shardID,
@@ -1875,6 +1911,67 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 	response.NextPageToken = make([]byte, len(nextPageToken))
 	copy(response.NextPageToken, nextPageToken)
 	return response, nil
+}
+
+func (d *cassandraPersistence) AddTasks(request *p.AddTasksRequest) error {
+	batch := d.session.NewBatch(gocql.LoggedBatch)
+
+	if err := applyTasks(
+		batch,
+		d.shardID,
+		request.NamespaceID,
+		request.WorkflowID,
+		request.RunID,
+		request.TransferTasks,
+		request.TimerTasks,
+		request.ReplicationTasks,
+		request.VisibilityTasks,
+	); err != nil {
+		return err
+	}
+
+	batch.Query(templateUpdateLeaseQuery,
+		request.RangeID,
+		d.shardID,
+		rowTypeShard,
+		rowTypeShardNamespaceID,
+		rowTypeShardWorkflowID,
+		rowTypeShardRunID,
+		defaultVisibilityTimestamp,
+		rowTypeShardTaskID,
+		request.RangeID,
+	)
+
+	previous := make(map[string]interface{})
+	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
+	defer func() {
+		if iter != nil {
+			_ = iter.Close()
+		}
+	}()
+
+	if err != nil {
+		if isTimeoutError(err) {
+			// Write may have succeeded, but we don't know
+			// return this info to the caller so they have the option of trying to find out by executing a read
+			return &p.TimeoutError{Msg: fmt.Sprintf("AddTasks timed out. Error: %v", err)}
+		} else if isThrottlingError(err) {
+			return serviceerror.NewResourceExhausted(fmt.Sprintf("AddTasks operation failed. Error: %v", err))
+		}
+		return serviceerror.NewInternal(fmt.Sprintf("AddTasks operation failed. Error: %v", err))
+	}
+	if !applied {
+		if previousRangeID, ok := previous["range_id"].(int64); ok && previousRangeID != request.RangeID {
+			// CreateWorkflowExecution failed because rangeID was modified
+			return &p.ShardOwnershipLostError{
+				ShardID: d.shardID,
+				Msg:     fmt.Sprintf("Failed to add tasks.  Request RangeID: %v, Actual RangeID: %v", request.RangeID, previousRangeID),
+			}
+		} else {
+			return serviceerror.NewInternal("AddTasks operation failed: %v")
+		}
+	}
+	return nil
 }
 
 func (d *cassandraPersistence) GetTransferTask(request *p.GetTransferTaskRequest) (*p.GetTransferTaskResponse, error) {
