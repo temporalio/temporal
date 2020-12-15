@@ -198,7 +198,6 @@ func NewService(
 				VisibilityListMaxQPS:   serviceConfig.ESVisibilityListMaxQPS,
 				ESIndexMaxResultWindow: serviceConfig.ESIndexMaxResultWindow,
 				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
-				EnableSampling:         serviceConfig.EnableVisibilitySampling,
 			}
 			visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
 				nil, nil, params.MetricsClient, logger)
