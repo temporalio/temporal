@@ -229,14 +229,14 @@ type (
 		RecordVisibility    bool
 	}
 
-	// RecordWorkflowStartedTask identifites a transfer task for writing visibility open execution record
+	// Deprecated. RecordWorkflowStartedTask identifies a transfer task for writing visibility open execution record
 	RecordWorkflowStartedTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
 	}
 
-	// ResetWorkflowTask identifites a transfer task to reset workflow
+	// ResetWorkflowTask identifies a transfer task to reset workflow
 	ResetWorkflowTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
@@ -298,7 +298,7 @@ type (
 		Version                 int64
 	}
 
-	// UpsertWorkflowSearchAttributesTask identifies a transfer task for upsert search attributes
+	// Deprecated. UpsertWorkflowSearchAttributesTask identifies a transfer task for upsert search attributes
 	UpsertWorkflowSearchAttributesTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
@@ -364,6 +364,36 @@ type (
 		NewRunBranchToken   []byte
 	}
 
+	// StartExecutionVisibilityTask identifies a visibility task for start workflow execution.
+	StartExecutionVisibilityTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
+	}
+
+	// UpsertExecutionVisibilityTask identifies a visibility task for upsert workflow execution search attributes.
+	UpsertExecutionVisibilityTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		// this version is not used by task processing for validation,
+		// instead, the version is used by elastic search
+		Version int64
+	}
+
+	// CloseExecutionVisibilityTask identifies a visibility task for close workflow execution.
+	CloseExecutionVisibilityTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
+	}
+
+	// DeleteExecutionVisibilityTask identifies a visibility task for deletion of execution.
+	DeleteExecutionVisibilityTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
+	}
+
 	// SyncActivityTask is the replication task created for shipping activity info to other clusters
 	SyncActivityTask struct {
 		VisibilityTimestamp time.Time
@@ -391,6 +421,20 @@ type (
 	UpdateShardRequest struct {
 		ShardInfo       *persistencespb.ShardInfo
 		PreviousRangeID int64
+	}
+
+	// AddTasksRequest is used to write new tasks
+	AddTasksRequest struct {
+		RangeID int64
+
+		NamespaceID string
+		WorkflowID  string
+		RunID       string
+
+		TransferTasks    []Task
+		TimerTasks       []Task
+		ReplicationTasks []Task
+		VisibilityTasks  []Task
 	}
 
 	// CreateWorkflowExecutionRequest is used to write a new workflow execution
@@ -527,6 +571,7 @@ type (
 		TransferTasks    []Task
 		ReplicationTasks []Task
 		TimerTasks       []Task
+		VisibilityTasks  []Task
 
 		Condition int64
 		Checksum  *persistencespb.Checksum
@@ -548,6 +593,7 @@ type (
 		TransferTasks    []Task
 		ReplicationTasks []Task
 		TimerTasks       []Task
+		VisibilityTasks  []Task
 
 		Condition int64
 		Checksum  *persistencespb.Checksum
@@ -592,6 +638,31 @@ type (
 		NextPageToken []byte
 	}
 
+	// GetVisibilityTaskRequest is the request for GetVisibilityTask
+	GetVisibilityTaskRequest struct {
+		ShardID int32
+		TaskID  int64
+	}
+
+	// GetVisibilityTaskResponse is the response to GetVisibilityTask
+	GetVisibilityTaskResponse struct {
+		VisibilityTaskInfo *persistencespb.VisibilityTaskInfo
+	}
+
+	// GetVisibilityTasksRequest is used to read tasks from the visibility task queue
+	GetVisibilityTasksRequest struct {
+		ReadLevel     int64
+		MaxReadLevel  int64
+		BatchSize     int
+		NextPageToken []byte
+	}
+
+	// GetVisibilityTasksResponse is the response to GetVisibilityTasksRequest
+	GetVisibilityTasksResponse struct {
+		Tasks         []*persistencespb.VisibilityTaskInfo
+		NextPageToken []byte
+	}
+
 	// GetReplicationTaskRequest is the request for GetReplicationTask
 	GetReplicationTaskRequest struct {
 		ShardID int32
@@ -624,6 +695,17 @@ type (
 
 	// RangeCompleteTransferTaskRequest is used to complete a range of tasks in the transfer task queue
 	RangeCompleteTransferTaskRequest struct {
+		ExclusiveBeginTaskID int64
+		InclusiveEndTaskID   int64
+	}
+
+	// CompleteVisibilityTaskRequest is used to complete a task in the visibility task queue
+	CompleteVisibilityTaskRequest struct {
+		TaskID int64
+	}
+
+	// RangeCompleteVisibilityTaskRequest is used to complete a range of tasks in the visibility task queue
+	RangeCompleteVisibilityTaskRequest struct {
 		ExclusiveBeginTaskID int64
 		InclusiveEndTaskID   int64
 	}
@@ -1145,13 +1227,25 @@ type (
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
 
-		// Transfer task related methods
+		// Scan operations
+		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error)
+
+		// Tasks related APIs
+		AddTasks(request *AddTasksRequest) error
+
+		// transfer tasks
 		GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error)
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
 		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
 
-		// Replication task related methods
+		// timer tasks
+		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
+		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
+		CompleteTimerTask(request *CompleteTimerTaskRequest) error
+		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
+
+		// replication tasks
 		GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error)
 		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
 		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
@@ -1161,14 +1255,11 @@ type (
 		DeleteReplicationTaskFromDLQ(request *DeleteReplicationTaskFromDLQRequest) error
 		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
 
-		// Timer related methods.
-		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
-		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
-		CompleteTimerTask(request *CompleteTimerTaskRequest) error
-		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
-
-		// Scan operations
-		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error)
+		// visibility tasks
+		GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error)
+		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
+		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
+		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
 	}
 
 	// ExecutionManagerFactory creates an instance of ExecutionManager for a given shard
@@ -1891,6 +1982,146 @@ func (a *HistoryReplicationTask) GetVisibilityTimestamp() time.Time {
 // SetVisibilityTimestamp set the visibility timestamp
 func (a *HistoryReplicationTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
+}
+
+// GetType returns the type of the upsert search attributes transfer task
+func (t *StartExecutionVisibilityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION
+}
+
+// GetVersion returns the version of the upsert search attributes transfer task
+func (t *StartExecutionVisibilityTask) GetVersion() int64 {
+	return t.Version
+}
+
+// SetVersion returns the version of the upsert search attributes transfer task
+func (t *StartExecutionVisibilityTask) SetVersion(version int64) {
+	t.Version = version
+}
+
+// GetTaskID returns the sequence ID of the signal transfer task.
+func (t *StartExecutionVisibilityTask) GetTaskID() int64 {
+	return t.TaskID
+}
+
+// SetTaskID sets the sequence ID of the signal transfer task.
+func (t *StartExecutionVisibilityTask) SetTaskID(id int64) {
+	t.TaskID = id
+}
+
+// GetVisibilityTime get the visibility timestamp
+func (t *StartExecutionVisibilityTask) GetVisibilityTimestamp() time.Time {
+	return t.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp set the visibility timestamp
+func (t *StartExecutionVisibilityTask) SetVisibilityTimestamp(timestamp time.Time) {
+	t.VisibilityTimestamp = timestamp
+}
+
+// GetType returns the type of the upsert search attributes transfer task
+func (t *UpsertExecutionVisibilityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION
+}
+
+// GetVersion returns the version of the upsert search attributes transfer task
+func (t *UpsertExecutionVisibilityTask) GetVersion() int64 {
+	return t.Version
+}
+
+// SetVersion returns the version of the upsert search attributes transfer task
+func (t *UpsertExecutionVisibilityTask) SetVersion(version int64) {
+	t.Version = version
+}
+
+// GetTaskID returns the sequence ID of the signal transfer task.
+func (t *UpsertExecutionVisibilityTask) GetTaskID() int64 {
+	return t.TaskID
+}
+
+// SetTaskID sets the sequence ID of the signal transfer task.
+func (t *UpsertExecutionVisibilityTask) SetTaskID(id int64) {
+	t.TaskID = id
+}
+
+// GetVisibilityTime get the visibility timestamp
+func (t *UpsertExecutionVisibilityTask) GetVisibilityTimestamp() time.Time {
+	return t.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp set the visibility timestamp
+func (t *UpsertExecutionVisibilityTask) SetVisibilityTimestamp(timestamp time.Time) {
+	t.VisibilityTimestamp = timestamp
+}
+
+// GetType returns the type of the upsert search attributes transfer task
+func (t *CloseExecutionVisibilityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION
+}
+
+// GetVersion returns the version of the upsert search attributes transfer task
+func (t *CloseExecutionVisibilityTask) GetVersion() int64 {
+	return t.Version
+}
+
+// SetVersion returns the version of the upsert search attributes transfer task
+func (t *CloseExecutionVisibilityTask) SetVersion(version int64) {
+	t.Version = version
+}
+
+// GetTaskID returns the sequence ID of the signal transfer task.
+func (t *CloseExecutionVisibilityTask) GetTaskID() int64 {
+	return t.TaskID
+}
+
+// SetTaskID sets the sequence ID of the signal transfer task.
+func (t *CloseExecutionVisibilityTask) SetTaskID(id int64) {
+	t.TaskID = id
+}
+
+// GetVisibilityTime get the visibility timestamp
+func (t *CloseExecutionVisibilityTask) GetVisibilityTimestamp() time.Time {
+	return t.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp set the visibility timestamp
+func (t *CloseExecutionVisibilityTask) SetVisibilityTimestamp(timestamp time.Time) {
+	t.VisibilityTimestamp = timestamp
+}
+
+// GetType returns the type of the upsert search attributes transfer task
+func (t *DeleteExecutionVisibilityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION
+}
+
+// GetVersion returns the version of the upsert search attributes transfer task
+func (t *DeleteExecutionVisibilityTask) GetVersion() int64 {
+	return t.Version
+}
+
+// SetVersion returns the version of the upsert search attributes transfer task
+func (t *DeleteExecutionVisibilityTask) SetVersion(version int64) {
+	t.Version = version
+}
+
+// GetTaskID returns the sequence ID of the signal transfer task.
+func (t *DeleteExecutionVisibilityTask) GetTaskID() int64 {
+	return t.TaskID
+}
+
+// SetTaskID sets the sequence ID of the signal transfer task.
+func (t *DeleteExecutionVisibilityTask) SetTaskID(id int64) {
+	t.TaskID = id
+}
+
+// GetVisibilityTime get the visibility timestamp
+func (t *DeleteExecutionVisibilityTask) GetVisibilityTimestamp() time.Time {
+	return t.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp set the visibility timestamp
+func (t *DeleteExecutionVisibilityTask) SetVisibilityTimestamp(timestamp time.Time) {
+	t.VisibilityTimestamp = timestamp
 }
 
 // GetType returns the type of the history replication task

@@ -99,8 +99,9 @@ func applyWorkflowMutationTx(
 		workflowID,
 		runID,
 		workflowMutation.TransferTasks,
-		workflowMutation.ReplicationTasks,
 		workflowMutation.TimerTasks,
+		workflowMutation.ReplicationTasks,
+		workflowMutation.VisibilityTasks,
 	); err != nil {
 		return err
 	}
@@ -256,8 +257,9 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID,
 		workflowSnapshot.TransferTasks,
-		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.TimerTasks,
+		workflowSnapshot.ReplicationTasks,
+		workflowSnapshot.VisibilityTasks,
 	); err != nil {
 		return err
 	}
@@ -443,8 +445,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowID,
 		runID,
 		workflowSnapshot.TransferTasks,
-		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.TimerTasks,
+		workflowSnapshot.ReplicationTasks,
+		workflowSnapshot.VisibilityTasks,
 	); err != nil {
 		return err
 	}
@@ -532,8 +535,9 @@ func applyTasks(
 	workflowID string,
 	runID string,
 	transferTasks []p.Task,
-	replicationTasks []p.Task,
 	timerTasks []p.Task,
+	replicationTasks []p.Task,
+	visibilityTasks []p.Task,
 ) error {
 
 	if err := createTransferTasks(ctx,
@@ -559,6 +563,16 @@ func applyTasks(
 	if err := createTimerTasks(ctx,
 		tx,
 		timerTasks,
+		shardID,
+		namespaceID,
+		workflowID,
+		runID); err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("applyTasks failed. Failed to create timer tasks. Error: %v", err))
+	}
+
+	if err := createVisibilityTasks(ctx,
+		tx,
+		visibilityTasks,
 		shardID,
 		namespaceID,
 		workflowID,
@@ -679,7 +693,7 @@ func lockAndCheckNextEventID(
 	if err != nil {
 		return err
 	}
-	if *nextEventID != condition {
+	if nextEventID != condition {
 		return &p.ConditionFailedError{
 			Msg: fmt.Sprintf("lockAndCheckNextEventID failed. Next_event_id was %v when it should have been %v.", nextEventID, condition),
 		}
@@ -694,7 +708,7 @@ func lockNextEventID(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (*int64, error) {
+) (int64, error) {
 
 	nextEventID, err := tx.WriteLockExecutions(ctx, sqlplugin.ExecutionsFilter{
 		ShardID:     shardID,
@@ -704,16 +718,15 @@ func lockNextEventID(
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("lockNextEventID failed. Unable to lock executions row with (shard, namespace, workflow, run) = (%v,%v,%v,%v) which does not exist.",
+			return 0, serviceerror.NewNotFound(fmt.Sprintf("lockNextEventID failed. Unable to lock executions row with (shard, namespace, workflow, run) = (%v,%v,%v,%v) which does not exist.",
 				shardID,
 				namespaceID,
 				workflowID,
 				runID))
 		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("lockNextEventID failed. Error: %v", err))
+		return 0, serviceerror.NewInternal(fmt.Sprintf("lockNextEventID failed. Error: %v", err))
 	}
-	result := int64(nextEventID)
-	return &result, nil
+	return nextEventID, nil
 }
 
 func createTransferTasks(
@@ -740,10 +753,10 @@ func createTransferTasks(
 			TargetWorkflowId:  p.TransferTaskTransferTargetWorkflowID,
 			ScheduleId:        0,
 			TaskId:            task.GetTaskID(),
+			TaskType:          task.GetType(),
+			Version:           task.GetVersion(),
+			VisibilityTime:    timestamp.TimePtr(task.GetVisibilityTimestamp().UTC()),
 		}
-
-		transferTasksRows[i].ShardID = shardID
-		transferTasksRows[i].TaskID = task.GetTaskID()
 
 		switch task.GetType() {
 		case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
@@ -789,15 +802,13 @@ func createTransferTasks(
 			return serviceerror.NewInternal(fmt.Sprintf("createTransferTasks failed. Unknow transfer type: %v", task.GetType()))
 		}
 
-		info.TaskType = task.GetType()
-		info.Version = task.GetVersion()
-
-		info.VisibilityTime = timestamp.TimePtr(task.GetVisibilityTimestamp().UTC())
-
 		blob, err := serialization.TransferTaskInfoToBlob(info)
 		if err != nil {
 			return err
 		}
+
+		transferTasksRows[i].ShardID = shardID
+		transferTasksRows[i].TaskID = task.GetTaskID()
 		transferTasksRows[i].Data = blob.Data
 		transferTasksRows[i].DataEncoding = blob.EncodingType.String()
 	}
@@ -834,13 +845,19 @@ func createReplicationTasks(
 
 	replicationTasksRows := make([]sqlplugin.ReplicationTasksRow, len(replicationTasks))
 	for i, task := range replicationTasks {
-
-		firstEventID := common.EmptyEventID
-		nextEventID := common.EmptyEventID
-		version := common.EmptyVersion
-		activityScheduleID := common.EmptyEventID
-
-		var branchToken, newRunBranchToken []byte
+		info := &persistencespb.ReplicationTaskInfo{
+			TaskId:            task.GetTaskID(),
+			NamespaceId:       namespaceID,
+			WorkflowId:        workflowID,
+			RunId:             runID,
+			TaskType:          task.GetType(),
+			FirstEventId:      common.EmptyEventID,
+			NextEventId:       common.EmptyEventID,
+			Version:           common.EmptyVersion,
+			ScheduledId:       common.EmptyEventID,
+			BranchToken:       nil,
+			NewRunBranchToken: nil,
+		}
 
 		switch task.GetType() {
 		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
@@ -848,36 +865,25 @@ func createReplicationTasks(
 			if !ok {
 				return serviceerror.NewInternal(fmt.Sprintf("createReplicationTasks failed. Failed to cast %v to HistoryReplicationTask", task))
 			}
-			firstEventID = historyReplicationTask.FirstEventID
-			nextEventID = historyReplicationTask.NextEventID
-			version = task.GetVersion()
-			branchToken = historyReplicationTask.BranchToken
-			newRunBranchToken = historyReplicationTask.NewRunBranchToken
+			info.FirstEventId = historyReplicationTask.FirstEventID
+			info.NextEventId = historyReplicationTask.NextEventID
+			info.Version = task.GetVersion()
+			info.BranchToken = historyReplicationTask.BranchToken
+			info.NewRunBranchToken = historyReplicationTask.NewRunBranchToken
 
 		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
-			version = task.GetVersion()
-			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
+			info.Version = task.GetVersion()
+			info.ScheduledId = task.(*p.SyncActivityTask).ScheduledID
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknown replication task: %v", task.GetType()))
 		}
 
-		blob, err := serialization.ReplicationTaskInfoToBlob(&persistencespb.ReplicationTaskInfo{
-			TaskId:            task.GetTaskID(),
-			NamespaceId:       namespaceID,
-			WorkflowId:        workflowID,
-			RunId:             runID,
-			TaskType:          task.GetType(),
-			FirstEventId:      firstEventID,
-			NextEventId:       nextEventID,
-			Version:           version,
-			ScheduledId:       activityScheduleID,
-			BranchToken:       branchToken,
-			NewRunBranchToken: newRunBranchToken,
-		})
+		blob, err := serialization.ReplicationTaskInfoToBlob(info)
 		if err != nil {
 			return err
 		}
+
 		replicationTasksRows[i].ShardID = shardID
 		replicationTasksRows[i].TaskID = task.GetTaskID()
 		replicationTasksRows[i].Data = blob.Data
@@ -916,7 +922,16 @@ func createTimerTasks(
 
 	timerTasksRows := make([]sqlplugin.TimerTasksRow, len(timerTasks))
 	for i, task := range timerTasks {
-		info := &persistencespb.TimerTaskInfo{}
+		info := &persistencespb.TimerTaskInfo{
+			NamespaceId:    namespaceID,
+			WorkflowId:     workflowID,
+			RunId:          runID,
+			Version:        task.GetVersion(),
+			TaskType:       task.GetType(),
+			TaskId:         task.GetTaskID(),
+			VisibilityTime: timestamp.TimePtr(task.GetVisibilityTimestamp().UTC()),
+		}
+
 		switch t := task.(type) {
 		case *p.WorkflowTaskTimeoutTask:
 			info.EventId = t.EventID
@@ -949,23 +964,13 @@ func createTimerTasks(
 			return serviceerror.NewInternal(fmt.Sprintf("createTimerTasks failed. Unknown timer task: %v", task.GetType()))
 		}
 
-		info.NamespaceId = namespaceID
-		info.WorkflowId = workflowID
-		info.RunId = runID
-		info.Version = task.GetVersion()
-		info.TaskType = task.GetType()
-		info.TaskId = task.GetTaskID()
-
-		goVisTs := timestamp.TimePtr(task.GetVisibilityTimestamp().UTC())
-
-		info.VisibilityTime = goVisTs
 		blob, err := serialization.TimerTaskInfoToBlob(info)
 		if err != nil {
 			return err
 		}
 
 		timerTasksRows[i].ShardID = shardID
-		timerTasksRows[i].VisibilityTimestamp = *goVisTs
+		timerTasksRows[i].VisibilityTimestamp = *info.VisibilityTime
 		timerTasksRows[i].TaskID = task.GetTaskID()
 		timerTasksRows[i].Data = blob.Data
 		timerTasksRows[i].DataEncoding = blob.EncodingType.String()
@@ -982,6 +987,76 @@ func createTimerTasks(
 
 	if int(rowsAffected) != len(timerTasks) {
 		return serviceerror.NewInternal(fmt.Sprintf("createTimerTasks failed. Inserted %v instead of %v rows into timer_tasks. Error: %v", rowsAffected, len(timerTasks), err))
+	}
+	return nil
+}
+
+func createVisibilityTasks(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	visibilityTasks []p.Task,
+	shardID int32,
+	namespaceID string,
+	workflowID string,
+	runID string,
+) error {
+
+	if len(visibilityTasks) == 0 {
+		return nil
+	}
+
+	visibilityTasksRows := make([]sqlplugin.VisibilityTasksRow, len(visibilityTasks))
+	for i, task := range visibilityTasks {
+		info := &persistencespb.VisibilityTaskInfo{
+			NamespaceId:    namespaceID,
+			WorkflowId:     workflowID,
+			RunId:          runID,
+			TaskId:         task.GetTaskID(),
+			TaskType:       task.GetType(),
+			Version:        task.GetVersion(),
+			VisibilityTime: timestamp.TimePtr(task.GetVisibilityTimestamp().UTC()),
+		}
+
+		switch task.GetType() {
+		case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
+			// noop
+
+		case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
+			// noop
+
+		case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
+			// noop
+
+		case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
+			// noop
+
+		default:
+			return serviceerror.NewInternal(fmt.Sprintf("createVisibilityTasks failed. Unknow visibility type: %v", task.GetType()))
+		}
+
+		blob, err := serialization.VisibilityTaskInfoToBlob(info)
+		if err != nil {
+			return err
+		}
+
+		visibilityTasksRows[i].ShardID = shardID
+		visibilityTasksRows[i].TaskID = task.GetTaskID()
+		visibilityTasksRows[i].Data = blob.Data
+		visibilityTasksRows[i].DataEncoding = blob.EncodingType.String()
+	}
+
+	result, err := tx.InsertIntoVisibilityTasks(ctx, visibilityTasksRows)
+	if err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("createTransferTasks failed. Error: %v", err))
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("createTransferTasks failed. Could not verify number of rows inserted. Error: %v", err))
+	}
+
+	if int(rowsAffected) != len(visibilityTasksRows) {
+		return serviceerror.NewInternal(fmt.Sprintf("createTransferTasks failed. Inserted %v instead of %v rows into transfer_tasks. Error: %v", rowsAffected, len(visibilityTasksRows), err))
 	}
 	return nil
 }

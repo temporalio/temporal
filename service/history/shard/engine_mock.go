@@ -614,3 +614,15 @@ func (mr *MockEngineMockRecorder) NotifyNewTimerTasks(tasks interface{}) *gomock
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTimerTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTimerTasks), tasks)
 }
+
+// NotifyNewVisibilityTasks mocks base method.
+func (m *MockEngine) NotifyNewVisibilityTasks(tasks []persistence.Task) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "NotifyNewVisibilityTasks", tasks)
+}
+
+// NotifyNewVisibilityTasks indicates an expected call of NotifyNewVisibilityTasks.
+func (mr *MockEngineMockRecorder) NotifyNewVisibilityTasks(tasks interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewVisibilityTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewVisibilityTasks), tasks)
+}

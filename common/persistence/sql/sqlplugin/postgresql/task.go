@@ -129,9 +129,6 @@ func (pdb *db) SelectFromTasks(
 			*filter.PageSize,
 		)
 	}
-	if err != nil {
-		return nil, err
-	}
 	return rows, err
 }
 

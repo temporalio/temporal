@@ -436,30 +436,6 @@ func (t *timerQueueProcessorBase) getTimerFiredCount() uint64 {
 	return atomic.LoadUint64(&t.timerFiredCount)
 }
 
-//nolint:unused
-func (t *timerQueueProcessorBase) getTimerTaskType(
-	taskType enumsspb.TaskType,
-) string {
-
-	switch taskType {
-	case enumsspb.TASK_TYPE_USER_TIMER:
-		return "UserTimer"
-	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
-		return "ActivityTimeout"
-	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
-		return "WorkflowTaskTimeout"
-	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
-		return "WorkflowRunTimeout"
-	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
-		return "DeleteHistoryEvent"
-	case enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
-		return "ActivityRetryTimerTask"
-	case enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
-		return "WorkflowBackoffTimerTask"
-	}
-	return "UnKnown"
-}
-
 func getTimerTaskMetricScope(
 	taskType enumsspb.TaskType,
 	isActive bool,

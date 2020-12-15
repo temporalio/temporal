@@ -37,30 +37,37 @@ import (
 // NewESVisibilityManager create a visibility manager for ElasticSearch
 // In history, it only needs kafka producer for writing data;
 // In frontend, it only needs ES client and related config for reading data
-func NewESVisibilityManager(indexName string, esClient es.Client, config *config.VisibilityConfig,
-	producer messaging.Producer, metricsClient metrics.Client, log log.Logger) p.VisibilityManager {
+func NewESVisibilityManager(
+	indexName string,
+	esClient es.Client,
+	cfg *config.VisibilityConfig,
+	producer messaging.Producer,
+	processor Processor,
+	metricsClient metrics.Client,
+	log log.Logger,
+) p.VisibilityManager {
 
-	visibilityFromESStore := NewElasticSearchVisibilityStore(esClient, indexName, producer, config, log)
-	visibilityFromES := p.NewVisibilityManagerImpl(visibilityFromESStore, log)
+	visibilityStore := NewElasticSearchVisibilityStore(esClient, indexName, producer, processor, cfg, log, metricsClient)
+	visibilityManager := p.NewVisibilityManagerImpl(visibilityStore, log)
 
-	if config != nil {
+	if cfg != nil {
 		// wrap with rate limiter
-		if config.MaxQPS != nil && config.MaxQPS() != 0 {
+		if cfg.MaxQPS != nil && cfg.MaxQPS() != 0 {
 			esRateLimiter := quotas.NewDynamicRateLimiter(
 				func() float64 {
-					return float64(config.MaxQPS())
+					return float64(cfg.MaxQPS())
 				},
 			)
-			visibilityFromES = p.NewVisibilityPersistenceRateLimitedClient(visibilityFromES, esRateLimiter, log)
+			visibilityManager = p.NewVisibilityPersistenceRateLimitedClient(visibilityManager, esRateLimiter, log)
 		}
-		if config.EnableSampling != nil && config.EnableSampling() {
-			visibilityFromES = p.NewVisibilitySamplingClient(visibilityFromES, config, metricsClient, log)
+		if cfg.EnableSampling != nil && cfg.EnableSampling() {
+			visibilityManager = p.NewVisibilitySamplingClient(visibilityManager, cfg, metricsClient, log)
 		}
 	}
 	if metricsClient != nil {
 		// wrap with metrics
-		visibilityFromES = NewVisibilityMetricsClient(visibilityFromES, metricsClient, log)
+		visibilityManager = NewVisibilityMetricsClient(visibilityManager, metricsClient, log)
 	}
 
-	return visibilityFromES
+	return visibilityManager
 }

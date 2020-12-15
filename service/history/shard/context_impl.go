@@ -182,6 +182,22 @@ func (s *ContextImpl) UpdateTransferClusterAckLevel(cluster string, ackLevel int
 	return s.updateShardInfoLocked()
 }
 
+func (s *ContextImpl) GetVisibilityAckLevel() int64 {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.shardInfo.VisibilityAckLevel
+}
+
+func (s *ContextImpl) UpdateVisibilityAckLevel(ackLevel int64) error {
+	s.Lock()
+	defer s.Unlock()
+
+	s.shardInfo.VisibilityAckLevel = ackLevel
+	s.shardInfo.StolenSinceRenew = 0
+	return s.updateShardInfoLocked()
+}
+
 func (s *ContextImpl) GetReplicatorAckLevel() int64 {
 	s.RLock()
 	defer s.RUnlock()
@@ -411,6 +427,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 		request.NewWorkflowSnapshot.TransferTasks,
 		request.NewWorkflowSnapshot.ReplicationTasks,
 		request.NewWorkflowSnapshot.TimerTasks,
+		request.NewWorkflowSnapshot.VisibilityTasks,
 		&transferMaxReadLevel,
 	); err != nil {
 		return nil, err
@@ -488,6 +505,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 		request.UpdateWorkflowMutation.TransferTasks,
 		request.UpdateWorkflowMutation.ReplicationTasks,
 		request.UpdateWorkflowMutation.TimerTasks,
+		request.UpdateWorkflowMutation.VisibilityTasks,
 		&transferMaxReadLevel,
 	); err != nil {
 		return nil, err
@@ -499,6 +517,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 			request.NewWorkflowSnapshot.TransferTasks,
 			request.NewWorkflowSnapshot.ReplicationTasks,
 			request.NewWorkflowSnapshot.TimerTasks,
+			request.NewWorkflowSnapshot.VisibilityTasks,
 			&transferMaxReadLevel,
 		); err != nil {
 			return nil, err
@@ -552,7 +571,9 @@ Update_Loop:
 	return nil, ErrMaxAttemptsExceeded
 }
 
-func (s *ContextImpl) ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error {
+func (s *ContextImpl) ResetWorkflowExecution(
+	request *persistence.ResetWorkflowExecutionRequest,
+) error {
 
 	namespaceID := request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId
 	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
@@ -574,6 +595,7 @@ func (s *ContextImpl) ResetWorkflowExecution(request *persistence.ResetWorkflowE
 			request.CurrentWorkflowMutation.TransferTasks,
 			request.CurrentWorkflowMutation.ReplicationTasks,
 			request.CurrentWorkflowMutation.TimerTasks,
+			request.CurrentWorkflowMutation.VisibilityTasks,
 			&transferMaxReadLevel,
 		); err != nil {
 			return err
@@ -585,6 +607,7 @@ func (s *ContextImpl) ResetWorkflowExecution(request *persistence.ResetWorkflowE
 		request.NewWorkflowSnapshot.TransferTasks,
 		request.NewWorkflowSnapshot.ReplicationTasks,
 		request.NewWorkflowSnapshot.TimerTasks,
+		request.NewWorkflowSnapshot.VisibilityTasks,
 		&transferMaxReadLevel,
 	); err != nil {
 		return err
@@ -662,6 +685,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 			request.CurrentWorkflowMutation.TransferTasks,
 			request.CurrentWorkflowMutation.ReplicationTasks,
 			request.CurrentWorkflowMutation.TimerTasks,
+			request.CurrentWorkflowMutation.VisibilityTasks,
 			&transferMaxReadLevel,
 		); err != nil {
 			return err
@@ -673,6 +697,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		request.ResetWorkflowSnapshot.TransferTasks,
 		request.ResetWorkflowSnapshot.ReplicationTasks,
 		request.ResetWorkflowSnapshot.TimerTasks,
+		request.ResetWorkflowSnapshot.VisibilityTasks,
 		&transferMaxReadLevel,
 	); err != nil {
 		return err
@@ -684,6 +709,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 			request.NewWorkflowSnapshot.TransferTasks,
 			request.NewWorkflowSnapshot.ReplicationTasks,
 			request.NewWorkflowSnapshot.TimerTasks,
+			request.NewWorkflowSnapshot.VisibilityTasks,
 			&transferMaxReadLevel,
 		); err != nil {
 			return err
@@ -737,8 +763,64 @@ Reset_Loop:
 	return ErrMaxAttemptsExceeded
 }
 
-func (s *ContextImpl) AppendHistoryV2Events(
-	request *persistence.AppendHistoryNodesRequest, namespaceID string, execution commonpb.WorkflowExecution) (int, error) {
+func (s *ContextImpl) AddTasks(
+	request *persistence.AddTasksRequest,
+) error {
+	namespaceID := request.NamespaceID
+	workflowID := request.WorkflowID
+
+	// do not try to get namespace cache within shard lock
+	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	if err != nil {
+		return err
+	}
+
+	s.Lock()
+	defer s.Unlock()
+
+	transferMaxReadLevel := int64(0)
+	if err := s.allocateTaskIDsLocked(
+		namespaceEntry,
+		workflowID,
+		request.TransferTasks,
+		request.ReplicationTasks,
+		request.TimerTasks,
+		request.VisibilityTasks,
+		&transferMaxReadLevel,
+	); err != nil {
+		return err
+	}
+	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
+
+	request.RangeID = s.getRangeID()
+	err = s.executionManager.AddTasks(request)
+	switch err.(type) {
+	case nil:
+		return nil
+	case *persistence.TimeoutError:
+		// noop
+
+	case *serviceerror.ResourceExhausted:
+		// noop
+
+	case *persistence.ShardOwnershipLostError:
+		s.closeShard()
+
+	default:
+		if err := s.renewRangeLocked(false); err != nil {
+			// At this point we have no choice but to unload the shard, so that it
+			// gets a new RangeID when it's reloaded.
+			s.closeShard()
+		}
+	}
+	return err
+}
+
+func (s *ContextImpl) AppendHistoryEvents(
+	request *persistence.AppendHistoryNodesRequest,
+	namespaceID string,
+	execution commonpb.WorkflowExecution,
+) (int, error) {
 
 	// NOTE: do not use generateNextTransferTaskIDLocked since
 	// generateNextTransferTaskIDLocked is not guarded by lock
@@ -982,6 +1064,7 @@ func (s *ContextImpl) allocateTaskIDsLocked(
 	transferTasks []persistence.Task,
 	replicationTasks []persistence.Task,
 	timerTasks []persistence.Task,
+	visibilityTasks []persistence.Task,
 	transferMaxReadLevel *int64,
 ) error {
 
@@ -992,6 +1075,11 @@ func (s *ContextImpl) allocateTaskIDsLocked(
 	}
 	if err := s.allocateTransferIDsLocked(
 		replicationTasks,
+		transferMaxReadLevel); err != nil {
+		return err
+	}
+	if err := s.allocateTransferIDsLocked(
+		visibilityTasks,
 		transferMaxReadLevel); err != nil {
 		return err
 	}

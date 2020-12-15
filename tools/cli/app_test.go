@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/api/workflowservicemock/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkmocks "go.temporal.io/sdk/mocks"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -81,6 +82,10 @@ func (m *clientFactoryMock) AdminClient(c *cli.Context) adminservice.AdminServic
 
 func (m *clientFactoryMock) SDKClient(c *cli.Context, namespace string) sdkclient.Client {
 	return m.sdkClient
+}
+
+func (m *clientFactoryMock) HealthClient(_ *cli.Context) healthpb.HealthClient {
+	panic("HealthClient mock is not supported.")
 }
 
 var commands = []string{

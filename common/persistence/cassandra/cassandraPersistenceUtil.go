@@ -155,8 +155,9 @@ func applyWorkflowMutationBatch(
 		workflowID,
 		runID,
 		workflowMutation.TransferTasks,
-		workflowMutation.ReplicationTasks,
 		workflowMutation.TimerTasks,
+		workflowMutation.ReplicationTasks,
+		workflowMutation.VisibilityTasks,
 	)
 }
 
@@ -266,8 +267,9 @@ func applyWorkflowSnapshotBatchAsReset(
 		workflowID,
 		runID,
 		workflowSnapshot.TransferTasks,
-		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.TimerTasks,
+		workflowSnapshot.ReplicationTasks,
+		workflowSnapshot.VisibilityTasks,
 	)
 }
 
@@ -373,8 +375,9 @@ func applyWorkflowSnapshotBatchAsNew(
 		workflowID,
 		runID,
 		workflowSnapshot.TransferTasks,
-		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.TimerTasks,
+		workflowSnapshot.ReplicationTasks,
+		workflowSnapshot.VisibilityTasks,
 	)
 }
 
@@ -543,13 +546,25 @@ func applyTasks(
 	workflowID string,
 	runID string,
 	transferTasks []p.Task,
-	replicationTasks []p.Task,
 	timerTasks []p.Task,
+	replicationTasks []p.Task,
+	visibilityTasks []p.Task,
 ) error {
 
 	if err := createTransferTasks(
 		batch,
 		transferTasks,
+		shardID,
+		namespaceID,
+		workflowID,
+		runID,
+	); err != nil {
+		return err
+	}
+
+	if err := createTimerTasks(
+		batch,
+		timerTasks,
 		shardID,
 		namespaceID,
 		workflowID,
@@ -569,14 +584,18 @@ func applyTasks(
 		return err
 	}
 
-	return createTimerTasks(
+	if err := createVisibilityTasks(
 		batch,
-		timerTasks,
+		visibilityTasks,
 		shardID,
 		namespaceID,
 		workflowID,
 		runID,
-	)
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func createTransferTasks(
@@ -631,10 +650,12 @@ func createTransferTasks(
 			scheduleID = task.(*p.StartChildExecutionTask).InitiatedID
 
 		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
-			enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
-			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW,
-			enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 			// No explicit property needs to be set
+
+		case enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
+			enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+			// TODO (alex): remove
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknow transfer type: %v", task.GetType()))
@@ -744,6 +765,61 @@ func createReplicationTasks(
 	return nil
 }
 
+func createVisibilityTasks(
+	batch *gocql.Batch,
+	visibilityTasks []p.Task,
+	shardID int32,
+	namespaceID string,
+	workflowID string,
+	runID string,
+) error {
+
+	for _, task := range visibilityTasks {
+		datablob, err := serialization.VisibilityTaskInfoToBlob(&persistencespb.VisibilityTaskInfo{
+			NamespaceId:    namespaceID,
+			WorkflowId:     workflowID,
+			RunId:          runID,
+			TaskId:         task.GetTaskID(),
+			TaskType:       task.GetType(),
+			Version:        task.GetVersion(),
+			VisibilityTime: timestamp.TimePtr(task.GetVisibilityTimestamp()),
+		})
+		if err != nil {
+			return err
+		}
+
+		switch task.GetType() {
+		case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
+			// noop
+
+		case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
+			// noop
+
+		case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
+			// noop
+
+		case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
+			// noop
+
+		default:
+			return serviceerror.NewInternal(fmt.Sprintf("createVisibilityTasks failed. Unknow visibility type: %v", task.GetType()))
+		}
+
+		batch.Query(templateCreateVisibilityTaskQuery,
+			shardID,
+			rowTypeVisibilityTask,
+			rowTypeVisibilityTaskNamespaceID,
+			rowTypeVisibilityTaskWorkflowID,
+			rowTypeVisibilityTaskRunID,
+			datablob.Data,
+			datablob.EncodingType.String(),
+			defaultVisibilityTimestamp,
+			task.GetTaskID())
+	}
+
+	return nil
+}
+
 func createTimerTasks(
 	batch *gocql.Batch,
 	timerTasks []p.Task,
@@ -809,7 +885,6 @@ func createTimerTasks(
 			TaskId:              task.GetTaskID(),
 			VisibilityTime:      &goTs,
 		})
-
 		if err != nil {
 			return err
 		}

@@ -82,5 +82,6 @@ type (
 		NotifyNewTransferTasks(tasks []persistence.Task)
 		NotifyNewReplicationTasks(tasks []persistence.Task)
 		NotifyNewTimerTasks(tasks []persistence.Task)
+		NotifyNewVisibilityTasks(tasks []persistence.Task)
 	}
 )

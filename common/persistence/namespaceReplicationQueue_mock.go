@@ -96,20 +96,6 @@ func (mr *MockNamespaceReplicationQueueMockRecorder) Publish(message interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).Publish), message)
 }
 
-// PublishToDLQ mocks base method.
-func (m *MockNamespaceReplicationQueue) PublishToDLQ(message interface{}) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishToDLQ", message)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// PublishToDLQ indicates an expected call of PublishToDLQ.
-func (mr *MockNamespaceReplicationQueueMockRecorder) PublishToDLQ(message interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishToDLQ", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).PublishToDLQ), message)
-}
-
 // GetReplicationMessages mocks base method.
 func (m *MockNamespaceReplicationQueue) GetReplicationMessages(lastMessageID int64, maxCount int) ([]*repication.ReplicationTask, int64, error) {
 	m.ctrl.T.Helper()
@@ -153,6 +139,20 @@ func (m *MockNamespaceReplicationQueue) GetAckLevels() (map[string]int64, error)
 func (mr *MockNamespaceReplicationQueueMockRecorder) GetAckLevels() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckLevels", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).GetAckLevels))
+}
+
+// PublishToDLQ mocks base method.
+func (m *MockNamespaceReplicationQueue) PublishToDLQ(message interface{}) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PublishToDLQ", message)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PublishToDLQ indicates an expected call of PublishToDLQ.
+func (mr *MockNamespaceReplicationQueueMockRecorder) PublishToDLQ(message interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishToDLQ", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).PublishToDLQ), message)
 }
 
 // GetMessagesFromDLQ mocks base method.

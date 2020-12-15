@@ -78,7 +78,7 @@ services:
     networks:
       - temporal-dependencies-network
   temporal-web:
-    image: temporalio/web:1.3.0
+    image: temporalio/web:1.4.0
     container_name: temporal-web
 
 networks:

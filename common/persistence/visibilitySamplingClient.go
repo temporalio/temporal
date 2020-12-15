@@ -120,6 +120,26 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionStarted(request *Recor
 	return nil
 }
 
+func (p *visibilitySamplingClient) RecordWorkflowExecutionStartedV2(request *RecordWorkflowExecutionStartedRequest) error {
+	namespace := request.Namespace
+	namespaceID := request.NamespaceID
+
+	rateLimiter := p.rateLimitersForOpen.getRateLimiter(namespace, numOfPriorityForOpen, p.config.VisibilityOpenMaxQPS(namespace))
+	if ok, _ := rateLimiter.GetToken(0, 1); ok {
+		return p.persistence.RecordWorkflowExecutionStartedV2(request)
+	}
+
+	p.logger.Info("Request for open workflow is sampled",
+		tag.WorkflowNamespaceID(namespaceID),
+		tag.WorkflowNamespace(namespace),
+		tag.WorkflowType(request.WorkflowTypeName),
+		tag.WorkflowID(request.Execution.GetWorkflowId()),
+		tag.WorkflowRunID(request.Execution.GetRunId()),
+	)
+	p.metricClient.IncCounter(metrics.PersistenceRecordWorkflowExecutionStartedScope, metrics.PersistenceSampledCounter)
+	return nil
+}
+
 func (p *visibilitySamplingClient) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
 	namespace := request.Namespace
 	namespaceID := request.NamespaceID
@@ -141,6 +161,27 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionClosed(request *Record
 	return nil
 }
 
+func (p *visibilitySamplingClient) RecordWorkflowExecutionClosedV2(request *RecordWorkflowExecutionClosedRequest) error {
+	namespace := request.Namespace
+	namespaceID := request.NamespaceID
+	priority := getRequestPriority(request)
+
+	rateLimiter := p.rateLimitersForClosed.getRateLimiter(namespace, numOfPriorityForClosed, p.config.VisibilityClosedMaxQPS(namespace))
+	if ok, _ := rateLimiter.GetToken(priority, 1); ok {
+		return p.persistence.RecordWorkflowExecutionClosedV2(request)
+	}
+
+	p.logger.Info("Request for closed workflow is sampled",
+		tag.WorkflowNamespaceID(namespaceID),
+		tag.WorkflowNamespace(namespace),
+		tag.WorkflowType(request.WorkflowTypeName),
+		tag.WorkflowID(request.Execution.GetWorkflowId()),
+		tag.WorkflowRunID(request.Execution.GetRunId()),
+	)
+	p.metricClient.IncCounter(metrics.PersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceSampledCounter)
+	return nil
+}
+
 func (p *visibilitySamplingClient) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
 	namespace := request.Namespace
 	namespaceID := request.NamespaceID
@@ -148,6 +189,26 @@ func (p *visibilitySamplingClient) UpsertWorkflowExecution(request *UpsertWorkfl
 	rateLimiter := p.rateLimitersForClosed.getRateLimiter(namespace, numOfPriorityForClosed, p.config.VisibilityClosedMaxQPS(namespace))
 	if ok, _ := rateLimiter.GetToken(0, 1); ok {
 		return p.persistence.UpsertWorkflowExecution(request)
+	}
+
+	p.logger.Info("Request for upsert workflow is sampled",
+		tag.WorkflowNamespaceID(namespaceID),
+		tag.WorkflowNamespace(namespace),
+		tag.WorkflowType(request.WorkflowTypeName),
+		tag.WorkflowID(request.Execution.GetWorkflowId()),
+		tag.WorkflowRunID(request.Execution.GetRunId()),
+	)
+	p.metricClient.IncCounter(metrics.PersistenceUpsertWorkflowExecutionScope, metrics.PersistenceSampledCounter)
+	return nil
+}
+
+func (p *visibilitySamplingClient) UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequest) error {
+	namespace := request.Namespace
+	namespaceID := request.NamespaceID
+
+	rateLimiter := p.rateLimitersForClosed.getRateLimiter(namespace, numOfPriorityForClosed, p.config.VisibilityClosedMaxQPS(namespace))
+	if ok, _ := rateLimiter.GetToken(0, 1); ok {
+		return p.persistence.UpsertWorkflowExecutionV2(request)
 	}
 
 	p.logger.Info("Request for upsert workflow is sampled",
@@ -244,6 +305,10 @@ func (p *visibilitySamplingClient) GetClosedWorkflowExecution(request *GetClosed
 
 func (p *visibilitySamplingClient) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {
 	return p.persistence.DeleteWorkflowExecution(request)
+}
+
+func (p *visibilitySamplingClient) DeleteWorkflowExecutionV2(request *VisibilityDeleteWorkflowExecutionRequest) error {
+	return p.persistence.DeleteWorkflowExecutionV2(request)
 }
 
 func (p *visibilitySamplingClient) ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {

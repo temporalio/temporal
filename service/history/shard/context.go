@@ -78,6 +78,9 @@ type (
 		GetTransferClusterAckLevel(cluster string) int64
 		UpdateTransferClusterAckLevel(cluster string, ackLevel int64) error
 
+		GetVisibilityAckLevel() int64
+		UpdateVisibilityAckLevel(ackLevel int64) error
+
 		GetReplicatorAckLevel() int64
 		UpdateReplicatorAckLevel(ackLevel int64) error
 		GetReplicatorDLQAckLevel(sourceCluster string) int64
@@ -106,6 +109,7 @@ type (
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
 		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error
 		ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error
-		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, namespaceID string, execution commonpb.WorkflowExecution) (int, error)
+		AddTasks(request *persistence.AddTasksRequest) error
+		AppendHistoryEvents(request *persistence.AppendHistoryNodesRequest, namespaceID string, execution commonpb.WorkflowExecution) (int, error)
 	}
 )

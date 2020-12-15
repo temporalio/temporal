@@ -30,10 +30,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-
-	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc/reflection"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
@@ -114,9 +114,8 @@ type Config struct {
 	// EnableServerVersionCheck disables periodic version checking performed by the frontend
 	EnableServerVersionCheck dynamicconfig.BoolPropertyFn
 
-	// EnableInfiniteTimeout enable infinite workflow timeout
-	// TODO remove after 1.5
-	EnableInfiniteTimeout dynamicconfig.BoolPropertyFn
+	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
+	EnableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -158,9 +157,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		DefaultWorkflowRetryPolicy:             dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
 		DefaultWorkflowTaskTimeout:             dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		EnableServerVersionCheck:               dc.GetBoolProperty(dynamicconfig.EnableServerVersionCheck, os.Getenv("TEMPORAL_VERSION_CHECK_DISABLED") == ""),
-
-		// TODO remove after 1.5
-		EnableInfiniteTimeout: dc.GetBoolProperty(dynamicconfig.EnableInfiniteTimeout, false),
+		EnableTokenNamespaceEnforcement:        dc.GetBoolProperty(dynamicconfig.EnableTokenNamespaceEnforcement, false),
 	}
 }
 
@@ -208,7 +205,7 @@ func NewService(
 				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
 			}
 			visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
-				nil, params.MetricsClient, logger)
+				nil, nil, params.MetricsClient, logger)
 		}
 		return persistence.NewVisibilityManagerWrapper(
 			visibilityFromDB,
@@ -288,6 +285,9 @@ func (s *Service) Start() {
 
 	s.adminHandler = NewAdminHandler(s, s.params, s.config)
 	adminservice.RegisterAdminServiceServer(s.server, s.adminHandler)
+
+	reflection.Register(s.server)
+
 	s.versionChecker = NewVersionChecker(s, s.params, s.config)
 
 	// must start resource first

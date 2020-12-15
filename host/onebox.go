@@ -117,10 +117,11 @@ type (
 
 	// HistoryConfig contains configs for history service
 	HistoryConfig struct {
-		NumHistoryShards       int32
-		NumHistoryHosts        int
-		HistoryCountLimitError int
-		HistoryCountLimitWarn  int
+		NumHistoryShards          int32
+		NumHistoryHosts           int
+		HistoryCountLimitError    int
+		HistoryCountLimitWarn     int
+		DisableKafkaForVisibility bool
 	}
 
 	// TemporalParams contains everything needed to bootstrap Temporal
@@ -733,6 +734,8 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	if c.historyConfig.HistoryCountLimitError != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
 	}
+
+	client.OverrideValue(dynamicconfig.DisableKafkaForVisibility, c.historyConfig.DisableKafkaForVisibility)
 }
 
 // copyPersistenceConfig makes a deepcopy of persistence config.

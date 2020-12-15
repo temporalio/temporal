@@ -71,11 +71,11 @@ var keys = map[Key]string{
 	MinRetentionDays:                       "system.minRetentionDays",
 	DisallowQuery:                          "system.disallowQuery",
 	EnableBatcher:                          "worker.enableBatcher",
+	EnableIndexer:                          "worker.enableIndexer",
 	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
 	EnableStickyQuery:                      "system.enableStickyQuery",
 	EnablePriorityTaskProcessor:            "system.enablePriorityTaskProcessor",
 	EnableAuthorization:                    "system.enableAuthorization",
-	EnableInfiniteTimeout:                  "system.enableInfiniteTimeout",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -112,6 +112,7 @@ var keys = map[Key]string{
 	VisibilityArchivalQueryMaxRangeInDays: "frontend.visibilityArchivalQueryMaxRangeInDays",
 	VisibilityArchivalQueryMaxQPS:         "frontend.visibilityArchivalQueryMaxQPS",
 	EnableServerVersionCheck:              "frontend.enableServerVersionCheck",
+	EnableTokenNamespaceEnforcement:       "frontend.enableTokenNamespaceEnforcement",
 
 	// matching settings
 	MatchingRPS:                             "matching.rps",
@@ -137,67 +138,86 @@ var keys = map[Key]string{
 	MatchingShutdownDrainDuration:           "matching.shutdownDrainDuration",
 
 	// history settings
-	HistoryRPS:                                             "history.rps",
-	HistoryPersistenceMaxQPS:                               "history.persistenceMaxQPS",
-	HistoryPersistenceGlobalMaxQPS:                         "history.persistenceGlobalMaxQPS",
-	HistoryVisibilityOpenMaxQPS:                            "history.historyVisibilityOpenMaxQPS",
-	HistoryVisibilityClosedMaxQPS:                          "history.historyVisibilityClosedMaxQPS",
-	HistoryLongPollExpirationInterval:                      "history.longPollExpirationInterval",
-	HistoryCacheInitialSize:                                "history.cacheInitialSize",
-	HistoryMaxAutoResetPoints:                              "history.historyMaxAutoResetPoints",
-	HistoryCacheMaxSize:                                    "history.cacheMaxSize",
-	HistoryCacheTTL:                                        "history.cacheTTL",
-	HistoryShutdownDrainDuration:                           "history.shutdownDrainDuration",
-	EventsCacheInitialSize:                                 "history.eventsCacheInitialSize",
-	EventsCacheMaxSize:                                     "history.eventsCacheMaxSize",
-	EventsCacheTTL:                                         "history.eventsCacheTTL",
-	AcquireShardInterval:                                   "history.acquireShardInterval",
-	AcquireShardConcurrency:                                "history.acquireShardConcurrency",
-	StandbyClusterDelay:                                    "history.standbyClusterDelay",
-	StandbyTaskMissingEventsResendDelay:                    "history.standbyTaskMissingEventsResendDelay",
-	StandbyTaskMissingEventsDiscardDelay:                   "history.standbyTaskMissingEventsDiscardDelay",
-	TaskProcessRPS:                                         "history.taskProcessRPS",
-	TaskSchedulerType:                                      "history.taskSchedulerType",
-	TaskSchedulerWorkerCount:                               "history.taskSchedulerWorkerCount",
-	TaskSchedulerQueueSize:                                 "history.taskSchedulerQueueSize",
-	TaskSchedulerRoundRobinWeights:                         "history.taskSchedulerRoundRobinWeight",
-	TimerTaskBatchSize:                                     "history.timerTaskBatchSize",
-	TimerTaskWorkerCount:                                   "history.timerTaskWorkerCount",
-	TimerTaskMaxRetryCount:                                 "history.timerTaskMaxRetryCount",
-	TimerProcessorGetFailureRetryCount:                     "history.timerProcessorGetFailureRetryCount",
-	TimerProcessorCompleteTimerFailureRetryCount:           "history.timerProcessorCompleteTimerFailureRetryCount",
-	TimerProcessorUpdateShardTaskCount:                     "history.timerProcessorUpdateShardTaskCount",
-	TimerProcessorUpdateAckInterval:                        "history.timerProcessorUpdateAckInterval",
-	TimerProcessorUpdateAckIntervalJitterCoefficient:       "history.timerProcessorUpdateAckIntervalJitterCoefficient",
-	TimerProcessorCompleteTimerInterval:                    "history.timerProcessorCompleteTimerInterval",
-	TimerProcessorFailoverMaxPollRPS:                       "history.timerProcessorFailoverMaxPollRPS",
-	TimerProcessorMaxPollRPS:                               "history.timerProcessorMaxPollRPS",
-	TimerProcessorMaxPollInterval:                          "history.timerProcessorMaxPollInterval",
-	TimerProcessorMaxPollIntervalJitterCoefficient:         "history.timerProcessorMaxPollIntervalJitterCoefficient",
-	TimerProcessorRedispatchInterval:                       "history.timerProcessorRedispatchInterval",
-	TimerProcessorRedispatchIntervalJitterCoefficient:      "history.timerProcessorRedispatchIntervalJitterCoefficient",
-	TimerProcessorMaxRedispatchQueueSize:                   "history.timerProcessorMaxRedispatchQueueSize",
-	TimerProcessorEnablePriorityTaskProcessor:              "history.timerProcessorEnablePriorityTaskProcessor",
-	TimerProcessorMaxTimeShift:                             "history.timerProcessorMaxTimeShift",
-	TimerProcessorHistoryArchivalSizeLimit:                 "history.timerProcessorHistoryArchivalSizeLimit",
-	TimerProcessorArchivalTimeLimit:                        "history.timerProcessorArchivalTimeLimit",
-	TransferTaskBatchSize:                                  "history.transferTaskBatchSize",
-	TransferProcessorFailoverMaxPollRPS:                    "history.transferProcessorFailoverMaxPollRPS",
-	TransferProcessorMaxPollRPS:                            "history.transferProcessorMaxPollRPS",
-	TransferTaskWorkerCount:                                "history.transferTaskWorkerCount",
-	TransferTaskMaxRetryCount:                              "history.transferTaskMaxRetryCount",
-	TransferProcessorCompleteTransferFailureRetryCount:     "history.transferProcessorCompleteTransferFailureRetryCount",
-	TransferProcessorUpdateShardTaskCount:                  "history.transferProcessorUpdateShardTaskCount",
-	TransferProcessorMaxPollInterval:                       "history.transferProcessorMaxPollInterval",
-	TransferProcessorMaxPollIntervalJitterCoefficient:      "history.transferProcessorMaxPollIntervalJitterCoefficient",
-	TransferProcessorUpdateAckInterval:                     "history.transferProcessorUpdateAckInterval",
-	TransferProcessorUpdateAckIntervalJitterCoefficient:    "history.transferProcessorUpdateAckIntervalJitterCoefficient",
-	TransferProcessorCompleteTransferInterval:              "history.transferProcessorCompleteTransferInterval",
-	TransferProcessorRedispatchInterval:                    "history.transferProcessorRedispatchInterval",
-	TransferProcessorRedispatchIntervalJitterCoefficient:   "history.transferProcessorRedispatchIntervalJitterCoefficient",
-	TransferProcessorMaxRedispatchQueueSize:                "history.transferProcessorMaxRedispatchQueueSize",
-	TransferProcessorEnablePriorityTaskProcessor:           "history.transferProcessorEnablePriorityTaskProcessor",
-	TransferProcessorVisibilityArchivalTimeLimit:           "history.transferProcessorVisibilityArchivalTimeLimit",
+	HistoryRPS:                                           "history.rps",
+	HistoryPersistenceMaxQPS:                             "history.persistenceMaxQPS",
+	HistoryPersistenceGlobalMaxQPS:                       "history.persistenceGlobalMaxQPS",
+	HistoryVisibilityOpenMaxQPS:                          "history.historyVisibilityOpenMaxQPS",
+	HistoryVisibilityClosedMaxQPS:                        "history.historyVisibilityClosedMaxQPS",
+	HistoryLongPollExpirationInterval:                    "history.longPollExpirationInterval",
+	HistoryCacheInitialSize:                              "history.cacheInitialSize",
+	HistoryMaxAutoResetPoints:                            "history.historyMaxAutoResetPoints",
+	HistoryCacheMaxSize:                                  "history.cacheMaxSize",
+	HistoryCacheTTL:                                      "history.cacheTTL",
+	HistoryShutdownDrainDuration:                         "history.shutdownDrainDuration",
+	EventsCacheInitialSize:                               "history.eventsCacheInitialSize",
+	EventsCacheMaxSize:                                   "history.eventsCacheMaxSize",
+	EventsCacheTTL:                                       "history.eventsCacheTTL",
+	AcquireShardInterval:                                 "history.acquireShardInterval",
+	AcquireShardConcurrency:                              "history.acquireShardConcurrency",
+	StandbyClusterDelay:                                  "history.standbyClusterDelay",
+	StandbyTaskMissingEventsResendDelay:                  "history.standbyTaskMissingEventsResendDelay",
+	StandbyTaskMissingEventsDiscardDelay:                 "history.standbyTaskMissingEventsDiscardDelay",
+	TaskProcessRPS:                                       "history.taskProcessRPS",
+	TaskSchedulerType:                                    "history.taskSchedulerType",
+	TaskSchedulerWorkerCount:                             "history.taskSchedulerWorkerCount",
+	TaskSchedulerQueueSize:                               "history.taskSchedulerQueueSize",
+	TaskSchedulerRoundRobinWeights:                       "history.taskSchedulerRoundRobinWeight",
+	TimerTaskBatchSize:                                   "history.timerTaskBatchSize",
+	TimerTaskWorkerCount:                                 "history.timerTaskWorkerCount",
+	TimerTaskMaxRetryCount:                               "history.timerTaskMaxRetryCount",
+	TimerProcessorGetFailureRetryCount:                   "history.timerProcessorGetFailureRetryCount",
+	TimerProcessorCompleteTimerFailureRetryCount:         "history.timerProcessorCompleteTimerFailureRetryCount",
+	TimerProcessorUpdateShardTaskCount:                   "history.timerProcessorUpdateShardTaskCount",
+	TimerProcessorUpdateAckInterval:                      "history.timerProcessorUpdateAckInterval",
+	TimerProcessorUpdateAckIntervalJitterCoefficient:     "history.timerProcessorUpdateAckIntervalJitterCoefficient",
+	TimerProcessorCompleteTimerInterval:                  "history.timerProcessorCompleteTimerInterval",
+	TimerProcessorFailoverMaxPollRPS:                     "history.timerProcessorFailoverMaxPollRPS",
+	TimerProcessorMaxPollRPS:                             "history.timerProcessorMaxPollRPS",
+	TimerProcessorMaxPollInterval:                        "history.timerProcessorMaxPollInterval",
+	TimerProcessorMaxPollIntervalJitterCoefficient:       "history.timerProcessorMaxPollIntervalJitterCoefficient",
+	TimerProcessorRedispatchInterval:                     "history.timerProcessorRedispatchInterval",
+	TimerProcessorRedispatchIntervalJitterCoefficient:    "history.timerProcessorRedispatchIntervalJitterCoefficient",
+	TimerProcessorMaxRedispatchQueueSize:                 "history.timerProcessorMaxRedispatchQueueSize",
+	TimerProcessorEnablePriorityTaskProcessor:            "history.timerProcessorEnablePriorityTaskProcessor",
+	TimerProcessorMaxTimeShift:                           "history.timerProcessorMaxTimeShift",
+	TimerProcessorHistoryArchivalSizeLimit:               "history.timerProcessorHistoryArchivalSizeLimit",
+	TimerProcessorArchivalTimeLimit:                      "history.timerProcessorArchivalTimeLimit",
+	TransferTaskBatchSize:                                "history.transferTaskBatchSize",
+	TransferProcessorFailoverMaxPollRPS:                  "history.transferProcessorFailoverMaxPollRPS",
+	TransferProcessorMaxPollRPS:                          "history.transferProcessorMaxPollRPS",
+	TransferTaskWorkerCount:                              "history.transferTaskWorkerCount",
+	TransferTaskMaxRetryCount:                            "history.transferTaskMaxRetryCount",
+	TransferProcessorCompleteTransferFailureRetryCount:   "history.transferProcessorCompleteTransferFailureRetryCount",
+	TransferProcessorUpdateShardTaskCount:                "history.transferProcessorUpdateShardTaskCount",
+	TransferProcessorMaxPollInterval:                     "history.transferProcessorMaxPollInterval",
+	TransferProcessorMaxPollIntervalJitterCoefficient:    "history.transferProcessorMaxPollIntervalJitterCoefficient",
+	TransferProcessorUpdateAckInterval:                   "history.transferProcessorUpdateAckInterval",
+	TransferProcessorUpdateAckIntervalJitterCoefficient:  "history.transferProcessorUpdateAckIntervalJitterCoefficient",
+	TransferProcessorCompleteTransferInterval:            "history.transferProcessorCompleteTransferInterval",
+	TransferProcessorRedispatchInterval:                  "history.transferProcessorRedispatchInterval",
+	TransferProcessorRedispatchIntervalJitterCoefficient: "history.transferProcessorRedispatchIntervalJitterCoefficient",
+	TransferProcessorMaxRedispatchQueueSize:              "history.transferProcessorMaxRedispatchQueueSize",
+	TransferProcessorEnablePriorityTaskProcessor:         "history.transferProcessorEnablePriorityTaskProcessor",
+	TransferProcessorVisibilityArchivalTimeLimit:         "history.transferProcessorVisibilityArchivalTimeLimit",
+
+	VisibilityTaskBatchSize:                                "history.visibilityTaskBatchSize",
+	VisibilityProcessorFailoverMaxPollRPS:                  "history.visibilityProcessorFailoverMaxPollRPS",
+	VisibilityProcessorMaxPollRPS:                          "history.visibilityProcessorMaxPollRPS",
+	VisibilityTaskWorkerCount:                              "history.visibilityTaskWorkerCount",
+	VisibilityTaskMaxRetryCount:                            "history.visibilityTaskMaxRetryCount",
+	VisibilityProcessorCompleteTaskFailureRetryCount:       "history.visibilityProcessorCompleteTaskFailureRetryCount",
+	VisibilityProcessorUpdateShardTaskCount:                "history.visibilityProcessorUpdateShardTaskCount",
+	VisibilityProcessorMaxPollInterval:                     "history.visibilityProcessorMaxPollInterval",
+	VisibilityProcessorMaxPollIntervalJitterCoefficient:    "history.visibilityProcessorMaxPollIntervalJitterCoefficient",
+	VisibilityProcessorUpdateAckInterval:                   "history.visibilityProcessorUpdateAckInterval",
+	VisibilityProcessorUpdateAckIntervalJitterCoefficient:  "history.visibilityProcessorUpdateAckIntervalJitterCoefficient",
+	VisibilityProcessorCompleteTaskInterval:                "history.visibilityProcessorCompleteTaskInterval",
+	VisibilityProcessorRedispatchInterval:                  "history.visibilityProcessorRedispatchInterval",
+	VisibilityProcessorRedispatchIntervalJitterCoefficient: "history.visibilityProcessorRedispatchIntervalJitterCoefficient",
+	VisibilityProcessorMaxRedispatchQueueSize:              "history.visibilityProcessorMaxRedispatchQueueSize",
+	VisibilityProcessorEnablePriorityTaskProcessor:         "history.visibilityProcessorEnablePriorityTaskProcessor",
+	VisibilityProcessorVisibilityArchivalTimeLimit:         "history.visibilityProcessorVisibilityArchivalTimeLimit",
+
 	ReplicatorTaskBatchSize:                                "history.replicatorTaskBatchSize",
 	ReplicatorTaskWorkerCount:                              "history.replicatorTaskWorkerCount",
 	ReplicatorTaskMaxRetryCount:                            "history.replicatorTaskMaxRetryCount",
@@ -257,6 +277,7 @@ var keys = map[Key]string{
 	SkipReapplicationByNamespaceId:                         "history.SkipReapplicationByNamespaceId",
 	DefaultActivityRetryPolicy:                             "history.defaultActivityRetryPolicy",
 	DefaultWorkflowRetryPolicy:                             "history.defaultWorkflowRetryPolicy",
+	DisableKafkaForVisibility:                              "history.disableKafkaForVisibility",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -274,6 +295,7 @@ var keys = map[Key]string{
 	WorkerESProcessorBulkActions:                    "worker.ESProcessorBulkActions",
 	WorkerESProcessorBulkSize:                       "worker.ESProcessorBulkSize",
 	WorkerESProcessorFlushInterval:                  "worker.ESProcessorFlushInterval",
+	WorkerESProcessorAckTimeout:                     "worker.ESProcessorAckTimeout",
 	EnableArchivalCompression:                       "worker.EnableArchivalCompression",
 	WorkerHistoryPageSize:                           "worker.WorkerHistoryPageSize",
 	WorkerTargetArchivalBlobSize:                    "worker.WorkerTargetArchivalBlobSize",
@@ -338,9 +360,6 @@ const (
 	EnablePriorityTaskProcessor
 	// EnableAuthorization is the key to enable authorization for a namespace
 	EnableAuthorization
-	// EnableInfiniteTimeout is the key to enable infinite timeout
-	// TODO remove after 1.5
-	EnableInfiniteTimeout
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning
@@ -409,6 +428,8 @@ const (
 	VisibilityArchivalQueryMaxQPS
 	// EnableServerVersionCheck is a flag that controls whether or not periodic version checking is enabled
 	EnableServerVersionCheck
+	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
+	EnableTokenNamespaceEnforcement
 
 	// key for matching
 
@@ -579,6 +600,42 @@ const (
 	TransferProcessorEnablePriorityTaskProcessor
 	// TransferProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
 	TransferProcessorVisibilityArchivalTimeLimit
+
+	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
+	VisibilityTaskBatchSize
+	// VisibilityProcessorFailoverMaxPollRPS is max poll rate per second for visibilityQueueProcessor
+	VisibilityProcessorFailoverMaxPollRPS
+	// VisibilityProcessorMaxPollRPS is max poll rate per second for visibilityQueueProcessor
+	VisibilityProcessorMaxPollRPS
+	// VisibilityTaskWorkerCount is number of worker for visibilityQueueProcessor
+	VisibilityTaskWorkerCount
+	// VisibilityTaskMaxRetryCount is max times of retry for visibilityQueueProcessor
+	VisibilityTaskMaxRetryCount
+	// VisibilityProcessorCompleteTaskFailureRetryCount is times of retry for failure
+	VisibilityProcessorCompleteTaskFailureRetryCount
+	// VisibilityProcessorUpdateShardTaskCount is update shard count for visibilityQueueProcessor
+	VisibilityProcessorUpdateShardTaskCount
+	// VisibilityProcessorMaxPollInterval max poll interval for visibilityQueueProcessor
+	VisibilityProcessorMaxPollInterval
+	// VisibilityProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
+	VisibilityProcessorMaxPollIntervalJitterCoefficient
+	// VisibilityProcessorUpdateAckInterval is update interval for visibilityQueueProcessor
+	VisibilityProcessorUpdateAckInterval
+	// VisibilityProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
+	VisibilityProcessorUpdateAckIntervalJitterCoefficient
+	// VisibilityProcessorCompleteTaskInterval is complete timer interval for visibilityQueueProcessor
+	VisibilityProcessorCompleteTaskInterval
+	// VisibilityProcessorRedispatchInterval is the redispatch interval for visibilityQueueProcessor
+	VisibilityProcessorRedispatchInterval
+	// VisibilityProcessorRedispatchIntervalJitterCoefficient is the redispatch interval jitter coefficient
+	VisibilityProcessorRedispatchIntervalJitterCoefficient
+	// VisibilityProcessorMaxRedispatchQueueSize is the threshold of the number of tasks in the redispatch queue for visibilityQueueProcessor
+	VisibilityProcessorMaxRedispatchQueueSize
+	// VisibilityProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for visibilityQueueProcessor
+	VisibilityProcessorEnablePriorityTaskProcessor
+	// VisibilityProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
+	VisibilityProcessorVisibilityArchivalTimeLimit
+
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize
 	// ReplicatorTaskWorkerCount is number of worker for ReplicatorProcessor
@@ -661,6 +718,9 @@ const (
 	// SkipReapplicationByNameSpaceId is whether skipping a event re-application for a namespace
 	SkipReapplicationByNamespaceId
 
+	// DisableKafkaForVisibility is to indicate if Kafka or internal visibility queue should be used for visibility.
+	DisableKafkaForVisibility
+
 	// key for worker
 
 	// WorkerPersistenceMaxQPS is the max qps worker host can query DB
@@ -695,6 +755,9 @@ const (
 	WorkerESProcessorBulkSize
 	// WorkerESProcessorFlushInterval is flush interval for esProcessor
 	WorkerESProcessorFlushInterval
+	// WorkerESProcessorAckTimeout is the timeout that store will wait to get ack signal from ES processor.
+	// Should be at least WorkerESProcessorFlushInterval+<time to process request>.
+	WorkerESProcessorAckTimeout
 	// EnableArchivalCompression indicates whether blobs are compressed before they are archived
 	EnableArchivalCompression
 	// WorkerHistoryPageSize indicates the page size of history fetched from persistence for archival
@@ -723,6 +786,8 @@ const (
 	ExecutionsScannerEnabled
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher
+	// EnableIndexer decides whether start indexer in our worker
+	EnableIndexer
 	// EnableParentClosePolicyWorker decides whether or not enable system workers for processing parent close policy task
 	EnableParentClosePolicyWorker
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace

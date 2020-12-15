@@ -154,6 +154,7 @@ type (
 		insertTransferTasks    []persistence.Task
 		insertReplicationTasks []persistence.Task
 		insertTimerTasks       []persistence.Task
+		insertVisibilityTasks  []persistence.Task
 
 		// do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
@@ -2208,7 +2209,13 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		ai.RetryMaximumInterval = attributes.RetryPolicy.GetMaximumInterval()
 		ai.RetryMaximumAttempts = attributes.RetryPolicy.GetMaximumAttempts()
 		ai.RetryNonRetryableErrorTypes = attributes.RetryPolicy.NonRetryableErrorTypes
-		ai.RetryExpirationTime = timestamp.TimePtr(timestamp.TimeValue(ai.ScheduledTime).Add(timestamp.DurationValue(scheduleToCloseTimeout)))
+		if timestamp.DurationValue(scheduleToCloseTimeout) > 0 {
+			ai.RetryExpirationTime = timestamp.TimePtr(
+				timestamp.TimeValue(ai.ScheduledTime).Add(timestamp.DurationValue(scheduleToCloseTimeout)),
+			)
+		} else {
+			ai.RetryExpirationTime = timestamp.TimePtr(time.Time{})
+		}
 	}
 
 	e.pendingActivityInfoIDs[scheduleEventID] = ai
@@ -3826,6 +3833,13 @@ func (e *mutableStateBuilder) AddTransferTasks(
 	e.insertTransferTasks = append(e.insertTransferTasks, transferTasks...)
 }
 
+func (e *mutableStateBuilder) AddVisibilityTasks(
+	visibilityTasks ...persistence.Task,
+) {
+
+	e.insertVisibilityTasks = append(e.insertVisibilityTasks, visibilityTasks...)
+}
+
 // TODO convert AddTransferTasks to prepareTimerTasks
 func (e *mutableStateBuilder) AddTimerTasks(
 	timerTasks ...persistence.Task,
@@ -3917,7 +3931,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		}
 	}
 
-	setTaskInfo(e.GetCurrentVersion(), now, e.insertTransferTasks, e.insertTimerTasks)
+	setTaskInfo(e.GetCurrentVersion(), now, e.insertTransferTasks, e.insertTimerTasks, e.insertVisibilityTasks)
 
 	// update last update time
 	e.executionInfo.LastUpdateTime = &now
@@ -3952,6 +3966,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		TransferTasks:    e.insertTransferTasks,
 		ReplicationTasks: e.insertReplicationTasks,
 		TimerTasks:       e.insertTimerTasks,
+		VisibilityTasks:  e.insertVisibilityTasks,
 
 		Condition: e.nextEventIDInDB,
 		Checksum:  checksum,
@@ -4002,7 +4017,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		}
 	}
 
-	setTaskInfo(e.GetCurrentVersion(), now, e.insertTransferTasks, e.insertTimerTasks)
+	setTaskInfo(e.GetCurrentVersion(), now, e.insertTransferTasks, e.insertTimerTasks, e.insertVisibilityTasks)
 
 	// update last update time
 	e.executionInfo.LastUpdateTime = &now
@@ -4029,6 +4044,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		TransferTasks:    e.insertTransferTasks,
 		ReplicationTasks: e.insertReplicationTasks,
 		TimerTasks:       e.insertTimerTasks,
+		VisibilityTasks:  e.insertVisibilityTasks,
 
 		Condition: e.nextEventIDInDB,
 		Checksum:  checksum,
@@ -4137,6 +4153,7 @@ func (e *mutableStateBuilder) cleanupTransaction(
 	e.insertTransferTasks = nil
 	e.insertReplicationTasks = nil
 	e.insertTimerTasks = nil
+	e.insertVisibilityTasks = nil
 
 	return nil
 }

@@ -96,13 +96,25 @@ type (
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
 
-		// Transfer task related methods
+		// Scan related methods
+		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*InternalListConcreteExecutionsResponse, error)
+
+		// Tasks related APIs
+		AddTasks(request *AddTasksRequest) error
+
+		// transfer tasks
 		GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error)
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
 		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
 
-		// Replication task related methods
+		// timer tasks
+		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
+		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
+		CompleteTimerTask(request *CompleteTimerTaskRequest) error
+		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
+
+		// replication tasks
 		GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error)
 		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
 		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
@@ -112,14 +124,11 @@ type (
 		DeleteReplicationTaskFromDLQ(request *DeleteReplicationTaskFromDLQRequest) error
 		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
 
-		// Timer related methods.
-		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
-		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
-		CompleteTimerTask(request *CompleteTimerTaskRequest) error
-		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
-
-		// Scan related methods
-		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*InternalListConcreteExecutionsResponse, error)
+		// visibility tasks
+		GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error)
+		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
+		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
+		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
 	}
 
 	// HistoryStore is to manager workflow history events
@@ -148,9 +157,15 @@ type (
 	VisibilityStore interface {
 		Closeable
 		GetName() string
+		// Deprecated.
 		RecordWorkflowExecutionStarted(request *InternalRecordWorkflowExecutionStartedRequest) error
+		RecordWorkflowExecutionStartedV2(request *InternalRecordWorkflowExecutionStartedRequest) error
+		// Deprecated.
 		RecordWorkflowExecutionClosed(request *InternalRecordWorkflowExecutionClosedRequest) error
+		RecordWorkflowExecutionClosedV2(request *InternalRecordWorkflowExecutionClosedRequest) error
+		// Deprecated.
 		UpsertWorkflowExecution(request *InternalUpsertWorkflowExecutionRequest) error
+		UpsertWorkflowExecutionV2(request *InternalUpsertWorkflowExecutionRequest) error
 		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
@@ -159,7 +174,9 @@ type (
 		ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*InternalListWorkflowExecutionsResponse, error)
 		GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*InternalGetClosedWorkflowExecutionResponse, error)
+		// Deprecated.
 		DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error
+		DeleteWorkflowExecutionV2(request *VisibilityDeleteWorkflowExecutionRequest) error
 		ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
 		ScanWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
 		CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)
@@ -293,6 +310,7 @@ type (
 		TransferTasks    []Task
 		TimerTasks       []Task
 		ReplicationTasks []Task
+		VisibilityTasks  []Task
 
 		Condition int64
 
@@ -316,6 +334,7 @@ type (
 		TransferTasks    []Task
 		TimerTasks       []Task
 		ReplicationTasks []Task
+		VisibilityTasks  []Task
 
 		Condition int64
 
@@ -464,52 +483,40 @@ type (
 	}
 
 	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
-	InternalRecordWorkflowExecutionStartedRequest struct {
+	InternalVisibilityRequestBase struct {
 		NamespaceID        string
 		WorkflowID         string
 		RunID              string
 		WorkflowTypeName   string
 		StartTimestamp     int64
+		Status             enumspb.WorkflowExecutionStatus
 		ExecutionTimestamp int64
-		RunTimeout         int64
 		TaskID             int64
+		ShardID            int32
 		Memo               *commonpb.DataBlob
 		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
+	}
+
+	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
+	InternalRecordWorkflowExecutionStartedRequest struct {
+		*InternalVisibilityRequestBase
+		RunTimeout int64
 	}
 
 	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
 	InternalRecordWorkflowExecutionClosedRequest struct {
-		NamespaceID        string
-		WorkflowID         string
-		RunID              string
-		WorkflowTypeName   string
-		StartTimestamp     int64
-		ExecutionTimestamp int64
-		TaskID             int64
-		Memo               *commonpb.DataBlob
-		TaskQueue          string
-		SearchAttributes   map[string]*commonpb.Payload
-		CloseTimestamp     int64
-		Status             enumspb.WorkflowExecutionStatus
-		HistoryLength      int64
-		RetentionSeconds   int64
+		*InternalVisibilityRequestBase
+		CloseTimestamp   int64
+		HistoryLength    int64
+		RetentionSeconds int64
 	}
 
 	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
 	InternalUpsertWorkflowExecutionRequest struct {
-		NamespaceID        string
-		WorkflowID         string
-		RunID              string
-		WorkflowTypeName   string
-		StartTimestamp     int64
-		ExecutionTimestamp int64
-		Status             enumspb.WorkflowExecutionStatus
-		WorkflowTimeout    int64
-		TaskID             int64
-		Memo               *commonpb.DataBlob
-		TaskQueue          string
-		SearchAttributes   map[string]*commonpb.Payload
+		*InternalVisibilityRequestBase
+		// TODO (alex): not used, remove
+		WorkflowTimeout int64
 	}
 
 	// InternalCreateNamespaceRequest is used to create the namespace
