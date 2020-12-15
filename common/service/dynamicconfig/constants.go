@@ -278,6 +278,7 @@ var keys = map[Key]string{
 	DefaultActivityRetryPolicy:                             "history.defaultActivityRetryPolicy",
 	DefaultWorkflowRetryPolicy:                             "history.defaultWorkflowRetryPolicy",
 	DisableKafkaForVisibility:                              "history.disableKafkaForVisibility",
+	DisableTransferQueueProcessForVisibility:               "history.disableTransferQueueProcessForVisibility",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -720,10 +721,12 @@ const (
 
 	// DisableKafkaForVisibility is to indicate if Kafka or internal visibility queue should be used for visibility.
 	DisableKafkaForVisibility
+	// DisableTransferQueueProcessForVisibility is to indicate if transfer queue processor should be used for visibility.
+	DisableTransferQueueProcessForVisibility
 
 	// key for worker
 
-	// WorkerPersistenceMaxQPS is the max qps worker host can query DB
+	// WorkerPersistenceMaxQPS is the max qps worker host can query DBDisableTransferQueueProcessForVisibility
 	WorkerPersistenceMaxQPS
 	// WorkerPersistenceGlobalMaxQPS is the max qps worker cluster can query DB
 	WorkerPersistenceGlobalMaxQPS
