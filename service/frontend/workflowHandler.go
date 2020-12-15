@@ -1369,9 +1369,11 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 // created for the workflow so new commands could be made.  Use the 'taskToken' provided as response of
 // PollActivityTaskQueue API call for completion. It fails with 'NotFoundFailure' if the taskToken is not valid
 // anymore due to activity timeout.
-func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context,
-	request *workflowservice.RespondActivityTaskCompletedRequest) (_ *workflowservice.RespondActivityTaskCompletedResponse,
-	retError error) {
+func (wh *WorkflowHandler) RespondActivityTaskCompleted(
+	ctx context.Context,
+	request *workflowservice.RespondActivityTaskCompletedRequest,
+) (_ *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
+
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskCompletedScope)
