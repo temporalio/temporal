@@ -950,7 +950,7 @@ func (c *workflowExecutionContextImpl) appendHistoryV2EventsWithRetry(
 	resp := 0
 	op := func() error {
 		var err error
-		resp, err = c.shard.AppendHistoryV2Events(request, namespaceID, execution)
+		resp, err = c.shard.AppendHistoryEvents(request, namespaceID, execution)
 		return err
 	}
 
