@@ -796,6 +796,10 @@ func (s *ContextImpl) AddTasks(
 	err = s.executionManager.AddTasks(request)
 	switch err.(type) {
 	case nil:
+		s.engine.NotifyNewTransferTasks(request.TransferTasks)
+		s.engine.NotifyNewReplicationTasks(request.ReplicationTasks)
+		s.engine.NotifyNewTimerTasks(request.TimerTasks)
+		s.engine.NotifyNewVisibilityTasks(request.VisibilityTasks)
 		return nil
 	case *persistence.TimeoutError:
 		// noop
