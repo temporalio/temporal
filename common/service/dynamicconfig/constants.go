@@ -726,7 +726,7 @@ const (
 
 	// key for worker
 
-	// WorkerPersistenceMaxQPS is the max qps worker host can query DBDisableTransferQueueProcessForVisibility
+	// WorkerPersistenceMaxQPS is the max qps worker host can query DB
 	WorkerPersistenceMaxQPS
 	// WorkerPersistenceGlobalMaxQPS is the max qps worker cluster can query DB
 	WorkerPersistenceGlobalMaxQPS

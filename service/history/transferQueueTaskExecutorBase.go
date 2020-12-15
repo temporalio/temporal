@@ -290,10 +290,6 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		archiveVisibility = clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
 	}
 
-	// Backward compatibility upgrade plan:
-	// 1. Next release: no config change, DisableKafkaForVisibility: false, DisableTransferQueueProcessForVisibility: false,
-	// 2. Next+1 release: disable publishing to transfer queue and Kafka: DisableKafkaForVisibility: true,
-	// 3. Next+2 release: disable processing of transfer queue and Kafka: DisableTransferQueueProcessForVisibility: true, EnableIndexer: false,
 	if (!t.config.DisableKafkaForVisibility() || !t.config.DisableTransferQueueProcessForVisibility()) && recordWorkflowClose {
 		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 			VisibilityRequestBase: &persistence.VisibilityRequestBase{

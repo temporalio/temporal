@@ -249,6 +249,7 @@ type Config struct {
 	VisibilityProcessorEnablePriorityTaskProcessor         dynamicconfig.BoolPropertyFn
 	VisibilityProcessorVisibilityArchivalTimeLimit         dynamicconfig.DurationPropertyFn
 
+	// TODO: See https://github.com/temporalio/temporal/pull/1096 on how to remove these fields.
 	DisableKafkaForVisibility                dynamicconfig.BoolPropertyFn
 	DisableTransferQueueProcessForVisibility dynamicconfig.BoolPropertyFn
 
