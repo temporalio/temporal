@@ -34,26 +34,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
+	"gopkg.in/square/go-jose.v2"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/service/config"
 )
-
-type jwks struct {
-	Keys []jsonWebKeys `json:"keys"`
-}
-
-type jsonWebKeys struct {
-	Kty string   `json:"kty"`
-	Kid string   `json:"kid"`
-	Use string   `json:"use"`
-	N   string   `json:"n"`
-	E   string   `json:"e"`
-	X5c []string `json:"x5c"`
-}
 
 // Default RSA token key provider
 type rsaKeyProvider struct {
@@ -152,19 +139,14 @@ func (a *rsaKeyProvider) updateKeysFromURI(uri string, keys map[string]*rsa.Publ
 	}
 	defer resp.Body.Close()
 
-	jwks := jwks{}
+	jwks := jose.JSONWebKeySet{}
 	err = json.NewDecoder(resp.Body).Decode(&jwks)
 	if err != nil {
 		return err
 	}
 
 	for _, k := range jwks.Keys {
-		cert := "-----BEGIN CERTIFICATE-----\n" + k.X5c[0] + "\n-----END CERTIFICATE-----"
-		key, err := jwt.ParseRSAPublicKeyFromPEM([]byte(cert))
-		if err != nil {
-			return err
-		}
-		keys[k.Kid] = key
+		keys[k.KeyID] = k.Key.(*rsa.PublicKey)
 	}
 	return nil
 }
