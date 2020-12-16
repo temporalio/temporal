@@ -52,6 +52,7 @@ type (
 
 		controller                   *gomock.Controller
 		mockShard                    *shard.ContextTest
+		mockEngine                   *MockEngine
 		mockWorkflowExecutionContext *MockworkflowExecutionContext
 		mockMutableState             *MockmutableState
 
@@ -98,6 +99,8 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) SetupTest() {
 			}},
 		config,
 	)
+	s.mockEngine = NewMockEngine(s.controller)
+	s.mockShard.SetEngine(s.mockEngine)
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockVisibilityManager = s.mockShard.Resource.VisibilityMgr
@@ -144,6 +147,10 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestDeleteWorkflow_NoErr() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testGlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionManager.On("AddTasks", mock.Anything).Return(nil).Once()
+	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any()).Times(1)
+	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any()).Times(1)
+	s.mockEngine.EXPECT().NotifyNewReplicationTasks(gomock.Any()).Times(1)
+	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any()).Times(1)
 
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
@@ -166,6 +173,10 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestArchiveHistory_NoErr_InlineArchi
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testGlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionManager.On("AddTasks", mock.Anything).Return(nil).Once()
+	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any()).Times(1)
+	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any()).Times(1)
+	s.mockEngine.EXPECT().NotifyNewReplicationTasks(gomock.Any()).Times(1)
+	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any()).Times(1)
 
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
