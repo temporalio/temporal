@@ -266,7 +266,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 	task *persistencespb.TimerTaskInfo,
 ) error {
 
-	if !t.config.DisableKafkaForVisibility() {
+	if t.config.VisibilityQueue() == common.VisibilityQueueKafka {
 		op := func() error {
 			request := &persistence.VisibilityDeleteWorkflowExecutionRequest{
 				NamespaceID: task.GetNamespaceId(),

@@ -106,7 +106,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	config := NewDynamicConfigForTest()
-	config.DisableKafkaForVisibility = dc.GetBoolPropertyFn(true)
+	config.VisibilityQueue = dc.GetStringPropertyFn(common.VisibilityQueueInternal)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
