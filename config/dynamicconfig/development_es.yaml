@@ -28,5 +28,4 @@ frontend.validSearchAttributes:
       BinaryChecksums: "Keyword"
       CustomNamespace: "Keyword"
       Operator: "Keyword"
-      RolloutId: "Keyword"
 
