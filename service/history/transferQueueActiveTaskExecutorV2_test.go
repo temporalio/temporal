@@ -155,6 +155,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) SetupTest() {
 
 	config := NewDynamicConfigForTest()
 	config.DisableKafkaForVisibility = dc.GetBoolPropertyFn(true)
+	config.DisableTransferQueueProcessForVisibility = dc.GetBoolPropertyFn(true)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{

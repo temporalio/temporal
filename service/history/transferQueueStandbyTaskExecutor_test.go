@@ -107,6 +107,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	config := configs.NewDynamicConfigForTest()
 	config.DisableKafkaForVisibility = dc.GetBoolPropertyFn(true)
+	config.DisableTransferQueueProcessForVisibility = dc.GetBoolPropertyFn(true)
 
 	s.namespaceID = testNamespaceID
 	s.namespaceEntry = testGlobalNamespaceEntry

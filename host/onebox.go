@@ -736,6 +736,8 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	}
 
 	client.OverrideValue(dynamicconfig.DisableKafkaForVisibility, c.historyConfig.DisableKafkaForVisibility)
+	// It is ok to use the same value for DisableTransferQueueProcessForVisibility in integration tests.
+	client.OverrideValue(dynamicconfig.DisableTransferQueueProcessForVisibility, c.historyConfig.DisableKafkaForVisibility)
 }
 
 // copyPersistenceConfig makes a deepcopy of persistence config.
