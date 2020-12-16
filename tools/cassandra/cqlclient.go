@@ -189,6 +189,10 @@ func (client *cqlClient) CreateSchemaVersionTables() error {
 // ReadSchemaVersion returns the current schema version for the Keyspace
 func (client *cqlClient) ReadSchemaVersion() (string, error) {
 	query := client.session.Query(readSchemaVersionCQL, client.clusterConfig.Keyspace)
+	// when querying the DB schema version, override to local quorum
+	// in case Cassandra node down (compared to using ALL)
+	query.SetConsistency(gocql.LocalQuorum)
+
 	iter := query.Iter()
 	var version string
 	if !iter.Scan(&version) {
