@@ -90,28 +90,28 @@ func (s *contextSuite) TestAddTasks_Success() {
 		VisibilityTime:  timestamp.TimeNowPtrUtc(),
 	}
 
-	visibilityTasks := []persistence.Task{&persistence.DeleteExecutionVisibilityTask{
-		// TaskID is set by shard
-		VisibilityTimestamp: s.shardContext.GetTimeSource().Now(),
-		Version:             task.GetVersion(),
-	}}
+	transferTasks := []persistence.Task{&persistence.ActivityTask{}}              // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
+	timerTasks := []persistence.Task{&persistence.ActivityRetryTimerTask{}}       // Just for testing purpose. In the real code ActivityRetryTimerTask can't be passed to shardContext.AddTasks.
+	replicationTasks := []persistence.Task{&persistence.HistoryReplicationTask{}} // Just for testing purpose. In the real code HistoryReplicationTask can't be passed to shardContext.AddTasks.
+	visibilityTasks := []persistence.Task{&persistence.DeleteExecutionVisibilityTask{}}
+
 	addTasksRequest := &persistence.AddTasksRequest{
 		NamespaceID: task.GetNamespaceId(),
 		WorkflowID:  task.GetWorkflowId(),
 		RunID:       task.GetRunId(),
 
-		TransferTasks:    nil,
-		TimerTasks:       nil,
-		ReplicationTasks: nil,
+		TransferTasks:    transferTasks,
+		TimerTasks:       timerTasks,
+		ReplicationTasks: replicationTasks,
 		VisibilityTasks:  visibilityTasks,
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil)
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
 	s.mockExecutionManager.On("AddTasks", addTasksRequest).Return(nil).Once()
-	s.mockHistoryEngine.EXPECT().NotifyNewTransferTasks(nil).Times(1)
-	s.mockHistoryEngine.EXPECT().NotifyNewTimerTasks(nil).Times(1)
-	s.mockHistoryEngine.EXPECT().NotifyNewReplicationTasks(nil).Times(1)
+	s.mockHistoryEngine.EXPECT().NotifyNewTransferTasks(transferTasks).Times(1)
+	s.mockHistoryEngine.EXPECT().NotifyNewTimerTasks(timerTasks).Times(1)
+	s.mockHistoryEngine.EXPECT().NotifyNewReplicationTasks(replicationTasks).Times(1)
 	s.mockHistoryEngine.EXPECT().NotifyNewVisibilityTasks(visibilityTasks).Times(1)
 
 	err := s.shardContext.AddTasks(addTasksRequest)
