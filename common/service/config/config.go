@@ -531,11 +531,13 @@ type (
 		PermissionsClaimName string         `yaml:"permissionsClaimName"`
 	}
 
+	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider
 	// Contains the config for signing key provider for validating JWT tokens
 	JWTKeyProvider struct {
 		KeySourceURIs   []string      `yaml:"keySourceURIs"`
 		RefreshInterval time.Duration `yaml:"refreshInterval"`
 	}
+	// @@@SNIPEND
 )
 
 // Validate validates this config

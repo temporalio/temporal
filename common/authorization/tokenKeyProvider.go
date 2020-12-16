@@ -29,6 +29,7 @@ import (
 	"crypto/rsa"
 )
 
+// @@@SNIPSTART temporal-common-authorization-tokenkeyprovider-interface
 // Provides keys for validating JWT tokens
 type TokenKeyProvider interface {
 	EcdsaKey(alg string, kid string) (*ecdsa.PublicKey, error)
@@ -36,3 +37,4 @@ type TokenKeyProvider interface {
 	RsaKey(alg string, kid string) (*rsa.PublicKey, error)
 	Close()
 }
+// @@@SNIPEND
