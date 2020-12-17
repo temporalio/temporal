@@ -71,7 +71,6 @@ var keys = map[Key]string{
 	MinRetentionDays:                       "system.minRetentionDays",
 	DisallowQuery:                          "system.disallowQuery",
 	EnableBatcher:                          "worker.enableBatcher",
-	EnableIndexer:                          "worker.enableIndexer",
 	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
 	EnableStickyQuery:                      "system.enableStickyQuery",
 	EnablePriorityTaskProcessor:            "system.enablePriorityTaskProcessor",
@@ -277,8 +276,7 @@ var keys = map[Key]string{
 	SkipReapplicationByNamespaceId:                         "history.SkipReapplicationByNamespaceId",
 	DefaultActivityRetryPolicy:                             "history.defaultActivityRetryPolicy",
 	DefaultWorkflowRetryPolicy:                             "history.defaultWorkflowRetryPolicy",
-	DisableKafkaForVisibility:                              "history.disableKafkaForVisibility",
-	DisableTransferQueueProcessForVisibility:               "history.disableTransferQueueProcessForVisibility",
+	VisibilityQueue:                                        "history.visibilityQueue",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -719,10 +717,8 @@ const (
 	// SkipReapplicationByNameSpaceId is whether skipping a event re-application for a namespace
 	SkipReapplicationByNamespaceId
 
-	// DisableKafkaForVisibility is to indicate if Kafka or internal visibility queue should be used for visibility.
-	DisableKafkaForVisibility
-	// DisableTransferQueueProcessForVisibility is to indicate if transfer queue processor should be used for visibility.
-	DisableTransferQueueProcessForVisibility
+	// VisibilityQueue is to indicate which visibility queue to use: "Kafka", "InternalWithDualProcessor", "Internal".
+	VisibilityQueue
 
 	// key for worker
 
@@ -789,8 +785,6 @@ const (
 	ExecutionsScannerEnabled
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher
-	// EnableIndexer decides whether start indexer in our worker
-	EnableIndexer
 	// EnableParentClosePolicyWorker decides whether or not enable system workers for processing parent close policy task
 	EnableParentClosePolicyWorker
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace

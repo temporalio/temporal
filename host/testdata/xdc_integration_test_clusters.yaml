@@ -36,7 +36,7 @@
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1
-    disablekafkaforvisibility: true
+    visibilityqueue: internal
   messagingclientconfig:
     usemock: false
     kafkaconfig:
@@ -99,7 +99,7 @@
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1
-    disablekafkaforvisibility: true
+    visibilityqueue: internal
   messagingclientconfig:
     usemock: false
     kafkaconfig:

@@ -290,7 +290,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		archiveVisibility = clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
 	}
 
-	if (!t.config.DisableKafkaForVisibility() || !t.config.DisableTransferQueueProcessForVisibility()) && recordWorkflowClose {
+	if (t.config.VisibilityQueue() == common.VisibilityQueueKafka || t.config.VisibilityQueue() == common.VisibilityQueueInternalWithDualProcessor) && recordWorkflowClose {
 		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 			VisibilityRequestBase: &persistence.VisibilityRequestBase{
 				NamespaceID: namespaceID,

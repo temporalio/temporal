@@ -117,11 +117,11 @@ type (
 
 	// HistoryConfig contains configs for history service
 	HistoryConfig struct {
-		NumHistoryShards          int32
-		NumHistoryHosts           int
-		HistoryCountLimitError    int
-		HistoryCountLimitWarn     int
-		DisableKafkaForVisibility bool
+		NumHistoryShards       int32
+		NumHistoryHosts        int
+		HistoryCountLimitError int
+		HistoryCountLimitWarn  int
+		VisibilityQueue        string
 	}
 
 	// TemporalParams contains everything needed to bootstrap Temporal
@@ -735,9 +735,7 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
 	}
 
-	client.OverrideValue(dynamicconfig.DisableKafkaForVisibility, c.historyConfig.DisableKafkaForVisibility)
-	// It is ok to use the same value for DisableTransferQueueProcessForVisibility in integration tests.
-	client.OverrideValue(dynamicconfig.DisableTransferQueueProcessForVisibility, c.historyConfig.DisableKafkaForVisibility)
+	client.OverrideValue(dynamicconfig.VisibilityQueue, c.historyConfig.VisibilityQueue)
 }
 
 // copyPersistenceConfig makes a deepcopy of persistence config.
