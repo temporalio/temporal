@@ -80,7 +80,7 @@ func buildCLI() *cli.App {
 			Name:    "zone",
 			Aliases: []string{"az"},
 			Usage:   "availability zone",
-			EnvVars: []string{config.EnvKeyAvailabilityZone},
+			EnvVars: []string{config.EnvKeyAvailabilityZone, config.EnvKeyAvailabilityZoneTypo},
 		},
 	}
 
