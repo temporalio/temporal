@@ -42,7 +42,11 @@ const (
 	// EnvKeyEnvironment is the environment variable key for environment
 	EnvKeyEnvironment = "TEMPORAL_ENVIRONMENT"
 	// EnvKeyAvailabilityZone is the environment variable key for AZ
-	EnvKeyAvailabilityZone = "TEMPORAL_AVAILABILTY_ZONE"
+	EnvKeyAvailabilityZone = "TEMPORAL_AVAILABILITY_ZONE"
+	// EnvKeyAvailabilityZoneTypo is the old environment variable key for AZ that
+	// included a typo. This is deprecated and only here to support backwards
+	// compatibility.
+	EnvKeyAvailabilityZoneTypo = "TEMPORAL_AVAILABILTY_ZONE"
 )
 
 const (
