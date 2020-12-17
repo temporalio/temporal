@@ -3,10 +3,28 @@
 version: "3.5"
 
 services:
+  # Use http://localhost:9090/ to access Prometheus.
   prometheus:
     image: prom/prometheus
     container_name: temporal-prometheus
-    ports:
-      - "9090:9090"
-    networks:
-      - temporal-dependencies-network
+    volumes:
+      - ./prometheus:/etc/prometheus
+    # Linux
+    network_mode: host
+    # darwin/Windows
+#    ports:
+#      - "9090:9090"
+#    networks:
+#      - temporal-dependencies-network
+
+  # Use http://localhost:3000/ to access Grafana (admin/admin).
+  grafana:
+    image: grafana/grafana
+    container_name: temporal-grafana
+    # Linux
+    network_mode: host
+    # darwin/Windows
+#    ports:
+#      - "3000:3000"
+#    networks:
+#      - temporal-dependencies-network
