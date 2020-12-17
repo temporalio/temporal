@@ -42,7 +42,7 @@ const (
 	// EnvKeyEnvironment is the environment variable key for environment
 	EnvKeyEnvironment = "TEMPORAL_ENVIRONMENT"
 	// EnvKeyAvailabilityZone is the environment variable key for AZ
-	EnvKeyAvailabilityZone = "TEMPORAL_AVAILABILTY_ZONE"
+	EnvKeyAvailabilityZone = "TEMPORAL_AVAILABILITY_ZONE"
 )
 
 const (
