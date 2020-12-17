@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -109,7 +110,7 @@ type (
 		mutableState mutableState
 
 		// TODO (alex): remove when kafka deprecation is done.
-		disableKafkaForVisibility bool
+		visibilityQueue string
 	}
 )
 
@@ -127,13 +128,13 @@ func newMutableStateTaskGenerator(
 		namespaceCache: namespaceCache,
 		logger:         logger,
 
-		mutableState:              mutableState,
-		disableKafkaForVisibility: false,
+		mutableState:    mutableState,
+		visibilityQueue: common.VisibilityQueueKafka,
 	}
 
 	// TODO (alex): remove when kafka deprecation is done.
 	if ms, ok := mutableState.(*mutableStateBuilder); ok {
-		mstg.disableKafkaForVisibility = ms.config.DisableKafkaForVisibility()
+		mstg.visibilityQueue = ms.config.VisibilityQueue()
 	}
 
 	return mstg
@@ -173,7 +174,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 		Version:             currentVersion,
 	})
 
-	if r.disableKafkaForVisibility {
+	if r.visibilityQueue == common.VisibilityQueueInternal || r.visibilityQueue == common.VisibilityQueueInternalWithDualProcessor {
 		r.mutableState.AddVisibilityTasks(&persistence.CloseExecutionVisibilityTask{
 			// TaskID is set by shard
 			VisibilityTimestamp: now,
@@ -241,7 +242,7 @@ func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
 
 	startVersion := startEvent.GetVersion()
 
-	if !r.disableKafkaForVisibility {
+	if r.visibilityQueue == common.VisibilityQueueKafka {
 		r.mutableState.AddTransferTasks(&persistence.RecordWorkflowStartedTask{
 			// TaskID is set by shard
 			VisibilityTimestamp: now,
@@ -494,7 +495,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowSearchAttrTasks(
 
 	currentVersion := r.mutableState.GetCurrentVersion()
 
-	if !r.disableKafkaForVisibility {
+	if r.visibilityQueue == common.VisibilityQueueKafka {
 		r.mutableState.AddTransferTasks(&persistence.UpsertWorkflowSearchAttributesTask{
 			// TaskID is set by shard
 			VisibilityTimestamp: now,
