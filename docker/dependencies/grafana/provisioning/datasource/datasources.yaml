@@ -1,0 +1,7 @@
+apiVersion: 1
+datasources:
+- name: prometheus
+  type: prometheus
+  url: http://temporal-prometheus:9090
+  access: proxy
+  isDefault: true

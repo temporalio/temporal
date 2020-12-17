@@ -21,6 +21,8 @@ services:
   grafana:
     image: grafana/grafana
     container_name: temporal-grafana
+    volumes:
+      - ./grafana:/etc/grafana
     # Linux
     network_mode: host
     # darwin/Windows
