@@ -10,9 +10,5 @@ scrape_configs:
       - targets:
           # server - Linux
           - localhost:8000
-          # canary - Linux
-          - localhost:9090
           # server - darwin/Windows
           - host.docker.internal:8000
-          # canary - darwin/Windows
-          - host.docker.internal:9090

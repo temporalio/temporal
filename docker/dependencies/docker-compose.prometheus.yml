@@ -21,8 +21,10 @@ services:
   grafana:
     image: grafana/grafana
     container_name: temporal-grafana
+    depends_on:
+      - prometheus
     volumes:
-      - ./grafana:/etc/grafana
+      - ./grafana/provisioning/:/etc/grafana/provisioning/
     # Linux
     network_mode: host
     # darwin/Windows
