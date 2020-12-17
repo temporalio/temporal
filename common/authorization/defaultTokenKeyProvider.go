@@ -42,7 +42,7 @@ import (
 	"go.temporal.io/server/common/service/config"
 )
 
-// Default RSA token key provider
+// Default token key provider
 type defaultTokenKeyProvider struct {
 	config   config.JWTKeyProvider
 	rsaKeys  map[string]*rsa.PublicKey
@@ -68,7 +68,7 @@ func (a *defaultTokenKeyProvider) init() {
 	if len(a.config.KeySourceURIs) > 0 {
 		err := a.updateKeys()
 		if err != nil {
-			a.logger.Error("error during initial retrieval of RSA token rsaKeys: ", tag.Error(err))
+			a.logger.Error("error during initial retrieval of token keys: ", tag.Error(err))
 		}
 	}
 	if a.config.RefreshInterval > 0 {
@@ -122,7 +122,7 @@ func (a *defaultTokenKeyProvider) timerCallback() {
 		if len(a.config.KeySourceURIs) > 0 {
 			err := a.updateKeys()
 			if err != nil {
-				a.logger.Error("error while refreshing RSA token rsaKeys: ", tag.Error(err))
+				a.logger.Error("error while refreshing token keys: ", tag.Error(err))
 			}
 		}
 	}
@@ -130,7 +130,7 @@ func (a *defaultTokenKeyProvider) timerCallback() {
 
 func (a *defaultTokenKeyProvider) updateKeys() error {
 	if len(a.config.KeySourceURIs) == 0 {
-		return fmt.Errorf("no URIs configured for retrieving rsaKeys")
+		return fmt.Errorf("no URIs configured for retrieving token keys")
 	}
 
 	rsaKeys := make(map[string]*rsa.PublicKey)
@@ -142,9 +142,10 @@ func (a *defaultTokenKeyProvider) updateKeys() error {
 			return err
 		}
 	}
-	// swap old rsaKeys with the new ones
+	// swap old keys with the new ones
 	a.keysLock.Lock()
 	a.rsaKeys = rsaKeys
+	a.ecKeys = ecKeys
 	a.keysLock.Unlock()
 	return nil
 }
