@@ -65,7 +65,7 @@ func (a *interceptor) Interceptor(
 
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
 			authHeaders = md["authorization"]
-			authExtraHeaders = md["authorization-extra-data"]
+			authExtraHeaders = md["authorization-extras"]
 		}
 		if p, ok := peer.FromContext(ctx); ok {
 			if tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo); ok {
