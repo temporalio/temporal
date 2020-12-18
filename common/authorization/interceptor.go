@@ -60,10 +60,12 @@ func (a *interceptor) Interceptor(
 	if a.claimMapper != nil && a.authorizer != nil {
 		var tlsSubject *pkix.Name
 		var authHeaders []string
+		var authExtraHeaders []string
 		var tlsConnection *credentials.TLSInfo
 
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
 			authHeaders = md["authorization"]
+			authExtraHeaders = md["authorization-extras"]
 		}
 		if p, ok := peer.FromContext(ctx); ok {
 			if tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo); ok {
@@ -82,13 +84,18 @@ func (a *interceptor) Interceptor(
 		// Add auth info to context only if there's some auth info
 		if tlsSubject != nil || len(authHeaders) > 0 {
 			var authHeader string
+			var authExtraHeader string
 			if len(authHeaders) > 0 {
 				authHeader = authHeaders[0]
+			}
+			if len(authExtraHeaders) > 0 {
+				authExtraHeader = authExtraHeaders[0]
 			}
 			authInfo := AuthInfo{
 				AuthToken:     authHeader,
 				TLSSubject:    tlsSubject,
 				TLSConnection: tlsConnection,
+				ExtraData:     authExtraHeader,
 			}
 			mappedClaims, err := a.claimMapper.GetClaims(&authInfo)
 			if err != nil {
