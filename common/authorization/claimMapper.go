@@ -40,7 +40,9 @@ type AuthInfo struct {
 	AuthToken     string
 	TLSSubject    *pkix.Name
 	TLSConnection *credentials.TLSInfo
+	ExtraData     string
 }
+
 // @@@SNIPEND
 
 // @@@SNIPSTART temporal-common-authorization-claimmapper-interface
@@ -48,6 +50,7 @@ type AuthInfo struct {
 type ClaimMapper interface {
 	GetClaims(authInfo *AuthInfo) (*Claims, error)
 }
+
 // @@@SNIPEND
 
 // No-op claim mapper that gives system level admin permission to everybody
