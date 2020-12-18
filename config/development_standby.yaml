@@ -18,9 +18,9 @@ global:
   pprof:
     port: 8936
   metrics:
-    statsd:
-      hostPort: "127.0.0.1:8125"
-      prefix: "temporal_standby"
+    prometheus:
+      timerType: "histogram"
+      listenAddress: "127.0.0.1:8000"
 
 services:
   frontend:
