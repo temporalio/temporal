@@ -581,15 +581,21 @@ func lockTaskQueue(
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
 	})
-	if err != nil {
+	switch err {
+	case nil:
+		if rangeID != oldRangeID {
+			return &persistence.ConditionFailedError{
+				Msg: fmt.Sprintf("Task queue range ID was %v when it was should have been %v", rangeID, oldRangeID),
+			}
+		}
+		return nil
+
+	case sql.ErrNoRows:
+		return &persistence.ConditionFailedError{Msg: "Task queue does not exists"}
+
+	default:
 		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock task queue. Error: %v", err))
 	}
-	if rangeID != oldRangeID {
-		return &persistence.ConditionFailedError{
-			Msg: fmt.Sprintf("Task queue range ID was %v when it was should have been %v", rangeID, oldRangeID),
-		}
-	}
-	return nil
 }
 
 func stickyTaskQueueTTL() *time.Time {
