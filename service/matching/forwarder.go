@@ -102,7 +102,6 @@ func newForwarder(
 	kind enumspb.TaskQueueKind,
 	client matching.Client,
 ) *Forwarder {
-	rpsFunc := func() float64 { return float64(cfg.ForwarderMaxRatePerSecond()) }
 	fwdr := &Forwarder{
 		cfg:                   cfg,
 		client:                client,
@@ -110,7 +109,9 @@ func newForwarder(
 		taskQueueKind:         kind,
 		outstandingTasksLimit: int32(cfg.ForwarderMaxOutstandingTasks()),
 		outstandingPollsLimit: int32(cfg.ForwarderMaxOutstandingPolls()),
-		limiter:               quotas.NewDynamicRateLimiter(rpsFunc),
+		limiter: quotas.NewDefaultOutgoingDynamicRateLimiter(
+			func() float64 { return float64(cfg.ForwarderMaxRatePerSecond()) },
+		),
 	}
 	fwdr.addReqToken.Store(newForwarderReqToken(cfg.ForwarderMaxOutstandingTasks()))
 	fwdr.pollReqToken.Store(newForwarderReqToken(cfg.ForwarderMaxOutstandingPolls()))

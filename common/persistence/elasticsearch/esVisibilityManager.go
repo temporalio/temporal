@@ -53,10 +53,8 @@ func NewESVisibilityManager(
 	if cfg != nil {
 		// wrap with rate limiter
 		if cfg.MaxQPS != nil && cfg.MaxQPS() != 0 {
-			esRateLimiter := quotas.NewDynamicRateLimiter(
-				func() float64 {
-					return float64(cfg.MaxQPS())
-				},
+			esRateLimiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
+				func() float64 { return float64(cfg.MaxQPS()) },
 			)
 			visibilityManager = p.NewVisibilityPersistenceRateLimitedClient(visibilityManager, esRateLimiter, log)
 		}

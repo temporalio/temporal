@@ -25,8 +25,6 @@
 package loggerimpl
 
 import (
-	"sync/atomic"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/quotas"
@@ -34,7 +32,6 @@ import (
 )
 
 type throttledLogger struct {
-	rps     int32
 	limiter quotas.Limiter
 	log     log.Logger
 }
@@ -61,13 +58,11 @@ func NewThrottledLogger(logger log.Logger, rps dynamicconfig.IntPropertyFn) log.
 		log = logger
 	}
 
-	rate := rps()
-	limiter := quotas.NewDynamicRateLimiter(func() float64 {
-		return float64(rps())
-	})
+	limiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
+		func() float64 { return float64(rps()) },
+	)
 	tl := &throttledLogger{
 		limiter: limiter,
-		rps:     int32(rate),
 		log:     log,
 	}
 	return tl
@@ -106,7 +101,6 @@ func (tl *throttledLogger) Fatal(msg string, tags ...tag.Tag) {
 // Return a logger with the specified key-value pairs set, to be included in a subsequent normal logging call
 func (tl *throttledLogger) WithTags(tags ...tag.Tag) log.Logger {
 	result := &throttledLogger{
-		rps:     atomic.LoadInt32(&tl.rps),
 		limiter: tl.limiter,
 		log:     tl.log.WithTags(tags...),
 	}

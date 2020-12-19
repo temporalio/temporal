@@ -683,7 +683,10 @@ func (e *matchingEngineImpl) getAllPartitions(
 
 // Loads a task from persistence and wraps it in a task context
 func (e *matchingEngineImpl) getTask(
-	ctx context.Context, taskQueue *taskQueueID, maxDispatchPerSecond *float64, taskQueueKind enumspb.TaskQueueKind,
+	ctx context.Context,
+	taskQueue *taskQueueID,
+	maxDispatchPerSecond *float64,
+	taskQueueKind enumspb.TaskQueueKind,
 ) (*internalTask, error) {
 	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {

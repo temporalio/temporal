@@ -25,43 +25,34 @@
 package quotas
 
 import (
-	"context"
-
-	"golang.org/x/time/rate"
+	"testing"
+	"time"
 )
 
-// Info corresponds to information required to determine rate limits
-type Info struct {
-	Namespace string
+// BenchmarkRateLimiter
+// BenchmarkRateLimiter-16           	 8445120	       125 ns/op
+// BenchmarkDynamicRateLimiter
+// BenchmarkDynamicRateLimiter-16    	 8629598	       132 ns/op
+
+const (
+	testRate  = 2000.0
+	testBurst = 4000
+)
+
+func BenchmarkRateLimiter(b *testing.B) {
+	limiter := NewRateLimiter(testRate, testBurst)
+	for n := 0; n < b.N; n++ {
+		limiter.Allow()
+	}
 }
 
-// Limiter corresponds to basic rate limiting functionality.
-type Limiter interface {
-	// Allow attempts to allow a request to go through. The method returns
-	// immediately with a true or false indicating if the request can make
-	// progress
-	Allow() bool
-
-	// Reserve returns a Reservation that indicates how long the caller
-	// must wait before event happen.
-	Reserve() *rate.Reservation
-
-	// Wait waits till the deadline for a rate limit token to allow the request
-	// to go through.
-	Wait(ctx context.Context) error
-
-	// Rate returns the rate per second for this rate limiter
-	Rate() float64
-
-	// Burst returns the burst for this rate limiter
-	Burst() int
-}
-
-// Policy corresponds to a quota policy. A policy allows implementing layered
-// and more complex rate limiting functionality.
-type Policy interface {
-	// Allow attempts to allow a request to go through. The method returns
-	// immediately with a true or false indicating if the request can make
-	// progress
-	Allow(info Info) bool
+func BenchmarkDynamicRateLimiter(b *testing.B) {
+	limiter := NewDynamicRateLimiter(
+		func() float64 { return testRate },
+		func() int { return testBurst },
+		time.Minute,
+	)
+	for n := 0; n < b.N; n++ {
+		limiter.Allow()
+	}
 }
