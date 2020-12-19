@@ -59,8 +59,8 @@ var (
 	testType      = docType
 	testID        = "test-doc-id"
 	testStopWatch = metrics.NopStopwatch()
-	testScope     = metrics.ESProcessorScope
-	testMetric    = metrics.ESProcessorProcessMsgLatency
+	testScope     = metrics.ESVisibility
+	testMetric    = metrics.ESBulkProcessorRequestLatency
 )
 
 func TestESProcessorSuite(t *testing.T) {
@@ -215,7 +215,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Ack() {
 	}
 
 	ackCh := make(chan bool, 1)
-	mapVal := newChanWithStopwatch(ackCh, &testStopWatch)
+	mapVal := newAckChanWithStopwatch(ackCh, &testStopWatch)
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
 	select {
@@ -264,7 +264,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 	}
 
 	ackCh := make(chan bool, 1)
-	mapVal := newChanWithStopwatch(ackCh, &testStopWatch)
+	mapVal := newAckChanWithStopwatch(ackCh, &testStopWatch)
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
 	select {
@@ -300,7 +300,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Error() {
 		Items:  []map[string]*elastic.BulkResponseItem{mFailed},
 	}
 
-	s.mockMetricClient.On("IncCounter", metrics.ESProcessorScope, metrics.ESProcessorFailures).Once()
+	s.mockMetricClient.On("IncCounter", metrics.ESVisibility, metrics.ESBulkProcessorFailures).Once()
 	s.esProcessor.bulkAfterAction(0, requests, response, errors.New("some error"))
 }
 
