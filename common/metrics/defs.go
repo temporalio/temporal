@@ -1008,6 +1008,9 @@ const (
 	// ReplicationDLQStatsScope is scope used by all metrics emitted related to replication DLQ
 	ReplicationDLQStatsScope
 
+	// ElasticSearchVisibility is scope used by all metric emitted by esProcessor
+	ElasticSearchVisibility
+
 	NumHistoryScopes
 )
 
@@ -1530,6 +1533,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ReplicationTaskFetcherScope:               {operation: "ReplicationTaskFetcher"},
 		ReplicationTaskCleanupScope:               {operation: "ReplicationTaskCleanup"},
 		ReplicationDLQStatsScope:                  {operation: "ReplicationDLQStats"},
+		ElasticSearchVisibility:                   {operation: "ElasticSearchVisibility"},
 	},
 	// Matching Scope Names
 	Matching: {
@@ -1871,6 +1875,13 @@ const (
 	ReplicationTaskCleanupFailure
 	MutableStateChecksumMismatch
 	MutableStateChecksumInvalidated
+
+	ESBulkProcessorRequests
+	ESBulkProcessorRetries
+	ESBulkProcessorFailures
+	ESBulkProcessorCorruptedData
+	ESBulkProcessorRequestLatency
+	ESInvalidSearchAttribute
 
 	NumHistoryMetrics
 )
@@ -2290,6 +2301,13 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ReplicationTaskCleanupFailure:                     {metricName: "replication_task_cleanup_failed", metricType: Counter},
 		MutableStateChecksumMismatch:                      {metricName: "mutable_state_checksum_mismatch", metricType: Counter},
 		MutableStateChecksumInvalidated:                   {metricName: "mutable_state_checksum_invalidated", metricType: Counter},
+
+		ESBulkProcessorRequests:       {metricName: "es_bulk_processor_requests"},
+		ESBulkProcessorRetries:        {metricName: "es_bulk_processor_retries"},
+		ESBulkProcessorFailures:       {metricName: "es_bulk_processor_errors"},
+		ESBulkProcessorCorruptedData:  {metricName: "es_bulk_processor_corrupted_data"},
+		ESBulkProcessorRequestLatency: {metricName: "es_bulk_processor_request_latency", metricType: Timer},
+		ESInvalidSearchAttribute:      {metricName: "es_invalid_search_attribute"},
 	},
 	Matching: {
 		PollSuccessPerTaskQueueCounter:            {metricName: "poll_success_per_tl", metricRollupName: "poll_success"},
