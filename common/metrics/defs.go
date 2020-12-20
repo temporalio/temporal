@@ -1008,8 +1008,8 @@ const (
 	// ReplicationDLQStatsScope is scope used by all metrics emitted related to replication DLQ
 	ReplicationDLQStatsScope
 
-	// ESVisibility is scope used by all metric emitted by esProcessor
-	ESVisibility
+	// ElasticSearchVisibility is scope used by all metric emitted by esProcessor
+	ElasticSearchVisibility
 
 	NumHistoryScopes
 )
@@ -1533,7 +1533,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ReplicationTaskFetcherScope:               {operation: "ReplicationTaskFetcher"},
 		ReplicationTaskCleanupScope:               {operation: "ReplicationTaskCleanup"},
 		ReplicationDLQStatsScope:                  {operation: "ReplicationDLQStats"},
-		ESVisibility:                              {operation: "ESVisibility"},
+		ElasticSearchVisibility:                   {operation: "ElasticSearchVisibility"},
 	},
 	// Matching Scope Names
 	Matching: {

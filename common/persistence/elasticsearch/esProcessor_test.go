@@ -59,7 +59,7 @@ var (
 	testType      = docType
 	testID        = "test-doc-id"
 	testStopWatch = metrics.NopStopwatch()
-	testScope     = metrics.ESVisibility
+	testScope     = metrics.ElasticSearchVisibility
 	testMetric    = metrics.ESBulkProcessorRequestLatency
 )
 
@@ -300,7 +300,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Error() {
 		Items:  []map[string]*elastic.BulkResponseItem{mFailed},
 	}
 
-	s.mockMetricClient.On("IncCounter", metrics.ESVisibility, metrics.ESBulkProcessorFailures).Once()
+	s.mockMetricClient.On("IncCounter", metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures).Once()
 	s.esProcessor.bulkAfterAction(0, requests, response, errors.New("some error"))
 }
 

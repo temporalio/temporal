@@ -309,7 +309,7 @@ func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBa
 	for searchAttributeName, searchAttributePayload := range request.SearchAttributes {
 		if !v.isValidSearchAttribute(searchAttributeName) {
 			v.logger.Error("Unregistered field.", tag.ESField(searchAttributeName))
-			v.metricsClient.IncCounter(metrics.ESVisibility, metrics.ESInvalidSearchAttribute)
+			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 			continue
 		}
 		var searchAttributeValue interface{}
@@ -317,7 +317,7 @@ func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBa
 		err := payload.Decode(searchAttributePayload, &searchAttributeValue)
 		if err != nil {
 			v.logger.Error("Error when decode search attribute payload.", tag.Error(err), tag.ESField(searchAttributeName))
-			v.metricsClient.IncCounter(metrics.ESVisibility, metrics.ESInvalidSearchAttribute)
+			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 		}
 		attr[searchAttributeName] = searchAttributeValue
 	}

@@ -173,7 +173,7 @@ func (p *esProcessorImpl) Add(request elastic.BulkableRequest, visibilityTaskKey
 		panic("ackCh must be buffered channel (length should be 1 or more)")
 	}
 
-	sw := p.metricsClient.StartTimer(metrics.ESVisibility, metrics.ESBulkProcessorRequestLatency)
+	sw := p.metricsClient.StartTimer(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRequestLatency)
 	ackChWithStopwatch := newAckChanWithStopwatch(ackCh, &sw)
 	_, isDup, _ := p.mapToAckChan.PutOrDo(visibilityTaskKey, ackChWithStopwatch, p.onDuplicateAction)
 	if isDup {
@@ -194,10 +194,10 @@ func (p *esProcessorImpl) onDuplicateAction(key interface{}, value interface{}) 
 
 // bulkBeforeAction is triggered before bulk processor commit
 func (p *esProcessorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableRequest) {
-	p.metricsClient.AddCounter(metrics.ESVisibility, metrics.ESBulkProcessorRequests, int64(len(requests)))
+	p.metricsClient.AddCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRequests, int64(len(requests)))
 }
 
-// bulkAfterAction is triggered eafter bulk processor commit
+// bulkAfterAction is triggered after bulk processor commit
 func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
 	if err != nil {
 		// This happens after configured retry, which means something bad happens on cluster or index
@@ -206,7 +206,7 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 
 		for _, request := range requests {
 			p.logger.Error("ES request failed.", tag.ESRequest(request.String()))
-			p.metricsClient.IncCounter(metrics.ESVisibility, metrics.ESBulkProcessorFailures)
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures)
 		}
 		return
 	}
@@ -230,7 +230,7 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 				p.sendToAckChan(visibilityTaskKey, false)
 			default: // bulk processor will retry
 				p.logger.Info("ES request retried.", tag.ESResponseStatus(resp.Status))
-				p.metricsClient.IncCounter(metrics.ESVisibility, metrics.ESBulkProcessorRetries)
+				p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRetries)
 			}
 		}
 	}
@@ -264,7 +264,7 @@ func (p *esProcessorImpl) getVisibilityTaskKey(request elastic.BulkableRequest) 
 	req, err := request.Source()
 	if err != nil {
 		p.logger.Error("Get request source err.", tag.Error(err), tag.ESRequest(request.String()))
-		p.metricsClient.IncCounter(metrics.ESVisibility, metrics.ESBulkProcessorCorruptedData)
+		p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 		return ""
 	}
 
@@ -273,7 +273,7 @@ func (p *esProcessorImpl) getVisibilityTaskKey(request elastic.BulkableRequest) 
 		var body map[string]interface{}
 		if err := json.Unmarshal([]byte(req[1]), &body); err != nil {
 			p.logger.Error("Unmarshal index request body err.", tag.Error(err))
-			p.metricsClient.IncCounter(metrics.ESVisibility, metrics.ESBulkProcessorCorruptedData)
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 			return ""
 		}
 
@@ -291,7 +291,7 @@ func (p *esProcessorImpl) getVisibilityTaskKey(request elastic.BulkableRequest) 
 		var body map[string]map[string]interface{}
 		if err := json.Unmarshal([]byte(req[0]), &body); err != nil {
 			p.logger.Error("Unmarshal delete request body err.", tag.Error(err))
-			p.metricsClient.IncCounter(metrics.ESVisibility, metrics.ESBulkProcessorCorruptedData)
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 			return ""
 		}
 
@@ -315,7 +315,7 @@ func (p *esProcessorImpl) getDocIDs(request elastic.BulkableRequest) (workflowID
 	req, err := request.Source()
 	if err != nil {
 		p.logger.Error("Get request source err.", tag.Error(err), tag.ESRequest(request.String()))
-		p.metricsClient.IncCounter(metrics.ESVisibility, metrics.ESBulkProcessorCorruptedData)
+		p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 		return
 	}
 
@@ -323,7 +323,7 @@ func (p *esProcessorImpl) getDocIDs(request elastic.BulkableRequest) (workflowID
 		var body map[string]interface{}
 		if err := json.Unmarshal([]byte(req[1]), &body); err != nil {
 			p.logger.Error("Unmarshal index request body err.", tag.Error(err))
-			p.metricsClient.IncCounter(metrics.ESVisibility, metrics.ESBulkProcessorCorruptedData)
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 			return
 		}
 
@@ -339,7 +339,7 @@ func (p *esProcessorImpl) getDocIDs(request elastic.BulkableRequest) (workflowID
 		var body map[string]map[string]interface{}
 		if err := json.Unmarshal([]byte(req[0]), &body); err != nil {
 			p.logger.Error("Unmarshal delete request body err.", tag.Error(err))
-			p.metricsClient.IncCounter(metrics.ESVisibility, metrics.ESBulkProcessorCorruptedData)
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 			return
 		}
 
