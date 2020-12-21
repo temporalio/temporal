@@ -97,7 +97,8 @@ func NewService(
 
 				esProcessor = espersistence.NewProcessor(esProcessorConfig, params.ESClient, logger, params.MetricsClient)
 				esProcessor.Start()
-			} else {
+			}
+			if serviceConfig.VisibilityQueue() == common.VisibilityQueueKafka || serviceConfig.VisibilityQueue() == common.VisibilityQueueInternalWithDualProcessor {
 				var err error
 				visibilityProducer, err = params.MessagingClient.NewProducer(common.VisibilityAppName)
 				if err != nil {
