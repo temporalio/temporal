@@ -35,6 +35,8 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -58,10 +60,12 @@ func (a *interceptor) Interceptor(
 	if a.claimMapper != nil && a.authorizer != nil {
 		var tlsSubject *pkix.Name
 		var authHeaders []string
+		var authExtraHeaders []string
 		var tlsConnection *credentials.TLSInfo
 
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
 			authHeaders = md["authorization"]
+			authExtraHeaders = md["authorization-extras"]
 		}
 		if p, ok := peer.FromContext(ctx); ok {
 			if tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo); ok {
@@ -80,17 +84,22 @@ func (a *interceptor) Interceptor(
 		// Add auth info to context only if there's some auth info
 		if tlsSubject != nil || len(authHeaders) > 0 {
 			var authHeader string
+			var authExtraHeader string
 			if len(authHeaders) > 0 {
 				authHeader = authHeaders[0]
+			}
+			if len(authExtraHeaders) > 0 {
+				authExtraHeader = authExtraHeaders[0]
 			}
 			authInfo := AuthInfo{
 				AuthToken:     authHeader,
 				TLSSubject:    tlsSubject,
 				TLSConnection: tlsConnection,
+				ExtraData:     authExtraHeader,
 			}
 			mappedClaims, err := a.claimMapper.GetClaims(&authInfo)
 			if err != nil {
-				return nil, err
+				return nil, a.logAuthError(err)
 			}
 			claims = mappedClaims
 			ctx = context.WithValue(ctx, ContextKeyMappedClaims, mappedClaims)
@@ -106,14 +115,14 @@ func (a *interceptor) Interceptor(
 
 		apiName := info.FullMethod
 
-		scope := a.getMetricsScope(metrics.NumAuthorizationScopes, namespace)
+		scope := a.getMetricsScope(metrics.AuthorizationScope, namespace)
 		sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
 		defer sw.Stop()
 
 		result, err := a.authorizer.Authorize(ctx, claims, &CallTarget{Namespace: namespace, APIName: apiName})
 		if err != nil {
 			scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
-			return nil, err
+			return nil, a.logAuthError(err)
 		}
 		if result.Decision != DecisionAllow {
 			scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
@@ -123,10 +132,16 @@ func (a *interceptor) Interceptor(
 	return handler(ctx, req)
 }
 
+func (a *interceptor) logAuthError(err error) error {
+	a.logger.Error("authorization error", tag.Error(err))
+	return errUnauthorized // return a generic error to the caller without disclosing details
+}
+
 type interceptor struct {
 	authorizer    Authorizer
 	claimMapper   ClaimMapper
 	metricsClient metrics.Client
+	logger        log.Logger
 }
 
 // GetAuthorizationInterceptor creates an authorization interceptor and return a func that points to its Interceptor method
@@ -134,8 +149,14 @@ func NewAuthorizationInterceptor(
 	claimMapper ClaimMapper,
 	authorizer Authorizer,
 	metrics metrics.Client,
+	logger log.Logger,
 ) grpc.UnaryServerInterceptor {
-	return (&interceptor{claimMapper: claimMapper, authorizer: authorizer, metricsClient: metrics}).Interceptor
+	return (&interceptor{
+		claimMapper:   claimMapper,
+		authorizer:    authorizer,
+		metricsClient: metrics,
+		logger:        logger,
+	}).Interceptor
 }
 
 // getMetricsScopeWithNamespace return metrics scope with namespace tag

@@ -6,7 +6,7 @@ CREATE TYPE serialized_event_batch (
 
 CREATE TABLE executions (
   shard_id                       int,
-  type                           int, -- enum RowType { Shard, Execution, TransferTask, TimerTask, ReplicationTask}
+  type                           int, -- enum RowType { Shard, Execution, TransferTask, TimerTask, ReplicationTask, VisibilityTask}
   namespace_id                   uuid,
   workflow_id                    text,
   run_id                         uuid,

@@ -151,6 +151,30 @@ func (w *taskWriter) allocTaskIDs(count int) ([]int64, error) {
 	return result, nil
 }
 
+func (w *taskWriter) appendTasks(
+	tasks []*persistencespb.AllocatedTaskInfo,
+) (*persistence.CreateTasksResponse, error) {
+
+	resp, err := w.tlMgr.db.CreateTasks(tasks)
+	switch err.(type) {
+	case nil:
+		return resp, nil
+
+	case *persistence.ConditionFailedError:
+		w.tlMgr.Stop()
+		return nil, err
+
+	default:
+		w.logger.Error("Persistent store operation failure",
+			tag.StoreOperationCreateTask,
+			tag.Error(err),
+			tag.WorkflowTaskQueueName(w.taskQueueID.name),
+			tag.WorkflowTaskQueueType(w.taskQueueID.taskType),
+		)
+		return nil, err
+	}
+}
+
 func (w *taskWriter) taskWriterLoop() {
 writerLoop:
 	for {
@@ -166,7 +190,7 @@ writerLoop:
 
 				taskIDs, err := w.allocTaskIDs(batchSize)
 				if err != nil {
-					w.sendWriteResponse(reqs, err, nil)
+					w.sendWriteResponse(reqs, nil, err)
 					continue writerLoop
 				}
 
@@ -179,24 +203,12 @@ writerLoop:
 					maxReadLevel = taskIDs[i]
 				}
 
-				r, err := w.tlMgr.db.CreateTasks(tasks)
-				if err != nil {
-					w.logger.Error("Persistent store operation failure",
-						tag.StoreOperationCreateTask,
-						tag.Error(err),
-						tag.WorkflowTaskQueueName(w.taskQueueID.name),
-						tag.WorkflowTaskQueueType(w.taskQueueID.taskType),
-						tag.Number(taskIDs[0]),
-						tag.NextNumber(taskIDs[batchSize-1]),
-					)
-				}
-
+				resp, err := w.appendTasks(tasks)
+				w.sendWriteResponse(reqs, resp, err)
 				// Update the maxReadLevel after the writes are completed.
 				if maxReadLevel > 0 {
 					atomic.StoreInt64(&w.maxReadLevel, maxReadLevel)
 				}
-
-				w.sendWriteResponse(reqs, err, r)
 			}
 		case <-w.stopCh:
 			// we don't close the appendCh here
@@ -220,8 +232,11 @@ readLoop:
 	return reqs
 }
 
-func (w *taskWriter) sendWriteResponse(reqs []*writeTaskRequest,
-	err error, persistenceResponse *persistence.CreateTasksResponse) {
+func (w *taskWriter) sendWriteResponse(
+	reqs []*writeTaskRequest,
+	persistenceResponse *persistence.CreateTasksResponse,
+	err error,
+) {
 	for _, req := range reqs {
 		resp := &writeTaskResponse{
 			err:                 err,

@@ -34,17 +34,24 @@ import (
 	"go.temporal.io/server/common/service/config"
 )
 
+// @@@SNIPSTART temporal-common-authorization-authinfo
 // Authentication information from subject's JWT token or/and mTLS certificate
 type AuthInfo struct {
 	AuthToken     string
 	TLSSubject    *pkix.Name
 	TLSConnection *credentials.TLSInfo
+	ExtraData     string
 }
 
-// Converts authorization info of a subject into Temporal claims (permissions) for authorization
+// @@@SNIPEND
+
+// @@@SNIPSTART temporal-common-authorization-claimmapper-interface
+// ClaimMapper converts authorization info of a subject into Temporal claims (permissions) for authorization
 type ClaimMapper interface {
 	GetClaims(authInfo *AuthInfo) (*Claims, error)
 }
+
+// @@@SNIPEND
 
 // No-op claim mapper that gives system level admin permission to everybody
 type noopClaimMapper struct{}

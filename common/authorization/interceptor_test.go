@@ -33,8 +33,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/mocks"
 )
@@ -83,14 +85,18 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 	s.mockMetricsScope = &mocks.Scope{}
 	s.mockMetricsClient = &mocks.Client{}
 	var nilTag []metrics.Tag
-	s.mockMetricsClient.On("Scope", metrics.NumAuthorizationScopes, nilTag).
+	s.mockMetricsClient.On("Scope", metrics.AuthorizationScope, nilTag).
 		Return(s.mockMetricsScope)
 	s.mockMetricsScope.On("Tagged", metrics.NamespaceTag(testNamespace)).
 		Return(s.mockMetricsScope)
 	s.mockMetricsScope.On("StartTimer", metrics.ServiceAuthorizationLatency).
 		Return(metrics.Stopwatch{}).Once()
 	s.mockClaimMapper = NewMockClaimMapper(s.controller)
-	s.interceptor = NewAuthorizationInterceptor(s.mockClaimMapper, s.mockAuthorizer, s.mockMetricsClient)
+	s.interceptor = NewAuthorizationInterceptor(
+		s.mockClaimMapper,
+		s.mockAuthorizer,
+		s.mockMetricsClient,
+		loggerimpl.NewLogger(zap.NewNop()))
 	s.handler = func(ctx context.Context, req interface{}) (interface{}, error) { return true, nil }
 }
 

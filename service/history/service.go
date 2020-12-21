@@ -85,7 +85,7 @@ func NewService(
 
 			var visibilityProducer messaging.Producer
 			var esProcessor espersistence.Processor
-			if serviceConfig.DisableKafkaForVisibility() {
+			if serviceConfig.VisibilityQueue() == common.VisibilityQueueInternal || serviceConfig.VisibilityQueue() == common.VisibilityQueueInternalWithDualProcessor {
 				esProcessorConfig := &espersistence.ProcessorConfig{
 					IndexerConcurrency:       serviceConfig.IndexerConcurrency,
 					ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
@@ -97,7 +97,8 @@ func NewService(
 
 				esProcessor = espersistence.NewProcessor(esProcessorConfig, params.ESClient, logger, params.MetricsClient)
 				esProcessor.Start()
-			} else {
+			}
+			if serviceConfig.VisibilityQueue() == common.VisibilityQueueKafka || serviceConfig.VisibilityQueue() == common.VisibilityQueueInternalWithDualProcessor {
 				var err error
 				visibilityProducer, err = params.MessagingClient.NewProducer(common.VisibilityAppName)
 				if err != nil {

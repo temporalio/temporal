@@ -34,7 +34,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
+	"gopkg.in/square/go-jose.v2"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
@@ -42,44 +42,33 @@ import (
 	"go.temporal.io/server/common/service/config"
 )
 
-type jwks struct {
-	Keys []jsonWebKeys `json:"keys"`
-}
-
-type jsonWebKeys struct {
-	Kty string   `json:"kty"`
-	Kid string   `json:"kid"`
-	Use string   `json:"use"`
-	N   string   `json:"n"`
-	E   string   `json:"e"`
-	X5c []string `json:"x5c"`
-}
-
-// Default RSA token key provider
-type rsaKeyProvider struct {
+// Default token key provider
+type defaultTokenKeyProvider struct {
 	config   config.JWTKeyProvider
-	keys     map[string]*rsa.PublicKey
+	rsaKeys  map[string]*rsa.PublicKey
+	ecKeys   map[string]*ecdsa.PublicKey
 	keysLock sync.RWMutex
 	ticker   *time.Ticker
 	logger   log.Logger
 	stop     chan bool
 }
 
-var _ TokenKeyProvider = (*rsaKeyProvider)(nil)
+var _ TokenKeyProvider = (*defaultTokenKeyProvider)(nil)
 
-func NewRSAKeyProvider(cfg *config.Config) *rsaKeyProvider {
+func NewDefaultTokenKeyProvider(cfg *config.Config) *defaultTokenKeyProvider {
 	logger := loggerimpl.NewLogger(cfg.Log.NewZapLogger())
-	provider := rsaKeyProvider{config: cfg.Global.Authorization.JWTKeyProvider, logger: logger}
+	provider := defaultTokenKeyProvider{config: cfg.Global.Authorization.JWTKeyProvider, logger: logger}
 	provider.init()
 	return &provider
 }
 
-func (a *rsaKeyProvider) init() {
-	a.keys = make(map[string]*rsa.PublicKey)
+func (a *defaultTokenKeyProvider) init() {
+	a.rsaKeys = make(map[string]*rsa.PublicKey)
+	a.ecKeys = make(map[string]*ecdsa.PublicKey)
 	if len(a.config.KeySourceURIs) > 0 {
 		err := a.updateKeys()
 		if err != nil {
-			a.logger.Error("error during initial retrieval of RSA token keys: ", tag.Error(err))
+			a.logger.Error("error during initial retrieval of token keys: ", tag.Error(err))
 		}
 	}
 	if a.config.RefreshInterval > 0 {
@@ -89,19 +78,19 @@ func (a *rsaKeyProvider) init() {
 	}
 }
 
-func (a *rsaKeyProvider) Close() {
+func (a *defaultTokenKeyProvider) Close() {
 	a.ticker.Stop()
 	a.stop <- true
 	close(a.stop)
 }
 
-func (a *rsaKeyProvider) RsaKey(alg string, kid string) (*rsa.PublicKey, error) {
+func (a *defaultTokenKeyProvider) RsaKey(alg string, kid string) (*rsa.PublicKey, error) {
 	if !strings.EqualFold(alg, "rs256") {
 		return nil, fmt.Errorf("unexpected signing algorithm: %s", alg)
 	}
 
 	a.keysLock.RLock()
-	key, found := a.keys[kid]
+	key, found := a.rsaKeys[kid]
 	a.keysLock.RUnlock()
 	if !found {
 		return nil, fmt.Errorf("RSA key not found for key ID: %s", kid)
@@ -109,7 +98,21 @@ func (a *rsaKeyProvider) RsaKey(alg string, kid string) (*rsa.PublicKey, error) 
 	return key, nil
 }
 
-func (a *rsaKeyProvider) timerCallback() {
+func (a *defaultTokenKeyProvider) EcdsaKey(alg string, kid string) (*ecdsa.PublicKey, error) {
+	if !strings.EqualFold(alg, "ec256") {
+		return nil, fmt.Errorf("unexpected signing algorithm: %s", alg)
+	}
+
+	a.keysLock.RLock()
+	key, found := a.ecKeys[kid]
+	a.keysLock.RUnlock()
+	if !found {
+		return nil, fmt.Errorf("ECDSA key not found for key ID: %s", kid)
+	}
+	return key, nil
+}
+
+func (a *defaultTokenKeyProvider) timerCallback() {
 	for {
 		select {
 		case <-a.stop:
@@ -119,60 +122,65 @@ func (a *rsaKeyProvider) timerCallback() {
 		if len(a.config.KeySourceURIs) > 0 {
 			err := a.updateKeys()
 			if err != nil {
-				a.logger.Error("error while refreshing RSA token keys: ", tag.Error(err))
+				a.logger.Error("error while refreshing token keys: ", tag.Error(err))
 			}
 		}
 	}
 }
 
-func (a *rsaKeyProvider) updateKeys() error {
+func (a *defaultTokenKeyProvider) updateKeys() error {
 	if len(a.config.KeySourceURIs) == 0 {
-		return fmt.Errorf("no URIs configured for retrieving keys")
+		return fmt.Errorf("no URIs configured for retrieving token keys")
 	}
 
-	keys := make(map[string]*rsa.PublicKey)
+	rsaKeys := make(map[string]*rsa.PublicKey)
+	ecKeys := make(map[string]*ecdsa.PublicKey)
 
 	for _, uri := range a.config.KeySourceURIs {
-		err := a.updateKeysFromURI(uri, keys)
+		err := a.updateKeysFromURI(uri, rsaKeys, ecKeys)
 		if err != nil {
 			return err
 		}
 	}
 	// swap old keys with the new ones
 	a.keysLock.Lock()
-	a.keys = keys
+	a.rsaKeys = rsaKeys
+	a.ecKeys = ecKeys
 	a.keysLock.Unlock()
 	return nil
 }
 
-func (a *rsaKeyProvider) updateKeysFromURI(uri string, keys map[string]*rsa.PublicKey) error {
+func (a *defaultTokenKeyProvider) updateKeysFromURI(
+	uri string,
+	rsaKeys map[string]*rsa.PublicKey,
+	ecKeys map[string]*ecdsa.PublicKey,
+) error {
+
 	resp, err := http.Get(uri)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	jwks := jwks{}
+	jwks := jose.JSONWebKeySet{}
 	err = json.NewDecoder(resp.Body).Decode(&jwks)
 	if err != nil {
 		return err
 	}
 
 	for _, k := range jwks.Keys {
-		cert := "-----BEGIN CERTIFICATE-----\n" + k.X5c[0] + "\n-----END CERTIFICATE-----"
-		key, err := jwt.ParseRSAPublicKeyFromPEM([]byte(cert))
-		if err != nil {
-			return err
+		switch k.Key.(type) {
+		case *rsa.PublicKey:
+			rsaKeys[k.KeyID] = k.Key.(*rsa.PublicKey)
+		case *ecdsa.PublicKey:
+			ecKeys[k.KeyID] = k.Key.(*ecdsa.PublicKey)
+		default:
+			a.logger.Warn(fmt.Sprintf("unexpected type of JWKS public key %s", k.Algorithm))
 		}
-		keys[k.Kid] = key
 	}
 	return nil
 }
 
-func (a *rsaKeyProvider) HmacKey(alg string, kid string) ([]byte, error) {
+func (a *defaultTokenKeyProvider) HmacKey(alg string, kid string) ([]byte, error) {
 	return nil, fmt.Errorf("unsupported key type HMAC for: %s", alg)
-}
-
-func (a *rsaKeyProvider) EcdsaKey(alg string, kid string) (*ecdsa.PublicKey, error) {
-	return nil, fmt.Errorf("unsupported key type ECDSA for: %s", alg)
 }

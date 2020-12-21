@@ -249,9 +249,7 @@ type Config struct {
 	VisibilityProcessorEnablePriorityTaskProcessor         dynamicconfig.BoolPropertyFn
 	VisibilityProcessorVisibilityArchivalTimeLimit         dynamicconfig.DurationPropertyFn
 
-	// TODO: See https://github.com/temporalio/temporal/pull/1096 on how to remove these fields.
-	DisableKafkaForVisibility                dynamicconfig.BoolPropertyFn
-	DisableTransferQueueProcessForVisibility dynamicconfig.BoolPropertyFn
+	VisibilityQueue dynamicconfig.StringPropertyFn
 
 	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
 	ValidSearchAttributes             dynamicconfig.MapPropertyFn
@@ -442,8 +440,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		VisibilityProcessorEnablePriorityTaskProcessor:         dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnablePriorityTaskProcessor, false),
 		VisibilityProcessorVisibilityArchivalTimeLimit:         dc.GetDurationProperty(dynamicconfig.VisibilityProcessorVisibilityArchivalTimeLimit, 200*time.Millisecond),
 
-		DisableKafkaForVisibility:                dc.GetBoolProperty(dynamicconfig.DisableKafkaForVisibility, false),
-		DisableTransferQueueProcessForVisibility: dc.GetBoolProperty(dynamicconfig.DisableTransferQueueProcessForVisibility, false),
+		VisibilityQueue: dc.GetStringProperty(dynamicconfig.VisibilityQueue, common.VisibilityQueueKafka),
 
 		ValidSearchAttributes:             dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
 		SearchAttributesNumberOfKeysLimit: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),

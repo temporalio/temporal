@@ -88,7 +88,7 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) SetupTest() {
 	s.mockMutableState = NewMockmutableState(s.controller)
 
 	config := NewDynamicConfigForTest()
-	config.DisableKafkaForVisibility = dc.GetBoolPropertyFn(true)
+	config.VisibilityQueue = dc.GetStringPropertyFn(common.VisibilityQueueInternal)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{

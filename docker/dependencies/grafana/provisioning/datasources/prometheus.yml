@@ -1,0 +1,12 @@
+apiVersion: 1
+datasources:
+- name: Prometheus-Linux
+  type: prometheus
+  url: http://localhost:9090
+  access: proxy
+  isDefault: true
+- name: Prometheus-Darwin
+  type: prometheus
+  url: http://prometheus:9090
+  access: proxy
+  isDefault: false
