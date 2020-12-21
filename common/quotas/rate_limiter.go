@@ -26,100 +26,66 @@ package quotas
 
 import (
 	"context"
-	"sync"
-	"sync/atomic"
-
-	"golang.org/x/time/rate"
+	"time"
 )
+
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination rate_limiter_mock.go
 
 type (
-	// RateLimiter is a wrapper around the golang rate limiter
-	RateLimiter struct {
-		sync.Mutex
-		rate          float64
-		burst         int
-		goRateLimiter atomic.Value // type *rate.Limiter
+	// RateLimiter corresponds to basic rate limiting functionality.
+	RateLimiter interface {
+		// Allow attempts to allow a request to go through. The method returns
+		// immediately with a true or false indicating if the request can make
+		// progress
+		Allow() bool
+
+		// AllowN attempts to allow a request to go through. The method returns
+		// immediately with a true or false indicating if the request can make
+		// progress
+		AllowN(now time.Time, numToken int) bool
+
+		// Reserve returns a Reservation that indicates how long the caller
+		// must wait before event happen.
+		Reserve() Reservation
+
+		// ReserveN returns a Reservation that indicates how long the caller
+		// must wait before event happen.
+		ReserveN(now time.Time, numToken int) Reservation
+
+		// Wait waits till the deadline for a rate limit token to allow the request
+		// to go through.
+		Wait(ctx context.Context) error
+
+		// Wait waits till the deadline for n rate limit token to allow the request
+		// to go through.
+		WaitN(ctx context.Context, numToken int) error
+
+		// Rate returns the rate per second for this rate limiter
+		Rate() float64
+
+		// Burst returns the burst for this rate limiter
+		Burst() int
+	}
+
+	// Reservation holds information about events that are permitted by a Limiter to happen after a delay
+	Reservation interface {
+		// OK returns whether the limiter can provide the requested number of tokens
+		OK() bool
+
+		// Cancel indicates that the reservation holder will not perform the reserved action
+		// and reverses the effects of this Reservation on the rate limit as much as possible
+		Cancel()
+
+		// CancelAt indicates that the reservation holder will not perform the reserved action
+		// and reverses the effects of this Reservation on the rate limit as much as possible
+		CancelAt(now time.Time)
+
+		// Delay returns the duration for which the reservation holder must wait
+		// before taking the reserved action.  Zero duration means act immediately.
+		Delay() time.Duration
+
+		// DelayFrom returns the duration for which the reservation holder must wait
+		// before taking the reserved action.  Zero duration means act immediately.
+		DelayFrom(now time.Time) time.Duration
 	}
 )
-
-// NewRateLimiter returns a new rate limiter that can handle dynamic
-// configuration updates
-func NewRateLimiter(newRate float64, newBurst int) *RateLimiter {
-	rl := &RateLimiter{
-		rate:  newRate,
-		burst: newBurst,
-	}
-	rl.goRateLimiter.Store(rate.NewLimiter(rate.Limit(rl.rate), rl.burst))
-	return rl
-}
-
-// SetRate set the rate of the rate limiter
-func (rl *RateLimiter) SetRate(rate float64) {
-	rl.refreshInternalRateLimiter(&rate, nil)
-}
-
-// Burst set the burst of the rate limiter
-func (rl *RateLimiter) SetBurst(burst int) {
-	rl.refreshInternalRateLimiter(nil, &burst)
-}
-
-// SetRateBurst set the rate & burst of the rate limiter
-func (rl *RateLimiter) SetRateBurst(rate float64, burst int) {
-	rl.refreshInternalRateLimiter(&rate, &burst)
-}
-
-// Allow immediately returns with true or false indicating if a rate limit
-// token is available or not
-func (rl *RateLimiter) Allow() bool {
-	limiter := rl.goRateLimiter.Load().(*rate.Limiter)
-	return limiter.Allow()
-}
-
-// Reserve reserves a rate limit token
-func (rl *RateLimiter) Reserve() *rate.Reservation {
-	limiter := rl.goRateLimiter.Load().(*rate.Limiter)
-	return limiter.Reserve()
-}
-
-// Wait waits up till deadline for a rate limit token
-func (rl *RateLimiter) Wait(ctx context.Context) error {
-	limiter := rl.goRateLimiter.Load().(*rate.Limiter)
-	return limiter.Wait(ctx)
-}
-
-// Rate returns the rate per second for this rate limiter
-func (rl *RateLimiter) Rate() float64 {
-	rl.Lock()
-	defer rl.Unlock()
-	return rl.rate
-}
-
-// Burst returns the burst for this rate limiter
-func (rl *RateLimiter) Burst() int {
-	rl.Lock()
-	defer rl.Unlock()
-	return rl.burst
-}
-
-func (rl *RateLimiter) refreshInternalRateLimiter(
-	newRate *float64,
-	newBurst *int,
-) {
-	rl.Lock()
-	defer rl.Unlock()
-
-	refresh := false
-	if newRate != nil && rl.rate != *newRate {
-		rl.rate = *newRate
-		refresh = true
-	}
-	if newBurst != nil && rl.burst != *newBurst {
-		rl.burst = *newBurst
-		refresh = true
-	}
-
-	if refresh {
-		limiter := rate.NewLimiter(rate.Limit(rl.rate), rl.burst)
-		rl.goRateLimiter.Store(limiter)
-	}
-}

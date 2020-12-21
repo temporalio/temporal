@@ -69,7 +69,7 @@ type (
 		startWG                 sync.WaitGroup
 		config                  *configs.Config
 		eventNotifier           events.Notifier
-		rateLimiter             quotas.Limiter
+		rateLimiter             quotas.RateLimiter
 		replicationTaskFetchers ReplicationTaskFetchers
 		queueTaskProcessor      queueTaskProcessor
 	}

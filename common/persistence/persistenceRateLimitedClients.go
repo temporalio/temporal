@@ -41,49 +41,49 @@ var (
 
 type (
 	shardRateLimitedPersistenceClient struct {
-		rateLimiter quotas.Limiter
+		rateLimiter quotas.RateLimiter
 		persistence ShardManager
 		logger      log.Logger
 	}
 
 	workflowExecutionRateLimitedPersistenceClient struct {
-		rateLimiter quotas.Limiter
+		rateLimiter quotas.RateLimiter
 		persistence ExecutionManager
 		logger      log.Logger
 	}
 
 	taskRateLimitedPersistenceClient struct {
-		rateLimiter quotas.Limiter
+		rateLimiter quotas.RateLimiter
 		persistence TaskManager
 		logger      log.Logger
 	}
 
 	historyV2RateLimitedPersistenceClient struct {
-		rateLimiter quotas.Limiter
+		rateLimiter quotas.RateLimiter
 		persistence HistoryManager
 		logger      log.Logger
 	}
 
 	metadataRateLimitedPersistenceClient struct {
-		rateLimiter quotas.Limiter
+		rateLimiter quotas.RateLimiter
 		persistence MetadataManager
 		logger      log.Logger
 	}
 
 	clusterMetadataRateLimitedPersistenceClient struct {
-		rateLimiter quotas.Limiter
+		rateLimiter quotas.RateLimiter
 		persistence ClusterMetadataManager
 		logger      log.Logger
 	}
 
 	visibilityRateLimitedPersistenceClient struct {
-		rateLimiter quotas.Limiter
+		rateLimiter quotas.RateLimiter
 		persistence VisibilityManager
 		logger      log.Logger
 	}
 
 	queueRateLimitedPersistenceClient struct {
-		rateLimiter quotas.Limiter
+		rateLimiter quotas.RateLimiter
 		persistence Queue
 		logger      log.Logger
 	}
@@ -99,7 +99,7 @@ var _ VisibilityManager = (*visibilityRateLimitedPersistenceClient)(nil)
 var _ Queue = (*queueRateLimitedPersistenceClient)(nil)
 
 // NewShardPersistenceRateLimitedClient creates a client to manage shards
-func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter quotas.Limiter, logger log.Logger) ShardManager {
+func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter quotas.RateLimiter, logger log.Logger) ShardManager {
 	return &shardRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -108,7 +108,7 @@ func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter 
 }
 
 // NewWorkflowExecutionPersistenceRateLimitedClient creates a client to manage executions
-func NewWorkflowExecutionPersistenceRateLimitedClient(persistence ExecutionManager, rateLimiter quotas.Limiter, logger log.Logger) ExecutionManager {
+func NewWorkflowExecutionPersistenceRateLimitedClient(persistence ExecutionManager, rateLimiter quotas.RateLimiter, logger log.Logger) ExecutionManager {
 	return &workflowExecutionRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -117,7 +117,7 @@ func NewWorkflowExecutionPersistenceRateLimitedClient(persistence ExecutionManag
 }
 
 // NewTaskPersistenceRateLimitedClient creates a client to manage tasks
-func NewTaskPersistenceRateLimitedClient(persistence TaskManager, rateLimiter quotas.Limiter, logger log.Logger) TaskManager {
+func NewTaskPersistenceRateLimitedClient(persistence TaskManager, rateLimiter quotas.RateLimiter, logger log.Logger) TaskManager {
 	return &taskRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -126,7 +126,7 @@ func NewTaskPersistenceRateLimitedClient(persistence TaskManager, rateLimiter qu
 }
 
 // NewHistoryV2PersistenceRateLimitedClient creates a HistoryManager client to manage workflow execution history
-func NewHistoryV2PersistenceRateLimitedClient(persistence HistoryManager, rateLimiter quotas.Limiter, logger log.Logger) HistoryManager {
+func NewHistoryV2PersistenceRateLimitedClient(persistence HistoryManager, rateLimiter quotas.RateLimiter, logger log.Logger) HistoryManager {
 	return &historyV2RateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -135,7 +135,7 @@ func NewHistoryV2PersistenceRateLimitedClient(persistence HistoryManager, rateLi
 }
 
 // NewMetadataPersistenceRateLimitedClient creates a MetadataManager client to manage metadata
-func NewMetadataPersistenceRateLimitedClient(persistence MetadataManager, rateLimiter quotas.Limiter, logger log.Logger) MetadataManager {
+func NewMetadataPersistenceRateLimitedClient(persistence MetadataManager, rateLimiter quotas.RateLimiter, logger log.Logger) MetadataManager {
 	return &metadataRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -144,7 +144,7 @@ func NewMetadataPersistenceRateLimitedClient(persistence MetadataManager, rateLi
 }
 
 // NewClusterMetadataPersistenceRateLimitedClient creates a MetadataManager client to manage metadata
-func NewClusterMetadataPersistenceRateLimitedClient(persistence ClusterMetadataManager, rateLimiter quotas.Limiter, logger log.Logger) ClusterMetadataManager {
+func NewClusterMetadataPersistenceRateLimitedClient(persistence ClusterMetadataManager, rateLimiter quotas.RateLimiter, logger log.Logger) ClusterMetadataManager {
 	return &clusterMetadataRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -153,7 +153,7 @@ func NewClusterMetadataPersistenceRateLimitedClient(persistence ClusterMetadataM
 }
 
 // NewVisibilityPersistenceRateLimitedClient creates a client to manage visibility
-func NewVisibilityPersistenceRateLimitedClient(persistence VisibilityManager, rateLimiter quotas.Limiter, logger log.Logger) VisibilityManager {
+func NewVisibilityPersistenceRateLimitedClient(persistence VisibilityManager, rateLimiter quotas.RateLimiter, logger log.Logger) VisibilityManager {
 	return &visibilityRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -162,7 +162,7 @@ func NewVisibilityPersistenceRateLimitedClient(persistence VisibilityManager, ra
 }
 
 // NewQueuePersistenceRateLimitedClient creates a client to manage queue
-func NewQueuePersistenceRateLimitedClient(persistence Queue, rateLimiter quotas.Limiter, logger log.Logger) Queue {
+func NewQueuePersistenceRateLimitedClient(persistence Queue, rateLimiter quotas.RateLimiter, logger log.Logger) Queue {
 	return &queueRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,

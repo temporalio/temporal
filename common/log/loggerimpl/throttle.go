@@ -32,7 +32,7 @@ import (
 )
 
 type throttledLogger struct {
-	limiter quotas.Limiter
+	limiter quotas.RateLimiter
 	log     log.Logger
 }
 

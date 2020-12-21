@@ -275,7 +275,7 @@ func scanShard(
 	session *gocql.Session,
 	shardID int32,
 	scanOutputDirectories *ScanOutputDirectories,
-	limiter *quotas.DynamicRateLimiter,
+	limiter *quotas.DynamicRateLimiterImpl,
 	executionsPageSize int,
 	payloadSerializer persistence.PayloadSerializer,
 	historyStore persistence.HistoryStore,
@@ -411,7 +411,7 @@ func verifyHistoryExists(
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
 	shardID int32,
-	limiter *quotas.DynamicRateLimiter,
+	limiter *quotas.DynamicRateLimiterImpl,
 	historyStore persistence.HistoryStore,
 	totalDBRequests *int64,
 	execStore persistence.ExecutionStore,
@@ -574,7 +574,7 @@ func verifyCurrentExecution(
 	shardID int32,
 	branch *persistencespb.HistoryBranch,
 	execStore persistence.ExecutionStore,
-	limiter *quotas.DynamicRateLimiter,
+	limiter *quotas.DynamicRateLimiterImpl,
 	totalDBRequests *int64,
 ) VerificationResult {
 	byteBranch, err := byteKeyFromProto(branch)
@@ -655,7 +655,7 @@ func concreteExecutionStillExists(
 	executionState *persistencespb.WorkflowExecutionState,
 	shardID int32,
 	execStore persistence.ExecutionStore,
-	limiter *quotas.DynamicRateLimiter,
+	limiter *quotas.DynamicRateLimiterImpl,
 	totalDBRequests *int64,
 ) (*ExecutionCheckFailure, bool) {
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
@@ -691,7 +691,7 @@ func concreteExecutionStillOpen(
 	executionState *persistencespb.WorkflowExecutionState,
 	shardID int32,
 	execStore persistence.ExecutionStore,
-	limiter *quotas.DynamicRateLimiter,
+	limiter *quotas.DynamicRateLimiterImpl,
 	totalDBRequests *int64,
 ) (*ExecutionCheckFailure, bool) {
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
@@ -835,7 +835,7 @@ func includeShardInProgressReport(report *ShardScanReport, progressReport *Progr
 	progressReport.Rates.DatabaseRPS = math.Round(float64(progressReport.Rates.TotalDBRequests) / secondsPast)
 }
 
-func getRateLimiter(startRPS int, targetRPS int) *quotas.DynamicRateLimiter {
+func getRateLimiter(startRPS int, targetRPS int) *quotas.DynamicRateLimiterImpl {
 	if startRPS >= targetRPS {
 		ErrorAndExit("startRPS is greater than target RPS", nil)
 	}
@@ -844,7 +844,7 @@ func getRateLimiter(startRPS int, targetRPS int) *quotas.DynamicRateLimiter {
 	)
 }
 
-func preconditionForDBCall(totalDBRequests *int64, limiter *quotas.DynamicRateLimiter) {
+func preconditionForDBCall(totalDBRequests *int64, limiter *quotas.DynamicRateLimiterImpl) {
 	*totalDBRequests = *totalDBRequests + 1
 	limiter.Wait(context.Background())
 }

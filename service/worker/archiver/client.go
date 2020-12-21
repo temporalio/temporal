@@ -98,7 +98,7 @@ type (
 		logger           log.Logger
 		temporalClient   sdkclient.Client
 		numWorkflows     dynamicconfig.IntPropertyFn
-		rateLimiter      quotas.Limiter
+		rateLimiter      quotas.RateLimiter
 		archiverProvider provider.ArchiverProvider
 	}
 

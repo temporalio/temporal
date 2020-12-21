@@ -52,7 +52,7 @@ type (
 		config             *configs.Config
 		logger             log.Logger
 		scope              metrics.Scope
-		rateLimiters       map[string]quotas.Limiter
+		rateLimiters       map[string]quotas.RateLimiter
 	}
 )
 
@@ -71,7 +71,7 @@ func newTaskPriorityAssigner(
 		config:             config,
 		logger:             logger,
 		scope:              metricClient.Scope(metrics.TaskPriorityAssignerScope),
-		rateLimiters:       make(map[string]quotas.Limiter),
+		rateLimiters:       make(map[string]quotas.RateLimiter),
 	}
 }
 
@@ -136,7 +136,7 @@ func (a *taskPriorityAssignerImpl) getNamespaceInfo(
 
 func (a *taskPriorityAssignerImpl) getRateLimiter(
 	namespace string,
-) quotas.Limiter {
+) quotas.RateLimiter {
 	a.RLock()
 	if limiter, ok := a.rateLimiters[namespace]; ok {
 		a.RUnlock()

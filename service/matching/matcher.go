@@ -29,8 +29,6 @@ import (
 	"errors"
 	"time"
 
-	"golang.org/x/time/rate"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/metrics"
@@ -56,7 +54,7 @@ type TaskMatcher struct {
 	// dynamicBurst is the dynamic burst for rate limiter
 	dynamicBurst quotas.DynamicBurst
 	// rateLimiter that limits the rate at which tasks can be dispatched to consumers
-	rateLimiter quotas.Limiter
+	rateLimiter quotas.RateLimiter
 
 	fwdr          *Forwarder
 	scope         func() metrics.Scope // namespace metric scope
@@ -125,7 +123,7 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scopeFunc func() m
 //  - task is matched and consumer returns error in response channel
 func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, error) {
 	var err error
-	var rsv *rate.Reservation
+	var rsv quotas.Reservation
 	if !task.isForwarded() {
 		rsv, err = tm.ratelimit(ctx)
 		if err != nil {
@@ -423,7 +421,7 @@ func (tm *TaskMatcher) fwdrAddReqTokenC() <-chan *ForwarderReqToken {
 	return tm.fwdr.AddReqTokenC()
 }
 
-func (tm *TaskMatcher) ratelimit(ctx context.Context) (*rate.Reservation, error) {
+func (tm *TaskMatcher) ratelimit(ctx context.Context) (quotas.Reservation, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()

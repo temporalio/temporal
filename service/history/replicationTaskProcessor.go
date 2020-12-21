@@ -79,8 +79,8 @@ type (
 		logger                  log.Logger
 		replicationTaskExecutor replicationTaskExecutor
 
-		hostRateLimiter  *quotas.DynamicRateLimiter
-		shardRateLimiter *quotas.DynamicRateLimiter
+		hostRateLimiter  *quotas.DynamicRateLimiterImpl
+		shardRateLimiter *quotas.DynamicRateLimiterImpl
 
 		taskRetryPolicy backoff.RetryPolicy
 		dlqRetryPolicy  backoff.RetryPolicy

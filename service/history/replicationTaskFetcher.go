@@ -64,7 +64,7 @@ type (
 
 		GetSourceCluster() string
 		GetRequestChan() chan<- *replicationTaskRequest
-		GetRateLimiter() *quotas.DynamicRateLimiter
+		GetRateLimiter() *quotas.DynamicRateLimiterImpl
 	}
 
 	// ReplicationTaskFetchersImpl is a group of fetchers, one per source DC.
@@ -83,7 +83,7 @@ type (
 		numWorker      int
 		logger         log.Logger
 		remotePeer     admin.Client
-		rateLimiter    *quotas.DynamicRateLimiter
+		rateLimiter    *quotas.DynamicRateLimiterImpl
 		requestChan    chan *replicationTaskRequest
 		shutdownChan   chan struct{}
 
@@ -97,7 +97,7 @@ type (
 		config         *configs.Config
 		logger         log.Logger
 		remotePeer     admin.Client
-		rateLimiter    *quotas.DynamicRateLimiter
+		rateLimiter    *quotas.DynamicRateLimiterImpl
 		requestChan    chan *replicationTaskRequest
 		shutdownChan   chan struct{}
 
@@ -265,7 +265,7 @@ func (f *ReplicationTaskFetcherImpl) GetRequestChan() chan<- *replicationTaskReq
 }
 
 // GetRateLimiter returns the host level rate limiter for the fetcher
-func (f *ReplicationTaskFetcherImpl) GetRateLimiter() *quotas.DynamicRateLimiter {
+func (f *ReplicationTaskFetcherImpl) GetRateLimiter() *quotas.DynamicRateLimiterImpl {
 	return f.rateLimiter
 }
 
@@ -275,7 +275,7 @@ func newReplicationTaskFetcherWorker(
 	currentCluster string,
 	config *configs.Config,
 	sourceFrontend admin.Client,
-	rateLimiter *quotas.DynamicRateLimiter,
+	rateLimiter *quotas.DynamicRateLimiterImpl,
 	requestChan chan *replicationTaskRequest,
 	shutdownChan chan struct{},
 ) *replicationTaskFetcherWorker {
