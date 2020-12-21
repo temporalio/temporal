@@ -793,6 +793,8 @@ const (
 	FrontendGetSearchAttributesScope
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope
+	// AuthorizationScope is the scope used by all metric emitted by authorization code
+	AuthorizationScope
 
 	NumFrontendScopes
 )
@@ -1082,13 +1084,6 @@ const (
 	ParentClosePolicyProcessorScope
 
 	NumWorkerScopes
-)
-
-// -- Operation scopes for Authorization --
-const (
-	// ReplicationScope is the scope used by all metric emitted by replicator
-	AuthorizerScope = iota + NumWorkerScopes
-	NumAuthorizationScopes
 )
 
 // ScopeDefs record the scopes for all services
@@ -1425,6 +1420,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendResetStickyTaskQueueScope:               {operation: "ResetStickyTaskQueue"},
 		FrontendGetSearchAttributesScope:                {operation: "GetSearchAttributes"},
 		VersionCheckScope:                               {operation: "VersionCheckScope"},
+		AuthorizationScope:                              {operation: "Authorization"},
 	},
 	// History Scope Names
 	History: {

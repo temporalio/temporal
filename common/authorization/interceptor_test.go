@@ -85,7 +85,7 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 	s.mockMetricsScope = &mocks.Scope{}
 	s.mockMetricsClient = &mocks.Client{}
 	var nilTag []metrics.Tag
-	s.mockMetricsClient.On("Scope", metrics.NumAuthorizationScopes, nilTag).
+	s.mockMetricsClient.On("Scope", metrics.AuthorizationScope, nilTag).
 		Return(s.mockMetricsScope)
 	s.mockMetricsScope.On("Tagged", metrics.NamespaceTag(testNamespace)).
 		Return(s.mockMetricsScope)
