@@ -1419,7 +1419,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendDescribeTaskQueueScope:                  {operation: "DescribeTaskQueue"},
 		FrontendResetStickyTaskQueueScope:               {operation: "ResetStickyTaskQueue"},
 		FrontendGetSearchAttributesScope:                {operation: "GetSearchAttributes"},
-		VersionCheckScope:                               {operation: "VersionCheckScope"},
+		VersionCheckScope:                               {operation: "VersionCheck"},
 		AuthorizationScope:                              {operation: "Authorization"},
 	},
 	// History Scope Names
@@ -1482,11 +1482,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TransferStandbyTaskResetWorkflowScope:                  {operation: "TransferStandbyTaskResetWorkflow"},
 		TransferStandbyTaskUpsertWorkflowSearchAttributesScope: {operation: "TransferStandbyTaskUpsertWorkflowSearchAttributes"},
 
-		VisibilityQueueProcessorScope:      {operation: "VisibilityQueueProcessorScope"},
-		VisibilityTaskStartExecutionScope:  {operation: "VisibilityTaskStartExecutionScope"},
-		VisibilityTaskUpsertExecutionScope: {operation: "VisibilityTaskUpsertExecutionScope"},
-		VisibilityTaskCloseExecutionScope:  {operation: "VisibilityTaskCloseExecutionScope"},
-		VisibilityTaskDeleteExecutionScope: {operation: "VisibilityTaskDeleteExecutionScope"},
+		VisibilityQueueProcessorScope:      {operation: "VisibilityQueueProcessor"},
+		VisibilityTaskStartExecutionScope:  {operation: "VisibilityTaskStartExecution"},
+		VisibilityTaskUpsertExecutionScope: {operation: "VisibilityTaskUpsertExecution"},
+		VisibilityTaskCloseExecutionScope:  {operation: "VisibilityTaskCloseExecution"},
+		VisibilityTaskDeleteExecutionScope: {operation: "VisibilityTaskDeleteExecution"},
 
 		TimerQueueProcessorScope:                  {operation: "TimerQueueProcessor"},
 		TimerActiveQueueProcessorScope:            {operation: "TimerActiveQueueProcessor"},
@@ -1530,6 +1530,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ReplicationTaskCleanupScope:               {operation: "ReplicationTaskCleanup"},
 		ReplicationDLQStatsScope:                  {operation: "ReplicationDLQStats"},
 		ElasticSearchVisibility:                   {operation: "ElasticSearchVisibility"},
+		SyncShardTaskScope:                        {operation: "SyncShardTask"},
+		SyncActivityTaskScope:                     {operation: "SyncActivityTask"},
+		HistoryMetadataReplicationTaskScope:       {operation: "HistoryMetadataReplicationTask"},
+		HistoryReplicationTaskScope:               {operation: "HistoryReplicationTask"},
+		ReplicatorScope:                           {operation: "Replicator"},
 	},
 	// Matching Scope Names
 	Matching: {
