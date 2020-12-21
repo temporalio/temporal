@@ -800,7 +800,7 @@ const (
 // -- Operation scopes for History service --
 const (
 	// HistoryStartWorkflowExecutionScope tracks StartWorkflowExecution API calls received by service
-	HistoryStartWorkflowExecutionScope = iota + NumCommonScopes
+	HistoryStartWorkflowExecutionScope = iota + NumFrontendScopes
 	// HistoryRecordActivityTaskHeartbeatScope tracks RecordActivityTaskHeartbeat API calls received by service
 	HistoryRecordActivityTaskHeartbeatScope
 	// HistoryRespondWorkflowTaskCompletedScope tracks RespondWorkflowTaskCompleted API calls received by service
@@ -1017,7 +1017,7 @@ const (
 // -- Operation scopes for Matching service --
 const (
 	// PollWorkflowTaskQueueScope tracks PollWorkflowTaskQueue API calls received by service
-	MatchingPollWorkflowTaskQueueScope = iota + NumCommonScopes
+	MatchingPollWorkflowTaskQueueScope = iota + NumHistoryScopes
 	// PollActivityTaskQueueScope tracks PollActivityTaskQueue API calls received by service
 	MatchingPollActivityTaskQueueScope
 	// MatchingAddActivityTaskScope tracks AddActivityTask API calls received by service
@@ -1043,7 +1043,7 @@ const (
 // -- Operation scopes for Worker service --
 const (
 	// ReplicationScope is the scope used by all metric emitted by replicator
-	ReplicatorScope = iota + NumCommonScopes
+	ReplicatorScope = iota + NumMatchingScopes
 	// NamespaceReplicationTaskScope is the scope used by namespace task replication processing
 	NamespaceReplicationTaskScope
 	// HistoryReplicationTaskScope is the scope used by history task replication processing

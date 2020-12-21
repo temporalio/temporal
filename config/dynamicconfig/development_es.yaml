@@ -28,4 +28,6 @@ frontend.validSearchAttributes:
       BinaryChecksums: "Keyword"
       CustomNamespace: "Keyword"
       Operator: "Keyword"
-
+history.visibilityQueue:
+    - value: "internal"
+      constraints: {}

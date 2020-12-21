@@ -115,7 +115,7 @@ func (a *interceptor) Interceptor(
 
 		apiName := info.FullMethod
 
-		scope := a.getMetricsScope(metrics.NumAuthorizationScopes, namespace)
+		scope := a.getMetricsScope(metrics.AuthorizerScope, namespace)
 		sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
 		defer sw.Stop()
 
