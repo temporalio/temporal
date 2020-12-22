@@ -35,7 +35,7 @@ import (
 type (
 	// RateLimiter is a wrapper around the golang rate limiter
 	RateLimiter struct {
-		sync.RWMutex
+		sync.Mutex
 		rate          float64
 		burst         int
 		goRateLimiter atomic.Value
