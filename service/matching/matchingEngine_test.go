@@ -644,15 +644,15 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	mgrImpl.matcher.config.MinTaskThrottlingBurstSize = func() int { return 0 }
 	mgrImpl.matcher.rateLimiter = quotas.NewRateLimiter(
-		_defaultTaskDispatchRPS,
-		_defaultTaskDispatchRPS,
+		defaultTaskDispatchRPS,
+		defaultTaskDispatchRPS,
 	)
 	mgrImpl.matcher.dynamicRate = &dynamicRateWrapper{
-		DynamicRate: quotas.NewDynamicRate(_defaultTaskDispatchRPS),
+		DynamicRate: quotas.NewDynamicRate(defaultTaskDispatchRPS),
 		RateLimiter: mgrImpl.matcher.rateLimiter.(*quotas.RateLimiter),
 	}
 	mgrImpl.matcher.dynamicBurst = &dynamicBurstWrapper{
-		DynamicBurst: quotas.NewDynamicBurst(_defaultTaskDispatchRPS),
+		DynamicBurst: quotas.NewDynamicBurst(defaultTaskDispatchRPS),
 		RateLimiter:  mgrImpl.matcher.rateLimiter.(*quotas.RateLimiter),
 	}
 	s.matchingEngine.updateTaskQueue(tlID, mgr)
@@ -704,7 +704,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		var wg sync.WaitGroup
 		var result *matchingservice.PollActivityTaskQueueResponse
 		var pollErr error
-		maxDispatch := _defaultTaskDispatchRPS
+		maxDispatch := defaultTaskDispatchRPS
 		if i == taskCount/2 {
 			maxDispatch = 0
 		}
@@ -734,7 +734,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			// reset ratelimit, poll again and make sure task is returned this time
 			s.logger.Debug("empty poll returned")
 			s.Equal(float64(0), maxDispatch)
-			maxDispatch = _defaultTaskDispatchRPS
+			maxDispatch = defaultTaskDispatchRPS
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -793,15 +793,15 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.Equal(1, len(descResp.Pollers))
 	s.Equal(identity, descResp.Pollers[0].GetIdentity())
 	s.NotEmpty(descResp.Pollers[0].GetLastAccessTime())
-	s.Equal(_defaultTaskDispatchRPS, descResp.Pollers[0].GetRatePerSecond())
+	s.Equal(defaultTaskDispatchRPS, descResp.Pollers[0].GetRatePerSecond())
 	s.NotNil(descResp.GetTaskQueueStatus())
 	numPartitions := float64(s.matchingEngine.config.NumTaskqueueWritePartitions("", "", tlType))
-	s.True(descResp.GetTaskQueueStatus().GetRatePerSecond()*numPartitions >= (_defaultTaskDispatchRPS - 1))
+	s.True(descResp.GetTaskQueueStatus().GetRatePerSecond()*numPartitions >= (defaultTaskDispatchRPS - 1))
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 	dispatchLimitFn := func(int, int64) float64 {
-		return _defaultTaskDispatchRPS
+		return defaultTaskDispatchRPS
 	}
 	const workerCount = 20
 	const taskCount = 100
@@ -816,7 +816,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDisp
 		if tc%50 == 0 && wc%5 == 0 { // Gets triggered atleast 20 times
 			return 0
 		}
-		return _defaultTaskDispatchRPS
+		return defaultTaskDispatchRPS
 	}
 	const workerCount = 20
 	const taskCount = 100
@@ -851,15 +851,15 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	mgrImpl := mgr.(*taskQueueManagerImpl)
 	mgrImpl.matcher.config.MinTaskThrottlingBurstSize = func() int { return 0 }
 	mgrImpl.matcher.rateLimiter = quotas.NewRateLimiter(
-		_defaultTaskDispatchRPS,
-		_defaultTaskDispatchRPS,
+		defaultTaskDispatchRPS,
+		defaultTaskDispatchRPS,
 	)
 	mgrImpl.matcher.dynamicRate = &dynamicRateWrapper{
-		DynamicRate: quotas.NewDynamicRate(_defaultTaskDispatchRPS),
+		DynamicRate: quotas.NewDynamicRate(defaultTaskDispatchRPS),
 		RateLimiter: mgrImpl.matcher.rateLimiter.(*quotas.RateLimiter),
 	}
 	mgrImpl.matcher.dynamicBurst = &dynamicBurstWrapper{
-		DynamicBurst: quotas.NewDynamicBurst(_defaultTaskDispatchRPS),
+		DynamicBurst: quotas.NewDynamicBurst(defaultTaskDispatchRPS),
 		RateLimiter:  mgrImpl.matcher.rateLimiter.(*quotas.RateLimiter),
 	}
 	s.matchingEngine.updateTaskQueue(tlID, mgr)

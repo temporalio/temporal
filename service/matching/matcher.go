@@ -64,8 +64,8 @@ type TaskMatcher struct {
 }
 
 const (
-	_defaultTaskDispatchRPS    = 100000.0
-	_defaultTaskDispatchRPSTTL = time.Minute
+	defaultTaskDispatchRPS    = 100000.0
+	defaultTaskDispatchRPSTTL = time.Minute
 )
 
 var errTaskqueueThrottled = errors.New("cannot add to taskqueue, limit exceeded")
@@ -74,12 +74,12 @@ var errTaskqueueThrottled = errors.New("cannot add to taskqueue, limit exceeded"
 // used by task producers and consumers to find a match. Both sync matches and non-sync
 // matches should use this implementation
 func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scopeFunc func() metrics.Scope) *TaskMatcher {
-	dynamicRate := quotas.NewDynamicRate(_defaultTaskDispatchRPS)
-	dynamicBurst := quotas.NewDynamicBurst(int(_defaultTaskDispatchRPS))
+	dynamicRate := quotas.NewDynamicRate(defaultTaskDispatchRPS)
+	dynamicBurst := quotas.NewDynamicBurst(int(defaultTaskDispatchRPS))
 	limiter := quotas.NewDynamicRateLimiter(
 		dynamicRate.RateFn(),
 		dynamicBurst.BurstFn(),
-		_defaultTaskDispatchRPSTTL,
+		defaultTaskDispatchRPSTTL,
 	)
 	return &TaskMatcher{
 		config:        config,

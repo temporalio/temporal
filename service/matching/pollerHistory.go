@@ -65,7 +65,7 @@ func newPollerHistory() *pollerHistory {
 }
 
 func (pollers *pollerHistory) updatePollerInfo(id pollerIdentity, ratePerSecond *float64) {
-	rps := _defaultTaskDispatchRPS
+	rps := defaultTaskDispatchRPS
 	if ratePerSecond != nil {
 		rps = *ratePerSecond
 	}

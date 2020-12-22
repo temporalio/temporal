@@ -212,8 +212,8 @@ func TestDescribeTaskQueue(t *testing.T) {
 	require.Zero(t, taskQueueStatus.GetAckLevel())
 	require.Equal(t, taskCount, taskQueueStatus.GetReadLevel())
 	require.Equal(t, taskCount, taskQueueStatus.GetBacklogCountHint())
-	require.True(t, taskQueueStatus.GetRatePerSecond() > (_defaultTaskDispatchRPS-1))
-	require.True(t, taskQueueStatus.GetRatePerSecond() < (_defaultTaskDispatchRPS+1))
+	require.True(t, taskQueueStatus.GetRatePerSecond() > (defaultTaskDispatchRPS-1))
+	require.True(t, taskQueueStatus.GetRatePerSecond() < (defaultTaskDispatchRPS+1))
 	taskIDBlock := taskQueueStatus.GetTaskIdBlock()
 	require.Equal(t, int64(1), taskIDBlock.GetStartId())
 	require.Equal(t, tlm.config.RangeSize, taskIDBlock.GetEndId())
@@ -228,7 +228,7 @@ func TestDescribeTaskQueue(t *testing.T) {
 	require.Equal(t, 1, len(descResp.GetPollers()))
 	require.Equal(t, PollerIdentity, descResp.Pollers[0].GetIdentity())
 	require.NotEmpty(t, descResp.Pollers[0].GetLastAccessTime())
-	require.True(t, descResp.Pollers[0].GetRatePerSecond() > (_defaultTaskDispatchRPS-1))
+	require.True(t, descResp.Pollers[0].GetRatePerSecond() > (defaultTaskDispatchRPS-1))
 
 	rps := 5.0
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), &rps)
