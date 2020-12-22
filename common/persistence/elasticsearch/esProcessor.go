@@ -79,7 +79,7 @@ type (
 		indexerConcurrency      uint32
 	}
 
-	chanWithStopwatch struct { // value of esProcessorImpl.mapToAckChan
+	ackChanWithStopwatch struct { // value of esProcessorImpl.mapToAckChan
 		ackCh             chan<- bool
 		addToAckStopwatch *tally.Stopwatch // metric from message add to process, to message ack/nack
 	}
@@ -173,23 +173,28 @@ func (p *esProcessorImpl) Add(request elastic.BulkableRequest, visibilityTaskKey
 		panic("ackCh must be buffered channel (length should be 1 or more)")
 	}
 
-	actionWhenFoundDuplicates := func(key interface{}, value interface{}) error {
-		ackCh <- true
-		return nil
-	}
-
-	sw := p.metricsClient.StartTimer(metrics.ESProcessorScope, metrics.ESProcessorProcessMsgLatency)
-	chWithStopwatch := newChanWithStopwatch(ackCh, &sw)
-	_, isDup, _ := p.mapToAckChan.PutOrDo(visibilityTaskKey, chWithStopwatch, actionWhenFoundDuplicates)
+	sw := p.metricsClient.StartTimer(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRequestLatency)
+	ackChWithStopwatch := newAckChanWithStopwatch(ackCh, &sw)
+	_, isDup, _ := p.mapToAckChan.PutOrDo(visibilityTaskKey, ackChWithStopwatch, p.onDuplicateAction)
 	if isDup {
 		return
 	}
 	p.bulkProcessor.Add(request)
 }
 
+func (p *esProcessorImpl) onDuplicateAction(key interface{}, value interface{}) error {
+	ackChWithStopwatch, ok := value.(*ackChanWithStopwatch)
+	if !ok { // must be bug in code and bad deployment
+		p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", value, &ackChanWithStopwatch{}), tag.Value(key))
+	}
+	ackChWithStopwatch.addToAckStopwatch.Stop()
+	ackChWithStopwatch.ackCh <- true
+	return nil
+}
+
 // bulkBeforeAction is triggered before bulk processor commit
 func (p *esProcessorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableRequest) {
-	p.metricsClient.AddCounter(metrics.ESProcessorScope, metrics.ESProcessorRequests, int64(len(requests)))
+	p.metricsClient.AddCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRequests, int64(len(requests)))
 }
 
 // bulkAfterAction is triggered after bulk processor commit
@@ -201,7 +206,7 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 
 		for _, request := range requests {
 			p.logger.Error("ES request failed.", tag.ESRequest(request.String()))
-			p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorFailures)
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures)
 		}
 		return
 	}
@@ -225,39 +230,41 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 				p.sendToAckChan(visibilityTaskKey, false)
 			default: // bulk processor will retry
 				p.logger.Info("ES request retried.", tag.ESResponseStatus(resp.Status))
-				p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorRetries)
+				p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRetries)
 			}
 		}
 	}
 }
 
 func (p *esProcessorImpl) sendToAckChan(visibilityTaskKey string, ack bool) {
-	ackCh, ok := p.getAckChan(visibilityTaskKey)
+	ackChWithStopwatch, ok := p.getAckChan(visibilityTaskKey)
 	if !ok {
 		return
 	}
-	ackCh <- ack
+
+	ackChWithStopwatch.addToAckStopwatch.Stop()
+	ackChWithStopwatch.ackCh <- ack
 
 	p.mapToAckChan.Remove(visibilityTaskKey)
 }
 
-func (p *esProcessorImpl) getAckChan(visibilityTaskKey string) (chan<- bool, bool) {
-	msg, ok := p.mapToAckChan.Get(visibilityTaskKey)
+func (p *esProcessorImpl) getAckChan(visibilityTaskKey string) (*ackChanWithStopwatch, bool) {
+	ackCh, ok := p.mapToAckChan.Get(visibilityTaskKey)
 	if !ok {
 		return nil, false
 	}
-	chWithStopwatch, ok := msg.(*chanWithStopwatch)
+	ackChWithStopwatch, ok := ackCh.(*ackChanWithStopwatch)
 	if !ok { // must be bug in code and bad deployment
-		p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", msg, &chanWithStopwatch{}), tag.ESKey(visibilityTaskKey))
+		p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", ackCh, &ackChanWithStopwatch{}), tag.ESKey(visibilityTaskKey))
 	}
-	return chWithStopwatch.ackCh, ok
+	return ackChWithStopwatch, ok
 }
 
 func (p *esProcessorImpl) getVisibilityTaskKey(request elastic.BulkableRequest) string {
 	req, err := request.Source()
 	if err != nil {
 		p.logger.Error("Get request source err.", tag.Error(err), tag.ESRequest(request.String()))
-		p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorCorruptedData)
+		p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 		return ""
 	}
 
@@ -266,7 +273,7 @@ func (p *esProcessorImpl) getVisibilityTaskKey(request elastic.BulkableRequest) 
 		var body map[string]interface{}
 		if err := json.Unmarshal([]byte(req[1]), &body); err != nil {
 			p.logger.Error("Unmarshal index request body err.", tag.Error(err))
-			p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorCorruptedData)
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 			return ""
 		}
 
@@ -284,7 +291,7 @@ func (p *esProcessorImpl) getVisibilityTaskKey(request elastic.BulkableRequest) 
 		var body map[string]map[string]interface{}
 		if err := json.Unmarshal([]byte(req[0]), &body); err != nil {
 			p.logger.Error("Unmarshal delete request body err.", tag.Error(err))
-			p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorCorruptedData)
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 			return ""
 		}
 
@@ -308,7 +315,7 @@ func (p *esProcessorImpl) getDocIDs(request elastic.BulkableRequest) (workflowID
 	req, err := request.Source()
 	if err != nil {
 		p.logger.Error("Get request source err.", tag.Error(err), tag.ESRequest(request.String()))
-		p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorCorruptedData)
+		p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 		return
 	}
 
@@ -316,7 +323,7 @@ func (p *esProcessorImpl) getDocIDs(request elastic.BulkableRequest) (workflowID
 		var body map[string]interface{}
 		if err := json.Unmarshal([]byte(req[1]), &body); err != nil {
 			p.logger.Error("Unmarshal index request body err.", tag.Error(err))
-			p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorCorruptedData)
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 			return
 		}
 
@@ -332,7 +339,7 @@ func (p *esProcessorImpl) getDocIDs(request elastic.BulkableRequest) (workflowID
 		var body map[string]map[string]interface{}
 		if err := json.Unmarshal([]byte(req[0]), &body); err != nil {
 			p.logger.Error("Unmarshal delete request body err.", tag.Error(err))
-			p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorCorruptedData)
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 			return
 		}
 
@@ -385,23 +392,9 @@ func getErrorMsgFromESResp(resp *elastic.BulkResponseItem) string {
 	return errMsg
 }
 
-func newChanWithStopwatch(ackCh chan<- bool, stopwatch *tally.Stopwatch) *chanWithStopwatch {
-	return &chanWithStopwatch{
+func newAckChanWithStopwatch(ackCh chan<- bool, stopwatch *tally.Stopwatch) *ackChanWithStopwatch {
+	return &ackChanWithStopwatch{
 		ackCh:             ackCh,
 		addToAckStopwatch: stopwatch,
-	}
-}
-
-func (km *chanWithStopwatch) Ack() {
-	km.ackCh <- true
-	if km.addToAckStopwatch != nil {
-		km.addToAckStopwatch.Stop()
-	}
-}
-
-func (km *chanWithStopwatch) Nack() {
-	km.ackCh <- false
-	if km.addToAckStopwatch != nil {
-		km.addToAckStopwatch.Stop()
 	}
 }

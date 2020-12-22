@@ -793,6 +793,8 @@ const (
 	FrontendGetSearchAttributesScope
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope
+	// AuthorizationScope is the scope used by all metric emitted by authorization code
+	AuthorizationScope
 
 	NumFrontendScopes
 )
@@ -800,7 +802,7 @@ const (
 // -- Operation scopes for History service --
 const (
 	// HistoryStartWorkflowExecutionScope tracks StartWorkflowExecution API calls received by service
-	HistoryStartWorkflowExecutionScope = iota + NumCommonScopes
+	HistoryStartWorkflowExecutionScope = iota + NumFrontendScopes
 	// HistoryRecordActivityTaskHeartbeatScope tracks RecordActivityTaskHeartbeat API calls received by service
 	HistoryRecordActivityTaskHeartbeatScope
 	// HistoryRespondWorkflowTaskCompletedScope tracks RespondWorkflowTaskCompleted API calls received by service
@@ -1008,13 +1010,16 @@ const (
 	// ReplicationDLQStatsScope is scope used by all metrics emitted related to replication DLQ
 	ReplicationDLQStatsScope
 
+	// ElasticSearchVisibility is scope used by all metric emitted by esProcessor
+	ElasticSearchVisibility
+
 	NumHistoryScopes
 )
 
 // -- Operation scopes for Matching service --
 const (
 	// PollWorkflowTaskQueueScope tracks PollWorkflowTaskQueue API calls received by service
-	MatchingPollWorkflowTaskQueueScope = iota + NumCommonScopes
+	MatchingPollWorkflowTaskQueueScope = iota + NumHistoryScopes
 	// PollActivityTaskQueueScope tracks PollActivityTaskQueue API calls received by service
 	MatchingPollActivityTaskQueueScope
 	// MatchingAddActivityTaskScope tracks AddActivityTask API calls received by service
@@ -1040,7 +1045,7 @@ const (
 // -- Operation scopes for Worker service --
 const (
 	// ReplicationScope is the scope used by all metric emitted by replicator
-	ReplicatorScope = iota + NumCommonScopes
+	ReplicatorScope = iota + NumMatchingScopes
 	// NamespaceReplicationTaskScope is the scope used by namespace task replication processing
 	NamespaceReplicationTaskScope
 	// HistoryReplicationTaskScope is the scope used by history task replication processing
@@ -1079,13 +1084,6 @@ const (
 	ParentClosePolicyProcessorScope
 
 	NumWorkerScopes
-)
-
-// -- Operation scopes for Authorization --
-const (
-	// ReplicationScope is the scope used by all metric emitted by replicator
-	AuthorizerScope = iota + NumWorkerScopes
-	NumAuthorizationScopes
 )
 
 // ScopeDefs record the scopes for all services
@@ -1421,7 +1419,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendDescribeTaskQueueScope:                  {operation: "DescribeTaskQueue"},
 		FrontendResetStickyTaskQueueScope:               {operation: "ResetStickyTaskQueue"},
 		FrontendGetSearchAttributesScope:                {operation: "GetSearchAttributes"},
-		VersionCheckScope:                               {operation: "VersionCheckScope"},
+		VersionCheckScope:                               {operation: "VersionCheck"},
+		AuthorizationScope:                              {operation: "Authorization"},
 	},
 	// History Scope Names
 	History: {
@@ -1483,11 +1482,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TransferStandbyTaskResetWorkflowScope:                  {operation: "TransferStandbyTaskResetWorkflow"},
 		TransferStandbyTaskUpsertWorkflowSearchAttributesScope: {operation: "TransferStandbyTaskUpsertWorkflowSearchAttributes"},
 
-		VisibilityQueueProcessorScope:      {operation: "VisibilityQueueProcessorScope"},
-		VisibilityTaskStartExecutionScope:  {operation: "VisibilityTaskStartExecutionScope"},
-		VisibilityTaskUpsertExecutionScope: {operation: "VisibilityTaskUpsertExecutionScope"},
-		VisibilityTaskCloseExecutionScope:  {operation: "VisibilityTaskCloseExecutionScope"},
-		VisibilityTaskDeleteExecutionScope: {operation: "VisibilityTaskDeleteExecutionScope"},
+		VisibilityQueueProcessorScope:      {operation: "VisibilityQueueProcessor"},
+		VisibilityTaskStartExecutionScope:  {operation: "VisibilityTaskStartExecution"},
+		VisibilityTaskUpsertExecutionScope: {operation: "VisibilityTaskUpsertExecution"},
+		VisibilityTaskCloseExecutionScope:  {operation: "VisibilityTaskCloseExecution"},
+		VisibilityTaskDeleteExecutionScope: {operation: "VisibilityTaskDeleteExecution"},
 
 		TimerQueueProcessorScope:                  {operation: "TimerQueueProcessor"},
 		TimerActiveQueueProcessorScope:            {operation: "TimerActiveQueueProcessor"},
@@ -1530,6 +1529,12 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ReplicationTaskFetcherScope:               {operation: "ReplicationTaskFetcher"},
 		ReplicationTaskCleanupScope:               {operation: "ReplicationTaskCleanup"},
 		ReplicationDLQStatsScope:                  {operation: "ReplicationDLQStats"},
+		ElasticSearchVisibility:                   {operation: "ElasticSearchVisibility"},
+		SyncShardTaskScope:                        {operation: "SyncShardTask"},
+		SyncActivityTaskScope:                     {operation: "SyncActivityTask"},
+		HistoryMetadataReplicationTaskScope:       {operation: "HistoryMetadataReplicationTask"},
+		HistoryReplicationTaskScope:               {operation: "HistoryReplicationTask"},
+		ReplicatorScope:                           {operation: "Replicator"},
 	},
 	// Matching Scope Names
 	Matching: {
@@ -1871,6 +1876,13 @@ const (
 	ReplicationTaskCleanupFailure
 	MutableStateChecksumMismatch
 	MutableStateChecksumInvalidated
+
+	ESBulkProcessorRequests
+	ESBulkProcessorRetries
+	ESBulkProcessorFailures
+	ESBulkProcessorCorruptedData
+	ESBulkProcessorRequestLatency
+	ESInvalidSearchAttribute
 
 	NumHistoryMetrics
 )
@@ -2290,6 +2302,13 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ReplicationTaskCleanupFailure:                     {metricName: "replication_task_cleanup_failed", metricType: Counter},
 		MutableStateChecksumMismatch:                      {metricName: "mutable_state_checksum_mismatch", metricType: Counter},
 		MutableStateChecksumInvalidated:                   {metricName: "mutable_state_checksum_invalidated", metricType: Counter},
+
+		ESBulkProcessorRequests:       {metricName: "es_bulk_processor_requests"},
+		ESBulkProcessorRetries:        {metricName: "es_bulk_processor_retries"},
+		ESBulkProcessorFailures:       {metricName: "es_bulk_processor_errors"},
+		ESBulkProcessorCorruptedData:  {metricName: "es_bulk_processor_corrupted_data"},
+		ESBulkProcessorRequestLatency: {metricName: "es_bulk_processor_request_latency", metricType: Timer},
+		ESInvalidSearchAttribute:      {metricName: "es_invalid_search_attribute"},
 	},
 	Matching: {
 		PollSuccessPerTaskQueueCounter:            {metricName: "poll_success_per_tl", metricRollupName: "poll_success"},
