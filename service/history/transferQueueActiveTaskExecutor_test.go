@@ -80,15 +80,14 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller               *gomock.Controller
-		mockShard                *shard.ContextTest
-		mockTxProcessor          *MocktransferQueueProcessor
-		mockReplicationProcessor *MockReplicatorQueueProcessor
-		mockTimerProcessor       *MocktimerQueueProcessor
-		mockNamespaceCache       *cache.MockNamespaceCache
-		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
-		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
-		mockClusterMetadata      *cluster.MockMetadata
+		controller          *gomock.Controller
+		mockShard           *shard.ContextTest
+		mockTxProcessor     *MocktransferQueueProcessor
+		mockTimerProcessor  *MocktimerQueueProcessor
+		mockNamespaceCache  *cache.MockNamespaceCache
+		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
+		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
+		mockClusterMetadata *cluster.MockMetadata
 
 		mockVisibilityMgr           *mocks.VisibilityManager
 		mockExecutionMgr            *mocks.ExecutionManager
@@ -147,10 +146,8 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
-	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
 	config := NewDynamicConfigForTest()
@@ -204,20 +201,19 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 
 	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName:  s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
-		shard:               s.mockShard,
-		clusterMetadata:     s.mockClusterMetadata,
-		historyV2Mgr:        s.mockHistoryV2Mgr,
-		executionManager:    s.mockExecutionMgr,
-		historyCache:        historyCache,
-		logger:              s.logger,
-		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
-		metricsClient:       s.mockShard.GetMetricsClient(),
-		eventNotifier:       events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
-		txProcessor:         s.mockTxProcessor,
-		replicatorProcessor: s.mockReplicationProcessor,
-		timerProcessor:      s.mockTimerProcessor,
-		archivalClient:      s.mockArchivalClient,
+		currentClusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		shard:              s.mockShard,
+		clusterMetadata:    s.mockClusterMetadata,
+		historyV2Mgr:       s.mockHistoryV2Mgr,
+		executionManager:   s.mockExecutionMgr,
+		historyCache:       historyCache,
+		logger:             s.logger,
+		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		metricsClient:      s.mockShard.GetMetricsClient(),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
+		txProcessor:        s.mockTxProcessor,
+		timerProcessor:     s.mockTimerProcessor,
+		archivalClient:     s.mockArchivalClient,
 	}
 	s.mockShard.SetEngine(h)
 

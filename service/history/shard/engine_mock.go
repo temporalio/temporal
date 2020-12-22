@@ -35,6 +35,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/api/common/v1"
 	history "go.temporal.io/api/history/v1"
+
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
 	persistence "go.temporal.io/server/common/persistence"
@@ -589,18 +590,6 @@ func (m *MockEngine) NotifyNewTransferTasks(tasks []persistence.Task) {
 func (mr *MockEngineMockRecorder) NotifyNewTransferTasks(tasks interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTransferTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTransferTasks), tasks)
-}
-
-// NotifyNewReplicationTasks mocks base method.
-func (m *MockEngine) NotifyNewReplicationTasks(tasks []persistence.Task) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewReplicationTasks", tasks)
-}
-
-// NotifyNewReplicationTasks indicates an expected call of NotifyNewReplicationTasks.
-func (mr *MockEngineMockRecorder) NotifyNewReplicationTasks(tasks interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewReplicationTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewReplicationTasks), tasks)
 }
 
 // NotifyNewTimerTasks mocks base method.

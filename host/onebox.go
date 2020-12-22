@@ -645,7 +645,6 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 }
 
 func (c *temporalImpl) startWorkerReplicator(params *resource.BootstrapParams, service resource.Resource, namespaceCache cache.NamespaceCache) {
-	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ReplicationCfg.ReplicatorMessageConcurrency = dynamicconfig.GetIntPropertyFn(10)
 	serviceResolver, err := service.GetMembershipMonitor().GetResolver(common.WorkerServiceName)
@@ -654,11 +653,8 @@ func (c *temporalImpl) startWorkerReplicator(params *resource.BootstrapParams, s
 	}
 	c.replicator = replicator.NewReplicator(
 		c.clusterMetadata,
-		metadataManager,
-		namespaceCache,
 		service.GetClientBean(),
 		workerConfig.ReplicationCfg,
-		c.messagingClient,
 		c.logger,
 		service.GetMetricsClient(),
 		service.GetHostInfo(),
@@ -666,10 +662,7 @@ func (c *temporalImpl) startWorkerReplicator(params *resource.BootstrapParams, s
 		c.namespaceReplicationQueue,
 		c.namespaceReplicationTaskExecutor,
 	)
-	if err := c.replicator.Start(); err != nil {
-		c.replicator.Stop()
-		c.logger.Fatal("Fail to start replicator when start worker", tag.Error(err))
-	}
+	c.replicator.Start()
 }
 
 func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, namespaceCache cache.NamespaceCache) {

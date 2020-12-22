@@ -156,18 +156,17 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName:  s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
-		shard:               s.mockShard,
-		clusterMetadata:     s.mockClusterMetadata,
-		executionManager:    s.mockExecutionMgr,
-		historyCache:        historyCache,
-		logger:              s.logger,
-		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
-		metricsClient:       s.mockShard.GetMetricsClient(),
-		eventNotifier:       events.NewNotifier(s.timeSource, metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
-		txProcessor:         s.mockTxProcessor,
-		replicatorProcessor: s.mockReplicationProcessor,
-		timerProcessor:      s.mockTimerProcessor,
+		currentClusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		shard:              s.mockShard,
+		clusterMetadata:    s.mockClusterMetadata,
+		executionManager:   s.mockExecutionMgr,
+		historyCache:       historyCache,
+		logger:             s.logger,
+		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		metricsClient:      s.mockShard.GetMetricsClient(),
+		eventNotifier:      events.NewNotifier(s.timeSource, metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
+		txProcessor:        s.mockTxProcessor,
+		timerProcessor:     s.mockTimerProcessor,
 	}
 	s.mockShard.SetEngine(h)
 

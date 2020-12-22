@@ -25,47 +25,31 @@
 package replicator
 
 import (
-	"context"
-	"fmt"
+	"sync/atomic"
 
-	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/client/admin"
-	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/task"
-	"go.temporal.io/server/common/xdc"
 )
 
 type (
 	// Replicator is the processor for replication tasks
 	Replicator struct {
-		namespaceCache                   cache.NamespaceCache
+		status                           int32
+		config                           *Config
 		clusterMetadata                  cluster.Metadata
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 		clientBean                       client.Bean
-		historyClient                    history.Client
-		config                           *Config
-		client                           messaging.Client
-		processors                       []*replicationTaskProcessor
 		namespaceProcessors              []*namespaceReplicationMessageProcessor
 		logger                           log.Logger
 		metricsClient                    metrics.Client
-		historySerializer                persistence.PayloadSerializer
 		hostInfo                         *membership.HostInfo
 		serviceResolver                  membership.ServiceResolver
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
@@ -89,11 +73,8 @@ type (
 // NewReplicator creates a new replicator for processing replication tasks
 func NewReplicator(
 	clusterMetadata cluster.Metadata,
-	metadataManagerV2 persistence.MetadataManager,
-	namespaceCache cache.NamespaceCache,
 	clientBean client.Bean,
 	config *Config,
-	client messaging.Client,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	hostInfo *membership.HostInfo,
@@ -103,152 +84,67 @@ func NewReplicator(
 ) *Replicator {
 
 	logger = logger.WithTags(tag.ComponentReplicator)
-	return &Replicator{
-		hostInfo:                         hostInfo,
-		serviceResolver:                  serviceResolver,
-		namespaceCache:                   namespaceCache,
-		clusterMetadata:                  clusterMetadata,
-		namespaceReplicationTaskExecutor: namespaceReplicationTaskExecutor,
-		clientBean:                       clientBean,
-		historyClient:                    clientBean.GetHistoryClient(),
-		config:                           config,
-		client:                           client,
-		logger:                           logger,
-		metricsClient:                    metricsClient,
-		historySerializer:                persistence.NewPayloadSerializer(),
-		namespaceReplicationQueue:        namespaceReplicationQueue,
-	}
-}
-
-// Start is called to start replicator
-func (r *Replicator) Start() error {
-	currentClusterName := r.clusterMetadata.GetCurrentClusterName()
-	replicationConsumerConfig := r.clusterMetadata.GetReplicationConsumerConfig()
-	for clusterName, info := range r.clusterMetadata.GetAllClusterInfo() {
+	var namespaceReplicationMessageProcessors []*namespaceReplicationMessageProcessor
+	currentClusterName := clusterMetadata.GetCurrentClusterName()
+	for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
 		}
 
 		if clusterName != currentClusterName {
-			if replicationConsumerConfig.Type == config.ReplicationConsumerTypeRPC || replicationConsumerConfig.Type == config.ReplicationConsumerTypeKafkaToRPC {
-				r.namespaceProcessors = append(r.namespaceProcessors, newNamespaceReplicationMessageProcessor(
-					clusterName,
-					r.logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
-					r.clientBean.GetRemoteAdminClient(clusterName),
-					r.metricsClient,
-					r.namespaceReplicationTaskExecutor,
-					r.hostInfo,
-					r.serviceResolver,
-					r.namespaceReplicationQueue,
-				))
-			}
-
-			if replicationConsumerConfig.Type == config.ReplicationConsumerTypeKafka || replicationConsumerConfig.Type == config.ReplicationConsumerTypeKafkaToRPC {
-				r.createKafkaProcessors(currentClusterName, clusterName)
-			}
+			namespaceReplicationMessageProcessors = append(namespaceReplicationMessageProcessors, newNamespaceReplicationMessageProcessor(
+				clusterName,
+				logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
+				clientBean.GetRemoteAdminClient(clusterName),
+				metricsClient,
+				namespaceReplicationTaskExecutor,
+				hostInfo,
+				serviceResolver,
+				namespaceReplicationQueue,
+			))
 		}
 	}
+	return &Replicator{
+		status:                           common.DaemonStatusInitialized,
+		config:                           config,
+		hostInfo:                         hostInfo,
+		serviceResolver:                  serviceResolver,
+		clusterMetadata:                  clusterMetadata,
+		namespaceReplicationTaskExecutor: namespaceReplicationTaskExecutor,
+		namespaceProcessors:              namespaceReplicationMessageProcessors,
+		clientBean:                       clientBean,
+		logger:                           logger,
+		metricsClient:                    metricsClient,
+		namespaceReplicationQueue:        namespaceReplicationQueue,
+	}
+}
 
-	for _, processor := range r.processors {
-		if err := processor.Start(); err != nil {
-			return err
-		}
+// Start is called to start replicator
+func (r *Replicator) Start() {
+	if !atomic.CompareAndSwapInt32(
+		&r.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
+		return
 	}
 
 	for _, namespaceProcessor := range r.namespaceProcessors {
 		namespaceProcessor.Start()
 	}
-
-	return nil
-}
-
-func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterName string) {
-	consumerName := getConsumerName(currentClusterName, clusterName)
-	adminClient := admin.NewRetryableClient(
-		r.clientBean.GetRemoteAdminClient(clusterName),
-		common.CreateAdminServiceRetryPolicy(),
-		isRetryableError,
-	)
-	// Create retry policy for service busy error
-	adminRetryClient := admin.NewRetryableClient(
-		adminClient,
-		common.CreateReplicationServiceBusyRetryPolicy(),
-		common.IsResourceExhausted,
-	)
-	historyClient := history.NewRetryableClient(
-		r.historyClient,
-		common.CreateHistoryServiceRetryPolicy(),
-		isRetryableError,
-	)
-	// Create retry policy for service busy error
-	historyRetryClient := history.NewRetryableClient(
-		historyClient,
-		common.CreateReplicationServiceBusyRetryPolicy(),
-		common.IsResourceExhausted,
-	)
-
-	logger := r.logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName), tag.KafkaConsumerName(consumerName))
-	nDCHistoryReplicator := xdc.NewNDCHistoryResender(
-		r.namespaceCache,
-		adminRetryClient,
-		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-			_, err := historyRetryClient.ReplicateEventsV2(ctx, request)
-			return err
-		},
-		r.historySerializer,
-		r.config.ReReplicationContextTimeout,
-		logger,
-	)
-	r.processors = append(r.processors, newReplicationTaskProcessor(
-		currentClusterName,
-		clusterName,
-		consumerName,
-		r.client,
-		r.config,
-		logger,
-		r.metricsClient,
-		r.namespaceReplicationTaskExecutor,
-		nDCHistoryReplicator,
-		historyRetryClient,
-		r.namespaceCache,
-		task.NewSequentialTaskProcessor(
-			r.config.ReplicatorTaskConcurrency(),
-			replicationSequentialTaskQueueHashFn,
-			newReplicationSequentialTaskQueue,
-			r.metricsClient,
-			logger,
-		),
-	))
 }
 
 // Stop is called to stop replicator
 func (r *Replicator) Stop() {
-	for _, processor := range r.processors {
-		processor.Stop()
+	if !atomic.CompareAndSwapInt32(
+		&r.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
 	}
 
 	for _, namespaceProcessor := range r.namespaceProcessors {
 		namespaceProcessor.Stop()
 	}
-
-	r.namespaceCache.Stop()
-}
-
-func getConsumerName(currentCluster, remoteCluster string) string {
-	return fmt.Sprintf("%v_consumer_for_%v", currentCluster, remoteCluster)
-}
-
-func isRetryableError(err error) bool {
-	switch err.(type) {
-	case *serviceerror.Internal,
-		*serviceerrors.ShardOwnershipLost,
-		*serviceerror.Unavailable:
-		return true
-	}
-
-	if common.IsContextDeadlineExceededErr(err) {
-		return true
-	}
-
-	return false
 }

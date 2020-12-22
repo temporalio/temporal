@@ -32,6 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+
 	config "go.temporal.io/server/common/service/config"
 )
 
@@ -168,18 +169,4 @@ func (m *MockMetadata) ClusterNameForFailoverVersion(failoverVersion int64) stri
 func (mr *MockMetadataMockRecorder) ClusterNameForFailoverVersion(failoverVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClusterNameForFailoverVersion", reflect.TypeOf((*MockMetadata)(nil).ClusterNameForFailoverVersion), failoverVersion)
-}
-
-// GetReplicationConsumerConfig mocks base method.
-func (m *MockMetadata) GetReplicationConsumerConfig() *config.ReplicationConsumerConfig {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationConsumerConfig")
-	ret0, _ := ret[0].(*config.ReplicationConsumerConfig)
-	return ret0
-}
-
-// GetReplicationConsumerConfig indicates an expected call of GetReplicationConsumerConfig.
-func (mr *MockMetadataMockRecorder) GetReplicationConsumerConfig() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationConsumerConfig", reflect.TypeOf((*MockMetadata)(nil).GetReplicationConsumerConfig))
 }

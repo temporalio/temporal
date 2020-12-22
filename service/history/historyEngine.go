@@ -62,12 +62,10 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/service/config"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
@@ -102,7 +100,7 @@ type (
 		visibilityProcessor       visibilityQueueProcessor
 		nDCReplicator             nDCHistoryReplicator
 		nDCActivityReplicator     nDCActivityReplicator
-		replicatorProcessor       ReplicatorQueueProcessor
+		replicatorProcessor       *replicatorQueueProcessorImpl
 		eventNotifier             events.Notifier
 		tokenSerializer           common.TaskTokenSerializer
 		historyCache              *historyCache
@@ -180,7 +178,6 @@ func NewEngineWithShardContext(
 	historyClient history.Client,
 	publicClient sdkclient.Client,
 	eventNotifier events.Notifier,
-	publisher messaging.Producer,
 	config *configs.Config,
 	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matching.Client,
@@ -233,7 +230,6 @@ func NewEngineWithShardContext(
 		historyEngImpl.replicatorProcessor = newReplicatorQueueProcessor(
 			shard,
 			historyEngImpl.historyCache,
-			publisher,
 			executionManager,
 			historyV2Manager,
 			logger,
@@ -343,13 +339,6 @@ func (e *historyEngineImpl) Start() {
 	// queue processor need to be started.
 	e.registerNamespaceFailoverCallback()
 
-	clusterMetadata := e.shard.GetClusterMetadata()
-	if e.replicatorProcessor != nil {
-		if clusterMetadata.GetReplicationConsumerConfig().Type == config.ReplicationConsumerTypeKafka {
-			e.replicatorProcessor.Start()
-		}
-	}
-
 	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
 		replicationTaskProcessor.Start()
 	}
@@ -372,9 +361,6 @@ func (e *historyEngineImpl) Stop() {
 	e.timerProcessor.Stop()
 	if e.visibilityProcessor != nil {
 		e.visibilityProcessor.Stop()
-	}
-	if e.replicatorProcessor != nil {
-		e.replicatorProcessor.Stop()
 	}
 
 	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
@@ -2527,15 +2513,6 @@ func (e *historyEngineImpl) NotifyNewVisibilityTasks(
 
 	if len(tasks) > 0 && e.visibilityProcessor != nil {
 		e.visibilityProcessor.NotifyNewTask(tasks)
-	}
-}
-
-func (e *historyEngineImpl) NotifyNewReplicationTasks(
-	tasks []persistence.Task,
-) {
-
-	if len(tasks) > 0 {
-		e.replicatorProcessor.notifyNewTask()
 	}
 }
 
