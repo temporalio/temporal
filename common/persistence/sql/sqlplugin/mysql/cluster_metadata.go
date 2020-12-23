@@ -38,7 +38,7 @@ const constMetadataPartition = 0
 const constMembershipPartition = 0
 const (
 	// ****** CLUSTER_METADATA TABLE ******
-	insertClusterMetadataQry = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES(?, ?, ?, ?)`
+	insertClusterMetadataQry = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, immutable_data, immutable_data_encoding, version) VALUES(?, ?, ?, ?, ?, ?)`
 
 	updateClusterMetadataQry = `UPDATE cluster_metadata SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ?`
 
@@ -83,6 +83,8 @@ func (mdb *db) SaveClusterMetadata(
 			constMetadataPartition,
 			row.Data,
 			row.DataEncoding,
+			[]byte{}, // TODO beginning 1.6.x, remove this line
+			"",       // TODO beginning 1.6.x, remove this line
 			1,
 		)
 	}
