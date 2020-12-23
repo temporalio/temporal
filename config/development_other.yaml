@@ -49,8 +49,6 @@ services:
 
 clusterMetadata:
   enableGlobalNamespace: true
-  replicationConsumer:
-    type: kafka
   failoverVersionIncrement: 10
   masterClusterName: "active"
   currentClusterName: "other"

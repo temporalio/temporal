@@ -55,7 +55,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/namespace"
@@ -88,8 +87,7 @@ type (
 		mockClusterMetadata *cluster.MockMetadata
 		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
 
-		mockProducer           *mocks.KafkaProducer
-		mockMessagingClient    messaging.Client
+		mockProducer           *persistence.MockNamespaceReplicationQueue
 		mockMetadataMgr        *mocks.MetadataManager
 		mockHistoryV2Mgr       *mocks.HistoryV2Manager
 		mockVisibilityMgr      *mocks.VisibilityManager
@@ -136,8 +134,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockArchiverProvider = s.mockResource.ArchiverProvider
 	s.mockMatchingClient = s.mockResource.MatchingClient
 
-	s.mockProducer = &mocks.KafkaProducer{}
-	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
+	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockHistoryArchiver = &archiver.HistoryArchiverMock{}
 	s.mockVisibilityArchiver = &archiver.VisibilityArchiverMock{}
 
@@ -150,7 +147,6 @@ func (s *workflowHandlerSuite) SetupTest() {
 func (s *workflowHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockResource.Finish(s.T())
-	s.mockProducer.AssertExpectations(s.T())
 	s.mockHistoryArchiver.AssertExpectations(s.T())
 	s.mockVisibilityArchiver.AssertExpectations(s.T())
 }

@@ -798,7 +798,6 @@ func (s *ContextImpl) AddTasks(
 	case nil:
 		s.engine.NotifyNewTransferTasks(request.TransferTasks)
 		s.engine.NotifyNewTimerTasks(request.TimerTasks)
-		s.engine.NotifyNewReplicationTasks(request.ReplicationTasks)
 		s.engine.NotifyNewVisibilityTasks(request.VisibilityTasks)
 		return nil
 	case *persistence.TimeoutError:

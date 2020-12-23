@@ -254,11 +254,8 @@ func (s *Service) startReplicator() {
 	)
 	msgReplicator := replicator.NewReplicator(
 		s.GetClusterMetadata(),
-		s.GetMetadataManager(),
-		s.GetNamespaceCache(),
 		s.GetClientBean(),
 		s.config.ReplicationCfg,
-		s.GetMessagingClient(),
 		s.GetLogger(),
 		s.GetMetricsClient(),
 		s.GetHostInfo(),
@@ -266,10 +263,7 @@ func (s *Service) startReplicator() {
 		s.GetNamespaceReplicationQueue(),
 		namespaceReplicationTaskExecutor,
 	)
-	if err := msgReplicator.Start(); err != nil {
-		msgReplicator.Stop()
-		s.GetLogger().Fatal("fail to start replicator", tag.Error(err))
-	}
+	msgReplicator.Start()
 }
 
 func (s *Service) startIndexer() {

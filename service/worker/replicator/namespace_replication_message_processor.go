@@ -216,3 +216,12 @@ func (p *namespaceReplicationMessageProcessor) Stop() {
 func getWaitDuration() time.Duration {
 	return backoff.JitDuration(time.Duration(pollIntervalSecs)*time.Second, pollTimerJitterCoefficient)
 }
+
+func isTransientRetryableError(err error) bool {
+	switch err.(type) {
+	case *serviceerror.InvalidArgument:
+		return false
+	default:
+		return true
+	}
+}

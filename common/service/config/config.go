@@ -37,16 +37,6 @@ import (
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
-const (
-	// ReplicationConsumerTypeKafka means consuming replication tasks from kafka.
-	ReplicationConsumerTypeKafka = "kafka"
-	// ReplicationConsumerTypeKafkaToRPC means sending tasks to kafka while receiving from both kafka & rpc
-	//  this should be used for kafka deprecation
-	ReplicationConsumerTypeKafkaToRPC = "kafka-to-rpc"
-	// ReplicationConsumerTypeRPC means pulling source DC for replication tasks.
-	ReplicationConsumerTypeRPC = "rpc"
-)
-
 type (
 	// Config contains the configuration for a set of temporal services
 	Config struct {
@@ -355,8 +345,6 @@ type (
 	// ClusterMetadata contains the all cluster which participated in cross DC
 	ClusterMetadata struct {
 		EnableGlobalNamespace bool `yaml:"enableGlobalNamespace"`
-		// ReplicationConsumerConfig determines how we consume replication tasks.
-		ReplicationConsumer *ReplicationConsumerConfig `yaml:"replicationConsumer"`
 		// FailoverVersionIncrement is the increment of each cluster version when failover happens
 		FailoverVersionIncrement int64 `yaml:"failoverVersionIncrement"`
 		// MasterClusterName is the master cluster name, only the master cluster can register / update namespace
@@ -377,12 +365,6 @@ type (
 		RPCName string `yaml:"rpcName"`
 		// Address indicate the remote service address(Host:Port). Host can be DNS name.
 		RPCAddress string `yaml:"rpcAddress"`
-	}
-
-	// ReplicationConsumerConfig contains config for replication consumer
-	ReplicationConsumerConfig struct {
-		// Type determines how we consume replication tasks. It can be either kafka(default) or rpc.
-		Type string `yaml:"type"`
 	}
 
 	// ReplicationTaskProcessorConfig is the config for replication task processor.
