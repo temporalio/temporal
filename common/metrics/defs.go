@@ -802,7 +802,7 @@ const (
 // -- Operation scopes for History service --
 const (
 	// HistoryStartWorkflowExecutionScope tracks StartWorkflowExecution API calls received by service
-	HistoryStartWorkflowExecutionScope = iota + NumCommonScopes
+	HistoryStartWorkflowExecutionScope = iota + NumFrontendScopes
 	// HistoryRecordActivityTaskHeartbeatScope tracks RecordActivityTaskHeartbeat API calls received by service
 	HistoryRecordActivityTaskHeartbeatScope
 	// HistoryRespondWorkflowTaskCompletedScope tracks RespondWorkflowTaskCompleted API calls received by service
@@ -1019,7 +1019,7 @@ const (
 // -- Operation scopes for Matching service --
 const (
 	// PollWorkflowTaskQueueScope tracks PollWorkflowTaskQueue API calls received by service
-	MatchingPollWorkflowTaskQueueScope = iota + NumCommonScopes
+	MatchingPollWorkflowTaskQueueScope = iota + NumHistoryScopes
 	// PollActivityTaskQueueScope tracks PollActivityTaskQueue API calls received by service
 	MatchingPollActivityTaskQueueScope
 	// MatchingAddActivityTaskScope tracks AddActivityTask API calls received by service
@@ -1045,7 +1045,7 @@ const (
 // -- Operation scopes for Worker service --
 const (
 	// ReplicationScope is the scope used by all metric emitted by replicator
-	ReplicatorScope = iota + NumCommonScopes
+	ReplicatorScope = iota + NumMatchingScopes
 	// NamespaceReplicationTaskScope is the scope used by namespace task replication processing
 	NamespaceReplicationTaskScope
 	// HistoryReplicationTaskScope is the scope used by history task replication processing
@@ -1419,7 +1419,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendDescribeTaskQueueScope:                  {operation: "DescribeTaskQueue"},
 		FrontendResetStickyTaskQueueScope:               {operation: "ResetStickyTaskQueue"},
 		FrontendGetSearchAttributesScope:                {operation: "GetSearchAttributes"},
-		VersionCheckScope:                               {operation: "VersionCheckScope"},
+		VersionCheckScope:                               {operation: "VersionCheck"},
 		AuthorizationScope:                              {operation: "Authorization"},
 	},
 	// History Scope Names
@@ -1482,11 +1482,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TransferStandbyTaskResetWorkflowScope:                  {operation: "TransferStandbyTaskResetWorkflow"},
 		TransferStandbyTaskUpsertWorkflowSearchAttributesScope: {operation: "TransferStandbyTaskUpsertWorkflowSearchAttributes"},
 
-		VisibilityQueueProcessorScope:      {operation: "VisibilityQueueProcessorScope"},
-		VisibilityTaskStartExecutionScope:  {operation: "VisibilityTaskStartExecutionScope"},
-		VisibilityTaskUpsertExecutionScope: {operation: "VisibilityTaskUpsertExecutionScope"},
-		VisibilityTaskCloseExecutionScope:  {operation: "VisibilityTaskCloseExecutionScope"},
-		VisibilityTaskDeleteExecutionScope: {operation: "VisibilityTaskDeleteExecutionScope"},
+		VisibilityQueueProcessorScope:      {operation: "VisibilityQueueProcessor"},
+		VisibilityTaskStartExecutionScope:  {operation: "VisibilityTaskStartExecution"},
+		VisibilityTaskUpsertExecutionScope: {operation: "VisibilityTaskUpsertExecution"},
+		VisibilityTaskCloseExecutionScope:  {operation: "VisibilityTaskCloseExecution"},
+		VisibilityTaskDeleteExecutionScope: {operation: "VisibilityTaskDeleteExecution"},
 
 		TimerQueueProcessorScope:                  {operation: "TimerQueueProcessor"},
 		TimerActiveQueueProcessorScope:            {operation: "TimerActiveQueueProcessor"},
@@ -1530,6 +1530,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ReplicationTaskCleanupScope:               {operation: "ReplicationTaskCleanup"},
 		ReplicationDLQStatsScope:                  {operation: "ReplicationDLQStats"},
 		ElasticSearchVisibility:                   {operation: "ElasticSearchVisibility"},
+		SyncShardTaskScope:                        {operation: "SyncShardTask"},
+		SyncActivityTaskScope:                     {operation: "SyncActivityTask"},
+		HistoryMetadataReplicationTaskScope:       {operation: "HistoryMetadataReplicationTask"},
+		HistoryReplicationTaskScope:               {operation: "HistoryReplicationTask"},
+		ReplicatorScope:                           {operation: "Replicator"},
 	},
 	// Matching Scope Names
 	Matching: {
