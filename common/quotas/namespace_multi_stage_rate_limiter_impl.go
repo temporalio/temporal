@@ -30,6 +30,7 @@ import (
 )
 
 type (
+	// NamespaceRateLimiterFn returns generate a namespace specific rate limiter
 	NamespaceRateLimiterFn func(namespaceID string) RateLimiter
 
 	// NamespaceMultiStageRateLimiterImpl is a multi stage rate limiter
