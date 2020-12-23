@@ -831,7 +831,6 @@ func (c *workflowExecutionContextImpl) notifyTasks(
 	visibilityTasks []persistence.Task,
 ) {
 	c.engine.NotifyNewTransferTasks(transferTasks)
-	c.engine.NotifyNewReplicationTasks(replicationTasks)
 	c.engine.NotifyNewTimerTasks(timerTasks)
 	c.engine.NotifyNewVisibilityTasks(visibilityTasks)
 }

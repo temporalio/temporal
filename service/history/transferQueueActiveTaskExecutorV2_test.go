@@ -205,20 +205,19 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) SetupTest() {
 
 	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName:  s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
-		shard:               s.mockShard,
-		clusterMetadata:     s.mockClusterMetadata,
-		historyV2Mgr:        s.mockHistoryV2Mgr,
-		executionManager:    s.mockExecutionMgr,
-		historyCache:        historyCache,
-		logger:              s.logger,
-		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
-		metricsClient:       s.mockShard.GetMetricsClient(),
-		eventNotifier:       events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
-		txProcessor:         s.mockTxProcessor,
-		replicatorProcessor: s.mockReplicationProcessor,
-		timerProcessor:      s.mockTimerProcessor,
-		archivalClient:      s.mockArchivalClient,
+		currentClusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		shard:              s.mockShard,
+		clusterMetadata:    s.mockClusterMetadata,
+		historyV2Mgr:       s.mockHistoryV2Mgr,
+		executionManager:   s.mockExecutionMgr,
+		historyCache:       historyCache,
+		logger:             s.logger,
+		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		metricsClient:      s.mockShard.GetMetricsClient(),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
+		txProcessor:        s.mockTxProcessor,
+		timerProcessor:     s.mockTimerProcessor,
+		archivalClient:     s.mockArchivalClient,
 	}
 	s.mockShard.SetEngine(h)
 

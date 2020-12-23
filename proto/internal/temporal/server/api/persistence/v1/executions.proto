@@ -285,12 +285,6 @@ message SignalInfo {
     int64 initiated_id = 7;
 }
 
-// replication_metadata column
-message ReplicationVersions {
-    google.protobuf.Int64Value start_version = 1;
-    google.protobuf.Int64Value last_write_version = 2;
-}
-
 // checksum column
 message Checksum {
     int32 version = 1;

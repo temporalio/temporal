@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -37,15 +38,18 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log/loggerimpl"
-	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 )
 
 type (
 	transmissionTaskSuite struct {
 		suite.Suite
+
+		controller *gomock.Controller
+
 		namespaceReplicator *namespaceReplicatorImpl
-		kafkaProducer       *mocks.KafkaProducer
+		kafkaProducer       *persistence.MockNamespaceReplicationQueue
 	}
 )
 
@@ -62,7 +66,8 @@ func (s *transmissionTaskSuite) TearDownSuite() {
 }
 
 func (s *transmissionTaskSuite) SetupTest() {
-	s.kafkaProducer = &mocks.KafkaProducer{}
+	s.controller = gomock.NewController(s.T())
+	s.kafkaProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.namespaceReplicator = NewNamespaceReplicator(
 		s.kafkaProducer,
 		loggerimpl.NewDevelopmentForTest(s.Suite),
@@ -70,7 +75,7 @@ func (s *transmissionTaskSuite) SetupTest() {
 }
 
 func (s *transmissionTaskSuite) TearDownTest() {
-	s.kafkaProducer.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask_IsGlobalNamespace() {
@@ -115,7 +120,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	}
 	isGlobalNamespace := true
 
-	s.kafkaProducer.On("Publish", &replicationspb.ReplicationTask{
+	s.kafkaProducer.EXPECT().Publish(&replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -144,7 +149,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 				FailoverVersion: failoverVersion,
 			},
 		},
-	}).Return(nil).Once()
+	}).Return(nil).Times(1)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 	s.Nil(err)
@@ -236,7 +241,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	}
 	isGlobalNamespace := true
 
-	s.kafkaProducer.On("Publish", &replicationspb.ReplicationTask{
+	s.kafkaProducer.EXPECT().Publish(&replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -264,7 +269,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 				ConfigVersion:   configVersion,
 				FailoverVersion: failoverVersion},
 		},
-	}).Return(nil).Once()
+	}).Return(nil).Times(1)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 	s.Nil(err)

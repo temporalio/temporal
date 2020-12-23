@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -420,41 +419,24 @@ func createExecution(
 		return err
 	}
 
-	if executionInfo.VersionHistories == nil {
-		// Cross DC feature is currently disabled so we will be creating workflow executions without versioned history
-		batch.Query(templateCreateWorkflowExecutionQuery,
-			shardID,
-			namespaceID,
-			workflowID,
-			runID,
-			rowTypeExecution,
-			executionDatablob.Data,
-			executionDatablob.EncodingType.String(),
-			executionStateDatablob.Data,
-			executionStateDatablob.EncodingType.String(),
-			nextEventID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			checksumDatablob.Data,
-			checksumDatablob.EncodingType.String())
-	} else {
-		// TODO also need to set the start / current / last write version
-		batch.Query(templateCreateWorkflowExecutionQuery,
-			shardID,
-			namespaceID,
-			workflowID,
-			runID,
-			rowTypeExecution,
-			executionDatablob.Data,
-			executionDatablob.EncodingType.String(),
-			executionStateDatablob.Data,
-			executionStateDatablob.EncodingType.String(),
-			nextEventID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			checksumDatablob.Data,
-			checksumDatablob.EncodingType.String())
-	}
+	// TODO also need to set the start / current / last write version
+	batch.Query(templateCreateWorkflowExecutionQuery,
+		shardID,
+		namespaceID,
+		workflowID,
+		runID,
+		rowTypeExecution,
+		executionDatablob.Data,
+		executionDatablob.EncodingType.String(),
+		executionStateDatablob.Data,
+		executionStateDatablob.EncodingType.String(),
+		nextEventID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID,
+		checksumDatablob.Data,
+		checksumDatablob.EncodingType.String(),
+	)
+
 	return nil
 }
 
@@ -498,43 +480,24 @@ func updateExecution(
 		return err
 	}
 
-	if executionInfo.VersionHistories == nil {
-		// Updates will be called with null ReplicationState while the feature is disabled
-		batch.Query(templateUpdateWorkflowExecutionQuery,
-			executionDatablob.Data,
-			executionDatablob.EncodingType.String(),
-			executionStateDatablob.Data,
-			executionStateDatablob.EncodingType.String(),
-			nextEventID,
-			checksumDatablob.Data,
-			checksumDatablob.EncodingType.String(),
-			shardID,
-			rowTypeExecution,
-			namespaceID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	} else {
-		// TODO also need to set the start / current / last write version
-		batch.Query(templateUpdateWorkflowExecutionQuery,
-			executionDatablob.Data,
-			executionDatablob.EncodingType.String(),
-			executionStateDatablob.Data,
-			executionStateDatablob.EncodingType.String(),
-			nextEventID,
-			checksumDatablob.Data,
-			checksumDatablob.EncodingType.String(),
-			shardID,
-			rowTypeExecution,
-			namespaceID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
+	// TODO also need to set the start / current / last write version
+	batch.Query(templateUpdateWorkflowExecutionQuery,
+		executionDatablob.Data,
+		executionDatablob.EncodingType.String(),
+		executionStateDatablob.Data,
+		executionStateDatablob.EncodingType.String(),
+		nextEventID,
+		checksumDatablob.Data,
+		checksumDatablob.EncodingType.String(),
+		shardID,
+		rowTypeExecution,
+		namespaceID,
+		workflowID,
+		runID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID,
+		condition,
+	)
 
 	return nil
 }
@@ -914,7 +877,6 @@ func createOrUpdateCurrentExecution(
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	createRequestID string,
-	startVersion int64,
 	lastWriteVersion int64,
 	previousRunID string,
 	previousLastWriteVersion int64,
@@ -926,17 +888,6 @@ func createOrUpdateCurrentExecution(
 		State:           state,
 		Status:          status,
 	})
-
-	if err != nil {
-		return err
-	}
-
-	replicationVersions, err := serialization.ReplicationVersionsToBlob(
-		&persistencespb.ReplicationVersions{
-			StartVersion:     &types.Int64Value{Value: startVersion},
-			LastWriteVersion: &types.Int64Value{Value: startVersion},
-		})
-
 	if err != nil {
 		return err
 	}
@@ -947,8 +898,6 @@ func createOrUpdateCurrentExecution(
 			runID,
 			executionStateDatablob.Data,
 			executionStateDatablob.EncodingType.String(),
-			replicationVersions.Data,
-			replicationVersions.EncodingType.String(),
 			lastWriteVersion,
 			state,
 			shardID,
@@ -965,8 +914,6 @@ func createOrUpdateCurrentExecution(
 			runID,
 			executionStateDatablob.Data,
 			executionStateDatablob.EncodingType.String(),
-			replicationVersions.Data,
-			replicationVersions.EncodingType.String(),
 			lastWriteVersion,
 			state,
 			shardID,
@@ -992,8 +939,6 @@ func createOrUpdateCurrentExecution(
 			runID,
 			executionStateDatablob.Data,
 			executionStateDatablob.EncodingType.String(),
-			replicationVersions.Data,
-			replicationVersions.EncodingType.String(),
 			lastWriteVersion,
 			state,
 		)

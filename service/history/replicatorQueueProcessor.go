@@ -38,7 +38,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -51,250 +50,52 @@ import (
 
 type (
 	replicatorQueueProcessorImpl struct {
-		currentClusterName    string
-		shard                 shard.Context
-		historyCache          *historyCache
-		replicationTaskFilter taskFilter
-		executionMgr          persistence.ExecutionManager
-		historyV2Mgr          persistence.HistoryManager
-		replicator            messaging.Producer
-		metricsClient         metrics.Client
-		options               *QueueProcessorOptions
-		logger                log.Logger
-		retryPolicy           backoff.RetryPolicy
+		currentClusterName string
+		shard              shard.Context
+		historyCache       *historyCache
+		executionMgr       persistence.ExecutionManager
+		historyMgr         persistence.HistoryManager
+		replicator         messaging.Producer
+		metricsClient      metrics.Client
+		logger             log.Logger
+		retryPolicy        backoff.RetryPolicy
 		// This is the batch size used by pull based RPC replicator.
 		fetchTasksBatchSize int
-		*queueProcessorBase
-		queueAckMgr
-
-		lastShardSyncTimestamp time.Time
 	}
 )
 
 var (
 	errUnknownReplicationTask = errors.New("unknown replication task")
-	errHistoryNotFoundTask    = errors.New("history not found")
 )
 
 func newReplicatorQueueProcessor(
 	shard shard.Context,
 	historyCache *historyCache,
-	replicator messaging.Producer,
 	executionMgr persistence.ExecutionManager,
-	historyV2Mgr persistence.HistoryManager,
+	historyMgr persistence.HistoryManager,
 	logger log.Logger,
-) ReplicatorQueueProcessor {
+) *replicatorQueueProcessorImpl {
 
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
-
 	config := shard.GetConfig()
-	options := &QueueProcessorOptions{
-		BatchSize:                           config.ReplicatorTaskBatchSize,
-		WorkerCount:                         config.ReplicatorTaskWorkerCount,
-		MaxPollRPS:                          config.ReplicatorProcessorMaxPollRPS,
-		MaxPollInterval:                     config.ReplicatorProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:    config.ReplicatorProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                   config.ReplicatorProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient:  config.ReplicatorProcessorUpdateAckIntervalJitterCoefficient,
-		MaxRetryCount:                       config.ReplicatorTaskMaxRetryCount,
-		RedispatchInterval:                  config.ReplicatorProcessorRedispatchInterval,
-		RedispatchIntervalJitterCoefficient: config.ReplicatorProcessorRedispatchIntervalJitterCoefficient,
-		MaxRedispatchQueueSize:              config.ReplicatorProcessorMaxRedispatchQueueSize,
-		EnablePriorityTaskProcessor:         config.ReplicatorProcessorEnablePriorityTaskProcessor,
-		MetricScope:                         metrics.ReplicatorQueueProcessorScope,
-	}
-
 	logger = logger.WithTags(tag.ComponentReplicatorQueue)
-
-	replicationTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
-		return true, nil
-	}
 
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	retryPolicy.SetMaximumAttempts(10)
 	retryPolicy.SetBackoffCoefficient(1)
 
-	processor := &replicatorQueueProcessorImpl{
-		currentClusterName:    currentClusterName,
-		shard:                 shard,
-		historyCache:          historyCache,
-		replicationTaskFilter: replicationTaskFilter,
-		executionMgr:          executionMgr,
-		historyV2Mgr:          historyV2Mgr,
-		replicator:            replicator,
-		metricsClient:         shard.GetMetricsClient(),
-		options:               options,
-		logger:                logger,
-		retryPolicy:           retryPolicy,
-		fetchTasksBatchSize:   config.ReplicatorProcessorFetchTasksBatchSize(),
-	}
-
-	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetReplicatorAckLevel(), logger)
-	queueProcessorBase := newQueueProcessorBase(
-		currentClusterName,
-		shard,
-		options,
-		processor,
-		nil, // replicator queue processor will soon be deprecated and won't use priority task processor
-		queueAckMgr,
-		nil, // replicator queue processor will soon be deprecated and won't use redispatch queue
-		historyCache,
-		nil, // there's no queueTask implementation for replication task
-		logger,
-		shard.GetMetricsClient().Scope(metrics.ReplicatorQueueProcessorScope),
-	)
-	processor.queueAckMgr = queueAckMgr
-	processor.queueProcessorBase = queueProcessorBase
-
-	return processor
-}
-
-func (p *replicatorQueueProcessorImpl) getTaskFilter() taskFilter {
-	return p.replicationTaskFilter
-}
-
-func (p *replicatorQueueProcessorImpl) complete(
-	taskInfo *taskInfo,
-) {
-	p.queueProcessorBase.complete(taskInfo.task)
-}
-
-func (p *replicatorQueueProcessorImpl) process(
-	taskInfo *taskInfo,
-) (int, error) {
-
-	task, ok := taskInfo.task.(*persistence.ReplicationTaskInfoWrapper)
-	if !ok {
-		return metrics.ReplicatorQueueProcessorScope, errUnexpectedQueueTask
-	}
-	// replication queue should always process all tasks
-	// so should not do anything to shouldProcessTask variable
-
-	switch task.TaskType {
-	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
-		err := p.processSyncActivityTask(task.ReplicationTaskInfo)
-		if err == nil {
-			err = p.executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{TaskID: task.GetTaskId()})
-		}
-		return metrics.ReplicatorTaskSyncActivityScope, err
-	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
-		err := p.processHistoryReplicationTask(task.ReplicationTaskInfo)
-		if _, ok := err.(*serviceerror.NotFound); ok {
-			err = errHistoryNotFoundTask
-		}
-		if err == nil {
-			err = p.executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{TaskID: task.GetTaskId()})
-		}
-		return metrics.ReplicatorTaskHistoryScope, err
-	default:
-		return metrics.ReplicatorQueueProcessorScope, errUnknownReplicationTask
+	return &replicatorQueueProcessorImpl{
+		currentClusterName:  currentClusterName,
+		shard:               shard,
+		historyCache:        historyCache,
+		executionMgr:        executionMgr,
+		historyMgr:          historyMgr,
+		metricsClient:       shard.GetMetricsClient(),
+		logger:              logger,
+		retryPolicy:         retryPolicy,
+		fetchTasksBatchSize: config.ReplicatorProcessorFetchTasksBatchSize(),
 	}
 }
-
-func (p *replicatorQueueProcessorImpl) queueShutdown() error {
-	// there is no shutdown specific behavior for replication queue
-	return nil
-}
-
-func (p *replicatorQueueProcessorImpl) processSyncActivityTask(
-	task *persistencespb.ReplicationTaskInfo,
-) error {
-
-	replicationTask, err := p.generateSyncActivityTask(context.Background(), task)
-	if err != nil || replicationTask == nil {
-		return err
-	}
-
-	return p.replicator.Publish(replicationTask)
-}
-
-func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(
-	task *persistencespb.ReplicationTaskInfo,
-) error {
-	replicationTask, err := p.toReplicationTask(context.Background(), &persistence.ReplicationTaskInfoWrapper{
-		ReplicationTaskInfo: task,
-	})
-	if err != nil || replicationTask == nil {
-		return err
-	}
-
-	err = p.replicator.Publish(replicationTask)
-	if err == messaging.ErrMessageSizeLimit {
-		// message size exceeds the server messaging size limit
-		// for this specific case, just send out a metadata message and
-		// let receiver fetch from source (for the concrete history events)
-		if metadataTask := p.generateHistoryMetadataTask(
-			task,
-			replicationTask,
-		); metadataTask != nil {
-			err = p.replicator.Publish(metadataTask)
-		}
-	}
-	return err
-}
-
-func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(
-	task *persistencespb.ReplicationTaskInfo,
-	replicationTask *replicationspb.ReplicationTask,
-) *replicationspb.ReplicationTask {
-
-	if replicationTask.GetHistoryTaskV2Attributes() != nil {
-		return &replicationspb.ReplicationTask{
-			TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
-			Attributes: &replicationspb.ReplicationTask_HistoryMetadataTaskAttributes{
-				HistoryMetadataTaskAttributes: &replicationspb.HistoryMetadataTaskAttributes{
-					NamespaceId:  task.GetNamespaceId(),
-					WorkflowId:   task.GetWorkflowId(),
-					RunId:        task.GetRunId(),
-					FirstEventId: task.GetFirstEventId(),
-					NextEventId:  task.GetNextEventId(),
-					Version:      task.GetVersion(),
-				}},
-		}
-	}
-	return nil
-}
-
-func (p *replicatorQueueProcessorImpl) readTasks(readLevel int64) ([]queueTaskInfo, bool, error) {
-	return p.readTasksWithBatchSize(readLevel, p.options.BatchSize())
-}
-
-func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
-	err := p.shard.UpdateReplicatorAckLevel(ackLevel)
-
-	// TODO: Remove this after enabled the rpc replication
-	clusterMetadata := p.shard.GetClusterMetadata()
-	for name, cluster := range clusterMetadata.GetAllClusterInfo() {
-		if !cluster.Enabled || clusterMetadata.GetCurrentClusterName() == name {
-			continue
-		}
-		p.shard.UpdateClusterReplicationLevel(name, ackLevel)
-	}
-
-	// this is a hack, since there is not dedicated ticker on the queue processor
-	// to periodically send out sync shard message, put it here
-	now := clock.NewRealTimeSource().Now()
-	if p.lastShardSyncTimestamp.Add(p.shard.GetConfig().ShardSyncMinInterval()).Before(now) {
-		syncStatusTask := &replicationspb.ReplicationTask{
-			TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK,
-			Attributes: &replicationspb.ReplicationTask_SyncShardStatusTaskAttributes{
-				SyncShardStatusTaskAttributes: &replicationspb.SyncShardStatusTaskAttributes{
-					SourceCluster: p.currentClusterName,
-					ShardId:       p.shard.GetShardID(),
-					StatusTime:    &now,
-				},
-			},
-		}
-		// ignore the error
-		if syncErr := p.replicator.Publish(syncStatusTask); syncErr == nil {
-			p.lastShardSyncTimestamp = now
-		}
-	}
-	return err
-}
-
-// TODO: when kafka deprecation is finished, delete all logic above
-//  and move logic below to dedicated replicationTaskAckMgr
 
 func (p *replicatorQueueProcessorImpl) getTasks(
 	ctx context.Context,
@@ -584,7 +385,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 	}
 
 	for {
-		resp, err := p.historyV2Mgr.ReadRawHistoryBranch(req)
+		resp, err := p.historyMgr.ReadRawHistoryBranch(req)
 		if err != nil {
 			return nil, err
 		}

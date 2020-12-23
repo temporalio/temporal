@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/service/config"
 )
 
 type (
@@ -615,9 +614,6 @@ func Test_NamespaceCacheEntry_GetNamespaceNotActiveErr(t *testing.T) {
 		cluster.TestCurrentClusterName,
 		cluster.TestCurrentClusterName,
 		cluster.TestAllClusterInfo,
-		&config.ReplicationConsumerConfig{
-			Type: config.ReplicationConsumerTypeRPC,
-		},
 	)
 	namespaceEntry := NewGlobalNamespaceCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},

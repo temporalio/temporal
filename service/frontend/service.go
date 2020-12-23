@@ -29,7 +29,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/stretchr/testify/mock"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -42,7 +41,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
@@ -247,20 +245,7 @@ func (s *Service) Start() {
 	var replicationMessageSink messaging.Producer
 	clusterMetadata := s.GetClusterMetadata()
 	if clusterMetadata.IsGlobalNamespaceEnabled() {
-		consumerConfig := clusterMetadata.GetReplicationConsumerConfig()
-		if consumerConfig.Type == config.ReplicationConsumerTypeRPC || consumerConfig.Type == config.ReplicationConsumerTypeKafkaToRPC {
-			replicationMessageSink = s.GetNamespaceReplicationQueue()
-		} else {
-			var err error
-			replicationMessageSink, err = s.GetMessagingClient().NewProducerWithClusterName(
-				s.GetClusterMetadata().GetCurrentClusterName())
-			if err != nil {
-				logger.Fatal("Creating replicationMessageSink producer failed", tag.Error(err))
-			}
-		}
-	} else {
-		replicationMessageSink = &mocks.KafkaProducer{}
-		replicationMessageSink.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
+		replicationMessageSink = s.GetNamespaceReplicationQueue()
 	}
 
 	opts, err := s.params.RPCFactory.GetFrontendGRPCServerOptions()

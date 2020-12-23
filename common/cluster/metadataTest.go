@@ -94,9 +94,6 @@ func GetTestClusterMetadata(enableGlobalNamespace bool, isMasterCluster bool) Me
 			masterClusterName,
 			TestCurrentClusterName,
 			TestAllClusterInfo,
-			&config.ReplicationConsumerConfig{
-				Type: config.ReplicationConsumerTypeRPC,
-			},
 		)
 	}
 
@@ -107,6 +104,5 @@ func GetTestClusterMetadata(enableGlobalNamespace bool, isMasterCluster bool) Me
 		TestCurrentClusterName,
 		TestCurrentClusterName,
 		TestSingleDCClusterInfo,
-		nil,
 	)
 }

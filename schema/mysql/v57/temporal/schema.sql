@@ -249,8 +249,6 @@ CREATE TABLE cluster_metadata (
   metadata_partition        INT NOT NULL,
   data                      MEDIUMBLOB NOT NULL,
   data_encoding             VARCHAR(16) NOT NULL,
-  immutable_data            MEDIUMBLOB NOT NULL,
-  immutable_data_encoding   VARCHAR(16) NOT NULL,
   version                   BIGINT NOT NULL,
   PRIMARY KEY(metadata_partition)
 );
