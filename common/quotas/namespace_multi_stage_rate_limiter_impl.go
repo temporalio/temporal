@@ -43,6 +43,8 @@ type (
 	}
 )
 
+var _ NamespaceRateLimiter = (*NamespaceMultiStageRateLimiterImpl)(nil)
+
 func NewNamespaceMultiStageRateLimiter(
 	namespaceRateLimiterFn NamespaceRateLimiterFn,
 	sharedRateLimiters []RateLimiter,
