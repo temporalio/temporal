@@ -217,15 +217,6 @@ func VisibilityTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.V
 	return result, proto3Decode(blob, encoding, result)
 }
 
-func ReplicationVersionsToBlob(info *persistencespb.ReplicationVersions) (commonpb.DataBlob, error) {
-	return proto3Encode(info)
-}
-
-func ReplicationVersionsFromBlob(blob []byte, encoding string) (*persistencespb.ReplicationVersions, error) {
-	result := &persistencespb.ReplicationVersions{}
-	return result, proto3Decode(blob, encoding, result)
-}
-
 func ChecksumToBlob(checksum *persistencespb.Checksum) (commonpb.DataBlob, error) {
 	// nil is replaced with empty object because it is not supported for "checksum" field in DB.
 	if checksum == nil {
