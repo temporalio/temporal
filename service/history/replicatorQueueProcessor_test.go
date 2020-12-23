@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -64,7 +65,6 @@ type (
 
 		mockExecutionMgr *mocks.ExecutionManager
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
-		mockProducer     *mocks.KafkaProducer
 
 		logger log.Logger
 
@@ -102,7 +102,6 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 		NewDynamicConfigForTest(),
 	)
 
-	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
@@ -114,17 +113,17 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	historyCache := newHistoryCache(s.mockShard)
 
 	s.replicatorQueueProcessor = newReplicatorQueueProcessor(
-		s.mockShard, historyCache, s.mockProducer, s.mockExecutionMgr, s.mockHistoryV2Mgr, s.logger,
-	).(*replicatorQueueProcessorImpl)
+		s.mockShard, historyCache, s.mockExecutionMgr, s.mockHistoryV2Mgr, s.logger,
+	)
 }
 
 func (s *replicatorQueueProcessorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.Finish(s.T())
-	s.mockProducer.AssertExpectations(s.T())
 }
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
+	ctx := context.Background()
 	namespace := "some random namespace name"
 	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
@@ -139,7 +138,6 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
-	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
 		Execution: commonpb.WorkflowExecution{
@@ -161,12 +159,13 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 		nil,
 	), nil).AnyTimes()
 
-	wrapper := &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task}
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, wrapper, s.logger))
-	s.Nil(err)
+	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)
+	s.NoError(err)
+	s.Nil(result)
 }
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
+	ctx := context.Background()
 	namespace := "some random namespace name"
 	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
@@ -182,7 +181,6 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
-	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		namespaceID,
@@ -209,12 +207,13 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 		nil,
 	), nil).AnyTimes()
 
-	wrapper := &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task}
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, wrapper, s.logger))
-	s.Nil(err)
+	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)
+	s.NoError(err)
+	s.Nil(result)
 }
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
+	ctx := context.Background()
 	namespace := "some random namespace name"
 	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
@@ -230,7 +229,6 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
-	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		namespaceID,
@@ -259,12 +257,13 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 		nil,
 	), nil).AnyTimes()
 
-	wrapper := &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task}
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, wrapper, s.logger))
-	s.Nil(err)
+	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)
+	s.NoError(err)
+	s.Nil(result)
 }
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
+	ctx := context.Background()
 	namespace := "some random namespace name"
 	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
@@ -280,7 +279,6 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
-	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		namespaceID,
@@ -345,7 +343,9 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		nil,
 	), nil).AnyTimes()
 
-	s.mockProducer.On("Publish", &replicationspb.ReplicationTask{
+	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)
+	s.NoError(err)
+	s.Equal(&replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
@@ -366,14 +366,11 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 				VersionHistory:     versionHistory,
 			},
 		},
-	}).Return(nil).Once()
-
-	wrapper := &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task}
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, wrapper, s.logger))
-	s.Nil(err)
+	}, result)
 }
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
+	ctx := context.Background()
 	namespace := "some random namespace name"
 	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
@@ -389,7 +386,6 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
-	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		namespaceID,
@@ -455,7 +451,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		version,
 		nil,
 	), nil).AnyTimes()
-	s.mockProducer.On("Publish", &replicationspb.ReplicationTask{
+
+	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)
+	s.NoError(err)
+	s.Equal(&replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
@@ -476,9 +475,5 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 				VersionHistory:     versionHistory,
 			},
 		},
-	}).Return(nil).Once()
-
-	wrapper := &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task}
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, wrapper, s.logger))
-	s.Nil(err)
+	}, result)
 }

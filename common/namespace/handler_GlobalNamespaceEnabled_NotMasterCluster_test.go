@@ -31,8 +31,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log/loggerimpl"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -59,10 +58,12 @@ type (
 		suite.Suite
 		persistencetests.TestBase
 
+		controller *gomock.Controller
+
 		minRetentionDays        int
 		maxBadBinaryCount       int
 		metadataMgr             persistence.MetadataManager
-		mockProducer            *mocks.KafkaProducer
+		mockProducer            *persistence.MockNamespaceReplicationQueue
 		mockNamespaceReplicator Replicator
 		archivalMetadata        archiver.ArchivalMetadata
 		mockArchiverProvider    *provider.MockArchiverProvider
@@ -97,7 +98,8 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) SetupTest(
 	s.minRetentionDays = 1
 	s.maxBadBinaryCount = 10
 	s.metadataMgr = s.TestBase.MetadataManager
-	s.mockProducer = &mocks.KafkaProducer{}
+	s.controller = gomock.NewController(s.T())
+	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockNamespaceReplicator = NewNamespaceReplicator(s.mockProducer, logger)
 	s.archivalMetadata = archiver.NewArchivalMetadata(
 		dcCollection,
@@ -121,7 +123,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) SetupTest(
 }
 
 func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TearDownTest() {
-	s.mockProducer.AssertExpectations(s.T())
+	s.controller.Finish()
 	s.mockArchiverProvider.AssertExpectations(s.T())
 }
 
@@ -695,7 +697,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 		s.Equal(isGlobalNamespace, isGlobalNamespace)
 	}
 
-	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
+	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil).Times(1)
 
 	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,

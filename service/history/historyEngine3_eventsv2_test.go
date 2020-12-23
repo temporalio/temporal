@@ -65,14 +65,13 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller               *gomock.Controller
-		mockShard                *shard.ContextTest
-		mockTxProcessor          *MocktransferQueueProcessor
-		mockReplicationProcessor *MockReplicatorQueueProcessor
-		mockTimerProcessor       *MocktimerQueueProcessor
-		mockEventsCache          *events.MockCache
-		mockNamespaceCache       *cache.MockNamespaceCache
-		mockClusterMetadata      *cluster.MockMetadata
+		controller          *gomock.Controller
+		mockShard           *shard.ContextTest
+		mockTxProcessor     *MocktransferQueueProcessor
+		mockTimerProcessor  *MocktimerQueueProcessor
+		mockEventsCache     *events.MockCache
+		mockNamespaceCache  *cache.MockNamespaceCache
+		mockClusterMetadata *cluster.MockMetadata
 
 		historyEngine    *historyEngineImpl
 		mockExecutionMgr *mocks.ExecutionManager
@@ -100,10 +99,8 @@ func (s *engine3Suite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
-	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.mockShard = shard.NewTestContext(
@@ -131,22 +128,21 @@ func (s *engine3Suite) SetupTest() {
 
 	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName:  s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
-		shard:               s.mockShard,
-		clusterMetadata:     s.mockClusterMetadata,
-		executionManager:    s.mockExecutionMgr,
-		historyV2Mgr:        s.mockHistoryV2Mgr,
-		historyCache:        historyCache,
-		logger:              s.logger,
-		throttledLogger:     s.logger,
-		metricsClient:       metrics.NewClient(tally.NoopScope, metrics.History),
-		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
-		config:              s.config,
-		timeSource:          s.mockShard.GetTimeSource(),
-		eventNotifier:       events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
-		txProcessor:         s.mockTxProcessor,
-		replicatorProcessor: s.mockReplicationProcessor,
-		timerProcessor:      s.mockTimerProcessor,
+		currentClusterName: s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
+		shard:              s.mockShard,
+		clusterMetadata:    s.mockClusterMetadata,
+		executionManager:   s.mockExecutionMgr,
+		historyV2Mgr:       s.mockHistoryV2Mgr,
+		historyCache:       historyCache,
+		logger:             s.logger,
+		throttledLogger:    s.logger,
+		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
+		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		config:             s.config,
+		timeSource:         s.mockShard.GetTimeSource(),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
+		txProcessor:        s.mockTxProcessor,
+		timerProcessor:     s.mockTimerProcessor,
 	}
 	s.mockShard.SetEngine(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)

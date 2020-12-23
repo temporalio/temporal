@@ -30,7 +30,6 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/server/common/convert"
-	serviceConfig "go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
@@ -49,7 +48,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -71,7 +69,6 @@ type (
 		startWG                 sync.WaitGroup
 		config                  *configs.Config
 		eventNotifier           events.Notifier
-		publisher               messaging.Producer
 		rateLimiter             quotas.Limiter
 		replicationTaskFetchers ReplicationTaskFetchers
 		queueTaskProcessor      queueTaskProcessor
@@ -133,20 +130,9 @@ func (h *Handler) Start() {
 		return
 	}
 
-	if h.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-		if h.GetClusterMetadata().GetReplicationConsumerConfig().Type == serviceConfig.ReplicationConsumerTypeKafka {
-			var err error
-			h.publisher, err = h.GetMessagingClient().NewProducerWithClusterName(h.GetClusterMetadata().GetCurrentClusterName())
-			if err != nil {
-				h.GetLogger().Fatal("Creating kafka producer failed", tag.Error(err))
-			}
-		}
-	}
-
 	h.replicationTaskFetchers = NewReplicationTaskFetchers(
 		h.GetLogger(),
 		h.config,
-		h.GetClusterMetadata().GetReplicationConsumerConfig(),
 		h.GetClusterMetadata(),
 		h.GetClientBean(),
 	)
@@ -242,7 +228,6 @@ func (h *Handler) CreateEngine(
 		h.GetHistoryClient(),
 		h.GetSDKClient(),
 		h.eventNotifier,
-		h.publisher,
 		h.config,
 		h.replicationTaskFetchers,
 		h.GetMatchingRawClient(),

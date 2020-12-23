@@ -111,7 +111,6 @@ func (s *contextSuite) TestAddTasks_Success() {
 	s.mockExecutionManager.On("AddTasks", addTasksRequest).Return(nil).Once()
 	s.mockHistoryEngine.EXPECT().NotifyNewTransferTasks(transferTasks).Times(1)
 	s.mockHistoryEngine.EXPECT().NotifyNewTimerTasks(timerTasks).Times(1)
-	s.mockHistoryEngine.EXPECT().NotifyNewReplicationTasks(replicationTasks).Times(1)
 	s.mockHistoryEngine.EXPECT().NotifyNewVisibilityTasks(visibilityTasks).Times(1)
 
 	err := s.shardContext.AddTasks(addTasksRequest)

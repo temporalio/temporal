@@ -49,8 +49,6 @@ services:
 
 clusterMetadata:
   enableGlobalNamespace: true
-  replicationConsumer:
-    type: rpc
   failoverVersionIncrement: 10
   masterClusterName: "active"
   currentClusterName: "standby"

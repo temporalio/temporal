@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
-	serviceConfig "go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/service/history/configs"
 )
 
@@ -110,30 +109,27 @@ type (
 func NewReplicationTaskFetchers(
 	logger log.Logger,
 	config *configs.Config,
-	consumerConfig *serviceConfig.ReplicationConsumerConfig,
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
 ) *ReplicationTaskFetchersImpl {
 
 	var fetchers []ReplicationTaskFetcher
-	if consumerConfig.Type == serviceConfig.ReplicationConsumerTypeRPC || consumerConfig.Type == serviceConfig.ReplicationConsumerTypeKafkaToRPC {
-		currentCluster := clusterMetadata.GetCurrentClusterName()
-		for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
-			if !info.Enabled {
-				continue
-			}
+	currentCluster := clusterMetadata.GetCurrentClusterName()
+	for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
+		if !info.Enabled {
+			continue
+		}
 
-			if clusterName != currentCluster {
-				remoteFrontendClient := clientBean.GetRemoteAdminClient(clusterName)
-				fetcher := newReplicationTaskFetcher(
-					logger,
-					clusterName,
-					currentCluster,
-					config,
-					remoteFrontendClient,
-				)
-				fetchers = append(fetchers, fetcher)
-			}
+		if clusterName != currentCluster {
+			remoteFrontendClient := clientBean.GetRemoteAdminClient(clusterName)
+			fetcher := newReplicationTaskFetcher(
+				logger,
+				clusterName,
+				currentCluster,
+				config,
+				remoteFrontendClient,
+			)
+			fetchers = append(fetchers, fetcher)
 		}
 	}
 
