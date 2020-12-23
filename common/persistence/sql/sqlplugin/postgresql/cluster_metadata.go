@@ -39,8 +39,7 @@ const constMetadataPartition = 0
 const constMembershipPartition = 0
 const (
 	// ****** CLUSTER_METADATA TABLE ******
-	insertClusterMetadataQryOld = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, immutable_data, immutable_data_encoding, version) VALUES($1, $2, $3, $4, $5, $6)`
-	insertClusterMetadataQry    = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES($1, $2, $3, $4)`
+	insertClusterMetadataQry = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES($1, $2, $3, $4)`
 
 	updateClusterMetadataQry = `UPDATE cluster_metadata SET data = $1, data_encoding = $2, version = $3 WHERE metadata_partition = $4`
 
@@ -83,26 +82,13 @@ func (pdb *db) SaveClusterMetadata(
 	row *sqlplugin.ClusterMetadataRow,
 ) (sql.Result, error) {
 	if row.Version == 0 {
-		result, err := pdb.conn.ExecContext(ctx,
-			insertClusterMetadataQryOld,
+		return pdb.conn.ExecContext(ctx,
+			insertClusterMetadataQry,
 			constMetadataPartition,
 			row.Data,
 			row.DataEncoding,
-			[]byte{}, // TODO beginning 1.6.x, remove this line
-			"",       // TODO beginning 1.6.x, remove this line
 			1,
 		)
-		if err != nil {
-			// in case schema is upgraded
-			result, err = pdb.conn.ExecContext(ctx,
-				insertClusterMetadataQry,
-				constMetadataPartition,
-				row.Data,
-				row.DataEncoding,
-				1,
-			)
-		}
-		return result, err
 	}
 	return pdb.conn.ExecContext(ctx,
 		updateClusterMetadataQry,

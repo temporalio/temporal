@@ -1,0 +1,9 @@
+{
+  "CurrVersion": "1.4",
+  "MinCompatibleVersion": "1.0",
+  "Description": "schema update for cluster metadata cleanup",
+  "SchemaUpdateCqlFiles": [
+    "executions.cql",
+    "cluster_metadata.cql"
+  ]
+}
