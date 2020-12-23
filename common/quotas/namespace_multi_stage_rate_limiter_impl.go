@@ -36,7 +36,7 @@ type (
 	// special built for multi-tenancy
 	NamespaceMultiStageRateLimiterImpl struct {
 		namespaceRateLimiterFn NamespaceRateLimiterFn
-		sharedRateLimiter      []RateLimiter
+		sharedRateLimiters     []RateLimiter
 
 		sync.RWMutex
 		namespaceRateLimiters map[string]RateLimiter
@@ -45,11 +45,11 @@ type (
 
 func NewNamespaceMultiStageRateLimiter(
 	namespaceRateLimiterFn NamespaceRateLimiterFn,
-	sharedRateLimiter []RateLimiter,
+	sharedRateLimiters []RateLimiter,
 ) *NamespaceMultiStageRateLimiterImpl {
 	return &NamespaceMultiStageRateLimiterImpl{
 		namespaceRateLimiterFn: namespaceRateLimiterFn,
-		sharedRateLimiter:      sharedRateLimiter,
+		sharedRateLimiters:     sharedRateLimiters,
 
 		namespaceRateLimiters: make(map[string]RateLimiter),
 	}
@@ -97,11 +97,11 @@ func (r *NamespaceMultiStageRateLimiterImpl) getOrInitRateLimiter(
 		return rateLimiter
 	}
 
-	length := len(r.sharedRateLimiter)
+	length := len(r.sharedRateLimiters)
 	rateLimiters := make([]RateLimiter, length+1)
 	rateLimiters[0] = r.namespaceRateLimiterFn(namespaceID)
 	for i := 0; i < length; i++ {
-		rateLimiters[i+1] = r.sharedRateLimiter[i]
+		rateLimiters[i+1] = r.sharedRateLimiters[i]
 	}
 	namespaceRateLimiter := NewMultiStageRateLimiter(rateLimiters)
 
