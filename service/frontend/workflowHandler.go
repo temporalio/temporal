@@ -3728,7 +3728,7 @@ func (wh *WorkflowHandler) initNamespaceRateLimiter(namespace string) quotas.Rat
 	}
 
 	ringSize, err := monitor.GetMemberCount(common.FrontendServiceName)
-	if err != nil {
+	if err != nil || ringSize == 0 {
 		return quotas.NewDefaultIncomingDynamicRateLimiter(
 			func() float64 { return float64(wh.config.MaxNamespaceRPSPerInstance(namespace)) },
 		)
