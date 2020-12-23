@@ -38,7 +38,7 @@ type (
 		sync.Mutex
 		rate          float64
 		burst         int
-		goRateLimiter atomic.Value
+		goRateLimiter atomic.Value // type *rate.Limiter
 	}
 )
 
