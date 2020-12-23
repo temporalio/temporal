@@ -3721,24 +3721,25 @@ func (wh *WorkflowHandler) allow(namespace string) bool {
 
 func (wh *WorkflowHandler) initNamespaceRateLimiter(namespace string) quotas.RateLimiter {
 	monitor := wh.GetMembershipMonitor()
-	instanceRate := wh.config.MaxNamespaceRPSPerInstance(namespace)
-	globalRate := wh.config.GlobalNamespaceRPS(namespace)
-	if monitor == nil || globalRate == 0 {
+	if monitor == nil || wh.config.GlobalNamespaceRPS(namespace) == 0 {
 		return quotas.NewDefaultIncomingDynamicRateLimiter(
-			func() float64 { return float64(instanceRate) },
+			func() float64 { return float64(wh.config.MaxNamespaceRPSPerInstance(namespace)) },
 		)
 	}
 
 	ringSize, err := monitor.GetMemberCount(common.FrontendServiceName)
 	if err != nil {
 		return quotas.NewDefaultIncomingDynamicRateLimiter(
-			func() float64 { return float64(instanceRate) },
+			func() float64 { return float64(wh.config.MaxNamespaceRPSPerInstance(namespace)) },
 		)
 	}
 
 	return quotas.NewDefaultIncomingDynamicRateLimiter(
 		func() float64 {
-			return float64(common.MinInt(instanceRate, common.MaxInt(globalRate/ringSize, 1)))
+			return float64(common.MinInt(
+				wh.config.MaxNamespaceRPSPerInstance(namespace),
+				common.MaxInt(wh.config.GlobalNamespaceRPS(namespace)/ringSize, 1),
+			))
 		},
 	)
 }
