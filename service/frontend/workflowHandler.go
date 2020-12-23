@@ -90,7 +90,7 @@ type (
 
 		healthStatus                    int32
 		tokenSerializer                 common.TaskTokenSerializer
-		rateLimiter                     *quotas.NamespaceMultiStageRateLimiterImpl
+		rateLimiter                     quotas.NamespaceRateLimiter
 		config                          *Config
 		versionChecker                  headers.VersionChecker
 		namespaceHandler                namespace.Handler
