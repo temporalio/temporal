@@ -44,16 +44,6 @@ const constMetadataPartition = 0
 const constMembershipPartition = 0
 
 const (
-	// ****** CLUSTER_METADATA TABLE ******
-	// metadata_partition is constant and PK, this should only return one row.
-	templateGetImmutableClusterMetadata = `SELECT immutable_data, immutable_data_encoding FROM 
-cluster_metadata 
-WHERE metadata_partition = ?`
-
-	immutablePayloadFieldName = `immutable_data`
-
-	immutableEncodingFieldName = immutablePayloadFieldName + `_encoding`
-
 	templateGetClusterMetadata    = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = ?`
 	templateCreateClusterMetadata = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES(?, ?, ?, ?) IF NOT EXISTS`
 	templateUpdateClusterMetadata = `UPDATE cluster_metadata SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ? IF version = ?`
@@ -111,35 +101,6 @@ func (m *cassandraClusterMetadata) Close() {
 	if m.session != nil {
 		m.session.Close()
 	}
-}
-
-func (m *cassandraClusterMetadata) convertPreviousMapToInitializeResponse(previous map[string]interface{}) (*p.InternalInitializeImmutableClusterMetadataResponse, error) {
-	// First, check if fields we are looking for is in previous map and verify we can type assert successfully
-	rawImData, ok := previous[immutablePayloadFieldName]
-	if !ok {
-		return nil, newFieldNotFoundError(immutablePayloadFieldName, previous)
-	}
-
-	imData, ok := rawImData.([]byte)
-	if !ok {
-		var byteSliceType []byte
-		return nil, newPersistedTypeMismatchError(immutablePayloadFieldName, byteSliceType, rawImData, previous)
-	}
-
-	rawImDataEncoding, ok := previous[immutableEncodingFieldName]
-	if !ok {
-		return nil, newFieldNotFoundError(immutableEncodingFieldName, previous)
-	}
-
-	imDataEncoding, ok := rawImDataEncoding.(string)
-	if !ok {
-		return nil, newPersistedTypeMismatchError(immutableEncodingFieldName, "", rawImDataEncoding, previous)
-	}
-
-	return &p.InternalInitializeImmutableClusterMetadataResponse{
-		PersistedImmutableMetadata: p.NewDataBlob(imData, imDataEncoding),
-		RequestApplied:             false,
-	}, nil
 }
 
 func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMetadataResponse, error) {
