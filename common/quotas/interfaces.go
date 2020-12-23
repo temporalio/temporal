@@ -24,39 +24,6 @@
 
 package quotas
 
-import (
-	"context"
-
-	"golang.org/x/time/rate"
-)
-
-// Info corresponds to information required to determine rate limits
-type Info struct {
-	Namespace string
-}
-
-// Limiter corresponds to basic rate limiting functionality.
-type Limiter interface {
-	// Allow attempts to allow a request to go through. The method returns
-	// immediately with a true or false indicating if the request can make
-	// progress
-	Allow() bool
-
-	// Reserve returns a Reservation that indicates how long the caller
-	// must wait before event happen.
-	Reserve() *rate.Reservation
-
-	// Wait waits till the deadline for a rate limit token to allow the request
-	// to go through.
-	Wait(ctx context.Context) error
-
-	// Rate returns the rate per second for this rate limiter
-	Rate() float64
-
-	// Burst returns the burst for this rate limiter
-	Burst() int
-}
-
 // Policy corresponds to a quota policy. A policy allows implementing layered
 // and more complex rate limiting functionality.
 type Policy interface {
@@ -64,4 +31,9 @@ type Policy interface {
 	// immediately with a true or false indicating if the request can make
 	// progress
 	Allow(info Info) bool
+}
+
+// Info corresponds to information required to determine rate limits
+type Info struct {
+	Namespace string
 }

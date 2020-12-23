@@ -648,12 +648,12 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		defaultTaskDispatchRPS,
 	)
 	mgrImpl.matcher.dynamicRate = &dynamicRateWrapper{
-		DynamicRate: quotas.NewDynamicRate(defaultTaskDispatchRPS),
-		RateLimiter: mgrImpl.matcher.rateLimiter.(*quotas.RateLimiter),
+		DynamicRate:     quotas.NewDynamicRate(defaultTaskDispatchRPS),
+		RateLimiterImpl: mgrImpl.matcher.rateLimiter.(*quotas.RateLimiterImpl),
 	}
 	mgrImpl.matcher.dynamicBurst = &dynamicBurstWrapper{
-		DynamicBurst: quotas.NewDynamicBurst(defaultTaskDispatchRPS),
-		RateLimiter:  mgrImpl.matcher.rateLimiter.(*quotas.RateLimiter),
+		DynamicBurst:    quotas.NewDynamicBurst(defaultTaskDispatchRPS),
+		RateLimiterImpl: mgrImpl.matcher.rateLimiter.(*quotas.RateLimiterImpl),
 	}
 	s.matchingEngine.updateTaskQueue(tlID, mgr)
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
@@ -855,12 +855,12 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 		defaultTaskDispatchRPS,
 	)
 	mgrImpl.matcher.dynamicRate = &dynamicRateWrapper{
-		DynamicRate: quotas.NewDynamicRate(defaultTaskDispatchRPS),
-		RateLimiter: mgrImpl.matcher.rateLimiter.(*quotas.RateLimiter),
+		DynamicRate:     quotas.NewDynamicRate(defaultTaskDispatchRPS),
+		RateLimiterImpl: mgrImpl.matcher.rateLimiter.(*quotas.RateLimiterImpl),
 	}
 	mgrImpl.matcher.dynamicBurst = &dynamicBurstWrapper{
-		DynamicBurst: quotas.NewDynamicBurst(defaultTaskDispatchRPS),
-		RateLimiter:  mgrImpl.matcher.rateLimiter.(*quotas.RateLimiter),
+		DynamicBurst:    quotas.NewDynamicBurst(defaultTaskDispatchRPS),
+		RateLimiterImpl: mgrImpl.matcher.rateLimiter.(*quotas.RateLimiterImpl),
 	}
 	s.matchingEngine.updateTaskQueue(tlID, mgr)
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
@@ -2030,20 +2030,20 @@ func defaultTestConfig() *Config {
 type (
 	dynamicRateWrapper struct {
 		quotas.DynamicRate
-		*quotas.RateLimiter
+		*quotas.RateLimiterImpl
 	}
 	dynamicBurstWrapper struct {
 		quotas.DynamicBurst
-		*quotas.RateLimiter
+		*quotas.RateLimiterImpl
 	}
 )
 
 func (d *dynamicRateWrapper) Store(rate float64) {
 	d.DynamicRate.Store(rate)
-	d.RateLimiter.SetRate(rate)
+	d.RateLimiterImpl.SetRate(rate)
 }
 
 func (d *dynamicBurstWrapper) Store(burst int) {
 	d.DynamicBurst.Store(burst)
-	d.RateLimiter.SetBurst(burst)
+	d.RateLimiterImpl.SetBurst(burst)
 }

@@ -91,7 +91,7 @@ type (
 	// Datastore represents a datastore
 	Datastore struct {
 		factory   DataStoreFactory
-		ratelimit quotas.Limiter
+		ratelimit quotas.RateLimiter
 	}
 	factoryImpl struct {
 		sync.RWMutex
@@ -324,7 +324,7 @@ func (f *factoryImpl) getCassandraConfig() *config.Cassandra {
 
 func (f *factoryImpl) init(
 	clusterName string,
-	limiters map[string]quotas.Limiter,
+	limiters map[string]quotas.RateLimiter,
 ) {
 
 	f.datastores = make(map[storeType]Datastore, len(storeTypes))
@@ -364,9 +364,9 @@ func (f *factoryImpl) init(
 func buildRateLimiters(
 	cfg *config.Persistence,
 	maxQPS dynamicconfig.IntPropertyFn,
-) map[string]quotas.Limiter {
+) map[string]quotas.RateLimiter {
 
-	result := make(map[string]quotas.Limiter, len(cfg.DataStores))
+	result := make(map[string]quotas.RateLimiter, len(cfg.DataStores))
 	for dsName := range cfg.DataStores {
 		if maxQPS != nil && maxQPS() > 0 {
 			result[dsName] = quotas.NewDefaultOutgoingDynamicRateLimiter(

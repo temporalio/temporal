@@ -71,7 +71,7 @@ type (
 		processor            processor
 		logger               log.Logger
 		metricsScope         metrics.Scope
-		rateLimiter          quotas.Limiter // Read rate limiter
+		rateLimiter          quotas.RateLimiter // Read rate limiter
 		ackMgr               queueAckMgr
 		taskProcessor        *taskProcessor // TODO: deprecate task processor, in favor of queueTaskProcessor
 		queueTaskProcessor   queueTaskProcessor

@@ -146,7 +146,7 @@ func AdminDBClean(c *cli.Context) {
 }
 
 func cleanShard(
-	limiter *quotas.DynamicRateLimiter,
+	limiter quotas.RateLimiter,
 	session *gocql.Session,
 	outputDirectories *CleanOutputDirectories,
 	inputDirectory string,

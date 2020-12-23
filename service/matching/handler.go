@@ -50,7 +50,7 @@ type (
 		config        *Config
 		metricsClient metrics.Client
 		startWG       sync.WaitGroup
-		rateLimiter   quotas.Limiter
+		rateLimiter   quotas.RateLimiter
 	}
 )
 

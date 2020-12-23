@@ -74,7 +74,7 @@ type (
 		timerQueueAckMgr     timerQueueAckMgr
 		timerGate            TimerGate
 		timeSource           clock.TimeSource
-		rateLimiter          quotas.Limiter
+		rateLimiter          quotas.RateLimiter
 		retryPolicy          backoff.RetryPolicy
 		lastPollTime         time.Time
 		taskProcessor        *taskProcessor // TODO: deprecate task processor, in favor of queueTaskProcessor
