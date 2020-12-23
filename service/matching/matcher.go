@@ -41,6 +41,8 @@ import (
 // Producers are usually rpc calls from history or taskReader
 // that drains backlog from db. Consumers are the task queue pollers
 type TaskMatcher struct {
+	config *taskQueueConfig
+
 	// synchronous task channel to match producer/consumer
 	taskC chan *internalTask
 	// synchronous task channel to match query task - the reason to have
@@ -48,8 +50,13 @@ type TaskMatcher struct {
 	// are interested in queryTasks but not others. Example is when namespace is
 	// not active in a cluster
 	queryTaskC chan *internalTask
-	// ratelimiter that limits the rate at which tasks can be dispatched to consumers
-	limiter *quotas.RateLimiter
+
+	// dynamicRate is the dynamic rate for rate limiter
+	dynamicRate quotas.DynamicRate
+	// dynamicBurst is the dynamic burst for rate limiter
+	dynamicBurst quotas.DynamicBurst
+	// rateLimiter that limits the rate at which tasks can be dispatched to consumers
+	rateLimiter quotas.Limiter
 
 	fwdr          *Forwarder
 	scope         func() metrics.Scope // namespace metric scope
@@ -57,8 +64,8 @@ type TaskMatcher struct {
 }
 
 const (
-	_defaultTaskDispatchRPS    = 100000.0
-	_defaultTaskDispatchRPSTTL = time.Minute
+	defaultTaskDispatchRPS    = 100000.0
+	defaultTaskDispatchRPSTTL = time.Minute
 )
 
 var errTaskqueueThrottled = errors.New("cannot add to taskqueue, limit exceeded")
@@ -67,10 +74,18 @@ var errTaskqueueThrottled = errors.New("cannot add to taskqueue, limit exceeded"
 // used by task producers and consumers to find a match. Both sync matches and non-sync
 // matches should use this implementation
 func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scopeFunc func() metrics.Scope) *TaskMatcher {
-	dPtr := _defaultTaskDispatchRPS
-	limiter := quotas.NewRateLimiter(&dPtr, _defaultTaskDispatchRPSTTL, config.MinTaskThrottlingBurstSize())
+	dynamicRate := quotas.NewDynamicRate(defaultTaskDispatchRPS)
+	dynamicBurst := quotas.NewDynamicBurst(int(defaultTaskDispatchRPS))
+	limiter := quotas.NewDynamicRateLimiter(
+		dynamicRate.RateFn(),
+		dynamicBurst.BurstFn(),
+		defaultTaskDispatchRPSTTL,
+	)
 	return &TaskMatcher{
-		limiter:       limiter,
+		config:        config,
+		dynamicRate:   dynamicRate,
+		dynamicBurst:  dynamicBurst,
+		rateLimiter:   limiter,
 		scope:         scopeFunc,
 		fwdr:          fwdr,
 		taskC:         make(chan *internalTask),
@@ -300,18 +315,27 @@ func (tm *TaskMatcher) UpdateRatelimit(rps *float64) {
 	if rps == nil {
 		return
 	}
+
 	rate := *rps
 	nPartitions := tm.numPartitions()
 	if rate > float64(nPartitions) {
 		// divide the rate equally across all partitions
 		rate = rate / float64(tm.numPartitions())
 	}
-	tm.limiter.UpdateMaxDispatch(&rate)
+
+	burst := int(rate)
+	minTaskThrottlingBurstSize := tm.config.MinTaskThrottlingBurstSize()
+	if burst < minTaskThrottlingBurstSize {
+		burst = minTaskThrottlingBurstSize
+	}
+
+	tm.dynamicRate.Store(rate)
+	tm.dynamicBurst.Store(burst)
 }
 
 // Rate returns the current rate at which tasks are dispatched
 func (tm *TaskMatcher) Rate() float64 {
-	return tm.limiter.Limit()
+	return tm.rateLimiter.Rate()
 }
 
 func (tm *TaskMatcher) pollOrForward(
@@ -408,13 +432,13 @@ func (tm *TaskMatcher) ratelimit(ctx context.Context) (*rate.Reservation, error)
 
 	deadline, ok := ctx.Deadline()
 	if !ok {
-		if err := tm.limiter.Wait(ctx); err != nil {
+		if err := tm.rateLimiter.Wait(ctx); err != nil {
 			return nil, err
 		}
 		return nil, nil
 	}
 
-	rsv := tm.limiter.Reserve()
+	rsv := tm.rateLimiter.Reserve()
 	// If we have to wait too long for reservation, give up and return
 	if !rsv.OK() || rsv.Delay() > deadline.Sub(time.Now().UTC()) {
 		if rsv.OK() { // if we were indeed given a reservation, return it before we bail out

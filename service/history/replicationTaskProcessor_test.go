@@ -129,9 +129,9 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.mockReplicationTaskExecutor = NewMockreplicationTaskExecutor(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.mockReplicationTaskFetcher = NewMockReplicationTaskFetcher(s.controller)
-	rateLimiter := quotas.NewDynamicRateLimiter(func() float64 {
-		return 100
-	})
+	rateLimiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
+		func() float64 { return 100 },
+	)
 	s.mockReplicationTaskFetcher.EXPECT().GetSourceCluster().Return(cluster.TestAlternativeClusterName).AnyTimes()
 	s.mockReplicationTaskFetcher.EXPECT().GetRequestChan().Return(s.requestChan).AnyTimes()
 	s.mockReplicationTaskFetcher.EXPECT().GetRateLimiter().Return(rateLimiter).AnyTimes()

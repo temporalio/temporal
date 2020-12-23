@@ -122,10 +122,8 @@ func newQueueProcessorBase(
 		timeSource:  shard.GetTimeSource(),
 		options:     options,
 		processor:   processor,
-		rateLimiter: quotas.NewDynamicRateLimiter(
-			func() float64 {
-				return float64(options.MaxPollRPS())
-			},
+		rateLimiter: quotas.NewDefaultOutgoingDynamicRateLimiter(
+			func() float64 { return float64(options.MaxPollRPS()) },
 		),
 		status:               common.DaemonStatusInitialized,
 		notifyCh:             make(chan struct{}, 1),

@@ -222,7 +222,6 @@ func AdminDBScan(c *cli.Context) {
 	numShards := upperShardBound - lowerShardBound
 	startingRPS := c.Int(FlagStartingRPS)
 	targetRPS := c.Int(FlagRPS)
-	scaleUpSeconds := c.Int(FlagRPSScaleUpSeconds)
 	scanWorkerCount := int32(c.Int(FlagConcurrency))
 	executionsPageSize := c.Int(FlagPageSize)
 	scanReportRate := int32(c.Int(FlagReportRate))
@@ -231,7 +230,7 @@ func AdminDBScan(c *cli.Context) {
 	}
 
 	payloadSerializer := persistence.NewPayloadSerializer()
-	rateLimiter := getRateLimiter(startingRPS, targetRPS, scaleUpSeconds)
+	rateLimiter := getRateLimiter(startingRPS, targetRPS)
 	session := connectToCassandra(c)
 	defer session.Close()
 	historyStore := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
@@ -836,23 +835,13 @@ func includeShardInProgressReport(report *ShardScanReport, progressReport *Progr
 	progressReport.Rates.DatabaseRPS = math.Round(float64(progressReport.Rates.TotalDBRequests) / secondsPast)
 }
 
-func getRateLimiter(startRPS int, targetRPS int, scaleUpSeconds int) *quotas.DynamicRateLimiter {
+func getRateLimiter(startRPS int, targetRPS int) *quotas.DynamicRateLimiter {
 	if startRPS >= targetRPS {
 		ErrorAndExit("startRPS is greater than target RPS", nil)
 	}
-	if scaleUpSeconds == 0 {
-		return quotas.NewDynamicRateLimiter(func() float64 { return float64(targetRPS) })
-	}
-	rpsIncreasePerSecond := (targetRPS - startRPS) / scaleUpSeconds
-	startTime := time.Now().UTC()
-	rpsFn := func() float64 {
-		secondsPast := int(time.Now().UTC().Sub(startTime).Seconds())
-		if secondsPast >= scaleUpSeconds {
-			return float64(targetRPS)
-		}
-		return float64((rpsIncreasePerSecond * secondsPast) + startRPS)
-	}
-	return quotas.NewDynamicRateLimiter(rpsFn)
+	return quotas.NewDefaultOutgoingDynamicRateLimiter(
+		func() float64 { return float64(targetRPS) },
+	)
 }
 
 func preconditionForDBCall(totalDBRequests *int64, limiter *quotas.DynamicRateLimiter) {

@@ -150,7 +150,7 @@ func NewFactory(
 		logger:                   logger,
 		clusterName:              clusterName,
 	}
-	limiters := buildRatelimiters(cfg, persistenceMaxQPS)
+	limiters := buildRateLimiters(cfg, persistenceMaxQPS)
 	factory.init(clusterName, limiters)
 	return factory
 }
@@ -245,7 +245,10 @@ func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, err
 }
 
 // NewExecutionManager returns a new execution manager for a given shardID
-func (f *factoryImpl) NewExecutionManager(shardID int32) (p.ExecutionManager, error) {
+func (f *factoryImpl) NewExecutionManager(
+	shardID int32,
+) (p.ExecutionManager, error) {
+
 	ds := f.datastores[storeTypeExecution]
 	store, err := ds.factory.NewExecutionStore(shardID)
 	if err != nil {
@@ -319,7 +322,11 @@ func (f *factoryImpl) getCassandraConfig() *config.Cassandra {
 	return cfg.DataStores[cfg.VisibilityStore].Cassandra
 }
 
-func (f *factoryImpl) init(clusterName string, limiters map[string]quotas.Limiter) {
+func (f *factoryImpl) init(
+	clusterName string,
+	limiters map[string]quotas.Limiter,
+) {
+
 	f.datastores = make(map[storeType]Datastore, len(storeTypes))
 	defaultCfg := f.config.DataStores[f.config.DefaultStore]
 	defaultDataStore := Datastore{ratelimit: limiters[f.config.DefaultStore]}
@@ -354,11 +361,17 @@ func (f *factoryImpl) init(clusterName string, limiters map[string]quotas.Limite
 	f.datastores[storeTypeVisibility] = visibilityDataStore
 }
 
-func buildRatelimiters(cfg *config.Persistence, maxQPS dynamicconfig.IntPropertyFn) map[string]quotas.Limiter {
+func buildRateLimiters(
+	cfg *config.Persistence,
+	maxQPS dynamicconfig.IntPropertyFn,
+) map[string]quotas.Limiter {
+
 	result := make(map[string]quotas.Limiter, len(cfg.DataStores))
 	for dsName := range cfg.DataStores {
 		if maxQPS != nil && maxQPS() > 0 {
-			result[dsName] = quotas.NewDynamicRateLimiter(func() float64 { return float64(maxQPS()) })
+			result[dsName] = quotas.NewDefaultOutgoingDynamicRateLimiter(
+				func() float64 { return float64(maxQPS()) },
+			)
 		}
 	}
 	return result

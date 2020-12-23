@@ -101,7 +101,6 @@ func AdminDBClean(c *cli.Context) {
 	numShards := upperShardBound - lowerShardBound
 	startingRPS := c.Int(FlagStartingRPS)
 	targetRPS := c.Int(FlagRPS)
-	scaleUpSeconds := c.Int(FlagRPSScaleUpSeconds)
 	scanWorkerCount := int32(c.Int(FlagConcurrency))
 	scanReportRate := int32(c.Int(FlagReportRate))
 	if numShards < scanWorkerCount {
@@ -109,7 +108,7 @@ func AdminDBClean(c *cli.Context) {
 	}
 	inputDirectory := getRequiredOption(c, FlagInputDirectory)
 
-	rateLimiter := getRateLimiter(startingRPS, targetRPS, scaleUpSeconds)
+	rateLimiter := getRateLimiter(startingRPS, targetRPS)
 	session := connectToCassandra(c)
 	defer session.Close()
 	cleanOutputDirectories := createCleanOutputDirectories()

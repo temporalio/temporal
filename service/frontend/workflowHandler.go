@@ -90,7 +90,7 @@ type (
 
 		healthStatus                    int32
 		tokenSerializer                 common.TaskTokenSerializer
-		rateLimiter                     quotas.Policy
+		rateLimiter                     quotas.Limiter
 		config                          *Config
 		versionChecker                  headers.VersionChecker
 		namespaceHandler                namespace.Handler
@@ -119,20 +119,8 @@ func NewWorkflowHandler(
 		config:          config,
 		healthStatus:    int32(HealthStatusOK),
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
-		rateLimiter: quotas.NewMultiStageRateLimiter(
-			func() float64 {
-				return float64(config.RPS())
-			},
-			func(namespace string) float64 {
-				if monitor := resource.GetMembershipMonitor(); monitor != nil && config.GlobalNamespaceRPS(namespace) > 0 {
-					ringSize, err := monitor.GetMemberCount(common.FrontendServiceName)
-					if err == nil && ringSize > 0 {
-						avgQuota := common.MaxInt(config.GlobalNamespaceRPS(namespace)/ringSize, 1)
-						return float64(common.MinInt(avgQuota, config.MaxNamespaceRPSPerInstance(namespace)))
-					}
-				}
-				return float64(config.MaxNamespaceRPSPerInstance(namespace))
-			},
+		rateLimiter: quotas.NewDefaultIncomingDynamicRateLimiter(
+			func() float64 { return float64(config.RPS()) },
 		),
 		versionChecker: headers.NewDefaultVersionChecker(),
 		namespaceHandler: namespace.NewHandler(
@@ -3722,8 +3710,9 @@ func (wh *WorkflowHandler) isListRequestPageSizeTooLarge(pageSize int32, namespa
 		pageSize > int32(wh.config.ESIndexMaxResultWindow())
 }
 
+// TODO use the namespace
 func (wh *WorkflowHandler) allow(namespace string) bool {
-	return wh.rateLimiter.Allow(quotas.Info{Namespace: namespace})
+	return wh.rateLimiter.Allow()
 }
 func (wh *WorkflowHandler) checkPermission(
 	config *Config,

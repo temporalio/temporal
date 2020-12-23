@@ -202,7 +202,6 @@ const (
 	FlagMaxVisibilityTimestamp           = "max_visibility_ts"
 	FlagStartingRPS                      = "starting_rps"
 	FlagRPS                              = "rps"
-	FlagRPSScaleUpSeconds                = "rps_scale_up_seconds"
 	FlagJobID                            = "job_id"
 	FlagJobIDWithAlias                   = FlagJobID + ", jid"
 	FlagYes                              = "yes"

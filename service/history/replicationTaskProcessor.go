@@ -140,9 +140,10 @@ func NewReplicationTaskProcessor(
 		logger:                  shard.GetLogger(),
 		replicationTaskExecutor: replicationTaskExecutor,
 		hostRateLimiter:         replicationTaskFetcher.GetRateLimiter(),
-		shardRateLimiter: quotas.NewDynamicRateLimiter(func() float64 {
-			return config.ReplicationTaskProcessorShardQPS()
-		}), taskRetryPolicy: taskRetryPolicy,
+		shardRateLimiter: quotas.NewDefaultOutgoingDynamicRateLimiter(
+			func() float64 { return config.ReplicationTaskProcessorShardQPS() },
+		),
+		taskRetryPolicy:      taskRetryPolicy,
 		requestChan:          replicationTaskFetcher.GetRequestChan(),
 		syncShardChan:        make(chan *replicationspb.SyncShardStatus, 1),
 		shutdownChan:         make(chan struct{}),

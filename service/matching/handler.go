@@ -73,9 +73,9 @@ func NewHandler(
 		Resource:      resource,
 		config:        config,
 		metricsClient: resource.GetMetricsClient(),
-		rateLimiter: quotas.NewDynamicRateLimiter(func() float64 {
-			return float64(config.RPS())
-		}),
+		rateLimiter: quotas.NewDefaultIncomingDynamicRateLimiter(
+			func() float64 { return float64(config.RPS()) },
+		),
 		engine: NewEngine(
 			resource.GetTaskManager(),
 			resource.GetHistoryClient(),

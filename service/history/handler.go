@@ -108,10 +108,8 @@ func NewHandler(
 		status:          common.DaemonStatusInitialized,
 		config:          config,
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
-		rateLimiter: quotas.NewDynamicRateLimiter(
-			func() float64 {
-				return float64(config.RPS())
-			},
+		rateLimiter: quotas.NewDefaultIncomingDynamicRateLimiter(
+			func() float64 { return float64(config.RPS()) },
 		),
 	}
 

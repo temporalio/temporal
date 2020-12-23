@@ -885,11 +885,6 @@ func newDBCommands() []cli.Command {
 					Value: 7000,
 				},
 				cli.IntFlag{
-					Name:  FlagRPSScaleUpSeconds,
-					Usage: "number of seconds over which rps is scaled up to target",
-					Value: 1800,
-				},
-				cli.IntFlag{
 					Name:  FlagPageSize,
 					Usage: "page size used to query db executions table",
 					Value: 500,
@@ -936,11 +931,6 @@ func newDBCommands() []cli.Command {
 					Name:  FlagRPS,
 					Usage: "target rps of database queries, target will be reached over scale up seconds",
 					Value: 7000,
-				},
-				cli.IntFlag{
-					Name:  FlagRPSScaleUpSeconds,
-					Usage: "number of seconds over which rps is scaled up to target",
-					Value: 1800,
 				},
 				cli.IntFlag{
 					Name:  FlagConcurrency,

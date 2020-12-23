@@ -188,9 +188,9 @@ func newReplicationTaskFetcher(
 	numWorker := config.ReplicationTaskFetcherParallelism()
 	requestChan := make(chan *replicationTaskRequest, requestChanBufferSize)
 	shutdownChan := make(chan struct{})
-	rateLimiter := quotas.NewDynamicRateLimiter(func() float64 {
-		return config.ReplicationTaskProcessorHostQPS()
-	})
+	rateLimiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
+		func() float64 { return config.ReplicationTaskProcessorHostQPS() },
+	)
 
 	workers := make(map[int]*replicationTaskFetcherWorker)
 	for i := 0; i < numWorker; i++ {
