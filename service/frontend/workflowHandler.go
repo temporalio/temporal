@@ -90,7 +90,7 @@ type (
 
 		healthStatus                    int32
 		tokenSerializer                 common.TaskTokenSerializer
-		rateLimiter                     quotas.RateLimiter
+		rateLimiter                     quotas.NamespaceRateLimiter
 		config                          *Config
 		versionChecker                  headers.VersionChecker
 		namespaceHandler                namespace.Handler
@@ -113,16 +113,14 @@ func NewWorkflowHandler(
 	config *Config,
 	replicationMessageSink messaging.Producer,
 ) Handler {
+
 	handler := &WorkflowHandler{
 		Resource:        resource,
 		status:          common.DaemonStatusInitialized,
 		config:          config,
 		healthStatus:    int32(HealthStatusOK),
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
-		rateLimiter: quotas.NewDefaultIncomingDynamicRateLimiter(
-			func() float64 { return float64(config.RPS()) },
-		),
-		versionChecker: headers.NewDefaultVersionChecker(),
+		versionChecker:  headers.NewDefaultVersionChecker(),
 		namespaceHandler: namespace.NewHandler(
 			config.MinRetentionDays(),
 			config.MaxBadBinaries,
@@ -143,6 +141,13 @@ func NewWorkflowHandler(
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 	}
+
+	handler.rateLimiter = quotas.NewNamespaceMultiStageRateLimiter(
+		handler.initNamespaceRateLimiter,
+		[]quotas.RateLimiter{quotas.NewDefaultIncomingDynamicRateLimiter(
+			func() float64 { return float64(config.RPS()) },
+		)},
+	)
 
 	return handler
 }
@@ -3710,10 +3715,35 @@ func (wh *WorkflowHandler) isListRequestPageSizeTooLarge(pageSize int32, namespa
 		pageSize > int32(wh.config.ESIndexMaxResultWindow())
 }
 
-// TODO use the namespace
 func (wh *WorkflowHandler) allow(namespace string) bool {
-	return wh.rateLimiter.Allow()
+	return wh.rateLimiter.Allow(namespace)
 }
+
+func (wh *WorkflowHandler) initNamespaceRateLimiter(namespace string) quotas.RateLimiter {
+	monitor := wh.GetMembershipMonitor()
+	if monitor == nil || wh.config.GlobalNamespaceRPS(namespace) == 0 {
+		return quotas.NewDefaultIncomingDynamicRateLimiter(
+			func() float64 { return float64(wh.config.MaxNamespaceRPSPerInstance(namespace)) },
+		)
+	}
+
+	ringSize, err := monitor.GetMemberCount(common.FrontendServiceName)
+	if err != nil || ringSize == 0 {
+		return quotas.NewDefaultIncomingDynamicRateLimiter(
+			func() float64 { return float64(wh.config.MaxNamespaceRPSPerInstance(namespace)) },
+		)
+	}
+
+	return quotas.NewDefaultIncomingDynamicRateLimiter(
+		func() float64 {
+			return float64(common.MinInt(
+				wh.config.MaxNamespaceRPSPerInstance(namespace),
+				common.MaxInt(wh.config.GlobalNamespaceRPS(namespace)/ringSize, 1),
+			))
+		},
+	)
+}
+
 func (wh *WorkflowHandler) checkPermission(
 	config *Config,
 	securityToken string,

@@ -79,8 +79,7 @@ type (
 		logger                  log.Logger
 		replicationTaskExecutor replicationTaskExecutor
 
-		hostRateLimiter  quotas.RateLimiter
-		shardRateLimiter quotas.RateLimiter
+		rateLimiter quotas.RateLimiter
 
 		taskRetryPolicy backoff.RetryPolicy
 		dlqRetryPolicy  backoff.RetryPolicy
@@ -139,10 +138,12 @@ func NewReplicationTaskProcessor(
 		metricsClient:           metricsClient,
 		logger:                  shard.GetLogger(),
 		replicationTaskExecutor: replicationTaskExecutor,
-		hostRateLimiter:         replicationTaskFetcher.GetRateLimiter(),
-		shardRateLimiter: quotas.NewDefaultOutgoingDynamicRateLimiter(
-			func() float64 { return config.ReplicationTaskProcessorShardQPS() },
-		),
+		rateLimiter: quotas.NewMultiStageRateLimiter([]quotas.RateLimiter{
+			quotas.NewDefaultOutgoingDynamicRateLimiter(
+				func() float64 { return config.ReplicationTaskProcessorShardQPS() },
+			),
+			replicationTaskFetcher.GetRateLimiter(),
+		}),
 		taskRetryPolicy:      taskRetryPolicy,
 		requestChan:          replicationTaskFetcher.GetRequestChan(),
 		syncShardChan:        make(chan *replicationspb.SyncShardStatus, 1),
@@ -310,10 +311,7 @@ func (p *ReplicationTaskProcessorImpl) handleReplicationTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) error {
 
-	// TODO create a dedicated multi-stage rate limiter
-	ctx := context.Background()
-	_ = p.shardRateLimiter.Wait(ctx)
-	_ = p.hostRateLimiter.Wait(ctx)
+	_ = p.rateLimiter.Wait(context.Background())
 
 	operation := func() error {
 		scope, err := p.replicationTaskExecutor.execute(replicationTask, false)
@@ -327,10 +325,7 @@ func (p *ReplicationTaskProcessorImpl) handleReplicationDLQTask(
 	request *persistence.PutReplicationTaskToDLQRequest,
 ) error {
 
-	// TODO create a dedicated multi-stage rate limiter
-	ctx := context.Background()
-	_ = p.shardRateLimiter.Wait(ctx)
-	_ = p.hostRateLimiter.Wait(ctx)
+	_ = p.rateLimiter.Wait(context.Background())
 
 	p.logger.Info("enqueue replication task to DLQ",
 		tag.ShardID(p.shard.GetShardID()),

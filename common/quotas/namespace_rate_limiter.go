@@ -24,16 +24,22 @@
 
 package quotas
 
-// Policy corresponds to a quota policy. A policy allows implementing layered
-// and more complex rate limiting functionality.
-type Policy interface {
-	// Allow attempts to allow a request to go through. The method returns
-	// immediately with a true or false indicating if the request can make
-	// progress
-	Allow(info Info) bool
-}
+import "context"
 
-// Info corresponds to information required to determine rate limits
-type Info struct {
-	Namespace string
-}
+type (
+	// NamespaceRateLimiter corresponds to basic rate limiting functionality.
+	NamespaceRateLimiter interface {
+		// Allow attempts to allow a request to go through. The method returns
+		// immediately with a true or false indicating if the request can make
+		// progress
+		Allow(namespaceID string) bool
+
+		// Reserve returns a Reservation that indicates how long the caller
+		// must wait before event happen.
+		Reserve(namespaceID string) Reservation
+
+		// Wait waits till the deadline for a rate limit token to allow the request
+		// to go through.
+		Wait(ctx context.Context, namespaceID string) error
+	}
+)
