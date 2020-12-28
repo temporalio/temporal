@@ -25,8 +25,6 @@
 package cassandra
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -41,6 +39,7 @@ import (
 	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -970,22 +969,10 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 		}
 	}()
 
-	var batchObservation *DebugBatchObservation
-	batch.Observer(DebugBatchObserver(func(ctx context.Context, observedBatch gocql.ObservedBatch) {
-		batchObservation = &DebugBatchObservation{
-			ObservedStmts: observedBatch.Statements,
-			ObservedErr:   observedBatch.Err,
-		}
-	}))
-
 	if err != nil {
-		fmt.Println("####### QUERY ERROR")
-		prettyPrint := func(input interface{}) string {
-			binary, _ := json.MarshalIndent(input, "", "  ")
-			return string(binary)
-		}
-		fmt.Printf("%v\n", prettyPrint(batchObservation))
-		fmt.Println("####### QUERY ERROR")
+		d.logger.Error("####### QUERY ERROR")
+		d.logger.Error(prettyPrint(batch.Entries), tag.Error(err))
+		d.logger.Error("####### QUERY ERROR")
 
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
@@ -1363,22 +1350,10 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 		}
 	}()
 
-	var batchObservation *DebugBatchObservation
-	batch.Observer(DebugBatchObserver(func(ctx context.Context, observedBatch gocql.ObservedBatch) {
-		batchObservation = &DebugBatchObservation{
-			ObservedStmts: observedBatch.Statements,
-			ObservedErr:   observedBatch.Err,
-		}
-	}))
-
 	if err != nil {
-		fmt.Println("####### QUERY ERROR")
-		prettyPrint := func(input interface{}) string {
-			binary, _ := json.MarshalIndent(input, "", "  ")
-			return string(binary)
-		}
-		fmt.Printf("%v\n", prettyPrint(batchObservation))
-		fmt.Println("####### QUERY ERROR")
+		d.logger.Error("####### QUERY ERROR")
+		d.logger.Error(prettyPrint(batch.Entries), tag.Error(err))
+		d.logger.Error("####### QUERY ERROR")
 
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
@@ -1656,22 +1631,10 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 		}
 	}()
 
-	var batchObservation *DebugBatchObservation
-	batch.Observer(DebugBatchObserver(func(ctx context.Context, observedBatch gocql.ObservedBatch) {
-		batchObservation = &DebugBatchObservation{
-			ObservedStmts: observedBatch.Statements,
-			ObservedErr:   observedBatch.Err,
-		}
-	}))
-
 	if err != nil {
-		fmt.Println("####### QUERY ERROR")
-		prettyPrint := func(input interface{}) string {
-			binary, _ := json.MarshalIndent(input, "", "  ")
-			return string(binary)
-		}
-		fmt.Printf("%v\n", prettyPrint(batchObservation))
-		fmt.Println("####### QUERY ERROR")
+		d.logger.Error("####### QUERY ERROR")
+		d.logger.Error(prettyPrint(batch.Entries), tag.Error(err))
+		d.logger.Error("####### QUERY ERROR")
 
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know

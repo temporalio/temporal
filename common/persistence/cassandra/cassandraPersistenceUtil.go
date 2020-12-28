@@ -25,7 +25,6 @@
 package cassandra
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"runtime/debug"
@@ -1578,6 +1577,7 @@ func isThrottlingError(err error) bool {
 	return false
 }
 
+// TODO debug log, remove before 1.6.x release
 func debugActivity(
 	nextEventID int64,
 	upsertActivityInfos []*persistencespb.ActivityInfo,
@@ -1596,10 +1596,6 @@ func debugActivity(
 	}
 	if logError {
 		fmt.Println("#######")
-		prettyPrint := func(input interface{}) string {
-			binary, _ := json.MarshalIndent(input, "", "  ")
-			return string(binary)
-		}
 		fmt.Println("####### upsert request")
 		fmt.Printf("%v\n", prettyPrint(upsertActivityInfos))
 		fmt.Println("####### upsert request")
@@ -1613,13 +1609,9 @@ func debugActivity(
 	}
 }
 
-type DebugBatchObservation struct {
-	ObservedStmts []string
-	ObservedErr   error
+func prettyPrint(input interface{}) string {
+	binary, _ := json.MarshalIndent(input, "", "  ")
+	return string(binary)
 }
 
-type DebugBatchObserver func(context.Context, gocql.ObservedBatch)
-
-func (f DebugBatchObserver) ObserveBatch(ctx context.Context, observedBatch gocql.ObservedBatch) {
-	f(ctx, observedBatch)
-}
+// TODO debug log, remove before 1.6.x release
