@@ -326,38 +326,6 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	return m.persistence.ConflictResolveWorkflowExecution(newRequest)
 }
 
-func (m *executionManagerImpl) ResetWorkflowExecution(
-	request *ResetWorkflowExecutionRequest,
-) error {
-
-	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.NewWorkflowSnapshot)
-	if err != nil {
-		return err
-	}
-	var serializedUpdateWorkflowSnapshot *InternalWorkflowMutation
-	if request.CurrentWorkflowMutation != nil {
-		serializedUpdateWorkflowSnapshot, err = m.SerializeWorkflowMutation(request.CurrentWorkflowMutation)
-		if err != nil {
-			return err
-		}
-	}
-
-	newRequest := &InternalResetWorkflowExecutionRequest{
-		RangeID: request.RangeID,
-
-		BaseRunID:          request.BaseRunID,
-		BaseRunNextEventID: request.BaseRunNextEventID,
-
-		CurrentRunID:          request.CurrentRunID,
-		CurrentRunNextEventID: request.CurrentRunNextEventID,
-
-		CurrentWorkflowMutation: serializedUpdateWorkflowSnapshot,
-
-		NewWorkflowSnapshot: *serializedNewWorkflowSnapshot,
-	}
-	return m.persistence.ResetWorkflowExecution(newRequest)
-}
-
 func (m *executionManagerImpl) CreateWorkflowExecution(
 	request *CreateWorkflowExecutionRequest,
 ) (*CreateWorkflowExecutionResponse, error) {

@@ -34,6 +34,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/common/v1"
+
 	cache "go.temporal.io/server/common/cache"
 	clock "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
@@ -766,20 +767,6 @@ func (m *MockContext) ConflictResolveWorkflowExecution(request *persistence.Conf
 func (mr *MockContextMockRecorder) ConflictResolveWorkflowExecution(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockContext)(nil).ConflictResolveWorkflowExecution), request)
-}
-
-// ResetWorkflowExecution mocks base method.
-func (m *MockContext) ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ResetWorkflowExecution", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ResetWorkflowExecution indicates an expected call of ResetWorkflowExecution.
-func (mr *MockContextMockRecorder) ResetWorkflowExecution(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).ResetWorkflowExecution), request)
 }
 
 // AddTasks mocks base method.
