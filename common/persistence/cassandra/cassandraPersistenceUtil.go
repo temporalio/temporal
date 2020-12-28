@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"runtime/debug"
@@ -1610,4 +1611,15 @@ func debugActivity(
 		fmt.Println("####### stack trace")
 		fmt.Println("#######")
 	}
+}
+
+type DebugBatchObservation struct {
+	ObservedStmts []string
+	ObservedErr   error
+}
+
+type DebugBatchObserver func(context.Context, gocql.ObservedBatch)
+
+func (f DebugBatchObserver) ObserveBatch(ctx context.Context, observedBatch gocql.ObservedBatch) {
+	f(ctx, observedBatch)
 }

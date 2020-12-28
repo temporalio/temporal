@@ -25,6 +25,8 @@
 package cassandra
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -968,7 +970,23 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 		}
 	}()
 
+	var batchObservation *DebugBatchObservation
+	batch.Observer(DebugBatchObserver(func(ctx context.Context, observedBatch gocql.ObservedBatch) {
+		batchObservation = &DebugBatchObservation{
+			ObservedStmts: observedBatch.Statements,
+			ObservedErr:   observedBatch.Err,
+		}
+	}))
+
 	if err != nil {
+		fmt.Println("####### QUERY ERROR")
+		prettyPrint := func(input interface{}) string {
+			binary, _ := json.MarshalIndent(input, "", "  ")
+			return string(binary)
+		}
+		fmt.Printf("%v\n", prettyPrint(batchObservation))
+		fmt.Println("####### QUERY ERROR")
+
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
@@ -1345,7 +1363,23 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 		}
 	}()
 
+	var batchObservation *DebugBatchObservation
+	batch.Observer(DebugBatchObserver(func(ctx context.Context, observedBatch gocql.ObservedBatch) {
+		batchObservation = &DebugBatchObservation{
+			ObservedStmts: observedBatch.Statements,
+			ObservedErr:   observedBatch.Err,
+		}
+	}))
+
 	if err != nil {
+		fmt.Println("####### QUERY ERROR")
+		prettyPrint := func(input interface{}) string {
+			binary, _ := json.MarshalIndent(input, "", "  ")
+			return string(binary)
+		}
+		fmt.Printf("%v\n", prettyPrint(batchObservation))
+		fmt.Println("####### QUERY ERROR")
+
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
@@ -1622,7 +1656,23 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 		}
 	}()
 
+	var batchObservation *DebugBatchObservation
+	batch.Observer(DebugBatchObserver(func(ctx context.Context, observedBatch gocql.ObservedBatch) {
+		batchObservation = &DebugBatchObservation{
+			ObservedStmts: observedBatch.Statements,
+			ObservedErr:   observedBatch.Err,
+		}
+	}))
+
 	if err != nil {
+		fmt.Println("####### QUERY ERROR")
+		prettyPrint := func(input interface{}) string {
+			binary, _ := json.MarshalIndent(input, "", "  ")
+			return string(binary)
+		}
+		fmt.Printf("%v\n", prettyPrint(batchObservation))
+		fmt.Println("####### QUERY ERROR")
+
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
