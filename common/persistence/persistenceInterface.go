@@ -89,7 +89,6 @@ type (
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *InternalUpdateWorkflowExecutionRequest) error
 		ConflictResolveWorkflowExecution(request *InternalConflictResolveWorkflowExecutionRequest) error
-		ResetWorkflowExecution(request *InternalResetWorkflowExecutionRequest) error
 
 		CreateWorkflowExecution(request *InternalCreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
@@ -264,25 +263,6 @@ type (
 
 		// current workflow
 		CurrentWorkflowMutation *InternalWorkflowMutation
-	}
-
-	// InternalResetWorkflowExecutionRequest is used to reset workflow execution state for Persistence Interface
-	InternalResetWorkflowExecutionRequest struct {
-		RangeID int64
-
-		// for base run (we need to make sure the baseRun hasn't been deleted after forking)
-		BaseRunID          string
-		BaseRunNextEventID int64
-
-		// for current workflow record
-		CurrentRunID          string
-		CurrentRunNextEventID int64
-
-		// for current mutable state
-		CurrentWorkflowMutation *InternalWorkflowMutation
-
-		// For new mutable state
-		NewWorkflowSnapshot InternalWorkflowSnapshot
 	}
 
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface

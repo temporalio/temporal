@@ -52,7 +52,7 @@ type (
 
 		controller                   *gomock.Controller
 		mockShard                    *shard.ContextTest
-		mockEngine                   *MockEngine
+		mockEngine                   *shard.MockEngine
 		mockWorkflowExecutionContext *MockworkflowExecutionContext
 		mockMutableState             *MockmutableState
 
@@ -99,7 +99,7 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) SetupTest() {
 			}},
 		config,
 	)
-	s.mockEngine = NewMockEngine(s.controller)
+	s.mockEngine = shard.NewMockEngine(s.controller)
 	s.mockShard.SetEngine(s.mockEngine)
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr

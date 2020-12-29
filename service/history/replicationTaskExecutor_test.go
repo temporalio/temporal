@@ -64,7 +64,7 @@ type (
 		currentCluster     string
 		mockResource       *resource.Test
 		mockShard          *shard.ContextTest
-		mockEngine         *MockEngine
+		mockEngine         *shard.MockEngine
 		config             *configs.Config
 		historyClient      *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *cache.MockNamespaceCache
@@ -110,7 +110,7 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 			}},
 		s.config,
 	)
-	s.mockEngine = NewMockEngine(s.controller)
+	s.mockEngine = shard.NewMockEngine(s.controller)
 	s.mockResource = s.mockShard.Resource
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockClientBean = s.mockResource.ClientBean

@@ -1222,7 +1222,6 @@ type (
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
 		ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) error
-		ResetWorkflowExecution(request *ResetWorkflowExecutionRequest) error
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)

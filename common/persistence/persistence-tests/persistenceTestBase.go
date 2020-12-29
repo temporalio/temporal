@@ -930,57 +930,6 @@ func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWr
 	})
 }
 
-// ResetWorkflowExecution is  utility method to reset WF
-func (s *TestBase) ResetWorkflowExecution(condition int64, executionInfo *persistencespb.WorkflowExecutionInfo, executionState *persistencespb.WorkflowExecutionState, nextEventID int64,
-	activityInfos []*persistencespb.ActivityInfo, timerInfos []*persistencespb.TimerInfo, childExecutionInfos []*persistencespb.ChildExecutionInfo,
-	requestCancelInfos []*persistencespb.RequestCancelInfo, signalInfos []*persistencespb.SignalInfo, ids []string, trasTasks, timerTasks, replTasks []persistence.Task,
-	updateCurr bool, currInfo *persistencespb.WorkflowExecutionInfo, currExecutionState *persistencespb.WorkflowExecutionState, curNextEventID int64,
-	currTrasTasks, currTimerTasks []persistence.Task, forkRunID string, forkRunNextEventID int64) error {
-
-	req := &persistence.ResetWorkflowExecutionRequest{
-		RangeID: s.ShardInfo.GetRangeId(),
-
-		BaseRunID:          forkRunID,
-		BaseRunNextEventID: forkRunNextEventID,
-
-		CurrentRunID:          currExecutionState.GetRunId(),
-		CurrentRunNextEventID: condition,
-
-		CurrentWorkflowMutation: nil,
-
-		NewWorkflowSnapshot: persistence.WorkflowSnapshot{
-			ExecutionInfo:  executionInfo,
-			ExecutionState: executionState,
-			NextEventID:    nextEventID,
-
-			ActivityInfos:       activityInfos,
-			TimerInfos:          timerInfos,
-			ChildExecutionInfos: childExecutionInfos,
-			RequestCancelInfos:  requestCancelInfos,
-			SignalInfos:         signalInfos,
-			SignalRequestedIDs:  ids,
-
-			TransferTasks:    trasTasks,
-			ReplicationTasks: replTasks,
-			TimerTasks:       timerTasks,
-		},
-	}
-
-	if updateCurr {
-		req.CurrentWorkflowMutation = &persistence.WorkflowMutation{
-			ExecutionInfo: currInfo,
-			NextEventID:   curNextEventID,
-
-			TransferTasks: currTrasTasks,
-			TimerTasks:    currTimerTasks,
-
-			Condition: condition,
-		}
-	}
-
-	return s.ExecutionManager.ResetWorkflowExecution(req)
-}
-
 // DeleteWorkflowExecution is a utility method to delete a workflow execution
 func (s *TestBase) DeleteWorkflowExecution(info *persistencespb.WorkflowExecutionInfo, state *persistencespb.WorkflowExecutionState) error {
 	return s.ExecutionManager.DeleteWorkflowExecution(&persistence.DeleteWorkflowExecutionRequest{

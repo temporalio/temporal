@@ -67,7 +67,7 @@ type (
 		controller                  *gomock.Controller
 		mockResource                *resource.Test
 		mockShard                   *shard.ContextTest
-		mockEngine                  *MockEngine
+		mockEngine                  *shard.MockEngine
 		mockNamespaceCache          *cache.MockNamespaceCache
 		mockClientBean              *client.MockBean
 		mockAdminClient             *adminservicemock.MockAdminServiceClient
@@ -119,7 +119,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 		},
 		s.config,
 	)
-	s.mockEngine = NewMockEngine(s.controller)
+	s.mockEngine = shard.NewMockEngine(s.controller)
 	s.mockResource = s.mockShard.Resource
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockClientBean = s.mockResource.ClientBean
