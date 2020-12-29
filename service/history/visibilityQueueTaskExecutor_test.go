@@ -55,7 +55,6 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	dc "go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -106,7 +105,6 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	config := NewDynamicConfigForTest()
-	config.VisibilityQueue = dc.GetStringPropertyFn(common.VisibilityQueueInternal)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{

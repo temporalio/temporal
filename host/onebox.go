@@ -121,7 +121,6 @@ type (
 		NumHistoryHosts        int
 		HistoryCountLimitError int
 		HistoryCountLimitWarn  int
-		VisibilityQueue        string
 	}
 
 	// TemporalParams contains everything needed to bootstrap Temporal
@@ -183,7 +182,7 @@ func NewTemporal(params *TemporalParams) Temporal {
 }
 
 func (c *temporalImpl) enableWorker() bool {
-	return c.workerConfig.EnableArchiver || c.workerConfig.EnableIndexer || c.workerConfig.EnableReplicator
+	return c.workerConfig.EnableArchiver || c.workerConfig.EnableReplicator
 }
 
 func (c *temporalImpl) Start() error {
@@ -629,10 +628,6 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		c.startWorkerClientWorker(params, service, clientWorkerNamespaceCache)
 	}
 
-	if c.workerConfig.EnableIndexer {
-		c.startWorkerIndexer(params, service)
-	}
-
 	startWG.Done()
 	<-c.shutdownCh
 	if c.workerConfig.EnableReplicator {
@@ -727,8 +722,6 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	if c.historyConfig.HistoryCountLimitError != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
 	}
-
-	client.OverrideValue(dynamicconfig.VisibilityQueue, c.historyConfig.VisibilityQueue)
 }
 
 // copyPersistenceConfig makes a deepcopy of persistence config.
