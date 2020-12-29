@@ -7,7 +7,6 @@ historyconfig:
   numhistoryhosts: 1
   historycountlimiterror: 20
   historycountlimitwarn: 10
-  visibilityqueue: internal
 workerconfig:
   enablearchiver: false
   enablereplicator: false

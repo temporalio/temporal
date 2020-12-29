@@ -121,7 +121,6 @@ type (
 		NumHistoryHosts        int
 		HistoryCountLimitError int
 		HistoryCountLimitWarn  int
-		VisibilityQueue        string
 	}
 
 	// TemporalParams contains everything needed to bootstrap Temporal
@@ -727,8 +726,6 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	if c.historyConfig.HistoryCountLimitError != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
 	}
-
-	client.OverrideValue(dynamicconfig.VisibilityQueue, c.historyConfig.VisibilityQueue)
 }
 
 // copyPersistenceConfig makes a deepcopy of persistence config.

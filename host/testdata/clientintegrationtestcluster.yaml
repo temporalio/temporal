@@ -5,7 +5,6 @@ messagingclientconfig:
 historyconfig:
   numhistoryshards: 4
   numhistoryhosts: 1
-  visibilityqueue: internal
 workerconfig:
   enablearchiver: false
   enablereplicator: false
