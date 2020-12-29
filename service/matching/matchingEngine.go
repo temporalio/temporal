@@ -789,7 +789,9 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	//  so need to override
 	scheduleToCloseTimeout := timestamp.DurationValue(attributes.ScheduleToCloseTimeout)
 	if scheduleToCloseTimeout == 0 {
-		scheduleToCloseTimeout = timestamp.DurationValue(attributes.StartToCloseTimeout)
+		scheduleToCloseTimeout = historyResponse.CurrentAttemptScheduledTime.Add(
+			timestamp.DurationValue(attributes.StartToCloseTimeout),
+		).Sub(timestamp.TimeValue(scheduledEvent.EventTime))
 	}
 
 	return &matchingservice.PollActivityTaskQueueResponse{
