@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -969,6 +970,10 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 	}()
 
 	if err != nil {
+		d.logger.Error("####### QUERY ERROR")
+		d.logger.Error(prettyPrint(batch.Entries), tag.Error(err))
+		d.logger.Error("####### QUERY ERROR")
+
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
@@ -1346,6 +1351,10 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	}()
 
 	if err != nil {
+		d.logger.Error("####### QUERY ERROR")
+		d.logger.Error(prettyPrint(batch.Entries), tag.Error(err))
+		d.logger.Error("####### QUERY ERROR")
+
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
@@ -1623,6 +1632,10 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 	}()
 
 	if err != nil {
+		d.logger.Error("####### QUERY ERROR")
+		d.logger.Error(prettyPrint(batch.Entries), tag.Error(err))
+		d.logger.Error("####### QUERY ERROR")
+
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
