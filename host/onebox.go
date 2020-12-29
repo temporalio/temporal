@@ -182,7 +182,7 @@ func NewTemporal(params *TemporalParams) Temporal {
 }
 
 func (c *temporalImpl) enableWorker() bool {
-	return c.workerConfig.EnableArchiver || c.workerConfig.EnableIndexer || c.workerConfig.EnableReplicator
+	return c.workerConfig.EnableArchiver || c.workerConfig.EnableReplicator
 }
 
 func (c *temporalImpl) Start() error {
@@ -626,10 +626,6 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		clientWorkerNamespaceCache = cache.NewNamespaceCache(metadataProxyManager, params.ClusterMetadata, service.GetMetricsClient(), service.GetLogger())
 		clientWorkerNamespaceCache.Start()
 		c.startWorkerClientWorker(params, service, clientWorkerNamespaceCache)
-	}
-
-	if c.workerConfig.EnableIndexer {
-		c.startWorkerIndexer(params, service)
 	}
 
 	startWG.Done()
