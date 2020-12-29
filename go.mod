@@ -53,6 +53,7 @@ require (
 	github.com/sirupsen/logrus v1.7.0 // indirect
 	github.com/spf13/cobra v1.1.1 // indirect
 	github.com/stretchr/testify v1.6.1
+	github.com/temporalio/gogo-protobuf v1.22.0
 	github.com/temporalio/kafka-client v0.2.3-0.20201118205213-e4dff30fc573
 	github.com/temporalio/ringpop-go v0.0.0-20200708034907-1e016ebb537a
 	github.com/uber-common/bark v1.3.0 // indirect
