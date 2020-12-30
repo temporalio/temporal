@@ -54,6 +54,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -533,12 +534,18 @@ func (s *cliAppSuite) TestAdminDescribeMutableState() {
 		HistoryAddr: "ip:port",
 		DatabaseMutableState: &persistencespb.WorkflowMutableState{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-				EventBranchToken: []byte{10, 3, 113, 119, 101, 18, 3, 97, 115, 100},
+				VersionHistories: versionhistory.NewVersionHistories(versionhistory.NewVersionHistory(
+					[]byte{10, 3, 113, 119, 101, 18, 3, 97, 115, 100},
+					nil,
+				)),
 			},
 		},
 		CacheMutableState: &persistencespb.WorkflowMutableState{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-				EventBranchToken: []byte{10, 3, 113, 119, 101, 18, 3, 97, 115, 100},
+				VersionHistories: versionhistory.NewVersionHistories(versionhistory.NewVersionHistory(
+					[]byte{10, 3, 113, 119, 101, 18, 3, 97, 115, 100},
+					nil,
+				)),
 			},
 		},
 	}

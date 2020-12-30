@@ -77,6 +77,8 @@ service AdminService {
     rpc GetDLQMessages(GetDLQMessagesRequest) returns (GetDLQMessagesResponse) {
     }
 
+    // (-- api-linter: core::0165::response-message-name=disabled
+    //     aip.dev/not-precedent:  --)
     // PurgeDLQMessages purges messages from DLQ.
     rpc PurgeDLQMessages(PurgeDLQMessagesRequest) returns (PurgeDLQMessagesResponse) {
     }

@@ -40,6 +40,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/versionhistory"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
@@ -417,11 +418,15 @@ func verifyHistoryExists(
 	execStore persistence.ExecutionStore,
 ) (VerificationResult, *persistence.InternalReadHistoryBranchResponse, *persistencespb.HistoryBranch) {
 	var branch persistencespb.HistoryBranch
-	err := branchDecoder.Decode(executionInfo.EventBranchToken, &branch)
-	byteBranch, err := byteKeyFromProto(&branch)
+	versionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
 	if err != nil {
 		return VerificationResultCheckFailure, nil, nil
 	}
+	err = branchDecoder.Decode(versionHistory.BranchToken, &branch)
+	if err != nil {
+		return VerificationResultCheckFailure, nil, nil
+	}
+	byteBranch, err := byteKeyFromProto(&branch)
 	if err != nil {
 		checkFailureWriter.Add(&ExecutionCheckFailure{
 			ShardID:     shardID,

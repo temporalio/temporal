@@ -108,7 +108,7 @@ message WorkflowExecutionInfo {
     bool has_retry_policy = 42;
     string cron_schedule = 43;
     reserved 44;
-    bytes event_branch_token = 45;
+    reserved 45;
     int64 signal_count = 46;
     int64 history_size = 47 [deprecated = true];
     reserved 48;

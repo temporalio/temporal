@@ -308,22 +308,6 @@ func (e *mutableStateBuilder) Load(
 	e.executionState = state.ExecutionState
 	e.nextEventID = state.NextEventId
 
-	// back fill version history for local namespace workflows
-	if e.executionInfo.VersionHistories == nil {
-		e.executionInfo.VersionHistories = versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
-		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
-		if err != nil {
-			return err
-		}
-		if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
-			e.nextEventID-1, common.EmptyVersion,
-		)); err != nil {
-			return err
-		}
-		versionhistory.SetVersionHistoryBranchToken(currentVersionHistory, e.executionInfo.EventBranchToken)
-		e.executionInfo.EventBranchToken = nil
-	}
-
 	e.bufferedEvents = state.BufferedEvents
 
 	e.currentVersion = common.EmptyVersion
@@ -351,14 +335,11 @@ func (e *mutableStateBuilder) Load(
 }
 
 func (e *mutableStateBuilder) GetCurrentBranchToken() ([]byte, error) {
-	if e.executionInfo.VersionHistories != nil {
-		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
-		if err != nil {
-			return nil, err
-		}
-		return currentVersionHistory.GetBranchToken(), nil
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
+	if err != nil {
+		return nil, err
 	}
-	return e.executionInfo.EventBranchToken, nil
+	return currentVersionHistory.GetBranchToken(), nil
 }
 
 // set treeID/historyBranches
@@ -376,12 +357,6 @@ func (e *mutableStateBuilder) SetHistoryTree(
 func (e *mutableStateBuilder) SetCurrentBranchToken(
 	branchToken []byte,
 ) error {
-
-	exeInfo := e.GetExecutionInfo()
-	if e.executionInfo.VersionHistories == nil {
-		exeInfo.EventBranchToken = branchToken
-		return nil
-	}
 
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
 	if err != nil {
@@ -501,32 +476,24 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 		return nil
 	}
 
-	if e.executionInfo.VersionHistories != nil {
-		versionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
+	versionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
+	if err != nil {
+		return err
+	}
+
+	if !versionhistory.IsEmptyVersionHistory(versionHistory) {
+		// this make sure current version >= last write version
+		versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
 		if err != nil {
 			return err
 		}
-
-		if !versionhistory.IsEmptyVersionHistory(versionHistory) {
-			// this make sure current version >= last write version
-			versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
-			if err != nil {
-				return err
-			}
-			e.currentVersion = versionHistoryItem.GetVersion()
-		}
-
-		if version > e.currentVersion || forceUpdate {
-			e.currentVersion = version
-		}
-
-		return nil
+		e.currentVersion = versionHistoryItem.GetVersion()
 	}
 
-	// TODO: All mutable state should have versioned histories.  Even local namespace should have it to allow for
-	// re-replication of local namespaces to other clusters.
-	// We probably need an error if mutableState does not have versioned history.
-	e.currentVersion = common.EmptyVersion
+	if version > e.currentVersion || forceUpdate {
+		e.currentVersion = version
+	}
+
 	return nil
 }
 

@@ -134,6 +134,8 @@ type AdminServiceClient interface {
 	DescribeCluster(ctx context.Context, in *DescribeClusterRequest, opts ...grpc.CallOption) (*DescribeClusterResponse, error)
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(ctx context.Context, in *GetDLQMessagesRequest, opts ...grpc.CallOption) (*GetDLQMessagesResponse, error)
+	// (-- api-linter: core::0165::response-message-name=disabled
+	//     aip.dev/not-precedent:  --)
 	// PurgeDLQMessages purges messages from DLQ.
 	PurgeDLQMessages(ctx context.Context, in *PurgeDLQMessagesRequest, opts ...grpc.CallOption) (*PurgeDLQMessagesResponse, error)
 	// MergeDLQMessages merges messages from DLQ.
@@ -323,6 +325,8 @@ type AdminServiceServer interface {
 	DescribeCluster(context.Context, *DescribeClusterRequest) (*DescribeClusterResponse, error)
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(context.Context, *GetDLQMessagesRequest) (*GetDLQMessagesResponse, error)
+	// (-- api-linter: core::0165::response-message-name=disabled
+	//     aip.dev/not-precedent:  --)
 	// PurgeDLQMessages purges messages from DLQ.
 	PurgeDLQMessages(context.Context, *PurgeDLQMessagesRequest) (*PurgeDLQMessagesResponse, error)
 	// MergeDLQMessages merges messages from DLQ.
