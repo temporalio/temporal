@@ -46,6 +46,7 @@ var (
 
 const (
 	ContextKeyMappedClaims = "auth-mappedClaims"
+	ContextAuthHeader      = "auth-header"
 )
 
 func (a *interceptor) Interceptor(
@@ -103,6 +104,9 @@ func (a *interceptor) Interceptor(
 			}
 			claims = mappedClaims
 			ctx = context.WithValue(ctx, ContextKeyMappedClaims, mappedClaims)
+			if authHeader != "" {
+				ctx = context.WithValue(ctx, ContextAuthHeader, authHeader)
+			}
 		}
 	}
 
