@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
   temporal:
-    image: temporalio/auto-setup:${SERVER_TAG:-1.4.1}
+    image: temporalio/auto-setup:${SERVER_TAG:-1.4.2}
     ports:
       - "7233:7233"
     volumes:
@@ -23,7 +23,7 @@ services:
     depends_on:
       - postgresql
   temporal-admin-tools:
-    image: temporalio/admin-tools:${SERVER_TAG:-1.4.1}
+    image: temporalio/admin-tools:${SERVER_TAG:-1.4.2}
     stdin_open: true
     tty: true
     environment:
