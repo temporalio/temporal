@@ -167,12 +167,6 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			return nil, err
 		}
 
-		indexName := options.ESConfig.Indices[common.VisibilityAppName]
-		visProducer, err := messagingClient.NewProducer(common.VisibilityAppName)
-		if err != nil {
-			return nil, err
-		}
-
 		esProcessorConfig := &pes.ProcessorConfig{
 			IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
 			ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
@@ -190,7 +184,8 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
 			ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(5 * time.Second),
 		}
-		esVisibilityStore := pes.NewElasticSearchVisibilityStore(esClient, indexName, visProducer, esProcessor, visConfig, logger, &metricsmocks.Client{})
+		indexName := options.ESConfig.Indices[common.VisibilityAppName]
+		esVisibilityStore := pes.NewElasticSearchVisibilityStore(esClient, indexName, nil, esProcessor, visConfig, logger, &metricsmocks.Client{})
 		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, logger)
 	}
 	visibilityMgr := persistence.NewVisibilityManagerWrapper(testBase.VisibilityMgr, esVisibilityMgr,

@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	dc "go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -88,7 +87,6 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) SetupTest() {
 	s.mockMutableState = NewMockmutableState(s.controller)
 
 	config := NewDynamicConfigForTest()
-	config.VisibilityQueue = dc.GetStringPropertyFn(common.VisibilityQueueInternal)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
