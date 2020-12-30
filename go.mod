@@ -3,7 +3,6 @@ module go.temporal.io/server
 go 1.15
 
 require (
-	bitbucket.org/creachadair/stringset v0.0.9 // indirect
 	cloud.google.com/go v0.74.0 // indirect
 	cloud.google.com/go/storage v1.12.0
 	github.com/Shopify/sarama v1.27.2
@@ -15,9 +14,9 @@ require (
 	github.com/bitly/go-hostpool v0.1.0 // indirect
 	github.com/blang/semver/v4 v4.0.0
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
-	github.com/bufbuild/buf v0.33.0
 	github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c
 	github.com/cch123/elasticsql v1.0.1
+	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13
@@ -31,11 +30,9 @@ require (
 	github.com/golang/protobuf v1.4.3
 	github.com/golang/snappy v0.0.2 // indirect
 	github.com/google/uuid v1.1.2
-	github.com/googleapis/api-linter v1.10.0
 	github.com/iancoleman/strcase v0.1.2
 	github.com/jmoiron/sqlx v1.2.1-0.20200615141059-0794cb1f47ee
 	github.com/jonboulle/clockwork v0.2.2
-	github.com/kisielk/errcheck v1.4.0
 	github.com/klauspost/compress v1.11.4 // indirect
 	github.com/lib/pq v1.9.0
 	github.com/m3db/prometheus_client_golang v0.8.1
@@ -45,6 +42,7 @@ require (
 	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mattn/go-sqlite3 v1.10.0 // indirect
+	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.4
 	github.com/olivere/elastic v6.2.35+incompatible
 	github.com/pborman/uuid v1.2.1
@@ -53,9 +51,7 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sirupsen/logrus v1.7.0 // indirect
-	github.com/spf13/cobra v1.1.1 // indirect
 	github.com/stretchr/testify v1.6.1
-	github.com/temporalio/gogo-protobuf v1.22.0
 	github.com/temporalio/kafka-client v0.2.3-0.20201118205213-e4dff30fc573
 	github.com/temporalio/ringpop-go v0.0.0-20200708034907-1e016ebb537a
 	github.com/uber-common/bark v1.3.0 // indirect
@@ -66,24 +62,24 @@ require (
 	github.com/valyala/fastjson v1.6.3
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/api v1.3.0
-	go.temporal.io/sdk v1.1.1-0.20201222040047-4fd761ab1fed
+	go.temporal.io/api v1.4.0
+	go.temporal.io/sdk v1.1.1-0.20201230032640-d321488f6791
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.7.0
 	go.uber.org/multierr v1.6.0
 	go.uber.org/zap v1.16.0
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
-	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b // indirect
 	golang.org/x/oauth2 v0.0.0-20201208152858-08078c50e5b5
 	golang.org/x/sys v0.0.0-20201223074533-0d417f636930 // indirect
 	golang.org/x/time v0.0.0-20201208040808-7e3f01d25324
-	golang.org/x/tools v0.0.0-20201229013931-929a8494cf60
+	golang.org/x/tools v0.0.0-20201229013931-929a8494cf60 // indirect
 	google.golang.org/api v0.36.0
 	google.golang.org/grpc v1.34.0
 	google.golang.org/grpc/examples v0.0.0-20200625174016-7a808837ae92
+	google.golang.org/protobuf v1.25.1-0.20201020201750-d3470999428b // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1
 	gopkg.in/validator.v2 v2.0.0-20200605151824-2b28d334fa05
 	gopkg.in/yaml.v2 v2.4.0
-	honnef.co/go/tools v0.1.0
+	honnef.co/go/tools v0.1.0 // indirect
 )
