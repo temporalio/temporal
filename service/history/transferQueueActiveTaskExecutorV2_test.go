@@ -154,6 +154,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) SetupTest() {
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
 	config := NewDynamicConfigForTest()
+	config.VisibilityQueue = dc.GetStringPropertyFn(common.VisibilityQueueInternal)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
