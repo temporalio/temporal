@@ -126,19 +126,19 @@ update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
 	cd && GO111MODULE=on go get golang.org/x/tools/cmd/goimports
 	cd && GO111MODULE=on go get golang.org/x/lint/golint
-	cd && GO111MODULE=on go get honnef.co/go/tools/cmd/staticcheck
-	cd && GO111MODULE=on go get github.com/kisielk/errcheck
-	cd && GO111MODULE=on go get github.com/googleapis/api-linter/cmd/api-linter
-	cd && GO111MODULE=on go get github.com/bufbuild/buf/cmd/buf
+	cd && GO111MODULE=on go get honnef.co/go/tools/cmd/staticcheck@v0.1.0
+	cd && GO111MODULE=on go get github.com/kisielk/errcheck@v1.4.0
+	cd && GO111MODULE=on go get github.com/googleapis/api-linter/cmd/api-linter@v1.10.0
+	cd && GO111MODULE=on go get github.com/bufbuild/buf/cmd/buf@v0.33.0
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
-	cd && GO111MODULE=on go get github.com/golang/mock/mockgen
+	cd && GO111MODULE=on go get github.com/golang/mock/mockgen@v1.4.4
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
 	cd && GO111MODULE=on go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
-	cd && GO111MODULE=on go get google.golang.org/grpc
+	cd && GO111MODULE=on go get google.golang.org/grpc@v1.34.0
 
 update-tools: update-checkers update-mockgen update-proto-plugins
 
