@@ -62,8 +62,8 @@ require (
 	github.com/valyala/fastjson v1.6.3
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/api v1.3.0
-	go.temporal.io/sdk v1.1.1-0.20201222040047-4fd761ab1fed
+	go.temporal.io/api v1.4.0
+	go.temporal.io/sdk v1.1.1-0.20201230032640-d321488f6791
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.7.0
 	go.uber.org/multierr v1.6.0
@@ -75,7 +75,6 @@ require (
 	golang.org/x/time v0.0.0-20201208040808-7e3f01d25324
 	golang.org/x/tools v0.0.0-20201229013931-929a8494cf60 // indirect
 	google.golang.org/api v0.36.0
-	google.golang.org/genproto v0.0.0-20201214200347-8c77b98c765d // indirect
 	google.golang.org/grpc v1.34.0
 	google.golang.org/grpc/examples v0.0.0-20200625174016-7a808837ae92
 	google.golang.org/protobuf v1.25.1-0.20201020201750-d3470999428b // indirect
