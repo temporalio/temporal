@@ -124,21 +124,21 @@ GOCOVERPKG_ARG := -coverpkg="$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/..
 ##### Tools #####
 update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
-	GO111MODULE=off go install golang.org/x/tools/cmd/goimports
-	GO111MODULE=off go install golang.org/x/lint/golint
-	GO111MODULE=off go install honnef.co/go/tools/cmd/staticcheck
-	GO111MODULE=off go install github.com/kisielk/errcheck
-	GO111MODULE=off go install github.com/googleapis/api-linter/cmd/api-linter
-	GO111MODULE=off go install github.com/bufbuild/buf/cmd/buf
+	cd && go get -u golang.org/x/tools/cmd/goimports
+	cd && go get -u golang.org/x/lint/golint
+	cd && go get -u honnef.co/go/tools/cmd/staticcheck
+	cd && go get -u github.com/kisielk/errcheck
+	cd && go get -u github.com/googleapis/api-linter/cmd/api-linter
+	cd && go get -u github.com/bufbuild/buf/cmd/buf
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
-	GO111MODULE=off go install github.com/golang/mock/mockgen
+	cd && go get -u github.com/golang/mock/mockgen
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
-	GO111MODULE=off go install github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
-	GO111MODULE=off go install google.golang.org/grpc
+	cd && go get -u github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
+	cd && go get -u install google.golang.org/grpc
 
 update-tools: update-checkers update-mockgen update-proto-plugins
 
