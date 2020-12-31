@@ -67,7 +67,6 @@ const (
 type (
 	cassandraHistoryV2Persistence struct {
 		cassandraStore
-		sessionWithTrace *gocql.Session
 	}
 )
 
