@@ -34,6 +34,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
@@ -122,6 +123,9 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 		batch.Query(v2templateUpsertData,
 			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
 		err = h.session.ExecuteBatch(batch)
+		h.logger.Error("####### BATCH QUERY ERROR")
+		h.logger.Error(prettyPrint(batch.Entries), tag.Error(err))
+		h.logger.Error("####### BATCH QUERY ERROR")
 	} else {
 		query := h.session.Query(v2templateUpsertData,
 			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
