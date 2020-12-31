@@ -25,7 +25,6 @@
 package cassandra
 
 import (
-	"os"
 	"sync"
 
 	"github.com/gocql/gocql"
@@ -45,7 +44,6 @@ type (
 		logger           log.Logger
 		execStoreFactory *executionStoreFactory
 		session          *gocql.Session
-		sessionWithTrace *gocql.Session
 	}
 
 	executionStoreFactory struct {
@@ -61,18 +59,11 @@ func NewFactory(cfg config.Cassandra, clusterName string, logger log.Logger) *Fa
 	if err != nil {
 		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
 	}
-	sessionWithTrace, err := NewSession(cfg)
-	if err != nil {
-		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
-	}
-	trace := gocql.NewTraceWriter(sessionWithTrace, os.Stdout)
-	sessionWithTrace.SetTrace(trace)
 	return &Factory{
-		cfg:              cfg,
-		clusterName:      clusterName,
-		logger:           logger,
-		session:          session,
-		sessionWithTrace: sessionWithTrace,
+		cfg:         cfg,
+		clusterName: clusterName,
+		logger:      logger,
+		session:     session,
 	}
 }
 
@@ -88,7 +79,7 @@ func (f *Factory) NewShardStore() (p.ShardStore, error) {
 
 // NewHistoryStore returns a new history store
 func (f *Factory) NewHistoryStore() (p.HistoryStore, error) {
-	return newHistoryPersistence(f.session, f.sessionWithTrace, f.logger)
+	return newHistoryPersistence(f.session, f.logger)
 }
 
 // NewMetadataStore returns a metadata store that understands only v2

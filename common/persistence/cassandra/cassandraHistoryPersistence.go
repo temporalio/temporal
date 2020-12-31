@@ -83,16 +83,13 @@ func NewHistoryV2PersistenceFromSession(
 // newHistoryPersistence is used to create an instance of HistoryManager implementation
 func newHistoryPersistence(
 	session *gocql.Session,
-	sessionWithTrace *gocql.Session,
 	logger log.Logger,
 ) (p.HistoryStore, error) {
 	return &cassandraHistoryV2Persistence{
 		cassandraStore: cassandraStore{
 			session: session,
-
-			logger: logger,
+			logger:  logger,
 		},
-		sessionWithTrace: sessionWithTrace,
 	}, nil
 }
 
