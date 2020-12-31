@@ -143,7 +143,7 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 			ClusterMetadata:     params.ClusterMetadata,
 		},
 		EnableBatcher:                 dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
-		VisibilityQueue:               dc.GetStringProperty(dynamicconfig.VisibilityQueue, common.VisibilityQueueInternal),
+		VisibilityQueue:               dc.GetStringProperty(dynamicconfig.VisibilityQueue, common.VisibilityQueueInternalWithDualProcessor),
 		EnableParentClosePolicyWorker: dc.GetBoolProperty(dynamicconfig.EnableParentClosePolicyWorker, true),
 		ThrottledLogRPS:               dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
 		PersistenceGlobalMaxQPS:       dc.GetIntProperty(dynamicconfig.WorkerPersistenceGlobalMaxQPS, 0),
