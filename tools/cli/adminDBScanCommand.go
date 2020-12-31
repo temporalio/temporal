@@ -40,13 +40,13 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/persistence/versionhistory"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/persistence"
 	cassp "go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 )
@@ -235,7 +235,6 @@ func AdminDBScan(c *cli.Context) {
 	session := connectToCassandra(c)
 	defer session.Close()
 	historyStore := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
-	branchDecoder := codec.NewJSONPBEncoder()
 	scanOutputDirectories := createScanOutputDirectories()
 
 	reports := make(chan *ShardScanReport)
@@ -250,8 +249,7 @@ func AdminDBScan(c *cli.Context) {
 						rateLimiter,
 						executionsPageSize,
 						payloadSerializer,
-						historyStore,
-						branchDecoder)
+						historyStore)
 				}
 			}
 		}(i)
@@ -280,7 +278,6 @@ func scanShard(
 	executionsPageSize int,
 	payloadSerializer persistence.PayloadSerializer,
 	historyStore persistence.HistoryStore,
-	branchDecoder *codec.JSONPBEncoder,
 ) *ShardScanReport {
 	outputFiles, closeFn := createShardScanOutputFiles(shardID, scanOutputDirectories)
 	report := &ShardScanReport{
@@ -331,7 +328,6 @@ func scanShard(
 				s.ExecutionInfo,
 				s.ExecutionState,
 				s.NextEventID,
-				branchDecoder,
 				corruptedExecutionWriter,
 				checkFailureWriter,
 				shardID,
@@ -408,7 +404,6 @@ func verifyHistoryExists(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
-	branchDecoder *codec.JSONPBEncoder,
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
 	shardID int32,
@@ -417,16 +412,13 @@ func verifyHistoryExists(
 	totalDBRequests *int64,
 	execStore persistence.ExecutionStore,
 ) (VerificationResult, *persistence.InternalReadHistoryBranchResponse, *persistencespb.HistoryBranch) {
-	var branch persistencespb.HistoryBranch
-	versionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
-	if err != nil {
-		return VerificationResultCheckFailure, nil, nil
+	var branch *persistencespb.HistoryBranch
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
+	if err == nil {
+		branch, err = serialization.HistoryBranchFromBlob(currentVersionHistory.BranchToken,
+			enumspb.ENCODING_TYPE_PROTO3.String())
 	}
-	err = branchDecoder.Decode(versionHistory.BranchToken, &branch)
-	if err != nil {
-		return VerificationResultCheckFailure, nil, nil
-	}
-	byteBranch, err := byteKeyFromProto(&branch)
+
 	if err != nil {
 		checkFailureWriter.Add(&ExecutionCheckFailure{
 			ShardID:     shardID,
@@ -438,6 +430,8 @@ func verifyHistoryExists(
 		})
 		return VerificationResultCheckFailure, nil, nil
 	}
+
+	byteBranch, err := byteKeyFromProto(branch)
 	readHistoryBranchReq := &persistence.InternalReadHistoryBranchRequest{
 		TreeID:    branch.GetTreeId(),
 		BranchID:  branch.GetBranchId(),
@@ -503,7 +497,7 @@ func verifyHistoryExists(
 		})
 		return VerificationResultDetectedCorruption, nil, nil
 	}
-	return VerificationResultNoCorruption, history, &branch
+	return VerificationResultNoCorruption, history, branch
 }
 
 func verifyFirstHistoryEvent(
