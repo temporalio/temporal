@@ -333,7 +333,6 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 				WorkflowTaskScheduleId:     workflowTaskScheduleID,
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
-				EventBranchToken:           branchToken,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},

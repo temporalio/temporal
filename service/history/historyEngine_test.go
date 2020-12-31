@@ -5382,7 +5382,6 @@ func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo)
 		RetryMaximumInterval:              sourceInfo.RetryMaximumInterval,
 		RetryMaximumAttempts:              sourceInfo.RetryMaximumAttempts,
 		RetryNonRetryableErrorTypes:       sourceInfo.RetryNonRetryableErrorTypes,
-		EventBranchToken:                  sourceInfo.EventBranchToken,
 		VersionHistories:                  sourceInfo.VersionHistories,
 		ExecutionStats:                    sourceInfo.ExecutionStats,
 		StartVersion:                      sourceInfo.StartVersion,

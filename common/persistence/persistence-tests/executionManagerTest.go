@@ -3186,7 +3186,6 @@ func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo)
 		WorkflowTaskStartedId:      sourceInfo.WorkflowTaskStartedId,
 		WorkflowTaskRequestId:      sourceInfo.WorkflowTaskRequestId,
 		WorkflowTaskTimeout:        sourceInfo.WorkflowTaskTimeout,
-		EventBranchToken:           sourceInfo.EventBranchToken,
 		AutoResetPoints:            sourceInfo.AutoResetPoints,
 		ExecutionStats: &persistencespb.ExecutionStats{
 			HistorySize: sourceInfo.ExecutionStats.HistorySize,

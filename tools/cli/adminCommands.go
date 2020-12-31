@@ -133,20 +133,14 @@ func AdminDescribeWorkflow(c *cli.Context) {
 		prettyPrintJSONObject(resp.GetDatabaseMutableState())
 
 		fmt.Println(colorGreen("Current branch token:"))
-		currentBranchTokenBytes := resp.GetDatabaseMutableState().GetExecutionInfo().GetEventBranchToken()
-		if versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories(); versionHistories != nil {
-			// if VersionHistories is set, then all branch infos are stored in VersionHistories
-			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
-			if err != nil {
-				fmt.Println(colorRed("Unable to get current version history:"), err)
-			} else {
-				currentBranchTokenBytes = currentVersionHistory.GetBranchToken()
-			}
-		}
-
-		if len(currentBranchTokenBytes) > 0 {
+		versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
+		// if VersionHistories is set, then all branch infos are stored in VersionHistories
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+		if err != nil {
+			fmt.Println(colorRed("Unable to get current version history:"), err)
+		} else {
 			currentBranchToken := persistencespb.HistoryBranch{}
-			err := currentBranchToken.Unmarshal(currentBranchTokenBytes)
+			err := currentBranchToken.Unmarshal(currentVersionHistory.BranchToken)
 			if err != nil {
 				fmt.Println(colorRed("Unable to unmarshal current branch token:"), err)
 			} else {
@@ -226,13 +220,10 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	}
 	shardIDInt32 := int32(shardIDInt)
 	var branchTokens [][]byte
-	if versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories(); versionHistories != nil {
-		// if VersionHistories is set, then all branch infos are stored in VersionHistories
-		for _, historyItem := range versionHistories.GetHistories() {
-			branchTokens = append(branchTokens, historyItem.GetBranchToken())
-		}
-	} else {
-		branchTokens = append(branchTokens, resp.GetDatabaseMutableState().GetExecutionInfo().GetEventBranchToken())
+	versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
+	// if VersionHistories is set, then all branch infos are stored in VersionHistories
+	for _, historyItem := range versionHistories.GetHistories() {
+		branchTokens = append(branchTokens, historyItem.GetBranchToken())
 	}
 
 	for _, branchToken := range branchTokens {

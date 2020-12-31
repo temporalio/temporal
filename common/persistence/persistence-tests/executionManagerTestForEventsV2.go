@@ -126,7 +126,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				WorkflowTaskScheduleId:     2,
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
-				EventBranchToken:           []byte("branchToken1"),
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
 			NextEventID: 3,
@@ -157,7 +156,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
-	s.Equal([]byte("branchToken1"), info0.EventBranchToken)
 	s.assertChecksumsEqual(csum, state0.Checksum)
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
@@ -172,7 +170,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 		TaskStatus: 2,
 		StartedId:  5,
 	}}
-	updatedInfo.EventBranchToken = []byte("branchToken2")
 
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedState, int64(5), []int64{int64(4)}, nil, int64(3), nil, nil, nil, timerInfos, nil)
 	s.NoError(err2)
@@ -195,8 +192,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.TimerInfos))
-	info1 := state.ExecutionInfo
-	s.Equal([]byte("branchToken2"), info1.EventBranchToken)
 	s.assertChecksumsEqual(testWorkflowChecksum, state.Checksum)
 }
 
@@ -230,7 +225,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 				WorkflowTaskScheduleId:     2,
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
-				EventBranchToken:           nil,
 				VersionHistories:           versionHistories,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
@@ -355,7 +349,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 				WorkflowTaskScheduleId:     int64(2),
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
-				EventBranchToken:           []byte("branchToken1"),
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -388,7 +381,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	s.Equal(int64(3), newExecutionState.NextEventId)
 	s.Equal(common.EmptyEventID, newExecutionInfo.LastProcessedEvent)
 	s.Equal(int64(2), newExecutionInfo.WorkflowTaskScheduleId)
-	s.Equal([]byte("branchToken1"), newExecutionInfo.EventBranchToken)
 
 	newRunID, err5 := s.GetCurrentWorkflowRunID(namespaceID, workflowExecution.WorkflowId)
 	s.NoError(err5)
