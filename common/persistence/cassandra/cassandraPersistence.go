@@ -217,7 +217,7 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ?`
 
-	templateListWorkflowExecutionQuery = `SELECT run_id, execution, execution_encoding, execution_state, execution_state_encoding,next_event_id ` +
+	templateListWorkflowExecutionQuery = `SELECT run_id, execution, execution_encoding, execution_state, execution_state_encoding, next_event_id ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ?`
