@@ -32,10 +32,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/service/config"
 )
 
 // Fixed namespace values for now
@@ -141,21 +139,10 @@ type (
 )
 
 // newVisibilityPersistence is used to create an instance of VisibilityManager implementation
-func newVisibilityPersistence(cfg config.Cassandra, logger log.Logger) (p.VisibilityStore, error) {
-	cluster, err := cassandra.NewCassandraCluster(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
-	}
-
-	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = cfg.Consistency.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
-	cluster.Timeout = defaultSessionTimeout
-
-	session, err := cluster.CreateSession()
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
-	}
+func newVisibilityPersistence(
+	session *gocql.Session,
+	logger log.Logger,
+) (p.VisibilityStore, error) {
 
 	return &cassandraVisibilityPersistence{
 		cassandraStore: cassandraStore{session: session, logger: logger},

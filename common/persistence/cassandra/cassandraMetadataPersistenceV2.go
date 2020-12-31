@@ -30,12 +30,10 @@ import (
 	"github.com/gocql/gocql"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/service/config"
 )
 
 const (
@@ -98,22 +96,12 @@ type (
 	}
 )
 
-// newMetadataPersistenceV2 is used to create an instance of the Namespace MetadataStore implementation
-func newMetadataPersistenceV2(cfg config.Cassandra, currentClusterName string, logger log.Logger) (p.MetadataStore, error) {
-	cluster, err := cassandra.NewCassandraCluster(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
-	}
-	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = cfg.Consistency.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
-	cluster.Timeout = defaultSessionTimeout
-
-	session, err := cluster.CreateSession()
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
-	}
-
+// newMetadataPersistence is used to create an instance of the Namespace MetadataStore implementation
+func newMetadataPersistence(
+	session *gocql.Session,
+	currentClusterName string,
+	logger log.Logger,
+) (p.MetadataStore, error) {
 	return &cassandraMetadataPersistenceV2{
 		cassandraStore:     cassandraStore{session: session, logger: logger},
 		currentClusterName: currentClusterName,
