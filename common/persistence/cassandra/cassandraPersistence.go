@@ -36,7 +36,6 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -44,7 +43,6 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/service/config"
 )
 
 //	"go.temporal.io/api/serviceerror"
@@ -727,21 +725,11 @@ type (
 var _ p.ExecutionStore = (*cassandraPersistence)(nil)
 
 // newShardPersistence is used to create an instance of ShardManager implementation
-func newShardPersistence(cfg config.Cassandra, clusterName string, logger log.Logger) (p.ShardStore, error) {
-	cluster, err := cassandra.NewCassandraCluster(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
-	}
-	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = cfg.Consistency.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
-	cluster.Timeout = defaultSessionTimeout
-
-	session, err := cluster.CreateSession()
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
-	}
-
+func newShardPersistence(
+	session *gocql.Session,
+	clusterName string,
+	logger log.Logger,
+) (p.ShardStore, error) {
 	return &cassandraPersistence{
 		cassandraStore:     cassandraStore{session: session, logger: logger},
 		shardID:            -1,
@@ -755,24 +743,21 @@ func NewWorkflowExecutionPersistence(
 	session *gocql.Session,
 	logger log.Logger,
 ) (p.ExecutionStore, error) {
-	return &cassandraPersistence{cassandraStore: cassandraStore{session: session, logger: logger}, shardID: shardID}, nil
+	return &cassandraPersistence{
+		cassandraStore: cassandraStore{session: session, logger: logger},
+		shardID:        shardID,
+	}, nil
 }
 
 // newTaskPersistence is used to create an instance of TaskManager implementation
-func newTaskPersistence(cfg config.Cassandra, logger log.Logger) (p.TaskStore, error) {
-	cluster, err := cassandra.NewCassandraCluster(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
-	}
-	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = cfg.Consistency.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
-	cluster.Timeout = defaultSessionTimeout
-	session, err := cluster.CreateSession()
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
-	}
-	return &cassandraPersistence{cassandraStore: cassandraStore{session: session, logger: logger}, shardID: -1}, nil
+func newTaskPersistence(
+	session *gocql.Session,
+	logger log.Logger,
+) (p.TaskStore, error) {
+	return &cassandraPersistence{
+		cassandraStore: cassandraStore{session: session, logger: logger},
+		shardID:        -1,
+	}, nil
 }
 
 func (d *cassandraStore) GetName() string {

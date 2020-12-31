@@ -70,8 +70,8 @@ type (
 		NewTaskStore() (p.TaskStore, error)
 		// NewShardStore returns a new shard store
 		NewShardStore() (p.ShardStore, error)
-		// NewHistoryV2Store returns a new historyV2 store
-		NewHistoryV2Store() (p.HistoryStore, error)
+		// NewHistoryStore returns a new history store
+		NewHistoryStore() (p.HistoryStore, error)
 		// NewMetadataStore returns a new metadata store
 		NewMetadataStore() (p.MetadataStore, error)
 		// NewExecutionStore returns an execution store for given shardID
@@ -190,7 +190,7 @@ func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 // NewHistoryManager returns a new history manager
 func (f *factoryImpl) NewHistoryManager() (p.HistoryManager, error) {
 	ds := f.datastores[storeTypeHistory]
-	store, err := ds.factory.NewHistoryV2Store()
+	store, err := ds.factory.NewHistoryStore()
 	if err != nil {
 		return nil, err
 	}

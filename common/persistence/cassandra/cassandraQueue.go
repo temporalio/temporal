@@ -35,11 +35,9 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/service/config"
 )
 
 const (
@@ -75,24 +73,10 @@ type (
 )
 
 func newQueue(
-	cfg config.Cassandra,
+	session *gocql.Session,
 	logger log.Logger,
 	queueType persistence.QueueType,
 ) (persistence.Queue, error) {
-	cluster, err := cassandra.NewCassandraCluster(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
-	}
-
-	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = cfg.Consistency.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
-	cluster.Timeout = defaultSessionTimeout
-
-	session, err := cluster.CreateSession()
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
-	}
 
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	retryPolicy.SetBackoffCoefficient(1.5)

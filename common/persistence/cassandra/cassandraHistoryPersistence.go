@@ -33,13 +33,11 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/service/config"
 )
 
 const (
@@ -80,26 +78,14 @@ func NewHistoryV2PersistenceFromSession(
 	return &cassandraHistoryV2Persistence{cassandraStore: cassandraStore{session: session, logger: logger}}
 }
 
-// newHistoryV2Persistence is used to create an instance of HistoryManager implementation
-func newHistoryV2Persistence(
-	cfg config.Cassandra,
+// newHistoryPersistence is used to create an instance of HistoryManager implementation
+func newHistoryPersistence(
+	session *gocql.Session,
 	logger log.Logger,
 ) (p.HistoryStore, error) {
-
-	cluster, err := cassandra.NewCassandraCluster(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
-	}
-	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = cfg.Consistency.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
-	cluster.Timeout = defaultSessionTimeout
-	session, err := cluster.CreateSession()
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
-	}
-
-	return &cassandraHistoryV2Persistence{cassandraStore: cassandraStore{session: session, logger: logger}}, nil
+	return &cassandraHistoryV2Persistence{
+		cassandraStore: cassandraStore{session: session, logger: logger},
+	}, nil
 }
 
 // AppendHistoryNodes upsert a batch of events as a single node to a history branch

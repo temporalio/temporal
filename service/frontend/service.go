@@ -72,9 +72,6 @@ type Config struct {
 	DisallowQuery              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ShutdownDrainDuration      dynamicconfig.DurationPropertyFn
 
-	// Persistence settings
-	HistoryMgrNumConns dynamicconfig.IntPropertyFn
-
 	MaxBadBinaries dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// security protection settings
@@ -133,7 +130,6 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		MaxNamespaceRPSPerInstance:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 1200),
 		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
 		MaxIDLengthLimit:                       dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
-		HistoryMgrNumConns:                     dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
 		MaxBadBinaries:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxBadBinaries, namespace.MaxBadBinaries),
 		EnableAdminProtection:                  dc.GetBoolProperty(dynamicconfig.EnableAdminProtection, false),
 		AdminOperationToken:                    dc.GetStringProperty(dynamicconfig.AdminOperationToken, common.DefaultAdminOperationToken),
@@ -181,7 +177,6 @@ func NewService(
 	isAdvancedVisExistInConfig := len(params.PersistenceConfig.AdvancedVisibilityStore) != 0
 	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.PersistenceConfig.NumHistoryShards, isAdvancedVisExistInConfig)
 
-	params.PersistenceConfig.HistoryMaxConns = serviceConfig.HistoryMgrNumConns()
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
 		VisibilityListMaxQPS: serviceConfig.VisibilityListMaxQPS,
 		EnableSampling:       serviceConfig.EnableVisibilitySampling,

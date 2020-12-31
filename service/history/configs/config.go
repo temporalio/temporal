@@ -137,10 +137,6 @@ type Config struct {
 	ReplicatorProcessorEnablePriorityTaskProcessor         dynamicconfig.BoolPropertyFn
 	ReplicatorProcessorFetchTasksBatchSize                 dynamicconfig.IntPropertyFn
 
-	// Persistence settings
-	ExecutionMgrNumConns dynamicconfig.IntPropertyFn
-	HistoryMgrNumConns   dynamicconfig.IntPropertyFn
-
 	// System Limits
 	MaximumBufferedEventsBatch dynamicconfig.IntPropertyFn
 	MaximumSignalsPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -362,8 +358,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		ReplicationTaskProcessorHostQPS:                        dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorHostQPS, 1500),
 		ReplicationTaskProcessorShardQPS:                       dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorShardQPS, 30),
 
-		ExecutionMgrNumConns:            dc.GetIntProperty(dynamicconfig.ExecutionMgrNumConns, 50),
-		HistoryMgrNumConns:              dc.GetIntProperty(dynamicconfig.HistoryMgrNumConns, 50),
 		MaximumBufferedEventsBatch:      dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsBatch, 100),
 		MaximumSignalsPerExecution:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MaximumSignalsPerExecution, 0),
 		ShardUpdateMinInterval:          dc.GetDurationProperty(dynamicconfig.ShardUpdateMinInterval, 5*time.Minute),

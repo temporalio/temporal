@@ -25,13 +25,12 @@
 package cassandra
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/gocql/gocql"
 
-	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/service/config"
 )
@@ -44,7 +43,9 @@ type (
 		clusterName      string
 		logger           log.Logger
 		execStoreFactory *executionStoreFactory
+		session          *gocql.Session
 	}
+
 	executionStoreFactory struct {
 		session *gocql.Session
 		logger  log.Logger
@@ -54,36 +55,41 @@ type (
 // NewFactory returns an instance of a factory object which can be used to create
 // datastores that are backed by cassandra
 func NewFactory(cfg config.Cassandra, clusterName string, logger log.Logger) *Factory {
+	session, err := NewSession(cfg)
+	if err != nil {
+		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
+	}
 	return &Factory{
 		cfg:         cfg,
 		clusterName: clusterName,
 		logger:      logger,
+		session:     session,
 	}
 }
 
 // NewTaskStore returns a new task store
 func (f *Factory) NewTaskStore() (p.TaskStore, error) {
-	return newTaskPersistence(f.cfg, f.logger)
+	return newTaskPersistence(f.session, f.logger)
 }
 
 // NewShardStore returns a new shard store
 func (f *Factory) NewShardStore() (p.ShardStore, error) {
-	return newShardPersistence(f.cfg, f.clusterName, f.logger)
+	return newShardPersistence(f.session, f.clusterName, f.logger)
 }
 
-// NewHistoryV2Store returns a new history store
-func (f *Factory) NewHistoryV2Store() (p.HistoryStore, error) {
-	return newHistoryV2Persistence(f.cfg, f.logger)
+// NewHistoryStore returns a new history store
+func (f *Factory) NewHistoryStore() (p.HistoryStore, error) {
+	return newHistoryPersistence(f.session, f.logger)
 }
 
 // NewMetadataStore returns a metadata store that understands only v2
 func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
-	return newMetadataPersistenceV2(f.cfg, f.clusterName, f.logger)
+	return newMetadataPersistence(f.session, f.clusterName, f.logger)
 }
 
 // NewClusterMetadataStore returns a metadata store
 func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
-	return newClusterMetadataInstance(f.cfg, f.logger)
+	return newClusterMetadataInstance(f.session, f.logger)
 }
 
 // NewExecutionStore returns an ExecutionStore for a given shardID
@@ -97,12 +103,12 @@ func (f *Factory) NewExecutionStore(shardID int32) (p.ExecutionStore, error) {
 
 // NewVisibilityStore returns a visibility store
 func (f *Factory) NewVisibilityStore() (p.VisibilityStore, error) {
-	return newVisibilityPersistence(f.cfg, f.logger)
+	return newVisibilityPersistence(f.session, f.logger)
 }
 
 // NewQueue returns a new queue backed by cassandra
 func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
-	return newQueue(f.cfg, f.logger, queueType)
+	return newQueue(f.session, f.logger, queueType)
 }
 
 // Close closes the factory
@@ -121,36 +127,32 @@ func (f *Factory) executionStoreFactory() (*executionStoreFactory, error) {
 		return f.execStoreFactory, nil
 	}
 	f.RUnlock()
+
 	f.Lock()
 	defer f.Unlock()
+
 	if f.execStoreFactory != nil {
 		return f.execStoreFactory, nil
 	}
 
-	factory, err := newExecutionStoreFactory(f.cfg, f.logger)
+	factory, err := newExecutionStoreFactory(f.session, f.logger)
 	if err != nil {
 		return nil, err
 	}
+
 	f.execStoreFactory = factory
 	return f.execStoreFactory, nil
 }
 
 // newExecutionStoreFactory is used to create an instance of ExecutionStoreFactory implementation
-func newExecutionStoreFactory(cfg config.Cassandra, logger log.Logger) (*executionStoreFactory, error) {
-	cluster, err := cassandra.NewCassandraCluster(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
-	}
-
-	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = cfg.Consistency.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
-	cluster.Timeout = defaultSessionTimeout
-	session, err := cluster.CreateSession()
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
-	}
-	return &executionStoreFactory{session: session, logger: logger}, nil
+func newExecutionStoreFactory(
+	session *gocql.Session,
+	logger log.Logger,
+) (*executionStoreFactory, error) {
+	return &executionStoreFactory{
+		session: session,
+		logger:  logger,
+	}, nil
 }
 
 func (f *executionStoreFactory) close() {
@@ -158,7 +160,9 @@ func (f *executionStoreFactory) close() {
 }
 
 // new implements ExecutionStoreFactory interface
-func (f *executionStoreFactory) new(shardID int32) (p.ExecutionStore, error) {
+func (f *executionStoreFactory) new(
+	shardID int32,
+) (p.ExecutionStore, error) {
 	pmgr, err := NewWorkflowExecutionPersistence(shardID, f.session, f.logger)
 	if err != nil {
 		return nil, err

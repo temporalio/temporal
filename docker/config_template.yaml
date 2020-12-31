@@ -20,6 +20,7 @@ persistence:
                 user: {{ default .Env.CASSANDRA_USER "" }}
                 password: {{ default .Env.CASSANDRA_PASSWORD "" }}
                 port: {{ default .Env.CASSANDRA_PORT "9042" }}
+                maxConns: {{ default .Env.CASSANDRA_MAX_CONNS "20" }}
                 tls:
                     enabled: {{ default .Env.CASSANDRA_TLS_ENABLED "false" }}
                     caFile: {{ default .Env.CASSANDRA_CA ""}}
@@ -37,6 +38,7 @@ persistence:
                 user: {{ default .Env.CASSANDRA_USER "" }}
                 password: {{ default .Env.CASSANDRA_PASSWORD "" }}
                 port: {{ default .Env.CASSANDRA_PORT "9042" }}
+                maxConns: {{ default .Env.CASSANDRA_MAX_CONNS "10" }}
                 tls:
                     enabled: {{ default .Env.CASSANDRA_TLS_ENABLED "false" }}
                     caFile: {{ default .Env.CASSANDRA_CA ""}}
@@ -74,8 +76,8 @@ persistence:
                 connectAttributes:
                     tx_isolation: 'READ-COMMITTED'
                 {{- end }}
-                maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "20" }}
-                maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "20" }}
+                maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "10" }}
+                maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "10" }}
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
         {{- else if eq $db "postgresql" }}
         default:
@@ -97,8 +99,8 @@ persistence:
                 connectProtocol: "tcp"
                 user: {{ default .Env.POSTGRES_USER "" }}
                 password: {{ default .Env.POSTGRES_PWD "" }}
-                maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "20" }}
-                maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "20" }}
+                maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "10" }}
+                maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "10" }}
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
         {{- end }}
         {{- if eq $es "true" }}

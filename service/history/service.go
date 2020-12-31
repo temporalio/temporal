@@ -66,7 +66,6 @@ func NewService(
 		params.PersistenceConfig.NumHistoryShards,
 		params.PersistenceConfig.IsAdvancedVisibilityConfigExist())
 
-	params.PersistenceConfig.HistoryMaxConns = serviceConfig.HistoryMgrNumConns()
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
 		VisibilityOpenMaxQPS:   serviceConfig.VisibilityOpenMaxQPS,
 		VisibilityClosedMaxQPS: serviceConfig.VisibilityClosedMaxQPS,
