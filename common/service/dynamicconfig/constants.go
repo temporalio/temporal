@@ -230,8 +230,6 @@ var keys = map[Key]string{
 	ReplicatorProcessorRedispatchIntervalJitterCoefficient: "history.replicatorProcessorRedispatchIntervalJitterCoefficient",
 	ReplicatorProcessorMaxRedispatchQueueSize:              "history.replicatorProcessorMaxRedispatchQueueSize",
 	ReplicatorProcessorEnablePriorityTaskProcessor:         "history.replicatorProcessorEnablePriorityTaskProcessor",
-	ExecutionMgrNumConns:                                   "history.executionMgrNumConns",
-	HistoryMgrNumConns:                                     "history.historyMgrNumConns",
 	MaximumBufferedEventsBatch:                             "history.maximumBufferedEventsBatch",
 	MaximumSignalsPerExecution:                             "history.maximumSignalsPerExecution",
 	ShardUpdateMinInterval:                                 "history.shardUpdateMinInterval",
@@ -661,10 +659,6 @@ const (
 	ReplicatorProcessorMaxRedispatchQueueSize
 	// ReplicatorProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for ReplicatorProcessor
 	ReplicatorProcessorEnablePriorityTaskProcessor
-	// ExecutionMgrNumConns is persistence connections number for ExecutionManager
-	ExecutionMgrNumConns
-	// HistoryMgrNumConns is persistence connections number for HistoryManager
-	HistoryMgrNumConns
 	// MaximumBufferedEventsBatch is max number of buffer event in mutable state
 	MaximumBufferedEventsBatch
 	// MaximumSignalsPerExecution is max number of signals supported by single execution

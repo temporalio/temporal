@@ -205,9 +205,6 @@ type (
 		VisibilityStore string `yaml:"visibilityStore" validate:"nonzero"`
 		// AdvancedVisibilityStore is the name of the datastore to be used for visibility records
 		AdvancedVisibilityStore string `yaml:"advancedVisibilityStore"`
-		// HistoryMaxConns is the desired number of conns to history store. Value specified
-		// here overrides the MaxConns config specified as part of datastore
-		HistoryMaxConns int `yaml:"historyMaxConns"`
 		// NumHistoryShards is the desired number of history shards. This config doesn't
 		// belong here, needs refactoring
 		NumHistoryShards int32 `yaml:"numHistoryShards" validate:"nonzero"`
