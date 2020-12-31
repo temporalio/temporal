@@ -67,6 +67,7 @@ const (
 type (
 	cassandraHistoryV2Persistence struct {
 		cassandraStore
+		sessionWithTrace *gocql.Session
 	}
 )
 
@@ -82,10 +83,16 @@ func NewHistoryV2PersistenceFromSession(
 // newHistoryPersistence is used to create an instance of HistoryManager implementation
 func newHistoryPersistence(
 	session *gocql.Session,
+	sessionWithTrace *gocql.Session,
 	logger log.Logger,
 ) (p.HistoryStore, error) {
 	return &cassandraHistoryV2Persistence{
-		cassandraStore: cassandraStore{session: session, logger: logger},
+		cassandraStore: cassandraStore{
+			session: session,
+
+			logger: logger,
+		},
+		sessionWithTrace: sessionWithTrace,
 	}, nil
 }
 
@@ -117,15 +124,13 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 			return convertCommonErrors("AppendHistoryNodes", err)
 		}
 
-		batch := h.session.NewBatch(gocql.LoggedBatch)
+		batch := h.sessionWithTrace.NewBatch(gocql.LoggedBatch)
 		batch.Query(v2templateInsertTree,
 			branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.EncodingType.String())
 		batch.Query(v2templateUpsertData,
 			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
-		err = h.session.ExecuteBatch(batch)
-		h.logger.Error("####### BATCH QUERY ERROR")
-		h.logger.Error(prettyPrint(batch.Entries), tag.Error(err))
-		h.logger.Error("####### BATCH QUERY ERROR")
+		err = h.sessionWithTrace.ExecuteBatch(batch)
+		h.logger.Info(fmt.Sprintf("####### BATCH QUERY: %v", prettyPrint(batch.Entries)), tag.Error(err))
 	} else {
 		query := h.session.Query(v2templateUpsertData,
 			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
