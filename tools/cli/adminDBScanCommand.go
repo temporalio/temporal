@@ -65,6 +65,7 @@ const (
 	InvalidFirstEvent = "invalid_first_event"
 	// OpenExecutionInvalidCurrentExecution is the CorruptionType that indicates there is an orphan concrete execution
 	OpenExecutionInvalidCurrentExecution = "open_execution_invalid_current_execution"
+	CorruptActivityIdPresent = "corrupt_activity_id_present"
 )
 
 const (
@@ -167,9 +168,11 @@ type (
 		TotalHistoryMissing                            int64
 		TotalInvalidFirstEvent                         int64
 		TotalOpenExecutionInvalidCurrentExecution      int64
+		TotalActivityIdsCorrupted                      int64
 		PercentageHistoryMissing                       float64
 		PercentageInvalidStartEvent                    float64
 		PercentageOpenExecutionInvalidCurrentExecution float64
+		PercentageActivityIdsCorrupted                 float64
 	}
 
 	// Rates indicates the rates at which the scan is progressing
@@ -395,6 +398,26 @@ func scanShard(
 				report.Scanned.ExecutionCheckFailureCount++
 				continue
 			}
+
+			activityIdsVerificationResult := verifyActivityIds(
+				shardID,
+				s.NextEventID,
+				s.ActivityInfos,
+				s.ExecutionInfo,
+				s.ExecutionState,
+				corruptedExecutionWriter,
+				historyBranch,
+				)
+			switch activityIdsVerificationResult {
+			case VerificationResultNoCorruption:
+			case VerificationResultDetectedCorruption:
+				report.Scanned.CorruptionTypeBreakdown.TotalActivityIdsCorrupted++
+				report.Scanned.CorruptedExecutionsCount++
+				continue
+			case VerificationResultCheckFailure:
+				report.Scanned.ExecutionCheckFailureCount++
+				continue
+			}
 		}
 	}
 	return report
@@ -560,6 +583,48 @@ func verifyFirstHistoryEvent(
 			},
 		})
 		return VerificationResultDetectedCorruption
+	}
+	return VerificationResultNoCorruption
+}
+
+// Checks for validity of activity ids.
+// This refers to an accident when DB or our code wrote incorrect values that looked like some huge int64s.
+func verifyActivityIds(
+	shardID int32,
+	nextEventID int64,
+	activityInfos map[int64]*persistencespb.ActivityInfo,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	corruptedExecutionWriter BufferedWriter,
+	branch *persistencespb.HistoryBranch,
+	) (
+	VerificationResult,
+) {
+	if (len(activityInfos) > 0) {
+		for activityId, _ := range activityInfos {
+			if activityId >= nextEventID {
+				byteBranch, err := byteKeyFromProto(branch)
+				if err != nil {
+					return VerificationResultCheckFailure
+				}
+				corruptedExecutionWriter.Add(&CorruptedExecution{
+					ShardID:     shardID,
+					NamespaceID: executionInfo.NamespaceId,
+					WorkflowID:  executionInfo.WorkflowId,
+					RunID:       executionState.GetRunId(),
+					NextEventID: nextEventID,
+					TreeID:      byteBranch.GetTreeId(),
+					BranchID:    byteBranch.GetBranchId(),
+					CloseStatus: executionState.Status,
+					CorruptedExceptionMetadata: CorruptedExceptionMetadata{
+						CorruptionType: CorruptActivityIdPresent,
+						Note:           "ActivityID greater than NextEventID present",
+						Details:        fmt.Sprint(activityId),
+					},
+				})
+				return VerificationResultDetectedCorruption
+			}
+		}
 	}
 	return VerificationResultNoCorruption
 }
