@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/elasticsearch"
-	esmock "go.temporal.io/server/common/elasticsearch/mocks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
@@ -480,8 +479,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	handler.params.DynamicConfig = dynamicConfig
 	// add advanced visibility store related config
 	handler.params.ESConfig = &elasticsearch.Config{}
-	esClient := &esmock.Client{}
-	defer func() { esClient.AssertExpectations(s.T()) }()
+	esClient := elasticsearch.NewMockClient(s.controller)
 	handler.params.ESClient = esClient
 
 	mockValidAttr := map[string]interface{}{
@@ -550,7 +548,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	s.Equal(convertFailedTest.Expected, err)
 	s.Nil(resp)
 
-	esClient.On("PutMapping", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+	esClient.EXPECT().PutMapping(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(errors.New("error"))
 	esErrorTest := test{
 		Name: "es error",
