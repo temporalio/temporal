@@ -25,34 +25,34 @@
 package elasticsearch
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/olivere/elastic"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	es "go.temporal.io/server/common/elasticsearch"
-	esMocks "go.temporal.io/server/common/elasticsearch/mocks"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	metricsmocks "go.temporal.io/server/common/metrics/mocks"
 	"go.temporal.io/server/common/service/dynamicconfig"
-	"go.temporal.io/server/service/worker/indexer/mocks"
 )
 
 type esProcessorSuite struct {
 	suite.Suite
+	controller        *gomock.Controller
 	esProcessor       *esProcessorImpl
-	mockBulkProcessor *mocks.ElasticBulkProcessor
+	mockBulkProcessor *MockElasticBulkProcessor
 	mockMetricClient  *metricsmocks.Client
-	mockESClient      *esMocks.Client
+	mockESClient      *es.MockClient
 }
 
 var (
@@ -75,6 +75,8 @@ func (s *esProcessorSuite) SetupTest() {
 	zapLogger, err := zap.NewDevelopment()
 	s.Require().NoError(err)
 
+	s.controller = gomock.NewController(s.T())
+
 	cfg := &ProcessorConfig{
 		IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
 		ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
@@ -83,8 +85,9 @@ func (s *esProcessorSuite) SetupTest() {
 		ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
 	s.mockMetricClient = &metricsmocks.Client{}
-	s.mockBulkProcessor = &mocks.ElasticBulkProcessor{}
-	s.mockESClient = &esMocks.Client{}
+
+	s.mockBulkProcessor = NewMockElasticBulkProcessor(s.controller)
+	s.mockESClient = es.NewMockClient(s.controller)
 	s.esProcessor = NewProcessor(cfg, s.mockESClient, loggerimpl.NewLogger(zapLogger), s.mockMetricClient)
 
 	// esProcessor.Start mock
@@ -93,9 +96,8 @@ func (s *esProcessorSuite) SetupTest() {
 }
 
 func (s *esProcessorSuite) TearDownTest() {
-	s.mockBulkProcessor.AssertExpectations(s.T())
+	s.controller.Finish()
 	s.mockMetricClient.AssertExpectations(s.T())
-	s.mockESClient.AssertExpectations(s.T())
 }
 
 func (s *esProcessorSuite) TestNewESProcessorAndStartStop() {
@@ -109,16 +111,18 @@ func (s *esProcessorSuite) TestNewESProcessorAndStartStop() {
 
 	p := NewProcessor(config, s.mockESClient, s.esProcessor.logger, &metricsmocks.Client{})
 
-	s.mockESClient.On("RunBulkProcessor", mock.Anything, mock.MatchedBy(func(input *es.BulkProcessorParameters) bool {
-		s.Equal(visibilityProcessorName, input.Name)
-		s.Equal(config.ESProcessorNumOfWorkers(), input.NumOfWorkers)
-		s.Equal(config.ESProcessorBulkActions(), input.BulkActions)
-		s.Equal(config.ESProcessorBulkSize(), input.BulkSize)
-		s.Equal(config.ESProcessorFlushInterval(), input.FlushInterval)
-		s.NotNil(input.Backoff)
-		s.NotNil(input.AfterFunc)
-		return true
-	})).Return(&elastic.BulkProcessor{}, nil).Once()
+	s.mockESClient.EXPECT().RunBulkProcessor(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *es.BulkProcessorParameters) (*elastic.BulkProcessor, error) {
+			s.Equal(visibilityProcessorName, input.Name)
+			s.Equal(config.ESProcessorNumOfWorkers(), input.NumOfWorkers)
+			s.Equal(config.ESProcessorBulkActions(), input.BulkActions)
+			s.Equal(config.ESProcessorBulkSize(), input.BulkSize)
+			s.Equal(config.ESProcessorFlushInterval(), input.FlushInterval)
+			s.NotNil(input.Backoff)
+			s.NotNil(input.AfterFunc)
+			return &elastic.BulkProcessor{}, nil
+		}).
+		Times(1)
 
 	p.Start()
 	s.NotNil(p.mapToAckChan)
@@ -135,7 +139,7 @@ func (s *esProcessorSuite) TestAdd() {
 	ackCh := make(chan bool, 1)
 	s.Equal(0, s.esProcessor.mapToAckChan.Len())
 
-	s.mockBulkProcessor.On("Add", request).Return().Once()
+	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
 	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
 
 	s.esProcessor.Add(request, visibilityTaskKey, ackCh)
@@ -171,7 +175,7 @@ func (s *esProcessorSuite) TestAdd_ConcurrentAdd() {
 	}
 	wg := &sync.WaitGroup{}
 	wg.Add(duplicates)
-	s.mockBulkProcessor.On("Add", request).Return().Once()
+	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
 	for i := 0; i < duplicates; i++ {
 		go addFunc(wg)
 	}
@@ -311,7 +315,7 @@ func (s *esProcessorSuite) TestAckChan() {
 
 	request := elastic.NewBulkIndexRequest()
 	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
-	s.mockBulkProcessor.On("Add", request).Return().Once()
+	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
 	ackCh := make(chan bool, 1)
 	s.esProcessor.Add(request, key, ackCh)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
@@ -332,7 +336,7 @@ func (s *esProcessorSuite) TestNackChan() {
 	s.esProcessor.sendToAckChan(key, false)
 
 	request := elastic.NewBulkIndexRequest()
-	s.mockBulkProcessor.On("Add", request).Return().Once()
+	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
 	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
 	ackCh := make(chan bool, 1)
 	s.esProcessor.Add(request, key, ackCh)

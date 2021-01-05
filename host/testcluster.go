@@ -162,7 +162,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	if options.WorkerConfig.EnableIndexer {
 		advancedVisibilityWritingMode = dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOn)
 		var err error
-		esClient, err = elasticsearch.NewClient(options.ESConfig)
+		esClient, err = elasticsearch.NewClientV6(options.ESConfig)
 		if err != nil {
 			return nil, err
 		}
