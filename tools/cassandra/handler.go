@@ -35,6 +35,9 @@ import (
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/schema/cassandra"
 	"go.temporal.io/server/tools/common/schema"
+
+	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 )
 
 const defaultNumReplicas = 1
@@ -53,7 +56,20 @@ type SetupSchemaConfig struct {
 func VerifyCompatibleVersion(
 	cfg config.Persistence,
 ) error {
+	g, _ := errgroup.WithContext(context.Background())
+	g.Go(func() error {
+		return checkTemporalKeyspace(cfg)
+	})
+	g.Go(func() error {
+		return checkVisibilityKeyspace(cfg)
+	})
 
+	return g.Wait()
+}
+
+func checkTemporalKeyspace(
+	cfg config.Persistence,
+) error {
 	ds, ok := cfg.DataStores[cfg.DefaultStore]
 	if ok && ds.Cassandra != nil {
 		err := checkCompatibleVersion(*ds.Cassandra, cassandra.Version)
@@ -61,13 +77,21 @@ func VerifyCompatibleVersion(
 			return err
 		}
 	}
-	ds, ok = cfg.DataStores[cfg.VisibilityStore]
+
+	return nil
+}
+
+func checkVisibilityKeyspace(
+	cfg config.Persistence,
+) error {
+	ds, ok := cfg.DataStores[cfg.VisibilityStore]
 	if ok && ds.Cassandra != nil {
 		err := checkCompatibleVersion(*ds.Cassandra, cassandra.VisibilityVersion)
 		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
