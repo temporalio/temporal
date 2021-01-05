@@ -25,14 +25,15 @@
 package indexer
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/olivere/elastic"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
@@ -40,7 +41,6 @@ import (
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
 	es "go.temporal.io/server/common/elasticsearch"
-	esMocks "go.temporal.io/server/common/elasticsearch/mocks"
 	"go.temporal.io/server/common/log/loggerimpl"
 	msgMocks "go.temporal.io/server/common/messaging/mocks"
 	"go.temporal.io/server/common/metrics"
@@ -51,10 +51,11 @@ import (
 
 type esProcessorSuite struct {
 	suite.Suite
+	controller        *gomock.Controller
 	esProcessor       *esProcessorImpl
 	mockBulkProcessor *mocks.ElasticBulkProcessor
 	mockMetricClient  *mmocks.Client
-	mockESClient      *esMocks.Client
+	mockESClient      *es.MockClient
 }
 
 var (
@@ -75,6 +76,7 @@ func (s *esProcessorSuite) SetupSuite() {
 }
 
 func (s *esProcessorSuite) SetupTest() {
+	s.controller = gomock.NewController(s.T())
 	config := &Config{
 		IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
 		ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
@@ -99,13 +101,13 @@ func (s *esProcessorSuite) SetupTest() {
 
 	s.esProcessor = p
 
-	s.mockESClient = &esMocks.Client{}
+	s.mockESClient = es.NewMockClient(s.controller)
 }
 
 func (s *esProcessorSuite) TearDownTest() {
 	s.mockBulkProcessor.AssertExpectations(s.T())
 	s.mockMetricClient.AssertExpectations(s.T())
-	s.mockESClient.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *esProcessorSuite) TestNewESProcessorAndStart() {
@@ -117,7 +119,7 @@ func (s *esProcessorSuite) TestNewESProcessorAndStart() {
 	}
 	processorName := "test-processor"
 
-	s.mockESClient.On("RunBulkProcessor", mock.Anything, mock.MatchedBy(func(input *es.BulkProcessorParameters) bool {
+	s.mockESClient.EXPECT().RunBulkProcessor(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, input *es.BulkProcessorParameters) (*elastic.BulkProcessor, error) {
 		s.Equal(processorName, input.Name)
 		s.Equal(config.ESProcessorNumOfWorkers(), input.NumOfWorkers)
 		s.Equal(config.ESProcessorBulkActions(), input.BulkActions)
@@ -125,8 +127,8 @@ func (s *esProcessorSuite) TestNewESProcessorAndStart() {
 		s.Equal(config.ESProcessorFlushInterval(), input.FlushInterval)
 		s.NotNil(input.Backoff)
 		s.NotNil(input.AfterFunc)
-		return true
-	})).Return(&elastic.BulkProcessor{}, nil).Once()
+		return &elastic.BulkProcessor{}, nil
+	}).Times(1)
 	p, err := NewESProcessorAndStart(config, s.mockESClient, processorName, s.esProcessor.logger, &mmocks.Client{}, codec.NewJSONPBEncoder())
 	s.NoError(err)
 
