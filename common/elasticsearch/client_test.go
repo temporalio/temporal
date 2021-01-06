@@ -48,7 +48,8 @@ func Test_BuildPutMappingBody(t *testing.T) {
 	k := "testKey"
 	v := "text"
 
+	var client clientV6
 	for _, test := range tests {
-		require.Equal(t, test.expected, fmt.Sprintf("%v", buildPutMappingBody(test.root, k, v)))
+		require.Equal(t, test.expected, fmt.Sprintf("%v", client.buildPutMappingBody(test.root, k, v)))
 	}
 }

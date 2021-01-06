@@ -520,7 +520,9 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	token := &esVisibilityPageToken{From: 0}
 
 	// test for empty hits
-	searchHits := &elastic.SearchHits{}
+	searchHits := &elastic.SearchHits{
+		TotalHits: &elastic.TotalHits{},
+	}
 	resp, err := s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, 1, nil)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
@@ -542,6 +544,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 		Sort:   []interface{}{1547596872371000000, "e481009e-14b3-45ae-91af-dce6e2a88365"},
 	}
 	searchHits.Hits = []*elastic.SearchHit{searchHit}
+	searchHits.TotalHits.Value = 1
 	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, 1, nil)
 	s.NoError(err)
 	serializedToken, _ := s.visibilityStore.serializePageToken(&esVisibilityPageToken{From: 1})
