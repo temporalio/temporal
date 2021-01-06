@@ -26,17 +26,9 @@ package elasticsearch
 
 import (
 	"context"
-	"fmt"
-	"net/http"
-	"os"
-	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/olivere/elastic"
-	elasticaws "github.com/olivere/elastic/aws/v4"
 	elastic7 "github.com/olivere/elastic/v7"
 )
 
@@ -67,11 +59,10 @@ func newClientV6(config *Config) (*clientV6, error) {
 	}
 
 	if config.AWSRequestSigning.Enabled {
-		httpClient, err := getAWSElasticSearchHTTPClient(config.AWSRequestSigning)
+		httpClient, err := newAWSElasticsearchHTTPClient(config.AWSRequestSigning)
 		if err != nil {
 			return nil, err
 		}
-
 		options = append(options, elastic.SetHttpClient(httpClient))
 	}
 
@@ -306,7 +297,7 @@ func (c *clientV6) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 
 // root is for nested object like Attr property for search attributes.
 func (c *clientV6) PutMapping(ctx context.Context, index, root, key, valueType string) error {
-	body := buildPutMappingBody(root, key, valueType)
+	body := c.buildPutMappingBody(root, key, valueType)
 	_, err := c.esClient.PutMapping().Index(index).Type("_doc").BodyJson(body).Do(ctx)
 	return err
 }
@@ -316,7 +307,7 @@ func (c *clientV6) CreateIndex(ctx context.Context, index string) error {
 	return err
 }
 
-func buildPutMappingBody(root, key, valueType string) map[string]interface{} {
+func (c *clientV6) buildPutMappingBody(root, key, valueType string) map[string]interface{} {
 	body := make(map[string]interface{})
 	if len(root) != 0 {
 		body["properties"] = map[string]interface{}{
@@ -336,40 +327,4 @@ func buildPutMappingBody(root, key, valueType string) map[string]interface{} {
 		}
 	}
 	return body
-}
-
-func getAWSElasticSearchHTTPClient(config AWSRequestSigningConfig) (*http.Client, error) {
-	if config.Region == "" {
-		config.Region = os.Getenv("AWS_REGION")
-		if config.Region == "" {
-			return nil, fmt.Errorf("unable to resolve aws region for obtaining aws es signing credentials")
-		}
-	}
-
-	var awsCredentials *credentials.Credentials
-
-	switch strings.ToLower(config.CredentialProvider) {
-	case "static":
-		awsCredentials = credentials.NewStaticCredentials(
-			config.Static.AccessKeyID,
-			config.Static.SecretAccessKey,
-			config.Static.Token,
-		)
-	case "environment":
-		awsCredentials = credentials.NewEnvCredentials()
-	case "aws-sdk-default":
-		awsSession, err := session.NewSession(&aws.Config{
-			Region: &config.Region,
-		})
-
-		if err != nil {
-			return nil, err
-		}
-
-		awsCredentials = awsSession.Config.Credentials
-	default:
-		return nil, fmt.Errorf("unknown aws credential provider specified: %+v. Accepted options are 'static', 'environment' or 'session'", config.CredentialProvider)
-	}
-
-	return elasticaws.NewV4SigningClient(awsCredentials, config.Region), nil
 }
