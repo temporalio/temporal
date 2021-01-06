@@ -108,7 +108,7 @@ func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic7.S
 func convertV7SortersToV6(sorters []elastic7.Sorter) []elastic.Sorter {
 	sortersV6 := make([]elastic.Sorter, len(sorters))
 	for i, sorter := range sorters {
-		sorters[i] = sorter
+		sortersV6[i] = sorter
 	}
 	return sortersV6
 }
