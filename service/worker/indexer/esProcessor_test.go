@@ -33,7 +33,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/olivere/elastic"
+	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
@@ -46,14 +46,13 @@ import (
 	"go.temporal.io/server/common/metrics"
 	mmocks "go.temporal.io/server/common/metrics/mocks"
 	"go.temporal.io/server/common/service/dynamicconfig"
-	"go.temporal.io/server/service/worker/indexer/mocks"
 )
 
 type esProcessorSuite struct {
 	suite.Suite
 	controller        *gomock.Controller
 	esProcessor       *esProcessorImpl
-	mockBulkProcessor *mocks.ElasticBulkProcessor
+	mockBulkProcessor *es.MockBulkProcessor
 	mockMetricClient  *mmocks.Client
 	mockESClient      *es.MockClient
 }
@@ -85,7 +84,7 @@ func (s *esProcessorSuite) SetupTest() {
 		ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
 	s.mockMetricClient = &mmocks.Client{}
-	s.mockBulkProcessor = &mocks.ElasticBulkProcessor{}
+	s.mockBulkProcessor = es.NewMockBulkProcessor(s.controller)
 
 	zapLogger, err := zap.NewDevelopment()
 	s.Require().NoError(err)
@@ -105,7 +104,6 @@ func (s *esProcessorSuite) SetupTest() {
 }
 
 func (s *esProcessorSuite) TearDownTest() {
-	s.mockBulkProcessor.AssertExpectations(s.T())
 	s.mockMetricClient.AssertExpectations(s.T())
 	s.controller.Finish()
 }
@@ -140,7 +138,7 @@ func (s *esProcessorSuite) TestNewESProcessorAndStart() {
 }
 
 func (s *esProcessorSuite) TestStop() {
-	s.mockBulkProcessor.On("Stop").Return(nil).Once()
+	s.mockBulkProcessor.EXPECT().Stop().Return(nil).Times(1)
 	s.esProcessor.Stop()
 	s.Nil(s.esProcessor.mapToKafkaMsg)
 }
@@ -151,7 +149,7 @@ func (s *esProcessorSuite) TestAdd() {
 	key := "test-key"
 	s.Equal(0, s.esProcessor.mapToKafkaMsg.Len())
 
-	s.mockBulkProcessor.On("Add", request).Return().Once()
+	s.mockBulkProcessor.EXPECT().Add(request).Return().Times(1)
 	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
 	s.esProcessor.Add(request, key, mockKafkaMsg)
 	s.Equal(1, s.esProcessor.mapToKafkaMsg.Len())
@@ -178,7 +176,7 @@ func (s *esProcessorSuite) TestAdd_ConcurrentAdd() {
 	duplicates := 5
 	wg := &sync.WaitGroup{}
 	wg.Add(duplicates)
-	s.mockBulkProcessor.On("Add", request).Return().Once()
+	s.mockBulkProcessor.EXPECT().Add(request).Return().Times(1)
 	mockKafkaMsg.On("Ack").Return(nil).Times(duplicates - 1)
 	for i := 0; i < duplicates; i++ {
 		addFunc(wg)
@@ -300,7 +298,7 @@ func (s *esProcessorSuite) TestAckKafkaMsg() {
 	request := elastic.NewBulkIndexRequest()
 	mockKafkaMsg := &msgMocks.Message{}
 	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
-	s.mockBulkProcessor.On("Add", request).Return().Once()
+	s.mockBulkProcessor.EXPECT().Add(request).Return().Times(1)
 	s.esProcessor.Add(request, key, mockKafkaMsg)
 	s.Equal(1, s.esProcessor.mapToKafkaMsg.Len())
 
@@ -317,7 +315,7 @@ func (s *esProcessorSuite) TestNackKafkaMsg() {
 
 	request := elastic.NewBulkIndexRequest()
 	mockKafkaMsg := &msgMocks.Message{}
-	s.mockBulkProcessor.On("Add", request).Return().Once()
+	s.mockBulkProcessor.EXPECT().Add(request).Return().Times(1)
 	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
 	s.esProcessor.Add(request, key, mockKafkaMsg)
 	s.Equal(1, s.esProcessor.mapToKafkaMsg.Len())
