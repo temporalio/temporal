@@ -33,7 +33,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/olivere/elastic"
+	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
@@ -50,7 +50,7 @@ type esProcessorSuite struct {
 	suite.Suite
 	controller        *gomock.Controller
 	esProcessor       *esProcessorImpl
-	mockBulkProcessor *MockElasticBulkProcessor
+	mockBulkProcessor *es.MockBulkProcessor
 	mockMetricClient  *metricsmocks.Client
 	mockESClient      *es.MockClient
 }
@@ -86,7 +86,7 @@ func (s *esProcessorSuite) SetupTest() {
 	}
 	s.mockMetricClient = &metricsmocks.Client{}
 
-	s.mockBulkProcessor = NewMockElasticBulkProcessor(s.controller)
+	s.mockBulkProcessor = es.NewMockBulkProcessor(s.controller)
 	s.mockESClient = es.NewMockClient(s.controller)
 	s.esProcessor = NewProcessor(cfg, s.mockESClient, loggerimpl.NewLogger(zapLogger), s.mockMetricClient)
 

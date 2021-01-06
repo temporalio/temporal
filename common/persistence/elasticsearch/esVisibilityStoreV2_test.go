@@ -30,7 +30,7 @@ import (
 	"fmt"
 
 	"github.com/golang/mock/gomock"
-	"github.com/olivere/elastic"
+	"github.com/olivere/elastic/v7"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 

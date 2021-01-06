@@ -30,7 +30,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/olivere/elastic"
+	"github.com/olivere/elastic/v7"
 )
 
 type (
@@ -43,7 +43,7 @@ type (
 		Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error)
 		ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error)
 		Count(ctx context.Context, index, query string) (int64, error)
-		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (*elastic.BulkProcessor, error)
+		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error)
 		PutMapping(ctx context.Context, index, root, key, valueType string) error
 		CreateIndex(ctx context.Context, index string) error
 	}

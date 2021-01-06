@@ -38,7 +38,7 @@ import (
 	"time"
 
 	"github.com/cch123/elasticsql"
-	"github.com/olivere/elastic"
+	"github.com/olivere/elastic/v7"
 	"github.com/valyala/fastjson"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -988,7 +988,7 @@ func (v *esVisibilityStore) getListWorkflowExecutionsResponse(searchHits *elasti
 
 		// ES Search API support pagination using From and PageSize, but has limit that From+PageSize cannot exceed a threshold
 		// to retrieve deeper pages, use ES SearchAfter
-		if searchHits.TotalHits <= int64(v.config.ESIndexMaxResultWindow()-pageSize) { // use ES Search From+Size
+		if searchHits.TotalHits.Value <= int64(v.config.ESIndexMaxResultWindow()-pageSize) { // use ES Search From+Size
 			nextPageToken, err = v.serializePageToken(&esVisibilityPageToken{From: token.From + numOfActualHits})
 		} else { // use ES Search After
 			var sortVal interface{}
@@ -1030,7 +1030,7 @@ func (v *esVisibilityStore) serializePageToken(token *esVisibilityPageToken) ([]
 
 func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.SearchHit) *p.VisibilityWorkflowExecutionInfo {
 	var source *visibilityRecord
-	err := json.Unmarshal(*hit.Source, &source)
+	err := json.Unmarshal(hit.Source, &source)
 	if err != nil { // log and skip error
 		v.logger.Error("unable to unmarshal search hit source",
 			tag.Error(err), tag.ESDocID(hit.Id))

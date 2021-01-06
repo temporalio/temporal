@@ -35,7 +35,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/olivere/elastic"
+	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -536,7 +536,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
           "StartTime": 1547596872371000000,
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
           "WorkflowType": "basic.stressWorkflowExecute"}`)
-	source := (*json.RawMessage)(&data)
+	source := json.RawMessage(data)
 	searchHit := &elastic.SearchHit{
 		Source: source,
 		Sort:   []interface{}{1547596872371000000, "e481009e-14b3-45ae-91af-dce6e2a88365"},
@@ -557,8 +557,10 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	// test for search after
 	token = &esVisibilityPageToken{}
 	searchHits.Hits = []*elastic.SearchHit{}
-	searchHits.TotalHits = int64(s.visibilityStore.config.ESIndexMaxResultWindow() + 1)
-	for i := int64(0); i < searchHits.TotalHits; i++ {
+	searchHits.TotalHits = &elastic.TotalHits{
+		Value: int64(s.visibilityStore.config.ESIndexMaxResultWindow() + 1),
+	}
+	for i := int64(0); i < searchHits.TotalHits.Value; i++ {
 		searchHits.Hits = append(searchHits.Hits, searchHit)
 	}
 	numOfHits := len(searchHits.Hits)
@@ -645,7 +647,7 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
           "StartTime": 1547596872371000000,
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
           "WorkflowType": "TestWorkflowExecute"}`)
-	source := (*json.RawMessage)(&data)
+	source := json.RawMessage(data)
 	searchHit := &elastic.SearchHit{
 		Source: source,
 	}
@@ -671,7 +673,7 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 
 	// test for error case
 	badData := []byte(`corrupted data`)
-	source = (*json.RawMessage)(&badData)
+	source = json.RawMessage(badData)
 	searchHit = &elastic.SearchHit{
 		Source: source,
 	}

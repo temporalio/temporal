@@ -31,7 +31,7 @@ package elasticsearch
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	elastic "github.com/olivere/elastic"
+	v7 "github.com/olivere/elastic/v7"
 	reflect "reflect"
 )
 
@@ -59,10 +59,10 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // Search mocks base method
-func (m *MockClient) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
+func (m *MockClient) Search(ctx context.Context, p *SearchParameters) (*v7.SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Search", ctx, p)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*v7.SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -74,10 +74,10 @@ func (mr *MockClientMockRecorder) Search(ctx, p interface{}) *gomock.Call {
 }
 
 // SearchWithDSL mocks base method
-func (m *MockClient) SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error) {
+func (m *MockClient) SearchWithDSL(ctx context.Context, index, query string) (*v7.SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SearchWithDSL", ctx, index, query)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*v7.SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -89,10 +89,10 @@ func (mr *MockClientMockRecorder) SearchWithDSL(ctx, index, query interface{}) *
 }
 
 // Scroll mocks base method
-func (m *MockClient) Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error) {
+func (m *MockClient) Scroll(ctx context.Context, scrollID string) (*v7.SearchResult, ScrollService, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Scroll", ctx, scrollID)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*v7.SearchResult)
 	ret1, _ := ret[1].(ScrollService)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -105,10 +105,10 @@ func (mr *MockClientMockRecorder) Scroll(ctx, scrollID interface{}) *gomock.Call
 }
 
 // ScrollFirstPage mocks base method
-func (m *MockClient) ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error) {
+func (m *MockClient) ScrollFirstPage(ctx context.Context, index, query string) (*v7.SearchResult, ScrollService, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ScrollFirstPage", ctx, index, query)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*v7.SearchResult)
 	ret1, _ := ret[1].(ScrollService)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -136,10 +136,10 @@ func (mr *MockClientMockRecorder) Count(ctx, index, query interface{}) *gomock.C
 }
 
 // RunBulkProcessor mocks base method
-func (m *MockClient) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (*elastic.BulkProcessor, error) {
+func (m *MockClient) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RunBulkProcessor", ctx, p)
-	ret0, _ := ret[0].(*elastic.BulkProcessor)
+	ret0, _ := ret[0].(BulkProcessor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

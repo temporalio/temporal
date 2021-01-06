@@ -37,6 +37,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/olivere/elastic"
 	elasticaws "github.com/olivere/elastic/aws/v4"
+	elastic7 "github.com/olivere/elastic/v7"
 )
 
 type (
@@ -44,16 +45,12 @@ type (
 	clientV6 struct {
 		esClient *elastic.Client
 	}
-
-	scrollServiceImpl struct {
-		esScrollService *elastic.ScrollService
-	}
 )
 
 var _ Client = (*clientV6)(nil)
 
-// NewClientV6 create a ES client
-func NewClientV6(config *Config) (Client, error) {
+// newClientV6 create a ES client
+func newClientV6(config *Config) (*clientV6, error) {
 	options := []elastic.ClientOptionFunc{
 		elastic.SetURL(config.URL.String()),
 		elastic.SetSniff(false),
@@ -84,7 +81,7 @@ func NewClientV6(config *Config) (Client, error) {
 		return nil, err
 	}
 
-	// Re-enable the healthcheck after client has successfully been created.
+	// Re-enable the health check after client has successfully been created.
 	client.Stop()
 	err = elastic.SetHealthcheck(true)(client)
 	if err != nil {
@@ -95,11 +92,11 @@ func NewClientV6(config *Config) (Client, error) {
 	return &clientV6{esClient: client}, nil
 }
 
-func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
+func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic7.SearchResult, error) {
 	searchService := c.esClient.Search(p.Index).
 		Query(p.Query).
 		From(p.From).
-		SortBy(p.Sorter...)
+		SortBy(convertV7SortersToV6(p.Sorter)...)
 
 	if p.PageSize != 0 {
 		searchService.Size(p.PageSize)
@@ -109,44 +106,202 @@ func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic.Se
 		searchService.SearchAfter(p.SearchAfter...)
 	}
 
-	return searchService.Do(ctx)
+	searchResult, err := searchService.Do(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return convertV6SearchResultToV7(searchResult), nil
 }
 
-func (c *clientV6) SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error) {
-	return c.esClient.Search(index).Source(query).Do(ctx)
+func convertV7SortersToV6(sorters []elastic7.Sorter) []elastic.Sorter {
+	sortersV6 := make([]elastic.Sorter, len(sorters))
+	for i, sorter := range sorters {
+		sorters[i] = sorter
+	}
+	return sortersV6
 }
 
-func (c *clientV6) Scroll(ctx context.Context, scrollID string) (
-	*elastic.SearchResult, ScrollService, error) {
+func convertV6SearchResultToV7(result *elastic.SearchResult) *elastic7.SearchResult {
+	if result == nil {
+		return nil
+	}
+	return &elastic7.SearchResult{
+		Header:          result.Header,
+		TookInMillis:    result.TookInMillis,
+		TerminatedEarly: result.TerminatedEarly,
+		NumReducePhases: result.NumReducePhases,
+		Clusters:        convertV6SearchResultClusterToV7(result.Clusters),
+		ScrollId:        result.ScrollId,
+		Hits:            convertV6SearchHitsToV7(result.Hits),
+		TimedOut:        result.TimedOut,
+		Error:           convertV6ErrorDetailsToV7(result.Error),
+		Status:          result.Status,
 
+		// TODO (alex): these complex structs are not converted. Add conversion funcs before using them in caller code.
+		Suggest:      nil, // result.Suggest,
+		Aggregations: nil, // result.Aggregations,
+		Profile:      nil, // result.Profile,
+		Shards:       nil, // result.Shards,
+	}
+}
+
+func convertV6SearchHitsToV7(hits *elastic.SearchHits) *elastic7.SearchHits {
+	if hits == nil {
+		return nil
+	}
+	return &elastic7.SearchHits{
+		TotalHits: &elastic7.TotalHits{
+			Value:    hits.TotalHits,
+			Relation: "eq",
+		},
+		MaxScore: hits.MaxScore,
+		Hits:     convertV6SearchHitSliceToV7(hits.Hits),
+	}
+}
+
+func convertV6SearchHitSliceToV7(hits []*elastic.SearchHit) []*elastic7.SearchHit {
+	if hits == nil {
+		return nil
+	}
+	hitsV7 := make([]*elastic7.SearchHit, len(hits))
+	for i, hit := range hits {
+		hitsV7[i] = convertV6SearchHitToV7(hit)
+	}
+	return hitsV7
+}
+
+func convertV6SearchHitToV7(hit *elastic.SearchHit) *elastic7.SearchHit {
+	if hit == nil {
+		return nil
+	}
+	hitV7 := &elastic7.SearchHit{
+		Score:          hit.Score,
+		Index:          hit.Index,
+		Type:           hit.Type,
+		Id:             hit.Id,
+		Uid:            hit.Uid,
+		Routing:        hit.Routing,
+		Parent:         hit.Parent,
+		Version:        hit.Version,
+		SeqNo:          hit.SeqNo,
+		PrimaryTerm:    hit.PrimaryTerm,
+		Sort:           hit.Sort,
+		Highlight:      elastic7.SearchHitHighlight(hit.Highlight),
+		Fields:         hit.Fields,
+		Explanation:    convertV6SearchExplanationToV7(hit.Explanation),
+		MatchedQueries: hit.MatchedQueries,
+		InnerHits:      convertV6SearchHitInnerHitsMapToV7(hit.InnerHits),
+		Nested:         convertV6NestedHitToV7(hit.Nested),
+		Shard:          hit.Shard,
+		Node:           hit.Node,
+	}
+
+	if hit.Source != nil {
+		hitV7.Source = *hit.Source
+	}
+
+	return hitV7
+}
+
+func convertV6NestedHitToV7(nestedHit *elastic.NestedHit) *elastic7.NestedHit {
+	if nestedHit == nil {
+		return nil
+	}
+	return &elastic7.NestedHit{
+		Field:  nestedHit.Field,
+		Offset: nestedHit.Offset,
+		Child:  convertV6NestedHitToV7(nestedHit.Child),
+	}
+}
+
+func convertV6SearchHitInnerHitsMapToV7(innerHitsMap map[string]*elastic.SearchHitInnerHits) map[string]*elastic7.SearchHitInnerHits {
+	if innerHitsMap == nil {
+		return nil
+	}
+	innerHitsMapV7 := make(map[string]*elastic7.SearchHitInnerHits, len(innerHitsMap))
+	for k, innerHits := range innerHitsMap {
+		innerHitsMapV7[k] = convertV6SearchHitInnerHitsToV7(innerHits)
+	}
+	return innerHitsMapV7
+}
+
+func convertV6SearchHitInnerHitsToV7(innerHits *elastic.SearchHitInnerHits) *elastic7.SearchHitInnerHits {
+	if innerHits == nil {
+		return nil
+	}
+	return &elastic7.SearchHitInnerHits{
+		Hits: convertV6SearchHitsToV7(innerHits.Hits),
+	}
+}
+
+func convertV6SearchExplanationToV7(explanation *elastic.SearchExplanation) *elastic7.SearchExplanation {
+	if explanation == nil {
+		return nil
+	}
+	return &elastic7.SearchExplanation{
+		Value:       explanation.Value,
+		Description: explanation.Description,
+		Details:     convertV6SearchExplanationSliceToV7(explanation.Details),
+	}
+}
+
+func convertV6SearchExplanationSliceToV7(details []elastic.SearchExplanation) []elastic7.SearchExplanation {
+	if details == nil {
+		return nil
+	}
+	detailsV7 := make([]elastic7.SearchExplanation, len(details))
+	for i, detail := range details {
+		detailsV7[i] = *convertV6SearchExplanationToV7(&detail)
+	}
+	return detailsV7
+}
+
+func convertV6SearchResultClusterToV7(cluster *elastic.SearchResultCluster) *elastic7.SearchResultCluster {
+	if cluster == nil {
+		return nil
+	}
+	return &elastic7.SearchResultCluster{
+		Successful: cluster.Successful,
+		Total:      cluster.Total,
+		Skipped:    cluster.Skipped,
+	}
+}
+
+func (c *clientV6) SearchWithDSL(ctx context.Context, index, query string) (*elastic7.SearchResult, error) {
+	searchResult, err := c.esClient.Search(index).Source(query).Do(ctx)
+	return convertV6SearchResultToV7(searchResult), err
+}
+
+func (c *clientV6) Scroll(ctx context.Context, scrollID string) (*elastic7.SearchResult, ScrollService, error) {
 	scrollService := elastic.NewScrollService(c.esClient)
 	result, err := scrollService.ScrollId(scrollID).Do(ctx)
-	return result, &scrollServiceImpl{esScrollService: scrollService}, err
+	return convertV6SearchResultToV7(result), scrollService, err
 }
 
-func (c *clientV6) ScrollFirstPage(ctx context.Context, index, query string) (
-	*elastic.SearchResult, ScrollService, error) {
-
+func (c *clientV6) ScrollFirstPage(ctx context.Context, index, query string) (*elastic7.SearchResult, ScrollService, error) {
 	scrollService := elastic.NewScrollService(c.esClient)
 	result, err := scrollService.Index(index).Body(query).Do(ctx)
-	return result, &scrollServiceImpl{esScrollService: scrollService}, err
+	return convertV6SearchResultToV7(result), scrollService, err
 }
 
 func (c *clientV6) Count(ctx context.Context, index, query string) (int64, error) {
 	return c.esClient.Count(index).BodyString(query).Do(ctx)
 }
 
-func (c *clientV6) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (*elastic.BulkProcessor, error) {
-	return c.esClient.BulkProcessor().
+func (c *clientV6) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
+	esBulkProcessor, err := c.esClient.BulkProcessor().
 		Name(p.Name).
 		Workers(p.NumOfWorkers).
 		BulkActions(p.BulkActions).
 		BulkSize(p.BulkSize).
 		FlushInterval(p.FlushInterval).
 		Backoff(p.Backoff).
-		Before(p.BeforeFunc).
-		After(p.AfterFunc).
+		Before(convertV7BeforeFuncToV6(p.BeforeFunc)).
+		After(convertV7AfterFuncToV6(p.AfterFunc)).
 		Do(ctx)
+
+	return newBulkProcessorV6(esBulkProcessor), err
 }
 
 // root is for nested object like Attr property for search attributes.
@@ -181,10 +336,6 @@ func buildPutMappingBody(root, key, valueType string) map[string]interface{} {
 		}
 	}
 	return body
-}
-
-func (s *scrollServiceImpl) Clear(ctx context.Context) error {
-	return s.esScrollService.Clear(ctx)
 }
 
 func getAWSElasticSearchHTTPClient(config AWSRequestSigningConfig) (*http.Client, error) {
