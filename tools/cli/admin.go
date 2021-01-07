@@ -572,7 +572,7 @@ func newAdminElasticSearchCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagVersion,
-					Usage: "Version of ElasticSearch cluster: v6 (default) or v7",
+					Usage: "Version of ElasticSearch cluster: v6 or v7 (default)",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -590,7 +590,7 @@ func newAdminElasticSearchCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagVersion,
-					Usage: "Version of ElasticSearch cluster: v6 (default) or v7",
+					Usage: "Version of ElasticSearch cluster: v6 or v7 (default)",
 				},
 				cli.StringFlag{
 					Name:  FlagIndex,
@@ -621,7 +621,7 @@ func newAdminElasticSearchCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagVersion,
-					Usage: "Version of ElasticSearch cluster: v6 (default) or v7",
+					Usage: "Version of ElasticSearch cluster: v6 or v7 (default)",
 				},
 				cli.StringFlag{
 					Name:  FlagIndex,

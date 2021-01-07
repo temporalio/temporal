@@ -41,9 +41,9 @@ func NewClient(config *Config) (Client, error) {
 
 func NewCLIClient(url string, version string) (CLIClient, error) {
 	switch version {
-	case "v6", "":
+	case "v6":
 		return newSimpleClientV6(url)
-	case "v7":
+	case "v7", "":
 		return newSimpleClientV7(url)
 	default:
 		return nil, fmt.Errorf("not supported ElasticSearch version: %v", version)
@@ -52,7 +52,7 @@ func NewCLIClient(url string, version string) (CLIClient, error) {
 
 func NewIntegrationTestsClient(url string, version string) (IntegrationTestsClient, error) {
 	switch version {
-	case "v6", "":
+	case "v6":
 		return newSimpleClientV6(url)
 	case "v7":
 		return newSimpleClientV7(url)
