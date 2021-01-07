@@ -54,7 +54,7 @@ services:
     networks:
       - temporal-dependencies-network
   elasticsearch:
-    image: elasticsearch:6.8.8
+    image: elasticsearch:7.10.1
     container_name: temporal-elasticsearch
     ports:
       - "9200:9200"
