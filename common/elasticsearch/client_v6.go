@@ -326,7 +326,7 @@ func (c *clientV6) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 // root is for nested object like Attr property for search attributes.
 func (c *clientV6) PutMapping(ctx context.Context, index, root, key, valueType string) error {
 	body := c.buildPutMappingBody(root, key, valueType)
-	_, err := c.esClient.PutMapping().Index(index).Type("_doc").BodyJson(body).Do(ctx)
+	_, err := c.esClient.PutMapping().Index(index).Type(docTypeV6).BodyJson(body).Do(ctx)
 	return err
 }
 

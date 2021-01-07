@@ -30,7 +30,6 @@ package elasticsearch
 
 import (
 	gomock "github.com/golang/mock/gomock"
-	elastic "github.com/olivere/elastic/v7"
 	reflect "reflect"
 )
 
@@ -72,7 +71,7 @@ func (mr *MockBulkProcessorMockRecorder) Stop() *gomock.Call {
 }
 
 // Add mocks base method
-func (m *MockBulkProcessor) Add(request elastic.BulkableRequest) {
+func (m *MockBulkProcessor) Add(request *BulkableRequest) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Add", request)
 }

@@ -50,7 +50,7 @@ type (
 		Stop()
 		// Add request to bulk, and record kafka message in map with provided key
 		// This call will be blocked when downstream has issues
-		Add(request elastic.BulkableRequest, key string, kafkaMsg messaging.Message)
+		Add(request *es.BulkableRequest, key string, kafkaMsg messaging.Message)
 	}
 
 	// esProcessorImpl implements ESProcessor, it's an agent of elastic.BulkProcessor
@@ -113,7 +113,7 @@ func (p *esProcessorImpl) Stop() {
 }
 
 // Add an ES request, and an map item for kafka message
-func (p *esProcessorImpl) Add(request elastic.BulkableRequest, key string, kafkaMsg messaging.Message) {
+func (p *esProcessorImpl) Add(request *es.BulkableRequest, key string, kafkaMsg messaging.Message) {
 	actionWhenFoundDuplicates := func(key interface{}, value interface{}) error {
 		return kafkaMsg.Ack()
 	}

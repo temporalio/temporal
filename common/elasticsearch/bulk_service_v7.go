@@ -26,6 +26,22 @@ func (b *bulkServiceV7) NumberOfActions() int {
 	return b.esBulkService.NumberOfActions()
 }
 
-func (b *bulkServiceV7) Add(request elastic.BulkableRequest) {
-	b.esBulkService.Add(request)
+func (b *bulkServiceV7) Add(request *BulkableRequest) {
+	switch request.RequestType {
+	case BulkableRequestTypeIndex:
+		bulkDeleteRequest := elastic.NewBulkIndexRequest().
+			Index(request.Index).
+			Id(request.ID).
+			VersionType(versionTypeExternal).
+			Version(request.Version).
+			Doc(request.Doc)
+		b.esBulkService.Add(bulkDeleteRequest)
+	case BulkableRequestTypeDelete:
+		bulkDeleteRequest := elastic.NewBulkDeleteRequest().
+			Index(request.Index).
+			Id(request.ID).
+			VersionType(versionTypeExternal).
+			Version(request.Version)
+		b.esBulkService.Add(bulkDeleteRequest)
+	}
 }

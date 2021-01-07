@@ -47,6 +47,22 @@ func (p *bulkProcessorV7) Stop() error {
 	return p.esBulkProcessor.Stop()
 }
 
-func (p *bulkProcessorV7) Add(request elastic.BulkableRequest) {
-	p.esBulkProcessor.Add(request)
+func (p *bulkProcessorV7) Add(request *BulkableRequest) {
+	switch request.RequestType {
+	case BulkableRequestTypeIndex:
+		bulkDeleteRequest := elastic.NewBulkIndexRequest().
+			Index(request.Index).
+			Id(request.ID).
+			VersionType(versionTypeExternal).
+			Version(request.Version).
+			Doc(request.Doc)
+		p.esBulkProcessor.Add(bulkDeleteRequest)
+	case BulkableRequestTypeDelete:
+		bulkDeleteRequest := elastic.NewBulkDeleteRequest().
+			Index(request.Index).
+			Id(request.ID).
+			VersionType(versionTypeExternal).
+			Version(request.Version)
+		p.esBulkProcessor.Add(bulkDeleteRequest)
+	}
 }

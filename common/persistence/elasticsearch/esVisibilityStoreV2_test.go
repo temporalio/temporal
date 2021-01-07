@@ -25,12 +25,9 @@
 package elasticsearch
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 
 	"github.com/golang/mock/gomock"
-	"github.com/olivere/elastic/v7"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -62,7 +59,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(bulkRequest elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+		Do(func(bulkRequest *es.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 			s.NotNil(ackCh)
 			s.Equal(1, cap(ackCh))
 			s.Equal(0, len(ackCh))
@@ -70,11 +67,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2() {
 
 			s.Equal("2208~111", visibilityTaskKey)
 
-			req, err := bulkRequest.Source()
-			s.NoError(err)
-			var body map[string]interface{}
-			err = json.Unmarshal([]byte(req[1]), &body)
-			s.NoError(err)
+			body := bulkRequest.Doc
 
 			s.Equal(request.NamespaceID, body[definition.NamespaceID])
 			s.Equal(request.WorkflowID, body[definition.WorkflowID])
@@ -85,24 +78,17 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2() {
 			s.Equal(request.TaskQueue, body[definition.TaskQueue])
 			s.EqualValues(request.Status, body[definition.ExecutionStatus])
 
-			memoFromBody, err := base64.StdEncoding.DecodeString(body[definition.Memo].(string))
-			s.NoError(err)
-			s.Equal(request.Memo.Data, memoFromBody)
+			s.Equal(request.Memo.Data, body[definition.Memo])
 			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[definition.Encoding])
 
 			searchAttributes := body[definition.Attr].(map[string]interface{})
 			// %q because request has JSON encoded string.
 			s.EqualValues(request.SearchAttributes[definition.CustomStringField].Data, fmt.Sprintf("%q", searchAttributes[definition.CustomStringField]))
 
-			var opBody map[string]map[string]interface{}
-			err = json.Unmarshal([]byte(req[0]), &opBody)
-			s.NoError(err)
-			opMap := opBody["index"]
-			s.EqualValues(request.TaskID, opMap["version"])
-			s.Equal(versionTypeExternal, opMap["version_type"])
-			s.Equal(docType, opMap["_type"])
-			s.Equal("wid~rid", opMap["_id"])
-			s.Equal("test-index", opMap["_index"])
+			s.Equal(es.BulkableRequestTypeIndex, bulkRequest.RequestType)
+			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal("wid~rid", bulkRequest.ID)
+			s.Equal("test-index", bulkRequest.Index)
 		})
 
 	err := s.visibilityStore.RecordWorkflowExecutionStartedV2(request)
@@ -118,7 +104,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2_EmptyRequest() 
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(bulkRequest elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+		Do(func(bulkRequest *es.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 			s.NotNil(ackCh)
 			s.Equal(1, cap(ackCh))
 			s.Equal(0, len(ackCh))
@@ -126,26 +112,17 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2_EmptyRequest() 
 
 			s.Equal("0~0", visibilityTaskKey)
 
-			req, err := bulkRequest.Source()
-			s.NoError(err)
-			var body map[string]interface{}
-			err = json.Unmarshal([]byte(req[1]), &body)
-			s.NoError(err)
+			body := bulkRequest.Doc
 
 			_, ok := body[es.Memo]
 			s.False(ok)
 			_, ok = body[es.Encoding]
 			s.False(ok)
 
-			var opBody map[string]map[string]interface{}
-			err = json.Unmarshal([]byte(req[0]), &opBody)
-			s.NoError(err)
-			opMap := opBody["index"]
-			s.EqualValues(request.TaskID, opMap["version"])
-			s.Equal(versionTypeExternal, opMap["version_type"])
-			s.Equal(docType, opMap["_type"])
-			s.Equal("~", opMap["_id"])
-			s.Equal("test-index", opMap["_index"])
+			s.Equal(es.BulkableRequestTypeIndex, bulkRequest.RequestType)
+			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal("~", bulkRequest.ID)
+			s.Equal("test-index", bulkRequest.Index)
 		})
 
 	err := s.visibilityStore.RecordWorkflowExecutionStartedV2(request)
@@ -176,7 +153,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(bulkRequest elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+		Do(func(bulkRequest *es.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 			s.NotNil(ackCh)
 			s.Equal(1, cap(ackCh))
 			s.Equal(0, len(ackCh))
@@ -184,11 +161,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2() {
 
 			s.Equal("2208~111", visibilityTaskKey)
 
-			req, err := bulkRequest.Source()
-			s.NoError(err)
-			var body map[string]interface{}
-			err = json.Unmarshal([]byte(req[1]), &body)
-			s.NoError(err)
+			body := bulkRequest.Doc
 
 			s.Equal(request.NamespaceID, body[definition.NamespaceID])
 			s.Equal(request.WorkflowID, body[definition.WorkflowID])
@@ -196,23 +169,16 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2() {
 			s.Equal(request.WorkflowTypeName, body[definition.WorkflowType])
 			s.EqualValues(request.StartTimestamp, body[definition.StartTime])
 			s.EqualValues(request.ExecutionTimestamp, body[definition.ExecutionTime])
-			memoFromBody, err := base64.StdEncoding.DecodeString(body[definition.Memo].(string))
-			s.NoError(err)
-			s.Equal(request.Memo.Data, memoFromBody)
+			s.Equal(request.Memo.Data, body[definition.Memo])
 			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[definition.Encoding])
 			s.EqualValues(request.CloseTimestamp, body[definition.CloseTime])
 			s.EqualValues(request.Status, body[definition.ExecutionStatus])
 			s.EqualValues(request.HistoryLength, body[definition.HistoryLength])
 
-			var opBody map[string]map[string]interface{}
-			err = json.Unmarshal([]byte(req[0]), &opBody)
-			s.NoError(err)
-			opMap := opBody["index"]
-			s.EqualValues(request.TaskID, opMap["version"])
-			s.Equal(versionTypeExternal, opMap["version_type"])
-			s.Equal(docType, opMap["_type"])
-			s.Equal("wid~rid", opMap["_id"])
-			s.Equal("test-index", opMap["_index"])
+			s.Equal(es.BulkableRequestTypeIndex, bulkRequest.RequestType)
+			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal("wid~rid", bulkRequest.ID)
+			s.Equal("test-index", bulkRequest.Index)
 		})
 
 	err := s.visibilityStore.RecordWorkflowExecutionClosedV2(request)
@@ -228,7 +194,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2_EmptyRequest() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(bulkRequest elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+		Do(func(bulkRequest *es.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 			s.NotNil(ackCh)
 			s.Equal(1, cap(ackCh))
 			s.Equal(0, len(ackCh))
@@ -236,26 +202,17 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2_EmptyRequest() {
 
 			s.Equal("0~0", visibilityTaskKey)
 
-			req, err := bulkRequest.Source()
-			s.NoError(err)
-			var body map[string]interface{}
-			err = json.Unmarshal([]byte(req[1]), &body)
-			s.NoError(err)
+			body := bulkRequest.Doc
 
 			_, ok := body[es.Memo]
 			s.False(ok)
 			_, ok = body[es.Encoding]
 			s.False(ok)
 
-			var opBody map[string]map[string]interface{}
-			err = json.Unmarshal([]byte(req[0]), &opBody)
-			s.NoError(err)
-			opMap := opBody["index"]
-			s.EqualValues(request.TaskID, opMap["version"])
-			s.Equal(versionTypeExternal, opMap["version_type"])
-			s.Equal(docType, opMap["_type"])
-			s.Equal("~", opMap["_id"])
-			s.Equal("test-index", opMap["_index"])
+			s.Equal(es.BulkableRequestTypeIndex, bulkRequest.RequestType)
+			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal("~", bulkRequest.ID)
+			s.Equal("test-index", bulkRequest.Index)
 		})
 
 	err := s.visibilityStore.RecordWorkflowExecutionClosedV2(request)
@@ -272,7 +229,7 @@ func (s *ESVisibilitySuite) TestDeleteExecutionV2() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(bulkRequest elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+		Do(func(bulkRequest *es.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 			s.NotNil(ackCh)
 			s.Equal(1, cap(ackCh))
 			s.Equal(0, len(ackCh))
@@ -280,18 +237,10 @@ func (s *ESVisibilitySuite) TestDeleteExecutionV2() {
 
 			s.Equal("wid~rid", visibilityTaskKey)
 
-			req, err := bulkRequest.Source()
-			s.NoError(err)
-
-			var opBody map[string]map[string]interface{}
-			err = json.Unmarshal([]byte(req[0]), &opBody)
-			s.NoError(err)
-			opMap := opBody["delete"]
-			s.EqualValues(request.TaskID, opMap["version"])
-			s.Equal(versionTypeExternal, opMap["version_type"])
-			s.Equal(docType, opMap["_type"])
-			s.Equal("wid~rid", opMap["_id"])
-			s.Equal("test-index", opMap["_index"])
+			s.Equal(es.BulkableRequestTypeDelete, bulkRequest.RequestType)
+			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal("wid~rid", bulkRequest.ID)
+			s.Equal("test-index", bulkRequest.Index)
 		})
 
 	err := s.visibilityStore.DeleteWorkflowExecutionV2(request)
@@ -303,7 +252,7 @@ func (s *ESVisibilitySuite) TestDeleteExecutionV2_EmptyRequest() {
 	request := &p.VisibilityDeleteWorkflowExecutionRequest{}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(bulkRequest elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+		Do(func(bulkRequest *es.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 			s.NotNil(ackCh)
 			s.Equal(1, cap(ackCh))
 			s.Equal(0, len(ackCh))
@@ -311,17 +260,9 @@ func (s *ESVisibilitySuite) TestDeleteExecutionV2_EmptyRequest() {
 
 			s.Equal("~", visibilityTaskKey)
 
-			req, err := bulkRequest.Source()
-			s.NoError(err)
-
-			var opBody map[string]map[string]interface{}
-			err = json.Unmarshal([]byte(req[0]), &opBody)
-			s.NoError(err)
-			opMap := opBody["delete"]
-			s.Equal(versionTypeExternal, opMap["version_type"])
-			s.Equal(docType, opMap["_type"])
-			s.Equal("~", opMap["_id"])
-			s.Equal("test-index", opMap["_index"])
+			s.Equal(es.BulkableRequestTypeDelete, bulkRequest.RequestType)
+			s.Equal("~", bulkRequest.ID)
+			s.Equal("test-index", bulkRequest.Index)
 		})
 
 	err := s.visibilityStore.DeleteWorkflowExecutionV2(request)

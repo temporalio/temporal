@@ -32,10 +32,17 @@ import (
 	"github.com/olivere/elastic/v7"
 )
 
+type BulkableRequestType uint8
+
+const (
+	BulkableRequestTypeIndex BulkableRequestType = iota
+	BulkableRequestTypeDelete
+)
+
 type (
 	BulkProcessor interface {
 		Stop() error
-		Add(request elastic.BulkableRequest)
+		Add(request *BulkableRequest)
 	}
 
 	// BulkProcessorParameters holds all required and optional parameters for executing bulk service
@@ -49,6 +56,12 @@ type (
 		BeforeFunc    elastic.BulkBeforeFunc
 		AfterFunc     elastic.BulkAfterFunc
 	}
-)
 
-var _ BulkProcessor = (*elastic.BulkProcessor)(nil)
+	BulkableRequest struct {
+		RequestType BulkableRequestType
+		Index       string
+		ID          string
+		Version     int64
+		Doc         map[string]interface{}
+	}
+)

@@ -62,9 +62,7 @@ import (
 const (
 	persistenceName = "elasticsearch"
 
-	delimiter           = "~"
-	docType             = "_doc"
-	versionTypeExternal = "external"
+	delimiter = "~"
 )
 
 type (
@@ -234,12 +232,12 @@ func (v *esVisibilityStore) UpsertWorkflowExecutionV2(request *p.InternalUpsertW
 func (v *esVisibilityStore) DeleteWorkflowExecutionV2(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
 	docID := getDocID(request.WorkflowID, request.RunID)
 
-	bulkDeleteRequest := elastic.NewBulkDeleteRequest().
-		Index(v.index).
-		Type(docType).
-		Id(docID).
-		VersionType(versionTypeExternal).
-		Version(request.TaskID)
+	bulkDeleteRequest := &es.BulkableRequest{
+		Index:       v.index,
+		ID:          docID,
+		Version:     request.TaskID,
+		RequestType: es.BulkableRequestTypeDelete,
+	}
 
 	return v.addBulkRequestAndWait(bulkDeleteRequest, docID)
 }
@@ -257,18 +255,18 @@ func (v *esVisibilityStore) addBulkIndexRequestAndWait(
 	esDoc map[string]interface{},
 	visibilityTaskKey string,
 ) error {
-	bulkRequest := elastic.NewBulkIndexRequest().
-		Index(v.index).
-		Type(docType).
-		Id(getDocID(request.WorkflowID, request.RunID)).
-		VersionType(versionTypeExternal).
-		Version(request.TaskID).
-		Doc(esDoc)
+	bulkIndexRequest := &es.BulkableRequest{
+		Index:       v.index,
+		ID:          getDocID(request.WorkflowID, request.RunID),
+		Version:     request.TaskID,
+		RequestType: es.BulkableRequestTypeIndex,
+		Doc:         esDoc,
+	}
 
-	return v.addBulkRequestAndWait(bulkRequest, visibilityTaskKey)
+	return v.addBulkRequestAndWait(bulkIndexRequest, visibilityTaskKey)
 }
 
-func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest elastic.BulkableRequest, visibilityTaskKey string) error {
+func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest *es.BulkableRequest, visibilityTaskKey string) error {
 	v.checkProcessor()
 
 	ackCh := make(chan bool, 1)

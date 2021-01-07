@@ -32,6 +32,11 @@ import (
 	"github.com/olivere/elastic/v7"
 )
 
+const (
+	docTypeV6           = "_doc"
+	versionTypeExternal = "external"
+)
+
 type (
 	// Client is a wrapper around ElasticSearch client library.
 	// It simplifies the interface and enables mocking. We intentionally let implementation details of the elastic library

@@ -30,7 +30,7 @@ package elasticsearch
 
 import (
 	gomock "github.com/golang/mock/gomock"
-	elastic "github.com/olivere/elastic/v7"
+	elasticsearch "go.temporal.io/server/common/elasticsearch"
 	reflect "reflect"
 )
 
@@ -82,7 +82,7 @@ func (mr *MockProcessorMockRecorder) Stop() *gomock.Call {
 }
 
 // Add mocks base method
-func (m *MockProcessor) Add(request elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+func (m *MockProcessor) Add(request *elasticsearch.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Add", request, visibilityTaskKey, ackCh)
 }

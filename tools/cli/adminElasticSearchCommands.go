@@ -36,7 +36,6 @@ import (
 	"time"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/olivere/elastic/v7"
 	"github.com/urfave/cli"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -50,9 +49,6 @@ import (
 
 const (
 	esDocIDDelimiter = "~"
-	esDocType        = "_doc"
-
-	versionTypeExternal = "external"
 )
 
 const (
@@ -151,24 +147,24 @@ func AdminIndex(c *cli.Context) {
 	}
 	for i, message := range messages {
 		docID := message.GetWorkflowId() + esDocIDDelimiter + message.GetRunId()
-		var req elastic.BulkableRequest
+		var req *es.BulkableRequest
 		switch message.GetMessageType() {
 		case enumsspb.MESSAGE_TYPE_INDEX:
 			doc := generateESDoc(message)
-			req = elastic.NewBulkIndexRequest().
-				Index(indexName).
-				Type(esDocType).
-				Id(docID).
-				VersionType(versionTypeExternal).
-				Version(message.GetVersion()).
-				Doc(doc)
+			req = &es.BulkableRequest{
+				Index:       indexName,
+				ID:          docID,
+				Version:     message.GetVersion(),
+				RequestType: es.BulkableRequestTypeIndex,
+				Doc:         doc,
+			}
 		case enumsspb.MESSAGE_TYPE_DELETE:
-			req = elastic.NewBulkDeleteRequest().
-				Index(indexName).
-				Type(esDocType).
-				Id(docID).
-				VersionType(versionTypeExternal).
-				Version(message.GetVersion())
+			req = &es.BulkableRequest{
+				Index:       indexName,
+				ID:          docID,
+				Version:     message.GetVersion(),
+				RequestType: es.BulkableRequestTypeDelete,
+			}
 		default:
 			ErrorAndExit("Unknown message type", nil)
 		}
@@ -222,12 +218,12 @@ func AdminDelete(c *cli.Context) {
 	for scanner.Scan() {
 		line := strings.Split(scanner.Text(), "|")
 		docID := strings.TrimSpace(line[1]) + esDocIDDelimiter + strings.TrimSpace(line[2])
-		req := elastic.NewBulkDeleteRequest().
-			Index(indexName).
-			Type(esDocType).
-			Id(docID).
-			VersionType(versionTypeExternal).
-			Version(math.MaxInt64)
+		req := &es.BulkableRequest{
+			Index:       indexName,
+			ID:          docID,
+			Version:     math.MaxInt64,
+			RequestType: es.BulkableRequestTypeDelete,
+		}
 		bulkRequest.Add(req)
 		if i%batchSize == batchSize-1 {
 			bulkConductFn()
