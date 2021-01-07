@@ -70,6 +70,8 @@ func (p *bulkProcessorV6) Add(request *BulkableRequest) {
 	}
 }
 
+// =============== V6/V7 adapters ===============
+
 func convertV7BeforeFuncToV6(beforeFunc elastic.BulkBeforeFunc) elastic6.BulkBeforeFunc {
 	if beforeFunc == nil {
 		return nil

@@ -19,10 +19,9 @@ func newBulkServiceV6(esBulkService *elastic6.BulkService) *bulkServiceV6 {
 	}
 }
 
-func (b *bulkServiceV6) Do(ctx context.Context) (*elastic.BulkResponse, error) {
+func (b *bulkServiceV6) Do(ctx context.Context) error {
 	_, err := b.esBulkService.Do(ctx)
-	// TODO (alex): BulkResponse is a complex structure and is not used by caller. Implement converter before using it in caller code.
-	return nil, err
+	return err
 }
 
 func (b *bulkServiceV6) NumberOfActions() int {

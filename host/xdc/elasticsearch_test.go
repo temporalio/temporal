@@ -132,7 +132,7 @@ func (s *esCrossDCTestSuite) SetupSuite() {
 	s.cluster2 = c
 
 	s.esClient = host.CreateESClient(s.Suite, s.clusterConfigs[0].ESConfig.URL.String(), s.clusterConfigs[0].ESConfig.Version)
-	host.PutIndexTemplate(s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.clusterConfigs[0].ESConfig.Version), "test-visibility-template")
+	host.PutIndexTemplate(s.Suite, s.esClient, fmt.Sprintf("../testdata/es_%s_index_template.json", s.clusterConfigs[0].ESConfig.Version), "test-visibility-template")
 	host.CreateIndex(s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.Indices[common.VisibilityAppName])
 	host.CreateIndex(s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.Indices[common.VisibilityAppName])
 

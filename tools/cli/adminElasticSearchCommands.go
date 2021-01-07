@@ -137,7 +137,7 @@ func AdminIndex(c *cli.Context) {
 
 	bulkRequest := esClient.Bulk()
 	bulkConductFn := func() {
-		_, err := bulkRequest.Do(context.Background())
+		err := bulkRequest.Do(context.Background())
 		if err != nil {
 			ErrorAndExit("Bulk failed", err)
 		}
@@ -206,7 +206,7 @@ func AdminDelete(c *cli.Context) {
 		if !ok {
 			time.Sleep(waitTime)
 		}
-		_, err := bulkRequest.Do(context.Background())
+		err := bulkRequest.Do(context.Background())
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("Bulk failed, current processed row %d", i), err)
 		}

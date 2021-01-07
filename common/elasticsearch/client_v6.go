@@ -120,6 +120,127 @@ func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic.Se
 	return convertV6SearchResultToV7(searchResult), nil
 }
 
+func (c *clientV6) SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error) {
+	searchResult, err := c.esClient.Search(index).Source(query).Do(ctx)
+	return convertV6SearchResultToV7(searchResult), err
+}
+
+func (c *clientV6) Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error) {
+	scrollService := elastic6.NewScrollService(c.esClient)
+	result, err := scrollService.ScrollId(scrollID).Do(ctx)
+	return convertV6SearchResultToV7(result), scrollService, err
+}
+
+func (c *clientV6) ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error) {
+	scrollService := elastic6.NewScrollService(c.esClient)
+	result, err := scrollService.Index(index).Body(query).Do(ctx)
+	return convertV6SearchResultToV7(result), scrollService, err
+}
+
+func (c *clientV6) Count(ctx context.Context, index, query string) (int64, error) {
+	return c.esClient.Count(index).BodyString(query).Do(ctx)
+}
+
+func (c *clientV6) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
+	esBulkProcessor, err := c.esClient.BulkProcessor().
+		Name(p.Name).
+		Workers(p.NumOfWorkers).
+		BulkActions(p.BulkActions).
+		BulkSize(p.BulkSize).
+		FlushInterval(p.FlushInterval).
+		Backoff(p.Backoff).
+		Before(convertV7BeforeFuncToV6(p.BeforeFunc)).
+		After(convertV7AfterFuncToV6(p.AfterFunc)).
+		Do(ctx)
+
+	return newBulkProcessorV6(esBulkProcessor), err
+}
+
+// root is for nested object like Attr property for search attributes.
+func (c *clientV6) PutMapping(ctx context.Context, index, root, key, valueType string) error {
+	body := c.buildPutMappingBody(root, key, valueType)
+	_, err := c.esClient.PutMapping().Index(index).Type(docTypeV6).BodyJson(body).Do(ctx)
+	return err
+}
+
+func (c *clientV6) CreateIndex(ctx context.Context, index string) (bool, error) {
+	resp, err := c.esClient.CreateIndex(index).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return resp.Acknowledged, nil
+}
+
+func (c *clientV6) buildPutMappingBody(root, key, valueType string) map[string]interface{} {
+	body := make(map[string]interface{})
+	if len(root) != 0 {
+		body["properties"] = map[string]interface{}{
+			root: map[string]interface{}{
+				"properties": map[string]interface{}{
+					key: map[string]interface{}{
+						"type": valueType,
+					},
+				},
+			},
+		}
+	} else {
+		body["properties"] = map[string]interface{}{
+			key: map[string]interface{}{
+				"type": valueType,
+			},
+		}
+	}
+	return body
+}
+
+func (c *clientV6) IsNotFoundError(err error) bool {
+	return elastic6.IsNotFound(err)
+}
+
+func (c *clientV6) CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error) {
+	catIndicesResponse, err := c.esClient.CatIndices().Do(ctx)
+	return convertV6CatIndicesResponseToV7(catIndicesResponse), err
+}
+
+func (c *clientV6) Bulk() BulkService {
+	return newBulkServiceV6(c.esClient.Bulk())
+}
+
+func (c *clientV6) IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error) {
+	resp, err := c.esClient.IndexPutTemplate(templateName).BodyString(bodyString).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return resp.Acknowledged, nil
+}
+
+func (c *clientV6) IndexExists(ctx context.Context, indexName string) (bool, error) {
+	return c.esClient.IndexExists(indexName).Do(ctx)
+}
+
+func (c *clientV6) DeleteIndex(ctx context.Context, indexName string) (bool, error) {
+	resp, err := c.esClient.DeleteIndex(indexName).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return resp.Acknowledged, nil
+}
+
+func (c *clientV6) IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error) {
+	resp, err := c.esClient.IndexPutSettings(indexName).BodyString(bodyString).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return resp.Acknowledged, nil
+}
+
+func (c *clientV6) IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error) {
+	resp, err := c.esClient.IndexGetSettings(indexName).Do(ctx)
+	return convertV6IndicesGetSettingsResponseMapToV7(resp), err
+}
+
+// =============== V6/V7 adapters ===============
+
 func convertV7SortersToV6(sorters []elastic.Sorter) []elastic6.Sorter {
 	sortersV6 := make([]elastic6.Sorter, len(sorters))
 	for i, sorter := range sorters {
@@ -287,92 +408,6 @@ func convertV6SearchResultClusterToV7(cluster *elastic6.SearchResultCluster) *el
 	}
 }
 
-func (c *clientV6) SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error) {
-	searchResult, err := c.esClient.Search(index).Source(query).Do(ctx)
-	return convertV6SearchResultToV7(searchResult), err
-}
-
-func (c *clientV6) Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error) {
-	scrollService := elastic6.NewScrollService(c.esClient)
-	result, err := scrollService.ScrollId(scrollID).Do(ctx)
-	return convertV6SearchResultToV7(result), scrollService, err
-}
-
-func (c *clientV6) ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error) {
-	scrollService := elastic6.NewScrollService(c.esClient)
-	result, err := scrollService.Index(index).Body(query).Do(ctx)
-	return convertV6SearchResultToV7(result), scrollService, err
-}
-
-func (c *clientV6) Count(ctx context.Context, index, query string) (int64, error) {
-	return c.esClient.Count(index).BodyString(query).Do(ctx)
-}
-
-func (c *clientV6) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
-	esBulkProcessor, err := c.esClient.BulkProcessor().
-		Name(p.Name).
-		Workers(p.NumOfWorkers).
-		BulkActions(p.BulkActions).
-		BulkSize(p.BulkSize).
-		FlushInterval(p.FlushInterval).
-		Backoff(p.Backoff).
-		Before(convertV7BeforeFuncToV6(p.BeforeFunc)).
-		After(convertV7AfterFuncToV6(p.AfterFunc)).
-		Do(ctx)
-
-	return newBulkProcessorV6(esBulkProcessor), err
-}
-
-// root is for nested object like Attr property for search attributes.
-func (c *clientV6) PutMapping(ctx context.Context, index, root, key, valueType string) error {
-	body := c.buildPutMappingBody(root, key, valueType)
-	_, err := c.esClient.PutMapping().Index(index).Type(docTypeV6).BodyJson(body).Do(ctx)
-	return err
-}
-
-func (c *clientV6) CreateIndex(ctx context.Context, index string) (bool, error) {
-	resp, err := c.esClient.CreateIndex(index).Do(ctx)
-	if err != nil {
-		return false, err
-	}
-	return resp.Acknowledged, nil
-}
-
-func (c *clientV6) buildPutMappingBody(root, key, valueType string) map[string]interface{} {
-	body := make(map[string]interface{})
-	if len(root) != 0 {
-		body["properties"] = map[string]interface{}{
-			root: map[string]interface{}{
-				"properties": map[string]interface{}{
-					key: map[string]interface{}{
-						"type": valueType,
-					},
-				},
-			},
-		}
-	} else {
-		body["properties"] = map[string]interface{}{
-			key: map[string]interface{}{
-				"type": valueType,
-			},
-		}
-	}
-	return body
-}
-
-func (c *clientV6) IsNotFoundError(err error) bool {
-	return elastic6.IsNotFound(err)
-}
-
-func (c *clientV6) CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error) {
-	catIndicesResponse, err := c.esClient.CatIndices().Do(ctx)
-	return convertV6CatIndicesResponseToV7(catIndicesResponse), err
-}
-
-func (c *clientV6) Bulk() BulkService {
-	return newBulkServiceV6(c.esClient.Bulk())
-}
-
 func convertV6CatIndicesResponseToV7(response elastic6.CatIndicesResponse) elastic.CatIndicesResponse {
 	if response == nil {
 		return nil
@@ -518,39 +553,6 @@ func convertV6CatIndicesResponseRowToV7(row elastic6.CatIndicesResponseRow) elas
 		MemoryTotal:                  row.MemoryTotal,
 		PriMemoryTotal:               row.PriMemoryTotal,
 	}
-}
-
-func (c *clientV6) IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error) {
-	resp, err := c.esClient.IndexPutTemplate(templateName).BodyString(bodyString).Do(ctx)
-	if err != nil {
-		return false, err
-	}
-	return resp.Acknowledged, nil
-}
-
-func (c *clientV6) IndexExists(ctx context.Context, indexName string) (bool, error) {
-	return c.esClient.IndexExists(indexName).Do(ctx)
-}
-
-func (c *clientV6) DeleteIndex(ctx context.Context, indexName string) (bool, error) {
-	resp, err := c.esClient.DeleteIndex(indexName).Do(ctx)
-	if err != nil {
-		return false, err
-	}
-	return resp.Acknowledged, nil
-}
-
-func (c *clientV6) IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error) {
-	resp, err := c.esClient.IndexPutSettings(indexName).BodyString(bodyString).Do(ctx)
-	if err != nil {
-		return false, err
-	}
-	return resp.Acknowledged, nil
-}
-
-func (c *clientV6) IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error) {
-	resp, err := c.esClient.IndexGetSettings(indexName).Do(ctx)
-	return convertV6IndicesGetSettingsResponseMapToV7(resp), err
 }
 
 func convertV6IndicesGetSettingsResponseMapToV7(response map[string]*elastic6.IndicesGetSettingsResponse) map[string]*elastic.IndicesGetSettingsResponse {

@@ -18,8 +18,9 @@ func newBulkServiceV7(esBulkService *elastic.BulkService) *bulkServiceV7 {
 	}
 }
 
-func (b *bulkServiceV7) Do(ctx context.Context) (*elastic.BulkResponse, error) {
-	return b.esBulkService.Do(ctx)
+func (b *bulkServiceV7) Do(ctx context.Context) error {
+	_, err := b.esBulkService.Do(ctx)
+	return err
 }
 
 func (b *bulkServiceV7) NumberOfActions() int {

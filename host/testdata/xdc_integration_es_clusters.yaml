@@ -57,6 +57,7 @@
           topic: test-visibility-topic-0
           dlq-topic: test-visibility-topic-0-dlq
   esconfig:
+    version: "${ES_VERSION}"
     url:
       scheme: "http"
       host: "${ES_SEEDS}:9200"
