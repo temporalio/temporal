@@ -28,7 +28,6 @@ package elasticsearch
 
 import (
 	"context"
-	"time"
 
 	"github.com/olivere/elastic/v7"
 )
@@ -45,7 +44,24 @@ type (
 		Count(ctx context.Context, index, query string) (int64, error)
 		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error)
 		PutMapping(ctx context.Context, index, root, key, valueType string) error
-		CreateIndex(ctx context.Context, index string) error
+		CreateIndex(ctx context.Context, index string) (bool, error)
+
+		IsNotFoundError(err error) bool
+	}
+
+	CLIClient interface {
+		CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error)
+		SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error)
+		Bulk() BulkService
+	}
+
+	IntegrationTestsClient interface {
+		CreateIndex(ctx context.Context, index string) (bool, error)
+		IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error)
+		IndexExists(ctx context.Context, indexName string) (bool, error)
+		DeleteIndex(ctx context.Context, indexName string) (bool, error)
+		IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error)
+		IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error)
 	}
 
 	// ScrollService is a interface for elastic.ScrollService
@@ -61,17 +77,5 @@ type (
 		PageSize    int
 		Sorter      []elastic.Sorter
 		SearchAfter []interface{}
-	}
-
-	// BulkProcessorParameters holds all required and optional parameters for executing bulk service
-	BulkProcessorParameters struct {
-		Name          string
-		NumOfWorkers  int
-		BulkActions   int
-		BulkSize      int
-		FlushInterval time.Duration
-		Backoff       elastic.Backoff
-		BeforeFunc    elastic.BulkBeforeFunc
-		AfterFunc     elastic.BulkAfterFunc
 	}
 )

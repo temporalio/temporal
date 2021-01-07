@@ -26,16 +26,17 @@ package elasticsearch
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
-	"github.com/olivere/elastic"
-	elastic7 "github.com/olivere/elastic/v7"
+	elastic6 "github.com/olivere/elastic"
+	"github.com/olivere/elastic/v7"
 )
 
 type (
 	// clientV6 implements Client
 	clientV6 struct {
-		esClient *elastic.Client
+		esClient *elastic6.Client
 	}
 )
 
@@ -43,19 +44,19 @@ var _ Client = (*clientV6)(nil)
 
 // newClientV6 create a ES client
 func newClientV6(config *Config) (*clientV6, error) {
-	options := []elastic.ClientOptionFunc{
-		elastic.SetURL(config.URL.String()),
-		elastic.SetSniff(false),
-		elastic.SetBasicAuth(config.Username, config.Password),
+	options := []elastic6.ClientOptionFunc{
+		elastic6.SetURL(config.URL.String()),
+		elastic6.SetSniff(false),
+		elastic6.SetBasicAuth(config.Username, config.Password),
 
 		// Disable health check so we don't block client creation (and thus temporal server startup)
 		// if the ES instance happens to be down.
-		elastic.SetHealthcheck(false),
+		elastic6.SetHealthcheck(false),
 
-		elastic.SetRetrier(elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
+		elastic6.SetRetrier(elastic6.NewBackoffRetrier(elastic6.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
 
 		// critical to ensure decode of int64 won't lose precision
-		elastic.SetDecoder(&elastic.NumberDecoder{}),
+		elastic6.SetDecoder(&elastic6.NumberDecoder{}),
 	}
 
 	if config.AWSRequestSigning.Enabled {
@@ -63,10 +64,10 @@ func newClientV6(config *Config) (*clientV6, error) {
 		if err != nil {
 			return nil, err
 		}
-		options = append(options, elastic.SetHttpClient(httpClient))
+		options = append(options, elastic6.SetHttpClient(httpClient))
 	}
 
-	client, err := elastic.NewClient(options...)
+	client, err := elastic6.NewClient(options...)
 
 	if err != nil {
 		return nil, err
@@ -74,7 +75,7 @@ func newClientV6(config *Config) (*clientV6, error) {
 
 	// Re-enable the health check after client has successfully been created.
 	client.Stop()
-	err = elastic.SetHealthcheck(true)(client)
+	err = elastic6.SetHealthcheck(true)(client)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +84,21 @@ func newClientV6(config *Config) (*clientV6, error) {
 	return &clientV6{esClient: client}, nil
 }
 
-func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic7.SearchResult, error) {
+func newSimpleClientV6(url string) (*clientV6, error) {
+	retrier := elastic6.NewBackoffRetrier(elastic6.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))
+	var client *elastic6.Client
+	var err error
+	if client, err = elastic6.NewClient(
+		elastic6.SetURL(url),
+		elastic6.SetRetrier(retrier),
+	); err != nil {
+		return nil, err
+	}
+
+	return &clientV6{esClient: client}, nil
+}
+
+func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
 	searchService := c.esClient.Search(p.Index).
 		Query(p.Query).
 		From(p.From).
@@ -105,19 +120,19 @@ func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic7.S
 	return convertV6SearchResultToV7(searchResult), nil
 }
 
-func convertV7SortersToV6(sorters []elastic7.Sorter) []elastic.Sorter {
-	sortersV6 := make([]elastic.Sorter, len(sorters))
+func convertV7SortersToV6(sorters []elastic.Sorter) []elastic6.Sorter {
+	sortersV6 := make([]elastic6.Sorter, len(sorters))
 	for i, sorter := range sorters {
 		sortersV6[i] = sorter
 	}
 	return sortersV6
 }
 
-func convertV6SearchResultToV7(result *elastic.SearchResult) *elastic7.SearchResult {
+func convertV6SearchResultToV7(result *elastic6.SearchResult) *elastic.SearchResult {
 	if result == nil {
 		return nil
 	}
-	return &elastic7.SearchResult{
+	return &elastic.SearchResult{
 		Header:          result.Header,
 		TookInMillis:    result.TookInMillis,
 		TerminatedEarly: result.TerminatedEarly,
@@ -128,21 +143,34 @@ func convertV6SearchResultToV7(result *elastic.SearchResult) *elastic7.SearchRes
 		TimedOut:        result.TimedOut,
 		Error:           convertV6ErrorDetailsToV7(result.Error),
 		Status:          result.Status,
+		Aggregations:    convertV6AggregationsToV7(result.Aggregations),
 
 		// TODO (alex): these complex structs are not converted. Add conversion funcs before using them in caller code.
-		Suggest:      nil, // result.Suggest,
-		Aggregations: nil, // result.Aggregations,
-		Profile:      nil, // result.Profile,
-		Shards:       nil, // result.Shards,
+		Suggest: nil, // result.Suggest,
+		Profile: nil, // result.Profile,
+		Shards:  nil, // result.Shards,
 	}
 }
 
-func convertV6SearchHitsToV7(hits *elastic.SearchHits) *elastic7.SearchHits {
+func convertV6AggregationsToV7(aggregations elastic6.Aggregations) elastic.Aggregations {
+	if aggregations == nil {
+		return nil
+	}
+	aggregationsV7 := make(map[string]json.RawMessage, len(aggregations))
+	for k, message := range aggregations {
+		if message != nil {
+			aggregationsV7[k] = *message
+		}
+	}
+	return aggregationsV7
+}
+
+func convertV6SearchHitsToV7(hits *elastic6.SearchHits) *elastic.SearchHits {
 	if hits == nil {
 		return nil
 	}
-	return &elastic7.SearchHits{
-		TotalHits: &elastic7.TotalHits{
+	return &elastic.SearchHits{
+		TotalHits: &elastic.TotalHits{
 			Value:    hits.TotalHits,
 			Relation: "eq",
 		},
@@ -151,22 +179,22 @@ func convertV6SearchHitsToV7(hits *elastic.SearchHits) *elastic7.SearchHits {
 	}
 }
 
-func convertV6SearchHitSliceToV7(hits []*elastic.SearchHit) []*elastic7.SearchHit {
+func convertV6SearchHitSliceToV7(hits []*elastic6.SearchHit) []*elastic.SearchHit {
 	if hits == nil {
 		return nil
 	}
-	hitsV7 := make([]*elastic7.SearchHit, len(hits))
+	hitsV7 := make([]*elastic.SearchHit, len(hits))
 	for i, hit := range hits {
 		hitsV7[i] = convertV6SearchHitToV7(hit)
 	}
 	return hitsV7
 }
 
-func convertV6SearchHitToV7(hit *elastic.SearchHit) *elastic7.SearchHit {
+func convertV6SearchHitToV7(hit *elastic6.SearchHit) *elastic.SearchHit {
 	if hit == nil {
 		return nil
 	}
-	hitV7 := &elastic7.SearchHit{
+	hitV7 := &elastic.SearchHit{
 		Score:          hit.Score,
 		Index:          hit.Index,
 		Type:           hit.Type,
@@ -178,7 +206,7 @@ func convertV6SearchHitToV7(hit *elastic.SearchHit) *elastic7.SearchHit {
 		SeqNo:          hit.SeqNo,
 		PrimaryTerm:    hit.PrimaryTerm,
 		Sort:           hit.Sort,
-		Highlight:      elastic7.SearchHitHighlight(hit.Highlight),
+		Highlight:      elastic.SearchHitHighlight(hit.Highlight),
 		Fields:         hit.Fields,
 		Explanation:    convertV6SearchExplanationToV7(hit.Explanation),
 		MatchedQueries: hit.MatchedQueries,
@@ -195,83 +223,83 @@ func convertV6SearchHitToV7(hit *elastic.SearchHit) *elastic7.SearchHit {
 	return hitV7
 }
 
-func convertV6NestedHitToV7(nestedHit *elastic.NestedHit) *elastic7.NestedHit {
+func convertV6NestedHitToV7(nestedHit *elastic6.NestedHit) *elastic.NestedHit {
 	if nestedHit == nil {
 		return nil
 	}
-	return &elastic7.NestedHit{
+	return &elastic.NestedHit{
 		Field:  nestedHit.Field,
 		Offset: nestedHit.Offset,
 		Child:  convertV6NestedHitToV7(nestedHit.Child),
 	}
 }
 
-func convertV6SearchHitInnerHitsMapToV7(innerHitsMap map[string]*elastic.SearchHitInnerHits) map[string]*elastic7.SearchHitInnerHits {
+func convertV6SearchHitInnerHitsMapToV7(innerHitsMap map[string]*elastic6.SearchHitInnerHits) map[string]*elastic.SearchHitInnerHits {
 	if innerHitsMap == nil {
 		return nil
 	}
-	innerHitsMapV7 := make(map[string]*elastic7.SearchHitInnerHits, len(innerHitsMap))
+	innerHitsMapV7 := make(map[string]*elastic.SearchHitInnerHits, len(innerHitsMap))
 	for k, innerHits := range innerHitsMap {
 		innerHitsMapV7[k] = convertV6SearchHitInnerHitsToV7(innerHits)
 	}
 	return innerHitsMapV7
 }
 
-func convertV6SearchHitInnerHitsToV7(innerHits *elastic.SearchHitInnerHits) *elastic7.SearchHitInnerHits {
+func convertV6SearchHitInnerHitsToV7(innerHits *elastic6.SearchHitInnerHits) *elastic.SearchHitInnerHits {
 	if innerHits == nil {
 		return nil
 	}
-	return &elastic7.SearchHitInnerHits{
+	return &elastic.SearchHitInnerHits{
 		Hits: convertV6SearchHitsToV7(innerHits.Hits),
 	}
 }
 
-func convertV6SearchExplanationToV7(explanation *elastic.SearchExplanation) *elastic7.SearchExplanation {
+func convertV6SearchExplanationToV7(explanation *elastic6.SearchExplanation) *elastic.SearchExplanation {
 	if explanation == nil {
 		return nil
 	}
-	return &elastic7.SearchExplanation{
+	return &elastic.SearchExplanation{
 		Value:       explanation.Value,
 		Description: explanation.Description,
 		Details:     convertV6SearchExplanationSliceToV7(explanation.Details),
 	}
 }
 
-func convertV6SearchExplanationSliceToV7(details []elastic.SearchExplanation) []elastic7.SearchExplanation {
+func convertV6SearchExplanationSliceToV7(details []elastic6.SearchExplanation) []elastic.SearchExplanation {
 	if details == nil {
 		return nil
 	}
-	detailsV7 := make([]elastic7.SearchExplanation, len(details))
+	detailsV7 := make([]elastic.SearchExplanation, len(details))
 	for i, detail := range details {
 		detailsV7[i] = *convertV6SearchExplanationToV7(&detail)
 	}
 	return detailsV7
 }
 
-func convertV6SearchResultClusterToV7(cluster *elastic.SearchResultCluster) *elastic7.SearchResultCluster {
+func convertV6SearchResultClusterToV7(cluster *elastic6.SearchResultCluster) *elastic.SearchResultCluster {
 	if cluster == nil {
 		return nil
 	}
-	return &elastic7.SearchResultCluster{
+	return &elastic.SearchResultCluster{
 		Successful: cluster.Successful,
 		Total:      cluster.Total,
 		Skipped:    cluster.Skipped,
 	}
 }
 
-func (c *clientV6) SearchWithDSL(ctx context.Context, index, query string) (*elastic7.SearchResult, error) {
+func (c *clientV6) SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error) {
 	searchResult, err := c.esClient.Search(index).Source(query).Do(ctx)
 	return convertV6SearchResultToV7(searchResult), err
 }
 
-func (c *clientV6) Scroll(ctx context.Context, scrollID string) (*elastic7.SearchResult, ScrollService, error) {
-	scrollService := elastic.NewScrollService(c.esClient)
+func (c *clientV6) Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error) {
+	scrollService := elastic6.NewScrollService(c.esClient)
 	result, err := scrollService.ScrollId(scrollID).Do(ctx)
 	return convertV6SearchResultToV7(result), scrollService, err
 }
 
-func (c *clientV6) ScrollFirstPage(ctx context.Context, index, query string) (*elastic7.SearchResult, ScrollService, error) {
-	scrollService := elastic.NewScrollService(c.esClient)
+func (c *clientV6) ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error) {
+	scrollService := elastic6.NewScrollService(c.esClient)
 	result, err := scrollService.Index(index).Body(query).Do(ctx)
 	return convertV6SearchResultToV7(result), scrollService, err
 }
@@ -302,9 +330,12 @@ func (c *clientV6) PutMapping(ctx context.Context, index, root, key, valueType s
 	return err
 }
 
-func (c *clientV6) CreateIndex(ctx context.Context, index string) error {
-	_, err := c.esClient.CreateIndex(index).Do(ctx)
-	return err
+func (c *clientV6) CreateIndex(ctx context.Context, index string) (bool, error) {
+	resp, err := c.esClient.CreateIndex(index).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return resp.Acknowledged, nil
 }
 
 func (c *clientV6) buildPutMappingBody(root, key, valueType string) map[string]interface{} {
@@ -327,4 +358,217 @@ func (c *clientV6) buildPutMappingBody(root, key, valueType string) map[string]i
 		}
 	}
 	return body
+}
+
+func (c *clientV6) IsNotFoundError(err error) bool {
+	return elastic6.IsNotFound(err)
+}
+
+func (c *clientV6) CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error) {
+	catIndicesResponse, err := c.esClient.CatIndices().Do(ctx)
+	return convertV6CatIndicesResponseToV7(catIndicesResponse), err
+}
+
+func (c *clientV6) Bulk() BulkService {
+	return newBulkServiceV6(c.esClient.Bulk())
+}
+
+func convertV6CatIndicesResponseToV7(response elastic6.CatIndicesResponse) elastic.CatIndicesResponse {
+	if response == nil {
+		return nil
+	}
+	responseV7 := make(elastic.CatIndicesResponse, len(response))
+	for i, row := range response {
+		responseV7[i] = convertV6CatIndicesResponseRowToV7(row)
+	}
+	return responseV7
+}
+
+func convertV6CatIndicesResponseRowToV7(row elastic6.CatIndicesResponseRow) elastic.CatIndicesResponseRow {
+	return elastic.CatIndicesResponseRow{
+		Health:                       row.Health,
+		Status:                       row.Status,
+		Index:                        row.Index,
+		UUID:                         row.UUID,
+		Pri:                          row.Pri,
+		Rep:                          row.Rep,
+		DocsCount:                    row.DocsCount,
+		DocsDeleted:                  row.DocsDeleted,
+		CreationDate:                 row.CreationDate,
+		CreationDateString:           row.CreationDateString,
+		StoreSize:                    row.StoreSize,
+		PriStoreSize:                 row.PriStoreSize,
+		CompletionSize:               row.CompletionSize,
+		PriCompletionSize:            row.PriCompletionSize,
+		FielddataMemorySize:          row.FielddataMemorySize,
+		PriFielddataMemorySize:       row.PriFielddataMemorySize,
+		FielddataEvictions:           row.FielddataEvictions,
+		PriFielddataEvictions:        row.PriFielddataEvictions,
+		QueryCacheMemorySize:         row.QueryCacheMemorySize,
+		PriQueryCacheMemorySize:      row.PriQueryCacheMemorySize,
+		QueryCacheEvictions:          row.QueryCacheEvictions,
+		PriQueryCacheEvictions:       row.PriQueryCacheEvictions,
+		RequestCacheMemorySize:       row.RequestCacheMemorySize,
+		PriRequestCacheMemorySize:    row.PriRequestCacheMemorySize,
+		RequestCacheEvictions:        row.RequestCacheEvictions,
+		PriRequestCacheEvictions:     row.PriRequestCacheEvictions,
+		RequestCacheHitCount:         row.RequestCacheHitCount,
+		PriRequestCacheHitCount:      row.PriRequestCacheHitCount,
+		RequestCacheMissCount:        row.RequestCacheMissCount,
+		PriRequestCacheMissCount:     row.PriRequestCacheMissCount,
+		FlushTotal:                   row.FlushTotal,
+		PriFlushTotal:                row.PriFlushTotal,
+		FlushTotalTime:               row.FlushTotalTime,
+		PriFlushTotalTime:            row.PriFlushTotalTime,
+		GetCurrent:                   row.GetCurrent,
+		PriGetCurrent:                row.PriGetCurrent,
+		GetTime:                      row.GetTime,
+		PriGetTime:                   row.PriGetTime,
+		GetTotal:                     row.GetTotal,
+		PriGetTotal:                  row.PriGetTotal,
+		GetExistsTime:                row.GetExistsTime,
+		PriGetExistsTime:             row.PriGetExistsTime,
+		GetExistsTotal:               row.GetExistsTotal,
+		PriGetExistsTotal:            row.PriGetExistsTotal,
+		GetMissingTime:               row.GetMissingTime,
+		PriGetMissingTime:            row.PriGetMissingTime,
+		GetMissingTotal:              row.GetMissingTotal,
+		PriGetMissingTotal:           row.PriGetMissingTotal,
+		IndexingDeleteCurrent:        row.IndexingDeleteCurrent,
+		PriIndexingDeleteCurrent:     row.PriIndexingDeleteCurrent,
+		IndexingDeleteTime:           row.IndexingDeleteTime,
+		PriIndexingDeleteTime:        row.PriIndexingDeleteTime,
+		IndexingDeleteTotal:          row.IndexingDeleteTotal,
+		PriIndexingDeleteTotal:       row.PriIndexingDeleteTotal,
+		IndexingIndexCurrent:         row.IndexingIndexCurrent,
+		PriIndexingIndexCurrent:      row.PriIndexingIndexCurrent,
+		IndexingIndexTime:            row.IndexingIndexTime,
+		PriIndexingIndexTime:         row.PriIndexingIndexTime,
+		IndexingIndexTotal:           row.IndexingIndexTotal,
+		PriIndexingIndexTotal:        row.PriIndexingIndexTotal,
+		IndexingIndexFailed:          row.IndexingIndexFailed,
+		PriIndexingIndexFailed:       row.PriIndexingIndexFailed,
+		MergesCurrent:                row.MergesCurrent,
+		PriMergesCurrent:             row.PriMergesCurrent,
+		MergesCurrentDocs:            row.MergesCurrentDocs,
+		PriMergesCurrentDocs:         row.PriMergesCurrentDocs,
+		MergesCurrentSize:            row.MergesCurrentSize,
+		PriMergesCurrentSize:         row.PriMergesCurrentSize,
+		MergesTotal:                  row.MergesTotal,
+		PriMergesTotal:               row.PriMergesTotal,
+		MergesTotalDocs:              row.MergesTotalDocs,
+		PriMergesTotalDocs:           row.PriMergesTotalDocs,
+		MergesTotalSize:              row.MergesTotalSize,
+		PriMergesTotalSize:           row.PriMergesTotalSize,
+		MergesTotalTime:              row.MergesTotalTime,
+		PriMergesTotalTime:           row.PriMergesTotalTime,
+		RefreshTotal:                 row.RefreshTotal,
+		PriRefreshTotal:              row.PriRefreshTotal,
+		RefreshExternalTotal:         0,
+		PriRefreshExternalTotal:      0,
+		RefreshTime:                  row.RefreshTime,
+		PriRefreshTime:               row.PriRefreshTime,
+		RefreshExternalTime:          "",
+		PriRefreshExternalTime:       "",
+		RefreshListeners:             row.RefreshListeners,
+		PriRefreshListeners:          row.PriRefreshListeners,
+		SearchFetchCurrent:           row.SearchFetchCurrent,
+		PriSearchFetchCurrent:        row.PriSearchFetchCurrent,
+		SearchFetchTime:              row.SearchFetchTime,
+		PriSearchFetchTime:           row.PriSearchFetchTime,
+		SearchFetchTotal:             row.SearchFetchTotal,
+		PriSearchFetchTotal:          row.PriSearchFetchTotal,
+		SearchOpenContexts:           row.SearchOpenContexts,
+		PriSearchOpenContexts:        row.PriSearchOpenContexts,
+		SearchQueryCurrent:           row.SearchQueryCurrent,
+		PriSearchQueryCurrent:        row.PriSearchQueryCurrent,
+		SearchQueryTime:              row.SearchQueryTime,
+		PriSearchQueryTime:           row.PriSearchQueryTime,
+		SearchQueryTotal:             row.SearchQueryTotal,
+		PriSearchQueryTotal:          row.PriSearchQueryTotal,
+		SearchScrollCurrent:          row.SearchScrollCurrent,
+		PriSearchScrollCurrent:       row.PriSearchScrollCurrent,
+		SearchScrollTime:             row.SearchScrollTime,
+		PriSearchScrollTime:          row.PriSearchScrollTime,
+		SearchScrollTotal:            row.SearchScrollTotal,
+		PriSearchScrollTotal:         row.PriSearchScrollTotal,
+		SearchThrottled:              false,
+		SegmentsCount:                row.SegmentsCount,
+		PriSegmentsCount:             row.PriSegmentsCount,
+		SegmentsMemory:               row.SegmentsMemory,
+		PriSegmentsMemory:            row.PriSegmentsMemory,
+		SegmentsIndexWriterMemory:    row.SegmentsIndexWriterMemory,
+		PriSegmentsIndexWriterMemory: row.PriSegmentsIndexWriterMemory,
+		SegmentsVersionMapMemory:     row.SegmentsVersionMapMemory,
+		PriSegmentsVersionMapMemory:  row.PriSegmentsVersionMapMemory,
+		SegmentsFixedBitsetMemory:    row.SegmentsFixedBitsetMemory,
+		PriSegmentsFixedBitsetMemory: row.PriSegmentsFixedBitsetMemory,
+		WarmerCurrent:                row.WarmerCurrent,
+		PriWarmerCurrent:             row.PriWarmerCurrent,
+		WarmerTotal:                  row.WarmerTotal,
+		PriWarmerTotal:               row.PriWarmerTotal,
+		WarmerTotalTime:              row.WarmerTotalTime,
+		PriWarmerTotalTime:           row.PriWarmerTotalTime,
+		SuggestCurrent:               row.SuggestCurrent,
+		PriSuggestCurrent:            row.PriSuggestCurrent,
+		SuggestTime:                  row.SuggestTime,
+		PriSuggestTime:               row.PriSuggestTime,
+		SuggestTotal:                 row.SuggestTotal,
+		PriSuggestTotal:              row.PriSuggestTotal,
+		MemoryTotal:                  row.MemoryTotal,
+		PriMemoryTotal:               row.PriMemoryTotal,
+	}
+}
+
+func (c *clientV6) IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error) {
+	resp, err := c.esClient.IndexPutTemplate(templateName).BodyString(bodyString).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return resp.Acknowledged, nil
+}
+
+func (c *clientV6) IndexExists(ctx context.Context, indexName string) (bool, error) {
+	return c.esClient.IndexExists(indexName).Do(ctx)
+}
+
+func (c *clientV6) DeleteIndex(ctx context.Context, indexName string) (bool, error) {
+	resp, err := c.esClient.DeleteIndex(indexName).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return resp.Acknowledged, nil
+}
+
+func (c *clientV6) IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error) {
+	resp, err := c.esClient.IndexPutSettings(indexName).BodyString(bodyString).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return resp.Acknowledged, nil
+}
+
+func (c *clientV6) IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error) {
+	resp, err := c.esClient.IndexGetSettings(indexName).Do(ctx)
+	return convertV6IndicesGetSettingsResponseMapToV7(resp), err
+}
+
+func convertV6IndicesGetSettingsResponseMapToV7(response map[string]*elastic6.IndicesGetSettingsResponse) map[string]*elastic.IndicesGetSettingsResponse {
+	if response == nil {
+		return nil
+	}
+	responseV7 := make(map[string]*elastic.IndicesGetSettingsResponse, len(response))
+	for k, responseItem := range response {
+		responseV7[k] = convertV6IndicesGetSettingsResponseToV7(responseItem)
+	}
+	return responseV7
+}
+
+func convertV6IndicesGetSettingsResponseToV7(response *elastic6.IndicesGetSettingsResponse) *elastic.IndicesGetSettingsResponse {
+	if response == nil {
+		return nil
+	}
+	return &elastic.IndicesGetSettingsResponse{
+		Settings: response.Settings,
+	}
 }

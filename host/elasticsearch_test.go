@@ -38,23 +38,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olivere/elastic"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -72,7 +71,7 @@ type elasticsearchIntegrationSuite struct {
 	// not merely log an error
 	*require.Assertions
 	IntegrationBase
-	esClient *elastic.Client
+	esClient elasticsearch.IntegrationTestsClient
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string
@@ -81,7 +80,7 @@ type elasticsearchIntegrationSuite struct {
 // This cluster use customized threshold for history config
 func (s *elasticsearchIntegrationSuite) SetupSuite() {
 	s.setupSuite("testdata/integration_elasticsearch_cluster.yaml")
-	s.esClient = CreateESClient(s.Suite, s.testClusterConfig.ESConfig.URL.String())
+	s.esClient = CreateESClient(s.Suite, s.testClusterConfig.ESConfig.URL.String(), s.testClusterConfig.ESConfig.Version)
 	PutIndexTemplate(s.Suite, s.esClient, "testdata/es_index_template.json", "test-visibility-template")
 	indexName := s.testClusterConfig.ESConfig.Indices[common.VisibilityAppName]
 	CreateIndex(s.Suite, s.esClient, indexName)
@@ -1112,16 +1111,18 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 }
 
 func (s *elasticsearchIntegrationSuite) putIndexSettings(indexName string, maxResultWindowSize int) {
-	_, err := s.esClient.IndexPutSettings(indexName).
-		BodyString(fmt.Sprintf(`{"max_result_window" : %d}`, defaultTestValueOfESIndexMaxResultWindow)).
-		Do(context.Background())
+	acknowledged, err := s.esClient.IndexPutSettings(
+		context.Background(),
+		indexName,
+		fmt.Sprintf(`{"max_result_window" : %d}`, defaultTestValueOfESIndexMaxResultWindow))
 	s.Require().NoError(err)
+	s.Require().True(acknowledged)
 	s.verifyMaxResultWindowSize(indexName, defaultTestValueOfESIndexMaxResultWindow)
 }
 
 func (s *elasticsearchIntegrationSuite) verifyMaxResultWindowSize(indexName string, targetSize int) {
 	for i := 0; i < numOfRetry; i++ {
-		settings, err := s.esClient.IndexGetSettings(indexName).Do(context.Background())
+		settings, err := s.esClient.IndexGetSettings(context.Background(), indexName)
 		s.Require().NoError(err)
 		if settings[indexName].Settings["index"].(map[string]interface{})["max_result_window"].(string) == strconv.Itoa(targetSize) {
 			return

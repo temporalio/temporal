@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/versionhistory"
 
-	"github.com/olivere/elastic"
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -190,8 +189,8 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 			return nil, adh.error(errUnknownValueType.MessageArgs(v), scope)
 		}
 		err := adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
-		if elastic.IsNotFound(err) {
-			err = adh.params.ESClient.CreateIndex(ctx, index)
+		if adh.params.ESClient.IsNotFoundError(err) {
+			_, err = adh.params.ESClient.CreateIndex(ctx, index)
 			if err != nil {
 				return nil, adh.error(errFailedToCreateESIndex.MessageArgs(err), scope)
 			}

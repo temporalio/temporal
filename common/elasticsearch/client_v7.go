@@ -82,6 +82,20 @@ func newClientV7(config *Config) (*clientV7, error) {
 	return &clientV7{esClient: client}, nil
 }
 
+func newSimpleClientV7(url string) (*clientV7, error) {
+	retrier := elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))
+	var client *elastic.Client
+	var err error
+	if client, err = elastic.NewClient(
+		elastic.SetURL(url),
+		elastic.SetRetrier(retrier),
+	); err != nil {
+		return nil, err
+	}
+
+	return &clientV7{esClient: client}, nil
+}
+
 func (c *clientV7) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
 	searchService := c.esClient.Search(p.Index).
 		Query(p.Query).
@@ -141,9 +155,12 @@ func (c *clientV7) PutMapping(ctx context.Context, index, root, key, valueType s
 	return err
 }
 
-func (c *clientV7) CreateIndex(ctx context.Context, index string) error {
-	_, err := c.esClient.CreateIndex(index).Do(ctx)
-	return err
+func (c *clientV7) CreateIndex(ctx context.Context, index string) (bool, error) {
+	resp, err := c.esClient.CreateIndex(index).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return resp.Acknowledged, nil
 }
 
 func (c *clientV7) buildPutMappingBody(root, key, valueType string) map[string]interface{} {
@@ -166,4 +183,48 @@ func (c *clientV7) buildPutMappingBody(root, key, valueType string) map[string]i
 		}
 	}
 	return body
+}
+
+func (c *clientV7) IsNotFoundError(err error) bool {
+	return elastic.IsNotFound(err)
+}
+
+func (c *clientV7) CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error) {
+	return c.esClient.CatIndices().Do(ctx)
+}
+
+func (c *clientV7) Bulk() BulkService {
+	return newBulkServiceV7(c.esClient.Bulk())
+}
+
+func (c *clientV7) IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error) {
+	resp, err := c.esClient.IndexPutTemplate(templateName).BodyString(bodyString).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return resp.Acknowledged, nil
+}
+
+func (c *clientV7) IndexExists(ctx context.Context, indexName string) (bool, error) {
+	return c.esClient.IndexExists(indexName).Do(ctx)
+}
+
+func (c *clientV7) DeleteIndex(ctx context.Context, indexName string) (bool, error) {
+	resp, err := c.esClient.DeleteIndex(indexName).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return resp.Acknowledged, nil
+}
+
+func (c *clientV7) IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error) {
+	resp, err := c.esClient.IndexPutSettings(indexName).BodyString(bodyString).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return resp.Acknowledged, nil
+}
+
+func (c *clientV7) IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error) {
+	return c.esClient.IndexGetSettings(indexName).Do(ctx)
 }

@@ -27,6 +27,8 @@
 package elasticsearch
 
 import (
+	"time"
+
 	"github.com/olivere/elastic/v7"
 )
 
@@ -34,6 +36,18 @@ type (
 	BulkProcessor interface {
 		Stop() error
 		Add(request elastic.BulkableRequest)
+	}
+
+	// BulkProcessorParameters holds all required and optional parameters for executing bulk service
+	BulkProcessorParameters struct {
+		Name          string
+		NumOfWorkers  int
+		BulkActions   int
+		BulkSize      int
+		FlushInterval time.Duration
+		Backoff       elastic.Backoff
+		BeforeFunc    elastic.BulkBeforeFunc
+		AfterFunc     elastic.BulkAfterFunc
 	}
 )
 

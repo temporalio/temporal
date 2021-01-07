@@ -25,17 +25,17 @@
 package elasticsearch
 
 import (
-	"github.com/olivere/elastic"
-	elastic7 "github.com/olivere/elastic/v7"
+	elastic6 "github.com/olivere/elastic"
+	"github.com/olivere/elastic/v7"
 )
 
 type (
 	bulkProcessorV6 struct {
-		esBulkProcessor *elastic.BulkProcessor
+		esBulkProcessor *elastic6.BulkProcessor
 	}
 )
 
-func newBulkProcessorV6(esBulkProcessor *elastic.BulkProcessor) *bulkProcessorV6 {
+func newBulkProcessorV6(esBulkProcessor *elastic6.BulkProcessor) *bulkProcessorV6 {
 	if esBulkProcessor == nil {
 		return nil
 	}
@@ -48,35 +48,35 @@ func (p *bulkProcessorV6) Stop() error {
 	return p.esBulkProcessor.Stop()
 }
 
-func (p *bulkProcessorV6) Add(request elastic7.BulkableRequest) {
+func (p *bulkProcessorV6) Add(request elastic.BulkableRequest) {
 	p.esBulkProcessor.Add(request)
 }
 
-func convertV7BeforeFuncToV6(beforeFunc elastic7.BulkBeforeFunc) elastic.BulkBeforeFunc {
+func convertV7BeforeFuncToV6(beforeFunc elastic.BulkBeforeFunc) elastic6.BulkBeforeFunc {
 	if beforeFunc == nil {
 		return nil
 	}
-	return func(executionId int64, requests []elastic.BulkableRequest) {
+	return func(executionId int64, requests []elastic6.BulkableRequest) {
 		beforeFunc(executionId, convertV6BulkableRequestsToV7(requests))
 	}
 }
 
-func convertV6BulkableRequestsToV7(requests []elastic.BulkableRequest) []elastic7.BulkableRequest {
+func convertV6BulkableRequestsToV7(requests []elastic6.BulkableRequest) []elastic.BulkableRequest {
 	if requests == nil {
 		return nil
 	}
-	requestsV7 := make([]elastic7.BulkableRequest, len(requests))
+	requestsV7 := make([]elastic.BulkableRequest, len(requests))
 	for i, request := range requests {
 		requestsV7[i] = request
 	}
 	return requestsV7
 }
 
-func convertV7AfterFuncToV6(afterFunc elastic7.BulkAfterFunc) elastic.BulkAfterFunc {
+func convertV7AfterFuncToV6(afterFunc elastic.BulkAfterFunc) elastic6.BulkAfterFunc {
 	if afterFunc == nil {
 		return nil
 	}
-	return func(executionId int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
+	return func(executionId int64, requests []elastic6.BulkableRequest, response *elastic6.BulkResponse, err error) {
 		errV7 := convertV6ErrorToV7(err)
 		afterFunc(
 			executionId,
@@ -91,22 +91,22 @@ func convertV6ErrorToV7(err error) error {
 		return nil
 	}
 	switch err := err.(type) {
-	case *elastic.Error:
-		return &elastic7.Error{
+	case *elastic6.Error:
+		return &elastic.Error{
 			Status:  err.Status,
 			Details: convertV6ErrorDetailsToV7(err.Details),
 		}
-	case *elastic7.Error:
+	case *elastic.Error:
 		return err
 	}
 	return err
 }
 
-func convertV6ErrorDetailsToV7(details *elastic.ErrorDetails) *elastic7.ErrorDetails {
+func convertV6ErrorDetailsToV7(details *elastic6.ErrorDetails) *elastic.ErrorDetails {
 	if details == nil {
 		return nil
 	}
-	return &elastic7.ErrorDetails{
+	return &elastic.ErrorDetails{
 		Type:         details.Type,
 		Reason:       details.Reason,
 		ResourceType: details.ResourceType,
@@ -120,55 +120,55 @@ func convertV6ErrorDetailsToV7(details *elastic.ErrorDetails) *elastic7.ErrorDet
 	}
 }
 
-func convertV6ErrorDetailsSliceToV7(details []*elastic.ErrorDetails) []*elastic7.ErrorDetails {
+func convertV6ErrorDetailsSliceToV7(details []*elastic6.ErrorDetails) []*elastic.ErrorDetails {
 	if details == nil {
 		return nil
 	}
-	detailsV7 := make([]*elastic7.ErrorDetails, len(details))
+	detailsV7 := make([]*elastic.ErrorDetails, len(details))
 	for i, detail := range details {
 		detailsV7[i] = convertV6ErrorDetailsToV7(detail)
 	}
 	return detailsV7
 }
 
-func convertV6BulkableResponseToV7(response *elastic.BulkResponse) *elastic7.BulkResponse {
+func convertV6BulkableResponseToV7(response *elastic6.BulkResponse) *elastic.BulkResponse {
 	if response == nil {
 		return nil
 	}
-	return &elastic7.BulkResponse{
+	return &elastic.BulkResponse{
 		Took:   response.Took,
 		Errors: response.Errors,
 		Items:  convertV6BulkResponseItemMapsToV7(response.Items),
 	}
 }
 
-func convertV6BulkResponseItemMapsToV7(items []map[string]*elastic.BulkResponseItem) []map[string]*elastic7.BulkResponseItem {
+func convertV6BulkResponseItemMapsToV7(items []map[string]*elastic6.BulkResponseItem) []map[string]*elastic.BulkResponseItem {
 	if items == nil {
 		return nil
 	}
-	itemsV7 := make([]map[string]*elastic7.BulkResponseItem, len(items))
+	itemsV7 := make([]map[string]*elastic.BulkResponseItem, len(items))
 	for i, item := range items {
 		itemsV7[i] = convertV6BulkResponseItemMapToV7(item)
 	}
 	return itemsV7
 }
 
-func convertV6BulkResponseItemMapToV7(item map[string]*elastic.BulkResponseItem) map[string]*elastic7.BulkResponseItem {
+func convertV6BulkResponseItemMapToV7(item map[string]*elastic6.BulkResponseItem) map[string]*elastic.BulkResponseItem {
 	if item == nil {
 		return nil
 	}
-	itemV7 := make(map[string]*elastic7.BulkResponseItem, len(item))
+	itemV7 := make(map[string]*elastic.BulkResponseItem, len(item))
 	for k, v := range item {
 		itemV7[k] = convertV6BulkResponseItemToV7(v)
 	}
 	return itemV7
 }
 
-func convertV6BulkResponseItemToV7(item *elastic.BulkResponseItem) *elastic7.BulkResponseItem {
+func convertV6BulkResponseItemToV7(item *elastic6.BulkResponseItem) *elastic.BulkResponseItem {
 	if item == nil {
 		return nil
 	}
-	return &elastic7.BulkResponseItem{
+	return &elastic.BulkResponseItem{
 		Index:         item.Index,
 		Type:          item.Type,
 		Id:            item.Id,
