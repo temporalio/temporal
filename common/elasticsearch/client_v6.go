@@ -68,16 +68,15 @@ func newClientV6(config *Config) (*clientV6, error) {
 	}
 
 	client, err := elastic6.NewClient(options...)
-
 	if err != nil {
-		return nil, err
+		return nil, convertV6ErrorToV7(err)
 	}
 
 	// Re-enable the health check after client has successfully been created.
 	client.Stop()
 	err = elastic6.SetHealthcheck(true)(client)
 	if err != nil {
-		return nil, err
+		return nil, convertV6ErrorToV7(err)
 	}
 	client.Start()
 
@@ -92,7 +91,7 @@ func newSimpleClientV6(url string) (*clientV6, error) {
 		elastic6.SetURL(url),
 		elastic6.SetRetrier(retrier),
 	); err != nil {
-		return nil, err
+		return nil, convertV6ErrorToV7(err)
 	}
 
 	return &clientV6{esClient: client}, nil
@@ -114,7 +113,7 @@ func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic.Se
 
 	searchResult, err := searchService.Do(ctx)
 	if err != nil {
-		return nil, err
+		return nil, convertV6ErrorToV7(err)
 	}
 
 	return convertV6SearchResultToV7(searchResult), nil
@@ -122,23 +121,24 @@ func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic.Se
 
 func (c *clientV6) SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error) {
 	searchResult, err := c.esClient.Search(index).Source(query).Do(ctx)
-	return convertV6SearchResultToV7(searchResult), err
+	return convertV6SearchResultToV7(searchResult), convertV6ErrorToV7(err)
 }
 
 func (c *clientV6) Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error) {
 	scrollService := elastic6.NewScrollService(c.esClient)
 	result, err := scrollService.ScrollId(scrollID).Do(ctx)
-	return convertV6SearchResultToV7(result), scrollService, err
+	return convertV6SearchResultToV7(result), scrollService, convertV6ErrorToV7(err)
 }
 
 func (c *clientV6) ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error) {
 	scrollService := elastic6.NewScrollService(c.esClient)
 	result, err := scrollService.Index(index).Body(query).Do(ctx)
-	return convertV6SearchResultToV7(result), scrollService, err
+	return convertV6SearchResultToV7(result), scrollService, convertV6ErrorToV7(err)
 }
 
 func (c *clientV6) Count(ctx context.Context, index, query string) (int64, error) {
-	return c.esClient.Count(index).BodyString(query).Do(ctx)
+	count, err := c.esClient.Count(index).BodyString(query).Do(ctx)
+	return count, convertV6ErrorToV7(err)
 }
 
 func (c *clientV6) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
@@ -153,20 +153,27 @@ func (c *clientV6) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 		After(convertV7AfterFuncToV6(p.AfterFunc)).
 		Do(ctx)
 
-	return newBulkProcessorV6(esBulkProcessor), err
+	return newBulkProcessorV6(esBulkProcessor), convertV6ErrorToV7(err)
 }
 
 // root is for nested object like Attr property for search attributes.
 func (c *clientV6) PutMapping(ctx context.Context, index, root, key, valueType string) error {
 	body := c.buildPutMappingBody(root, key, valueType)
 	_, err := c.esClient.PutMapping().Index(index).Type(docTypeV6).BodyJson(body).Do(ctx)
-	return err
+	if elastic6.IsNotFound(err) {
+		_, err = c.CreateIndex(ctx, index)
+		if err != nil {
+			return convertV6ErrorToV7(err)
+		}
+		_, err = c.esClient.PutMapping().Index(index).Type(docTypeV6).BodyJson(body).Do(ctx)
+	}
+	return convertV6ErrorToV7(err)
 }
 
 func (c *clientV6) CreateIndex(ctx context.Context, index string) (bool, error) {
 	resp, err := c.esClient.CreateIndex(index).Do(ctx)
 	if err != nil {
-		return false, err
+		return false, convertV6ErrorToV7(err)
 	}
 	return resp.Acknowledged, nil
 }
@@ -193,13 +200,9 @@ func (c *clientV6) buildPutMappingBody(root, key, valueType string) map[string]i
 	return body
 }
 
-func (c *clientV6) IsNotFoundError(err error) bool {
-	return elastic6.IsNotFound(err)
-}
-
 func (c *clientV6) CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error) {
 	catIndicesResponse, err := c.esClient.CatIndices().Do(ctx)
-	return convertV6CatIndicesResponseToV7(catIndicesResponse), err
+	return convertV6CatIndicesResponseToV7(catIndicesResponse), convertV6ErrorToV7(err)
 }
 
 func (c *clientV6) Bulk() BulkService {
@@ -209,19 +212,20 @@ func (c *clientV6) Bulk() BulkService {
 func (c *clientV6) IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error) {
 	resp, err := c.esClient.IndexPutTemplate(templateName).BodyString(bodyString).Do(ctx)
 	if err != nil {
-		return false, err
+		return false, convertV6ErrorToV7(err)
 	}
 	return resp.Acknowledged, nil
 }
 
 func (c *clientV6) IndexExists(ctx context.Context, indexName string) (bool, error) {
-	return c.esClient.IndexExists(indexName).Do(ctx)
+	exists, err := c.esClient.IndexExists(indexName).Do(ctx)
+	return exists, convertV6ErrorToV7(err)
 }
 
 func (c *clientV6) DeleteIndex(ctx context.Context, indexName string) (bool, error) {
 	resp, err := c.esClient.DeleteIndex(indexName).Do(ctx)
 	if err != nil {
-		return false, err
+		return false, convertV6ErrorToV7(err)
 	}
 	return resp.Acknowledged, nil
 }
@@ -229,14 +233,14 @@ func (c *clientV6) DeleteIndex(ctx context.Context, indexName string) (bool, err
 func (c *clientV6) IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error) {
 	resp, err := c.esClient.IndexPutSettings(indexName).BodyString(bodyString).Do(ctx)
 	if err != nil {
-		return false, err
+		return false, convertV6ErrorToV7(err)
 	}
 	return resp.Acknowledged, nil
 }
 
 func (c *clientV6) IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error) {
 	resp, err := c.esClient.IndexGetSettings(indexName).Do(ctx)
-	return convertV6IndicesGetSettingsResponseMapToV7(resp), err
+	return convertV6IndicesGetSettingsResponseMapToV7(resp), convertV6ErrorToV7(err)
 }
 
 // =============== V6/V7 adapters ===============

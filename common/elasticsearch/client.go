@@ -49,9 +49,6 @@ type (
 		Count(ctx context.Context, index, query string) (int64, error)
 		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error)
 		PutMapping(ctx context.Context, index, root, key, valueType string) error
-		CreateIndex(ctx context.Context, index string) (bool, error)
-
-		IsNotFoundError(err error) bool
 	}
 
 	CLIClient interface {

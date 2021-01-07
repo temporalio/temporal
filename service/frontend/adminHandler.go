@@ -189,13 +189,6 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 			return nil, adh.error(errUnknownValueType.MessageArgs(v), scope)
 		}
 		err := adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
-		if adh.params.ESClient.IsNotFoundError(err) {
-			_, err = adh.params.ESClient.CreateIndex(ctx, index)
-			if err != nil {
-				return nil, adh.error(errFailedToCreateESIndex.MessageArgs(err), scope)
-			}
-			err = adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
-		}
 		if err != nil {
 			return nil, adh.error(errFailedToUpdateESMapping.MessageArgs(err), scope)
 		}

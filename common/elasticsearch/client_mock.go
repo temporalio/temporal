@@ -151,11 +151,12 @@ func (mr *MockClientMockRecorder) RunBulkProcessor(ctx, p interface{}) *gomock.C
 }
 
 // PutMapping mocks base method
-func (m *MockClient) PutMapping(ctx context.Context, index, root, key, valueType string) error {
+func (m *MockClient) PutMapping(ctx context.Context, index, root, key, valueType string) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PutMapping", ctx, index, root, key, valueType)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // PutMapping indicates an expected call of PutMapping
@@ -177,20 +178,6 @@ func (m *MockClient) CreateIndex(ctx context.Context, index string) (bool, error
 func (mr *MockClientMockRecorder) CreateIndex(ctx, index interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateIndex", reflect.TypeOf((*MockClient)(nil).CreateIndex), ctx, index)
-}
-
-// IsNotFoundError mocks base method
-func (m *MockClient) IsNotFoundError(err error) bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsNotFoundError", err)
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// IsNotFoundError indicates an expected call of IsNotFoundError
-func (mr *MockClientMockRecorder) IsNotFoundError(err interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsNotFoundError", reflect.TypeOf((*MockClient)(nil).IsNotFoundError), err)
 }
 
 // MockCLIClient is a mock of CLIClient interface

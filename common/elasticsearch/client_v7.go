@@ -28,6 +28,7 @@ import (
 	"context"
 	"time"
 
+	elastic6 "github.com/olivere/elastic"
 	"github.com/olivere/elastic/v7"
 )
 
@@ -66,7 +67,6 @@ func newClientV7(config *Config) (*clientV7, error) {
 	}
 
 	client, err := elastic.NewClient(options...)
-
 	if err != nil {
 		return nil, err
 	}
@@ -152,6 +152,13 @@ func (c *clientV7) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 func (c *clientV7) PutMapping(ctx context.Context, index, root, key, valueType string) error {
 	body := c.buildPutMappingBody(root, key, valueType)
 	_, err := c.esClient.PutMapping().Index(index).BodyJson(body).Do(ctx)
+	if elastic6.IsNotFound(err) {
+		_, err = c.CreateIndex(ctx, index)
+		if err != nil {
+			return err
+		}
+		_, err = c.esClient.PutMapping().Index(index).BodyJson(body).Do(ctx)
+	}
 	return err
 }
 
