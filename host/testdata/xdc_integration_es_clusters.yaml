@@ -123,8 +123,8 @@
           topic: test-visibility-topic-1
           dlq-topic: test-visibility-topic-1-dlq
   esconfig:
+    version: "${ES_VERSION}"
     url:
-      version: "${ES_VERSION}"
       scheme: "http"
       host: "${ES_SEEDS}:9200"
     indices:
