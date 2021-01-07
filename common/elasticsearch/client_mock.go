@@ -151,33 +151,17 @@ func (mr *MockClientMockRecorder) RunBulkProcessor(ctx, p interface{}) *gomock.C
 }
 
 // PutMapping mocks base method
-func (m *MockClient) PutMapping(ctx context.Context, index, root, key, valueType string) (bool, error) {
+func (m *MockClient) PutMapping(ctx context.Context, index, root, key, valueType string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PutMapping", ctx, index, root, key, valueType)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // PutMapping indicates an expected call of PutMapping
 func (mr *MockClientMockRecorder) PutMapping(ctx, index, root, key, valueType interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockClient)(nil).PutMapping), ctx, index, root, key, valueType)
-}
-
-// CreateIndex mocks base method
-func (m *MockClient) CreateIndex(ctx context.Context, index string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateIndex", ctx, index)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CreateIndex indicates an expected call of CreateIndex
-func (mr *MockClientMockRecorder) CreateIndex(ctx, index interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateIndex", reflect.TypeOf((*MockClient)(nil).CreateIndex), ctx, index)
 }
 
 // MockCLIClient is a mock of CLIClient interface
