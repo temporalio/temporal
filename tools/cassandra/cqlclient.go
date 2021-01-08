@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -42,6 +43,7 @@ type (
 	cqlClient struct {
 		nReplicas     int
 		datacenter    string
+		timeout       time.Duration
 		session       *gocql.Session
 		clusterConfig *gocql.ClusterConfig
 	}
@@ -130,6 +132,7 @@ func newCQLClient(cfg *CQLClientConfig) (*cqlClient, error) {
 	cqlClient := new(cqlClient)
 	cqlClient.nReplicas = cfg.numReplicas
 	cqlClient.datacenter = cfg.Datacenter
+	cqlClient.timeout = time.Duration(cfg.Timeout) * time.Second
 	cqlClient.clusterConfig = clusterCfg
 	cqlClient.session, err = clusterCfg.CreateSession()
 	if err != nil {
@@ -221,7 +224,10 @@ func (client *cqlClient) WriteSchemaUpdateLog(oldVersion string, newVersion stri
 
 // Exec executes a cql statement
 func (client *cqlClient) Exec(stmt string, args ...interface{}) error {
-	return client.session.Query(stmt, args...).Exec()
+	if err := client.session.Query(stmt, args...).Exec(); err != nil {
+		return err
+	}
+	return client.waitSchemaAgreement()
 }
 
 // Close closes the cql client
@@ -307,4 +313,11 @@ func (client *cqlClient) dropAllTablesTypes() error {
 		return err
 	}
 	return nil
+}
+
+// waitSchemaAgreement wait for schema change agreements
+func (client *cqlClient) waitSchemaAgreement() error {
+	ctx, cancel := context.WithTimeout(context.Background(), client.timeout)
+	defer cancel()
+	return client.session.AwaitSchemaAgreement(ctx)
 }
