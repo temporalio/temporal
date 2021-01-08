@@ -36,7 +36,6 @@ import (
 	"time"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/olivere/elastic"
 	"github.com/urfave/cli"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -50,9 +49,6 @@ import (
 
 const (
 	esDocIDDelimiter = "~"
-	esDocType        = "_doc"
-
-	versionTypeExternal = "external"
 )
 
 const (
@@ -83,16 +79,16 @@ func timeValProcess(timeStr string) (string, error) {
 	return fmt.Sprintf("%v", parsedTime.UnixNano()), nil
 }
 
-func getESClient(c *cli.Context) *elastic.Client {
+func newESClient(c *cli.Context) es.CLIClient {
 	url := getRequiredOption(c, FlagURL)
-	retrier := elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))
-	var client *elastic.Client
-	var err error
-	if client, err = elastic.NewClient(
-		elastic.SetURL(url),
-		elastic.SetRetrier(retrier),
-	); err != nil {
-		ErrorAndExit("Unable to create ElasticSearch client", err)
+	var version string
+	if c.IsSet(FlagVersion) {
+		version = c.String(FlagVersion)
+	}
+
+	client, err := es.NewCLIClient(url, version)
+	if err != nil {
+		ErrorAndExit("Unable to create Elasticsearch client", err)
 	}
 
 	return client
@@ -100,10 +96,10 @@ func getESClient(c *cli.Context) *elastic.Client {
 
 // AdminCatIndices cat indices for ES cluster
 func AdminCatIndices(c *cli.Context) {
-	esClient := getESClient(c)
+	esClient := newESClient(c)
 
 	ctx := context.Background()
-	resp, err := esClient.CatIndices().Do(ctx)
+	resp, err := esClient.CatIndices(ctx)
 	if err != nil {
 		ErrorAndExit("Unable to cat indices", err)
 	}
@@ -129,7 +125,7 @@ func AdminCatIndices(c *cli.Context) {
 
 // AdminIndex used to bulk insert message from kafka parse
 func AdminIndex(c *cli.Context) {
-	esClient := getESClient(c)
+	esClient := newESClient(c)
 	indexName := getRequiredOption(c, FlagIndex)
 	inputFileName := getRequiredOption(c, FlagInputFile)
 	batchSize := c.Int(FlagBatchSize)
@@ -141,34 +137,34 @@ func AdminIndex(c *cli.Context) {
 
 	bulkRequest := esClient.Bulk()
 	bulkConductFn := func() {
-		_, err := bulkRequest.Do(context.Background())
+		err := bulkRequest.Do(context.Background())
 		if err != nil {
 			ErrorAndExit("Bulk failed", err)
 		}
 		if bulkRequest.NumberOfActions() != 0 {
-			ErrorAndExit(fmt.Sprintf("Bulk request not done, %d", bulkRequest.NumberOfActions()), err)
+			ErrorAndExit(fmt.Sprintf("Bulk request not done, %d", bulkRequest.NumberOfActions()), nil)
 		}
 	}
 	for i, message := range messages {
 		docID := message.GetWorkflowId() + esDocIDDelimiter + message.GetRunId()
-		var req elastic.BulkableRequest
+		var req *es.BulkableRequest
 		switch message.GetMessageType() {
 		case enumsspb.MESSAGE_TYPE_INDEX:
 			doc := generateESDoc(message)
-			req = elastic.NewBulkIndexRequest().
-				Index(indexName).
-				Type(esDocType).
-				Id(docID).
-				VersionType(versionTypeExternal).
-				Version(message.GetVersion()).
-				Doc(doc)
+			req = &es.BulkableRequest{
+				Index:       indexName,
+				ID:          docID,
+				Version:     message.GetVersion(),
+				RequestType: es.BulkableRequestTypeIndex,
+				Doc:         doc,
+			}
 		case enumsspb.MESSAGE_TYPE_DELETE:
-			req = elastic.NewBulkDeleteRequest().
-				Index(indexName).
-				Type(esDocType).
-				Id(docID).
-				VersionType(versionTypeExternal).
-				Version(message.GetVersion())
+			req = &es.BulkableRequest{
+				Index:       indexName,
+				ID:          docID,
+				Version:     message.GetVersion(),
+				RequestType: es.BulkableRequestTypeDelete,
+			}
 		default:
 			ErrorAndExit("Unknown message type", nil)
 		}
@@ -185,7 +181,7 @@ func AdminIndex(c *cli.Context) {
 
 // AdminDelete used to delete documents from ElasticSearch with input of list result
 func AdminDelete(c *cli.Context) {
-	esClient := getESClient(c)
+	esClient := newESClient(c)
 	indexName := getRequiredOption(c, FlagIndex)
 	inputFileName := getRequiredOption(c, FlagInputFile)
 	batchSize := c.Int(FlagBatchSize)
@@ -210,24 +206,24 @@ func AdminDelete(c *cli.Context) {
 		if !ok {
 			time.Sleep(waitTime)
 		}
-		_, err := bulkRequest.Do(context.Background())
+		err := bulkRequest.Do(context.Background())
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("Bulk failed, current processed row %d", i), err)
 		}
 		if bulkRequest.NumberOfActions() != 0 {
-			ErrorAndExit(fmt.Sprintf("Bulk request not done, current processed row %d", i), err)
+			ErrorAndExit(fmt.Sprintf("Bulk request not done, current processed row %d", i), nil)
 		}
 	}
 
 	for scanner.Scan() {
 		line := strings.Split(scanner.Text(), "|")
 		docID := strings.TrimSpace(line[1]) + esDocIDDelimiter + strings.TrimSpace(line[2])
-		req := elastic.NewBulkDeleteRequest().
-			Index(indexName).
-			Type(esDocType).
-			Id(docID).
-			VersionType(versionTypeExternal).
-			Version(math.MaxInt64)
+		req := &es.BulkableRequest{
+			Index:       indexName,
+			ID:          docID,
+			Version:     math.MaxInt64,
+			RequestType: es.BulkableRequestTypeDelete,
+		}
 		bulkRequest.Add(req)
 		if i%batchSize == batchSize-1 {
 			bulkConductFn()
@@ -240,7 +236,7 @@ func AdminDelete(c *cli.Context) {
 }
 
 func parseIndexerMessage(fileName string) (messages []*indexerspb.Message, err error) {
-	// Executed from the CLI to parse existing elastiseach files
+	// Executed from the CLI to parse existing elasticsearch files
 	// #nosec
 	file, err := os.Open(fileName)
 	if err != nil {
@@ -323,7 +319,6 @@ func toTimeStr(s interface{}) string {
 // GenerateReport generate report for an aggregation query to ES
 func GenerateReport(c *cli.Context) {
 	// use url command argument to create client
-	url := getRequiredOption(c, FlagURL)
 	index := getRequiredOption(c, FlagIndex)
 	sql := getRequiredOption(c, FlagListQuery)
 	var reportFormat, reportFilePath string
@@ -335,11 +330,6 @@ func GenerateReport(c *cli.Context) {
 	} else {
 		reportFilePath = "./report." + reportFormat
 	}
-	esClient, err := elastic.NewClient(elastic.SetURL(url))
-	if err != nil {
-		ErrorAndExit("Fail to create elastic client", err)
-	}
-	ctx := context.Background()
 
 	// convert sql to dsl
 	e := esql.NewESql()
@@ -350,8 +340,10 @@ func GenerateReport(c *cli.Context) {
 		ErrorAndExit("Fail to convert sql to dsl", err)
 	}
 
+	esClient := newESClient(c)
+	ctx := context.Background()
 	// query client
-	resp, err := esClient.Search(index).Source(dsl).Do(ctx)
+	resp, err := esClient.SearchWithDSL(ctx, index, dsl)
 	if err != nil {
 		ErrorAndExit("Fail to talk with ES", err)
 	}
@@ -361,7 +353,7 @@ func GenerateReport(c *cli.Context) {
 	var headers []string
 	var groupby, bucket map[string]interface{}
 	var buckets []interface{}
-	err = json.Unmarshal(*resp.Aggregations["groupby"], &groupby)
+	err = json.Unmarshal(resp.Aggregations["groupby"], &groupby)
 	if err != nil {
 		ErrorAndExit("Fail to parse groupby", err)
 	}

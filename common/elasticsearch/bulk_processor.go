@@ -22,46 +22,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination bulk_processor_mock.go
+
 package elasticsearch
 
 import (
-	"fmt"
-	"testing"
+	"time"
 
 	"github.com/olivere/elastic/v7"
-	"github.com/stretchr/testify/require"
 )
 
-func Test_BuildPutMappingBody(t *testing.T) {
-	tests := []struct {
-		root     string
-		expected string
-	}{
-		{
-			root:     "Attr",
-			expected: "map[properties:map[Attr:map[properties:map[testKey:map[type:text]]]]]",
-		},
-		{
-			root:     "",
-			expected: "map[properties:map[testKey:map[type:text]]]",
-		},
-	}
-	k := "testKey"
-	v := "text"
+type BulkableRequestType uint8
 
-	var client clientV6
-	for _, test := range tests {
-		require.Equal(t, test.expected, fmt.Sprintf("%v", client.buildPutMappingBody(test.root, k, v)))
-	}
-}
-func Test_ConvertV7Sorters(t *testing.T) {
-	sortersV7 := make([]elastic.Sorter, 2)
-	sortersV7[0] = elastic.NewFieldSort("test")
-	sortersV7[1] = elastic.NewFieldSort("test2")
+const (
+	BulkableRequestTypeIndex BulkableRequestType = iota
+	BulkableRequestTypeDelete
+)
 
-	sortersV6 := convertV7SortersToV6(sortersV7)
-	require.NotNil(t, sortersV6[0])
-	source0, err0 := sortersV6[0].Source()
-	require.NoError(t, err0)
-	require.NotNil(t, source0)
-}
+type (
+	BulkProcessor interface {
+		Stop() error
+		Add(request *BulkableRequest)
+	}
+
+	// BulkProcessorParameters holds all required and optional parameters for executing bulk service
+	BulkProcessorParameters struct {
+		Name          string
+		NumOfWorkers  int
+		BulkActions   int
+		BulkSize      int
+		FlushInterval time.Duration
+		Backoff       elastic.Backoff
+		BeforeFunc    elastic.BulkBeforeFunc
+		AfterFunc     elastic.BulkAfterFunc
+	}
+
+	BulkableRequest struct {
+		RequestType BulkableRequestType
+		Index       string
+		ID          string
+		Version     int64
+		Doc         map[string]interface{}
+	}
+)

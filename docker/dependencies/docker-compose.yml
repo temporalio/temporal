@@ -54,7 +54,7 @@ services:
     networks:
       - temporal-dependencies-network
   elasticsearch:
-    image: elasticsearch:6.8.8
+    image: elasticsearch:7.10.1
     container_name: temporal-elasticsearch
     ports:
       - "9200:9200"
@@ -77,6 +77,18 @@ services:
       - kafka
     networks:
       - temporal-dependencies-network
+  prometheus:
+    # Use http://localhost:9090/ to access Prometheus.
+    image: prom/prometheus
+    container_name: temporal-prometheus
+  grafana:
+    # Use http://localhost:3000/ to access Grafana (admin/admin).
+    image: grafana/grafana
+    container_name: temporal-grafana
+    depends_on:
+      - prometheus
+    volumes:
+      - ./grafana/provisioning/:/etc/grafana/provisioning/
   temporal-web:
     image: temporalio/web:1.4.0
     container_name: temporal-web

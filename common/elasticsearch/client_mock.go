@@ -31,7 +31,7 @@ package elasticsearch
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	elastic "github.com/olivere/elastic"
+	v7 "github.com/olivere/elastic/v7"
 	reflect "reflect"
 )
 
@@ -59,10 +59,10 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // Search mocks base method
-func (m *MockClient) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
+func (m *MockClient) Search(ctx context.Context, p *SearchParameters) (*v7.SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Search", ctx, p)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*v7.SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -74,10 +74,10 @@ func (mr *MockClientMockRecorder) Search(ctx, p interface{}) *gomock.Call {
 }
 
 // SearchWithDSL mocks base method
-func (m *MockClient) SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error) {
+func (m *MockClient) SearchWithDSL(ctx context.Context, index, query string) (*v7.SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SearchWithDSL", ctx, index, query)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*v7.SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -89,10 +89,10 @@ func (mr *MockClientMockRecorder) SearchWithDSL(ctx, index, query interface{}) *
 }
 
 // Scroll mocks base method
-func (m *MockClient) Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error) {
+func (m *MockClient) Scroll(ctx context.Context, scrollID string) (*v7.SearchResult, ScrollService, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Scroll", ctx, scrollID)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*v7.SearchResult)
 	ret1, _ := ret[1].(ScrollService)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -105,10 +105,10 @@ func (mr *MockClientMockRecorder) Scroll(ctx, scrollID interface{}) *gomock.Call
 }
 
 // ScrollFirstPage mocks base method
-func (m *MockClient) ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error) {
+func (m *MockClient) ScrollFirstPage(ctx context.Context, index, query string) (*v7.SearchResult, ScrollService, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ScrollFirstPage", ctx, index, query)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*v7.SearchResult)
 	ret1, _ := ret[1].(ScrollService)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -136,10 +136,10 @@ func (mr *MockClientMockRecorder) Count(ctx, index, query interface{}) *gomock.C
 }
 
 // RunBulkProcessor mocks base method
-func (m *MockClient) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (*elastic.BulkProcessor, error) {
+func (m *MockClient) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RunBulkProcessor", ctx, p)
-	ret0, _ := ret[0].(*elastic.BulkProcessor)
+	ret0, _ := ret[0].(BulkProcessor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -164,18 +164,184 @@ func (mr *MockClientMockRecorder) PutMapping(ctx, index, root, key, valueType in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockClient)(nil).PutMapping), ctx, index, root, key, valueType)
 }
 
-// CreateIndex mocks base method
-func (m *MockClient) CreateIndex(ctx context.Context, index string) error {
+// MockCLIClient is a mock of CLIClient interface
+type MockCLIClient struct {
+	ctrl     *gomock.Controller
+	recorder *MockCLIClientMockRecorder
+}
+
+// MockCLIClientMockRecorder is the mock recorder for MockCLIClient
+type MockCLIClientMockRecorder struct {
+	mock *MockCLIClient
+}
+
+// NewMockCLIClient creates a new mock instance
+func NewMockCLIClient(ctrl *gomock.Controller) *MockCLIClient {
+	mock := &MockCLIClient{ctrl: ctrl}
+	mock.recorder = &MockCLIClientMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use
+func (m *MockCLIClient) EXPECT() *MockCLIClientMockRecorder {
+	return m.recorder
+}
+
+// CatIndices mocks base method
+func (m *MockCLIClient) CatIndices(ctx context.Context) (v7.CatIndicesResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateIndex", ctx, index)
-	ret0, _ := ret[0].(error)
+	ret := m.ctrl.Call(m, "CatIndices", ctx)
+	ret0, _ := ret[0].(v7.CatIndicesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CatIndices indicates an expected call of CatIndices
+func (mr *MockCLIClientMockRecorder) CatIndices(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CatIndices", reflect.TypeOf((*MockCLIClient)(nil).CatIndices), ctx)
+}
+
+// SearchWithDSL mocks base method
+func (m *MockCLIClient) SearchWithDSL(ctx context.Context, index, query string) (*v7.SearchResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SearchWithDSL", ctx, index, query)
+	ret0, _ := ret[0].(*v7.SearchResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SearchWithDSL indicates an expected call of SearchWithDSL
+func (mr *MockCLIClientMockRecorder) SearchWithDSL(ctx, index, query interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchWithDSL", reflect.TypeOf((*MockCLIClient)(nil).SearchWithDSL), ctx, index, query)
+}
+
+// Bulk mocks base method
+func (m *MockCLIClient) Bulk() BulkService {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Bulk")
+	ret0, _ := ret[0].(BulkService)
 	return ret0
 }
 
-// CreateIndex indicates an expected call of CreateIndex
-func (mr *MockClientMockRecorder) CreateIndex(ctx, index interface{}) *gomock.Call {
+// Bulk indicates an expected call of Bulk
+func (mr *MockCLIClientMockRecorder) Bulk() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateIndex", reflect.TypeOf((*MockClient)(nil).CreateIndex), ctx, index)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Bulk", reflect.TypeOf((*MockCLIClient)(nil).Bulk))
+}
+
+// MockIntegrationTestsClient is a mock of IntegrationTestsClient interface
+type MockIntegrationTestsClient struct {
+	ctrl     *gomock.Controller
+	recorder *MockIntegrationTestsClientMockRecorder
+}
+
+// MockIntegrationTestsClientMockRecorder is the mock recorder for MockIntegrationTestsClient
+type MockIntegrationTestsClientMockRecorder struct {
+	mock *MockIntegrationTestsClient
+}
+
+// NewMockIntegrationTestsClient creates a new mock instance
+func NewMockIntegrationTestsClient(ctrl *gomock.Controller) *MockIntegrationTestsClient {
+	mock := &MockIntegrationTestsClient{ctrl: ctrl}
+	mock.recorder = &MockIntegrationTestsClientMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use
+func (m *MockIntegrationTestsClient) EXPECT() *MockIntegrationTestsClientMockRecorder {
+	return m.recorder
+}
+
+// CreateIndex mocks base method
+func (m *MockIntegrationTestsClient) CreateIndex(ctx context.Context, index string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateIndex", ctx, index)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateIndex indicates an expected call of CreateIndex
+func (mr *MockIntegrationTestsClientMockRecorder) CreateIndex(ctx, index interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateIndex", reflect.TypeOf((*MockIntegrationTestsClient)(nil).CreateIndex), ctx, index)
+}
+
+// IndexPutTemplate mocks base method
+func (m *MockIntegrationTestsClient) IndexPutTemplate(ctx context.Context, templateName, bodyString string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IndexPutTemplate", ctx, templateName, bodyString)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IndexPutTemplate indicates an expected call of IndexPutTemplate
+func (mr *MockIntegrationTestsClientMockRecorder) IndexPutTemplate(ctx, templateName, bodyString interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexPutTemplate", reflect.TypeOf((*MockIntegrationTestsClient)(nil).IndexPutTemplate), ctx, templateName, bodyString)
+}
+
+// IndexExists mocks base method
+func (m *MockIntegrationTestsClient) IndexExists(ctx context.Context, indexName string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IndexExists", ctx, indexName)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IndexExists indicates an expected call of IndexExists
+func (mr *MockIntegrationTestsClientMockRecorder) IndexExists(ctx, indexName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexExists", reflect.TypeOf((*MockIntegrationTestsClient)(nil).IndexExists), ctx, indexName)
+}
+
+// DeleteIndex mocks base method
+func (m *MockIntegrationTestsClient) DeleteIndex(ctx context.Context, indexName string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteIndex", ctx, indexName)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteIndex indicates an expected call of DeleteIndex
+func (mr *MockIntegrationTestsClientMockRecorder) DeleteIndex(ctx, indexName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteIndex", reflect.TypeOf((*MockIntegrationTestsClient)(nil).DeleteIndex), ctx, indexName)
+}
+
+// IndexPutSettings mocks base method
+func (m *MockIntegrationTestsClient) IndexPutSettings(ctx context.Context, indexName, bodyString string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IndexPutSettings", ctx, indexName, bodyString)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IndexPutSettings indicates an expected call of IndexPutSettings
+func (mr *MockIntegrationTestsClientMockRecorder) IndexPutSettings(ctx, indexName, bodyString interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexPutSettings", reflect.TypeOf((*MockIntegrationTestsClient)(nil).IndexPutSettings), ctx, indexName, bodyString)
+}
+
+// IndexGetSettings mocks base method
+func (m *MockIntegrationTestsClient) IndexGetSettings(ctx context.Context, indexName string) (map[string]*v7.IndicesGetSettingsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IndexGetSettings", ctx, indexName)
+	ret0, _ := ret[0].(map[string]*v7.IndicesGetSettingsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IndexGetSettings indicates an expected call of IndexGetSettings
+func (mr *MockIntegrationTestsClientMockRecorder) IndexGetSettings(ctx, indexName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexGetSettings", reflect.TypeOf((*MockIntegrationTestsClient)(nil).IndexGetSettings), ctx, indexName)
 }
 
 // MockScrollService is a mock of ScrollService interface

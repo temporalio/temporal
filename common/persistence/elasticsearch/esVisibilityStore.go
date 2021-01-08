@@ -38,7 +38,7 @@ import (
 	"time"
 
 	"github.com/cch123/elasticsql"
-	"github.com/olivere/elastic"
+	"github.com/olivere/elastic/v7"
 	"github.com/valyala/fastjson"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -62,9 +62,7 @@ import (
 const (
 	persistenceName = "elasticsearch"
 
-	delimiter           = "~"
-	docType             = "_doc"
-	versionTypeExternal = "external"
+	delimiter = "~"
 )
 
 type (
@@ -234,12 +232,12 @@ func (v *esVisibilityStore) UpsertWorkflowExecutionV2(request *p.InternalUpsertW
 func (v *esVisibilityStore) DeleteWorkflowExecutionV2(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
 	docID := getDocID(request.WorkflowID, request.RunID)
 
-	bulkDeleteRequest := elastic.NewBulkDeleteRequest().
-		Index(v.index).
-		Type(docType).
-		Id(docID).
-		VersionType(versionTypeExternal).
-		Version(request.TaskID)
+	bulkDeleteRequest := &es.BulkableRequest{
+		Index:       v.index,
+		ID:          docID,
+		Version:     request.TaskID,
+		RequestType: es.BulkableRequestTypeDelete,
+	}
 
 	return v.addBulkRequestAndWait(bulkDeleteRequest, docID)
 }
@@ -257,18 +255,18 @@ func (v *esVisibilityStore) addBulkIndexRequestAndWait(
 	esDoc map[string]interface{},
 	visibilityTaskKey string,
 ) error {
-	bulkRequest := elastic.NewBulkIndexRequest().
-		Index(v.index).
-		Type(docType).
-		Id(getDocID(request.WorkflowID, request.RunID)).
-		VersionType(versionTypeExternal).
-		Version(request.TaskID).
-		Doc(esDoc)
+	bulkIndexRequest := &es.BulkableRequest{
+		Index:       v.index,
+		ID:          getDocID(request.WorkflowID, request.RunID),
+		Version:     request.TaskID,
+		RequestType: es.BulkableRequestTypeIndex,
+		Doc:         esDoc,
+	}
 
-	return v.addBulkRequestAndWait(bulkRequest, visibilityTaskKey)
+	return v.addBulkRequestAndWait(bulkIndexRequest, visibilityTaskKey)
 }
 
-func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest elastic.BulkableRequest, visibilityTaskKey string) error {
+func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest *es.BulkableRequest, visibilityTaskKey string) error {
 	v.checkProcessor()
 
 	ackCh := make(chan bool, 1)
@@ -988,7 +986,7 @@ func (v *esVisibilityStore) getListWorkflowExecutionsResponse(searchHits *elasti
 
 		// ES Search API support pagination using From and PageSize, but has limit that From+PageSize cannot exceed a threshold
 		// to retrieve deeper pages, use ES SearchAfter
-		if searchHits.TotalHits <= int64(v.config.ESIndexMaxResultWindow()-pageSize) { // use ES Search From+Size
+		if searchHits.TotalHits.Value <= int64(v.config.ESIndexMaxResultWindow()-pageSize) { // use ES Search From+Size
 			nextPageToken, err = v.serializePageToken(&esVisibilityPageToken{From: token.From + numOfActualHits})
 		} else { // use ES Search After
 			var sortVal interface{}
@@ -1030,7 +1028,7 @@ func (v *esVisibilityStore) serializePageToken(token *esVisibilityPageToken) ([]
 
 func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.SearchHit) *p.VisibilityWorkflowExecutionInfo {
 	var source *visibilityRecord
-	err := json.Unmarshal(*hit.Source, &source)
+	err := json.Unmarshal(hit.Source, &source)
 	if err != nil { // log and skip error
 		v.logger.Error("unable to unmarshal search hit source",
 			tag.Error(err), tag.ESDocID(hit.Id))

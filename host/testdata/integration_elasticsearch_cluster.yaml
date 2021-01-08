@@ -24,6 +24,7 @@ workerconfig:
   enablereplicator: false
   enableindexer: true
 esconfig:
+  version: "${ES_VERSION}"
   url:
     scheme: "http"
     host: "${ES_SEEDS}:9200"

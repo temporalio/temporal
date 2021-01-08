@@ -23,6 +23,7 @@
 // THE SOFTWARE.
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination esProcessor_mock.go
+
 package elasticsearch
 
 import (
@@ -34,7 +35,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/olivere/elastic"
+	"github.com/olivere/elastic/v7"
 	"github.com/uber-go/tally"
 
 	"go.temporal.io/server/common"
@@ -53,24 +54,13 @@ type (
 
 		// Add request to bulk, and record kafka message in map with provided key
 		// This call will be blocked when downstream has issues
-		Add(request elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool)
-	}
-
-	// ElasticBulkProcessor is interface for elastic.BulkProcessor
-	// (elastic package doesn't provide such interface that tests can mock)
-	ElasticBulkProcessor interface {
-		Start(ctx context.Context) error
-		Stop() error
-		Close() error
-		Stats() elastic.BulkProcessorStats
-		Add(request elastic.BulkableRequest)
-		Flush() error
+		Add(request *elasticsearch.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool)
 	}
 
 	// esProcessorImpl implements Processor, it's an agent of elastic.BulkProcessor
 	esProcessorImpl struct {
 		status                  int32
-		bulkProcessor           ElasticBulkProcessor
+		bulkProcessor           elasticsearch.BulkProcessor
 		bulkProcessorParameters *elasticsearch.BulkProcessorParameters
 		client                  elasticsearch.Client
 		mapToAckChan            collection.ConcurrentTxMap // used to map ES request to ack channel
@@ -86,7 +76,6 @@ type (
 )
 
 var _ Processor = (*esProcessorImpl)(nil)
-var _ ElasticBulkProcessor = (*elastic.BulkProcessor)(nil)
 
 const (
 	// retry configs for es bulk processor
@@ -168,7 +157,7 @@ func (p *esProcessorImpl) hashFn(key interface{}) uint32 {
 }
 
 // Add request to bulk, and record ack channel message in map with provided key
-func (p *esProcessorImpl) Add(request elastic.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+func (p *esProcessorImpl) Add(request *elasticsearch.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 	if cap(ackCh) < 1 {
 		panic("ackCh must be buffered channel (length should be 1 or more)")
 	}
@@ -211,21 +200,23 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 		return
 	}
 
-	responseItems := response.Items
-	for i := 0; i < len(requests); i++ {
-		visibilityTaskKey := p.getVisibilityTaskKey(requests[i])
+	for i, request := range requests {
+		visibilityTaskKey := p.getVisibilityTaskKey(request)
 		if visibilityTaskKey == "" {
 			continue
 		}
-		responseItem := responseItems[i]
+		responseItem := response.Items[i]
 		for _, resp := range responseItem {
 			switch {
 			case isResponseSuccess(resp.Status):
 				p.sendToAckChan(visibilityTaskKey, true)
 			case !isResponseRetryable(resp.Status):
-				wid, rid, namespaceID := p.getDocIDs(requests[i])
+				wid, rid, namespaceID := p.getDocIDs(request)
 				p.logger.Error("ES request failed.",
-					tag.ESResponseStatus(resp.Status), tag.ESResponseError(getErrorMsgFromESResp(resp)), tag.WorkflowID(wid), tag.WorkflowRunID(rid),
+					tag.ESResponseStatus(resp.Status),
+					tag.ESResponseError(getErrorMsgFromESResp(resp)),
+					tag.WorkflowID(wid),
+					tag.WorkflowRunID(rid),
 					tag.WorkflowNamespaceID(namespaceID))
 				p.sendToAckChan(visibilityTaskKey, false)
 			default: // bulk processor will retry

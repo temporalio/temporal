@@ -26,42 +26,48 @@ package elasticsearch
 
 import (
 	"fmt"
-	"testing"
+	"net/http"
+	"os"
+	"strings"
 
-	"github.com/olivere/elastic/v7"
-	"github.com/stretchr/testify/require"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	elasticaws "github.com/olivere/elastic/aws/v4"
 )
 
-func Test_BuildPutMappingBody(t *testing.T) {
-	tests := []struct {
-		root     string
-		expected string
-	}{
-		{
-			root:     "Attr",
-			expected: "map[properties:map[Attr:map[properties:map[testKey:map[type:text]]]]]",
-		},
-		{
-			root:     "",
-			expected: "map[properties:map[testKey:map[type:text]]]",
-		},
+func newAWSElasticsearchHTTPClient(config AWSRequestSigningConfig) (*http.Client, error) {
+	if config.Region == "" {
+		config.Region = os.Getenv("AWS_REGION")
+		if config.Region == "" {
+			return nil, fmt.Errorf("unable to resolve aws region for obtaining aws es signing credentials")
+		}
 	}
-	k := "testKey"
-	v := "text"
 
-	var client clientV6
-	for _, test := range tests {
-		require.Equal(t, test.expected, fmt.Sprintf("%v", client.buildPutMappingBody(test.root, k, v)))
+	var awsCredentials *credentials.Credentials
+
+	switch strings.ToLower(config.CredentialProvider) {
+	case "static":
+		awsCredentials = credentials.NewStaticCredentials(
+			config.Static.AccessKeyID,
+			config.Static.SecretAccessKey,
+			config.Static.Token,
+		)
+	case "environment":
+		awsCredentials = credentials.NewEnvCredentials()
+	case "aws-sdk-default":
+		awsSession, err := session.NewSession(&aws.Config{
+			Region: &config.Region,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		awsCredentials = awsSession.Config.Credentials
+	default:
+		return nil, fmt.Errorf("unknown aws credential provider specified: %+v. Accepted options are 'static', 'environment' or 'session'", config.CredentialProvider)
 	}
-}
-func Test_ConvertV7Sorters(t *testing.T) {
-	sortersV7 := make([]elastic.Sorter, 2)
-	sortersV7[0] = elastic.NewFieldSort("test")
-	sortersV7[1] = elastic.NewFieldSort("test2")
 
-	sortersV6 := convertV7SortersToV6(sortersV7)
-	require.NotNil(t, sortersV6[0])
-	source0, err0 := sortersV6[0].Source()
-	require.NoError(t, err0)
-	require.NotNil(t, source0)
+	return elasticaws.NewV4SigningClient(awsCredentials, config.Region), nil
 }
