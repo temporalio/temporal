@@ -110,6 +110,7 @@ func loadCassandraSchema(
 		CQLClientConfig: cassandra.CQLClientConfig{
 			Hosts:    strings.Join(hosts, ","),
 			Port:     port,
+			Timeout:  30,
 			Keyspace: keyspace,
 			TLS:      tls,
 		},
