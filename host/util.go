@@ -25,53 +25,50 @@
 package host
 
 import (
+	"context"
 	"io/ioutil"
-	"time"
 
-	"github.com/olivere/elastic"
 	"github.com/stretchr/testify/suite"
+
+	"go.temporal.io/server/common/elasticsearch"
 )
 
 // CreateESClient create ElasticSearch client for test
-func CreateESClient(s suite.Suite, url string) *elastic.Client {
-	var err error
-	esClient, err := elastic.NewClient(
-		elastic.SetURL(url),
-		elastic.SetRetrier(elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
-	)
+func CreateESClient(s suite.Suite, url string, version string) elasticsearch.IntegrationTestsClient {
+	client, err := elasticsearch.NewIntegrationTestsClient(url, version)
 	s.Require().NoError(err)
-	return esClient
+	return client
 }
 
 // PutIndexTemplate put index template for test
-func PutIndexTemplate(s suite.Suite, esClient *elastic.Client, templateConfigFile, templateName string) {
+func PutIndexTemplate(s suite.Suite, esClient elasticsearch.IntegrationTestsClient, templateConfigFile, templateName string) {
 	// This function is used exclusively in tests. Excluding it from security checks.
 	// #nosec
 	template, err := ioutil.ReadFile(templateConfigFile)
 	s.Require().NoError(err)
-	putTemplate, err := esClient.IndexPutTemplate(templateName).BodyString(string(template)).Do(NewContext())
+	acknowledged, err := esClient.IndexPutTemplate(context.Background(), templateName, string(template))
 	s.Require().NoError(err)
-	s.Require().True(putTemplate.Acknowledged)
+	s.Require().True(acknowledged)
 }
 
 // CreateIndex create test index
-func CreateIndex(s suite.Suite, esClient *elastic.Client, indexName string) {
-	exists, err := esClient.IndexExists(indexName).Do(NewContext())
+func CreateIndex(s suite.Suite, esClient elasticsearch.IntegrationTestsClient, indexName string) {
+	exists, err := esClient.IndexExists(context.Background(), indexName)
 	s.Require().NoError(err)
 	if exists {
-		deleteTestIndex, err := esClient.DeleteIndex(indexName).Do(NewContext())
+		acknowledged, err := esClient.DeleteIndex(context.Background(), indexName)
 		s.Require().NoError(err)
-		s.Require().True(deleteTestIndex.Acknowledged)
+		s.Require().True(acknowledged)
 	}
 
-	createTestIndex, err := esClient.CreateIndex(indexName).Do(NewContext())
+	acknowledged, err := esClient.CreateIndex(context.Background(), indexName)
 	s.Require().NoError(err)
-	s.Require().True(createTestIndex.Acknowledged)
+	s.Require().True(acknowledged)
 }
 
 // DeleteIndex delete test index
-func DeleteIndex(s suite.Suite, esClient *elastic.Client, indexName string) {
-	deleteTestIndex, err := esClient.DeleteIndex(indexName).Do(NewContext())
+func DeleteIndex(s suite.Suite, esClient elasticsearch.IntegrationTestsClient, indexName string) {
+	acknowledged, err := esClient.DeleteIndex(context.Background(), indexName)
 	s.NoError(err)
-	s.True(deleteTestIndex.Acknowledged)
+	s.True(acknowledged)
 }

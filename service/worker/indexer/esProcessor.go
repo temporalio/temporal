@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/olivere/elastic"
+	"github.com/olivere/elastic/v7"
 	"github.com/uber-go/tally"
 
 	indexerspb "go.temporal.io/server/api/indexer/v1"
@@ -50,23 +50,12 @@ type (
 		Stop()
 		// Add request to bulk, and record kafka message in map with provided key
 		// This call will be blocked when downstream has issues
-		Add(request elastic.BulkableRequest, key string, kafkaMsg messaging.Message)
-	}
-
-	// ElasticBulkProcessor is interface for elastic.BulkProcessor
-	// (elastic package doesn't provide such interface that tests can mock)
-	ElasticBulkProcessor interface {
-		Start(ctx context.Context) error
-		Stop() error
-		Close() error
-		Stats() elastic.BulkProcessorStats
-		Add(request elastic.BulkableRequest)
-		Flush() error
+		Add(request *es.BulkableRequest, key string, kafkaMsg messaging.Message)
 	}
 
 	// esProcessorImpl implements ESProcessor, it's an agent of elastic.BulkProcessor
 	esProcessorImpl struct {
-		processor     ElasticBulkProcessor
+		processor     es.BulkProcessor
 		mapToKafkaMsg collection.ConcurrentTxMap // used to map ES request to kafka message
 		config        *Config
 		logger        log.Logger
@@ -81,7 +70,6 @@ type (
 )
 
 var _ ESProcessor = (*esProcessorImpl)(nil)
-var _ ElasticBulkProcessor = (*elastic.BulkProcessor)(nil)
 
 const (
 	// retry configs for es bulk processor
@@ -125,7 +113,7 @@ func (p *esProcessorImpl) Stop() {
 }
 
 // Add an ES request, and an map item for kafka message
-func (p *esProcessorImpl) Add(request elastic.BulkableRequest, key string, kafkaMsg messaging.Message) {
+func (p *esProcessorImpl) Add(request *es.BulkableRequest, key string, kafkaMsg messaging.Message) {
 	actionWhenFoundDuplicates := func(key interface{}, value interface{}) error {
 		return kafkaMsg.Ack()
 	}

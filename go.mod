@@ -39,12 +39,12 @@ require (
 	github.com/m3db/prometheus_client_model v0.1.0 // indirect
 	github.com/m3db/prometheus_common v0.1.0 // indirect
 	github.com/m3db/prometheus_procfs v0.8.1 // indirect
-	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mattn/go-sqlite3 v1.10.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.4
 	github.com/olivere/elastic v6.2.35+incompatible
+	github.com/olivere/elastic/v7 v7.0.22
 	github.com/pborman/uuid v1.2.1
 	github.com/pierrec/lz4 v2.6.0+incompatible // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect

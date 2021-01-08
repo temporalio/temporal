@@ -34,13 +34,14 @@ services:
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development_es.yaml"
       - "ENABLE_ES=true"
       - "ES_SEEDS=elasticsearch"
+      - "ES_VERSION=v7"
       - "KAFKA_SEEDS=kafka"
     depends_on:
       - mysql
       - elasticsearch
       - kafka
   elasticsearch:
-    image: elasticsearch:6.8.8
+    image: elasticsearch:7.10.1
     ports:
       - "9200:9200"
     environment:

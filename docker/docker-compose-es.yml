@@ -19,7 +19,7 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
   elasticsearch:
-    image: elasticsearch:6.8.8
+    image: elasticsearch:7.10.1
     ports:
       - "9200:9200"
     environment:
@@ -36,6 +36,7 @@ services:
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development_es.yaml"
       - "ENABLE_ES=true"
       - "ES_SEEDS=elasticsearch"
+      - "ES_VERSION=v7"
       - "KAFKA_SEEDS=kafka"
     depends_on:
       - cassandra
