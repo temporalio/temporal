@@ -137,7 +137,7 @@ update-mockgen:
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
-	cd && GO111MODULE=on go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
+	GO111MODULE=off go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
 	cd && GO111MODULE=on go get google.golang.org/grpc@v1.34.0
 
 update-tools: update-checkers update-mockgen update-proto-plugins
