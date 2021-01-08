@@ -1,4 +1,4 @@
-Quickstart for localhost development
+# Quickstart for localhost development
 ====================================
 
 Install [docker](https://docs.docker.com/engine/installation/) and [docker-compose](https://docs.docker.com/compose/install/).
@@ -53,13 +53,11 @@ $ docker-compose up
 Running Temporal service with MySQL
 -----------------------------------------
 
-Run Temporal with MySQL instead of Cassandra, use following commads:
+Run Temporal with MySQL instead of Cassandra, use following commands:
 
 ```bash
 $ docker-compose -f docker-compose-mysql.yml up
 ```
-
-Please note that PostreSQL support is still in active developement, and it is not production ready yet.
 
 Running Temporal service with ElasticSearch
 -----------------------------------------
