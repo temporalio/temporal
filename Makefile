@@ -15,10 +15,10 @@ ci-build: bins update-tools check proto go-generate gomodtidy ensure-no-changes
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto install-proto-submodule buf-lint api-linter protoc fix-proto-path proto-mock copyright-proto
+proto: clean-proto install-proto-submodule buf-lint api-linter protoc fix-proto-path goimports-proto proto-mock copyright-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-proto-path update-go-api proto-mock copyright-proto gomodtidy
+update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-proto-path update-go-api goimports-proto proto-mock copyright-proto gomodtidy
 
 # Build all docker images.
 docker-images:
@@ -187,6 +187,10 @@ proto-mock: $(PROTO_OUT)
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api..."
 	@go get -u go.temporal.io/api@master
+
+goimports-proto:
+	@printf $(COLOR) "Run goimports..."
+	@goimports -w $(PROTO_OUT)
 
 copyright-proto:
 	@printf $(COLOR) "Update license headers..."
