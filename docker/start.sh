@@ -6,6 +6,7 @@ DB="${DB:-cassandra}"
 ENABLE_ES="${ENABLE_ES:-false}"
 ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS="${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS:-0}"
 ES_PORT="${ES_PORT:-9200}"
+ES_VERSION="${ES_VERSION:-v6}"
 ES_SCHEME="${ES_SCHEME:-http}"
 ES_VIS_INDEX="${ES_VIS_INDEX:-temporal-visibility-dev}"
 RF=${RF:-1}
@@ -79,7 +80,7 @@ setup_postgres_schema() {
 
 
 setup_es_template() {
-    SCHEMA_FILE=$TEMPORAL_HOME/schema/elasticsearch/visibility/index_template.json
+    SCHEMA_FILE=$TEMPORAL_HOME/schema/elasticsearch/${ES_VERSION}/visibility/index_template.json
     server=`echo $ES_SEEDS | awk -F ',' '{print $1}'`
     URL="${ES_SCHEME}://$server:$ES_PORT/_template/temporal-visibility-template"
     curl -X PUT $URL -H 'Content-Type: application/json' --data-binary "@$SCHEMA_FILE"

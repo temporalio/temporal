@@ -137,7 +137,7 @@ update-mockgen:
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
-	cd && GO111MODULE=on go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
+	GO111MODULE=off go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
 	cd && GO111MODULE=on go get google.golang.org/grpc@v1.34.0
 
 update-tools: update-checkers update-mockgen update-proto-plugins
@@ -384,7 +384,7 @@ install-schema-postgresql: temporal-sql-tool
 
 install-schema-es:
 	@printf $(COLOR) "Install Elasticsearch schema..."
-	curl -X PUT "http://127.0.0.1:9200/_template/temporal-visibility-template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/index_template.json
+	curl -X PUT "http://127.0.0.1:9200/_template/temporal-visibility-template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/v7/visibility/index_template.json
 	curl -X PUT "http://127.0.0.1:9200/temporal-visibility-dev"
 
 install-schema-cdc: temporal-cassandra-tool

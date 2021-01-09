@@ -229,6 +229,7 @@ const (
 	FlagUpperShardBound                  = "upper_shard_bound"
 	FlagInputDirectory                   = "input_directory"
 	FlagAutoConfirm                      = "auto_confirm"
+	FlagVersion                          = "version"
 )
 
 var flagsForExecution = []cli.Flag{

@@ -38,6 +38,21 @@ steps:
           run: integration-test-cassandra
           config: docker/buildkite/docker-compose.yml
 
+  - label: ":golang: integration test with cassandra (ES6)"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-cassandra
+          config: docker/buildkite/docker-compose-es6.yml
+
   - label: ":golang: integration xdc test with cassandra"
     agents:
       queue: "default"

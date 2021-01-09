@@ -22,21 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination client_mock.go
+
 package elasticsearch
 
 import (
 	"context"
-	"fmt"
-	"net/http"
-	"os"
-	"strings"
-	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/olivere/elastic"
-	elasticaws "github.com/olivere/elastic/aws/v4"
+	"github.com/olivere/elastic/v7"
+)
+
+const (
+	docTypeV6           = "_doc"
+	versionTypeExternal = "external"
 )
 
 type (
@@ -49,9 +47,23 @@ type (
 		Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error)
 		ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error)
 		Count(ctx context.Context, index, query string) (int64, error)
-		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (*elastic.BulkProcessor, error)
+		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error)
 		PutMapping(ctx context.Context, index, root, key, valueType string) error
-		CreateIndex(ctx context.Context, index string) error
+	}
+
+	CLIClient interface {
+		CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error)
+		SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error)
+		Bulk() BulkService
+	}
+
+	IntegrationTestsClient interface {
+		CreateIndex(ctx context.Context, index string) (bool, error)
+		IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error)
+		IndexExists(ctx context.Context, indexName string) (bool, error)
+		DeleteIndex(ctx context.Context, indexName string) (bool, error)
+		IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error)
+		IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error)
 	}
 
 	// ScrollService is a interface for elastic.ScrollService
@@ -68,200 +80,4 @@ type (
 		Sorter      []elastic.Sorter
 		SearchAfter []interface{}
 	}
-
-	// BulkProcessorParameters holds all required and optional parameters for executing bulk service
-	BulkProcessorParameters struct {
-		Name          string
-		NumOfWorkers  int
-		BulkActions   int
-		BulkSize      int
-		FlushInterval time.Duration
-		Backoff       elastic.Backoff
-		BeforeFunc    elastic.BulkBeforeFunc
-		AfterFunc     elastic.BulkAfterFunc
-	}
-
-	// elasticWrapper implements Client
-	elasticWrapper struct {
-		client *elastic.Client
-	}
-
-	scrollServiceImpl struct {
-		scrollService *elastic.ScrollService
-	}
 )
-
-var _ Client = (*elasticWrapper)(nil)
-
-// NewClient create a ES client
-func NewClient(config *Config) (Client, error) {
-	options := []elastic.ClientOptionFunc{
-		elastic.SetURL(config.URL.String()),
-		elastic.SetSniff(false),
-		elastic.SetBasicAuth(config.Username, config.Password),
-
-		// Disable health check so we don't block client creation (and thus temporal server startup)
-		// if the ES instance happens to be down.
-		elastic.SetHealthcheck(false),
-
-		elastic.SetRetrier(elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
-
-		// critical to ensure decode of int64 won't lose precision
-		elastic.SetDecoder(&elastic.NumberDecoder{}),
-	}
-
-	if config.AWSRequestSigning.Enabled {
-		httpClient, err := getAWSElasticSearchHTTPClient(config.AWSRequestSigning)
-		if err != nil {
-			return nil, err
-		}
-
-		options = append(options, elastic.SetHttpClient(httpClient))
-	}
-
-	client, err := elastic.NewClient(options...)
-
-	if err != nil {
-		return nil, err
-	}
-
-	// Re-enable the healthcheck after client has successfully been created.
-	client.Stop()
-	elastic.SetHealthcheck(true)(client)
-	client.Start()
-
-	return NewWrapperClient(client), nil
-}
-
-// NewWrapperClient returns a new implementation of Client
-func NewWrapperClient(esClient *elastic.Client) Client {
-	return &elasticWrapper{client: esClient}
-}
-
-func (c *elasticWrapper) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
-	searchService := c.client.Search(p.Index).
-		Query(p.Query).
-		From(p.From).
-		SortBy(p.Sorter...)
-
-	if p.PageSize != 0 {
-		searchService.Size(p.PageSize)
-	}
-
-	if len(p.SearchAfter) != 0 {
-		searchService.SearchAfter(p.SearchAfter...)
-	}
-
-	return searchService.Do(ctx)
-}
-
-func (c *elasticWrapper) SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error) {
-	return c.client.Search(index).Source(query).Do(ctx)
-}
-
-func (c *elasticWrapper) Scroll(ctx context.Context, scrollID string) (
-	*elastic.SearchResult, ScrollService, error) {
-
-	scrollService := elastic.NewScrollService(c.client)
-	result, err := scrollService.ScrollId(scrollID).Do(ctx)
-	return result, &scrollServiceImpl{scrollService}, err
-}
-
-func (c *elasticWrapper) ScrollFirstPage(ctx context.Context, index, query string) (
-	*elastic.SearchResult, ScrollService, error) {
-
-	scrollService := elastic.NewScrollService(c.client)
-	result, err := scrollService.Index(index).Body(query).Do(ctx)
-	return result, &scrollServiceImpl{scrollService}, err
-}
-
-func (c *elasticWrapper) Count(ctx context.Context, index, query string) (int64, error) {
-	return c.client.Count(index).BodyString(query).Do(ctx)
-}
-
-func (c *elasticWrapper) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (*elastic.BulkProcessor, error) {
-	return c.client.BulkProcessor().
-		Name(p.Name).
-		Workers(p.NumOfWorkers).
-		BulkActions(p.BulkActions).
-		BulkSize(p.BulkSize).
-		FlushInterval(p.FlushInterval).
-		Backoff(p.Backoff).
-		Before(p.BeforeFunc).
-		After(p.AfterFunc).
-		Do(ctx)
-}
-
-// root is for nested object like Attr property for search attributes.
-func (c *elasticWrapper) PutMapping(ctx context.Context, index, root, key, valueType string) error {
-	body := buildPutMappingBody(root, key, valueType)
-	_, err := c.client.PutMapping().Index(index).Type("_doc").BodyJson(body).Do(ctx)
-	return err
-}
-
-func (c *elasticWrapper) CreateIndex(ctx context.Context, index string) error {
-	_, err := c.client.CreateIndex(index).Do(ctx)
-	return err
-}
-
-func buildPutMappingBody(root, key, valueType string) map[string]interface{} {
-	body := make(map[string]interface{})
-	if len(root) != 0 {
-		body["properties"] = map[string]interface{}{
-			root: map[string]interface{}{
-				"properties": map[string]interface{}{
-					key: map[string]interface{}{
-						"type": valueType,
-					},
-				},
-			},
-		}
-	} else {
-		body["properties"] = map[string]interface{}{
-			key: map[string]interface{}{
-				"type": valueType,
-			},
-		}
-	}
-	return body
-}
-
-func (s *scrollServiceImpl) Clear(ctx context.Context) error {
-	return s.scrollService.Clear(ctx)
-}
-
-func getAWSElasticSearchHTTPClient(config AWSRequestSigningConfig) (*http.Client, error) {
-	if config.Region == "" {
-		config.Region = os.Getenv("AWS_REGION")
-		if config.Region == "" {
-			return nil, fmt.Errorf("unable to resolve aws region for obtaining aws es signing credentials")
-		}
-	}
-
-	var awsCredentials *credentials.Credentials
-
-	switch strings.ToLower(config.CredentialProvider) {
-	case "static":
-		awsCredentials = credentials.NewStaticCredentials(
-			config.Static.AccessKeyID,
-			config.Static.SecretAccessKey,
-			config.Static.Token,
-		)
-	case "environment":
-		awsCredentials = credentials.NewEnvCredentials()
-	case "aws-sdk-default":
-		awsSession, err := session.NewSession(&aws.Config{
-			Region: &config.Region,
-		})
-
-		if err != nil {
-			return nil, err
-		}
-
-		awsCredentials = awsSession.Config.Credentials
-	default:
-		return nil, fmt.Errorf("unknown aws credential provider specified: %+v. Accepted options are 'static', 'environment' or 'session'", config.CredentialProvider)
-	}
-
-	return elasticaws.NewV4SigningClient(awsCredentials, config.Region), nil
-}

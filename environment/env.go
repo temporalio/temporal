@@ -61,6 +61,10 @@ const (
 	ESPort = "ES_PORT"
 	// ESDefaultPort ES default port
 	ESDefaultPort = 9200
+	// ESVersion is the ElasticSearch version
+	ESVersion = "ES_VERSION"
+	// ESDefaultVersion is the default version
+	ESDefaultVersion = "v7"
 
 	// PostgresSeeds env
 	PostgresSeeds = "POSTGRES_SEEDS"
@@ -141,6 +145,13 @@ func SetupEnv() {
 			panic(fmt.Sprintf("error setting env %v", ESPort))
 		}
 	}
+
+	if os.Getenv(ESVersion) == "" {
+		err := os.Setenv(ESVersion, ESDefaultVersion)
+		if err != nil {
+			panic(fmt.Sprintf("error setting env %v", ESVersion))
+		}
+	}
 }
 
 // GetCassandraAddress return the cassandra address
@@ -205,50 +216,6 @@ func GetPostgreSQLPort() int {
 	p, err := strconv.Atoi(port)
 	if err != nil {
 		panic(fmt.Sprintf("error getting env %v", PostgresPort))
-	}
-	return p
-}
-
-// GetKafkaAddress return the kafka address
-func GetKafkaAddress() string {
-	addr := os.Getenv(KafkaSeeds)
-	if addr == "" {
-		addr = Localhost
-	}
-	return addr
-}
-
-// GetKafkaPort return the Kafka port
-func GetKafkaPort() int {
-	port := os.Getenv(KafkaPort)
-	if port == "" {
-		return KafkaDefaultPort
-	}
-	p, err := strconv.Atoi(port)
-	if err != nil {
-		panic(fmt.Sprintf("error getting env %v", KafkaPort))
-	}
-	return p
-}
-
-// GetESAddress return the kafka address
-func GetESAddress() string {
-	addr := os.Getenv(ESSeeds)
-	if addr == "" {
-		addr = Localhost
-	}
-	return addr
-}
-
-// GetESPort return the Kafka port
-func GetESPort() int {
-	port := os.Getenv(ESPort)
-	if port == "" {
-		return ESDefaultPort
-	}
-	p, err := strconv.Atoi(port)
-	if err != nil {
-		panic(fmt.Sprintf("error getting env %v", ESPort))
 	}
 	return p
 }

@@ -62,7 +62,7 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
 
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.5.1
+    image: elasticsearch:7.10.1
     ports:
       - "9200:9200"
     networks:
@@ -129,6 +129,7 @@ services:
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
+      - "ES_VERSION=v7"
       - "KAFKA_SEEDS=kafka"
       - "PERSISTENCE_TYPE=nosql"
       - "PERSISTENCE_DRIVER=cassandra"
@@ -167,6 +168,7 @@ services:
     environment:
       - "MYSQL_SEEDS=mysql"
       - "ES_SEEDS=elasticsearch"
+      - "ES_VERSION=v7"
       - "KAFKA_SEEDS=kafka"
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=mysql"
@@ -205,6 +207,7 @@ services:
     environment:
       - "POSTGRES_SEEDS=postgresql"
       - "ES_SEEDS=elasticsearch"
+      - "ES_VERSION=v7"
       - "KAFKA_SEEDS=kafka"
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres"
@@ -243,6 +246,7 @@ services:
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
+      - "ES_VERSION=v7"
       - "KAFKA_SEEDS=kafka"
       - "PERSISTENCE_TYPE=nosql"
       - "PERSISTENCE_DRIVER=cassandra"
@@ -281,6 +285,7 @@ services:
     environment:
       - "MYSQL_SEEDS=mysql"
       - "ES_SEEDS=elasticsearch"
+      - "ES_VERSION=v7"
       - "KAFKA_SEEDS=kafka"
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=mysql"
@@ -319,6 +324,7 @@ services:
     environment:
       - "MYSQL_SEEDS=mysql"
       - "ES_SEEDS=elasticsearch"
+      - "ES_VERSION=v7"
       - "KAFKA_SEEDS=kafka"
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres"

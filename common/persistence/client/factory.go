@@ -25,6 +25,8 @@
 package client
 
 import (
+	"context"
+	"fmt"
 	"sync"
 
 	"go.temporal.io/server/common/log"
@@ -35,6 +37,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
+	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -330,32 +333,45 @@ func (f *factoryImpl) init(
 	f.datastores = make(map[storeType]Datastore, len(storeTypes))
 	defaultCfg := f.config.DataStores[f.config.DefaultStore]
 	defaultDataStore := Datastore{ratelimit: limiters[f.config.DefaultStore]}
-	switch {
-	case defaultCfg.Cassandra != nil:
-		defaultDataStore.factory = cassandra.NewFactory(*defaultCfg.Cassandra, clusterName, f.logger)
-	case defaultCfg.SQL != nil:
-		defaultDataStore.factory = sql.NewFactory(*defaultCfg.SQL, clusterName, f.logger)
-	case defaultCfg.CustomDataStoreConfig != nil:
-		defaultDataStore.factory = f.abstractDataStoreFactory.NewFactory(*defaultCfg.CustomDataStoreConfig, clusterName, f.logger)
-	default:
-		f.logger.Fatal("invalid config: one of cassandra or sql params must be specified")
+	visibilityCfg := f.config.DataStores[f.config.VisibilityStore]
+	visibilityDataStore := Datastore{ratelimit: limiters[f.config.VisibilityStore]}
+
+	g, _ := errgroup.WithContext(context.Background())
+
+	g.Go(func() error {
+		switch {
+		case defaultCfg.Cassandra != nil:
+			defaultDataStore.factory = cassandra.NewFactory(*defaultCfg.Cassandra, clusterName, f.logger)
+		case defaultCfg.SQL != nil:
+			defaultDataStore.factory = sql.NewFactory(*defaultCfg.SQL, clusterName, f.logger)
+		case defaultCfg.CustomDataStoreConfig != nil:
+			defaultDataStore.factory = f.abstractDataStoreFactory.NewFactory(*defaultCfg.CustomDataStoreConfig, clusterName, f.logger)
+		default:
+			return fmt.Errorf("invalid config: one of cassandra or sql params must be specified for default data store")
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		switch {
+		case visibilityCfg.Cassandra != nil:
+			visibilityDataStore.factory = cassandra.NewFactory(*visibilityCfg.Cassandra, clusterName, f.logger)
+		case visibilityCfg.SQL != nil:
+			visibilityDataStore.factory = sql.NewFactory(*visibilityCfg.SQL, clusterName, f.logger)
+		default:
+			return fmt.Errorf("invalid config: one of cassandra or sql params must be specified for visibility store")
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		f.logger.Fatal(err.Error())
 	}
 
 	for _, st := range storeTypes {
 		if st != storeTypeVisibility {
 			f.datastores[st] = defaultDataStore
 		}
-	}
-
-	visibilityCfg := f.config.DataStores[f.config.VisibilityStore]
-	visibilityDataStore := Datastore{ratelimit: limiters[f.config.VisibilityStore]}
-	switch {
-	case visibilityCfg.Cassandra != nil:
-		visibilityDataStore.factory = cassandra.NewFactory(*visibilityCfg.Cassandra, clusterName, f.logger)
-	case visibilityCfg.SQL != nil:
-		visibilityDataStore.factory = sql.NewFactory(*visibilityCfg.SQL, clusterName, f.logger)
-	default:
-		f.logger.Fatal("invalid config: one of cassandra or sql params must be specified")
 	}
 
 	f.datastores[storeTypeVisibility] = visibilityDataStore

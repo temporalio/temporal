@@ -25,38 +25,37 @@
 package elasticsearch
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/olivere/elastic"
-	"github.com/stretchr/testify/mock"
+	"github.com/golang/mock/gomock"
+	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	es "go.temporal.io/server/common/elasticsearch"
-	esMocks "go.temporal.io/server/common/elasticsearch/mocks"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	metricsmocks "go.temporal.io/server/common/metrics/mocks"
 	"go.temporal.io/server/common/service/dynamicconfig"
-	"go.temporal.io/server/service/worker/indexer/mocks"
 )
 
 type esProcessorSuite struct {
 	suite.Suite
+	controller        *gomock.Controller
 	esProcessor       *esProcessorImpl
-	mockBulkProcessor *mocks.ElasticBulkProcessor
+	mockBulkProcessor *es.MockBulkProcessor
 	mockMetricClient  *metricsmocks.Client
-	mockESClient      *esMocks.Client
+	mockESClient      *es.MockClient
 }
 
 var (
-	testType      = docType
 	testID        = "test-doc-id"
 	testStopWatch = metrics.NopStopwatch()
 	testScope     = metrics.ElasticSearchVisibility
@@ -75,6 +74,8 @@ func (s *esProcessorSuite) SetupTest() {
 	zapLogger, err := zap.NewDevelopment()
 	s.Require().NoError(err)
 
+	s.controller = gomock.NewController(s.T())
+
 	cfg := &ProcessorConfig{
 		IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
 		ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
@@ -83,8 +84,9 @@ func (s *esProcessorSuite) SetupTest() {
 		ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
 	s.mockMetricClient = &metricsmocks.Client{}
-	s.mockBulkProcessor = &mocks.ElasticBulkProcessor{}
-	s.mockESClient = &esMocks.Client{}
+
+	s.mockBulkProcessor = es.NewMockBulkProcessor(s.controller)
+	s.mockESClient = es.NewMockClient(s.controller)
 	s.esProcessor = NewProcessor(cfg, s.mockESClient, loggerimpl.NewLogger(zapLogger), s.mockMetricClient)
 
 	// esProcessor.Start mock
@@ -93,9 +95,8 @@ func (s *esProcessorSuite) SetupTest() {
 }
 
 func (s *esProcessorSuite) TearDownTest() {
-	s.mockBulkProcessor.AssertExpectations(s.T())
+	s.controller.Finish()
 	s.mockMetricClient.AssertExpectations(s.T())
-	s.mockESClient.AssertExpectations(s.T())
 }
 
 func (s *esProcessorSuite) TestNewESProcessorAndStartStop() {
@@ -109,16 +110,21 @@ func (s *esProcessorSuite) TestNewESProcessorAndStartStop() {
 
 	p := NewProcessor(config, s.mockESClient, s.esProcessor.logger, &metricsmocks.Client{})
 
-	s.mockESClient.On("RunBulkProcessor", mock.Anything, mock.MatchedBy(func(input *es.BulkProcessorParameters) bool {
-		s.Equal(visibilityProcessorName, input.Name)
-		s.Equal(config.ESProcessorNumOfWorkers(), input.NumOfWorkers)
-		s.Equal(config.ESProcessorBulkActions(), input.BulkActions)
-		s.Equal(config.ESProcessorBulkSize(), input.BulkSize)
-		s.Equal(config.ESProcessorFlushInterval(), input.FlushInterval)
-		s.NotNil(input.Backoff)
-		s.NotNil(input.AfterFunc)
-		return true
-	})).Return(&elastic.BulkProcessor{}, nil).Once()
+	s.mockESClient.EXPECT().RunBulkProcessor(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *es.BulkProcessorParameters) (es.BulkProcessor, error) {
+			s.Equal(visibilityProcessorName, input.Name)
+			s.Equal(config.ESProcessorNumOfWorkers(), input.NumOfWorkers)
+			s.Equal(config.ESProcessorBulkActions(), input.BulkActions)
+			s.Equal(config.ESProcessorBulkSize(), input.BulkSize)
+			s.Equal(config.ESProcessorFlushInterval(), input.FlushInterval)
+			s.NotNil(input.Backoff)
+			s.NotNil(input.AfterFunc)
+
+			bulkProcessor := es.NewMockBulkProcessor(s.controller)
+			bulkProcessor.EXPECT().Stop().Times(1)
+			return bulkProcessor, nil
+		}).
+		Times(1)
 
 	p.Start()
 	s.NotNil(p.mapToAckChan)
@@ -130,12 +136,12 @@ func (s *esProcessorSuite) TestNewESProcessorAndStartStop() {
 }
 
 func (s *esProcessorSuite) TestAdd() {
-	request := elastic.NewBulkIndexRequest()
+	request := &es.BulkableRequest{}
 	visibilityTaskKey := "test-key"
 	ackCh := make(chan bool, 1)
 	s.Equal(0, s.esProcessor.mapToAckChan.Len())
 
-	s.mockBulkProcessor.On("Add", request).Return().Once()
+	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
 	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
 
 	s.esProcessor.Add(request, visibilityTaskKey, ackCh)
@@ -159,7 +165,7 @@ func (s *esProcessorSuite) TestAdd() {
 }
 
 func (s *esProcessorSuite) TestAdd_ConcurrentAdd() {
-	request := elastic.NewBulkIndexRequest()
+	request := &es.BulkableRequest{}
 	key := "test-key"
 	duplicates := 100
 	ackCh := make(chan bool, duplicates-1)
@@ -171,7 +177,7 @@ func (s *esProcessorSuite) TestAdd_ConcurrentAdd() {
 	}
 	wg := &sync.WaitGroup{}
 	wg.Add(duplicates)
-	s.mockBulkProcessor.On("Add", request).Return().Once()
+	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
 	for i := 0; i < duplicates; i++ {
 		go addFunc(wg)
 	}
@@ -192,9 +198,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Ack() {
 	testKey := "testKey"
 	request := elastic.NewBulkIndexRequest().
 		Index(testIndex).
-		Type(testType).
 		Id(testID).
-		VersionType(versionTypeExternal).
 		Version(version).
 		Doc(map[string]interface{}{definition.VisibilityTaskKey: testKey})
 	requests := []elastic.BulkableRequest{request}
@@ -202,7 +206,6 @@ func (s *esProcessorSuite) TestBulkAfterAction_Ack() {
 	mSuccess := map[string]*elastic.BulkResponseItem{
 		"index": {
 			Index:   testIndex,
-			Type:    testType,
 			Id:      testID,
 			Version: version,
 			Status:  200,
@@ -236,9 +239,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 
 	request := elastic.NewBulkIndexRequest().
 		Index(testIndex).
-		Type(testType).
 		Id(testID).
-		VersionType(versionTypeExternal).
 		Version(version).
 		Doc(map[string]interface{}{
 			definition.VisibilityTaskKey: testKey,
@@ -251,7 +252,6 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 	mFailed := map[string]*elastic.BulkResponseItem{
 		"index": {
 			Index:   testIndex,
-			Type:    testType,
 			Id:      testID,
 			Version: version,
 			Status:  400,
@@ -279,16 +279,13 @@ func (s *esProcessorSuite) TestBulkAfterAction_Error() {
 	version := int64(3)
 	request := elastic.NewBulkIndexRequest().
 		Index(testIndex).
-		Type(testType).
 		Id(testID).
-		VersionType(versionTypeExternal).
 		Version(version)
 	requests := []elastic.BulkableRequest{request}
 
 	mFailed := map[string]*elastic.BulkResponseItem{
 		"index": {
 			Index:   testIndex,
-			Type:    testType,
 			Id:      testID,
 			Version: version,
 			Status:  400,
@@ -309,9 +306,9 @@ func (s *esProcessorSuite) TestAckChan() {
 	// no msg in map, nothing called
 	s.esProcessor.sendToAckChan(key, true)
 
-	request := elastic.NewBulkIndexRequest()
+	request := &es.BulkableRequest{}
 	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
-	s.mockBulkProcessor.On("Add", request).Return().Once()
+	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
 	ackCh := make(chan bool, 1)
 	s.esProcessor.Add(request, key, ackCh)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
@@ -331,8 +328,8 @@ func (s *esProcessorSuite) TestNackChan() {
 	// no msg in map, nothing called
 	s.esProcessor.sendToAckChan(key, false)
 
-	request := elastic.NewBulkIndexRequest()
-	s.mockBulkProcessor.On("Add", request).Return().Once()
+	request := &es.BulkableRequest{}
+	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
 	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
 	ackCh := make(chan bool, 1)
 	s.esProcessor.Add(request, key, ackCh)

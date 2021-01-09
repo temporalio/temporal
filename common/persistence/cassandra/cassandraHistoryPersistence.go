@@ -33,8 +33,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
@@ -67,6 +67,10 @@ const (
 type (
 	cassandraHistoryV2Persistence struct {
 		cassandraStore
+
+		// TODO DEBUG
+		isDebug bool
+		// TODO DEBUG
 	}
 )
 
@@ -89,6 +93,9 @@ func newHistoryPersistence(
 			session: session,
 			logger:  logger,
 		},
+		// TODO DEBUG
+		isDebug: common.IsDebugMode(),
+		// TODO DEBUG
 	}, nil
 }
 
@@ -126,7 +133,34 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 		batch.Query(v2templateUpsertData,
 			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
 		err = h.session.ExecuteBatch(batch)
-		h.logger.Info(fmt.Sprintf("####### BATCH QUERY: %v", prettyPrint(batch.Entries)), tag.Error(err))
+
+		// TODO DEBUG
+		if err == nil && h.isDebug {
+			var readResp *p.InternalReadHistoryBranchResponse
+			var readErr error
+		readLoop:
+			for i := 0; i < 10; i++ {
+				readResp, readErr = h.ReadHistoryBranch(&p.InternalReadHistoryBranchRequest{
+					TreeID:    branchInfo.TreeId,
+					BranchID:  branchInfo.BranchId,
+					MinNodeID: common.FirstEventID,
+					MaxNodeID: common.FirstEventID + 1,
+					PageSize:  1,
+				})
+				if readErr == nil {
+					break readLoop
+				}
+			}
+			if readErr != nil {
+				h.logger.Info(fmt.Sprintf("####### BATCH QUERY: %v, cannot be verified: %v", prettyPrint(batch.Entries), readErr))
+				return convertCommonErrors("AppendHistoryNodes", readErr)
+			}
+			if len(readResp.History) == 0 {
+				h.logger.Info(fmt.Sprintf("####### BATCH QUERY: %v", prettyPrint(batch.Entries)))
+			}
+		}
+		// TODO DEBUG
+
 	} else {
 		query := h.session.Query(v2templateUpsertData,
 			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
