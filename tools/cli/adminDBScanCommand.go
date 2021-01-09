@@ -327,7 +327,7 @@ func scanShard(
 				report.Scanned = &ShardScanReportExecutionsScanned{}
 			}
 			report.Scanned.TotalExecutionsCount++
-			historyVerificationResult, history, historyBranch := verifyHistoryExists(
+			historyVerificationResult, history, historyBranch := fetchAndVerifyHistoryExists(
 				s.ExecutionInfo,
 				s.ExecutionState,
 				s.NextEventID,
@@ -337,7 +337,8 @@ func scanShard(
 				limiter,
 				historyStore,
 				&report.TotalDBRequests,
-				execStore)
+				execStore,
+			)
 			switch historyVerificationResult {
 			case VerificationResultNoCorruption:
 				// nothing to do just keep checking other conditions
@@ -354,16 +355,23 @@ func scanShard(
 				continue
 			}
 
+			byteBranch, err := byteKeyFromProto(historyBranch)
+			if err != nil {
+				report.Scanned.ExecutionCheckFailureCount++
+				continue
+			}
+
 			firstHistoryEventVerificationResult := verifyFirstHistoryEvent(
 				s.ExecutionInfo,
 				s.ExecutionState,
 				s.NextEventID,
-				historyBranch,
+				byteBranch,
 				corruptedExecutionWriter,
 				checkFailureWriter,
 				shardID,
 				payloadSerializer,
-				history)
+				history,
+			)
 			switch firstHistoryEventVerificationResult {
 			case VerificationResultNoCorruption:
 				// nothing to do just keep checking other conditions
@@ -383,10 +391,11 @@ func scanShard(
 				corruptedExecutionWriter,
 				checkFailureWriter,
 				shardID,
-				historyBranch,
+				byteBranch,
 				execStore,
 				limiter,
-				&report.TotalDBRequests)
+				&report.TotalDBRequests,
+			)
 			switch currentExecutionVerificationResult {
 			case VerificationResultNoCorruption:
 				// nothing to do just keep checking other conditions
@@ -423,7 +432,7 @@ func scanShard(
 	return report
 }
 
-func verifyHistoryExists(
+func fetchAndVerifyHistoryExists(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
@@ -527,17 +536,13 @@ func verifyFirstHistoryEvent(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
-	branch *persistencespb.HistoryBranch,
+	byteBranch *historyBranchByteKey,
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
 	shardID int32,
 	payloadSerializer persistence.PayloadSerializer,
 	history *persistence.InternalReadHistoryBranchResponse,
 ) VerificationResult {
-	byteBranch, err := byteKeyFromProto(branch)
-	if err != nil {
-		return VerificationResultCheckFailure
-	}
 	firstBatch, err := payloadSerializer.DeserializeEvents(history.History[0])
 	if err != nil || len(firstBatch) == 0 {
 		checkFailureWriter.Add(&ExecutionCheckFailure{
@@ -600,14 +605,18 @@ func verifyActivityIds(
 	) (
 	VerificationResult,
 ) {
-	if (len(activityInfos) > 0) {
-		for activityId, _ := range activityInfos {
-			if activityId >= nextEventID {
-				byteBranch, err := byteKeyFromProto(branch)
-				if err != nil {
-					return VerificationResultCheckFailure
-				}
-				corruptedExecutionWriter.Add(&CorruptedExecution{
+	if len(activityInfos) == 0 {
+		return VerificationResultNoCorruption
+	}
+
+	for activityId := range activityInfos {
+		if activityId >= nextEventID || activityId < 0 {
+			byteBranch, err := byteKeyFromProto(branch)
+			if err != nil {
+				return VerificationResultCheckFailure
+			}
+			corruptedExecutionWriter.Add(
+				&CorruptedExecution{
 					ShardID:     shardID,
 					NamespaceID: executionInfo.NamespaceId,
 					WorkflowID:  executionInfo.WorkflowId,
@@ -621,9 +630,9 @@ func verifyActivityIds(
 						Note:           "ActivityID greater than NextEventID present",
 						Details:        fmt.Sprint(activityId),
 					},
-				})
-				return VerificationResultDetectedCorruption
-			}
+				},
+			)
+			return VerificationResultDetectedCorruption
 		}
 	}
 	return VerificationResultNoCorruption
@@ -636,15 +645,11 @@ func verifyCurrentExecution(
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
 	shardID int32,
-	branch *persistencespb.HistoryBranch,
+	byteBranch *historyBranchByteKey,
 	execStore persistence.ExecutionStore,
 	limiter quotas.RateLimiter,
 	totalDBRequests *int64,
 ) VerificationResult {
-	byteBranch, err := byteKeyFromProto(branch)
-	if err != nil {
-		return VerificationResultCheckFailure
-	}
 	if !executionOpen(executionState) {
 		return VerificationResultNoCorruption
 	}
