@@ -36,30 +36,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MocknDCWorkflowResetter is a mock of nDCWorkflowResetter interface.
+// MocknDCWorkflowResetter is a mock of nDCWorkflowResetter interface
 type MocknDCWorkflowResetter struct {
 	ctrl     *gomock.Controller
 	recorder *MocknDCWorkflowResetterMockRecorder
 }
 
-// MocknDCWorkflowResetterMockRecorder is the mock recorder for MocknDCWorkflowResetter.
+// MocknDCWorkflowResetterMockRecorder is the mock recorder for MocknDCWorkflowResetter
 type MocknDCWorkflowResetterMockRecorder struct {
 	mock *MocknDCWorkflowResetter
 }
 
-// NewMocknDCWorkflowResetter creates a new mock instance.
+// NewMocknDCWorkflowResetter creates a new mock instance
 func NewMocknDCWorkflowResetter(ctrl *gomock.Controller) *MocknDCWorkflowResetter {
 	mock := &MocknDCWorkflowResetter{ctrl: ctrl}
 	mock.recorder = &MocknDCWorkflowResetterMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MocknDCWorkflowResetter) EXPECT() *MocknDCWorkflowResetterMockRecorder {
 	return m.recorder
 }
 
-// resetWorkflow mocks base method.
+// resetWorkflow mocks base method
 func (m *MocknDCWorkflowResetter) resetWorkflow(ctx context.Context, now time.Time, baseLastEventID, baseLastEventVersion, incomingFirstEventID, incomingFirstEventVersion int64) (mutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "resetWorkflow", ctx, now, baseLastEventID, baseLastEventVersion, incomingFirstEventID, incomingFirstEventVersion)
@@ -68,7 +68,7 @@ func (m *MocknDCWorkflowResetter) resetWorkflow(ctx context.Context, now time.Ti
 	return ret0, ret1
 }
 
-// resetWorkflow indicates an expected call of resetWorkflow.
+// resetWorkflow indicates an expected call of resetWorkflow
 func (mr *MocknDCWorkflowResetterMockRecorder) resetWorkflow(ctx, now, baseLastEventID, baseLastEventVersion, incomingFirstEventID, incomingFirstEventVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "resetWorkflow", reflect.TypeOf((*MocknDCWorkflowResetter)(nil).resetWorkflow), ctx, now, baseLastEventID, baseLastEventVersion, incomingFirstEventID, incomingFirstEventVersion)

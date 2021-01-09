@@ -29,8 +29,9 @@
 package elasticsearch
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockBulkProcessor is a mock of BulkProcessor interface

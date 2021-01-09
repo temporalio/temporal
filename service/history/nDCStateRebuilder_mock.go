@@ -34,34 +34,33 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-
 	definition "go.temporal.io/server/common/definition"
 )
 
-// MocknDCStateRebuilder is a mock of nDCStateRebuilder interface.
+// MocknDCStateRebuilder is a mock of nDCStateRebuilder interface
 type MocknDCStateRebuilder struct {
 	ctrl     *gomock.Controller
 	recorder *MocknDCStateRebuilderMockRecorder
 }
 
-// MocknDCStateRebuilderMockRecorder is the mock recorder for MocknDCStateRebuilder.
+// MocknDCStateRebuilderMockRecorder is the mock recorder for MocknDCStateRebuilder
 type MocknDCStateRebuilderMockRecorder struct {
 	mock *MocknDCStateRebuilder
 }
 
-// NewMocknDCStateRebuilder creates a new mock instance.
+// NewMocknDCStateRebuilder creates a new mock instance
 func NewMocknDCStateRebuilder(ctrl *gomock.Controller) *MocknDCStateRebuilder {
 	mock := &MocknDCStateRebuilder{ctrl: ctrl}
 	mock.recorder = &MocknDCStateRebuilderMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MocknDCStateRebuilder) EXPECT() *MocknDCStateRebuilderMockRecorder {
 	return m.recorder
 }
 
-// rebuild mocks base method.
+// rebuild mocks base method
 func (m *MocknDCStateRebuilder) rebuild(ctx context.Context, now time.Time, baseWorkflowIdentifier definition.WorkflowIdentifier, baseBranchToken []byte, baseLastEventID, baseLastEventVersion int64, targetWorkflowIdentifier definition.WorkflowIdentifier, targetBranchToken []byte, requestID string) (mutableState, int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "rebuild", ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID)
@@ -71,7 +70,7 @@ func (m *MocknDCStateRebuilder) rebuild(ctx context.Context, now time.Time, base
 	return ret0, ret1, ret2
 }
 
-// rebuild indicates an expected call of rebuild.
+// rebuild indicates an expected call of rebuild
 func (mr *MocknDCStateRebuilderMockRecorder) rebuild(ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "rebuild", reflect.TypeOf((*MocknDCStateRebuilder)(nil).rebuild), ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID)

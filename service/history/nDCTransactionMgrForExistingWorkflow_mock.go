@@ -36,30 +36,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MocknDCTransactionMgrForExistingWorkflow is a mock of nDCTransactionMgrForExistingWorkflow interface.
+// MocknDCTransactionMgrForExistingWorkflow is a mock of nDCTransactionMgrForExistingWorkflow interface
 type MocknDCTransactionMgrForExistingWorkflow struct {
 	ctrl     *gomock.Controller
 	recorder *MocknDCTransactionMgrForExistingWorkflowMockRecorder
 }
 
-// MocknDCTransactionMgrForExistingWorkflowMockRecorder is the mock recorder for MocknDCTransactionMgrForExistingWorkflow.
+// MocknDCTransactionMgrForExistingWorkflowMockRecorder is the mock recorder for MocknDCTransactionMgrForExistingWorkflow
 type MocknDCTransactionMgrForExistingWorkflowMockRecorder struct {
 	mock *MocknDCTransactionMgrForExistingWorkflow
 }
 
-// NewMocknDCTransactionMgrForExistingWorkflow creates a new mock instance.
+// NewMocknDCTransactionMgrForExistingWorkflow creates a new mock instance
 func NewMocknDCTransactionMgrForExistingWorkflow(ctrl *gomock.Controller) *MocknDCTransactionMgrForExistingWorkflow {
 	mock := &MocknDCTransactionMgrForExistingWorkflow{ctrl: ctrl}
 	mock.recorder = &MocknDCTransactionMgrForExistingWorkflowMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MocknDCTransactionMgrForExistingWorkflow) EXPECT() *MocknDCTransactionMgrForExistingWorkflowMockRecorder {
 	return m.recorder
 }
 
-// dispatchForExistingWorkflow mocks base method.
+// dispatchForExistingWorkflow mocks base method
 func (m *MocknDCTransactionMgrForExistingWorkflow) dispatchForExistingWorkflow(ctx context.Context, now time.Time, isWorkflowRebuilt bool, targetWorkflow, newWorkflow nDCWorkflow) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "dispatchForExistingWorkflow", ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
@@ -67,7 +67,7 @@ func (m *MocknDCTransactionMgrForExistingWorkflow) dispatchForExistingWorkflow(c
 	return ret0
 }
 
-// dispatchForExistingWorkflow indicates an expected call of dispatchForExistingWorkflow.
+// dispatchForExistingWorkflow indicates an expected call of dispatchForExistingWorkflow
 func (mr *MocknDCTransactionMgrForExistingWorkflowMockRecorder) dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "dispatchForExistingWorkflow", reflect.TypeOf((*MocknDCTransactionMgrForExistingWorkflow)(nil).dispatchForExistingWorkflow), ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
