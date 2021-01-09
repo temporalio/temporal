@@ -34,30 +34,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockClaimMapper is a mock of ClaimMapper interface
+// MockClaimMapper is a mock of ClaimMapper interface.
 type MockClaimMapper struct {
 	ctrl     *gomock.Controller
 	recorder *MockClaimMapperMockRecorder
 }
 
-// MockClaimMapperMockRecorder is the mock recorder for MockClaimMapper
+// MockClaimMapperMockRecorder is the mock recorder for MockClaimMapper.
 type MockClaimMapperMockRecorder struct {
 	mock *MockClaimMapper
 }
 
-// NewMockClaimMapper creates a new mock instance
+// NewMockClaimMapper creates a new mock instance.
 func NewMockClaimMapper(ctrl *gomock.Controller) *MockClaimMapper {
 	mock := &MockClaimMapper{ctrl: ctrl}
 	mock.recorder = &MockClaimMapperMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockClaimMapper) EXPECT() *MockClaimMapperMockRecorder {
 	return m.recorder
 }
 
-// GetClaims mocks base method
+// GetClaims mocks base method.
 func (m *MockClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetClaims", authInfo)
@@ -66,7 +66,7 @@ func (m *MockClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 	return ret0, ret1
 }
 
-// GetClaims indicates an expected call of GetClaims
+// GetClaims indicates an expected call of GetClaims.
 func (mr *MockClaimMapperMockRecorder) GetClaims(authInfo interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaims", reflect.TypeOf((*MockClaimMapper)(nil).GetClaims), authInfo)

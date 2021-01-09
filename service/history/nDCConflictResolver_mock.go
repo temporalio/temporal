@@ -35,30 +35,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MocknDCConflictResolver is a mock of nDCConflictResolver interface
+// MocknDCConflictResolver is a mock of nDCConflictResolver interface.
 type MocknDCConflictResolver struct {
 	ctrl     *gomock.Controller
 	recorder *MocknDCConflictResolverMockRecorder
 }
 
-// MocknDCConflictResolverMockRecorder is the mock recorder for MocknDCConflictResolver
+// MocknDCConflictResolverMockRecorder is the mock recorder for MocknDCConflictResolver.
 type MocknDCConflictResolverMockRecorder struct {
 	mock *MocknDCConflictResolver
 }
 
-// NewMocknDCConflictResolver creates a new mock instance
+// NewMocknDCConflictResolver creates a new mock instance.
 func NewMocknDCConflictResolver(ctrl *gomock.Controller) *MocknDCConflictResolver {
 	mock := &MocknDCConflictResolver{ctrl: ctrl}
 	mock.recorder = &MocknDCConflictResolverMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MocknDCConflictResolver) EXPECT() *MocknDCConflictResolverMockRecorder {
 	return m.recorder
 }
 
-// prepareMutableState mocks base method
+// prepareMutableState mocks base method.
 func (m *MocknDCConflictResolver) prepareMutableState(ctx context.Context, branchIndex int32, incomingVersion int64) (mutableState, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "prepareMutableState", ctx, branchIndex, incomingVersion)
@@ -68,7 +68,7 @@ func (m *MocknDCConflictResolver) prepareMutableState(ctx context.Context, branc
 	return ret0, ret1, ret2
 }
 
-// prepareMutableState indicates an expected call of prepareMutableState
+// prepareMutableState indicates an expected call of prepareMutableState.
 func (mr *MocknDCConflictResolverMockRecorder) prepareMutableState(ctx, branchIndex, incomingVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "prepareMutableState", reflect.TypeOf((*MocknDCConflictResolver)(nil).prepareMutableState), ctx, branchIndex, incomingVersion)

@@ -35,96 +35,96 @@ import (
 	persistence "go.temporal.io/server/common/persistence"
 )
 
-// MocktimerQueueProcessor is a mock of timerQueueProcessor interface
+// MocktimerQueueProcessor is a mock of timerQueueProcessor interface.
 type MocktimerQueueProcessor struct {
 	ctrl     *gomock.Controller
 	recorder *MocktimerQueueProcessorMockRecorder
 }
 
-// MocktimerQueueProcessorMockRecorder is the mock recorder for MocktimerQueueProcessor
+// MocktimerQueueProcessorMockRecorder is the mock recorder for MocktimerQueueProcessor.
 type MocktimerQueueProcessorMockRecorder struct {
 	mock *MocktimerQueueProcessor
 }
 
-// NewMocktimerQueueProcessor creates a new mock instance
+// NewMocktimerQueueProcessor creates a new mock instance.
 func NewMocktimerQueueProcessor(ctrl *gomock.Controller) *MocktimerQueueProcessor {
 	mock := &MocktimerQueueProcessor{ctrl: ctrl}
 	mock.recorder = &MocktimerQueueProcessorMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MocktimerQueueProcessor) EXPECT() *MocktimerQueueProcessorMockRecorder {
 	return m.recorder
 }
 
-// Start mocks base method
-func (m *MocktimerQueueProcessor) Start() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
-}
-
-// Start indicates an expected call of Start
-func (mr *MocktimerQueueProcessorMockRecorder) Start() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MocktimerQueueProcessor)(nil).Start))
-}
-
-// Stop mocks base method
-func (m *MocktimerQueueProcessor) Stop() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Stop")
-}
-
-// Stop indicates an expected call of Stop
-func (mr *MocktimerQueueProcessorMockRecorder) Stop() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MocktimerQueueProcessor)(nil).Stop))
-}
-
-// FailoverNamespace mocks base method
+// FailoverNamespace mocks base method.
 func (m *MocktimerQueueProcessor) FailoverNamespace(namespaceIDs map[string]struct{}) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "FailoverNamespace", namespaceIDs)
 }
 
-// FailoverNamespace indicates an expected call of FailoverNamespace
+// FailoverNamespace indicates an expected call of FailoverNamespace.
 func (mr *MocktimerQueueProcessorMockRecorder) FailoverNamespace(namespaceIDs interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailoverNamespace", reflect.TypeOf((*MocktimerQueueProcessor)(nil).FailoverNamespace), namespaceIDs)
 }
 
-// NotifyNewTimers mocks base method
-func (m *MocktimerQueueProcessor) NotifyNewTimers(clusterName string, timerTask []persistence.Task) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewTimers", clusterName, timerTask)
-}
-
-// NotifyNewTimers indicates an expected call of NotifyNewTimers
-func (mr *MocktimerQueueProcessorMockRecorder) NotifyNewTimers(clusterName, timerTask interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTimers", reflect.TypeOf((*MocktimerQueueProcessor)(nil).NotifyNewTimers), clusterName, timerTask)
-}
-
-// LockTaskProcessing mocks base method
+// LockTaskProcessing mocks base method.
 func (m *MocktimerQueueProcessor) LockTaskProcessing() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "LockTaskProcessing")
 }
 
-// LockTaskProcessing indicates an expected call of LockTaskProcessing
+// LockTaskProcessing indicates an expected call of LockTaskProcessing.
 func (mr *MocktimerQueueProcessorMockRecorder) LockTaskProcessing() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LockTaskProcessing", reflect.TypeOf((*MocktimerQueueProcessor)(nil).LockTaskProcessing))
 }
 
-// UnlockTaskProcessing mocks base method
+// NotifyNewTimers mocks base method.
+func (m *MocktimerQueueProcessor) NotifyNewTimers(clusterName string, timerTask []persistence.Task) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "NotifyNewTimers", clusterName, timerTask)
+}
+
+// NotifyNewTimers indicates an expected call of NotifyNewTimers.
+func (mr *MocktimerQueueProcessorMockRecorder) NotifyNewTimers(clusterName, timerTask interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTimers", reflect.TypeOf((*MocktimerQueueProcessor)(nil).NotifyNewTimers), clusterName, timerTask)
+}
+
+// Start mocks base method.
+func (m *MocktimerQueueProcessor) Start() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Start")
+}
+
+// Start indicates an expected call of Start.
+func (mr *MocktimerQueueProcessorMockRecorder) Start() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MocktimerQueueProcessor)(nil).Start))
+}
+
+// Stop mocks base method.
+func (m *MocktimerQueueProcessor) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *MocktimerQueueProcessorMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MocktimerQueueProcessor)(nil).Stop))
+}
+
+// UnlockTaskProcessing mocks base method.
 func (m *MocktimerQueueProcessor) UnlockTaskProcessing() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "UnlockTaskProcessing")
 }
 
-// UnlockTaskProcessing indicates an expected call of UnlockTaskProcessing
+// UnlockTaskProcessing indicates an expected call of UnlockTaskProcessing.
 func (mr *MocktimerQueueProcessorMockRecorder) UnlockTaskProcessing() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnlockTaskProcessing", reflect.TypeOf((*MocktimerQueueProcessor)(nil).UnlockTaskProcessing))

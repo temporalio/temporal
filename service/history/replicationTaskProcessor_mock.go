@@ -34,48 +34,48 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockReplicationTaskProcessor is a mock of ReplicationTaskProcessor interface
+// MockReplicationTaskProcessor is a mock of ReplicationTaskProcessor interface.
 type MockReplicationTaskProcessor struct {
 	ctrl     *gomock.Controller
 	recorder *MockReplicationTaskProcessorMockRecorder
 }
 
-// MockReplicationTaskProcessorMockRecorder is the mock recorder for MockReplicationTaskProcessor
+// MockReplicationTaskProcessorMockRecorder is the mock recorder for MockReplicationTaskProcessor.
 type MockReplicationTaskProcessorMockRecorder struct {
 	mock *MockReplicationTaskProcessor
 }
 
-// NewMockReplicationTaskProcessor creates a new mock instance
+// NewMockReplicationTaskProcessor creates a new mock instance.
 func NewMockReplicationTaskProcessor(ctrl *gomock.Controller) *MockReplicationTaskProcessor {
 	mock := &MockReplicationTaskProcessor{ctrl: ctrl}
 	mock.recorder = &MockReplicationTaskProcessorMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockReplicationTaskProcessor) EXPECT() *MockReplicationTaskProcessorMockRecorder {
 	return m.recorder
 }
 
-// Start mocks base method
+// Start mocks base method.
 func (m *MockReplicationTaskProcessor) Start() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Start")
 }
 
-// Start indicates an expected call of Start
+// Start indicates an expected call of Start.
 func (mr *MockReplicationTaskProcessorMockRecorder) Start() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockReplicationTaskProcessor)(nil).Start))
 }
 
-// Stop mocks base method
+// Stop mocks base method.
 func (m *MockReplicationTaskProcessor) Stop() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Stop")
 }
 
-// Stop indicates an expected call of Stop
+// Stop indicates an expected call of Stop.
 func (mr *MockReplicationTaskProcessorMockRecorder) Stop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockReplicationTaskProcessor)(nil).Stop))
