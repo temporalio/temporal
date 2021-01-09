@@ -8,6 +8,9 @@ bins: clean-bins temporal-server tctl temporal-cassandra-tool temporal-sql-tool
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
 all: update-tools clean proto bins check test
 
+# Used by Buildkite.
+ci-build: bins update-tools check proto gomodtidy nochanges
+
 # Delete all build artefacts.
 clean: clean-bins clean-test-results
 
@@ -446,6 +449,5 @@ gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
 
-##### Buildkite #####
-buildkite-check: update-tools check proto gomodtidy
-	@git status
+nochanges:
+	@git diff --exit-code

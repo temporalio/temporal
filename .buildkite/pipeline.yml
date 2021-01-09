@@ -3,17 +3,7 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make bins"
-    plugins:
-      - docker-compose#v3.1.0:
-          run: build
-          config: ./.buildkite/docker-compose.yml
-
-  - label: ":golang: check"
-    agents:
-      queue: "default"
-      docker: "*"
-    command: "make buildkite-check"
+    command: "make ci-build"
     plugins:
       - docker-compose#v3.1.0:
           run: build
