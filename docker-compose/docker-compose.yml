@@ -7,7 +7,7 @@ version: "3.5"
 services:
   mysql:
     image: mysql:5.7
-    container_name: temporal-mysql
+    container_name: temporal-dev-mysql
     ports:
       - "3306:3306"
     environment:
@@ -15,34 +15,34 @@ services:
     volumes:
       - ./mysql-init:/docker-entrypoint-initdb.d
     networks:
-      - temporal-dependencies-network
+      - temporal-dev-network
   cassandra:
     image: cassandra:3.11
-    container_name: temporal-cassandra
+    container_name: temporal-dev-cassandra
     ports:
       - "9042:9042"
     environment:
       CASSANDRA_LISTEN_ADDRESS: 127.0.0.1
     networks:
-      - temporal-dependencies-network
+      - temporal-dev-network
   postgresql:
     image: postgres:9.6
-    container_name: temporal-postgresql
+    container_name: temporal-dev-postgresql
     ports:
       - "5432:5432"
     environment:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
     networks:
-      - temporal-dependencies-network
+      - temporal-dev-network
   zookeeper:
     image: wurstmeister/zookeeper:3.4.6
-    container_name: temporal-zookeeper
+    container_name: temporal-dev-zookeeper
     networks:
-      - temporal-dependencies-network
+      - temporal-dev-network
   kafka:
     image: wurstmeister/kafka:2.12-2.1.1
-    container_name: temporal-kafka
+    container_name: temporal-dev-kafka
     depends_on:
       - zookeeper
     ports:
@@ -52,10 +52,10 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
     networks:
-      - temporal-dependencies-network
+      - temporal-dev-network
   elasticsearch:
     image: elasticsearch:7.10.1
-    container_name: temporal-elasticsearch
+    container_name: temporal-dev-elasticsearch
     ports:
       - "9200:9200"
     environment:
@@ -76,25 +76,25 @@ services:
     depends_on:
       - kafka
     networks:
-      - temporal-dependencies-network
+      - temporal-dev-network
   prometheus:
     # Use http://localhost:9090/ to access Prometheus.
     image: prom/prometheus
-    container_name: temporal-prometheus
+    container_name: temporal-dev-prometheus
   grafana:
     # Use http://localhost:3000/ to access Grafana (admin/admin).
     image: grafana/grafana
-    container_name: temporal-grafana
+    container_name: temporal-dev-grafana
     depends_on:
       - prometheus
     volumes:
       - ./grafana/provisioning/:/etc/grafana/provisioning/
   temporal-web:
-    image: temporalio/web:1.4.0
-    container_name: temporal-web
+    image: temporalio/web:1.4.1
+    container_name: temporal-dev-web
 
 networks:
-  temporal-dependencies-network:
+  temporal-dev-network:
     driver: bridge
-    name: temporal-dependencies-network
+    name: temporal-dev-network
 

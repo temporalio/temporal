@@ -5,9 +5,9 @@ version: "3.5"
 services:
   jaeger:
     image: jaegertracing/all-in-one:latest
-    container_name: temporal-jaeger
+    container_name: temporal-dev-jaeger
     ports:
       - "6831:6831/udp"
       - "16686:16686"
     networks:
-      - temporal-dependencies-network
+      - temporal-dev-network
