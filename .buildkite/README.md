@@ -7,10 +7,11 @@ same build locally that BuildKite will do.
 To run tests locally use `docker-compose run` command in `.buildkite` directory:
 
 ```bash
+$ cd .buildkite
 $ docker-compose run <container_name> <command>
 ```
 
-Get `<container_name>` and `<command>` form `pipeline.yml`:
+Get `<container_name>` and `<command>` form [pipeline.yml](pipeline.yml):
 ```yaml
   - label: ":golang: integration test with cassandra"
     agents:
