@@ -23,7 +23,7 @@ Clone Temporal docker-compose repo: [https://github.com/temporalio/docker-compos
 $ git clone https://github.com/temporalio/docker-compose.git
 ```
 
-Replace the tag of **image: temporalio/auto-setup** to **YOUR_TAG** in `docker-compose.yml`.
+Replace the tag of `image: temporalio/auto-setup` to **YOUR_TAG** in `docker-compose.yml`.
 Then start the service using the below commands:
 ```bash
 $ docker-compose up
