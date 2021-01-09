@@ -9,6 +9,16 @@ steps:
           run: build
           config: ./.buildkite/docker-compose.yml
 
+  - label: ":golang: check"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make check"
+    plugins:
+      - docker-compose#v3.1.0:
+          run: build
+          config: ./.buildkite/docker-compose.yml
+
   - wait
 
   - label: ":golang: unit test"
