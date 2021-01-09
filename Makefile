@@ -445,3 +445,7 @@ go-generate:
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
+
+##### Buildkite #####
+buildkite-check: update-tools check proto gomodtidy
+	@git status
