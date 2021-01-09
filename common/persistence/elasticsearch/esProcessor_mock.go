@@ -29,9 +29,10 @@
 package elasticsearch
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	elasticsearch "go.temporal.io/server/common/elasticsearch"
-	reflect "reflect"
 )
 
 // MockProcessor is a mock of Processor interface

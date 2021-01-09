@@ -41,10 +41,11 @@ const (
 type CallTarget struct {
 	// APIName must be the full API function name.
 	// Example: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution".
-	APIName   string
+	APIName string
 	// If a Namespace is not being targeted this be set to an empty string.
 	Namespace string
 }
+
 // @@@SNIPEND
 
 type (
@@ -62,6 +63,7 @@ type (
 type Authorizer interface {
 	Authorize(ctx context.Context, caller *Claims, target *CallTarget) (Result, error)
 }
+
 // @@@SNIPEND
 
 type requestWithNamespace interface {

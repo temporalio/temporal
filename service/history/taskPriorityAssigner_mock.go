@@ -34,30 +34,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MocktaskPriorityAssigner is a mock of taskPriorityAssigner interface.
+// MocktaskPriorityAssigner is a mock of taskPriorityAssigner interface
 type MocktaskPriorityAssigner struct {
 	ctrl     *gomock.Controller
 	recorder *MocktaskPriorityAssignerMockRecorder
 }
 
-// MocktaskPriorityAssignerMockRecorder is the mock recorder for MocktaskPriorityAssigner.
+// MocktaskPriorityAssignerMockRecorder is the mock recorder for MocktaskPriorityAssigner
 type MocktaskPriorityAssignerMockRecorder struct {
 	mock *MocktaskPriorityAssigner
 }
 
-// NewMocktaskPriorityAssigner creates a new mock instance.
+// NewMocktaskPriorityAssigner creates a new mock instance
 func NewMocktaskPriorityAssigner(ctrl *gomock.Controller) *MocktaskPriorityAssigner {
 	mock := &MocktaskPriorityAssigner{ctrl: ctrl}
 	mock.recorder = &MocktaskPriorityAssignerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MocktaskPriorityAssigner) EXPECT() *MocktaskPriorityAssignerMockRecorder {
 	return m.recorder
 }
 
-// Assign mocks base method.
+// Assign mocks base method
 func (m *MocktaskPriorityAssigner) Assign(arg0 queueTask) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Assign", arg0)
@@ -65,7 +65,7 @@ func (m *MocktaskPriorityAssigner) Assign(arg0 queueTask) error {
 	return ret0
 }
 
-// Assign indicates an expected call of Assign.
+// Assign indicates an expected call of Assign
 func (mr *MocktaskPriorityAssignerMockRecorder) Assign(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Assign", reflect.TypeOf((*MocktaskPriorityAssigner)(nil).Assign), arg0)

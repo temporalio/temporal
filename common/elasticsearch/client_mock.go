@@ -30,9 +30,10 @@ package elasticsearch
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	v7 "github.com/olivere/elastic/v7"
-	reflect "reflect"
 )
 
 // MockClient is a mock of Client interface

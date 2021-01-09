@@ -36,30 +36,30 @@ import (
 	workflowservice "go.temporal.io/api/workflowservice/v1"
 )
 
-// MockHandler is a mock of Handler interface.
+// MockHandler is a mock of Handler interface
 type MockHandler struct {
 	ctrl     *gomock.Controller
 	recorder *MockHandlerMockRecorder
 }
 
-// MockHandlerMockRecorder is the mock recorder for MockHandler.
+// MockHandlerMockRecorder is the mock recorder for MockHandler
 type MockHandlerMockRecorder struct {
 	mock *MockHandler
 }
 
-// NewMockHandler creates a new mock instance.
+// NewMockHandler creates a new mock instance
 func NewMockHandler(ctrl *gomock.Controller) *MockHandler {
 	mock := &MockHandler{ctrl: ctrl}
 	mock.recorder = &MockHandlerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockHandler) EXPECT() *MockHandlerMockRecorder {
 	return m.recorder
 }
 
-// DeprecateNamespace mocks base method.
+// DeprecateNamespace mocks base method
 func (m *MockHandler) DeprecateNamespace(ctx context.Context, deprecateRequest *workflowservice.DeprecateNamespaceRequest) (*workflowservice.DeprecateNamespaceResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeprecateNamespace", ctx, deprecateRequest)
@@ -68,13 +68,13 @@ func (m *MockHandler) DeprecateNamespace(ctx context.Context, deprecateRequest *
 	return ret0, ret1
 }
 
-// DeprecateNamespace indicates an expected call of DeprecateNamespace.
+// DeprecateNamespace indicates an expected call of DeprecateNamespace
 func (mr *MockHandlerMockRecorder) DeprecateNamespace(ctx, deprecateRequest interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeprecateNamespace", reflect.TypeOf((*MockHandler)(nil).DeprecateNamespace), ctx, deprecateRequest)
 }
 
-// DescribeNamespace mocks base method.
+// DescribeNamespace mocks base method
 func (m *MockHandler) DescribeNamespace(ctx context.Context, describeRequest *workflowservice.DescribeNamespaceRequest) (*workflowservice.DescribeNamespaceResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DescribeNamespace", ctx, describeRequest)
@@ -83,13 +83,13 @@ func (m *MockHandler) DescribeNamespace(ctx context.Context, describeRequest *wo
 	return ret0, ret1
 }
 
-// DescribeNamespace indicates an expected call of DescribeNamespace.
+// DescribeNamespace indicates an expected call of DescribeNamespace
 func (mr *MockHandlerMockRecorder) DescribeNamespace(ctx, describeRequest interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeNamespace", reflect.TypeOf((*MockHandler)(nil).DescribeNamespace), ctx, describeRequest)
 }
 
-// ListNamespaces mocks base method.
+// ListNamespaces mocks base method
 func (m *MockHandler) ListNamespaces(ctx context.Context, listRequest *workflowservice.ListNamespacesRequest) (*workflowservice.ListNamespacesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListNamespaces", ctx, listRequest)
@@ -98,13 +98,13 @@ func (m *MockHandler) ListNamespaces(ctx context.Context, listRequest *workflows
 	return ret0, ret1
 }
 
-// ListNamespaces indicates an expected call of ListNamespaces.
+// ListNamespaces indicates an expected call of ListNamespaces
 func (mr *MockHandlerMockRecorder) ListNamespaces(ctx, listRequest interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockHandler)(nil).ListNamespaces), ctx, listRequest)
 }
 
-// RegisterNamespace mocks base method.
+// RegisterNamespace mocks base method
 func (m *MockHandler) RegisterNamespace(ctx context.Context, registerRequest *workflowservice.RegisterNamespaceRequest) (*workflowservice.RegisterNamespaceResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RegisterNamespace", ctx, registerRequest)
@@ -113,13 +113,13 @@ func (m *MockHandler) RegisterNamespace(ctx context.Context, registerRequest *wo
 	return ret0, ret1
 }
 
-// RegisterNamespace indicates an expected call of RegisterNamespace.
+// RegisterNamespace indicates an expected call of RegisterNamespace
 func (mr *MockHandlerMockRecorder) RegisterNamespace(ctx, registerRequest interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterNamespace", reflect.TypeOf((*MockHandler)(nil).RegisterNamespace), ctx, registerRequest)
 }
 
-// UpdateNamespace mocks base method.
+// UpdateNamespace mocks base method
 func (m *MockHandler) UpdateNamespace(ctx context.Context, updateRequest *workflowservice.UpdateNamespaceRequest) (*workflowservice.UpdateNamespaceResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateNamespace", ctx, updateRequest)
@@ -128,7 +128,7 @@ func (m *MockHandler) UpdateNamespace(ctx context.Context, updateRequest *workfl
 	return ret0, ret1
 }
 
-// UpdateNamespace indicates an expected call of UpdateNamespace.
+// UpdateNamespace indicates an expected call of UpdateNamespace
 func (mr *MockHandlerMockRecorder) UpdateNamespace(ctx, updateRequest interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNamespace", reflect.TypeOf((*MockHandler)(nil).UpdateNamespace), ctx, updateRequest)
