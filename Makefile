@@ -9,7 +9,7 @@ bins: clean-bins temporal-server tctl temporal-cassandra-tool temporal-sql-tool
 all: update-tools clean proto bins check test
 
 # Used by Buildkite.
-ci-build: bins update-tools check proto go-generate gomodtidy nochanges
+ci-build: bins update-tools check proto go-generate gomodtidy ensure-no-changes
 
 # Delete all build artefacts.
 clean: clean-bins clean-test-results
@@ -219,7 +219,7 @@ temporal-sql-tool:
 ##### Checks #####
 copyright:
 	@printf $(COLOR) "Check license header..."
-	@go run ./cmd/tools/copyright/licensegen.go --verifyOnly || true
+	@go run ./cmd/tools/copyright/licensegen.go --verifyOnly
 
 lint:
 	@printf $(COLOR) "Run linter..."
@@ -231,12 +231,11 @@ vet:
 
 goimports-check:
 	@printf $(COLOR) "Run goimports checks..."
-# Use $(ALL_SRC) here to avoid checking generated files.
-	@goimports -l $(ALL_SRC) || true
+	@goimports -l .
 
 goimports:
 	@printf $(COLOR) "Run goimports..."
-	@goimports -local "go.temporal.io" -w $(ALL_SRC)
+	@goimports -w .
 
 staticcheck:
 	@printf $(COLOR) "Run staticcheck..."
@@ -444,5 +443,5 @@ gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
 
-nochanges:
+ensure-no-changes:
 	@git diff --exit-code
