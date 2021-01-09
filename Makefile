@@ -9,16 +9,16 @@ bins: clean-bins temporal-server tctl temporal-cassandra-tool temporal-sql-tool
 all: update-tools clean proto bins check test
 
 # Used by Buildkite.
-ci-build: bins update-tools check proto gomodtidy nochanges
+ci-build: bins update-tools check proto go-generate gomodtidy nochanges
 
 # Delete all build artefacts.
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto install-proto-submodule buf-lint api-linter protoc fix-proto-path proto-mock goimports-proto copyright-proto
+proto: clean-proto install-proto-submodule buf-lint api-linter protoc fix-proto-path proto-mock copyright-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-proto-path update-go-api proto-mock goimports-proto copyright-proto gomodtidy
+update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-proto-path update-go-api proto-mock copyright-proto gomodtidy
 
 # Build all docker images.
 docker-images:
@@ -136,7 +136,7 @@ update-checkers:
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
-	cd && GO111MODULE=on go get github.com/golang/mock/mockgen@v1.4.4
+	cd && GO111MODULE=on go get github.com/golang/mock/mockgen@1fe605df5e5f07f453dc4f594cc3510c914dbdee
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
@@ -187,10 +187,6 @@ proto-mock: $(PROTO_OUT)
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api..."
 	@go get -u go.temporal.io/api@master
-
-goimports-proto:
-	@printf $(COLOR) "Run goimports..."
-	@goimports -w $(PROTO_OUT)
 
 copyright-proto:
 	@printf $(COLOR) "Update license headers..."
@@ -440,10 +436,9 @@ start-cdc-other: temporal-server
 ##### Auxilary #####
 AWS_SDK_VERSION := $(lastword $(shell grep "github.com/aws/aws-sdk-go" go.mod))
 go-generate:
-	@printf $(COLOR) "Regenerate everything..."
+	@printf $(COLOR) "Process go:generate directives..."
 	@go generate ./...
 	@mockgen -copyright_file LICENSE -package mocks -source $(GOPATH)/pkg/mod/github.com/aws/aws-sdk-go@$(AWS_SDK_VERSION)/service/s3/s3iface/interface.go -destination common/archiver/s3store/mocks/S3API.go
-	@goimports -w $(ALL_SRC)
 
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
