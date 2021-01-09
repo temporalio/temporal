@@ -1,54 +1,48 @@
-# Using BuildKite
+# Using Buildkite
 
-BuildKite simply runs Docker containers. So it is easy to perform the 
-same build locally that BuildKite will do. To handle this, there are 
-two different docker-compose files: one for BuildKite and one for local.
-The Dockerfile is the same for both. 
+Buildkite simply runs docker containers. So it is easy to perform the 
+same build locally that BuildKite will do.
 
 ## Testing the build locally
-To try out the build locally, start from the root folder of this repo 
-(temporal) and run the following commands.
+To run tests locally run the following commands in `.buildkite` directory.
 
-Build the container for 
-
-unit tests:
+Run unit tests:
 ```bash
-docker-compose -f docker/buildkite/docker-compose-local.yml build unit-test
+$ docker-compose run unit-test make cover_profile
 ```
 
-integration tests:
+Run integration tests with Cassandra:
 ```bash
-docker-compose -f docker/buildkite/docker-compose-local.yml build integration-test-cassandra
+$ docker-compose run integration-test-cassandra make cover_integration_profile
 ```
 
-cross DC integration tests:
+Run integration tests with MySQL:
 ```bash
-docker-compose -f docker/buildkite/docker-compose-local.yml build integration-test-xdc-cassandra
+$ docker-compose run integration-test-mysql make cover_integration_profile
 ```
 
-Run the integration tests:
-
-unit tests:
-```bash
-docker-compose -f docker/buildkite/docker-compose-local.yml run unit-test
+Note that Buildkite will run basically the same commands:
+```yaml
+  - label: ":golang: integration test with cassandra"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_integration_profile" # command to run in container
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-cassandra # container name
+          config: docker-compose.yml
 ```
 
-integration tests:
-```bash
-docker-compose -f docker/buildkite/docker-compose-local.yml run integration-test-cassandra
-```
-
-cross DC integration tests:
-```bash
-docker-compose -f docker/buildkite/docker-compose-local.yml run integration-test-xdc-cassandra
-```
-
-Note that BuildKite will run basically the same commands.
-
-## Testing the build in BuildKite
-Creating a PR against the master branch will trigger the BuildKite
+## Testing the build in Buildkite
+Creating a PR against the master branch will trigger the Buildkite
 build. Members of the Temporal team can view the build pipeline here:
-https://buildkite.com/temporal/temporal-server
+[https://buildkite.com/temporal/temporal-server](https://buildkite.com/temporal/temporal-server).
 
 Eventually this pipeline should be made public. It will need to ignore 
 third party PRs for safety reasons.

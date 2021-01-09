@@ -62,8 +62,8 @@ services:
 
   integration-test-cassandra:
     build:
-      context: ../../
-      dockerfile: ./docker/buildkite/Dockerfile
+      context: ../
+      dockerfile: ./.buildkite/Dockerfile
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
@@ -82,7 +82,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/temporal
+      - ../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
