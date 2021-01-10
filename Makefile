@@ -49,6 +49,7 @@ SHELL := PATH=$(GOBIN):$(PATH) /bin/sh
 MODULE_ROOT := go.temporal.io/server
 BUILD := ./build
 COLOR := "\e[1;36m%s\e[0m\n"
+RED :=   "\e[1;31m%s\e[0m\n"
 
 define NEWLINE
 
@@ -185,15 +186,15 @@ proto-mocks: $(PROTO_OUT)
 	$(NEWLINE))
 
 update-go-api:
-	@printf $(COLOR) "Update go.temporal.io/api..."
+	@printf $(COLOR) "Update go.temporal.io/api@master..."
 	@go get -u go.temporal.io/api@master
 
 goimports-proto:
-	@printf $(COLOR) "Run goimports..."
+	@printf $(COLOR) "Run goimports for proto files..."
 	@goimports -w $(PROTO_OUT)
 
 copyright-proto:
-	@printf $(COLOR) "Update license headers..."
+	@printf $(COLOR) "Update license headers for proto files..."
 	@go run ./cmd/tools/copyright/licensegen.go --scanDir $(PROTO_OUT)
 
 ##### Binaries #####
@@ -221,7 +222,7 @@ temporal-sql-tool:
 	go build -o temporal-sql-tool cmd/tools/sql/main.go
 
 ##### Checks #####
-copyright:
+copyright-check:
 	@printf $(COLOR) "Check license header..."
 	@go run ./cmd/tools/copyright/licensegen.go --verifyOnly
 
@@ -265,7 +266,7 @@ buf-breaking:
 	@printf $(COLOR) "Run buf breaking changes check against image.bin..."
 	@(cd $(PROTO_ROOT) && buf check breaking --against image.bin)
 
-check: copyright goimports-check lint vet staticcheck errcheck
+check: copyright-check goimports-check lint vet staticcheck errcheck
 
 ##### Tests #####
 clean-test-results:
@@ -454,4 +455,4 @@ gomodtidy:
 	@go mod tidy
 
 ensure-no-changes:
-	@git diff --exit-code
+	@git diff --name-status --exit-code || (printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; exit 1)
