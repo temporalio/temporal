@@ -179,7 +179,7 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "scripts/buildkite/gocov.sh"
+    command: "./.buildkite/scripts/gocov.sh"
     retry:
       automatic:
         limit: 2
@@ -192,7 +192,7 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "scripts/buildkite/docker-push.sh"
+    command: "./.buildkite/scripts/docker-push.sh"
     retry:
       automatic:
         limit: 1
