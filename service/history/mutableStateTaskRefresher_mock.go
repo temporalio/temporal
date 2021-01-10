@@ -35,30 +35,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockmutableStateTaskRefresher is a mock of mutableStateTaskRefresher interface
+// MockmutableStateTaskRefresher is a mock of mutableStateTaskRefresher interface.
 type MockmutableStateTaskRefresher struct {
 	ctrl     *gomock.Controller
 	recorder *MockmutableStateTaskRefresherMockRecorder
 }
 
-// MockmutableStateTaskRefresherMockRecorder is the mock recorder for MockmutableStateTaskRefresher
+// MockmutableStateTaskRefresherMockRecorder is the mock recorder for MockmutableStateTaskRefresher.
 type MockmutableStateTaskRefresherMockRecorder struct {
 	mock *MockmutableStateTaskRefresher
 }
 
-// NewMockmutableStateTaskRefresher creates a new mock instance
+// NewMockmutableStateTaskRefresher creates a new mock instance.
 func NewMockmutableStateTaskRefresher(ctrl *gomock.Controller) *MockmutableStateTaskRefresher {
 	mock := &MockmutableStateTaskRefresher{ctrl: ctrl}
 	mock.recorder = &MockmutableStateTaskRefresherMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockmutableStateTaskRefresher) EXPECT() *MockmutableStateTaskRefresherMockRecorder {
 	return m.recorder
 }
 
-// refreshTasks mocks base method
+// refreshTasks mocks base method.
 func (m *MockmutableStateTaskRefresher) refreshTasks(now time.Time, mutableState mutableState) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "refreshTasks", now, mutableState)
@@ -66,7 +66,7 @@ func (m *MockmutableStateTaskRefresher) refreshTasks(now time.Time, mutableState
 	return ret0
 }
 
-// refreshTasks indicates an expected call of refreshTasks
+// refreshTasks indicates an expected call of refreshTasks.
 func (mr *MockmutableStateTaskRefresherMockRecorder) refreshTasks(now, mutableState interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "refreshTasks", reflect.TypeOf((*MockmutableStateTaskRefresher)(nil).refreshTasks), now, mutableState)

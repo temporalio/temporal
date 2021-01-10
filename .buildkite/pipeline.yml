@@ -3,7 +3,7 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make bins"
+    command: "make ci-build"
     plugins:
       - docker-compose#v3.1.0:
           run: build

@@ -36,30 +36,30 @@ import (
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 )
 
-// MocknDCActivityReplicator is a mock of nDCActivityReplicator interface
+// MocknDCActivityReplicator is a mock of nDCActivityReplicator interface.
 type MocknDCActivityReplicator struct {
 	ctrl     *gomock.Controller
 	recorder *MocknDCActivityReplicatorMockRecorder
 }
 
-// MocknDCActivityReplicatorMockRecorder is the mock recorder for MocknDCActivityReplicator
+// MocknDCActivityReplicatorMockRecorder is the mock recorder for MocknDCActivityReplicator.
 type MocknDCActivityReplicatorMockRecorder struct {
 	mock *MocknDCActivityReplicator
 }
 
-// NewMocknDCActivityReplicator creates a new mock instance
+// NewMocknDCActivityReplicator creates a new mock instance.
 func NewMocknDCActivityReplicator(ctrl *gomock.Controller) *MocknDCActivityReplicator {
 	mock := &MocknDCActivityReplicator{ctrl: ctrl}
 	mock.recorder = &MocknDCActivityReplicatorMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MocknDCActivityReplicator) EXPECT() *MocknDCActivityReplicatorMockRecorder {
 	return m.recorder
 }
 
-// SyncActivity mocks base method
+// SyncActivity mocks base method.
 func (m *MocknDCActivityReplicator) SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncActivity", ctx, request)
@@ -67,7 +67,7 @@ func (m *MocknDCActivityReplicator) SyncActivity(ctx context.Context, request *h
 	return ret0
 }
 
-// SyncActivity indicates an expected call of SyncActivity
+// SyncActivity indicates an expected call of SyncActivity.
 func (mr *MocknDCActivityReplicatorMockRecorder) SyncActivity(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncActivity", reflect.TypeOf((*MocknDCActivityReplicator)(nil).SyncActivity), ctx, request)

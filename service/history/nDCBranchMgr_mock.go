@@ -36,30 +36,30 @@ import (
 	history "go.temporal.io/server/api/history/v1"
 )
 
-// MocknDCBranchMgr is a mock of nDCBranchMgr interface
+// MocknDCBranchMgr is a mock of nDCBranchMgr interface.
 type MocknDCBranchMgr struct {
 	ctrl     *gomock.Controller
 	recorder *MocknDCBranchMgrMockRecorder
 }
 
-// MocknDCBranchMgrMockRecorder is the mock recorder for MocknDCBranchMgr
+// MocknDCBranchMgrMockRecorder is the mock recorder for MocknDCBranchMgr.
 type MocknDCBranchMgrMockRecorder struct {
 	mock *MocknDCBranchMgr
 }
 
-// NewMocknDCBranchMgr creates a new mock instance
+// NewMocknDCBranchMgr creates a new mock instance.
 func NewMocknDCBranchMgr(ctrl *gomock.Controller) *MocknDCBranchMgr {
 	mock := &MocknDCBranchMgr{ctrl: ctrl}
 	mock.recorder = &MocknDCBranchMgrMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MocknDCBranchMgr) EXPECT() *MocknDCBranchMgrMockRecorder {
 	return m.recorder
 }
 
-// prepareVersionHistory mocks base method
+// prepareVersionHistory mocks base method.
 func (m *MocknDCBranchMgr) prepareVersionHistory(ctx context.Context, incomingVersionHistory *history.VersionHistory, incomingFirstEventID, incomingFirstEventVersion int64) (bool, int32, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "prepareVersionHistory", ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
@@ -69,7 +69,7 @@ func (m *MocknDCBranchMgr) prepareVersionHistory(ctx context.Context, incomingVe
 	return ret0, ret1, ret2
 }
 
-// prepareVersionHistory indicates an expected call of prepareVersionHistory
+// prepareVersionHistory indicates an expected call of prepareVersionHistory.
 func (mr *MocknDCBranchMgrMockRecorder) prepareVersionHistory(ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "prepareVersionHistory", reflect.TypeOf((*MocknDCBranchMgr)(nil).prepareVersionHistory), ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)

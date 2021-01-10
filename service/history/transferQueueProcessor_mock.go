@@ -35,96 +35,96 @@ import (
 	persistence "go.temporal.io/server/common/persistence"
 )
 
-// MocktransferQueueProcessor is a mock of transferQueueProcessor interface
+// MocktransferQueueProcessor is a mock of transferQueueProcessor interface.
 type MocktransferQueueProcessor struct {
 	ctrl     *gomock.Controller
 	recorder *MocktransferQueueProcessorMockRecorder
 }
 
-// MocktransferQueueProcessorMockRecorder is the mock recorder for MocktransferQueueProcessor
+// MocktransferQueueProcessorMockRecorder is the mock recorder for MocktransferQueueProcessor.
 type MocktransferQueueProcessorMockRecorder struct {
 	mock *MocktransferQueueProcessor
 }
 
-// NewMocktransferQueueProcessor creates a new mock instance
+// NewMocktransferQueueProcessor creates a new mock instance.
 func NewMocktransferQueueProcessor(ctrl *gomock.Controller) *MocktransferQueueProcessor {
 	mock := &MocktransferQueueProcessor{ctrl: ctrl}
 	mock.recorder = &MocktransferQueueProcessorMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MocktransferQueueProcessor) EXPECT() *MocktransferQueueProcessorMockRecorder {
 	return m.recorder
 }
 
-// Start mocks base method
-func (m *MocktransferQueueProcessor) Start() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
-}
-
-// Start indicates an expected call of Start
-func (mr *MocktransferQueueProcessorMockRecorder) Start() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MocktransferQueueProcessor)(nil).Start))
-}
-
-// Stop mocks base method
-func (m *MocktransferQueueProcessor) Stop() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Stop")
-}
-
-// Stop indicates an expected call of Stop
-func (mr *MocktransferQueueProcessorMockRecorder) Stop() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MocktransferQueueProcessor)(nil).Stop))
-}
-
-// FailoverNamespace mocks base method
+// FailoverNamespace mocks base method.
 func (m *MocktransferQueueProcessor) FailoverNamespace(namespaceIDs map[string]struct{}) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "FailoverNamespace", namespaceIDs)
 }
 
-// FailoverNamespace indicates an expected call of FailoverNamespace
+// FailoverNamespace indicates an expected call of FailoverNamespace.
 func (mr *MocktransferQueueProcessorMockRecorder) FailoverNamespace(namespaceIDs interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailoverNamespace", reflect.TypeOf((*MocktransferQueueProcessor)(nil).FailoverNamespace), namespaceIDs)
 }
 
-// NotifyNewTask mocks base method
-func (m *MocktransferQueueProcessor) NotifyNewTask(clusterName string, transferTasks []persistence.Task) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewTask", clusterName, transferTasks)
-}
-
-// NotifyNewTask indicates an expected call of NotifyNewTask
-func (mr *MocktransferQueueProcessorMockRecorder) NotifyNewTask(clusterName, transferTasks interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTask", reflect.TypeOf((*MocktransferQueueProcessor)(nil).NotifyNewTask), clusterName, transferTasks)
-}
-
-// LockTaskProcessing mocks base method
+// LockTaskProcessing mocks base method.
 func (m *MocktransferQueueProcessor) LockTaskProcessing() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "LockTaskProcessing")
 }
 
-// LockTaskProcessing indicates an expected call of LockTaskProcessing
+// LockTaskProcessing indicates an expected call of LockTaskProcessing.
 func (mr *MocktransferQueueProcessorMockRecorder) LockTaskProcessing() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LockTaskProcessing", reflect.TypeOf((*MocktransferQueueProcessor)(nil).LockTaskProcessing))
 }
 
-// UnlockTaskPrrocessing mocks base method
+// NotifyNewTask mocks base method.
+func (m *MocktransferQueueProcessor) NotifyNewTask(clusterName string, transferTasks []persistence.Task) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "NotifyNewTask", clusterName, transferTasks)
+}
+
+// NotifyNewTask indicates an expected call of NotifyNewTask.
+func (mr *MocktransferQueueProcessorMockRecorder) NotifyNewTask(clusterName, transferTasks interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTask", reflect.TypeOf((*MocktransferQueueProcessor)(nil).NotifyNewTask), clusterName, transferTasks)
+}
+
+// Start mocks base method.
+func (m *MocktransferQueueProcessor) Start() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Start")
+}
+
+// Start indicates an expected call of Start.
+func (mr *MocktransferQueueProcessorMockRecorder) Start() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MocktransferQueueProcessor)(nil).Start))
+}
+
+// Stop mocks base method.
+func (m *MocktransferQueueProcessor) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *MocktransferQueueProcessorMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MocktransferQueueProcessor)(nil).Stop))
+}
+
+// UnlockTaskPrrocessing mocks base method.
 func (m *MocktransferQueueProcessor) UnlockTaskPrrocessing() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "UnlockTaskPrrocessing")
 }
 
-// UnlockTaskPrrocessing indicates an expected call of UnlockTaskPrrocessing
+// UnlockTaskPrrocessing indicates an expected call of UnlockTaskPrrocessing.
 func (mr *MocktransferQueueProcessorMockRecorder) UnlockTaskPrrocessing() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnlockTaskPrrocessing", reflect.TypeOf((*MocktransferQueueProcessor)(nil).UnlockTaskPrrocessing))
