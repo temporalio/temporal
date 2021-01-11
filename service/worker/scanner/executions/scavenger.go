@@ -44,7 +44,9 @@ type (
 	// Scavenger is the type that holds the state for executions scavenger daemon
 	Scavenger struct {
 		params ScannerWorkflowParams
-		// TODO: currently frontend client does not support scan visibility records without namespace filter (need to chat with Bowei to understand if querying without namespace filter is an issue)? Maybe we go directly to elasticSearch?
+		// TODO: currently frontend client does not support scan visibility records without namespace filter (need to
+		// 		chat with Bowei to understand if querying without namespace filter is an issue)? Maybe we go directly to
+		//		elasticSearch?
 		frontendClient frontend.Client // used to query visibility
 		historyDB      p.HistoryManager
 		executor       executor.Executor
