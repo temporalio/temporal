@@ -32,98 +32,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-
 	quotas "go.temporal.io/server/common/quotas"
 )
-
-// MockReplicationTaskFetcher is a mock of ReplicationTaskFetcher interface.
-type MockReplicationTaskFetcher struct {
-	ctrl     *gomock.Controller
-	recorder *MockReplicationTaskFetcherMockRecorder
-}
-
-// MockReplicationTaskFetcherMockRecorder is the mock recorder for MockReplicationTaskFetcher.
-type MockReplicationTaskFetcherMockRecorder struct {
-	mock *MockReplicationTaskFetcher
-}
-
-// NewMockReplicationTaskFetcher creates a new mock instance.
-func NewMockReplicationTaskFetcher(ctrl *gomock.Controller) *MockReplicationTaskFetcher {
-	mock := &MockReplicationTaskFetcher{ctrl: ctrl}
-	mock.recorder = &MockReplicationTaskFetcherMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockReplicationTaskFetcher) EXPECT() *MockReplicationTaskFetcherMockRecorder {
-	return m.recorder
-}
-
-// Start mocks base method.
-func (m *MockReplicationTaskFetcher) Start() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
-}
-
-// Start indicates an expected call of Start.
-func (mr *MockReplicationTaskFetcherMockRecorder) Start() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockReplicationTaskFetcher)(nil).Start))
-}
-
-// Stop mocks base method.
-func (m *MockReplicationTaskFetcher) Stop() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Stop")
-}
-
-// Stop indicates an expected call of Stop.
-func (mr *MockReplicationTaskFetcherMockRecorder) Stop() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockReplicationTaskFetcher)(nil).Stop))
-}
-
-// GetSourceCluster mocks base method.
-func (m *MockReplicationTaskFetcher) GetSourceCluster() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSourceCluster")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetSourceCluster indicates an expected call of GetSourceCluster.
-func (mr *MockReplicationTaskFetcherMockRecorder) GetSourceCluster() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSourceCluster", reflect.TypeOf((*MockReplicationTaskFetcher)(nil).GetSourceCluster))
-}
-
-// GetRequestChan mocks base method.
-func (m *MockReplicationTaskFetcher) GetRequestChan() chan<- *replicationTaskRequest {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRequestChan")
-	ret0, _ := ret[0].(chan<- *replicationTaskRequest)
-	return ret0
-}
-
-// GetRequestChan indicates an expected call of GetRequestChan.
-func (mr *MockReplicationTaskFetcherMockRecorder) GetRequestChan() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRequestChan", reflect.TypeOf((*MockReplicationTaskFetcher)(nil).GetRequestChan))
-}
-
-// GetRateLimiter mocks base method.
-func (m *MockReplicationTaskFetcher) GetRateLimiter() quotas.RateLimiter {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRateLimiter")
-	ret0, _ := ret[0].(quotas.RateLimiter)
-	return ret0
-}
-
-// GetRateLimiter indicates an expected call of GetRateLimiter.
-func (mr *MockReplicationTaskFetcherMockRecorder) GetRateLimiter() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRateLimiter", reflect.TypeOf((*MockReplicationTaskFetcher)(nil).GetRateLimiter))
-}
 
 // MockReplicationTaskFetchers is a mock of ReplicationTaskFetchers interface.
 type MockReplicationTaskFetchers struct {
@@ -146,6 +56,20 @@ func NewMockReplicationTaskFetchers(ctrl *gomock.Controller) *MockReplicationTas
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockReplicationTaskFetchers) EXPECT() *MockReplicationTaskFetchersMockRecorder {
 	return m.recorder
+}
+
+// GetFetchers mocks base method.
+func (m *MockReplicationTaskFetchers) GetFetchers() []ReplicationTaskFetcher {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFetchers")
+	ret0, _ := ret[0].([]ReplicationTaskFetcher)
+	return ret0
+}
+
+// GetFetchers indicates an expected call of GetFetchers.
+func (mr *MockReplicationTaskFetchersMockRecorder) GetFetchers() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFetchers", reflect.TypeOf((*MockReplicationTaskFetchers)(nil).GetFetchers))
 }
 
 // Start mocks base method.
@@ -172,16 +96,91 @@ func (mr *MockReplicationTaskFetchersMockRecorder) Stop() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockReplicationTaskFetchers)(nil).Stop))
 }
 
-// GetFetchers mocks base method.
-func (m *MockReplicationTaskFetchers) GetFetchers() []ReplicationTaskFetcher {
+// MockReplicationTaskFetcher is a mock of ReplicationTaskFetcher interface.
+type MockReplicationTaskFetcher struct {
+	ctrl     *gomock.Controller
+	recorder *MockReplicationTaskFetcherMockRecorder
+}
+
+// MockReplicationTaskFetcherMockRecorder is the mock recorder for MockReplicationTaskFetcher.
+type MockReplicationTaskFetcherMockRecorder struct {
+	mock *MockReplicationTaskFetcher
+}
+
+// NewMockReplicationTaskFetcher creates a new mock instance.
+func NewMockReplicationTaskFetcher(ctrl *gomock.Controller) *MockReplicationTaskFetcher {
+	mock := &MockReplicationTaskFetcher{ctrl: ctrl}
+	mock.recorder = &MockReplicationTaskFetcherMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockReplicationTaskFetcher) EXPECT() *MockReplicationTaskFetcherMockRecorder {
+	return m.recorder
+}
+
+// GetRateLimiter mocks base method.
+func (m *MockReplicationTaskFetcher) GetRateLimiter() quotas.RateLimiter {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetFetchers")
-	ret0, _ := ret[0].([]ReplicationTaskFetcher)
+	ret := m.ctrl.Call(m, "GetRateLimiter")
+	ret0, _ := ret[0].(quotas.RateLimiter)
 	return ret0
 }
 
-// GetFetchers indicates an expected call of GetFetchers.
-func (mr *MockReplicationTaskFetchersMockRecorder) GetFetchers() *gomock.Call {
+// GetRateLimiter indicates an expected call of GetRateLimiter.
+func (mr *MockReplicationTaskFetcherMockRecorder) GetRateLimiter() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFetchers", reflect.TypeOf((*MockReplicationTaskFetchers)(nil).GetFetchers))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRateLimiter", reflect.TypeOf((*MockReplicationTaskFetcher)(nil).GetRateLimiter))
+}
+
+// GetRequestChan mocks base method.
+func (m *MockReplicationTaskFetcher) GetRequestChan() chan<- *replicationTaskRequest {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRequestChan")
+	ret0, _ := ret[0].(chan<- *replicationTaskRequest)
+	return ret0
+}
+
+// GetRequestChan indicates an expected call of GetRequestChan.
+func (mr *MockReplicationTaskFetcherMockRecorder) GetRequestChan() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRequestChan", reflect.TypeOf((*MockReplicationTaskFetcher)(nil).GetRequestChan))
+}
+
+// GetSourceCluster mocks base method.
+func (m *MockReplicationTaskFetcher) GetSourceCluster() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSourceCluster")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetSourceCluster indicates an expected call of GetSourceCluster.
+func (mr *MockReplicationTaskFetcherMockRecorder) GetSourceCluster() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSourceCluster", reflect.TypeOf((*MockReplicationTaskFetcher)(nil).GetSourceCluster))
+}
+
+// Start mocks base method.
+func (m *MockReplicationTaskFetcher) Start() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Start")
+}
+
+// Start indicates an expected call of Start.
+func (mr *MockReplicationTaskFetcherMockRecorder) Start() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockReplicationTaskFetcher)(nil).Start))
+}
+
+// Stop mocks base method.
+func (m *MockReplicationTaskFetcher) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *MockReplicationTaskFetcherMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockReplicationTaskFetcher)(nil).Stop))
 }

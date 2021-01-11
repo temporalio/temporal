@@ -57,52 +57,33 @@ func (m *MockNamespaceCache) EXPECT() *MockNamespaceCacheMockRecorder {
 	return m.recorder
 }
 
-// Start mocks base method.
-func (m *MockNamespaceCache) Start() {
+// GetAllNamespace mocks base method.
+func (m *MockNamespaceCache) GetAllNamespace() map[string]*NamespaceCacheEntry {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
+	ret := m.ctrl.Call(m, "GetAllNamespace")
+	ret0, _ := ret[0].(map[string]*NamespaceCacheEntry)
+	return ret0
 }
 
-// Start indicates an expected call of Start.
-func (mr *MockNamespaceCacheMockRecorder) Start() *gomock.Call {
+// GetAllNamespace indicates an expected call of GetAllNamespace.
+func (mr *MockNamespaceCacheMockRecorder) GetAllNamespace() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockNamespaceCache)(nil).Start))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllNamespace", reflect.TypeOf((*MockNamespaceCache)(nil).GetAllNamespace))
 }
 
-// Stop mocks base method.
-func (m *MockNamespaceCache) Stop() {
+// GetCacheSize mocks base method.
+func (m *MockNamespaceCache) GetCacheSize() (int64, int64) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Stop")
+	ret := m.ctrl.Call(m, "GetCacheSize")
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(int64)
+	return ret0, ret1
 }
 
-// Stop indicates an expected call of Stop.
-func (mr *MockNamespaceCacheMockRecorder) Stop() *gomock.Call {
+// GetCacheSize indicates an expected call of GetCacheSize.
+func (mr *MockNamespaceCacheMockRecorder) GetCacheSize() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockNamespaceCache)(nil).Stop))
-}
-
-// RegisterNamespaceChangeCallback mocks base method.
-func (m *MockNamespaceCache) RegisterNamespaceChangeCallback(shard int32, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RegisterNamespaceChangeCallback", shard, initialNotificationVersion, prepareCallback, callback)
-}
-
-// RegisterNamespaceChangeCallback indicates an expected call of RegisterNamespaceChangeCallback.
-func (mr *MockNamespaceCacheMockRecorder) RegisterNamespaceChangeCallback(shard, initialNotificationVersion, prepareCallback, callback interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterNamespaceChangeCallback", reflect.TypeOf((*MockNamespaceCache)(nil).RegisterNamespaceChangeCallback), shard, initialNotificationVersion, prepareCallback, callback)
-}
-
-// UnregisterNamespaceChangeCallback mocks base method.
-func (m *MockNamespaceCache) UnregisterNamespaceChangeCallback(shard int32) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UnregisterNamespaceChangeCallback", shard)
-}
-
-// UnregisterNamespaceChangeCallback indicates an expected call of UnregisterNamespaceChangeCallback.
-func (mr *MockNamespaceCacheMockRecorder) UnregisterNamespaceChangeCallback(shard interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterNamespaceChangeCallback", reflect.TypeOf((*MockNamespaceCache)(nil).UnregisterNamespaceChangeCallback), shard)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCacheSize", reflect.TypeOf((*MockNamespaceCache)(nil).GetCacheSize))
 }
 
 // GetNamespace mocks base method.
@@ -165,31 +146,50 @@ func (mr *MockNamespaceCacheMockRecorder) GetNamespaceName(id interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceName", reflect.TypeOf((*MockNamespaceCache)(nil).GetNamespaceName), id)
 }
 
-// GetAllNamespace mocks base method.
-func (m *MockNamespaceCache) GetAllNamespace() map[string]*NamespaceCacheEntry {
+// RegisterNamespaceChangeCallback mocks base method.
+func (m *MockNamespaceCache) RegisterNamespaceChangeCallback(shard int32, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAllNamespace")
-	ret0, _ := ret[0].(map[string]*NamespaceCacheEntry)
-	return ret0
+	m.ctrl.Call(m, "RegisterNamespaceChangeCallback", shard, initialNotificationVersion, prepareCallback, callback)
 }
 
-// GetAllNamespace indicates an expected call of GetAllNamespace.
-func (mr *MockNamespaceCacheMockRecorder) GetAllNamespace() *gomock.Call {
+// RegisterNamespaceChangeCallback indicates an expected call of RegisterNamespaceChangeCallback.
+func (mr *MockNamespaceCacheMockRecorder) RegisterNamespaceChangeCallback(shard, initialNotificationVersion, prepareCallback, callback interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllNamespace", reflect.TypeOf((*MockNamespaceCache)(nil).GetAllNamespace))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterNamespaceChangeCallback", reflect.TypeOf((*MockNamespaceCache)(nil).RegisterNamespaceChangeCallback), shard, initialNotificationVersion, prepareCallback, callback)
 }
 
-// GetCacheSize mocks base method.
-func (m *MockNamespaceCache) GetCacheSize() (int64, int64) {
+// Start mocks base method.
+func (m *MockNamespaceCache) Start() {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCacheSize")
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(int64)
-	return ret0, ret1
+	m.ctrl.Call(m, "Start")
 }
 
-// GetCacheSize indicates an expected call of GetCacheSize.
-func (mr *MockNamespaceCacheMockRecorder) GetCacheSize() *gomock.Call {
+// Start indicates an expected call of Start.
+func (mr *MockNamespaceCacheMockRecorder) Start() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCacheSize", reflect.TypeOf((*MockNamespaceCache)(nil).GetCacheSize))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockNamespaceCache)(nil).Start))
+}
+
+// Stop mocks base method.
+func (m *MockNamespaceCache) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *MockNamespaceCacheMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockNamespaceCache)(nil).Stop))
+}
+
+// UnregisterNamespaceChangeCallback mocks base method.
+func (m *MockNamespaceCache) UnregisterNamespaceChangeCallback(shard int32) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UnregisterNamespaceChangeCallback", shard)
+}
+
+// UnregisterNamespaceChangeCallback indicates an expected call of UnregisterNamespaceChangeCallback.
+func (mr *MockNamespaceCacheMockRecorder) UnregisterNamespaceChangeCallback(shard interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterNamespaceChangeCallback", reflect.TypeOf((*MockNamespaceCache)(nil).UnregisterNamespaceChangeCallback), shard)
 }

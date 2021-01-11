@@ -37,4 +37,5 @@ type TokenKeyProvider interface {
 	RsaKey(alg string, kid string) (*rsa.PublicKey, error)
 	Close()
 }
+
 // @@@SNIPEND

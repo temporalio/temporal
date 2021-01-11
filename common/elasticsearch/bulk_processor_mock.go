@@ -29,34 +29,47 @@
 package elasticsearch
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
-// MockBulkProcessor is a mock of BulkProcessor interface
+// MockBulkProcessor is a mock of BulkProcessor interface.
 type MockBulkProcessor struct {
 	ctrl     *gomock.Controller
 	recorder *MockBulkProcessorMockRecorder
 }
 
-// MockBulkProcessorMockRecorder is the mock recorder for MockBulkProcessor
+// MockBulkProcessorMockRecorder is the mock recorder for MockBulkProcessor.
 type MockBulkProcessorMockRecorder struct {
 	mock *MockBulkProcessor
 }
 
-// NewMockBulkProcessor creates a new mock instance
+// NewMockBulkProcessor creates a new mock instance.
 func NewMockBulkProcessor(ctrl *gomock.Controller) *MockBulkProcessor {
 	mock := &MockBulkProcessor{ctrl: ctrl}
 	mock.recorder = &MockBulkProcessorMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockBulkProcessor) EXPECT() *MockBulkProcessorMockRecorder {
 	return m.recorder
 }
 
-// Stop mocks base method
+// Add mocks base method.
+func (m *MockBulkProcessor) Add(request *BulkableRequest) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Add", request)
+}
+
+// Add indicates an expected call of Add.
+func (mr *MockBulkProcessorMockRecorder) Add(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockBulkProcessor)(nil).Add), request)
+}
+
+// Stop mocks base method.
 func (m *MockBulkProcessor) Stop() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Stop")
@@ -64,20 +77,8 @@ func (m *MockBulkProcessor) Stop() error {
 	return ret0
 }
 
-// Stop indicates an expected call of Stop
+// Stop indicates an expected call of Stop.
 func (mr *MockBulkProcessorMockRecorder) Stop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockBulkProcessor)(nil).Stop))
-}
-
-// Add mocks base method
-func (m *MockBulkProcessor) Add(request *BulkableRequest) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Add", request)
-}
-
-// Add indicates an expected call of Add
-func (mr *MockBulkProcessorMockRecorder) Add(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockBulkProcessor)(nil).Add), request)
 }

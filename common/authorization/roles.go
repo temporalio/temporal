@@ -36,6 +36,7 @@ const (
 	RoleAdmin
 	RoleUndefined = Role(0)
 )
+
 // @@@SNIPEND
 
 // Checks if the provided role bitmask represents a valid combination of authz
@@ -53,4 +54,5 @@ type Claims struct {
 	// Roles within specific namespaces
 	Namespaces map[string]Role
 }
+
 // @@@SNIPEND

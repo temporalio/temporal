@@ -34,7 +34,6 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-
 	definition "go.temporal.io/server/common/definition"
 )
 

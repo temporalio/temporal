@@ -87,6 +87,34 @@ func (mr *MockRateLimiterMockRecorder) AllowN(now, numToken interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllowN", reflect.TypeOf((*MockRateLimiter)(nil).AllowN), now, numToken)
 }
 
+// Burst mocks base method.
+func (m *MockRateLimiter) Burst() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Burst")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// Burst indicates an expected call of Burst.
+func (mr *MockRateLimiterMockRecorder) Burst() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Burst", reflect.TypeOf((*MockRateLimiter)(nil).Burst))
+}
+
+// Rate mocks base method.
+func (m *MockRateLimiter) Rate() float64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Rate")
+	ret0, _ := ret[0].(float64)
+	return ret0
+}
+
+// Rate indicates an expected call of Rate.
+func (mr *MockRateLimiterMockRecorder) Rate() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rate", reflect.TypeOf((*MockRateLimiter)(nil).Rate))
+}
+
 // Reserve mocks base method.
 func (m *MockRateLimiter) Reserve() Reservation {
 	m.ctrl.T.Helper()
@@ -143,34 +171,6 @@ func (mr *MockRateLimiterMockRecorder) WaitN(ctx, numToken interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitN", reflect.TypeOf((*MockRateLimiter)(nil).WaitN), ctx, numToken)
 }
 
-// Rate mocks base method.
-func (m *MockRateLimiter) Rate() float64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Rate")
-	ret0, _ := ret[0].(float64)
-	return ret0
-}
-
-// Rate indicates an expected call of Rate.
-func (mr *MockRateLimiterMockRecorder) Rate() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rate", reflect.TypeOf((*MockRateLimiter)(nil).Rate))
-}
-
-// Burst mocks base method.
-func (m *MockRateLimiter) Burst() int {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Burst")
-	ret0, _ := ret[0].(int)
-	return ret0
-}
-
-// Burst indicates an expected call of Burst.
-func (mr *MockRateLimiterMockRecorder) Burst() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Burst", reflect.TypeOf((*MockRateLimiter)(nil).Burst))
-}
-
 // MockReservation is a mock of Reservation interface.
 type MockReservation struct {
 	ctrl     *gomock.Controller
@@ -192,20 +192,6 @@ func NewMockReservation(ctrl *gomock.Controller) *MockReservation {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockReservation) EXPECT() *MockReservationMockRecorder {
 	return m.recorder
-}
-
-// OK mocks base method.
-func (m *MockReservation) OK() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OK")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// OK indicates an expected call of OK.
-func (mr *MockReservationMockRecorder) OK() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OK", reflect.TypeOf((*MockReservation)(nil).OK))
 }
 
 // Cancel mocks base method.
@@ -258,4 +244,18 @@ func (m *MockReservation) DelayFrom(now time.Time) time.Duration {
 func (mr *MockReservationMockRecorder) DelayFrom(now interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DelayFrom", reflect.TypeOf((*MockReservation)(nil).DelayFrom), now)
+}
+
+// OK mocks base method.
+func (m *MockReservation) OK() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OK")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// OK indicates an expected call of OK.
+func (mr *MockReservationMockRecorder) OK() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OK", reflect.TypeOf((*MockReservation)(nil).OK))
 }

@@ -75,20 +75,6 @@ func (mr *MockreplicationDLQHandlerMockRecorder) getMessages(ctx, sourceCluster,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getMessages", reflect.TypeOf((*MockreplicationDLQHandler)(nil).getMessages), ctx, sourceCluster, lastMessageID, pageSize, pageToken)
 }
 
-// purgeMessages mocks base method.
-func (m *MockreplicationDLQHandler) purgeMessages(sourceCluster string, lastMessageID int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "purgeMessages", sourceCluster, lastMessageID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// purgeMessages indicates an expected call of purgeMessages.
-func (mr *MockreplicationDLQHandlerMockRecorder) purgeMessages(sourceCluster, lastMessageID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "purgeMessages", reflect.TypeOf((*MockreplicationDLQHandler)(nil).purgeMessages), sourceCluster, lastMessageID)
-}
-
 // mergeMessages mocks base method.
 func (m *MockreplicationDLQHandler) mergeMessages(ctx context.Context, sourceCluster string, lastMessageID int64, pageSize int, pageToken []byte) ([]byte, error) {
 	m.ctrl.T.Helper()
@@ -102,4 +88,18 @@ func (m *MockreplicationDLQHandler) mergeMessages(ctx context.Context, sourceClu
 func (mr *MockreplicationDLQHandlerMockRecorder) mergeMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "mergeMessages", reflect.TypeOf((*MockreplicationDLQHandler)(nil).mergeMessages), ctx, sourceCluster, lastMessageID, pageSize, pageToken)
+}
+
+// purgeMessages mocks base method.
+func (m *MockreplicationDLQHandler) purgeMessages(sourceCluster string, lastMessageID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "purgeMessages", sourceCluster, lastMessageID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// purgeMessages indicates an expected call of purgeMessages.
+func (mr *MockreplicationDLQHandlerMockRecorder) purgeMessages(sourceCluster, lastMessageID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "purgeMessages", reflect.TypeOf((*MockreplicationDLQHandler)(nil).purgeMessages), sourceCluster, lastMessageID)
 }

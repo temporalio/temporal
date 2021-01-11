@@ -3,11 +3,11 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make bins"
+    command: "make ci-build"
     plugins:
       - docker-compose#v3.1.0:
           run: build
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - wait
 
@@ -21,7 +21,7 @@ steps:
     plugins:
       - docker-compose#v3.1.0:
           run: unit-test
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration test with cassandra"
     agents:
@@ -36,7 +36,7 @@ steps:
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-cassandra
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration test with cassandra (ES6)"
     agents:
@@ -51,7 +51,7 @@ steps:
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-cassandra
-          config: docker/buildkite/docker-compose-es6.yml
+          config: ./.buildkite/docker-compose-es6.yml
 
   - label: ":golang: integration xdc test with cassandra"
     agents:
@@ -66,7 +66,7 @@ steps:
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-xdc-cassandra
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration ndc test with cassandra"
     agents:
@@ -81,7 +81,7 @@ steps:
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-xdc-cassandra
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration test with mysql"
     agents:
@@ -96,7 +96,7 @@ steps:
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-mysql
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration xdc test with mysql"
     agents:
@@ -111,7 +111,7 @@ steps:
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-xdc-mysql
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration ndc test with mysql"
     agents:
@@ -126,7 +126,7 @@ steps:
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-xdc-mysql
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration test with postgresql"
     agents:
@@ -141,7 +141,7 @@ steps:
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-postgresql
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration xdc test with postgresql"
     agents:
@@ -156,7 +156,7 @@ steps:
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-xdc-postgresql
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration ndc test with postgresql"
     agents:
@@ -171,7 +171,7 @@ steps:
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-xdc-postgresql
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - wait
 
@@ -186,7 +186,7 @@ steps:
     plugins:
       - docker-compose#v3.1.0:
           run: coverage-report
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":docker: build and push master"
     agents:

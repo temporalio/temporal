@@ -58,6 +58,42 @@ func (m *MocktimerQueueProcessor) EXPECT() *MocktimerQueueProcessorMockRecorder 
 	return m.recorder
 }
 
+// FailoverNamespace mocks base method.
+func (m *MocktimerQueueProcessor) FailoverNamespace(namespaceIDs map[string]struct{}) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "FailoverNamespace", namespaceIDs)
+}
+
+// FailoverNamespace indicates an expected call of FailoverNamespace.
+func (mr *MocktimerQueueProcessorMockRecorder) FailoverNamespace(namespaceIDs interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailoverNamespace", reflect.TypeOf((*MocktimerQueueProcessor)(nil).FailoverNamespace), namespaceIDs)
+}
+
+// LockTaskProcessing mocks base method.
+func (m *MocktimerQueueProcessor) LockTaskProcessing() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "LockTaskProcessing")
+}
+
+// LockTaskProcessing indicates an expected call of LockTaskProcessing.
+func (mr *MocktimerQueueProcessorMockRecorder) LockTaskProcessing() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LockTaskProcessing", reflect.TypeOf((*MocktimerQueueProcessor)(nil).LockTaskProcessing))
+}
+
+// NotifyNewTimers mocks base method.
+func (m *MocktimerQueueProcessor) NotifyNewTimers(clusterName string, timerTask []persistence.Task) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "NotifyNewTimers", clusterName, timerTask)
+}
+
+// NotifyNewTimers indicates an expected call of NotifyNewTimers.
+func (mr *MocktimerQueueProcessorMockRecorder) NotifyNewTimers(clusterName, timerTask interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTimers", reflect.TypeOf((*MocktimerQueueProcessor)(nil).NotifyNewTimers), clusterName, timerTask)
+}
+
 // Start mocks base method.
 func (m *MocktimerQueueProcessor) Start() {
 	m.ctrl.T.Helper()
@@ -80,42 +116,6 @@ func (m *MocktimerQueueProcessor) Stop() {
 func (mr *MocktimerQueueProcessorMockRecorder) Stop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MocktimerQueueProcessor)(nil).Stop))
-}
-
-// FailoverNamespace mocks base method.
-func (m *MocktimerQueueProcessor) FailoverNamespace(namespaceIDs map[string]struct{}) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "FailoverNamespace", namespaceIDs)
-}
-
-// FailoverNamespace indicates an expected call of FailoverNamespace.
-func (mr *MocktimerQueueProcessorMockRecorder) FailoverNamespace(namespaceIDs interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailoverNamespace", reflect.TypeOf((*MocktimerQueueProcessor)(nil).FailoverNamespace), namespaceIDs)
-}
-
-// NotifyNewTimers mocks base method.
-func (m *MocktimerQueueProcessor) NotifyNewTimers(clusterName string, timerTask []persistence.Task) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewTimers", clusterName, timerTask)
-}
-
-// NotifyNewTimers indicates an expected call of NotifyNewTimers.
-func (mr *MocktimerQueueProcessorMockRecorder) NotifyNewTimers(clusterName, timerTask interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTimers", reflect.TypeOf((*MocktimerQueueProcessor)(nil).NotifyNewTimers), clusterName, timerTask)
-}
-
-// LockTaskProcessing mocks base method.
-func (m *MocktimerQueueProcessor) LockTaskProcessing() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "LockTaskProcessing")
-}
-
-// LockTaskProcessing indicates an expected call of LockTaskProcessing.
-func (mr *MocktimerQueueProcessorMockRecorder) LockTaskProcessing() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LockTaskProcessing", reflect.TypeOf((*MocktimerQueueProcessor)(nil).LockTaskProcessing))
 }
 
 // UnlockTaskProcessing mocks base method.

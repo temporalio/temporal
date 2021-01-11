@@ -60,34 +60,6 @@ func (m *MocknDCTransactionMgr) EXPECT() *MocknDCTransactionMgrMockRecorder {
 	return m.recorder
 }
 
-// createWorkflow mocks base method.
-func (m *MocknDCTransactionMgr) createWorkflow(ctx context.Context, now time.Time, targetWorkflow nDCWorkflow) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "createWorkflow", ctx, now, targetWorkflow)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// createWorkflow indicates an expected call of createWorkflow.
-func (mr *MocknDCTransactionMgrMockRecorder) createWorkflow(ctx, now, targetWorkflow interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "createWorkflow", reflect.TypeOf((*MocknDCTransactionMgr)(nil).createWorkflow), ctx, now, targetWorkflow)
-}
-
-// updateWorkflow mocks base method.
-func (m *MocknDCTransactionMgr) updateWorkflow(ctx context.Context, now time.Time, isWorkflowRebuilt bool, targetWorkflow, newWorkflow nDCWorkflow) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "updateWorkflow", ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// updateWorkflow indicates an expected call of updateWorkflow.
-func (mr *MocknDCTransactionMgrMockRecorder) updateWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "updateWorkflow", reflect.TypeOf((*MocknDCTransactionMgr)(nil).updateWorkflow), ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
-}
-
 // backfillWorkflow mocks base method.
 func (m *MocknDCTransactionMgr) backfillWorkflow(ctx context.Context, now time.Time, targetWorkflow nDCWorkflow, targetWorkflowEvents *persistence.WorkflowEvents) error {
 	m.ctrl.T.Helper()
@@ -115,6 +87,20 @@ func (m *MocknDCTransactionMgr) checkWorkflowExists(ctx context.Context, namespa
 func (mr *MocknDCTransactionMgrMockRecorder) checkWorkflowExists(ctx, namespaceID, workflowID, runID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "checkWorkflowExists", reflect.TypeOf((*MocknDCTransactionMgr)(nil).checkWorkflowExists), ctx, namespaceID, workflowID, runID)
+}
+
+// createWorkflow mocks base method.
+func (m *MocknDCTransactionMgr) createWorkflow(ctx context.Context, now time.Time, targetWorkflow nDCWorkflow) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "createWorkflow", ctx, now, targetWorkflow)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// createWorkflow indicates an expected call of createWorkflow.
+func (mr *MocknDCTransactionMgrMockRecorder) createWorkflow(ctx, now, targetWorkflow interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "createWorkflow", reflect.TypeOf((*MocknDCTransactionMgr)(nil).createWorkflow), ctx, now, targetWorkflow)
 }
 
 // getCurrentWorkflowRunID mocks base method.
@@ -145,4 +131,18 @@ func (m *MocknDCTransactionMgr) loadNDCWorkflow(ctx context.Context, namespaceID
 func (mr *MocknDCTransactionMgrMockRecorder) loadNDCWorkflow(ctx, namespaceID, workflowID, runID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "loadNDCWorkflow", reflect.TypeOf((*MocknDCTransactionMgr)(nil).loadNDCWorkflow), ctx, namespaceID, workflowID, runID)
+}
+
+// updateWorkflow mocks base method.
+func (m *MocknDCTransactionMgr) updateWorkflow(ctx context.Context, now time.Time, isWorkflowRebuilt bool, targetWorkflow, newWorkflow nDCWorkflow) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "updateWorkflow", ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// updateWorkflow indicates an expected call of updateWorkflow.
+func (mr *MocknDCTransactionMgrMockRecorder) updateWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "updateWorkflow", reflect.TypeOf((*MocknDCTransactionMgr)(nil).updateWorkflow), ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 }

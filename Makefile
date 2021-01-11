@@ -8,14 +8,17 @@ bins: clean-bins temporal-server tctl temporal-cassandra-tool temporal-sql-tool
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
 all: update-tools clean proto bins check test
 
+# Used by Buildkite.
+ci-build: bins update-tools check proto mocks gomodtidy ensure-no-changes
+
 # Delete all build artefacts.
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto install-proto-submodule buf-lint api-linter protoc fix-proto-path proto-mock goimports-proto copyright-proto
+proto: clean-proto install-proto-submodule buf-lint api-linter protoc fix-proto-path goimports-proto proto-mocks copyright-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-proto-path update-go-api proto-mock goimports-proto copyright-proto gomodtidy
+update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-proto-path update-go-api goimports-proto proto-mocks copyright-proto gomodtidy
 
 # Build all docker images.
 docker-images:
@@ -46,6 +49,7 @@ SHELL := PATH=$(GOBIN):$(PATH) /bin/sh
 MODULE_ROOT := go.temporal.io/server
 BUILD := ./build
 COLOR := "\e[1;36m%s\e[0m\n"
+RED :=   "\e[1;31m%s\e[0m\n"
 
 define NEWLINE
 
@@ -133,7 +137,7 @@ update-checkers:
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
-	cd && GO111MODULE=on go get github.com/golang/mock/mockgen@v1.4.4
+	cd && GO111MODULE=on go get github.com/golang/mock/mockgen@1fe605df5e5f07f453dc4f594cc3510c914dbdee
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
@@ -174,7 +178,7 @@ PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -nam
 service_name = $(firstword $(subst /, ,$(1)))
 mock_file_name = $(call service_name,$(1))mock/$(subst $(call service_name,$(1))/,,$(1:go=mock.go))
 
-proto-mock: $(PROTO_OUT)
+proto-mocks: $(PROTO_OUT)
 	@printf $(COLOR) "Generate proto mocks..."
 	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),\
 		cd $(PROTO_OUT) && \
@@ -182,15 +186,15 @@ proto-mock: $(PROTO_OUT)
 	$(NEWLINE))
 
 update-go-api:
-	@printf $(COLOR) "Update go.temporal.io/api..."
+	@printf $(COLOR) "Update go.temporal.io/api@master..."
 	@go get -u go.temporal.io/api@master
 
 goimports-proto:
-	@printf $(COLOR) "Run goimports..."
+	@printf $(COLOR) "Run goimports for proto files..."
 	@goimports -w $(PROTO_OUT)
 
 copyright-proto:
-	@printf $(COLOR) "Update license headers..."
+	@printf $(COLOR) "Update license headers for proto files..."
 	@go run ./cmd/tools/copyright/licensegen.go --scanDir $(PROTO_OUT)
 
 ##### Binaries #####
@@ -218,9 +222,9 @@ temporal-sql-tool:
 	go build -o temporal-sql-tool cmd/tools/sql/main.go
 
 ##### Checks #####
-copyright:
+copyright-check:
 	@printf $(COLOR) "Check license header..."
-	@go run ./cmd/tools/copyright/licensegen.go --verifyOnly || true
+	@go run ./cmd/tools/copyright/licensegen.go --verifyOnly
 
 lint:
 	@printf $(COLOR) "Run linter..."
@@ -232,12 +236,11 @@ vet:
 
 goimports-check:
 	@printf $(COLOR) "Run goimports checks..."
-# Use $(ALL_SRC) here to avoid checking generated files.
-	@goimports -l $(ALL_SRC) || true
+	@goimports -l .
 
 goimports:
 	@printf $(COLOR) "Run goimports..."
-	@goimports -local "go.temporal.io" -w $(ALL_SRC)
+	@goimports -w .
 
 staticcheck:
 	@printf $(COLOR) "Run staticcheck..."
@@ -263,7 +266,7 @@ buf-breaking:
 	@printf $(COLOR) "Run buf breaking changes check against image.bin..."
 	@(cd $(PROTO_ROOT) && buf check breaking --against image.bin)
 
-check: copyright goimports-check lint vet staticcheck errcheck
+check: copyright-check goimports-check lint vet staticcheck errcheck
 
 ##### Tests #####
 clean-test-results:
@@ -414,10 +417,10 @@ install-schema-cdc: temporal-cassandra-tool
 
 ##### Run server #####
 start-dependencies:
-	docker-compose -f docker/dependencies/docker-compose.yml -f docker/dependencies/docker-compose.$(GOOS).yml up
+	docker-compose -f docker-compose/docker-compose.yml -f docker-compose/docker-compose.$(GOOS).yml up
 
 stop-dependencies:
-	docker-compose -f docker/dependencies/docker-compose.yml -f docker/dependencies/docker-compose.$(GOOS).yml down
+	docker-compose -f docker-compose/docker-compose.yml -f docker-compose/docker-compose.$(GOOS).yml down
 
 start: temporal-server
 	./temporal-server start
@@ -434,12 +437,22 @@ start-cdc-standby: temporal-server
 start-cdc-other: temporal-server
 	./temporal-server --zone other start
 
-##### Auxilary #####
-go-generate:
-	@printf $(COLOR) "Regenerate everything..."
-	@go generate ./...
-	@goimports -w $(ALL_SRC)
+##### Mocks #####
+AWS_SDK_VERSION := $(lastword $(shell grep "github.com/aws/aws-sdk-go" go.mod))
+external-mocks:
+	@printf $(COLOR) "Generate external libraries mocks..."
+	@mockgen -copyright_file LICENSE -package mocks -source $(GOPATH)/pkg/mod/github.com/aws/aws-sdk-go@$(AWS_SDK_VERSION)/service/s3/s3iface/interface.go | grep -v -e "^// Source: .*" > common/archiver/s3store/mocks/S3API.go
 
+go-generate:
+	@printf $(COLOR) "Process go:generate directives..."
+	@go generate ./...
+
+mocks: go-generate external-mocks
+
+##### Auxilary #####
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
+
+ensure-no-changes:
+	@git diff --name-status --exit-code || (printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; exit 1)
