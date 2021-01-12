@@ -54,9 +54,6 @@ INTEG_TEST_ROOT        := ./host
 INTEG_TEST_XDC_ROOT    := ./host/xdc
 INTEG_TEST_NDC_ROOT    := ./host/ndc
 
-GO_BUILD_LDFLAGS_CMD      := $(abspath ./scripts/go-build-ldflags.sh)
-GO_BUILD_LDFLAGS          := $(shell $(GO_BUILD_LDFLAGS_CMD) LDFLAG)
-
 ifndef PERSISTENCE_TYPE
 override PERSISTENCE_TYPE := nosql
 endif
@@ -177,7 +174,7 @@ clean-bins:
 
 temporal-server:
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
-	go build -ldflags '$(GO_BUILD_LDFLAGS)' -o temporal-server cmd/server/main.go
+	go build -ldflags "$(shell ./scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
 
 tctl:
 	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
