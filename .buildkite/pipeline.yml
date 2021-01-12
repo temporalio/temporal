@@ -15,9 +15,9 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_profile"
+    command: "make unit-test-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     plugins:
       - docker-compose#v3.1.0:
           run: unit-test
@@ -27,9 +27,9 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_integration_profile"
+    command: "make integration-test-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -42,9 +42,9 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_integration_profile"
+    command: "make integration-test-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -57,9 +57,9 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_xdc_profile"
+    command: "make integration-test-xdc-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -72,9 +72,9 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_ndc_profile"
+    command: "make integration-test-ndc-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -87,9 +87,9 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_integration_profile"
+    command: "make integration-test-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -102,9 +102,9 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_xdc_profile"
+    command: "make integration-test-xdc-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -117,9 +117,9 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_ndc_profile"
+    command: "make integration-test-ndc-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -132,9 +132,9 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_integration_profile"
+    command: "make integration-test-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -147,9 +147,9 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_xdc_profile"
+    command: "make integration-test-xdc-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -162,9 +162,9 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_ndc_profile"
+    command: "make integration-test-ndc-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -175,11 +175,14 @@ steps:
 
   - wait
 
-  - label: ":golang: code-coverage"
+  - label: ":golang: coverage-report"
     agents:
       queue: "default"
       docker: "*"
-    command: "scripts/buildkite/gocov.sh"
+    command: "./.buildkite/scripts/coverage-report.sh"
+    artifact_paths:
+      - ".coverage/summary_coverprofile.out"
+      - ".coverage/summary_coverprofile.out.html"
     retry:
       automatic:
         limit: 2
@@ -192,7 +195,8 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "scripts/buildkite/docker-push.sh"
+    branches: "master"
+    command: "./.buildkite/scripts/docker-push.sh"
     retry:
       automatic:
         limit: 1

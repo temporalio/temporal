@@ -19,13 +19,6 @@ proto: clean-proto install-proto-submodule buf-lint api-linter protoc fix-proto-
 
 # Update proto submodule from remote and recompile proto files.
 update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-proto-path update-go-api goimports-proto proto-mocks copyright-proto gomodtidy
-
-# Build all docker images.
-docker-images:
-	docker build --build-arg "TARGET=server" -t temporalio/server:$(DOCKER_IMAGE_TAG) .
-	docker build --build-arg "TARGET=tctl" -t temporalio/tctl:$(DOCKER_IMAGE_TAG) .
-	docker build --build-arg "TARGET=auto-setup" -t temporalio/auto-setup:$(DOCKER_IMAGE_TAG) .
-	docker build --build-arg "TARGET=admin-tools" -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) .
 ########################################################################
 
 .PHONY: proto
@@ -47,7 +40,6 @@ GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)
 SHELL := PATH=$(GOBIN):$(PATH) /bin/sh
 
 MODULE_ROOT := go.temporal.io/server
-BUILD := ./build
 COLOR := "\e[1;36m%s\e[0m\n"
 RED :=   "\e[1;31m%s\e[0m\n"
 
@@ -57,19 +49,13 @@ define NEWLINE
 endef
 
 TEST_TIMEOUT := 20m
-TEST_ARG ?= -race -v -timeout $(TEST_TIMEOUT)
 
 INTEG_TEST_ROOT        := ./host
-INTEG_TEST_OUT_DIR     := host
 INTEG_TEST_XDC_ROOT    := ./host/xdc
-INTEG_TEST_XDC_OUT_DIR := hostxdc
 INTEG_TEST_NDC_ROOT    := ./host/ndc
-INTEG_TEST_NDC_OUT_DIR := hostndc
 
 GO_BUILD_LDFLAGS_CMD      := $(abspath ./scripts/go-build-ldflags.sh)
 GO_BUILD_LDFLAGS          := $(shell $(GO_BUILD_LDFLAGS_CMD) LDFLAG)
-
-DOCKER_IMAGE_TAG := $(shell whoami | tr -d " ")-local
 
 ifndef PERSISTENCE_TYPE
 override PERSISTENCE_TYPE := nosql
@@ -77,10 +63,6 @@ endif
 
 ifndef PERSISTENCE_DRIVER
 override PERSISTENCE_DRIVER := cassandra
-endif
-
-ifndef TEST_RUN_COUNT
-override TEST_RUN_COUNT := 1
 endif
 
 ifdef TEST_TAG
@@ -99,24 +81,12 @@ INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_D
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
 
 # Code coverage output files.
-COVER_ROOT                 := $(BUILD)/coverage
-UNIT_COVER_FILE            := $(COVER_ROOT)/unit_cover.out
-INTEG_COVER_FILE           := $(COVER_ROOT)/integ_$(PERSISTENCE_TYPE)_$(PERSISTENCE_DRIVER)_cover.out
-INTEG_XDC_COVER_FILE       := $(COVER_ROOT)/integ_xdc_$(PERSISTENCE_TYPE)_$(PERSISTENCE_DRIVER)_cover.out
-INTEG_NDC_COVER_FILE       := $(COVER_ROOT)/integ_ndc_$(PERSISTENCE_TYPE)_$(PERSISTENCE_DRIVER)_cover.out
-
-# NoSQL Cassandra
-INTEG_NOSQL_CASS_COVER_FILE         := $(COVER_ROOT)/integ_nosql_cassandra_cover.out
-INTEG_XDC_NOSQL_CASS_COVER_FILE     := $(COVER_ROOT)/integ_xdc_nosql_cassandra_cover.out
-INTEG_NDC_NOSQL_CASS_COVER_FILE     := $(COVER_ROOT)/integ_ndc_nosql_cassandra_cover.out
-# SQL MySQL
-INTEG_SQL_MYSQL_COVER_FILE          := $(COVER_ROOT)/integ_sql_mysql_cover.out
-INTEG_XDC_SQL_MYSQL_COVER_FILE      := $(COVER_ROOT)/integ_xdc_sql_mysql_cover.out
-INTEG_NDC_SQL_MYSQL_COVER_FILE      := $(COVER_ROOT)/integ_ndc_sql_mysql_cover.out
-# SQL PostgreSQL
-INTEG_SQL_POSTGRESQL_COVER_FILE     := $(COVER_ROOT)/integ_sql_postgres_cover.out
-INTEG_XDC_SQL_POSTGRESQL_COVER_FILE := $(COVER_ROOT)/integ_xdc_sql_postgres_cover.out
-INTEG_NDC_SQL_POSTGRESQL_COVER_FILE := $(COVER_ROOT)/integ_ndc_sql_postgres_cover.out
+COVER_ROOT                 := ./.coverage
+UNIT_COVER_PROFILE         := $(COVER_ROOT)/unit_coverprofile.out
+INTEG_COVER_PROFILE        := $(COVER_ROOT)/integ_$(PERSISTENCE_DRIVER)_coverprofile.out
+INTEG_XDC_COVER_PROFILE    := $(COVER_ROOT)/integ_xdc_$(PERSISTENCE_DRIVER)_coverprofile.out
+INTEG_NDC_COVER_PROFILE    := $(COVER_ROOT)/integ_ndc_$(PERSISTENCE_DRIVER)_coverprofile.out
+SUMMARY_COVER_PROFILE      := $(COVER_ROOT)/summary_coverprofile.out
 
 # Need the following option to have integration tests count towards coverage. godoc below:
 # -coverpkg pkg1,pkg2,pkg3
@@ -271,6 +241,7 @@ check: copyright-check goimports-check lint vet staticcheck errcheck
 ##### Tests #####
 clean-test-results:
 	@rm -f test.log
+	@go clean -testcache
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
@@ -291,62 +262,47 @@ integration-test: clean-test-results
 test: unit-test integration-test
 
 ##### Coverage #####
-clean-build-results:
-	@rm -rf $(BUILD)
-	@mkdir -p $(BUILD)
+$(COVER_ROOT):
 	@mkdir -p $(COVER_ROOT)
 
-cover_profile: clean-build-results
-	@printf $(COLOR) "Running unit tests..."
-	@echo "mode: atomic" > $(UNIT_COVER_FILE)
+unit-test-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run unit tests with coverage..."
+	@echo "mode: atomic" > $(UNIT_COVER_PROFILE)
 	$(foreach UNIT_TEST_DIR,$(patsubst ./%/,%,$(UNIT_TEST_DIRS)),\
-		mkdir -p $(BUILD)/$(UNIT_TEST_DIR); \
-		go test ./$(UNIT_TEST_DIR) $(TEST_ARG) -coverprofile=$(BUILD)/$(UNIT_TEST_DIR)/coverage.out || exit 1; \
-		grep -v "^mode: \w\+" $(BUILD)/$(UNIT_TEST_DIR)/coverage.out >> $(UNIT_COVER_FILE) || true \
+		@mkdir -p $(COVER_ROOT)/$(UNIT_TEST_DIR); \
+		go test ./$(UNIT_TEST_DIR) -timeout $(TEST_TIMEOUT) -race -coverprofile=$(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out || exit 1; \
+		grep -v -e "^mode: \w\+" $(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out >> $(UNIT_COVER_PROFILE) || true \
 	$(NEWLINE))
 
-cover_integration_profile: clean-build-results
-	@printf $(COLOR) "Running integration test with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)..."
-	@echo "mode: atomic" > $(INTEG_COVER_FILE)
-	@mkdir -p $(BUILD)/$(INTEG_TEST_OUT_DIR)
-	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out || exit 1;
-	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out >> $(INTEG_COVER_FILE) || true
+integration-test-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run integration tests with coverage with $(PERSISTENCE_DRIVER) driver..."
+	@go test $(INTEG_TEST_ROOT) -timeout $(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_COVER_PROFILE)
 
-cover_xdc_profile: clean-build-results
-	@printf $(COLOR) "Running integration test for cross dc with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)..."
-	@echo "mode: atomic" > $(INTEG_XDC_COVER_FILE)
-	@mkdir -p $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)
-	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out || exit 1;
-	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE) || true
+integration-test-xdc-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run integration test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
+	@go test $(INTEG_TEST_XDC_ROOT) -timeout $(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_XDC_COVER_PROFILE)
 
-cover_ndc_profile: clean-build-results
-	@printf $(COLOR) "Running integration test for N DC with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)..."
-	@echo "mode: atomic" > $(INTEG_NDC_COVER_FILE)
-	@mkdir -p $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)
-	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_NDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out -count=$(TEST_RUN_COUNT) || exit 1;
-	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out | grep -v "mode: set" >> $(INTEG_NDC_COVER_FILE) || true
+integration-test-ndc-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run integration test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
+	@go test $(INTEG_TEST_NDC_ROOT) -timeout $(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_NDC_COVER_PROFILE)
 
-$(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_NOSQL_CASS_COVER_FILE) $(INTEG_XDC_NOSQL_CASS_COVER_FILE) $(INTEG_NDC_NOSQL_CASS_COVER_FILE) $(INTEG_SQL_MYSQL_COVER_FILE) $(INTEG_XDC_SQL_MYSQL_COVER_FILE) $(INTEG_NDC_SQL_MYSQL_COVER_FILE) $(INTEG_SQL_POSTGRESQL_COVER_FILE) $(INTEG_XDC_SQL_POSTGRESQL_COVER_FILE) $(INTEG_NDC_SQL_POSTGRESQL_COVER_FILE)
-	@echo "mode: atomic" > $(COVER_ROOT)/cover.out
-	cat $(UNIT_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	# NoSQL Cassandra
-	cat $(INTEG_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	cat $(INTEG_XDC_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	cat $(INTEG_NDC_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	# SQL MySQL
-	cat $(INTEG_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	cat $(INTEG_XDC_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	cat $(INTEG_NDC_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	# SQL PostgreSQL
-	cat $(INTEG_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	cat $(INTEG_XDC_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	cat $(INTEG_NDC_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
+$(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
+	@printf $(COLOR) "Combine coverage reports to $(SUMMARY_COVER_PROFILE)..."
+	@rm -f $(SUMMARY_COVER_PROFILE)
+	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
+	$(foreach COVER_PROFILE,$(wildcard $(COVER_ROOT)/*_coverprofile.out),\
+		@printf $(COLOR) $(COVER_PROFILE); \
+		cat $(COVER_PROFILE) | grep -v -e "^mode: \w\+" | grep -v -E "[Mm]ocks?" >> $(SUMMARY_COVER_PROFILE) \
+	$(NEWLINE))
 
-cover: $(COVER_ROOT)/cover.out
-	go tool cover -html=$(COVER_ROOT)/cover.out;
+coverage-report: $(SUMMARY_COVER_PROFILE)
+	@printf $(COLOR) "Generate HTML report from $(SUMMARY_COVER_PROFILE) to $(SUMMARY_COVER_PROFILE).html..."
+	@go tool cover -html=$(SUMMARY_COVER_PROFILE) -o $(SUMMARY_COVER_PROFILE).html
 
-cover_ci: $(COVER_ROOT)/cover.out
-	goveralls -coverprofile=$(COVER_ROOT)/cover.out -service=buildkite || echo Coveralls failed;
+ci-coverage-report: $(SUMMARY_COVER_PROFILE) coverage-report
+	@printf $(COLOR) "Generate Coveralls report from $(SUMMARY_COVER_PROFILE)..."
+	cd && GO111MODULE=on go get github.com/mattn/goveralls@v0.0.7
+	@goveralls -coverprofile=$(SUMMARY_COVER_PROFILE) -service=buildkite || (printf $(RED) "Generating report for Coveralls (goveralls) failed."; exit 1)
 
 ##### Schema #####
 install-schema: temporal-cassandra-tool
