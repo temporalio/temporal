@@ -2,32 +2,28 @@
 
 set -ex
 
-# fetch codecov reporting tool
-go get github.com/mattn/goveralls
+# Download cover profiles from all the test containers.
+buildkite-agent artifact download ".coverage/unit_coverprofile.out" . --step ":golang: unit test" --build "$BUILDKITE_BUILD_ID"
 
-# download cover files from all the tests
-mkdir -p build/coverage
-buildkite-agent artifact download "build/coverage/unit_cover.out" . --step ":golang: unit test" --build "$BUILDKITE_BUILD_ID"
+# Cassandra.
+buildkite-agent artifact download ".coverage/integ_cassandra_coverprofile.out" . --step ":golang: integration test with cassandra" --build "$BUILDKITE_BUILD_ID"
+buildkite-agent artifact download ".coverage/integ_xdc_cassandra_coverprofile.out" . --step ":golang: integration xdc test with cassandra" --build "$BUILDKITE_BUILD_ID"
+buildkite-agent artifact download ".coverage/integ_ndc_cassandra_coverprofile.out" . --step ":golang: integration ndc test with cassandra" --build "$BUILDKITE_BUILD_ID"
 
-# NoSQL Cassandra
-buildkite-agent artifact download "build/coverage/integ_nosql_cassandra_cover.out" . --step ":golang: integration test with cassandra" --build "$BUILDKITE_BUILD_ID"
-buildkite-agent artifact download "build/coverage/integ_xdc_nosql_cassandra_cover.out" . --step ":golang: integration xdc test with cassandra" --build "$BUILDKITE_BUILD_ID"
-buildkite-agent artifact download "build/coverage/integ_ndc_nosql_cassandra_cover.out" . --step ":golang: integration ndc test with cassandra" --build "$BUILDKITE_BUILD_ID"
+# MySQL.
+buildkite-agent artifact download ".coverage/integ_mysql_coverprofile.out" . --step ":golang: integration test with mysql" --build "$BUILDKITE_BUILD_ID"
+buildkite-agent artifact download ".coverage/integ_xdc_mysql_coverprofile.out" . --step ":golang: integration xdc test with mysql" --build "$BUILDKITE_BUILD_ID"
+buildkite-agent artifact download ".coverage/integ_ndc_mysql_coverprofile.out" . --step ":golang: integration ndc test with mysql" --build "$BUILDKITE_BUILD_ID"
 
-# SQL MySQL
-buildkite-agent artifact download "build/coverage/integ_sql_mysql_cover.out" . --step ":golang: integration test with mysql" --build "$BUILDKITE_BUILD_ID"
-buildkite-agent artifact download "build/coverage/integ_xdc_sql_mysql_cover.out" . --step ":golang: integration xdc test with mysql" --build "$BUILDKITE_BUILD_ID"
-buildkite-agent artifact download "build/coverage/integ_ndc_sql_mysql_cover.out" . --step ":golang: integration ndc test with mysql" --build "$BUILDKITE_BUILD_ID"
+# PostgreSQL.
+buildkite-agent artifact download ".coverage/integ_postgres_coverprofile.out" . --step ":golang: integration test with postgresql" --build "$BUILDKITE_BUILD_ID"
+buildkite-agent artifact download ".coverage/integ_xdc_postgres_coverprofile.out" . --step ":golang: integration xdc test with postgresql" --build "$BUILDKITE_BUILD_ID"
+buildkite-agent artifact download ".coverage/integ_ndc_postgres_coverprofile.out" . --step ":golang: integration ndc test with postgresql" --build "$BUILDKITE_BUILD_ID"
 
-# SQL PostgreSQL
-buildkite-agent artifact download "build/coverage/integ_sql_postgres_cover.out" . --step ":golang: integration test with postgresql" --build "$BUILDKITE_BUILD_ID"
-buildkite-agent artifact download "build/coverage/integ_xdc_sql_postgres_cover.out" . --step ":golang: integration xdc test with postgresql" --build "$BUILDKITE_BUILD_ID"
-buildkite-agent artifact download "build/coverage/integ_ndc_sql_postgres_cover.out" . --step ":golang: integration ndc test with postgresql" --build "$BUILDKITE_BUILD_ID"
+# ES6.
+buildkite-agent artifact download ".coverage/integ_cassandra_coverprofile.out" .coverage/integ_cassandra_es6_coverprofile.out --step ":golang: integration test with cassandra (ES6)" --build "$BUILDKITE_BUILD_ID"
 
-echo "download complete"
+echo "Artifacts download complete."
 
 # report coverage
-make cover_ci
-
-# cleanup
-rm -rf build
+make ci-coverage-report
