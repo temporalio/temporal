@@ -242,6 +242,7 @@ check: copyright-check goimports-check lint vet staticcheck errcheck
 ##### Tests #####
 clean-test-results:
 	@rm -f test.log
+	@go clean -testcache
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."

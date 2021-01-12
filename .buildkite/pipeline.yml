@@ -192,8 +192,8 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-  branches: "master"
-  command: "./.buildkite/scripts/docker-push.sh"
+    branches: "master"
+    command: "./.buildkite/scripts/docker-push.sh"
     retry:
       automatic:
         limit: 1
