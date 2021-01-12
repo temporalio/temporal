@@ -25,5 +25,4 @@ buildkite-agent artifact download ".coverage/integ_cassandra_coverprofile.out" .
 
 echo "Artifacts download complete."
 
-# report coverage
 make ci-coverage-report

@@ -179,7 +179,7 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "./.buildkite/scripts/gocov.sh"
+    command: "./.buildkite/scripts/coverage-report.sh"
     retry:
       automatic:
         limit: 2
