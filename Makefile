@@ -291,14 +291,15 @@ $(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
 	@rm -f $(SUMMARY_COVER_PROFILE)
 	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
 	$(foreach COVER_PROFILE,$(wildcard $(COVER_ROOT)/*_coverprofile.out),\
-		@cat $(COVER_PROFILE) | grep -v -e "^mode: \w\+" | grep -v -e "[Mm]ock[s]?" >> $(SUMMARY_COVER_PROFILE) \
+		@printf $(COLOR) $(COVER_PROFILE); \
+		cat $(COVER_PROFILE) | grep -v -e "^mode: \w\+" | grep -v -E "[Mm]ocks?" >> $(SUMMARY_COVER_PROFILE) \
 	$(NEWLINE))
 
 coverage-report: $(SUMMARY_COVER_PROFILE)
-	@printf $(COLOR) "Open coverage report $(SUMMARY_COVER_PROFILE) in a browser..."
-	@go tool cover -html=$(SUMMARY_COVER_PROFILE)
+	@printf $(COLOR) "Generate HTML report from $(SUMMARY_COVER_PROFILE) to $(SUMMARY_COVER_PROFILE).html..."
+	@go tool cover -html=$(SUMMARY_COVER_PROFILE) -o $(SUMMARY_COVER_PROFILE).html
 
-ci-coverage-report: $(SUMMARY_COVER_PROFILE)
+ci-coverage-report: $(SUMMARY_COVER_PROFILE) coverage-report
 	@printf $(COLOR) "Generate Coveralls report from $(SUMMARY_COVER_PROFILE)..."
 	cd && GO111MODULE=on go get github.com/mattn/goveralls@v0.0.7
 	@goveralls -coverprofile=$(SUMMARY_COVER_PROFILE) -service=buildkite || (printf $(RED) "Generating report for Coveralls (goveralls) failed."; exit 1)

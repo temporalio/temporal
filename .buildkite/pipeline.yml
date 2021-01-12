@@ -180,6 +180,9 @@ steps:
       queue: "default"
       docker: "*"
     command: "./.buildkite/scripts/coverage-report.sh"
+    artifact_paths:
+      - ".coverage/summary_coverprofile.out"
+      - ".coverage/summary_coverprofile.out.html"
     retry:
       automatic:
         limit: 2
