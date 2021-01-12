@@ -270,8 +270,8 @@ unit-test-coverage: $(COVER_ROOT)
 	@echo "mode: atomic" > $(UNIT_COVER_PROFILE)
 	$(foreach UNIT_TEST_DIR,$(patsubst ./%/,%,$(UNIT_TEST_DIRS)),\
 		@mkdir -p $(COVER_ROOT)/$(UNIT_TEST_DIR); \
-		@go test ./$(UNIT_TEST_DIR) -timeout $(TEST_TIMEOUT) -race -coverprofile=$(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out || exit 1; \
-		@grep -v -e "^mode: \w\+" $(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out >> $(UNIT_COVER_PROFILE) || true \
+		go test ./$(UNIT_TEST_DIR) -timeout $(TEST_TIMEOUT) -race -coverprofile=$(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out || exit 1; \
+		grep -v -e "^mode: \w\+" $(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out >> $(UNIT_COVER_PROFILE) || true \
 	$(NEWLINE))
 
 integration-test-coverage: $(COVER_ROOT)
