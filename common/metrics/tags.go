@@ -25,12 +25,13 @@
 package metrics
 
 const (
-	gitRevisionTag  = "git_revision"
-	gitBranchTag    = "git_branch"
-	buildDateTag    = "build_date"
-	gitVersionTag   = "git_version"
-	buildVersionTag = "build_version"
-	goVersionTag    = "go_version"
+	gitRevisionTag   = "git_revision"
+	gitBranchTag     = "git_branch"
+	buildDateTag     = "build_date"
+	gitTagTag        = "git_tag"
+	buildVersionTag  = "build_version"
+	buildPlatformTag = "build_platform"
+	goVersionTag     = "go_version"
 
 	instance      = "instance"
 	namespace     = "namespace"

@@ -21,8 +21,8 @@ Learn more about Temporal at [docs.temporal.io](https://docs.temporal.io).
 Execute the following commands to start a pre-built image along with all the dependencies.
 
 ```bash
-$ curl -L https://github.com/temporalio/temporal/releases/latest/download/docker.tar.gz | tar -xz
-$ cd docker
+$ git clone https://github.com/temporalio/docker-compose.git
+$ cd docker-compose
 $ docker-compose up
 ```
 
@@ -38,7 +38,7 @@ We have a number of [HelloWorld type scenarios](https://github.com/temporalio/sa
 Use [Temporal's command line tool](https://docs.temporal.io/docs/tctl) `tctl` to interact with the local Temporal server.
 
 ```bash
-$ alias tctl="docker-compose exec temporal-admin-tools tctl"
+$ alias tctl="docker exec temporal-admin-tools tctl"
 $ tctl namespace list
 $ tctl workflow list
 ```
