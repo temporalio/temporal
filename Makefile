@@ -66,10 +66,6 @@ ifndef PERSISTENCE_DRIVER
 override PERSISTENCE_DRIVER := cassandra
 endif
 
-ifndef TEST_RUN_COUNT
-override TEST_RUN_COUNT := 1
-endif
-
 ifdef TEST_TAG
 override TEST_TAG := -tags $(TEST_TAG)
 endif
@@ -274,8 +270,8 @@ unit-test-coverage: $(COVER_ROOT)
 	echo "mode: atomic" > $(UNIT_COVER_PROFILE)
 	$(foreach UNIT_TEST_DIR,$(patsubst ./%/,%,$(UNIT_TEST_DIRS)),\
 		mkdir -p $(COVER_ROOT)/$(UNIT_TEST_DIR); \
-		go test ./$(UNIT_TEST_DIR) $(TEST_ARG) -coverprofile=$(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out \
-		grep -v -e "^mode: \w\+" $(BUILD)/$(UNIT_TEST_DIR)/coverprofile.out >> $(UNIT_COVER_PROFILE) \
+		go test ./$(UNIT_TEST_DIR) $(TEST_ARG) -coverprofile=$(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out || exit 1; \
+		grep -v -e "^mode: \w\+" $(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out >> $(UNIT_COVER_PROFILE) \
 	$(NEWLINE))
 
 integration-test-coverage: $(COVER_ROOT)
