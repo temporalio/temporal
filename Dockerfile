@@ -15,10 +15,9 @@ ENV GOFLAGS="-mod=readonly"
 
 WORKDIR /temporal
 
-# Copy go mod dependencies and build cache
+# Copy go mod dependencies first and build docker cache
 COPY go.mod ./
 COPY go.sum ./
-
 RUN go mod download
 
 COPY . .
@@ -27,8 +26,6 @@ RUN CGO_ENABLED=0 make bins
 
 # Download dockerize
 FROM alpine:3.12 AS dockerize
-
-RUN apk add --no-cache openssl
 
 ENV DOCKERIZE_VERSION v0.6.1
 RUN wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-alpine-linux-amd64-$DOCKERIZE_VERSION.tar.gz \
@@ -40,7 +37,12 @@ RUN wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSI
 # Alpine base image
 FROM alpine:3.12 AS alpine
 
-RUN apk add --update --no-cache ca-certificates tzdata bash curl vim
+RUN apk add --update --no-cache \
+    ca-certificates \
+    tzdata \
+    bash \
+    curl \
+    vim
 
 # set up nsswitch.conf for Go's "netgo" implementation
 # https://github.com/gliderlabs/docker-alpine/issues/367#issuecomment-424546457
@@ -91,11 +93,10 @@ FROM alpine AS temporal-admin-tools
 
 RUN apk add --update --no-cache \
     jq \
-    curl \
-    ca-certificates \
-    py-pip \
     mysql-client \
     postgresql-client \
+    python2 \
+    && curl https://bootstrap.pypa.io/get-pip.py | python \
     && pip install cqlsh
 
 ENV TEMPORAL_HOME /etc/temporal
