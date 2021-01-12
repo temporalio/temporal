@@ -267,40 +267,41 @@ $(COVER_ROOT):
 
 unit-test-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run unit tests with coverage..."
-	echo "mode: atomic" > $(UNIT_COVER_PROFILE)
+	@echo "mode: atomic" > $(UNIT_COVER_PROFILE)
 	$(foreach UNIT_TEST_DIR,$(patsubst ./%/,%,$(UNIT_TEST_DIRS)),\
-		mkdir -p $(COVER_ROOT)/$(UNIT_TEST_DIR); \
-		go test ./$(UNIT_TEST_DIR) -timeout $(TEST_TIMEOUT) -race -coverprofile=$(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out || exit 1; \
-		grep -v -e "^mode: \w\+" $(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out >> $(UNIT_COVER_PROFILE) || true \
+		@mkdir -p $(COVER_ROOT)/$(UNIT_TEST_DIR); \
+		@go test ./$(UNIT_TEST_DIR) -timeout $(TEST_TIMEOUT) -race -coverprofile=$(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out || exit 1; \
+		@grep -v -e "^mode: \w\+" $(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out >> $(UNIT_COVER_PROFILE) || true \
 	$(NEWLINE))
 
 integration-test-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run integration tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go test $(INTEG_TEST_ROOT) -timeout $(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_COVER_PROFILE)
+	@go test $(INTEG_TEST_ROOT) -timeout $(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_COVER_PROFILE)
 
 integration-test-xdc-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run integration test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go test $(INTEG_TEST_XDC_ROOT) -timeout $(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_XDC_COVER_PROFILE)
+	@go test $(INTEG_TEST_XDC_ROOT) -timeout $(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_XDC_COVER_PROFILE)
 
 integration-test-ndc-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run integration test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go test $(INTEG_TEST_NDC_ROOT) -timeout $(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_NDC_COVER_PROFILE)
+	@go test $(INTEG_TEST_NDC_ROOT) -timeout $(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_NDC_COVER_PROFILE)
 
 $(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
 	@printf $(COLOR) "Combine coverage reports to one file $(SUMMARY_COVER_PROFILE)..."
-	rm -f $(SUMMARY_COVER_PROFILE)
-	echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
+	@rm -f $(SUMMARY_COVER_PROFILE)
+	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
 	$(foreach COVER_PROFILE,$(wildcard $(COVER_ROOT)/*_coverprofile.out),\
-		cat $(COVER_PROFILE) | grep -v -e "^mode: \w\+" | grep -v -e "[Mm]ock[s]?" >> $(SUMMARY_COVER_PROFILE) \
+		@cat $(COVER_PROFILE) | grep -v -e "^mode: \w\+" | grep -v -e "[Mm]ock[s]?" >> $(SUMMARY_COVER_PROFILE) \
 	$(NEWLINE))
 
 coverage-report: $(SUMMARY_COVER_PROFILE)
-	@printf $(COLOR) "Open coverage report in a browser..."
+	@printf $(COLOR) "Open coverage report $(SUMMARY_COVER_PROFILE) in a browser..."
 	@go tool cover -html=$(SUMMARY_COVER_PROFILE)
 
 ci-coverage-report: $(SUMMARY_COVER_PROFILE)
+	@printf $(COLOR) "Generate Coveralls report from $(SUMMARY_COVER_PROFILE)..."
 	cd && GO111MODULE=on go get github.com/mattn/goveralls@v0.0.7
-	goveralls -coverprofile=$(SUMMARY_COVER_PROFILE) -service=buildkite || (printf $(RED) "Generating report for Coveralls (goveralls) failed."; exit 1)
+	@goveralls -coverprofile=$(SUMMARY_COVER_PROFILE) -service=buildkite || (printf $(RED) "Generating report for Coveralls (goveralls) failed."; exit 1)
 
 ##### Schema #####
 install-schema: temporal-cassandra-tool
