@@ -960,3 +960,50 @@ func newDBCommands() []cli.Command {
 		},
 	}
 }
+
+func newDecodeCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:  "proto",
+			Usage: "Decode proto payload",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagProtoType,
+					Usage: "full name of proto type to decode to (i.e. temporal.server.api.persistence.v1.WorkflowExecutionInfo).",
+				},
+				cli.StringFlag{
+					Name:  FlagHexData,
+					Usage: "data in hex format (i.e. 0x0a243462613036633466...).",
+				},
+				cli.StringFlag{
+					Name:  FlagHexFile,
+					Usage: "file with data in hex format (i.e. 0x0a243462613036633466...).",
+				},
+				cli.StringFlag{
+					Name:  FlagBinaryFile,
+					Usage: "file with data in binary format.",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminDecodeProto(c)
+			},
+		},
+		{
+			Name:  "base64",
+			Usage: "Decode base64 payload",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagBase64Data,
+					Usage: "data in base64 format (i.e. anNvbi9wbGFpbg==).",
+				},
+				cli.StringFlag{
+					Name:  FlagBase64File,
+					Usage: "file with data in base64 format (i.e. anNvbi9wbGFpbg==).",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminDecodeBase64(c)
+			},
+		},
+	}
+}
