@@ -109,10 +109,6 @@ func (s *Server) Start() error {
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
 	s.logger.Debug(s.so.config.String())
 
-	if common.IsDebugMode() {
-		s.logger.Info("DEBUG MODE ENABLED")
-	}
-
 	err = s.validate()
 	if err != nil {
 		return err
