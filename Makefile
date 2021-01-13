@@ -304,36 +304,33 @@ ci-coverage-report: $(SUMMARY_COVER_PROFILE) coverage-report
 ##### Schema #####
 install-schema: temporal-cassandra-tool
 	@printf $(COLOR) "Install Cassandra schema..."
+	./temporal-cassandra-tool --ep 127.0.0.1 drop -k temporal
 	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal --rf 1
 	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal setup-schema -v 0.0
 	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool --ep 127.0.0.1 drop -k temporal_visibility
 	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_visibility --rf 1
 	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility setup-schema -v 0.0
 	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility update-schema -d ./schema/cassandra/visibility/versioned
 
-install-schema-mysql-pre5720: temporal-sql-tool
-	@printf $(COLOR) "Install MySQL schema..."
-	./temporal-sql-tool --ep 127.0.0.1 --ca tx_isolation='READ-COMMITTED' create --db temporal
-	./temporal-sql-tool --ep 127.0.0.1 --ca tx_isolation='READ-COMMITTED' --db temporal setup-schema -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 --ca tx_isolation='READ-COMMITTED' --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned
-	./temporal-sql-tool --ep 127.0.0.1 --ca tx_isolation='READ-COMMITTED' create --db temporal_visibility
-	./temporal-sql-tool --ep 127.0.0.1 --ca tx_isolation='READ-COMMITTED' --db temporal_visibility setup-schema -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 --ca tx_isolation='READ-COMMITTED' --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
-
 install-schema-mysql: temporal-sql-tool
 	@printf $(COLOR) "Install MySQL schema..."
+	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root drop --db temporal
 	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root create --db temporal
 	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal setup-schema -v 0.0
 	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned
+	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root drop --db temporal_visibility
 	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root create --db temporal_visibility
 	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal_visibility setup-schema -v 0.0
 	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
 
 install-schema-postgresql: temporal-sql-tool
 	@printf $(COLOR) "Install Postgres schema..."
+	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres drop --db temporal
 	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres create --db temporal
 	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal setup -v 0.0
 	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal update-schema -d ./schema/postgresql/v96/temporal/versioned
+	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres drop --db temporal_visibility
 	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres create --db temporal_visibility
 	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal_visibility setup-schema -v 0.0
 	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal_visibility update-schema -d ./schema/postgresql/v96/visibility/versioned

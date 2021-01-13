@@ -57,10 +57,10 @@ const (
 		`old_version VARCHAR(64), ` +
 		`PRIMARY KEY (version_partition, year, month, update_time));`
 
-	//NOTE we have to use %v because somehow mysql doesn't work with ? here
-	createDatabaseQuery = "CREATE database %v CHARACTER SET UTF8"
+	// NOTE: we have to use %v because somehow mysql doesn't work with ? here
+	createDatabaseQuery = "CREATE DATABASE IF NOT EXISTS %v CHARACTER SET UTF8"
 
-	dropDatabaseQuery = "Drop database %v"
+	dropDatabaseQuery = "DROP DATABASE IF EXISTS %v"
 
 	listTablesQuery = "SHOW TABLES FROM %v"
 
