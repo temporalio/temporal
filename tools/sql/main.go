@@ -193,6 +193,20 @@ func BuildCLIOptions() *cli.App {
 				cliHandler(c, createDatabase)
 			},
 		},
+		{
+			Name:    "drop-database",
+			Aliases: []string{"drop"},
+			Usage:   "drops a database",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  schema.CLIFlagDatabase,
+					Usage: "name of the database",
+				},
+			},
+			Action: func(c *cli.Context) {
+				cliHandler(c, dropDatabase)
+			},
+		},
 	}
 
 	return app

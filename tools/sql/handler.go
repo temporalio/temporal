@@ -129,7 +129,10 @@ func updateSchema(cli *cli.Context) error {
 		if err := DoCreateDatabase(cfg, cfg.DatabaseName); err != nil {
 			return handleErr(fmt.Errorf("error creating dryrun database: %v", err))
 		}
-		defer DoDropDatabase(cfg, cfg.DatabaseName)
+		defer func() {
+			err := DoDropDatabase(cfg, cfg.DatabaseName)
+			logErr(err)
+		}()
 	}
 	conn, err := NewConnection(cfg)
 	if err != nil {
@@ -169,18 +172,35 @@ func DoCreateDatabase(cfg *config.SQL, name string) error {
 	return conn.CreateDatabase(name)
 }
 
-func DoDropDatabase(cfg *config.SQL, name string) {
+// dropDatabase drops a sql database
+func dropDatabase(cli *cli.Context) error {
+	cfg, err := parseConnectConfig(cli)
+	if err != nil {
+		return handleErr(schema.NewConfigError(err.Error()))
+	}
+	database := cli.String(schema.CLIOptDatabase)
+	if database == "" {
+		return handleErr(schema.NewConfigError("missing " + flag(schema.CLIOptDatabase) + " argument "))
+	}
+	err = DoDropDatabase(cfg, database)
+	if err != nil {
+		return handleErr(fmt.Errorf("error creating database:%v", err))
+	}
+	return nil
+}
+
+func DoDropDatabase(cfg *config.SQL, name string) error {
 	cfg.DatabaseName = ""
 	conn, err := NewConnection(cfg)
 	if err != nil {
-		logErr(err)
-		return
+		return err
 	}
 	err = conn.DropDatabase(name)
 	if err != nil {
-		logErr(err)
+		return err
 	}
 	conn.Close()
+	return nil
 }
 
 func parseConnectConfig(cli *cli.Context) (*config.SQL, error) {

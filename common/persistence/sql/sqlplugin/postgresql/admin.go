@@ -62,9 +62,9 @@ const (
 	// NOTE we have to use %v because somehow postgresql doesn't work with ? here
 	// It's a small bug in sqlx library
 	// TODO https://github.com/uber/cadence/issues/2893
-	createDatabaseQuery = "CREATE database %v"
+	createDatabaseQuery = "CREATE DATABASE %v"
 
-	dropDatabaseQuery = "Drop database %v"
+	dropDatabaseQuery = "DROP DATABASE IF EXISTS %v"
 
 	listTablesQuery = "select table_name from information_schema.tables where table_schema='public'"
 

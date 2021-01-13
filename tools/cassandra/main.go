@@ -192,18 +192,18 @@ func buildCLIOptions() *cli.App {
 			},
 		},
 		{
-			Name:    "create-Keyspace",
-			Aliases: []string{"create"},
-			Usage:   "creates a Keyspace with simple strategy or network topology if datacenter name is provided",
+			Name:    "create-keyspace",
+			Aliases: []string{"create", "create-Keyspace"},
+			Usage:   "creates a keyspace with simple strategy or network topology if datacenter name is provided",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  schema.CLIFlagKeyspace,
-					Usage: "name of the Keyspace",
+					Usage: "name of the keyspace",
 				},
 				cli.IntFlag{
 					Name:  schema.CLIFlagReplicationFactor,
 					Value: 1,
-					Usage: "replication factor for the Keyspace",
+					Usage: "replication factor for the keyspace",
 				},
 				cli.StringFlag{
 					Name:  schema.CLIFlagDatacenter,
@@ -213,6 +213,30 @@ func buildCLIOptions() *cli.App {
 			},
 			Action: func(c *cli.Context) {
 				cliHandler(c, createKeyspace)
+			},
+		},
+		{
+			Name:    "drop-keyspace",
+			Aliases: []string{"drop"},
+			Usage:   "drops a keyspace with simple strategy or network topology if datacenter name is provided",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  schema.CLIFlagKeyspace,
+					Usage: "name of the keyspace",
+				},
+				cli.IntFlag{
+					Name:  schema.CLIFlagReplicationFactor,
+					Value: 1,
+					Usage: "replication factor for the keyspace",
+				},
+				cli.StringFlag{
+					Name:  schema.CLIFlagDatacenter,
+					Value: "",
+					Usage: "enable NetworkTopologyStrategy by providing datacenter name",
+				},
+			},
+			Action: func(c *cli.Context) {
+				cliHandler(c, dropKeyspace)
 			},
 		},
 		{

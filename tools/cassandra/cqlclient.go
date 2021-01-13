@@ -174,7 +174,7 @@ func (client *cqlClient) createKeyspace(name string) error {
 
 // dropKeyspace drops a Keyspace
 func (client *cqlClient) dropKeyspace(name string) error {
-	return client.Exec(fmt.Sprintf("DROP KEYSPACE %v", name))
+	return client.Exec(fmt.Sprintf("DROP KEYSPACE IF EXISTS %v", name))
 }
 
 func (client *cqlClient) DropAllTables() error {
