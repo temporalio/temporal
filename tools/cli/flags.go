@@ -230,6 +230,13 @@ const (
 	FlagInputDirectory                   = "input_directory"
 	FlagAutoConfirm                      = "auto_confirm"
 	FlagVersion                          = "version"
+
+	FlagProtoType  = "type"
+	FlagHexData    = "hex_data"
+	FlagHexFile    = "hex_file"
+	FlagBinaryFile = "binary_file"
+	FlagBase64Data = "base64_data"
+	FlagBase64File = "base64_file"
 )
 
 var flagsForExecution = []cli.Flag{
