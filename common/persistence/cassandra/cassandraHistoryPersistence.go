@@ -106,33 +106,33 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 		}
 	}
 
-	var err error
-	if request.IsNewBranch {
-		h.sortAncestors(branchInfo.Ancestors)
-		treeInfoDataBlob, err := serialization.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
-			BranchInfo: branchInfo,
-			ForkTime:   timestamp.TimeNowPtrUtc(),
-			Info:       request.Info,
-		})
-
-		if err != nil {
-			return convertCommonErrors("AppendHistoryNodes", err)
-		}
-
-		batch := h.session.NewBatch(gocql.LoggedBatch)
-		batch.Query(v2templateInsertTree,
-			branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.EncodingType.String())
-		batch.Query(v2templateUpsertData,
-			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
-		err = h.session.ExecuteBatch(batch)
-
-	} else {
+	if !request.IsNewBranch {
 		query := h.session.Query(v2templateUpsertData,
 			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
-		err = query.Exec()
+		if err := query.Exec(); err != nil {
+			return convertCommonErrors("AppendHistoryNodes", err)
+		}
+		return nil
 	}
 
+	// request.IsNewBranch == true
+
+	h.sortAncestors(branchInfo.Ancestors)
+	treeInfoDataBlob, err := serialization.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
+		BranchInfo: branchInfo,
+		ForkTime:   timestamp.TimeNowPtrUtc(),
+		Info:       request.Info,
+	})
 	if err != nil {
+		return convertCommonErrors("AppendHistoryNodes", err)
+	}
+
+	batch := h.session.NewBatch(gocql.LoggedBatch)
+	batch.Query(v2templateInsertTree,
+		branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.EncodingType.String())
+	batch.Query(v2templateUpsertData,
+		branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
+	if err = h.session.ExecuteBatch(batch); err != nil {
 		return convertCommonErrors("AppendHistoryNodes", err)
 	}
 	return nil
