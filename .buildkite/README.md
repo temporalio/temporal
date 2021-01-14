@@ -31,18 +31,16 @@ Get `<container_name>` and `<command>` form [pipeline.yml](pipeline.yml):
 
 For example to run unit tests:
 ```bash
-$ docker-compose run unit-test make cover_profile
+$ docker-compose run unit-test make unit-test-coverage
 ```
 or run integration tests with Cassandra:
 ```bash
-$ docker-compose run integration-test-cassandra make cover_integration_profile
+$ docker-compose run integration-test-cassandra make integration-test-coverage
 ```
 or run integration tests with MySQL:
 ```bash
 $ docker-compose run integration-test-mysql make integration-test-coverage
 ```
-
-Note that Buildkite will run basically the same commands.
 
 ## Testing the build in Buildkite
 
