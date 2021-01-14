@@ -52,8 +52,8 @@ import (
 // R represents row type in executions table, valid values are:
 // R = {Shard = 1, Execution = 2, Transfer = 3, Timer = 4, Replication = 5}
 const (
-	// ProtoVersion is the protocol version used to communicate with Cassandra cluster
-	ProtoVersion = 4
+	// ProtocolVersion is the protocol version used to communicate with Cassandra cluster
+	ProtocolVersion = 4
 
 	defaultSessionTimeout = 10 * time.Second
 	// Special Namespaces related constants
