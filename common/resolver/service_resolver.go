@@ -31,8 +31,16 @@ import (
 )
 
 type (
+	// ServiceResolver interface can be implemented to support custom name resolving
+	// for any dependency service.
 	ServiceResolver interface {
-		RefreshInterval() time.Duration
+		// Resolve implementation should return list of addresses for the service
+		// (not necessary IP addresses but addresses that service dependency library accepts).
 		Resolve(service string) []string
+		// RefreshInterval implementation should return interval which is used to periodically call Resolve
+		// and update cached service dependency addresses.
+		// time.Duration(0) means no refresh (only single Resolve call on service startup)
+		// and it is the only value supported for now.
+		RefreshInterval() time.Duration
 	}
 )
