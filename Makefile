@@ -193,6 +193,10 @@ copyright-check:
 	@printf $(COLOR) "Check license header..."
 	@go run ./cmd/tools/copyright/licensegen.go --verifyOnly
 
+copyright:
+	@printf $(COLOR) "Fix license header..."
+	@go run ./cmd/tools/copyright/licensegen.go
+
 lint:
 	@printf $(COLOR) "Run linter..."
 	@golint ./...
