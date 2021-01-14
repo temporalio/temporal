@@ -17,7 +17,7 @@ Get `<container_name>` and `<command>` form [pipeline.yml](pipeline.yml):
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_integration_profile"    # command to run in container
+    command: "make integration-test-coverage"    # command to run in container
     artifact_paths:
       - "build/coverage/*.out"
     retry:
@@ -39,7 +39,7 @@ $ docker-compose run integration-test-cassandra make cover_integration_profile
 ```
 or run integration tests with MySQL:
 ```bash
-$ docker-compose run integration-test-mysql make cover_integration_profile
+$ docker-compose run integration-test-mysql make integration-test-coverage
 ```
 
 Note that Buildkite will run basically the same commands.
