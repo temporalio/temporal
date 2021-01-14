@@ -65,10 +65,9 @@ var errNoHosts = errors.New("Cassandra Hosts list is empty or malformed")
 var errGetSchemaVersion = errors.New("Failed to get current schema version from cassandra")
 
 const (
-	defaultTimeout     = 30    // Timeout in seconds
-	cqlProtoVersion    = 4     // default CQL protocol version
-	defaultConsistency = "ALL" // schema updates must always be ALL
-	systemKeyspace     = "system"
+	defaultTimeout  = 30 // Timeout in seconds
+	cqlProtoVersion = 4  // default CQL protocol version
+	systemKeyspace  = "system"
 )
 
 const (
@@ -116,7 +115,8 @@ func NewCassandraCluster(cfg *config.Cassandra, timeoutSeconds int) (*gocql.Clus
 	timeout := time.Duration(timeoutSeconds) * time.Second
 	clusterCfg.Timeout = timeout
 	clusterCfg.ProtoVersion = cqlProtoVersion
-	clusterCfg.Consistency = gocql.ParseConsistency(defaultConsistency)
+	clusterCfg.Consistency = cfg.Consistency.GetConsistency()
+	clusterCfg.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	return clusterCfg, nil
 }
 
