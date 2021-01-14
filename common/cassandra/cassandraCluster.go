@@ -28,22 +28,25 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
-	"io/ioutil"
-
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"strings"
 
 	"github.com/gocql/gocql"
 
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 )
 
 // NewCassandraCluster creates a cassandra cluster from a given configuration
-func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
-	hosts := parseHosts(cfg.Hosts)
-	cluster := gocql.NewCluster(hosts...)
+func NewCassandraCluster(cfg config.Cassandra, resolver resolver.ServiceResolver) (*gocql.ClusterConfig, error) {
+	var resolvedHosts []string
+	for _, host := range parseHosts(cfg.Hosts) {
+		resolvedHosts = append(resolvedHosts, resolver.Resolve(host)...)
+	}
+	cluster := gocql.NewCluster(resolvedHosts...)
 	cluster.ProtoVersion = 4
 	if cfg.Port > 0 {
 		cluster.Port = cfg.Port
@@ -141,7 +144,7 @@ func NewCassandraCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 }
 
 func parseHosts(input string) []string {
-	var hosts = make([]string, 0)
+	var hosts []string
 	for _, h := range strings.Split(input, ",") {
 		if host := strings.TrimSpace(h); len(host) > 0 {
 			hosts = append(hosts, host)

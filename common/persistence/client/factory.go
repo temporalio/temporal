@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"golang.org/x/sync/errgroup"
@@ -140,6 +141,7 @@ var storeTypes = []storeType{
 // given configuration. In addition, all objects will emit metrics automatically
 func NewFactory(
 	cfg *config.Persistence,
+	resolver resolver.ServiceResolver,
 	persistenceMaxQPS dynamicconfig.IntPropertyFn,
 	abstractDataStoreFactory AbstractDataStoreFactory,
 	clusterName string,
@@ -154,7 +156,7 @@ func NewFactory(
 		clusterName:              clusterName,
 	}
 	limiters := buildRateLimiters(cfg, persistenceMaxQPS)
-	factory.init(clusterName, limiters)
+	factory.init(clusterName, limiters, resolver)
 	return factory
 }
 
@@ -328,6 +330,7 @@ func (f *factoryImpl) getCassandraConfig() *config.Cassandra {
 func (f *factoryImpl) init(
 	clusterName string,
 	limiters map[string]quotas.RateLimiter,
+	resolver resolver.ServiceResolver,
 ) {
 
 	f.datastores = make(map[storeType]Datastore, len(storeTypes))
@@ -341,7 +344,7 @@ func (f *factoryImpl) init(
 	g.Go(func() error {
 		switch {
 		case defaultCfg.Cassandra != nil:
-			defaultDataStore.factory = cassandra.NewFactory(*defaultCfg.Cassandra, clusterName, f.logger)
+			defaultDataStore.factory = cassandra.NewFactory(*defaultCfg.Cassandra, resolver, clusterName, f.logger)
 		case defaultCfg.SQL != nil:
 			defaultDataStore.factory = sql.NewFactory(*defaultCfg.SQL, clusterName, f.logger)
 		case defaultCfg.CustomDataStoreConfig != nil:
@@ -355,7 +358,7 @@ func (f *factoryImpl) init(
 	g.Go(func() error {
 		switch {
 		case visibilityCfg.Cassandra != nil:
-			visibilityDataStore.factory = cassandra.NewFactory(*visibilityCfg.Cassandra, clusterName, f.logger)
+			visibilityDataStore.factory = cassandra.NewFactory(*visibilityCfg.Cassandra, resolver, clusterName, f.logger)
 		case visibilityCfg.SQL != nil:
 			visibilityDataStore.factory = sql.NewFactory(*visibilityCfg.SQL, clusterName, f.logger)
 		default:

@@ -26,7 +26,9 @@ package temporal
 
 import (
 	"github.com/uber-go/tally"
+
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/service/config"
 )
@@ -88,5 +90,12 @@ func WithClaimMapper(claimMapper func(cfg *config.Config) authorization.ClaimMap
 func WithCustomMetricsReporter(reporter tally.BaseStatsReporter) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.metricsReporter = reporter
+	})
+}
+
+// Set custom persistence service resolver which will convert service name or address value from config to another a....
+func WithPersistenceServiceResolver(r resolver.ServiceResolver) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.persistenceServiceResolver = r
 	})
 }

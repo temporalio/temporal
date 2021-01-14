@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/environment"
@@ -127,12 +128,15 @@ func (s *TestCluster) TearDownTestDatabase() {
 // CreateSession from PersistenceTestCluster interface
 func (s *TestCluster) CreateSession() {
 	var err error
-	s.cluster, err = cassandra.NewCassandraCluster(config.Cassandra{
-		Hosts:    s.cfg.Hosts,
-		Port:     s.cfg.Port,
-		User:     s.cfg.User,
-		Password: s.cfg.Password,
-	})
+	s.cluster, err = cassandra.NewCassandraCluster(
+		config.Cassandra{
+			Hosts:    s.cfg.Hosts,
+			Port:     s.cfg.Port,
+			User:     s.cfg.User,
+			Password: s.cfg.Password,
+		},
+		resolver.NewNoopResolver(),
+	)
 	if err != nil {
 		s.logger.Fatal("CreateSession", tag.Error(err))
 	}

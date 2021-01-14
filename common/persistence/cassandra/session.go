@@ -30,15 +30,17 @@ import (
 	"github.com/gocql/gocql"
 
 	"go.temporal.io/server/common/cassandra"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 )
 
 // NewSession creates a new cassandra session
 func NewSession(
 	cfg config.Cassandra,
+	resolver resolver.ServiceResolver,
 ) (*gocql.Session, error) {
 
-	cluster, err := cassandra.NewCassandraCluster(cfg)
+	cluster, err := cassandra.NewCassandraCluster(cfg, resolver)
 	if err != nil {
 		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
 	}

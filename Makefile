@@ -203,7 +203,7 @@ vet:
 
 goimports-check:
 	@printf $(COLOR) "Run goimports checks..."
-	@goimports -l .
+	@GO_IMPORTS_OUTPUT=$$(goimports -l .); if [ -n "$${GO_IMPORTS_OUTPUT}" ]; then echo "$${GO_IMPORTS_OUTPUT}" && exit 1; fi
 
 goimports:
 	@printf $(COLOR) "Run goimports..."
@@ -288,7 +288,7 @@ $(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
 	@rm -f $(SUMMARY_COVER_PROFILE)
 	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
 	$(foreach COVER_PROFILE,$(wildcard $(COVER_ROOT)/*_coverprofile.out),\
-		@printf $(COLOR) $(COVER_PROFILE); \
+		@printf "Add %s...\n" $(COVER_PROFILE); \
 		cat $(COVER_PROFILE) | grep -v -e "^mode: \w\+" | grep -v -E "[Mm]ocks?" >> $(SUMMARY_COVER_PROFILE) \
 	$(NEWLINE))
 
