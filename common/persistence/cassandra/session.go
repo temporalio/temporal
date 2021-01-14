@@ -43,7 +43,7 @@ func NewSession(
 		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
 	}
 
-	cluster.ProtoVersion = cassandraProtoVersion
+	cluster.ProtoVersion = ProtoVersion
 	cluster.Consistency = cfg.Consistency.GetConsistency()
 	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
