@@ -27,6 +27,7 @@ package sql
 import (
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/tools/common/schema"
 )
@@ -43,7 +44,7 @@ var _ schema.DB = (*Connection)(nil)
 
 // NewConnection creates a new connection to database
 func NewConnection(cfg *config.SQL) (*Connection, error) {
-	db, err := sql.NewSQLAdminDB(cfg)
+	db, err := sql.NewSQLAdminDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		return nil, err
 	}

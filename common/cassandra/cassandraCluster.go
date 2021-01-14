@@ -41,10 +41,10 @@ import (
 )
 
 // NewCassandraCluster creates a cassandra cluster from a given configuration
-func NewCassandraCluster(cfg config.Cassandra, resolver resolver.ServiceResolver) (*gocql.ClusterConfig, error) {
+func NewCassandraCluster(cfg config.Cassandra, r resolver.ServiceResolver) (*gocql.ClusterConfig, error) {
 	var resolvedHosts []string
 	for _, host := range parseHosts(cfg.Hosts) {
-		resolvedHosts = append(resolvedHosts, resolver.Resolve(host)...)
+		resolvedHosts = append(resolvedHosts, r.Resolve(host)...)
 	}
 	cluster := gocql.NewCluster(resolvedHosts...)
 	cluster.ProtoVersion = 4

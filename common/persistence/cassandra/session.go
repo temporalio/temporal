@@ -37,10 +37,10 @@ import (
 // NewSession creates a new cassandra session
 func NewSession(
 	cfg config.Cassandra,
-	resolver resolver.ServiceResolver,
+	r resolver.ServiceResolver,
 ) (*gocql.Session, error) {
 
-	cluster, err := cassandra.NewCassandraCluster(cfg, resolver)
+	cluster, err := cassandra.NewCassandraCluster(cfg, r)
 	if err != nil {
 		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
 	}

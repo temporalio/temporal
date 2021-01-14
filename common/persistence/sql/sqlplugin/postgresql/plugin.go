@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -53,8 +54,8 @@ func init() {
 }
 
 // CreateDB initialize the db object
-func (d *plugin) CreateDB(cfg *config.SQL) (sqlplugin.DB, error) {
-	conn, err := d.createDBConnection(cfg)
+func (d *plugin) CreateDB(cfg *config.SQL, r resolver.ServiceResolver) (sqlplugin.DB, error) {
+	conn, err := d.createDBConnection(cfg, r)
 	if err != nil {
 		return nil, err
 	}
@@ -63,8 +64,8 @@ func (d *plugin) CreateDB(cfg *config.SQL) (sqlplugin.DB, error) {
 }
 
 // CreateAdminDB initialize the adminDB object
-func (d *plugin) CreateAdminDB(cfg *config.SQL) (sqlplugin.AdminDB, error) {
-	conn, err := d.createDBConnection(cfg)
+func (d *plugin) CreateAdminDB(cfg *config.SQL, r resolver.ServiceResolver) (sqlplugin.AdminDB, error) {
+	conn, err := d.createDBConnection(cfg, r)
 	if err != nil {
 		return nil, err
 	}
@@ -76,9 +77,8 @@ func (d *plugin) CreateAdminDB(cfg *config.SQL) (sqlplugin.AdminDB, error) {
 // underlying SQL database. The returned object is to tied to a single
 // SQL database and the object can be used to perform CRUD operations on
 // the tables in the database
-func (d *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
-
-	db, err := sqlx.Connect(PluginName, buildDSN(cfg))
+func (d *plugin) createDBConnection(cfg *config.SQL, r resolver.ServiceResolver) (*sqlx.DB, error) {
+	db, err := sqlx.Connect(PluginName, buildDSN(cfg, r))
 	if err != nil {
 		return nil, err
 	}
@@ -97,13 +97,14 @@ func (d *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
 	return db, nil
 }
 
-func buildDSN(cfg *config.SQL) string {
+func buildDSN(cfg *config.SQL, r resolver.ServiceResolver) string {
 	tlsAttrs := dsnTSL(cfg).Encode()
+	resolvedAddr := r.Resolve(cfg.ConnectAddr)[0]
 	dsn := fmt.Sprintf(
 		dsnFmt,
 		cfg.User,
 		cfg.Password,
-		cfg.ConnectAddr,
+		resolvedAddr,
 		databaseName(cfg.DatabaseName),
 		tlsAttrs,
 	)

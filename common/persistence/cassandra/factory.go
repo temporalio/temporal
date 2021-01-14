@@ -55,8 +55,8 @@ type (
 
 // NewFactory returns an instance of a factory object which can be used to create
 // datastores that are backed by cassandra
-func NewFactory(cfg config.Cassandra, resolver resolver.ServiceResolver, clusterName string, logger log.Logger) *Factory {
-	session, err := NewSession(cfg, resolver)
+func NewFactory(cfg config.Cassandra, r resolver.ServiceResolver, clusterName string, logger log.Logger) *Factory {
+	session, err := NewSession(cfg, r)
 	if err != nil {
 		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
 	}
