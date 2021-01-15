@@ -35,6 +35,7 @@ import (
 
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -64,8 +65,8 @@ func init() {
 }
 
 // CreateDB initialize the db object
-func (p *plugin) CreateDB(cfg *config.SQL) (sqlplugin.DB, error) {
-	conn, err := p.createDBConnection(cfg)
+func (p *plugin) CreateDB(cfg *config.SQL, r resolver.ServiceResolver) (sqlplugin.DB, error) {
+	conn, err := p.createDBConnection(cfg, r)
 	if err != nil {
 		return nil, err
 	}
@@ -74,8 +75,8 @@ func (p *plugin) CreateDB(cfg *config.SQL) (sqlplugin.DB, error) {
 }
 
 // CreateAdminDB initialize the db object
-func (p *plugin) CreateAdminDB(cfg *config.SQL) (sqlplugin.AdminDB, error) {
-	conn, err := p.createDBConnection(cfg)
+func (p *plugin) CreateAdminDB(cfg *config.SQL, r resolver.ServiceResolver) (sqlplugin.AdminDB, error) {
+	conn, err := p.createDBConnection(cfg, r)
 	if err != nil {
 		return nil, err
 	}
@@ -87,13 +88,13 @@ func (p *plugin) CreateAdminDB(cfg *config.SQL) (sqlplugin.AdminDB, error) {
 // underlying SQL database. The returned object is to tied to a single
 // SQL database and the object can be used to perform CRUD operations on
 // the tables in the database
-func (p *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
+func (p *plugin) createDBConnection(cfg *config.SQL, r resolver.ServiceResolver) (*sqlx.DB, error) {
 	err := registerTLSConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	db, err := sqlx.Connect(PluginName, buildDSN(cfg))
+	db, err := sqlx.Connect(PluginName, buildDSN(cfg, r))
 	if err != nil {
 		return nil, err
 	}
@@ -112,9 +113,10 @@ func (p *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
 	return db, nil
 }
 
-func buildDSN(cfg *config.SQL) string {
+func buildDSN(cfg *config.SQL, r resolver.ServiceResolver) string {
 	attrs := buildDSNAttrs(cfg)
-	dsn := fmt.Sprintf(dsnFmt, cfg.User, cfg.Password, cfg.ConnectProtocol, cfg.ConnectAddr, cfg.DatabaseName)
+	resolvedAddr := r.Resolve(cfg.ConnectAddr)[0]
+	dsn := fmt.Sprintf(dsnFmt, cfg.User, cfg.Password, cfg.ConnectProtocol, resolvedAddr, cfg.DatabaseName)
 	if attrs != "" {
 		dsn = dsn + "?" + attrs
 	}

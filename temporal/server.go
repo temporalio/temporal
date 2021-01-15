@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -341,6 +342,12 @@ func (s *Server) getServiceParams(
 		params.ClaimMapper = authorization.NewNoopClaimMapper(s.so.config)
 	}
 
+	if s.so.persistenceServiceResolver != nil {
+		params.PersistenceServiceResolver = s.so.persistenceServiceResolver
+	} else {
+		s.so.persistenceServiceResolver = resolver.NewNoopResolver()
+	}
+
 	return &params, nil
 }
 
@@ -370,6 +377,7 @@ func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collec
 	logger := s.logger.WithTags(tag.ComponentMetadataInitializer)
 	factory := persistenceClient.NewFactory(
 		&s.so.config.Persistence,
+		s.so.persistenceServiceResolver,
 		dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 3000),
 		nil,
 		s.so.config.ClusterMetadata.CurrentClusterName,

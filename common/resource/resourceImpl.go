@@ -157,6 +157,7 @@ func New(
 
 	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
 		&params.PersistenceConfig,
+		params.PersistenceServiceResolver,
 		func(...dynamicconfig.FilterOption) int {
 			if persistenceGlobalMaxQPS() > 0 {
 				// TODO: We have a bootstrap issue to correctly find memberCount.  Membership relies on

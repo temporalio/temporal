@@ -35,6 +35,7 @@ import (
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/cassandra"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/tools/common/schema"
 )
@@ -103,7 +104,7 @@ var _ schema.DB = (*cqlClient)(nil)
 
 // NewCassandraCluster return gocql clusterConfig
 func NewCassandraCluster(cfg *config.Cassandra, timeoutSeconds int) (*gocql.ClusterConfig, error) {
-	clusterCfg, err := cassandra.NewCassandraCluster(*cfg)
+	clusterCfg, err := cassandra.NewCassandraCluster(*cfg, resolver.NewNoopResolver())
 	if err != nil {
 		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
 	}
