@@ -236,8 +236,6 @@ var keys = map[Key]string{
 	ShardSyncMinInterval:                                   "history.shardSyncMinInterval",
 	ShardSyncTimerJitterCoefficient:                        "history.shardSyncMinInterval",
 	DefaultEventEncoding:                                   "history.defaultEventEncoding",
-	EnableAdminProtection:                                  "history.enableAdminProtection",
-	AdminOperationToken:                                    "history.adminOperationToken",
 	EnableParentClosePolicy:                                "history.enableParentClosePolicy",
 	NumArchiveSystemWorkflows:                              "history.numArchiveSystemWorkflows",
 	ArchiveRequestRPS:                                      "history.archiveRequestRPS",
@@ -682,10 +680,6 @@ const (
 	// where the user has set an explicit RetryPolicy, but not specified all the fields
 	DefaultWorkflowRetryPolicy
 
-	// EnableAdminProtection is whether to enable admin checking
-	EnableAdminProtection
-	// AdminOperationToken is the token to pass admin checking
-	AdminOperationToken
 	// HistoryMaxAutoResetPoints is the key for max number of auto reset points stored in mutableState
 	HistoryMaxAutoResetPoints
 
