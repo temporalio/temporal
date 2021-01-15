@@ -342,10 +342,9 @@ func (s *Server) getServiceParams(
 		params.ClaimMapper = authorization.NewNoopClaimMapper(s.so.config)
 	}
 
-	if s.so.persistenceServiceResolver != nil {
-		params.PersistenceServiceResolver = s.so.persistenceServiceResolver
-	} else {
-		s.so.persistenceServiceResolver = resolver.NewNoopResolver()
+	params.PersistenceServiceResolver = s.so.persistenceServiceResolver
+	if params.PersistenceServiceResolver == nil {
+		params.PersistenceServiceResolver = resolver.NewNoopResolver()
 	}
 
 	return &params, nil
@@ -375,9 +374,15 @@ func (s *Server) validate() error {
 
 func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collection) error {
 	logger := s.logger.WithTags(tag.ComponentMetadataInitializer)
+
+	persistenceServiceResolver := s.so.persistenceServiceResolver
+	if persistenceServiceResolver == nil {
+		persistenceServiceResolver = resolver.NewNoopResolver()
+	}
+
 	factory := persistenceClient.NewFactory(
 		&s.so.config.Persistence,
-		s.so.persistenceServiceResolver,
+		persistenceServiceResolver,
 		dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 3000),
 		nil,
 		s.so.config.ClusterMetadata.CurrentClusterName,
