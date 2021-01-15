@@ -49,10 +49,10 @@ var (
 )
 
 const (
-	timerOpInitialInterval    = 50 * time.Millisecond
+	timerOpInitialInterval    = 100 * time.Millisecond
 	timerOpMaxInterval        = 1000 * time.Millisecond
 	timerOpExpirationInterval = 10 * time.Second
-	timerOpBackoffCoefficient = 1.2
+	timerOpBackoffCoefficient = 2
 	timerOpMaximumAttempts    = 20
 )
 
