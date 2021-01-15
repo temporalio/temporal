@@ -30,7 +30,6 @@ package resolver
 
 import (
 	reflect "reflect"
-	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 )
@@ -56,20 +55,6 @@ func NewMockServiceResolver(ctrl *gomock.Controller) *MockServiceResolver {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockServiceResolver) EXPECT() *MockServiceResolverMockRecorder {
 	return m.recorder
-}
-
-// RefreshInterval mocks base method.
-func (m *MockServiceResolver) RefreshInterval() time.Duration {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshInterval")
-	ret0, _ := ret[0].(time.Duration)
-	return ret0
-}
-
-// RefreshInterval indicates an expected call of RefreshInterval.
-func (mr *MockServiceResolverMockRecorder) RefreshInterval() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshInterval", reflect.TypeOf((*MockServiceResolver)(nil).RefreshInterval))
 }
 
 // Resolve mocks base method.
