@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -121,7 +122,7 @@ func (s *TestCluster) CreateDatabase() {
 	cfg2 := s.cfg
 	// NOTE need to connect with empty name to create new database
 	cfg2.DatabaseName = ""
-	db, err := NewSQLAdminDB(&cfg2)
+	db, err := NewSQLAdminDB(&cfg2, resolver.NewNoopResolver())
 	if err != nil {
 		panic(err)
 	}
@@ -142,7 +143,7 @@ func (s *TestCluster) DropDatabase() {
 	cfg2 := s.cfg
 	// NOTE need to connect with empty name to drop the database
 	cfg2.DatabaseName = ""
-	db, err := NewSQLAdminDB(&cfg2)
+	db, err := NewSQLAdminDB(&cfg2, resolver.NewNoopResolver())
 	if err != nil {
 		panic(err)
 	}
@@ -195,7 +196,7 @@ func getTemporalPackageDir() (string, error) {
 
 // loadDatabaseSchema loads the schema from the given .sql files on this database
 func (s *TestCluster) loadDatabaseSchema(dir string, fileNames []string, override bool) (err error) {
-	db, err := NewSQLAdminDB(&s.cfg)
+	db, err := NewSQLAdminDB(&s.cfg, resolver.NewNoopResolver())
 	if err != nil {
 		panic(err)
 	}

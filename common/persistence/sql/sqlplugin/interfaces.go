@@ -28,14 +28,15 @@ import (
 	"context"
 	"database/sql"
 
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 )
 
 type (
 	// Plugin defines the interface for any SQL database that needs to implement
 	Plugin interface {
-		CreateDB(cfg *config.SQL) (DB, error)
-		CreateAdminDB(cfg *config.SQL) (AdminDB, error)
+		CreateDB(cfg *config.SQL, r resolver.ServiceResolver) (DB, error)
+		CreateAdminDB(cfg *config.SQL, r resolver.ServiceResolver) (AdminDB, error)
 	}
 
 	// TableCRUD defines the API for interacting with the database tables

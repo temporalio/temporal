@@ -34,6 +34,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
@@ -61,6 +62,7 @@ func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 
 	factory := persistenceClient.NewFactory(
 		&persistence,
+		resolver.NewNoopResolver(),
 		GetQPS,
 		params.AbstractDatastoreFactory,
 		c.String(FlagTargetCluster),

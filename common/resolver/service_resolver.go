@@ -22,36 +22,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination service_resolver_mock.go
 
-import (
-	"fmt"
+package resolver
 
-	"github.com/gocql/gocql"
-
-	"go.temporal.io/server/common/cassandra"
-	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
+type (
+	// ServiceResolver interface can be implemented to support custom name resolving
+	// for any dependency service.
+	ServiceResolver interface {
+		// Resolve implementation should return list of addresses for the service
+		// (not necessary IP addresses but addresses that service dependency library accepts).
+		Resolve(service string) []string
+	}
 )
-
-// NewSession creates a new cassandra session
-func NewSession(
-	cfg config.Cassandra,
-	r resolver.ServiceResolver,
-) (*gocql.Session, error) {
-
-	cluster, err := cassandra.NewCassandraCluster(cfg, r)
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
-	}
-
-	cluster.ProtoVersion = ProtocolVersion
-	cluster.Consistency = cfg.Consistency.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
-	cluster.Timeout = defaultSessionTimeout
-	session, err := cluster.CreateSession()
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
-	}
-	return session, nil
-}

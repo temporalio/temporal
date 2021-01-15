@@ -22,36 +22,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package resolver
 
-import (
-	"fmt"
-
-	"github.com/gocql/gocql"
-
-	"go.temporal.io/server/common/cassandra"
-	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
+type (
+	NoopResolver struct {
+	}
 )
 
-// NewSession creates a new cassandra session
-func NewSession(
-	cfg config.Cassandra,
-	r resolver.ServiceResolver,
-) (*gocql.Session, error) {
+func NewNoopResolver() *NoopResolver {
+	return &NoopResolver{}
+}
 
-	cluster, err := cassandra.NewCassandraCluster(cfg, r)
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
-	}
-
-	cluster.ProtoVersion = ProtocolVersion
-	cluster.Consistency = cfg.Consistency.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
-	cluster.Timeout = defaultSessionTimeout
-	session, err := cluster.CreateSession()
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
-	}
-	return session, nil
+func (c *NoopResolver) Resolve(service string) []string {
+	return []string{service}
 }

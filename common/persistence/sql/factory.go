@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -56,19 +57,20 @@ type (
 	dbConn struct {
 		sync.Mutex
 		sqlplugin.DB
-		refCnt int
-		cfg    *config.SQL
+		refCnt   int
+		cfg      *config.SQL
+		resolver resolver.ServiceResolver
 	}
 )
 
 // NewFactory returns an instance of a factory object which can be used to create
 // datastores backed by any kind of SQL store
-func NewFactory(cfg config.SQL, clusterName string, logger log.Logger) *Factory {
+func NewFactory(cfg config.SQL, r resolver.ServiceResolver, clusterName string, logger log.Logger) *Factory {
 	return &Factory{
 		cfg:         cfg,
 		clusterName: clusterName,
 		logger:      logger,
-		dbConn:      newRefCountedDBConn(&cfg),
+		dbConn:      newRefCountedDBConn(&cfg, r),
 	}
 }
 
@@ -154,8 +156,8 @@ func (f *Factory) Close() {
 // uses reference counting to decide when to close the
 // underlying connection object. The reference count gets incremented
 // everytime get() is called and decremented everytime Close() is called
-func newRefCountedDBConn(cfg *config.SQL) dbConn {
-	return dbConn{cfg: cfg}
+func newRefCountedDBConn(cfg *config.SQL, r resolver.ServiceResolver) dbConn {
+	return dbConn{cfg: cfg, resolver: r}
 }
 
 // get returns a mysql db connection and increments a reference count
@@ -165,7 +167,7 @@ func (c *dbConn) get() (sqlplugin.DB, error) {
 	c.Lock()
 	defer c.Unlock()
 	if c.refCnt == 0 {
-		conn, err := NewSQLDB(c.cfg)
+		conn, err := NewSQLDB(c.cfg, c.resolver)
 		if err != nil {
 			return nil, err
 		}

@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -54,8 +55,8 @@ type (
 
 // NewFactory returns an instance of a factory object which can be used to create
 // datastores that are backed by cassandra
-func NewFactory(cfg config.Cassandra, clusterName string, logger log.Logger) *Factory {
-	session, err := NewSession(cfg)
+func NewFactory(cfg config.Cassandra, r resolver.ServiceResolver, clusterName string, logger log.Logger) *Factory {
+	session, err := NewSession(cfg, r)
 	if err != nil {
 		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
 	}

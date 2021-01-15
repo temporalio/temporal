@@ -35,6 +35,7 @@ import (
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/cassandra"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/tools/common/schema"
 )
@@ -65,10 +66,9 @@ var errNoHosts = errors.New("Cassandra Hosts list is empty or malformed")
 var errGetSchemaVersion = errors.New("Failed to get current schema version from cassandra")
 
 const (
-	defaultTimeout     = 30    // Timeout in seconds
-	cqlProtoVersion    = 4     // default CQL protocol version
-	defaultConsistency = "ALL" // schema updates must always be ALL
-	systemKeyspace     = "system"
+	defaultTimeout  = 30 // Timeout in seconds
+	cqlProtoVersion = 4  // default CQL protocol version
+	systemKeyspace  = "system"
 )
 
 const (
@@ -104,7 +104,7 @@ var _ schema.DB = (*cqlClient)(nil)
 
 // NewCassandraCluster return gocql clusterConfig
 func NewCassandraCluster(cfg *config.Cassandra, timeoutSeconds int) (*gocql.ClusterConfig, error) {
-	clusterCfg, err := cassandra.NewCassandraCluster(*cfg)
+	clusterCfg, err := cassandra.NewCassandraCluster(*cfg, resolver.NewNoopResolver())
 	if err != nil {
 		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
 	}
@@ -116,7 +116,8 @@ func NewCassandraCluster(cfg *config.Cassandra, timeoutSeconds int) (*gocql.Clus
 	timeout := time.Duration(timeoutSeconds) * time.Second
 	clusterCfg.Timeout = timeout
 	clusterCfg.ProtoVersion = cqlProtoVersion
-	clusterCfg.Consistency = gocql.ParseConsistency(defaultConsistency)
+	clusterCfg.Consistency = cfg.Consistency.GetConsistency()
+	clusterCfg.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	return clusterCfg, nil
 }
 

@@ -40,7 +40,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/persistence"
@@ -65,7 +64,7 @@ const (
 	InvalidFirstEvent = "invalid_first_event"
 	// OpenExecutionInvalidCurrentExecution is the CorruptionType that indicates there is an orphan concrete execution
 	OpenExecutionInvalidCurrentExecution = "open_execution_invalid_current_execution"
-	CorruptActivityIdPresent = "corrupt_activity_id_present"
+	CorruptActivityIdPresent             = "corrupt_activity_id_present"
 )
 
 const (
@@ -416,7 +415,7 @@ func scanShard(
 				s.ExecutionState,
 				corruptedExecutionWriter,
 				historyBranch,
-				)
+			)
 			switch activityIdsVerificationResult {
 			case VerificationResultNoCorruption:
 			case VerificationResultDetectedCorruption:
@@ -602,9 +601,7 @@ func verifyActivityIds(
 	executionState *persistencespb.WorkflowExecutionState,
 	corruptedExecutionWriter BufferedWriter,
 	branch *persistencespb.HistoryBranch,
-	) (
-	VerificationResult,
-) {
+) VerificationResult {
 	if len(activityInfos) == 0 {
 		return VerificationResultNoCorruption
 	}
