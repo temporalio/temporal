@@ -110,6 +110,8 @@ const (
 	CLIOptDatacenter = "datacenter"
 	// CLIOptQuiet is the cli option for quiet mode
 	CLIOptQuiet = "quiet"
+	// CLIOptForce is the cli option for force mode
+	CLIOptForce = "force"
 
 	// CLIFlagEndpoint is the cli flag for endpoint
 	CLIFlagEndpoint = CLIOptEndpoint + ", ep"
@@ -149,6 +151,8 @@ const (
 	CLIFlagDatacenter = CLIOptDatacenter + ", dc"
 	// CLIFlagQuiet is the cli flag for quiet mode
 	CLIFlagQuiet = CLIOptQuiet + ", q"
+	// CLIFlagForce is the cli flag for force mode
+	CLIFlagForce = CLIOptForce + ", f"
 
 	// CLIFlagEnableTLS enables cassandra client TLS
 	CLIFlagEnableTLS = "tls"
