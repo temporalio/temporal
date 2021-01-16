@@ -30,7 +30,7 @@ import (
 
 var (
 	// This variables are overridden using ldflags at compile time. Example:
-	// $ go build -ldflags "-X go.temporal.io/server/common.GitRevision=abcdef" ...
+	// $ go build -ldflags "-X go.temporal.io/server/ldflags.GitRevision=abcdef" ...
 
 	// GitRevision is the git revision associated with this build.
 	GitRevision = "unknown"
