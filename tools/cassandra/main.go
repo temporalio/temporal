@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/urfave/cli"
@@ -234,9 +235,25 @@ func buildCLIOptions() *cli.App {
 					Value: "",
 					Usage: "enable NetworkTopologyStrategy by providing datacenter name",
 				},
+				cli.BoolFlag{
+					Name:  schema.CLIFlagForce,
+					Usage: "don't prompt for confirmation",
+				},
 			},
 			Action: func(c *cli.Context) {
-				cliHandler(c, dropKeyspace)
+				drop := c.Bool(schema.CLIOptForce)
+				if !drop {
+					keyspace := c.String(schema.CLIOptKeyspace)
+					fmt.Printf("Are you sure you want to drop keyspace %q (y/N)? ", keyspace)
+					y := ""
+					_, _ = fmt.Scanln(&y)
+					if y == "y" || y == "Y" {
+						drop = true
+					}
+				}
+				if drop {
+					cliHandler(c, dropKeyspace)
+				}
 			},
 		},
 		{
