@@ -174,7 +174,7 @@ clean-bins:
 
 temporal-server:
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
-	go build -ldflags "$(shell ./scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
+	go build -ldflags "$(shell ./.development/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
 
 tctl:
 	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
@@ -371,10 +371,10 @@ install-schema-cdc: temporal-cassandra-tool
 
 ##### Run server #####
 start-dependencies:
-	docker-compose -f docker-compose/docker-compose.yml -f docker-compose/docker-compose.$(GOOS).yml up
+	docker-compose -f ./.development/docker-compose/docker-compose.yml -f ./.development/docker-compose/docker-compose.$(GOOS).yml up
 
 stop-dependencies:
-	docker-compose -f docker-compose/docker-compose.yml -f docker-compose/docker-compose.$(GOOS).yml down
+	docker-compose -f ./.development/docker-compose/docker-compose.yml -f ./.development/docker-compose/docker-compose.$(GOOS).yml down
 
 start: temporal-server
 	./temporal-server start
