@@ -570,6 +570,10 @@ func newAdminElasticSearchCommands() []cli.Command {
 					Name:  FlagURL,
 					Usage: "URL of ElasticSearch cluster",
 				},
+				cli.StringFlag{
+					Name:  FlagVersion,
+					Usage: "Version of ElasticSearch cluster: v6 or v7 (default)",
+				},
 			},
 			Action: func(c *cli.Context) {
 				AdminCatIndices(c)
@@ -583,6 +587,10 @@ func newAdminElasticSearchCommands() []cli.Command {
 				cli.StringFlag{
 					Name:  FlagURL,
 					Usage: "URL of ElasticSearch cluster",
+				},
+				cli.StringFlag{
+					Name:  FlagVersion,
+					Usage: "Version of ElasticSearch cluster: v6 or v7 (default)",
 				},
 				cli.StringFlag{
 					Name:  FlagIndex,
@@ -610,6 +618,10 @@ func newAdminElasticSearchCommands() []cli.Command {
 				cli.StringFlag{
 					Name:  FlagURL,
 					Usage: "URL of ElasticSearch cluster",
+				},
+				cli.StringFlag{
+					Name:  FlagVersion,
+					Usage: "Version of ElasticSearch cluster: v6 or v7 (default)",
 				},
 				cli.StringFlag{
 					Name:  FlagIndex,
@@ -944,6 +956,53 @@ func newDBCommands() []cli.Command {
 				}),
 			Action: func(c *cli.Context) {
 				AdminDBClean(c)
+			},
+		},
+	}
+}
+
+func newDecodeCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:  "proto",
+			Usage: "Decode proto payload",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagProtoType,
+					Usage: "full name of proto type to decode to (i.e. temporal.server.api.persistence.v1.WorkflowExecutionInfo).",
+				},
+				cli.StringFlag{
+					Name:  FlagHexData,
+					Usage: "data in hex format (i.e. 0x0a243462613036633466...).",
+				},
+				cli.StringFlag{
+					Name:  FlagHexFile,
+					Usage: "file with data in hex format (i.e. 0x0a243462613036633466...).",
+				},
+				cli.StringFlag{
+					Name:  FlagBinaryFile,
+					Usage: "file with data in binary format.",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminDecodeProto(c)
+			},
+		},
+		{
+			Name:  "base64",
+			Usage: "Decode base64 payload",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagBase64Data,
+					Usage: "data in base64 format (i.e. anNvbi9wbGFpbg==).",
+				},
+				cli.StringFlag{
+					Name:  FlagBase64File,
+					Usage: "file with data in base64 format (i.e. anNvbi9wbGFpbg==).",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminDecodeBase64(c)
 			},
 		},
 	}

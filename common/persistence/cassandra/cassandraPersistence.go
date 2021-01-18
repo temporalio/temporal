@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -53,7 +52,9 @@ import (
 // R represents row type in executions table, valid values are:
 // R = {Shard = 1, Execution = 2, Transfer = 3, Timer = 4, Replication = 5}
 const (
-	cassandraProtoVersion = 4
+	// ProtocolVersion is the protocol version used to communicate with Cassandra cluster
+	ProtocolVersion = 4
+
 	defaultSessionTimeout = 10 * time.Second
 	// Special Namespaces related constants
 	emptyNamespaceID = "10000000-0000-f000-f000-000000000000"
@@ -719,10 +720,6 @@ type (
 		cassandraStore
 		shardID            int32
 		currentClusterName string
-
-		// TODO DEBUG
-		isDebug bool
-		// TODO DEBUG
 	}
 )
 
@@ -750,10 +747,6 @@ func NewWorkflowExecutionPersistence(
 	return &cassandraPersistence{
 		cassandraStore: cassandraStore{session: session, logger: logger},
 		shardID:        shardID,
-
-		// TODO DEBUG
-		isDebug: common.IsDebugMode(),
-		// TODO DEBUG
 	}, nil
 }
 
@@ -963,11 +956,6 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 	}()
 
 	if err != nil {
-		if d.isDebug {
-			d.logger.Error("####### QUERY ERROR")
-			d.logger.Error(prettyPrint(batch.Entries), tag.Error(err))
-			d.logger.Error("####### QUERY ERROR")
-		}
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
@@ -1345,12 +1333,6 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	}()
 
 	if err != nil {
-		if d.isDebug {
-			d.logger.Error("####### QUERY ERROR")
-			d.logger.Error(prettyPrint(batch.Entries), tag.Error(err))
-			d.logger.Error("####### QUERY ERROR")
-		}
-
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
@@ -1503,12 +1485,6 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 	}()
 
 	if err != nil {
-		if d.isDebug {
-			d.logger.Error("####### QUERY ERROR")
-			d.logger.Error(prettyPrint(batch.Entries), tag.Error(err))
-			d.logger.Error("####### QUERY ERROR")
-		}
-
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read

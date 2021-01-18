@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/urfave/cli"
@@ -192,18 +193,18 @@ func buildCLIOptions() *cli.App {
 			},
 		},
 		{
-			Name:    "create-Keyspace",
-			Aliases: []string{"create"},
-			Usage:   "creates a Keyspace with simple strategy or network topology if datacenter name is provided",
+			Name:    "create-keyspace",
+			Aliases: []string{"create", "create-Keyspace"},
+			Usage:   "creates a keyspace with simple strategy or network topology if datacenter name is provided",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  schema.CLIFlagKeyspace,
-					Usage: "name of the Keyspace",
+					Usage: "name of the keyspace",
 				},
 				cli.IntFlag{
 					Name:  schema.CLIFlagReplicationFactor,
 					Value: 1,
-					Usage: "replication factor for the Keyspace",
+					Usage: "replication factor for the keyspace",
 				},
 				cli.StringFlag{
 					Name:  schema.CLIFlagDatacenter,
@@ -213,6 +214,46 @@ func buildCLIOptions() *cli.App {
 			},
 			Action: func(c *cli.Context) {
 				cliHandler(c, createKeyspace)
+			},
+		},
+		{
+			Name:    "drop-keyspace",
+			Aliases: []string{"drop"},
+			Usage:   "drops a keyspace with simple strategy or network topology if datacenter name is provided",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  schema.CLIFlagKeyspace,
+					Usage: "name of the keyspace",
+				},
+				cli.IntFlag{
+					Name:  schema.CLIFlagReplicationFactor,
+					Value: 1,
+					Usage: "replication factor for the keyspace",
+				},
+				cli.StringFlag{
+					Name:  schema.CLIFlagDatacenter,
+					Value: "",
+					Usage: "enable NetworkTopologyStrategy by providing datacenter name",
+				},
+				cli.BoolFlag{
+					Name:  schema.CLIFlagForce,
+					Usage: "don't prompt for confirmation",
+				},
+			},
+			Action: func(c *cli.Context) {
+				drop := c.Bool(schema.CLIOptForce)
+				if !drop {
+					keyspace := c.String(schema.CLIOptKeyspace)
+					fmt.Printf("Are you sure you want to drop keyspace %q (y/N)? ", keyspace)
+					y := ""
+					_, _ = fmt.Scanln(&y)
+					if y == "y" || y == "Y" {
+						drop = true
+					}
+				}
+				if drop {
+					cliHandler(c, dropKeyspace)
+				}
 			},
 		},
 		{

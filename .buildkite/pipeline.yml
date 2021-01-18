@@ -3,11 +3,11 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make bins"
+    command: "make ci-build"
     plugins:
       - docker-compose#v3.1.0:
           run: build
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - wait
 
@@ -15,169 +15,188 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_profile"
+    command: "make unit-test-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     plugins:
       - docker-compose#v3.1.0:
           run: unit-test
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration test with cassandra"
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_integration_profile"
+    command: "make integration-test-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-cassandra
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
+
+  - label: ":golang: integration test with cassandra (ES6)"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make integration-test-coverage"
+    artifact_paths:
+      - ".coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-cassandra
+          config: ./.buildkite/docker-compose-es6.yml
 
   - label: ":golang: integration xdc test with cassandra"
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_xdc_profile"
+    command: "make integration-test-xdc-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-xdc-cassandra
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration ndc test with cassandra"
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_ndc_profile"
+    command: "make integration-test-ndc-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-xdc-cassandra
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration test with mysql"
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_integration_profile"
+    command: "make integration-test-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-mysql
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration xdc test with mysql"
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_xdc_profile"
+    command: "make integration-test-xdc-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-xdc-mysql
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration ndc test with mysql"
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_ndc_profile"
+    command: "make integration-test-ndc-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-xdc-mysql
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration test with postgresql"
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_integration_profile"
+    command: "make integration-test-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-postgresql
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration xdc test with postgresql"
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_xdc_profile"
+    command: "make integration-test-xdc-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-xdc-postgresql
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":golang: integration ndc test with postgresql"
     agents:
       queue: "default"
       docker: "*"
-    command: "make cover_ndc_profile"
+    command: "make integration-test-ndc-coverage"
     artifact_paths:
-      - "build/coverage/*.out"
+      - ".coverage/*.out"
     retry:
       automatic:
         limit: 1
     plugins:
       - docker-compose#v3.1.0:
           run: integration-test-xdc-postgresql
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - wait
 
-  - label: ":golang: code-coverage"
+  - label: ":golang: coverage-report"
     agents:
       queue: "default"
       docker: "*"
-    command: "scripts/buildkite/gocov.sh"
+    command: "./.buildkite/scripts/coverage-report.sh"
+    artifact_paths:
+      - ".coverage/summary_coverprofile.out"
+      - ".coverage/summary_coverprofile.out.html"
     retry:
       automatic:
         limit: 2
     plugins:
       - docker-compose#v3.1.0:
           run: coverage-report
-          config: docker/buildkite/docker-compose.yml
+          config: ./.buildkite/docker-compose.yml
 
   - label: ":docker: build and push master"
     agents:
       queue: "default"
       docker: "*"
-    command: "scripts/buildkite/docker-push.sh"
+    branches: "master"
+    command: "./.buildkite/scripts/docker-push.sh"
     retry:
       automatic:
         limit: 1

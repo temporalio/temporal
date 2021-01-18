@@ -33,6 +33,7 @@ import (
 // Config for connecting to ElasticSearch
 type (
 	Config struct {
+		Version           string                  `yaml:"version"`
 		URL               url.URL                 `yaml:"url"` //nolint:govet
 		Username          string                  `yaml:"username"`
 		Password          string                  `yaml:"password"`

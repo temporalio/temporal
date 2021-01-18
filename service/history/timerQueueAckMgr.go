@@ -31,6 +31,7 @@ import (
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -43,6 +44,16 @@ import (
 
 var (
 	maximumTime = time.Unix(0, math.MaxInt64).UTC()
+
+	timerRetryPolicy = createTimerRetryPolicy()
+)
+
+const (
+	timerOpInitialInterval    = 100 * time.Millisecond
+	timerOpMaxInterval        = 1000 * time.Millisecond
+	timerOpExpirationInterval = 10 * time.Second
+	timerOpBackoffCoefficient = 2
+	timerOpMaximumAttempts    = 20
 )
 
 type (
@@ -404,16 +415,20 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 		NextPageToken: pageToken,
 	}
 
-	retryCount := t.config.TimerProcessorGetFailureRetryCount()
-	for attempt := 1; attempt <= retryCount; attempt++ {
-		response, err := t.executionMgr.GetTimerIndexTasks(request)
-		if err == nil {
-			return response.Timers, response.NextPageToken, nil
-		}
-		backoff := time.Duration((attempt - 1) * 100)
-		time.Sleep(backoff * time.Millisecond)
+	var response *persistence.GetTimerIndexTasksResponse
+	var err error
+	op := func() error {
+		response, err = t.executionMgr.GetTimerIndexTasks(request)
+		return err
 	}
-	return nil, nil, ErrMaxAttemptsExceeded
+
+	err = backoff.Retry(op, timerRetryPolicy, func(err error) bool {
+		return true
+	})
+	if err != nil {
+		return nil, nil, ErrMaxAttemptsExceeded
+	}
+	return response.Timers, response.NextPageToken, nil
 }
 
 func (t *timerQueueAckMgrImpl) isProcessNow(expiryTime time.Time) bool {
@@ -421,4 +436,14 @@ func (t *timerQueueAckMgrImpl) isProcessNow(expiryTime time.Time) bool {
 		t.logger.Warn("Timer task has timestamp zero")
 	}
 	return expiryTime.UnixNano() <= t.timeNow().UnixNano()
+}
+
+func createTimerRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(timerOpInitialInterval)
+	policy.SetMaximumInterval(timerOpMaxInterval)
+	policy.SetExpirationInterval(timerOpExpirationInterval)
+	policy.SetBackoffCoefficient(timerOpBackoffCoefficient)
+	policy.SetMaximumAttempts(timerOpMaximumAttempts)
+
+	return policy
 }

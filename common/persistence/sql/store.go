@@ -28,6 +28,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -45,23 +46,23 @@ func RegisterPlugin(pluginName string, plugin sqlplugin.Plugin) {
 // underlying SQL database. The returned object is to tied to a single
 // SQL database and the object can be used to perform CRUD operations on
 // the tables in the database
-func NewSQLDB(cfg *config.SQL) (sqlplugin.DB, error) {
+func NewSQLDB(cfg *config.SQL, r resolver.ServiceResolver) (sqlplugin.DB, error) {
 	plugin, ok := supportedPlugins[cfg.PluginName]
 
 	if !ok {
 		return nil, fmt.Errorf("not supported plugin %v, only supported: %v", cfg.PluginName, supportedPlugins)
 	}
 
-	return plugin.CreateDB(cfg)
+	return plugin.CreateDB(cfg, r)
 }
 
 // NewSQLAdminDB returns a AdminDB
-func NewSQLAdminDB(cfg *config.SQL) (sqlplugin.AdminDB, error) {
+func NewSQLAdminDB(cfg *config.SQL, r resolver.ServiceResolver) (sqlplugin.AdminDB, error) {
 	plugin, ok := supportedPlugins[cfg.PluginName]
 
 	if !ok {
 		return nil, fmt.Errorf("not supported plugin %v, only supported: %v", cfg.PluginName, supportedPlugins)
 	}
 
-	return plugin.CreateAdminDB(cfg)
+	return plugin.CreateAdminDB(cfg, r)
 }

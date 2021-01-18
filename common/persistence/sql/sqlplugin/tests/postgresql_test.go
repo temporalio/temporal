@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/environment"
@@ -60,7 +61,7 @@ func TestPostgreSQLNamespaceSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
@@ -77,7 +78,7 @@ func TestPostgreSQLQueueMessageSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
@@ -94,7 +95,7 @@ func TestPostgreSQLQueueMetadataSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestPostgreSQLMatchingTaskSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
@@ -128,7 +129,7 @@ func TestPostgreSQLMatchingTaskQueueSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
@@ -145,7 +146,7 @@ func TestPostgreSQLHistoryShardSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -162,7 +163,7 @@ func TestPostgreSQLHistoryNodeSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -179,7 +180,7 @@ func TestPostgreSQLHistoryTreeSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -196,7 +197,7 @@ func TestPostgreSQLHistoryCurrentExecutionSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -213,7 +214,7 @@ func TestPostgreSQLHistoryExecutionSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -230,7 +231,7 @@ func TestPostgreSQLHistoryTransferTaskSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -247,7 +248,7 @@ func TestPostgreSQLHistoryTimerTaskSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -264,7 +265,7 @@ func TestPostgreSQLHistoryReplicationTaskSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -281,7 +282,7 @@ func TestPostgreSQLHistoryReplicationDLQTaskSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -298,7 +299,7 @@ func TestPostgreSQLHistoryExecutionBufferSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -315,7 +316,7 @@ func TestPostgreSQLHistoryExecutionActivitySuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -332,7 +333,7 @@ func TestPostgreSQLHistoryExecutionChildWorkflowSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -349,7 +350,7 @@ func TestPostgreSQLHistoryExecutionTimerSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -366,7 +367,7 @@ func TestPostgreSQLHistoryExecutionRequestCancelSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -383,7 +384,7 @@ func TestPostgreSQLHistoryExecutionSignalSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -400,7 +401,7 @@ func TestPostgreSQLHistoryExecutionSignalRequestSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -417,7 +418,7 @@ func TestPostgreSQLVisibilitySuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
-	store, err := sql.NewSQLDB(cfg)
+	store, err := sql.NewSQLDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -450,7 +451,7 @@ func SetupPostgreSQLDatabase(cfg *config.SQL) {
 	// NOTE need to connect with empty name to create new database
 	adminCfg.DatabaseName = ""
 
-	db, err := sql.NewSQLAdminDB(&adminCfg)
+	db, err := sql.NewSQLAdminDB(&adminCfg, resolver.NewNoopResolver())
 	if err != nil {
 		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
 	}
@@ -463,7 +464,7 @@ func SetupPostgreSQLDatabase(cfg *config.SQL) {
 }
 
 func SetupPostgreSQLSchema(cfg *config.SQL) {
-	db, err := sql.NewSQLAdminDB(cfg)
+	db, err := sql.NewSQLAdminDB(cfg, resolver.NewNoopResolver())
 	if err != nil {
 		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
 	}
@@ -503,7 +504,7 @@ func TearDownPostgreSQLDatabase(cfg *config.SQL) {
 	// NOTE need to connect with empty name to create new database
 	adminCfg.DatabaseName = ""
 
-	db, err := sql.NewSQLAdminDB(&adminCfg)
+	db, err := sql.NewSQLAdminDB(&adminCfg, resolver.NewNoopResolver())
 	if err != nil {
 		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
 	}

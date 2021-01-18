@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/service/config"
@@ -395,6 +396,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	if err != nil {
 		c.logger.Fatal("Failed to copy persistence config for frontend", tag.Error(err))
 	}
+	params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
 	if c.esConfig != nil {
 		esDataStoreName := "es-visibility"
@@ -473,6 +475,7 @@ func (c *temporalImpl) startHistory(
 		if err != nil {
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
 		}
+		params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
 		if c.esConfig != nil {
 			esDataStoreName := "es-visibility"
@@ -538,6 +541,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	if err != nil {
 		c.logger.Fatal("Failed to copy persistence config for matching", tag.Error(err))
 	}
+	params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
 	matchingService, err := matching.NewService(params)
 	if err != nil {
@@ -580,6 +584,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	if err != nil {
 		c.logger.Fatal("Failed to copy persistence config for worker", tag.Error(err))
 	}
+	params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
 	params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
 		HostPort:     c.FrontendGRPCAddress(),

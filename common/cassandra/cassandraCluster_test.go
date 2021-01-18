@@ -30,9 +30,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -130,10 +132,13 @@ func TestNewCassandraCluster(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err := NewCassandraCluster(tc.cfg)
+			ctrl := gomock.NewController(t)
+			r := resolver.NewMockServiceResolver(ctrl)
+			_, err := NewCassandraCluster(tc.cfg, r)
 			if !errors.Is(err, tc.err) {
 				assert.Equal(t, tc.err, err)
 			}
+			ctrl.Finish()
 		})
 	}
 }

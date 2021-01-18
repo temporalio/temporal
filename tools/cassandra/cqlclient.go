@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -34,6 +35,7 @@ import (
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/cassandra"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/tools/common/schema"
 )
@@ -42,6 +44,7 @@ type (
 	cqlClient struct {
 		nReplicas     int
 		datacenter    string
+		timeout       time.Duration
 		session       *gocql.Session
 		clusterConfig *gocql.ClusterConfig
 	}
@@ -63,10 +66,9 @@ var errNoHosts = errors.New("Cassandra Hosts list is empty or malformed")
 var errGetSchemaVersion = errors.New("Failed to get current schema version from cassandra")
 
 const (
-	defaultTimeout     = 30    // Timeout in seconds
-	cqlProtoVersion    = 4     // default CQL protocol version
-	defaultConsistency = "ALL" // schema updates must always be ALL
-	systemKeyspace     = "system"
+	defaultTimeout  = 30 // Timeout in seconds
+	cqlProtoVersion = 4  // default CQL protocol version
+	systemKeyspace  = "system"
 )
 
 const (
@@ -102,7 +104,7 @@ var _ schema.DB = (*cqlClient)(nil)
 
 // NewCassandraCluster return gocql clusterConfig
 func NewCassandraCluster(cfg *config.Cassandra, timeoutSeconds int) (*gocql.ClusterConfig, error) {
-	clusterCfg, err := cassandra.NewCassandraCluster(*cfg)
+	clusterCfg, err := cassandra.NewCassandraCluster(*cfg, resolver.NewNoopResolver())
 	if err != nil {
 		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
 	}
@@ -114,7 +116,8 @@ func NewCassandraCluster(cfg *config.Cassandra, timeoutSeconds int) (*gocql.Clus
 	timeout := time.Duration(timeoutSeconds) * time.Second
 	clusterCfg.Timeout = timeout
 	clusterCfg.ProtoVersion = cqlProtoVersion
-	clusterCfg.Consistency = gocql.ParseConsistency(defaultConsistency)
+	clusterCfg.Consistency = cfg.Consistency.GetConsistency()
+	clusterCfg.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	return clusterCfg, nil
 }
 
@@ -130,6 +133,7 @@ func newCQLClient(cfg *CQLClientConfig) (*cqlClient, error) {
 	cqlClient := new(cqlClient)
 	cqlClient.nReplicas = cfg.numReplicas
 	cqlClient.datacenter = cfg.Datacenter
+	cqlClient.timeout = time.Duration(cfg.Timeout) * time.Second
 	cqlClient.clusterConfig = clusterCfg
 	cqlClient.session, err = clusterCfg.CreateSession()
 	if err != nil {
@@ -171,7 +175,7 @@ func (client *cqlClient) createKeyspace(name string) error {
 
 // dropKeyspace drops a Keyspace
 func (client *cqlClient) dropKeyspace(name string) error {
-	return client.Exec(fmt.Sprintf("DROP KEYSPACE %v", name))
+	return client.Exec(fmt.Sprintf("DROP KEYSPACE IF EXISTS %v", name))
 }
 
 func (client *cqlClient) DropAllTables() error {
@@ -221,7 +225,10 @@ func (client *cqlClient) WriteSchemaUpdateLog(oldVersion string, newVersion stri
 
 // Exec executes a cql statement
 func (client *cqlClient) Exec(stmt string, args ...interface{}) error {
-	return client.session.Query(stmt, args...).Exec()
+	if err := client.session.Query(stmt, args...).Exec(); err != nil {
+		return err
+	}
+	return client.waitSchemaAgreement()
 }
 
 // Close closes the cql client
@@ -307,4 +314,11 @@ func (client *cqlClient) dropAllTablesTypes() error {
 		return err
 	}
 	return nil
+}
+
+// waitSchemaAgreement wait for schema change agreements
+func (client *cqlClient) waitSchemaAgreement() error {
+	ctx, cancel := context.WithTimeout(context.Background(), client.timeout)
+	defer cancel()
+	return client.session.AwaitSchemaAgreement(ctx)
 }

@@ -34,6 +34,9 @@ import (
 func NewEmptyTLSConfig() *tls.Config {
 	return &tls.Config{
 		MinVersion: tls.VersionTLS12,
+		NextProtos: []string{
+			"h2",
+		},
 	}
 }
 

@@ -25,6 +25,7 @@
 package sql
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/urfave/cli"
@@ -191,6 +192,36 @@ func BuildCLIOptions() *cli.App {
 			},
 			Action: func(c *cli.Context) {
 				cliHandler(c, createDatabase)
+			},
+		},
+		{
+			Name:    "drop-database",
+			Aliases: []string{"drop"},
+			Usage:   "drops a database",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  schema.CLIFlagDatabase,
+					Usage: "name of the database",
+				},
+				cli.BoolFlag{
+					Name:  schema.CLIFlagForce,
+					Usage: "don't prompt for confirmation",
+				},
+			},
+			Action: func(c *cli.Context) {
+				drop := c.Bool(schema.CLIOptForce)
+				if !drop {
+					database := c.String(schema.CLIOptDatabase)
+					fmt.Printf("Are you sure you want to drop database %q (y/N)? ", database)
+					y := ""
+					_, _ = fmt.Scanln(&y)
+					if y == "y" || y == "Y" {
+						drop = true
+					}
+				}
+				if drop {
+					cliHandler(c, dropDatabase)
+				}
 			},
 		},
 	}

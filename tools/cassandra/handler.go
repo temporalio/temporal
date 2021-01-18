@@ -150,7 +150,10 @@ func updateSchema(cli *cli.Context) error {
 		if err := doCreateKeyspace(cfg, cfg.Keyspace); err != nil {
 			return handleErr(fmt.Errorf("error creating dryrun Keyspace: %v", err))
 		}
-		defer doDropKeyspace(cfg, cfg.Keyspace)
+		defer func() {
+			err := doDropKeyspace(cfg, cfg.Keyspace)
+			logErr(err)
+		}()
 	}
 	client, err := newCQLClient(config)
 	if err != nil {
@@ -174,7 +177,23 @@ func createKeyspace(cli *cli.Context) error {
 	}
 	err = doCreateKeyspace(*config, keyspace)
 	if err != nil {
-		return handleErr(fmt.Errorf("error creating Keyspace:%+v", err))
+		return handleErr(fmt.Errorf("error creating keyspace:%+v", err))
+	}
+	return nil
+}
+
+func dropKeyspace(cli *cli.Context) error {
+	config, err := newCQLClientConfig(cli)
+	if err != nil {
+		return handleErr(schema.NewConfigError(err.Error()))
+	}
+	keyspace := cli.String(schema.CLIOptKeyspace)
+	if keyspace == "" {
+		return handleErr(schema.NewConfigError("missing " + flag(schema.CLIOptKeyspace) + " argument "))
+	}
+	err = doDropKeyspace(*config, keyspace)
+	if err != nil {
+		return handleErr(fmt.Errorf("error dropping keyspace:%+v", err))
 	}
 	return nil
 }
@@ -206,18 +225,18 @@ func doCreateKeyspace(cfg CQLClientConfig, name string) error {
 	return client.createKeyspace(name)
 }
 
-func doDropKeyspace(cfg CQLClientConfig, name string) {
+func doDropKeyspace(cfg CQLClientConfig, name string) error {
 	cfg.Keyspace = systemKeyspace
 	client, err := newCQLClient(&cfg)
 	if err != nil {
-		logErr(fmt.Errorf("error creating client: %v", err))
-		return
+		return err
 	}
 	err = client.dropKeyspace(name)
 	if err != nil {
-		logErr(fmt.Errorf("error dropping keyspace %v: %v", name, err))
+		return err
 	}
 	client.Close()
+	return nil
 }
 
 func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {

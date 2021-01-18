@@ -2,27 +2,23 @@
 # Install all tools and builds binaries.
 install: update-tools bins
 
-# Rebuild binaries.
+# Rebuild binaries (used by Dockerfile).
 bins: clean-bins temporal-server tctl temporal-cassandra-tool temporal-sql-tool
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
 all: update-tools clean proto bins check test
 
+# Used by Buildkite.
+ci-build: bins update-tools check proto mocks gomodtidy ensure-no-changes
+
 # Delete all build artefacts.
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto install-proto-submodule buf-lint api-linter protoc fix-proto-path proto-mock goimports-proto copyright-proto
+proto: clean-proto install-proto-submodule buf-lint api-linter protoc fix-proto-path goimports-proto proto-mocks copyright-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-proto-path update-go-api proto-mock goimports-proto copyright-proto gomodtidy
-
-# Build all docker images.
-docker-images:
-	docker build --build-arg "TARGET=server" -t temporalio/server:$(DOCKER_IMAGE_TAG) .
-	docker build --build-arg "TARGET=tctl" -t temporalio/tctl:$(DOCKER_IMAGE_TAG) .
-	docker build --build-arg "TARGET=auto-setup" -t temporalio/auto-setup:$(DOCKER_IMAGE_TAG) .
-	docker build --build-arg "TARGET=admin-tools" -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) .
+update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-proto-path update-go-api goimports-proto proto-mocks copyright-proto gomodtidy
 ########################################################################
 
 .PHONY: proto
@@ -44,8 +40,8 @@ GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)
 SHELL := PATH=$(GOBIN):$(PATH) /bin/sh
 
 MODULE_ROOT := go.temporal.io/server
-BUILD := ./build
 COLOR := "\e[1;36m%s\e[0m\n"
+RED :=   "\e[1;31m%s\e[0m\n"
 
 define NEWLINE
 
@@ -53,19 +49,10 @@ define NEWLINE
 endef
 
 TEST_TIMEOUT := 20m
-TEST_ARG ?= -race -v -timeout $(TEST_TIMEOUT)
 
 INTEG_TEST_ROOT        := ./host
-INTEG_TEST_OUT_DIR     := host
 INTEG_TEST_XDC_ROOT    := ./host/xdc
-INTEG_TEST_XDC_OUT_DIR := hostxdc
 INTEG_TEST_NDC_ROOT    := ./host/ndc
-INTEG_TEST_NDC_OUT_DIR := hostndc
-
-GO_BUILD_LDFLAGS_CMD      := $(abspath ./scripts/go-build-ldflags.sh)
-GO_BUILD_LDFLAGS          := $(shell $(GO_BUILD_LDFLAGS_CMD) LDFLAG)
-
-DOCKER_IMAGE_TAG := $(shell whoami | tr -d " ")-local
 
 ifndef PERSISTENCE_TYPE
 override PERSISTENCE_TYPE := nosql
@@ -73,10 +60,6 @@ endif
 
 ifndef PERSISTENCE_DRIVER
 override PERSISTENCE_DRIVER := cassandra
-endif
-
-ifndef TEST_RUN_COUNT
-override TEST_RUN_COUNT := 1
 endif
 
 ifdef TEST_TAG
@@ -95,24 +78,12 @@ INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_D
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
 
 # Code coverage output files.
-COVER_ROOT                 := $(BUILD)/coverage
-UNIT_COVER_FILE            := $(COVER_ROOT)/unit_cover.out
-INTEG_COVER_FILE           := $(COVER_ROOT)/integ_$(PERSISTENCE_TYPE)_$(PERSISTENCE_DRIVER)_cover.out
-INTEG_XDC_COVER_FILE       := $(COVER_ROOT)/integ_xdc_$(PERSISTENCE_TYPE)_$(PERSISTENCE_DRIVER)_cover.out
-INTEG_NDC_COVER_FILE       := $(COVER_ROOT)/integ_ndc_$(PERSISTENCE_TYPE)_$(PERSISTENCE_DRIVER)_cover.out
-
-# NoSQL Cassandra
-INTEG_NOSQL_CASS_COVER_FILE         := $(COVER_ROOT)/integ_nosql_cassandra_cover.out
-INTEG_XDC_NOSQL_CASS_COVER_FILE     := $(COVER_ROOT)/integ_xdc_nosql_cassandra_cover.out
-INTEG_NDC_NOSQL_CASS_COVER_FILE     := $(COVER_ROOT)/integ_ndc_nosql_cassandra_cover.out
-# SQL MySQL
-INTEG_SQL_MYSQL_COVER_FILE          := $(COVER_ROOT)/integ_sql_mysql_cover.out
-INTEG_XDC_SQL_MYSQL_COVER_FILE      := $(COVER_ROOT)/integ_xdc_sql_mysql_cover.out
-INTEG_NDC_SQL_MYSQL_COVER_FILE      := $(COVER_ROOT)/integ_ndc_sql_mysql_cover.out
-# SQL PostgreSQL
-INTEG_SQL_POSTGRESQL_COVER_FILE     := $(COVER_ROOT)/integ_sql_postgres_cover.out
-INTEG_XDC_SQL_POSTGRESQL_COVER_FILE := $(COVER_ROOT)/integ_xdc_sql_postgres_cover.out
-INTEG_NDC_SQL_POSTGRESQL_COVER_FILE := $(COVER_ROOT)/integ_ndc_sql_postgres_cover.out
+COVER_ROOT                 := ./.coverage
+UNIT_COVER_PROFILE         := $(COVER_ROOT)/unit_coverprofile.out
+INTEG_COVER_PROFILE        := $(COVER_ROOT)/integ_$(PERSISTENCE_DRIVER)_coverprofile.out
+INTEG_XDC_COVER_PROFILE    := $(COVER_ROOT)/integ_xdc_$(PERSISTENCE_DRIVER)_coverprofile.out
+INTEG_NDC_COVER_PROFILE    := $(COVER_ROOT)/integ_ndc_$(PERSISTENCE_DRIVER)_coverprofile.out
+SUMMARY_COVER_PROFILE      := $(COVER_ROOT)/summary_coverprofile.out
 
 # Need the following option to have integration tests count towards coverage. godoc below:
 # -coverpkg pkg1,pkg2,pkg3
@@ -133,11 +104,11 @@ update-checkers:
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
-	cd && GO111MODULE=on go get github.com/golang/mock/mockgen@v1.4.4
+	cd && GO111MODULE=on go get github.com/golang/mock/mockgen@1fe605df5e5f07f453dc4f594cc3510c914dbdee
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
-	cd && GO111MODULE=on go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
+	GO111MODULE=off go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
 	cd && GO111MODULE=on go get google.golang.org/grpc@v1.34.0
 
 update-tools: update-checkers update-mockgen update-proto-plugins
@@ -174,7 +145,7 @@ PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -nam
 service_name = $(firstword $(subst /, ,$(1)))
 mock_file_name = $(call service_name,$(1))mock/$(subst $(call service_name,$(1))/,,$(1:go=mock.go))
 
-proto-mock: $(PROTO_OUT)
+proto-mocks: $(PROTO_OUT)
 	@printf $(COLOR) "Generate proto mocks..."
 	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),\
 		cd $(PROTO_OUT) && \
@@ -182,15 +153,15 @@ proto-mock: $(PROTO_OUT)
 	$(NEWLINE))
 
 update-go-api:
-	@printf $(COLOR) "Update go.temporal.io/api..."
+	@printf $(COLOR) "Update go.temporal.io/api@master..."
 	@go get -u go.temporal.io/api@master
 
 goimports-proto:
-	@printf $(COLOR) "Run goimports..."
+	@printf $(COLOR) "Run goimports for proto files..."
 	@goimports -w $(PROTO_OUT)
 
 copyright-proto:
-	@printf $(COLOR) "Update license headers..."
+	@printf $(COLOR) "Update license headers for proto files..."
 	@go run ./cmd/tools/copyright/licensegen.go --scanDir $(PROTO_OUT)
 
 ##### Binaries #####
@@ -203,7 +174,7 @@ clean-bins:
 
 temporal-server:
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
-	go build -ldflags '$(GO_BUILD_LDFLAGS)' -o temporal-server cmd/server/main.go
+	go build -ldflags "$(shell ./.development/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
 
 tctl:
 	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
@@ -218,9 +189,13 @@ temporal-sql-tool:
 	go build -o temporal-sql-tool cmd/tools/sql/main.go
 
 ##### Checks #####
-copyright:
+copyright-check:
 	@printf $(COLOR) "Check license header..."
-	@go run ./cmd/tools/copyright/licensegen.go --verifyOnly || true
+	@go run ./cmd/tools/copyright/licensegen.go --verifyOnly
+
+copyright:
+	@printf $(COLOR) "Fix license header..."
+	@go run ./cmd/tools/copyright/licensegen.go
 
 lint:
 	@printf $(COLOR) "Run linter..."
@@ -232,12 +207,11 @@ vet:
 
 goimports-check:
 	@printf $(COLOR) "Run goimports checks..."
-# Use $(ALL_SRC) here to avoid checking generated files.
-	@goimports -l $(ALL_SRC) || true
+	@GO_IMPORTS_OUTPUT=$$(goimports -l .); if [ -n "$${GO_IMPORTS_OUTPUT}" ]; then echo "$${GO_IMPORTS_OUTPUT}" && exit 1; fi
 
 goimports:
 	@printf $(COLOR) "Run goimports..."
-	@goimports -local "go.temporal.io" -w $(ALL_SRC)
+	@goimports -w .
 
 staticcheck:
 	@printf $(COLOR) "Run staticcheck..."
@@ -263,11 +237,12 @@ buf-breaking:
 	@printf $(COLOR) "Run buf breaking changes check against image.bin..."
 	@(cd $(PROTO_ROOT) && buf check breaking --against image.bin)
 
-check: copyright goimports-check lint vet staticcheck errcheck
+check: copyright-check goimports-check lint vet staticcheck errcheck
 
 ##### Tests #####
 clean-test-results:
 	@rm -f test.log
+	@go clean -testcache
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
@@ -288,136 +263,124 @@ integration-test: clean-test-results
 test: unit-test integration-test
 
 ##### Coverage #####
-clean-build-results:
-	@rm -rf $(BUILD)
-	@mkdir -p $(BUILD)
+$(COVER_ROOT):
 	@mkdir -p $(COVER_ROOT)
 
-cover_profile: clean-build-results
-	@printf $(COLOR) "Running unit tests..."
-	@echo "mode: atomic" > $(UNIT_COVER_FILE)
+unit-test-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run unit tests with coverage..."
+	@echo "mode: atomic" > $(UNIT_COVER_PROFILE)
 	$(foreach UNIT_TEST_DIR,$(patsubst ./%/,%,$(UNIT_TEST_DIRS)),\
-		mkdir -p $(BUILD)/$(UNIT_TEST_DIR); \
-		go test ./$(UNIT_TEST_DIR) $(TEST_ARG) -coverprofile=$(BUILD)/$(UNIT_TEST_DIR)/coverage.out || exit 1; \
-		grep -v "^mode: \w\+" $(BUILD)/$(UNIT_TEST_DIR)/coverage.out >> $(UNIT_COVER_FILE) || true \
+		@mkdir -p $(COVER_ROOT)/$(UNIT_TEST_DIR); \
+		go test ./$(UNIT_TEST_DIR) -timeout $(TEST_TIMEOUT) -race -coverprofile=$(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out || exit 1; \
+		grep -v -e "^mode: \w\+" $(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out >> $(UNIT_COVER_PROFILE) || true \
 	$(NEWLINE))
 
-cover_integration_profile: clean-build-results
-	@printf $(COLOR) "Running integration test with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)..."
-	@echo "mode: atomic" > $(INTEG_COVER_FILE)
-	@mkdir -p $(BUILD)/$(INTEG_TEST_OUT_DIR)
-	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out || exit 1;
-	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out >> $(INTEG_COVER_FILE) || true
+integration-test-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run integration tests with coverage with $(PERSISTENCE_DRIVER) driver..."
+	@go test $(INTEG_TEST_ROOT) -timeout $(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_COVER_PROFILE)
 
-cover_xdc_profile: clean-build-results
-	@printf $(COLOR) "Running integration test for cross dc with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)..."
-	@echo "mode: atomic" > $(INTEG_XDC_COVER_FILE)
-	@mkdir -p $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)
-	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out || exit 1;
-	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE) || true
+integration-test-xdc-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run integration test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
+	@go test $(INTEG_TEST_XDC_ROOT) -timeout $(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_XDC_COVER_PROFILE)
 
-cover_ndc_profile: clean-build-results
-	@printf $(COLOR) "Running integration test for N DC with $(PERSISTENCE_TYPE) $(PERSISTENCE_DRIVER)..."
-	@echo "mode: atomic" > $(INTEG_NDC_COVER_FILE)
-	@mkdir -p $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)
-	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_NDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out -count=$(TEST_RUN_COUNT) || exit 1;
-	@grep -v "^mode: \w\+" $(BUILD)/$(INTEG_TEST_NDC_OUT_DIR)/coverage.out | grep -v "mode: set" >> $(INTEG_NDC_COVER_FILE) || true
+integration-test-ndc-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run integration test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
+	@go test $(INTEG_TEST_NDC_ROOT) -timeout $(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_NDC_COVER_PROFILE)
 
-$(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_NOSQL_CASS_COVER_FILE) $(INTEG_XDC_NOSQL_CASS_COVER_FILE) $(INTEG_NDC_NOSQL_CASS_COVER_FILE) $(INTEG_SQL_MYSQL_COVER_FILE) $(INTEG_XDC_SQL_MYSQL_COVER_FILE) $(INTEG_NDC_SQL_MYSQL_COVER_FILE) $(INTEG_SQL_POSTGRESQL_COVER_FILE) $(INTEG_XDC_SQL_POSTGRESQL_COVER_FILE) $(INTEG_NDC_SQL_POSTGRESQL_COVER_FILE)
-	@echo "mode: atomic" > $(COVER_ROOT)/cover.out
-	cat $(UNIT_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	# NoSQL Cassandra
-	cat $(INTEG_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	cat $(INTEG_XDC_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	cat $(INTEG_NDC_NOSQL_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	# SQL MySQL
-	cat $(INTEG_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	cat $(INTEG_XDC_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	cat $(INTEG_NDC_SQL_MYSQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	# SQL PostgreSQL
-	cat $(INTEG_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	cat $(INTEG_XDC_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
-	cat $(INTEG_NDC_SQL_POSTGRESQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out || true
+$(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
+	@printf $(COLOR) "Combine coverage reports to $(SUMMARY_COVER_PROFILE)..."
+	@rm -f $(SUMMARY_COVER_PROFILE)
+	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
+	$(foreach COVER_PROFILE,$(wildcard $(COVER_ROOT)/*_coverprofile.out),\
+		@printf "Add %s...\n" $(COVER_PROFILE); \
+		cat $(COVER_PROFILE) | grep -v -e "^mode: \w\+" | grep -v -E "[Mm]ocks?" >> $(SUMMARY_COVER_PROFILE) \
+	$(NEWLINE))
 
-cover: $(COVER_ROOT)/cover.out
-	go tool cover -html=$(COVER_ROOT)/cover.out;
+coverage-report: $(SUMMARY_COVER_PROFILE)
+	@printf $(COLOR) "Generate HTML report from $(SUMMARY_COVER_PROFILE) to $(SUMMARY_COVER_PROFILE).html..."
+	@go tool cover -html=$(SUMMARY_COVER_PROFILE) -o $(SUMMARY_COVER_PROFILE).html
 
-cover_ci: $(COVER_ROOT)/cover.out
-	goveralls -coverprofile=$(COVER_ROOT)/cover.out -service=buildkite || echo Coveralls failed;
+ci-coverage-report: $(SUMMARY_COVER_PROFILE) coverage-report
+	@printf $(COLOR) "Generate Coveralls report from $(SUMMARY_COVER_PROFILE)..."
+	cd && GO111MODULE=on go get github.com/mattn/goveralls@v0.0.7
+	@goveralls -coverprofile=$(SUMMARY_COVER_PROFILE) -service=buildkite || (printf $(RED) "Generating report for Coveralls (goveralls) failed."; exit 1)
 
 ##### Schema #####
 install-schema: temporal-cassandra-tool
 	@printf $(COLOR) "Install Cassandra schema..."
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal update-schema -d ./schema/cassandra/temporal/versioned
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_visibility --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility update-schema -d ./schema/cassandra/visibility/versioned
-
-install-schema-mysql-pre5720: temporal-sql-tool
-	@printf $(COLOR) "Install MySQL schema..."
-	./temporal-sql-tool --ep 127.0.0.1 --ca tx_isolation='READ-COMMITTED' create --db temporal
-	./temporal-sql-tool --ep 127.0.0.1 --ca tx_isolation='READ-COMMITTED' --db temporal setup-schema -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 --ca tx_isolation='READ-COMMITTED' --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned
-	./temporal-sql-tool --ep 127.0.0.1 --ca tx_isolation='READ-COMMITTED' create --db temporal_visibility
-	./temporal-sql-tool --ep 127.0.0.1 --ca tx_isolation='READ-COMMITTED' --db temporal_visibility setup-schema -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 --ca tx_isolation='READ-COMMITTED' --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
+	./temporal-cassandra-tool drop -k temporal -f
+	./temporal-cassandra-tool create -k temporal --rf 1
+	./temporal-cassandra-tool -k temporal setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k temporal_visibility -f
+	./temporal-cassandra-tool create -k temporal_visibility --rf 1
+	./temporal-cassandra-tool -k temporal_visibility setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_visibility update-schema -d ./schema/cassandra/visibility/versioned
 
 install-schema-mysql: temporal-sql-tool
 	@printf $(COLOR) "Install MySQL schema..."
-	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root create --db temporal
-	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal setup-schema -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned
-	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root create --db temporal_visibility
-	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal_visibility setup-schema -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
+	./temporal-sql-tool -u temporal --pw temporal drop --db temporal -f
+	./temporal-sql-tool -u temporal --pw temporal create --db temporal
+	./temporal-sql-tool -u temporal --pw temporal --db temporal setup-schema -v 0.0
+	./temporal-sql-tool -u temporal --pw temporal --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned
+	./temporal-sql-tool -u temporal --pw temporal drop --db temporal_visibility -f
+	./temporal-sql-tool -u temporal --pw temporal create --db temporal_visibility
+	./temporal-sql-tool -u temporal --pw temporal --db temporal_visibility setup-schema -v 0.0
+	./temporal-sql-tool -u temporal --pw temporal --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
 
 install-schema-postgresql: temporal-sql-tool
 	@printf $(COLOR) "Install Postgres schema..."
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres create --db temporal
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal setup -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal update-schema -d ./schema/postgresql/v96/temporal/versioned
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres create --db temporal_visibility
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal_visibility setup-schema -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal_visibility update-schema -d ./schema/postgresql/v96/visibility/versioned
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres drop --db temporal -f
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres create --db temporal
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db temporal setup -v 0.0
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db temporal update-schema -d ./schema/postgresql/v96/temporal/versioned
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres drop --db temporal_visibility -f
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres create --db temporal_visibility
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db temporal_visibility setup-schema -v 0.0
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db temporal_visibility update-schema -d ./schema/postgresql/v96/visibility/versioned
 
 install-schema-es:
 	@printf $(COLOR) "Install Elasticsearch schema..."
-	curl -X PUT "http://127.0.0.1:9200/_template/temporal-visibility-template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/index_template.json
+	curl -X PUT "http://127.0.0.1:9200/_template/temporal-visibility-template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/v7/visibility/index_template.json
 	curl -X PUT "http://127.0.0.1:9200/temporal-visibility-dev"
 
 install-schema-cdc: temporal-cassandra-tool
 	@printf $(COLOR)  "Set up temporal_active key space..."
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_active --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_active setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_active update-schema -d ./schema/cassandra/temporal/versioned
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_visibility_active --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_active setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_active update-schema -d ./schema/cassandra/visibility/versioned
+	./temporal-cassandra-tool drop -k temporal_active -f
+	./temporal-cassandra-tool create -k temporal_active --rf 1
+	./temporal-cassandra-tool -k temporal_active setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_active update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k temporal_visibility_active -f
+	./temporal-cassandra-tool create -k temporal_visibility_active --rf 1
+	./temporal-cassandra-tool -k temporal_visibility_active setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_visibility_active update-schema -d ./schema/cassandra/visibility/versioned
 
 	@printf $(COLOR) "Set up temporal_standby key space..."
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_standby --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_standby setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_standby update-schema -d ./schema/cassandra/temporal/versioned
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_visibility_standby --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_standby setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_standby update-schema -d ./schema/cassandra/visibility/versioned
+	./temporal-cassandra-tool drop -k temporal_standby -f
+	./temporal-cassandra-tool create -k temporal_standby --rf 1
+	./temporal-cassandra-tool -k temporal_standby setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_standby update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k temporal_visibility_standby -f
+	./temporal-cassandra-tool create -k temporal_visibility_standby --rf 1
+	./temporal-cassandra-tool -k temporal_visibility_standby setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_visibility_standby update-schema -d ./schema/cassandra/visibility/versioned
 
 	@printf $(COLOR) "Set up temporal_other key space..."
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_other --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_other setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_other update-schema -d ./schema/cassandra/temporal/versioned
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_visibility_other --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_other setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_other update-schema -d ./schema/cassandra/visibility/versioned
+	./temporal-cassandra-tool drop -k temporal_other -f
+	./temporal-cassandra-tool create -k temporal_other --rf 1
+	./temporal-cassandra-tool -k temporal_other setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_other update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k temporal_visibility_other -f
+	./temporal-cassandra-tool create -k temporal_visibility_other --rf 1
+	./temporal-cassandra-tool -k temporal_visibility_other setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_visibility_other update-schema -d ./schema/cassandra/visibility/versioned
 
 ##### Run server #####
 start-dependencies:
-	docker-compose -f docker/dependencies/docker-compose.yml -f docker/dependencies/docker-compose.$(GOOS).yml up
+	docker-compose -f ./.development/docker-compose/docker-compose.yml -f ./.development/docker-compose/docker-compose.$(GOOS).yml up
 
 stop-dependencies:
-	docker-compose -f docker/dependencies/docker-compose.yml -f docker/dependencies/docker-compose.$(GOOS).yml down
+	docker-compose -f ./.development/docker-compose/docker-compose.yml -f ./.development/docker-compose/docker-compose.$(GOOS).yml down
 
 start: temporal-server
 	./temporal-server start
@@ -434,12 +397,22 @@ start-cdc-standby: temporal-server
 start-cdc-other: temporal-server
 	./temporal-server --zone other start
 
-##### Auxilary #####
-go-generate:
-	@printf $(COLOR) "Regenerate everything..."
-	@go generate ./...
-	@goimports -w $(ALL_SRC)
+##### Mocks #####
+AWS_SDK_VERSION := $(lastword $(shell grep "github.com/aws/aws-sdk-go" go.mod))
+external-mocks:
+	@printf $(COLOR) "Generate external libraries mocks..."
+	@mockgen -copyright_file LICENSE -package mocks -source $(GOPATH)/pkg/mod/github.com/aws/aws-sdk-go@$(AWS_SDK_VERSION)/service/s3/s3iface/interface.go | grep -v -e "^// Source: .*" > common/archiver/s3store/mocks/S3API.go
 
+go-generate:
+	@printf $(COLOR) "Process go:generate directives..."
+	@go generate ./...
+
+mocks: go-generate external-mocks
+
+##### Auxilary #####
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
+
+ensure-no-changes:
+	@git diff --name-status --exit-code || (printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; exit 1)

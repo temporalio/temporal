@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -296,6 +297,7 @@ func initializeMetadataMgr(
 	}
 	pFactory := client.NewFactory(
 		&pConfig,
+		resolver.NewNoopResolver(),
 		dynamicconfig.GetIntPropertyFn(dependencyMaxQPS),
 		nil, // TODO propagate abstract datastore factory from the CLI.
 		clusterMetadata.GetCurrentClusterName(),

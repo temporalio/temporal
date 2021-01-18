@@ -1,0 +1,14 @@
+# Overrides for Linux users.
+version: "3.5"
+
+services:
+  prometheus:
+    network_mode: host
+    volumes:
+      - ./prometheus-linux:/etc/prometheus
+  grafana:
+    network_mode: host
+  temporal-web:
+    environment:
+      - "TEMPORAL_GRPC_ENDPOINT=localhost:7233"
+    network_mode: host

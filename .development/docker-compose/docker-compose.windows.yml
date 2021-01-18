@@ -1,0 +1,23 @@
+# Overrides for Windows users.
+version: "3.5"
+
+services:
+  prometheus:
+    volumes:
+      - ./prometheus-darwin:/etc/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - temporal-dev-network
+  grafana:
+    ports:
+      - "3000:3000"
+    networks:
+      - temporal-dev-network
+  temporal-web:
+    environment:
+      - "TEMPORAL_GRPC_ENDPOINT=host.docker.internal:7233"
+    ports:
+      - "8088:8088"
+    networks:
+      - temporal-dev-network

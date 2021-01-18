@@ -195,6 +195,11 @@ func NewCliApp() *cli.App {
 					Usage:       "Run admin operations on database",
 					Subcommands: newDBCommands(),
 				},
+				{
+					Name:        "decode",
+					Usage:       "Decode payload",
+					Subcommands: newDecodeCommands(),
+				},
 			},
 		},
 		{

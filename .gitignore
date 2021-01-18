@@ -4,6 +4,7 @@
 .vscode/settings.json
 *.code-workspace
 .DS_Store
+.coverage
 
 *.out
 *.test

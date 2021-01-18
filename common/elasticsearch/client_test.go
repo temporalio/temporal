@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,7 +49,19 @@ func Test_BuildPutMappingBody(t *testing.T) {
 	k := "testKey"
 	v := "text"
 
+	var client clientV6
 	for _, test := range tests {
-		require.Equal(t, test.expected, fmt.Sprintf("%v", buildPutMappingBody(test.root, k, v)))
+		require.Equal(t, test.expected, fmt.Sprintf("%v", client.buildPutMappingBody(test.root, k, v)))
 	}
+}
+func Test_ConvertV7Sorters(t *testing.T) {
+	sortersV7 := make([]elastic.Sorter, 2)
+	sortersV7[0] = elastic.NewFieldSort("test")
+	sortersV7[1] = elastic.NewFieldSort("test2")
+
+	sortersV6 := convertV7SortersToV6(sortersV7)
+	require.NotNil(t, sortersV6[0])
+	source0, err0 := sortersV6[0].Source()
+	require.NoError(t, err0)
+	require.NotNil(t, source0)
 }

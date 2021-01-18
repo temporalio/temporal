@@ -31,7 +31,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/olivere/elastic"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -200,26 +199,26 @@ func (p *indexProcessor) addMessageToES(indexMsg *indexerspb.Message, kafkaMsg m
 	docID := indexMsg.GetWorkflowId() + esDocIDDelimiter + indexMsg.GetRunId()
 
 	var keyToKafkaMsg string
-	var req elastic.BulkableRequest
+	var req *es.BulkableRequest
 	switch indexMsg.GetMessageType() {
 	case enumsspb.MESSAGE_TYPE_INDEX:
 		keyToKafkaMsg = fmt.Sprintf("%v-%v", kafkaMsg.Partition(), kafkaMsg.Offset())
 		doc := p.generateESDoc(indexMsg, keyToKafkaMsg)
-		req = elastic.NewBulkIndexRequest().
-			Index(p.esIndexName).
-			Type(esDocType).
-			Id(docID).
-			VersionType(versionTypeExternal).
-			Version(indexMsg.GetVersion()).
-			Doc(doc)
+		req = &es.BulkableRequest{
+			Index:       p.esIndexName,
+			ID:          docID,
+			Version:     indexMsg.GetVersion(),
+			RequestType: es.BulkableRequestTypeIndex,
+			Doc:         doc,
+		}
 	case enumsspb.MESSAGE_TYPE_DELETE:
 		keyToKafkaMsg = docID
-		req = elastic.NewBulkDeleteRequest().
-			Index(p.esIndexName).
-			Type(esDocType).
-			Id(docID).
-			VersionType(versionTypeExternal).
-			Version(indexMsg.GetVersion())
+		req = &es.BulkableRequest{
+			Index:       p.esIndexName,
+			ID:          docID,
+			Version:     indexMsg.GetVersion(),
+			RequestType: es.BulkableRequestTypeDelete,
+		}
 	default:
 		logger.Error("Unknown message type")
 		p.metricsClient.IncCounter(metrics.IndexProcessorScope, metrics.IndexProcessorCorruptedData)

@@ -29,17 +29,27 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 )
 
 type StoreTestSuite struct {
 	suite.Suite
+	controller *gomock.Controller
 }
 
 func TestStoreTestSuite(t *testing.T) {
-	suite.Run(t, new(StoreTestSuite))
+	ts := &StoreTestSuite{
+		controller: gomock.NewController(t),
+	}
+	suite.Run(t, ts)
+}
+
+func (s *StoreTestSuite) TearDownSuite() {
+	s.controller.Finish()
 }
 
 func (s *StoreTestSuite) TestBuildDSN() {
@@ -116,7 +126,10 @@ func (s *StoreTestSuite) TestBuildDSN() {
 	}
 
 	for _, tc := range testCases {
-		out := buildDSN(&tc.in)
+		r := resolver.NewMockServiceResolver(s.controller)
+		r.EXPECT().Resolve(tc.in.ConnectAddr).Return([]string{tc.in.ConnectAddr}).Times(1)
+
+		out := buildDSN(&tc.in, r)
 		s.True(strings.HasPrefix(out, tc.outURLPath), "invalid url path")
 		tokens := strings.Split(out, "?")
 		s.Equal(2, len(tokens), "invalid url")

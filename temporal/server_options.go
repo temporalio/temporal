@@ -26,23 +26,26 @@ package temporal
 
 import (
 	"fmt"
+
 	"github.com/uber-go/tally"
 
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/service/config"
 )
 
 type (
 	serverOptions struct {
-		config            		*config.Config
-		authorizer        		authorization.Authorizer
-		tlsConfigProvider 		encryption.TLSConfigProvider
-		claimMapper       		authorization.ClaimMapper
-		metricsReporter 		tally.BaseStatsReporter
-		configDir         		string
-		env               		string
-		zone              		string
+		config                     *config.Config
+		authorizer                 authorization.Authorizer
+		tlsConfigProvider          encryption.TLSConfigProvider
+		claimMapper                authorization.ClaimMapper
+		metricsReporter            tally.BaseStatsReporter
+		persistenceServiceResolver resolver.ServiceResolver
+		configDir                  string
+		env                        string
+		zone                       string
 
 		serviceNames []string
 

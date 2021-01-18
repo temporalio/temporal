@@ -1,0 +1,12 @@
+# https://dev.to/ablx/minimal-prometheus-setup-with-docker-compose-56mp
+global:
+  scrape_interval: 5s
+  scrape_timeout: 5s
+
+scrape_configs:
+  - job_name: services
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          # port should match value from server config listenAddress.
+          - localhost:8000

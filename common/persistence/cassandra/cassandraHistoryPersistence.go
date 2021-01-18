@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -67,10 +66,6 @@ const (
 type (
 	cassandraHistoryV2Persistence struct {
 		cassandraStore
-
-		// TODO DEBUG
-		isDebug bool
-		// TODO DEBUG
 	}
 )
 
@@ -93,9 +88,6 @@ func newHistoryPersistence(
 			session: session,
 			logger:  logger,
 		},
-		// TODO DEBUG
-		isDebug: common.IsDebugMode(),
-		// TODO DEBUG
 	}, nil
 }
 
@@ -114,60 +106,33 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 		}
 	}
 
-	var err error
-	if request.IsNewBranch {
-		h.sortAncestors(branchInfo.Ancestors)
-		treeInfoDataBlob, err := serialization.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
-			BranchInfo: branchInfo,
-			ForkTime:   timestamp.TimeNowPtrUtc(),
-			Info:       request.Info,
-		})
-
-		if err != nil {
-			return convertCommonErrors("AppendHistoryNodes", err)
-		}
-
-		batch := h.session.NewBatch(gocql.LoggedBatch)
-		batch.Query(v2templateInsertTree,
-			branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.EncodingType.String())
-		batch.Query(v2templateUpsertData,
-			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
-		err = h.session.ExecuteBatch(batch)
-
-		// TODO DEBUG
-		if err == nil && h.isDebug {
-			var readResp *p.InternalReadHistoryBranchResponse
-			var readErr error
-		readLoop:
-			for i := 0; i < 10; i++ {
-				readResp, readErr = h.ReadHistoryBranch(&p.InternalReadHistoryBranchRequest{
-					TreeID:    branchInfo.TreeId,
-					BranchID:  branchInfo.BranchId,
-					MinNodeID: common.FirstEventID,
-					MaxNodeID: common.FirstEventID + 1,
-					PageSize:  1,
-				})
-				if readErr == nil {
-					break readLoop
-				}
-			}
-			if readErr != nil {
-				h.logger.Info(fmt.Sprintf("####### BATCH QUERY: %v, cannot be verified: %v", prettyPrint(batch.Entries), readErr))
-				return convertCommonErrors("AppendHistoryNodes", readErr)
-			}
-			if len(readResp.History) == 0 {
-				h.logger.Info(fmt.Sprintf("####### BATCH QUERY: %v", prettyPrint(batch.Entries)))
-			}
-		}
-		// TODO DEBUG
-
-	} else {
+	if !request.IsNewBranch {
 		query := h.session.Query(v2templateUpsertData,
 			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
-		err = query.Exec()
+		if err := query.Exec(); err != nil {
+			return convertCommonErrors("AppendHistoryNodes", err)
+		}
+		return nil
 	}
 
+	// request.IsNewBranch == true
+
+	h.sortAncestors(branchInfo.Ancestors)
+	treeInfoDataBlob, err := serialization.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
+		BranchInfo: branchInfo,
+		ForkTime:   timestamp.TimeNowPtrUtc(),
+		Info:       request.Info,
+	})
 	if err != nil {
+		return convertCommonErrors("AppendHistoryNodes", err)
+	}
+
+	batch := h.session.NewBatch(gocql.LoggedBatch)
+	batch.Query(v2templateInsertTree,
+		branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.EncodingType.String())
+	batch.Query(v2templateUpsertData,
+		branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
+	if err = h.session.ExecuteBatch(batch); err != nil {
 		return convertCommonErrors("AppendHistoryNodes", err)
 	}
 	return nil

@@ -34,29 +34,7 @@ import (
 
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-)
-
-var (
-	// GitRevision is the VCS revision associated with this build. Overridden using ldflags
-	// at compile time. Example:
-	// $ go build -ldflags "-X go.temporal.io/server/common/metrics.GitRevision=abcdef" ...
-	// Adapted from: https://www.atatus.com/blog/golang-auto-build-versioning/
-	GitRevision = "unknown"
-
-	// GitBranch is the git branch associated with this build.
-	GitBranch = "unknown"
-
-	// GitVersion is the git version (tag) associated with this build.
-	GitVersion = "unknown"
-
-	// BuildDate is the date this build was created.
-	BuildDate = "unknown"
-
-	// BuildTimeUnix is the seconds since epoch representing the date this build was created.
-	BuildTimeUnix = "0"
-
-	// goVersion is the current runtime version.
-	goVersion = runtime.Version()
+	"go.temporal.io/server/ldflags"
 )
 
 const (
@@ -104,15 +82,16 @@ func NewRuntimeMetricsReporter(
 	}
 	rReporter.buildInfoScope = scope.Tagged(
 		map[string]string{
-			gitRevisionTag:  GitRevision,
-			gitBranchTag:    GitBranch,
-			buildDateTag:    BuildDate,
-			buildVersionTag: headers.ServerVersion,
-			gitVersionTag:   GitVersion,
-			goVersionTag:    goVersion,
+			gitRevisionTag:   ldflags.GitRevision,
+			gitBranchTag:     ldflags.GitBranch,
+			gitTagTag:        ldflags.GitTag,
+			buildDateTag:     ldflags.BuildDate,
+			buildPlatformTag: ldflags.BuildPlatform,
+			goVersionTag:     ldflags.GoVersion,
+			buildVersionTag:  headers.ServerVersion,
 		},
 	)
-	sec, err := strconv.ParseInt(BuildTimeUnix, base, bitSize)
+	sec, err := strconv.ParseInt(ldflags.BuildTimeUnix, base, bitSize)
 	if err != nil || sec < 0 {
 		sec = 0
 	}

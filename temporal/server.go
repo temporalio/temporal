@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -108,10 +109,6 @@ func (s *Server) Start() error {
 
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
 	s.logger.Debug(s.so.config.String())
-
-	if common.IsDebugMode() {
-		s.logger.Info("DEBUG MODE ENABLED")
-	}
 
 	err = s.validate()
 	if err != nil {
@@ -308,7 +305,7 @@ func (s *Server) getServiceParams(
 			return nil, fmt.Errorf("unable to find advanced visibility store in config for %q key", advancedVisStoreKey)
 		}
 
-		esClient, err := elasticsearch.NewClientV6(advancedVisStore.ElasticSearch)
+		esClient, err := elasticsearch.NewClient(advancedVisStore.ElasticSearch)
 		if err != nil {
 			return nil, fmt.Errorf("error creating elastic search client: %v", err)
 		}
@@ -345,6 +342,11 @@ func (s *Server) getServiceParams(
 		params.ClaimMapper = authorization.NewNoopClaimMapper(s.so.config)
 	}
 
+	params.PersistenceServiceResolver = s.so.persistenceServiceResolver
+	if params.PersistenceServiceResolver == nil {
+		params.PersistenceServiceResolver = resolver.NewNoopResolver()
+	}
+
 	return &params, nil
 }
 
@@ -372,8 +374,15 @@ func (s *Server) validate() error {
 
 func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collection) error {
 	logger := s.logger.WithTags(tag.ComponentMetadataInitializer)
+
+	persistenceServiceResolver := s.so.persistenceServiceResolver
+	if persistenceServiceResolver == nil {
+		persistenceServiceResolver = resolver.NewNoopResolver()
+	}
+
 	factory := persistenceClient.NewFactory(
 		&s.so.config.Persistence,
+		persistenceServiceResolver,
 		dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 3000),
 		nil,
 		s.so.config.ClusterMetadata.CurrentClusterName,
