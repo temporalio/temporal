@@ -2418,7 +2418,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 					WorkflowID:                    request.GetExecutionFilter().GetWorkflowId(),
 				})
 		}
-		wh.GetLogger().Info("List open workflow with filter",
+		wh.GetLogger().Debug("List open workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByID)
 	} else if request.GetTypeFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespace) {
@@ -2429,7 +2429,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 				WorkflowTypeName:              request.GetTypeFilter().GetName(),
 			})
 		}
-		wh.GetLogger().Info("List open workflow with filter",
+		wh.GetLogger().Debug("List open workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByType)
 	} else {
 		persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutions(&baseReq)
@@ -2518,7 +2518,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 					WorkflowID:                    request.GetExecutionFilter().GetWorkflowId(),
 				})
 		}
-		wh.GetLogger().Info("List closed workflow with filter",
+		wh.GetLogger().Debug("List closed workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByID)
 	} else if request.GetTypeFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespace) {
@@ -2529,7 +2529,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 				WorkflowTypeName:              request.GetTypeFilter().GetName(),
 			})
 		}
-		wh.GetLogger().Info("List closed workflow with filter",
+		wh.GetLogger().Debug("List closed workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByType)
 	} else if request.GetStatusFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespace) {
@@ -2544,7 +2544,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 				})
 			}
 		}
-		wh.GetLogger().Info("List closed workflow with filter",
+		wh.GetLogger().Debug("List closed workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByStatus)
 	} else {
 		persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutions(&baseReq)

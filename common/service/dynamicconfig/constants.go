@@ -275,6 +275,7 @@ var keys = map[Key]string{
 	DefaultActivityRetryPolicy:                             "history.defaultActivityRetryPolicy",
 	DefaultWorkflowRetryPolicy:                             "history.defaultWorkflowRetryPolicy",
 	VisibilityQueue:                                        "history.visibilityQueue",
+	VisibilityProcessorEnabled:                             "history.visibilityProcessorEnabled",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -713,6 +714,9 @@ const (
 
 	// VisibilityQueue is to indicate which visibility queue to use: "Kafka", "InternalWithDualProcessor", "Internal".
 	VisibilityQueue
+
+	// VisibilityProcessorEnabled is to indicate if visibility processor should be enabled or not.
+	VisibilityProcessorEnabled
 
 	// key for worker
 
