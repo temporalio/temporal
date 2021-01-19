@@ -638,7 +638,7 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
-	return nil, nil
+	return &adminservice.ReapplyEventsResponse{}, nil
 }
 
 // GetDLQMessages reads messages from DLQ
@@ -887,7 +887,7 @@ func (adh *AdminHandler) ResendReplicationTasks(
 		nil,
 		adh.GetLogger(),
 	)
-	return nil, resender.SendSingleWorkflowHistory(
+	if err := resender.SendSingleWorkflowHistory(
 		request.GetNamespaceId(),
 		request.GetWorkflowId(),
 		request.GetRunId(),
@@ -895,7 +895,10 @@ func (adh *AdminHandler) ResendReplicationTasks(
 		request.StartVersion,
 		common.EmptyEventID,
 		common.EmptyVersion,
-	)
+	); err != nil {
+		return nil, err
+	}
+	return &adminservice.ResendReplicationTasksResponse{}, nil
 }
 
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
