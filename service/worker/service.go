@@ -72,6 +72,7 @@ type (
 		PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
 		EnableBatcher                 dynamicconfig.BoolPropertyFn
 		VisibilityQueue               dynamicconfig.StringPropertyFn
+		VisibilityProcessorEnabled    dynamicconfig.BoolPropertyFn
 		EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
 	}
 )
@@ -143,6 +144,7 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 		},
 		EnableBatcher:                 dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
 		VisibilityQueue:               dc.GetStringProperty(dynamicconfig.VisibilityQueue, common.VisibilityQueueInternalWithDualProcessor),
+		VisibilityProcessorEnabled:    dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnabled, true),
 		EnableParentClosePolicyWorker: dc.GetBoolProperty(dynamicconfig.EnableParentClosePolicyWorker, true),
 		ThrottledLogRPS:               dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
 		PersistenceGlobalMaxQPS:       dc.GetIntProperty(dynamicconfig.WorkerPersistenceGlobalMaxQPS, 0),
@@ -151,7 +153,9 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 		dynamicconfig.AdvancedVisibilityWritingMode,
 		common.GetDefaultAdvancedVisibilityWritingMode(params.PersistenceConfig.IsAdvancedVisibilityConfigExist()),
 	)
-	if (config.VisibilityQueue() == common.VisibilityQueueKafka || config.VisibilityQueue() == common.VisibilityQueueInternalWithDualProcessor) && advancedVisWritingMode() != common.AdvancedVisibilityWritingModeOff {
+	if (config.VisibilityQueue() == common.VisibilityQueueKafka || config.VisibilityQueue() == common.VisibilityQueueInternalWithDualProcessor) &&
+		advancedVisWritingMode() != common.AdvancedVisibilityWritingModeOff &&
+		config.VisibilityProcessorEnabled() {
 		config.IndexerCfg = &indexer.Config{
 			IndexerConcurrency:       dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 100),
 			ESProcessorNumOfWorkers:  dc.GetIntProperty(dynamicconfig.WorkerESProcessorNumOfWorkers, 1),

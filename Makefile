@@ -174,7 +174,7 @@ clean-bins:
 
 temporal-server:
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
-	go build -ldflags "$(shell ./scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
+	go build -ldflags "$(shell ./.development/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
 
 tctl:
 	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
@@ -308,36 +308,36 @@ ci-coverage-report: $(SUMMARY_COVER_PROFILE) coverage-report
 ##### Schema #####
 install-schema: temporal-cassandra-tool
 	@printf $(COLOR) "Install Cassandra schema..."
-	./temporal-cassandra-tool --ep 127.0.0.1 drop -k temporal
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal update-schema -d ./schema/cassandra/temporal/versioned
-	./temporal-cassandra-tool --ep 127.0.0.1 drop -k temporal_visibility
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_visibility --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility update-schema -d ./schema/cassandra/visibility/versioned
+	./temporal-cassandra-tool drop -k temporal -f
+	./temporal-cassandra-tool create -k temporal --rf 1
+	./temporal-cassandra-tool -k temporal setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k temporal_visibility -f
+	./temporal-cassandra-tool create -k temporal_visibility --rf 1
+	./temporal-cassandra-tool -k temporal_visibility setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_visibility update-schema -d ./schema/cassandra/visibility/versioned
 
 install-schema-mysql: temporal-sql-tool
 	@printf $(COLOR) "Install MySQL schema..."
-	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root drop --db temporal
-	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root create --db temporal
-	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal setup-schema -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned
-	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root drop --db temporal_visibility
-	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root create --db temporal_visibility
-	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal_visibility setup-schema -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 -u root --pw root --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
+	./temporal-sql-tool -u temporal --pw temporal drop --db temporal -f
+	./temporal-sql-tool -u temporal --pw temporal create --db temporal
+	./temporal-sql-tool -u temporal --pw temporal --db temporal setup-schema -v 0.0
+	./temporal-sql-tool -u temporal --pw temporal --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned
+	./temporal-sql-tool -u temporal --pw temporal drop --db temporal_visibility -f
+	./temporal-sql-tool -u temporal --pw temporal create --db temporal_visibility
+	./temporal-sql-tool -u temporal --pw temporal --db temporal_visibility setup-schema -v 0.0
+	./temporal-sql-tool -u temporal --pw temporal --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
 
 install-schema-postgresql: temporal-sql-tool
 	@printf $(COLOR) "Install Postgres schema..."
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres drop --db temporal
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres create --db temporal
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal setup -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal update-schema -d ./schema/postgresql/v96/temporal/versioned
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres drop --db temporal_visibility
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres create --db temporal_visibility
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal_visibility setup-schema -v 0.0
-	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u temporal -pw temporal --pl postgres --db temporal_visibility update-schema -d ./schema/postgresql/v96/visibility/versioned
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres drop --db temporal -f
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres create --db temporal
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db temporal setup -v 0.0
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db temporal update-schema -d ./schema/postgresql/v96/temporal/versioned
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres drop --db temporal_visibility -f
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres create --db temporal_visibility
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db temporal_visibility setup-schema -v 0.0
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db temporal_visibility update-schema -d ./schema/postgresql/v96/visibility/versioned
 
 install-schema-es:
 	@printf $(COLOR) "Install Elasticsearch schema..."
@@ -346,35 +346,41 @@ install-schema-es:
 
 install-schema-cdc: temporal-cassandra-tool
 	@printf $(COLOR)  "Set up temporal_active key space..."
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_active --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_active setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_active update-schema -d ./schema/cassandra/temporal/versioned
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_visibility_active --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_active setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_active update-schema -d ./schema/cassandra/visibility/versioned
+	./temporal-cassandra-tool drop -k temporal_active -f
+	./temporal-cassandra-tool create -k temporal_active --rf 1
+	./temporal-cassandra-tool -k temporal_active setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_active update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k temporal_visibility_active -f
+	./temporal-cassandra-tool create -k temporal_visibility_active --rf 1
+	./temporal-cassandra-tool -k temporal_visibility_active setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_visibility_active update-schema -d ./schema/cassandra/visibility/versioned
 
 	@printf $(COLOR) "Set up temporal_standby key space..."
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_standby --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_standby setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_standby update-schema -d ./schema/cassandra/temporal/versioned
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_visibility_standby --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_standby setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_standby update-schema -d ./schema/cassandra/visibility/versioned
+	./temporal-cassandra-tool drop -k temporal_standby -f
+	./temporal-cassandra-tool create -k temporal_standby --rf 1
+	./temporal-cassandra-tool -k temporal_standby setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_standby update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k temporal_visibility_standby -f
+	./temporal-cassandra-tool create -k temporal_visibility_standby --rf 1
+	./temporal-cassandra-tool -k temporal_visibility_standby setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_visibility_standby update-schema -d ./schema/cassandra/visibility/versioned
 
 	@printf $(COLOR) "Set up temporal_other key space..."
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_other --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_other setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_other update-schema -d ./schema/cassandra/temporal/versioned
-	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_visibility_other --rf 1
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_other setup-schema -v 0.0
-	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_other update-schema -d ./schema/cassandra/visibility/versioned
+	./temporal-cassandra-tool drop -k temporal_other -f
+	./temporal-cassandra-tool create -k temporal_other --rf 1
+	./temporal-cassandra-tool -k temporal_other setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_other update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k temporal_visibility_other -f
+	./temporal-cassandra-tool create -k temporal_visibility_other --rf 1
+	./temporal-cassandra-tool -k temporal_visibility_other setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_visibility_other update-schema -d ./schema/cassandra/visibility/versioned
 
 ##### Run server #####
 start-dependencies:
-	docker-compose -f docker-compose/docker-compose.yml -f docker-compose/docker-compose.$(GOOS).yml up
+	docker-compose -f ./.development/docker-compose/docker-compose.yml -f ./.development/docker-compose/docker-compose.$(GOOS).yml up
 
 stop-dependencies:
-	docker-compose -f docker-compose/docker-compose.yml -f docker-compose/docker-compose.$(GOOS).yml down
+	docker-compose -f ./.development/docker-compose/docker-compose.yml -f ./.development/docker-compose/docker-compose.$(GOOS).yml down
 
 start: temporal-server
 	./temporal-server start
