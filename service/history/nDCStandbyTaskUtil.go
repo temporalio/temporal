@@ -25,11 +25,16 @@
 package history
 
 import (
+	"context"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/client/admin"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -194,4 +199,29 @@ func getStandbyPostActionFn(
 
 	// task start time + StandbyTaskMissingEventsResendDelay <= now
 	return discardTaskStandbyPostActionFn
+}
+
+func refreshTasks(
+	adminClient admin.Client,
+	namespaceCache cache.NamespaceCache,
+	namespaceID string,
+	workflowID string,
+	runID string,
+) error {
+	namespaceEntry, err := namespaceCache.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), refreshTaskTimeout)
+	defer cancel()
+
+	_, err = adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
+		Namespace: namespaceEntry.GetInfo().Name,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+	})
+	return err
 }

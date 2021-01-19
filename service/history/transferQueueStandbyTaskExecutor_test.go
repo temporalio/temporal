@@ -38,6 +38,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -71,6 +73,7 @@ type (
 		mockShard              *shard.ContextTest
 		mockNamespaceCache     *cache.MockNamespaceCache
 		mockClusterMetadata    *cluster.MockMetadata
+		mockAdminClient        *adminservicemock.MockAdminServiceClient
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
 		mockMatchingClient     *matchingservicemock.MockMatchingServiceClient
 
@@ -148,6 +151,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockArchivalMetadata = s.mockShard.Resource.ArchivalMetadata
 	s.mockArchiverProvider = s.mockShard.Resource.ArchiverProvider
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
+	s.mockAdminClient = s.mockShard.Resource.RemoteAdminClient
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(testNamespace).Return(testGlobalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testTargetNamespaceID).Return(testGlobalTargetNamespaceEntry, nil).AnyTimes()
@@ -696,6 +700,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	s.Equal(ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
+	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
+		Namespace: s.namespaceEntry.GetInfo().Name,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: transferTask.GetWorkflowId(),
+			RunId:      transferTask.GetRunId(),
+		},
+	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil).Times(1)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		transferTask.GetNamespaceId(),
 		transferTask.GetWorkflowId(),
@@ -844,6 +855,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 	s.Equal(ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
+	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
+		Namespace: s.namespaceEntry.GetInfo().Name,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: transferTask.GetWorkflowId(),
+			RunId:      transferTask.GetRunId(),
+		},
+	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil).Times(1)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		transferTask.GetNamespaceId(),
 		transferTask.GetWorkflowId(),
@@ -992,6 +1010,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	s.Equal(ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
+	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
+		Namespace: s.namespaceEntry.GetInfo().Name,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: transferTask.GetWorkflowId(),
+			RunId:      transferTask.GetRunId(),
+		},
+	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil).Times(1)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		transferTask.GetNamespaceId(),
 		transferTask.GetWorkflowId(),
