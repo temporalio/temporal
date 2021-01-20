@@ -388,6 +388,12 @@ start: temporal-server
 start-es: temporal-server
 	./temporal-server --zone es start
 
+start-mysql: temporal-server
+	./temporal-server --zone mysql start
+
+start-mysql-es: temporal-server
+	./temporal-server --zone mysql-es start
+
 start-cdc-active: temporal-server
 	./temporal-server --zone active start
 
