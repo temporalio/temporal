@@ -50,13 +50,13 @@ func (p *bulkProcessorV7) Stop() error {
 func (p *bulkProcessorV7) Add(request *BulkableRequest) {
 	switch request.RequestType {
 	case BulkableRequestTypeIndex:
-		bulkDeleteRequest := elastic.NewBulkIndexRequest().
+		bulkIndexRequest := elastic.NewBulkIndexRequest().
 			Index(request.Index).
 			Id(request.ID).
 			VersionType(versionTypeExternal).
 			Version(request.Version).
 			Doc(request.Doc)
-		p.esBulkProcessor.Add(bulkDeleteRequest)
+		p.esBulkProcessor.Add(bulkIndexRequest)
 	case BulkableRequestTypeDelete:
 		bulkDeleteRequest := elastic.NewBulkDeleteRequest().
 			Index(request.Index).
