@@ -58,9 +58,6 @@ func NewESVisibilityManager(
 			)
 			visibilityManager = p.NewVisibilityPersistenceRateLimitedClient(visibilityManager, esRateLimiter, log)
 		}
-		if cfg.EnableSampling != nil && cfg.EnableSampling() {
-			visibilityManager = p.NewVisibilitySamplingClient(visibilityManager, cfg, metricsClient, log)
-		}
 	}
 	if metricsClient != nil {
 		// wrap with metrics
