@@ -72,7 +72,7 @@ type (
 	ackChanWithStopwatch struct { // value of esProcessorImpl.mapToAckChan
 		processed             bool
 		ackCh                 chan<- bool
-		addToProcessStopwatch *tally.Stopwatch // metric from message add to process, to message ack/nack
+		addToProcessStopwatch *tally.Stopwatch // Used to report metrics: interval between visibility task being added to bulk processor and it is processed (ack/nack).
 	}
 )
 
