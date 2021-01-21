@@ -30,35 +30,28 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-func NewClient(config *Config, logger log.Logger) (Client, error) {
-	switch config.Version {
-	case "v6", "":
-		return newClientV6(config, logger)
-	case "v7":
-		return newClientV7(config, logger)
-	default:
-		return nil, fmt.Errorf("not supported ElasticSearch version: %v", config.Version)
+type (
+	errorLogger struct {
+		log.Logger
 	}
+
+	infoLogger struct {
+		log.Logger
+	}
+)
+
+func newErrorLogger(logger log.Logger) *errorLogger {
+	return &errorLogger{logger}
 }
 
-func NewCLIClient(url string, version string) (CLIClient, error) {
-	switch version {
-	case "v6":
-		return newSimpleClientV6(url)
-	case "v7", "":
-		return newSimpleClientV7(url)
-	default:
-		return nil, fmt.Errorf("not supported ElasticSearch version: %v", version)
-	}
+func (l *errorLogger) Printf(format string, v ...interface{}) {
+	l.Error(fmt.Sprintf(format, v...))
 }
 
-func NewIntegrationTestsClient(url string, version string) (IntegrationTestsClient, error) {
-	switch version {
-	case "v6":
-		return newSimpleClientV6(url)
-	case "v7":
-		return newSimpleClientV7(url)
-	default:
-		return nil, fmt.Errorf("not supported ElasticSearch version: %v", version)
-	}
+func newInfoLogger(logger log.Logger) *infoLogger {
+	return &infoLogger{logger}
+}
+
+func (l *infoLogger) Printf(format string, v ...interface{}) {
+	l.Info(fmt.Sprintf(format, v...))
 }

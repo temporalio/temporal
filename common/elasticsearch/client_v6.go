@@ -31,6 +31,8 @@ import (
 
 	elastic6 "github.com/olivere/elastic"
 	"github.com/olivere/elastic/v7"
+
+	"go.temporal.io/server/common/log"
 )
 
 type (
@@ -43,11 +45,15 @@ type (
 var _ Client = (*clientV6)(nil)
 
 // newClientV6 create a ES client
-func newClientV6(config *Config) (*clientV6, error) {
+func newClientV6(config *Config, logger log.Logger) (*clientV6, error) {
 	options := []elastic6.ClientOptionFunc{
 		elastic6.SetURL(config.URL.String()),
 		elastic6.SetSniff(false),
 		elastic6.SetBasicAuth(config.Username, config.Password),
+
+		elastic6.SetErrorLog(newErrorLogger(logger)),
+		// Uncomment next line to enable info logging also.
+		// elastic6.SetInfoLog(newInfoLogger(logger)),
 
 		// Disable health check so we don't block client creation (and thus temporal server startup)
 		// if the ES instance happens to be down.
