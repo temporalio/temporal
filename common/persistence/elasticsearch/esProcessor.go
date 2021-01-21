@@ -70,6 +70,7 @@ type (
 	}
 
 	ackChanWithStopwatch struct { // value of esProcessorImpl.mapToAckChan
+		processed             bool
 		ackCh                 chan<- bool
 		addToProcessStopwatch *tally.Stopwatch // metric from message add to process, to message ack/nack
 	}
@@ -171,15 +172,15 @@ func (p *esProcessorImpl) Add(request *elasticsearch.BulkableRequest, visibility
 		}
 
 		// Nack existing visibility task.
-		ackChWithStopwatchExisting.addToProcessStopwatch.Stop()
-		// In case if sendToAckChan is called for already processed channel, just ignore it.
-		select {
-		case ackChWithStopwatchExisting.ackCh <- false:
-		default:
+		if !ackChWithStopwatchExisting.processed {
+			ackChWithStopwatchExisting.processed = true
+			ackChWithStopwatchExisting.addToProcessStopwatch.Stop()
+			ackChWithStopwatchExisting.ackCh <- false
 		}
 
 		// Replace existing dictionary item with new item.
 		// Note: request won't be added to bulk processor.
+		ackChWithStopwatchExisting.processed = false
 		ackChWithStopwatchExisting.addToProcessStopwatch = ackChWithStopwatch.addToProcessStopwatch
 		ackChWithStopwatchExisting.ackCh = ackChWithStopwatch.ackCh
 		return nil
@@ -237,31 +238,18 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 }
 
 func (p *esProcessorImpl) sendToAckChan(visibilityTaskKey string, ack bool) {
-	ackChWithStopwatch, ok := p.getAckChan(visibilityTaskKey)
-	if !ok {
-		return
-	}
-
-	ackChWithStopwatch.addToProcessStopwatch.Stop()
-	// In case if sendToAckChan is called for already processed channel, just ignore it.
-	select {
-	case ackChWithStopwatch.ackCh <- ack:
-	default:
-	}
-
-	p.mapToAckChan.Remove(visibilityTaskKey)
-}
-
-func (p *esProcessorImpl) getAckChan(visibilityTaskKey string) (*ackChanWithStopwatch, bool) {
-	ackCh, ok := p.mapToAckChan.Get(visibilityTaskKey)
-	if !ok {
-		return nil, false
-	}
-	ackChWithStopwatch, ok := ackCh.(*ackChanWithStopwatch)
-	if !ok { // must be bug in code and bad deployment
-		p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", ackCh, &ackChanWithStopwatch{}), tag.ESKey(visibilityTaskKey))
-	}
-	return ackChWithStopwatch, ok
+	_ = p.mapToAckChan.RemoveIf(visibilityTaskKey, func(key interface{}, value interface{}) bool {
+		ackChWithStopwatch, ok := value.(*ackChanWithStopwatch)
+		if !ok { // must be bug in code and bad deployment
+			p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", value, &ackChanWithStopwatch{}), tag.ESKey(visibilityTaskKey))
+		}
+		if !ackChWithStopwatch.processed {
+			ackChWithStopwatch.processed = true
+			ackChWithStopwatch.addToProcessStopwatch.Stop()
+			ackChWithStopwatch.ackCh <- ack
+		}
+		return ackChWithStopwatch.processed
+	})
 }
 
 func (p *esProcessorImpl) getVisibilityTaskKey(request elastic.BulkableRequest) string {
@@ -398,6 +386,7 @@ func getErrorMsgFromESResp(resp *elastic.BulkResponseItem) string {
 
 func newAckChanWithStopwatch(ackCh chan<- bool, stopwatch *tally.Stopwatch) *ackChanWithStopwatch {
 	return &ackChanWithStopwatch{
+		processed:             false,
 		ackCh:                 ackCh,
 		addToProcessStopwatch: stopwatch,
 	}
