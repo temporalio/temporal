@@ -80,8 +80,8 @@ type (
 	}
 
 	ackChanWithStopwatch struct { // value of esProcessorImpl.mapToAckChan
-		ackCh             chan<- bool
-		addToAckStopwatch *tally.Stopwatch // metric from message add to process, to message ack/nack
+		ackCh                 chan<- bool
+		addToProcessStopwatch *tally.Stopwatch // Used to report metrics: interval between visibility task being added to bulk processor and it is processed (ack/nack).
 	}
 )
 
@@ -175,21 +175,26 @@ func (p *esProcessorImpl) Add(request elastic.BulkableRequest, visibilityTaskKey
 
 	sw := p.metricsClient.StartTimer(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRequestLatency)
 	ackChWithStopwatch := newAckChanWithStopwatch(ackCh, &sw)
-	_, isDup, _ := p.mapToAckChan.PutOrDo(visibilityTaskKey, ackChWithStopwatch, p.onDuplicateAction)
+	_, isDup, _ := p.mapToAckChan.PutOrDo(visibilityTaskKey, ackChWithStopwatch, func(key interface{}, value interface{}) error {
+		ackChWithStopwatchExisting, ok := value.(*ackChanWithStopwatch)
+		if !ok { // must be bug in code and bad deployment
+			p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", value, &ackChanWithStopwatch{}), tag.Value(key))
+		}
+
+		// Nack existing visibility task.
+		ackChWithStopwatchExisting.addToProcessStopwatch.Stop()
+		ackChWithStopwatchExisting.ackCh <- false
+
+		// Replace existing dictionary item with new item.
+		// Note: request won't be added to bulk processor.
+		ackChWithStopwatchExisting.addToProcessStopwatch = ackChWithStopwatch.addToProcessStopwatch
+		ackChWithStopwatchExisting.ackCh = ackChWithStopwatch.ackCh
+		return nil
+	})
 	if isDup {
 		return
 	}
 	p.bulkProcessor.Add(request)
-}
-
-func (p *esProcessorImpl) onDuplicateAction(key interface{}, value interface{}) error {
-	ackChWithStopwatch, ok := value.(*ackChanWithStopwatch)
-	if !ok { // must be bug in code and bad deployment
-		p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", value, &ackChanWithStopwatch{}), tag.Value(key))
-	}
-	ackChWithStopwatch.addToAckStopwatch.Stop()
-	ackChWithStopwatch.ackCh <- true
-	return nil
 }
 
 // bulkBeforeAction is triggered before bulk processor commit
@@ -237,27 +242,17 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 }
 
 func (p *esProcessorImpl) sendToAckChan(visibilityTaskKey string, ack bool) {
-	ackChWithStopwatch, ok := p.getAckChan(visibilityTaskKey)
-	if !ok {
-		return
-	}
+	// Use RemoveIf here to prevent race condition with de-dup logic in Add method.
+	_ = p.mapToAckChan.RemoveIf(visibilityTaskKey, func(key interface{}, value interface{}) bool {
+		ackChWithStopwatch, ok := value.(*ackChanWithStopwatch)
+		if !ok { // must be bug in code and bad deployment
+			p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", value, &ackChanWithStopwatch{}), tag.ESKey(visibilityTaskKey))
+		}
 
-	ackChWithStopwatch.addToAckStopwatch.Stop()
-	ackChWithStopwatch.ackCh <- ack
-
-	p.mapToAckChan.Remove(visibilityTaskKey)
-}
-
-func (p *esProcessorImpl) getAckChan(visibilityTaskKey string) (*ackChanWithStopwatch, bool) {
-	ackCh, ok := p.mapToAckChan.Get(visibilityTaskKey)
-	if !ok {
-		return nil, false
-	}
-	ackChWithStopwatch, ok := ackCh.(*ackChanWithStopwatch)
-	if !ok { // must be bug in code and bad deployment
-		p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", ackCh, &ackChanWithStopwatch{}), tag.ESKey(visibilityTaskKey))
-	}
-	return ackChWithStopwatch, ok
+		ackChWithStopwatch.addToProcessStopwatch.Stop()
+		ackChWithStopwatch.ackCh <- ack
+		return true
+	})
 }
 
 func (p *esProcessorImpl) getVisibilityTaskKey(request elastic.BulkableRequest) string {
@@ -394,7 +389,7 @@ func getErrorMsgFromESResp(resp *elastic.BulkResponseItem) string {
 
 func newAckChanWithStopwatch(ackCh chan<- bool, stopwatch *tally.Stopwatch) *ackChanWithStopwatch {
 	return &ackChanWithStopwatch{
-		ackCh:             ackCh,
-		addToAckStopwatch: stopwatch,
+		ackCh:                 ackCh,
+		addToProcessStopwatch: stopwatch,
 	}
 }
