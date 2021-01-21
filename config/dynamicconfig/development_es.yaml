@@ -1,9 +1,39 @@
 frontend.enableClientVersionCheck:
-  - value: true
+- value: true
+  constraints: {}
+history.persistenceMaxQPS:
+- value: 3000
+  constraints: {}
+frontend.persistenceMaxQPS:
+- value: 3000
+  constraints: {}
+frontend.historyMgrNumConns:
+- value: 10
+  constraints: {}
+frontend.throttledLogRPS:
+- value: 20
+  constraints: {}
+history.historyMgrNumConns:
+- value: 50
+  constraints: {}
+history.defaultActivityRetryPolicy:
+- value:
+    InitialIntervalInSeconds: 1
+    MaximumIntervalCoefficient: 100.0
+    BackoffCoefficient: 2.0
+    MaximumAttempts: 0
+history.defaultWorkflowRetryPolicy:
+- value:
+    InitialIntervalInSeconds: 1
+    MaximumIntervalCoefficient: 100.0
+    BackoffCoefficient: 2.0
+    MaximumAttempts: 0
 system.advancedVisibilityWritingMode:
   - value: "on"
+  constraints: {}
 system.enableReadVisibilityFromES:
   - value: true
+  constraints: {}
 frontend.validSearchAttributes:
   - value:
       NamespaceId: "Keyword"
@@ -28,4 +58,3 @@ frontend.validSearchAttributes:
       BinaryChecksums: "Keyword"
       CustomNamespace: "Keyword"
       Operator: "Keyword"
-

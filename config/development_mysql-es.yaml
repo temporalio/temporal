@@ -1,0 +1,136 @@
+persistence:
+  defaultStore: mysql-default
+  visibilityStore: mysql-visibility
+  advancedVisibilityStore: es-visibility
+  numHistoryShards: 4
+  datastores:
+    mysql-default:
+      sql:
+        pluginName: "mysql"
+        databaseName: "temporal"
+        connectAddr: "127.0.0.1:3306"
+        connectProtocol: "tcp"
+        user: "temporal"
+        password: "temporal"
+        maxConns: 20
+        maxIdleConns: 20
+        maxConnLifetime: "1h"
+    mysql-visibility:
+      sql:
+        pluginName: "mysql"
+        databaseName: "temporal_visibility"
+        connectAddr: "127.0.0.1:3306"
+        connectProtocol: "tcp"
+        user: "temporal"
+        password: "temporal"
+        maxConns: 2
+        maxIdleConns: 2
+        maxConnLifetime: "1h"
+    es-visibility:
+      elasticsearch:
+        version: "v7"
+        url:
+          scheme: "http"
+          host: "127.0.0.1:9200"
+        indices:
+          visibility: temporal-visibility-dev
+global:
+  membership:
+    maxJoinDuration: 30s
+  pprof:
+      port: 7936
+  metrics:
+    prometheus:
+      timerType: "histogram"
+      listenAddress: "127.0.0.1:8000"
+
+services:
+  frontend:
+    rpc:
+      grpcPort: 7233
+      membershipPort: 6933
+      bindOnLocalHost: true
+
+  matching:
+    rpc:
+      grpcPort: 7235
+      membershipPort: 6935
+      bindOnLocalHost: true
+
+  history:
+    rpc:
+      grpcPort: 7234
+      membershipPort: 6934
+      bindOnLocalHost: true
+
+  worker:
+    rpc:
+      grpcPort: 7239
+      membershipPort: 6939
+      bindOnLocalHost: true
+
+clusterMetadata:
+  enableGlobalNamespace: false
+  failoverVersionIncrement: 10
+  masterClusterName: "active"
+  currentClusterName: "active"
+  clusterInformation:
+    active:
+      enabled: true
+      initialFailoverVersion: 1
+      rpcName: "frontend"
+      rpcAddress: "localhost:7233"
+
+dcRedirectionPolicy:
+  policy: "noop"
+  toDC: ""
+
+archival:
+  history:
+    state: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+  visibility:
+    state: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+
+namespaceDefaults:
+  archival:
+    history:
+      state: "enabled"
+      URI: "file:///tmp/temporal_archival/development"
+    visibility:
+      state: "enabled"
+      URI: "file:///tmp/temporal_vis_archival/development"
+
+kafka:
+  tls:
+    enabled: false
+  clusters:
+    test:
+      brokers:
+        - 127.0.0.1:9092
+  topics:
+    temporal-visibility-dev:
+      cluster: test
+    temporal-visibility-dev-dlq:
+      cluster: test
+  applications:
+    visibility:
+      topic: temporal-visibility-dev
+      dlq-topic: temporal-visibility-dev-dlq
+
+publicClient:
+  hostPort: "localhost:7233"
+
+dynamicConfigClient:
+  filepath: "config/dynamicconfig/development_es.yaml"
+  pollInterval: "10s"
+

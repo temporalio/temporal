@@ -33,6 +33,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -48,6 +49,7 @@ type (
 		*transferQueueTaskExecutorBase
 
 		clusterName        string
+		adminClient        admin.Client
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
 )
@@ -70,6 +72,7 @@ func newTransferQueueStandbyTaskExecutor(
 			config,
 		),
 		clusterName:        clusterName,
+		adminClient:        shard.GetService().GetRemoteAdminClient(clusterName),
 		nDCHistoryResender: nDCHistoryResender,
 	}
 }
@@ -587,6 +590,20 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 
 	var err error
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
+		if err := refreshTasks(
+			t.adminClient,
+			t.shard.GetNamespaceCache(),
+			transferTask.GetNamespaceId(),
+			transferTask.GetWorkflowId(),
+			transferTask.GetRunId(),
+		); err != nil {
+			t.logger.Error("Error refresh tasks from remote.",
+				tag.ShardID(t.shard.GetShardID()),
+				tag.WorkflowNamespaceID(transferTask.GetNamespaceId()),
+				tag.WorkflowID(transferTask.GetWorkflowId()),
+				tag.WorkflowRunID(transferTask.GetRunId()),
+				tag.ClusterName(t.clusterName))
+		}
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
 			transferTask.GetNamespaceId(),
 			transferTask.GetWorkflowId(),

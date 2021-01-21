@@ -26,6 +26,7 @@ package history
 
 import (
 	"fmt"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 
@@ -36,6 +37,10 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
+)
+
+const (
+	refreshTaskTimeout = 30 * time.Second
 )
 
 // verifyTaskVersion, will return true if failover version check is successful
