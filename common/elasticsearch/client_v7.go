@@ -28,8 +28,9 @@ import (
 	"context"
 	"time"
 
-	elastic6 "github.com/olivere/elastic"
 	"github.com/olivere/elastic/v7"
+
+	"go.temporal.io/server/common/log"
 )
 
 type (
@@ -42,11 +43,15 @@ type (
 var _ Client = (*clientV7)(nil)
 
 // newClientV7 create a ES client
-func newClientV7(config *Config) (*clientV7, error) {
+func newClientV7(config *Config, logger log.Logger) (*clientV7, error) {
 	options := []elastic.ClientOptionFunc{
 		elastic.SetURL(config.URL.String()),
 		elastic.SetSniff(false),
 		elastic.SetBasicAuth(config.Username, config.Password),
+
+		elastic.SetErrorLog(newErrorLogger(logger)),
+		// Uncomment next line to enable info logging also.
+		// elastic.SetInfoLog(newInfoLogger(logger)),
 
 		// Disable health check so we don't block client creation (and thus temporal server startup)
 		// if the ES instance happens to be down.
@@ -152,7 +157,7 @@ func (c *clientV7) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 func (c *clientV7) PutMapping(ctx context.Context, index, root, key, valueType string) error {
 	body := c.buildPutMappingBody(root, key, valueType)
 	_, err := c.esClient.PutMapping().Index(index).BodyJson(body).Do(ctx)
-	if elastic6.IsNotFound(err) {
+	if elastic.IsNotFound(err) {
 		_, err = c.CreateIndex(ctx, index)
 		if err != nil {
 			return err
