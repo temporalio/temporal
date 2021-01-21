@@ -52,6 +52,7 @@ func newClientV6(config *Config, logger log.Logger) (*clientV6, error) {
 		elastic6.SetBasicAuth(config.Username, config.Password),
 
 		elastic6.SetErrorLog(newErrorLogger(logger)),
+		// Uncomment next line to enable info logging also.
 		// elastic6.SetInfoLog(newInfoLogger(logger)),
 
 		// Disable health check so we don't block client creation (and thus temporal server startup)
