@@ -238,17 +238,17 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 }
 
 func (p *esProcessorImpl) sendToAckChan(visibilityTaskKey string, ack bool) {
+	// Use RemoveIf here to prevent race condition with de-dup logic in Add method.
 	_ = p.mapToAckChan.RemoveIf(visibilityTaskKey, func(key interface{}, value interface{}) bool {
 		ackChWithStopwatch, ok := value.(*ackChanWithStopwatch)
 		if !ok { // must be bug in code and bad deployment
 			p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", value, &ackChanWithStopwatch{}), tag.ESKey(visibilityTaskKey))
 		}
 		if !ackChWithStopwatch.processed {
-			ackChWithStopwatch.processed = true
 			ackChWithStopwatch.addToProcessStopwatch.Stop()
 			ackChWithStopwatch.ackCh <- ack
 		}
-		return ackChWithStopwatch.processed
+		return true
 	})
 }
 
