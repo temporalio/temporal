@@ -189,7 +189,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			VisibilityListMaxQPS:   dynamicconfig.GetIntPropertyFilteredByNamespace(2000),
 			ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(defaultTestValueOfESIndexMaxResultWindow),
 			ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
-			ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(5 * time.Second),
+			ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 		}
 		esVisibilityStore := pes.NewElasticSearchVisibilityStore(esClient, indexName, visProducer, esProcessor, visConfig, logger, &metricsmocks.Client{})
 		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, logger)

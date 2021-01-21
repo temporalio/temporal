@@ -114,7 +114,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	config := &config.VisibilityConfig{
 		ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(3),
 		ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
-		ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(5 * time.Second),
+		ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
 
 	s.mockMetricsClient = &metricsmocks.Client{}
