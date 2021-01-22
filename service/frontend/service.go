@@ -75,8 +75,6 @@ type Config struct {
 	MaxBadBinaries dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// security protection settings
-	EnableAdminProtection         dynamicconfig.BoolPropertyFn
-	AdminOperationToken           dynamicconfig.StringPropertyFn
 	DisableListVisibilityByFilter dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// size limit system protection
@@ -131,8 +129,6 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
 		MaxIDLengthLimit:                       dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		MaxBadBinaries:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxBadBinaries, namespace.MaxBadBinaries),
-		EnableAdminProtection:                  dc.GetBoolProperty(dynamicconfig.EnableAdminProtection, false),
-		AdminOperationToken:                    dc.GetStringProperty(dynamicconfig.AdminOperationToken, common.DefaultAdminOperationToken),
 		DisableListVisibilityByFilter:          dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.DisableListVisibilityByFilter, false),
 		BlobSizeLimitError:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
 		BlobSizeLimitWarn:                      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 256*1024),

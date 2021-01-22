@@ -151,9 +151,7 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
-	if err := adh.checkPermission(adh.config, request.SecurityToken); err != nil {
-		return nil, adh.error(errNoPermission, scope)
-	}
+
 	if len(request.GetSearchAttribute()) == 0 {
 		return nil, adh.error(errSearchAttributesNotSet, scope)
 	}
@@ -1074,20 +1072,4 @@ func (adh *AdminHandler) convertIndexedValueTypeToESDataType(valueType enumspb.I
 	default:
 		return ""
 	}
-}
-
-func (adh *AdminHandler) checkPermission(
-	config *Config,
-	securityToken string,
-) error {
-	if config.EnableAdminProtection() {
-		if securityToken == "" {
-			return errNoPermission
-		}
-		requiredToken := config.AdminOperationToken()
-		if securityToken != requiredToken {
-			return errNoPermission
-		}
-	}
-	return nil
 }

@@ -140,8 +140,7 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 			ExecutionsScannerEnabled: dc.GetBoolProperty(dynamicconfig.ExecutionsScannerEnabled, false),
 		},
 		BatcherCfg: &batcher.Config{
-			AdminOperationToken: dc.GetStringProperty(dynamicconfig.AdminOperationToken, common.DefaultAdminOperationToken),
-			ClusterMetadata:     params.ClusterMetadata,
+			ClusterMetadata: params.ClusterMetadata,
 		},
 		EnableBatcher:                 dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
 		VisibilityQueue:               dc.GetStringProperty(dynamicconfig.VisibilityQueue, common.VisibilityQueueInternalWithDualProcessor),

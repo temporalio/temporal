@@ -98,7 +98,7 @@ func (d *plugin) createDBConnection(cfg *config.SQL, r resolver.ServiceResolver)
 }
 
 func buildDSN(cfg *config.SQL, r resolver.ServiceResolver) string {
-	tlsAttrs := dsnTSL(cfg).Encode()
+	tlsAttrs := buildDSNAttr(cfg).Encode()
 	resolvedAddr := r.Resolve(cfg.ConnectAddr)[0]
 	dsn := fmt.Sprintf(
 		dsnFmt,
