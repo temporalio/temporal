@@ -25,7 +25,9 @@
 package postgresql
 
 import (
+	"fmt"
 	"net/url"
+	"strings"
 
 	"go.temporal.io/server/common/service/config"
 )
@@ -43,25 +45,38 @@ const (
 	postgreSQLCert = "sslcert"
 )
 
-func dsnTSL(cfg *config.SQL) url.Values {
-	sslParams := url.Values{}
+func buildDSNAttr(cfg *config.SQL) url.Values {
+	parameters := url.Values{}
 	if cfg.TLS != nil && cfg.TLS.Enabled {
 		if !cfg.TLS.EnableHostVerification {
-			sslParams.Set(postgreSQLSSLMode, postgreSQLSSLModeRequire)
+			parameters.Set(postgreSQLSSLMode, postgreSQLSSLModeRequire)
 		} else {
-			sslParams.Set(postgreSQLSSLMode, postgreSQLSSLModeFull)
-			sslParams.Set(postgreSQLSSLHost, cfg.TLS.ServerName)
+			parameters.Set(postgreSQLSSLMode, postgreSQLSSLModeFull)
+			parameters.Set(postgreSQLSSLHost, cfg.TLS.ServerName)
 		}
 
 		if cfg.TLS.CaFile != "" {
-			sslParams.Set(postgreSQLCA, cfg.TLS.CaFile)
+			parameters.Set(postgreSQLCA, cfg.TLS.CaFile)
 		}
 		if cfg.TLS.KeyFile != "" && cfg.TLS.CertFile != "" {
-			sslParams.Set(postgreSQLKey, cfg.TLS.KeyFile)
-			sslParams.Set(postgreSQLCert, cfg.TLS.CertFile)
+			parameters.Set(postgreSQLKey, cfg.TLS.KeyFile)
+			parameters.Set(postgreSQLCert, cfg.TLS.CertFile)
 		}
 	} else {
-		sslParams.Set(postgreSQLSSLMode, postgreSQLSSLModeNoop)
+		parameters.Set(postgreSQLSSLMode, postgreSQLSSLModeNoop)
 	}
-	return sslParams
+
+	for k, v := range cfg.ConnectAttributes {
+		key := strings.TrimSpace(k)
+		value := strings.TrimSpace(v)
+		if parameters.Get(key) != "" {
+			panic(fmt.Sprintf("duplicate connection attr: %v:%v, %v:%v",
+				key,
+				parameters.Get(key),
+				key, value,
+			))
+		}
+		parameters.Set(key, value)
+	}
+	return parameters
 }
