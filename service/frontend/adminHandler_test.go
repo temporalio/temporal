@@ -99,9 +99,7 @@ func (s *adminHandlerSuite) SetupTest() {
 			NumHistoryShards: 1,
 		},
 	}
-	config := &Config{
-		EnableAdminProtection: dynamicconfig.GetBoolPropertyFn(false),
-	}
+	config := &Config{}
 	s.handler = NewAdminHandler(s.mockResource, params, config)
 	s.handler.Start()
 }
@@ -562,40 +560,4 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	resp, err = handler.AddSearchAttribute(ctx, esErrorTest.Request)
 	s.Equal(esErrorTest.Expected, err)
 	s.Nil(resp)
-}
-
-func (s *adminHandlerSuite) Test_AddSearchAttribute_Permission() {
-	ctx := context.Background()
-	handler := s.handler
-	handler.config = &Config{
-		EnableAdminProtection: dynamicconfig.GetBoolPropertyFn(true),
-		AdminOperationToken:   dynamicconfig.GetStringPropertyFn(common.DefaultAdminOperationToken),
-	}
-
-	type test struct {
-		Name     string
-		Request  *adminservice.AddSearchAttributeRequest
-		Expected error
-	}
-	testCases := []test{
-		{
-			Name: "unknown token",
-			Request: &adminservice.AddSearchAttributeRequest{
-				SecurityToken: "unknown",
-			},
-			Expected: errNoPermission,
-		},
-		{
-			Name: "correct token",
-			Request: &adminservice.AddSearchAttributeRequest{
-				SecurityToken: common.DefaultAdminOperationToken,
-			},
-			Expected: &serviceerror.InvalidArgument{Message: "SearchAttributes are not set on request."},
-		},
-	}
-	for _, testCase := range testCases {
-		resp, err := handler.AddSearchAttribute(ctx, testCase.Request)
-		s.Equal(testCase.Expected, err)
-		s.Nil(resp)
-	}
 }
