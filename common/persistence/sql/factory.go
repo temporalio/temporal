@@ -65,7 +65,12 @@ type (
 
 // NewFactory returns an instance of a factory object which can be used to create
 // datastores backed by any kind of SQL store
-func NewFactory(cfg config.SQL, r resolver.ServiceResolver, clusterName string, logger log.Logger) *Factory {
+func NewFactory(
+	cfg config.SQL,
+	r resolver.ServiceResolver,
+	clusterName string,
+	logger log.Logger,
+) *Factory {
 	return &Factory{
 		cfg:         cfg,
 		clusterName: clusterName,
