@@ -388,6 +388,12 @@ start: temporal-server
 start-es: temporal-server
 	./temporal-server --zone es start
 
+start-mysql: temporal-server
+	./temporal-server --zone mysql start
+
+start-mysql-es: temporal-server
+	./temporal-server --zone mysql-es start
+
 start-cdc-active: temporal-server
 	./temporal-server --zone active start
 
@@ -415,4 +421,6 @@ gomodtidy:
 	@go mod tidy
 
 ensure-no-changes:
-	@git diff --name-status --exit-code || (printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; exit 1)
+	@printf $(COLOR) "Check for local changes..."
+	@printf $(COLOR) "========================================================================"
+	@git diff --name-status --exit-code || (printf $(COLOR) "========================================================================"; printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; exit 1)

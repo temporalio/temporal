@@ -174,6 +174,8 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	// TODO (alex): remove copy?
 	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
+	executionStatus := executionState.GetStatus()
+	taskQueue := executionInfo.TaskQueue
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
@@ -189,8 +191,8 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 			executionTimestamp.UnixNano(),
 			runTimeout,
 			task.GetTaskId(),
-			executionState.GetStatus(),
-			executionInfo.TaskQueue,
+			executionStatus,
+			taskQueue,
 			visibilityMemo,
 			searchAttr,
 		)
@@ -204,8 +206,8 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 		executionTimestamp.UnixNano(),
 		runTimeout,
 		task.GetTaskId(),
-		executionState.GetStatus(),
-		executionInfo.TaskQueue,
+		executionStatus,
+		taskQueue,
 		visibilityMemo,
 		searchAttr,
 	)
@@ -366,6 +368,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	workflowExecutionTime := getWorkflowExecutionTime(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := executionInfo.SearchAttributes
+	taskQueue := executionInfo.TaskQueue
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
@@ -382,7 +385,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		workflowHistoryLength,
 		task.GetTaskId(),
 		visibilityMemo,
-		executionInfo.TaskQueue,
+		taskQueue,
 		searchAttr,
 	)
 }

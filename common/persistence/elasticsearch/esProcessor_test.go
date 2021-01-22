@@ -158,9 +158,9 @@ func (s *esProcessorSuite) TestAdd() {
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
 	select {
 	case ack := <-ackCh:
-		s.True(ack)
+		s.False(ack)
 	default:
-		s.Fail("request should be acknowledged due to duplicate key")
+		s.Fail("request should be nacked due to duplicate key")
 	}
 }
 
@@ -184,7 +184,7 @@ func (s *esProcessorSuite) TestAdd_ConcurrentAdd() {
 	wg.Wait()
 	for i := 0; i < duplicates-1; i++ {
 		ack := <-ackCh
-		s.True(ack)
+		s.False(ack)
 	}
 	select {
 	case <-ackCh:

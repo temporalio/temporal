@@ -25,44 +25,33 @@
 package elasticsearch
 
 import (
-	"github.com/olivere/elastic/v7"
+	"fmt"
+
+	"go.temporal.io/server/common/log"
 )
 
 type (
-	bulkProcessorV7 struct {
-		esBulkProcessor *elastic.BulkProcessor
+	errorLogger struct {
+		log.Logger
+	}
+
+	infoLogger struct {
+		log.Logger
 	}
 )
 
-func newBulkProcessorV7(esBulkProcessor *elastic.BulkProcessor) *bulkProcessorV7 {
-	if esBulkProcessor == nil {
-		return nil
-	}
-	return &bulkProcessorV7{
-		esBulkProcessor: esBulkProcessor,
-	}
+func newErrorLogger(logger log.Logger) *errorLogger {
+	return &errorLogger{logger}
 }
 
-func (p *bulkProcessorV7) Stop() error {
-	return p.esBulkProcessor.Stop()
+func (l *errorLogger) Printf(format string, v ...interface{}) {
+	l.Error(fmt.Sprintf(format, v...))
 }
 
-func (p *bulkProcessorV7) Add(request *BulkableRequest) {
-	switch request.RequestType {
-	case BulkableRequestTypeIndex:
-		bulkIndexRequest := elastic.NewBulkIndexRequest().
-			Index(request.Index).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version).
-			Doc(request.Doc)
-		p.esBulkProcessor.Add(bulkIndexRequest)
-	case BulkableRequestTypeDelete:
-		bulkDeleteRequest := elastic.NewBulkDeleteRequest().
-			Index(request.Index).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version)
-		p.esBulkProcessor.Add(bulkDeleteRequest)
-	}
+func newInfoLogger(logger log.Logger) *infoLogger {
+	return &infoLogger{logger}
+}
+
+func (l *infoLogger) Printf(format string, v ...interface{}) {
+	l.Info(fmt.Sprintf(format, v...))
 }

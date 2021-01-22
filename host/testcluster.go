@@ -162,7 +162,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	if options.WorkerConfig.EnableIndexer {
 		advancedVisibilityWritingMode = dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOn)
 		var err error
-		esClient, err = elasticsearch.NewClient(options.ESConfig)
+		esClient, err = elasticsearch.NewClient(options.ESConfig, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -182,7 +182,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			VisibilityListMaxQPS:   dynamicconfig.GetIntPropertyFilteredByNamespace(2000),
 			ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(defaultTestValueOfESIndexMaxResultWindow),
 			ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
-			ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(5 * time.Second),
+			ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 		}
 		indexName := options.ESConfig.Indices[common.VisibilityAppName]
 		esVisibilityStore := pes.NewElasticSearchVisibilityStore(esClient, indexName, nil, esProcessor, visConfig, logger, &metricsmocks.Client{})

@@ -16,9 +16,6 @@ frontend.throttledLogRPS:
 history.historyMgrNumConns:
 - value: 50
   constraints: {}
-system.advancedVisibilityWritingMode:
-- value: "off"
-  constraints: {}
 history.defaultActivityRetryPolicy:
 - value:
     InitialIntervalInSeconds: 1
@@ -31,3 +28,6 @@ history.defaultWorkflowRetryPolicy:
     MaximumIntervalCoefficient: 100.0
     BackoffCoefficient: 2.0
     MaximumAttempts: 0
+system.advancedVisibilityWritingMode:
+  - value: "off"
+    constraints: {}
