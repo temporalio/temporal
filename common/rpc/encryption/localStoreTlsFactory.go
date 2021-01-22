@@ -154,13 +154,11 @@ func newServerTLSConfig(
 	certProvider CertProvider,
 	perHostCertProviderFactory PerHostCertProviderFactory,
 ) (*tls.Config, error) {
-	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider)
-	if err != nil {
-		return nil, err
-	}
 
-	if tlsConfig != nil && perHostCertProviderFactory != nil {
-		tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
+	var callback func(c *tls.ClientHelloInfo) (*tls.Config, error)
+
+	if perHostCertProviderFactory != nil {
+		callback = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
 			perHostCertProvider, err := perHostCertProviderFactory.GetCertProvider(c.ServerName)
 			if err != nil {
 				return nil, err
@@ -169,13 +167,22 @@ func newServerTLSConfig(
 			// If there are no special TLS settings for the specific host name being requested,
 			// returning nil here will fallback to the default, top-level TLS config
 			if perHostCertProvider == nil {
-				return nil, nil
+				return getServerTLSConfigFromCertProvider(certProvider)
 			}
-
 			return getServerTLSConfigFromCertProvider(perHostCertProvider)
+		}
+	} else {
+		callback = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
+			return getServerTLSConfigFromCertProvider(certProvider)
 		}
 	}
 
+	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider)
+	if err != nil {
+		return nil, err
+	}
+
+	tlsConfig.GetConfigForClient = callback
 	return tlsConfig, nil
 }
 
@@ -206,8 +213,10 @@ func getServerTLSConfigFromCertProvider(certProvider CertProvider) (*tls.Config,
 
 		clientCaPool = ca
 	}
-
-	return auth.NewTLSConfigWithClientAuthAndCAs(clientAuthType, []tls.Certificate{*serverCert}, clientCaPool), nil
+	return auth.NewTLSConfigWithCertsAndCAs(
+		clientAuthType,
+		[]tls.Certificate{*serverCert},
+		clientCaPool), nil
 }
 
 func newClientTLSConfig(clientProvider ClientCertProvider, isAuthRequired bool, isWorker bool) (*tls.Config, error) {
@@ -217,22 +226,25 @@ func newClientTLSConfig(clientProvider ClientCertProvider, isAuthRequired bool, 
 		return nil, fmt.Errorf("failed to load client ca: %v", err)
 	}
 
-	// mTLS enabled, present certificate
-	var clientCerts []tls.Certificate
-	if isAuthRequired {
-		cert, err := clientProvider.FetchClientCertificate(isWorker)
-		if err != nil {
-			return nil, err
-		}
+	var getCert func() (*tls.Certificate, error)
 
-		if cert == nil {
-			return nil, fmt.Errorf("client auth required, but no certificate provided")
+	// mTLS enabled, present certificate
+	if isAuthRequired {
+		getCert = func() (*tls.Certificate, error) {
+			cert, err := clientProvider.FetchClientCertificate(isWorker)
+			if err != nil {
+				return nil, err
+			}
+
+			if cert == nil {
+				return nil, fmt.Errorf("client auth required, but no certificate provided")
+			}
+			return cert, nil
 		}
-		clientCerts = []tls.Certificate{*cert}
 	}
 
-	return auth.NewTLSConfigWithCertsAndCAs(
-		clientCerts,
+	return auth.NewDynamicTLSClientConfig(
+		getCert,
 		serverCa,
 		clientProvider.ServerName(isWorker),
 		!clientProvider.DisableHostVerification(isWorker),

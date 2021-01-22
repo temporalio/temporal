@@ -50,19 +50,25 @@ func NewTLSConfigForServer(
 	return c
 }
 
-func NewTLSConfigWithCertsAndCAs(
-	certificates []tls.Certificate,
+func NewDynamicTLSClientConfig(
+	getCert func() (*tls.Certificate, error),
 	rootCAs *x509.CertPool,
 	serverName string,
 	enableHostVerification bool,
 ) *tls.Config {
 	c := NewTLSConfigForServer(serverName, enableHostVerification)
-	c.Certificates = certificates
+
+	if getCert != nil {
+		c.GetClientCertificate = func(info *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return getCert()
+		}
+	}
 	c.RootCAs = rootCAs
+
 	return c
 }
 
-func NewTLSConfigWithClientAuthAndCAs(
+func NewTLSConfigWithCertsAndCAs(
 	clientAuth tls.ClientAuthType,
 	certificates []tls.Certificate,
 	clientCAs *x509.CertPool,
