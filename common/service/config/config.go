@@ -34,8 +34,8 @@ import (
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/elasticsearch"
+	"go.temporal.io/server/common/masker"
 	"go.temporal.io/server/common/messaging"
-	"go.temporal.io/server/common/password"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -540,7 +540,7 @@ func (c *Config) String() string {
 	encoder := yaml.NewEncoder(&buf)
 	encoder.SetIndent(2)
 	_ = encoder.Encode(c)
-	return password.MaskYaml(buf.String(), password.DefaultYAMLFieldNames)
+	return masker.MaskYaml(buf.String(), masker.DefaultYAMLFieldNames)
 }
 
 func (r *GroupTLS) IsEnabled() bool {
