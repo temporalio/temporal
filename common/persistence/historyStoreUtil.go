@@ -28,6 +28,7 @@ import (
 	"fmt"
 
 	historypb "go.temporal.io/api/history/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -55,7 +56,7 @@ func ReadFullPageV2Events(historyV2Mgr HistoryManager, req *ReadHistoryBranchReq
 // it is not guaranteed that pageSize amount of data is returned. Function returns the list of history batches, the size
 // of data read, the next page token, and an error if present.
 func ReadFullPageV2EventsByBatch(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*historypb.History, int, []byte, error) {
-	historyBatches := []*historypb.History{}
+	var historyBatches []*historypb.History
 	eventsRead := 0
 	size := 0
 	for {

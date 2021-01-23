@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -59,8 +58,8 @@ type (
 		mockTransactionMgr      *MocknDCTransactionMgr
 		mockStateBuilder        *MocknDCStateRebuilder
 
-		logger           log.Logger
-		mockHistoryV2Mgr *mocks.HistoryV2Manager
+		logger         log.Logger
+		mockHistoryMgr *persistence.MockHistoryManager
 
 		namespaceID string
 		namespace   string
@@ -98,7 +97,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 		NewDynamicConfigForTest(),
 	)
 
-	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
 
 	s.logger = s.mockShard.GetLogger()
 
@@ -188,7 +187,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	).Return(s.mockRebuiltMutableState, rebuiltHistorySize, nil).Times(1)
 
 	shardId := s.mockShard.GetShardID()
-	s.mockHistoryV2Mgr.On("ForkHistoryBranch", &persistence.ForkHistoryBranchRequest{
+	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: branchToken,
 		ForkNodeID:      baseEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.newRunID),

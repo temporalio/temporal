@@ -42,7 +42,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -83,9 +83,9 @@ func (s *ScavengerTestSuite) SetupTest() {
 	s.metric = metrics.NewClient(tally.NoopScope, metrics.Worker)
 }
 
-func (s *ScavengerTestSuite) createTestScavenger(rps int) (*mocks.HistoryV2Manager, *historyservicemock.MockHistoryServiceClient, *Scavenger, *gomock.Controller) {
-	db := &mocks.HistoryV2Manager{}
+func (s *ScavengerTestSuite) createTestScavenger(rps int) (*persistence.MockHistoryManager, *historyservicemock.MockHistoryServiceClient, *Scavenger, *gomock.Controller) {
 	controller := gomock.NewController(s.T())
+	db := persistence.NewMockHistoryManager(controller)
 	historyClient := historyservicemock.NewMockHistoryServiceClient(controller)
 	scvgr := NewScavenger(db, 100, historyClient, ScavengerHeartbeatDetails{}, s.metric, s.logger)
 	scvgr.isInTest = true
@@ -95,7 +95,7 @@ func (s *ScavengerTestSuite) createTestScavenger(rps int) (*mocks.HistoryV2Manag
 func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 	db, _, scvgr, controller := s.createTestScavenger(100)
 	defer controller.Finish()
-	db.On("GetAllHistoryTreeBranches", &p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
@@ -113,9 +113,9 @@ func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
-	}, nil).Once()
+	}, nil).Times(1)
 
-	db.On("GetAllHistoryTreeBranches", &p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
@@ -133,7 +133,7 @@ func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
-	}, nil).Once()
+	}, nil).Times(1)
 
 	hbd, err := scvgr.Run(context.Background())
 	s.Nil(err)
@@ -147,7 +147,7 @@ func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 	db, _, scvgr, controller := s.createTestScavenger(100)
 	defer controller.Finish()
-	db.On("GetAllHistoryTreeBranches", &p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
@@ -165,9 +165,9 @@ func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 				Info:     "error-info",
 			},
 		},
-	}, nil).Once()
+	}, nil).Times(1)
 
-	db.On("GetAllHistoryTreeBranches", &p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
@@ -185,7 +185,7 @@ func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 				Info:     "error-info",
 			},
 		},
-	}, nil).Once()
+	}, nil).Times(1)
 
 	hbd, err := scvgr.Run(context.Background())
 	s.Nil(err)
@@ -199,7 +199,7 @@ func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 	db, client, scvgr, controller := s.createTestScavenger(100)
 	defer controller.Finish()
-	db.On("GetAllHistoryTreeBranches", &p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
@@ -217,9 +217,9 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
-	}, nil).Once()
+	}, nil).Times(1)
 
-	db.On("GetAllHistoryTreeBranches", &p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
@@ -237,7 +237,7 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
-	}, nil).Once()
+	}, nil).Times(1)
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID1",
@@ -280,7 +280,7 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 	db, client, scvgr, controller := s.createTestScavenger(100)
 	defer controller.Finish()
-	db.On("GetAllHistoryTreeBranches", &p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
@@ -298,8 +298,8 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
-	}, nil).Once()
-	db.On("GetAllHistoryTreeBranches", &p.GetAllHistoryTreeBranchesRequest{
+	}, nil).Times(1)
+	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
@@ -317,7 +317,7 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
-	}, nil).Once()
+	}, nil).Times(1)
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID1",
@@ -350,28 +350,28 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 
 	branchToken1, err := p.NewHistoryBranchTokenByBranchID(treeID1, branchID1)
 	s.Nil(err)
-	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
+	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken1,
 		ShardID:     convert.Int32Ptr(1),
-	}).Return(nil).Once()
+	}).Return(nil).Times(1)
 	branchToken2, err := p.NewHistoryBranchTokenByBranchID(treeID2, branchID2)
 	s.Nil(err)
-	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
+	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken2,
 		ShardID:     convert.Int32Ptr(1),
-	}).Return(nil).Once()
+	}).Return(nil).Times(1)
 	branchToken3, err := p.NewHistoryBranchTokenByBranchID(treeID3, branchID3)
 	s.Nil(err)
-	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
+	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     convert.Int32Ptr(1),
-	}).Return(nil).Once()
+	}).Return(nil).Times(1)
 	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
-	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
+	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
 		ShardID:     convert.Int32Ptr(1),
-	}).Return(nil).Once()
+	}).Return(nil).Times(1)
 
 	hbd, err := scvgr.Run(context.Background())
 	s.Nil(err)
@@ -385,7 +385,7 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 func (s *ScavengerTestSuite) TestMixesTwoPages() {
 	db, client, scvgr, controller := s.createTestScavenger(100)
 	defer controller.Finish()
-	db.On("GetAllHistoryTreeBranches", &p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
@@ -405,8 +405,8 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 				Info:     "error-info",
 			},
 		},
-	}, nil).Once()
-	db.On("GetAllHistoryTreeBranches", &p.GetAllHistoryTreeBranchesRequest{
+	}, nil).Times(1)
+	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
@@ -433,7 +433,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID5", "workflowID5", "runID5"),
 			},
 		},
-	}, nil).Once()
+	}, nil).Times(1)
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID3",
@@ -460,17 +460,17 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 
 	branchToken3, err := p.NewHistoryBranchTokenByBranchID(treeID3, branchID3)
 	s.Nil(err)
-	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
+	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     convert.Int32Ptr(1),
-	}).Return(nil).Once()
+	}).Return(nil).Times(1)
 
 	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
-	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
+	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
 		ShardID:     convert.Int32Ptr(1),
-	}).Return(fmt.Errorf("failed to delete history")).Once()
+	}).Return(fmt.Errorf("failed to delete history")).Times(1)
 
 	hbd, err := scvgr.Run(context.Background())
 	s.Nil(err)
