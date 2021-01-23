@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/password"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
@@ -147,7 +148,7 @@ func (s *Service) Start() {
 	}
 
 	logger := s.GetLogger()
-	logger.Info("elastic search config", tag.ESConfig(s.params.ESConfig))
+	logger.Info("elastic search config", tag.ESConfig(password.MaskStruct(s.params.ESConfig, password.DefaultFieldNames)))
 	logger.Info("history starting")
 
 	s.handler = NewHandler(s.Resource, s.config)

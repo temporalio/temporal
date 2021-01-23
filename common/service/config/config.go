@@ -25,15 +25,17 @@
 package config
 
 import (
-	"encoding/json"
+	"bytes"
 	"time"
 
 	"github.com/uber-go/tally/m3"
 	"github.com/uber-go/tally/prometheus"
+	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/password"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -534,8 +536,11 @@ func (c *Config) Validate() error {
 
 // String converts the config object into a string
 func (c *Config) String() string {
-	out, _ := json.MarshalIndent(c, "", "    ")
-	return string(out)
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	_ = encoder.Encode(c)
+	return password.MaskYaml(buf.String(), password.DefaultYAMLFieldNames)
 }
 
 func (r *GroupTLS) IsEnabled() bool {
