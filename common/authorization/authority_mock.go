@@ -35,30 +35,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockAuthorizer is a mock of Authorizer interface.
+// MockAuthorizer is a mock of Authorizer interface
 type MockAuthorizer struct {
 	ctrl     *gomock.Controller
 	recorder *MockAuthorizerMockRecorder
 }
 
-// MockAuthorizerMockRecorder is the mock recorder for MockAuthorizer.
+// MockAuthorizerMockRecorder is the mock recorder for MockAuthorizer
 type MockAuthorizerMockRecorder struct {
 	mock *MockAuthorizer
 }
 
-// NewMockAuthorizer creates a new mock instance.
+// NewMockAuthorizer creates a new mock instance
 func NewMockAuthorizer(ctrl *gomock.Controller) *MockAuthorizer {
 	mock := &MockAuthorizer{ctrl: ctrl}
 	mock.recorder = &MockAuthorizerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockAuthorizer) EXPECT() *MockAuthorizerMockRecorder {
 	return m.recorder
 }
 
-// Authorize mocks base method.
+// Authorize mocks base method
 func (m *MockAuthorizer) Authorize(ctx context.Context, caller *Claims, target *CallTarget) (Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Authorize", ctx, caller, target)
@@ -67,36 +67,36 @@ func (m *MockAuthorizer) Authorize(ctx context.Context, caller *Claims, target *
 	return ret0, ret1
 }
 
-// Authorize indicates an expected call of Authorize.
+// Authorize indicates an expected call of Authorize
 func (mr *MockAuthorizerMockRecorder) Authorize(ctx, caller, target interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authorize", reflect.TypeOf((*MockAuthorizer)(nil).Authorize), ctx, caller, target)
 }
 
-// MockrequestWithNamespace is a mock of requestWithNamespace interface.
+// MockrequestWithNamespace is a mock of requestWithNamespace interface
 type MockrequestWithNamespace struct {
 	ctrl     *gomock.Controller
 	recorder *MockrequestWithNamespaceMockRecorder
 }
 
-// MockrequestWithNamespaceMockRecorder is the mock recorder for MockrequestWithNamespace.
+// MockrequestWithNamespaceMockRecorder is the mock recorder for MockrequestWithNamespace
 type MockrequestWithNamespaceMockRecorder struct {
 	mock *MockrequestWithNamespace
 }
 
-// NewMockrequestWithNamespace creates a new mock instance.
+// NewMockrequestWithNamespace creates a new mock instance
 func NewMockrequestWithNamespace(ctrl *gomock.Controller) *MockrequestWithNamespace {
 	mock := &MockrequestWithNamespace{ctrl: ctrl}
 	mock.recorder = &MockrequestWithNamespaceMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockrequestWithNamespace) EXPECT() *MockrequestWithNamespaceMockRecorder {
 	return m.recorder
 }
 
-// GetNamespace mocks base method.
+// GetNamespace mocks base method
 func (m *MockrequestWithNamespace) GetNamespace() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespace")
@@ -104,7 +104,7 @@ func (m *MockrequestWithNamespace) GetNamespace() string {
 	return ret0
 }
 
-// GetNamespace indicates an expected call of GetNamespace.
+// GetNamespace indicates an expected call of GetNamespace
 func (mr *MockrequestWithNamespaceMockRecorder) GetNamespace() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespace", reflect.TypeOf((*MockrequestWithNamespace)(nil).GetNamespace))

@@ -36,30 +36,30 @@ import (
 	repication "go.temporal.io/server/api/replication/v1"
 )
 
-// MockreplicationDLQHandler is a mock of replicationDLQHandler interface.
+// MockreplicationDLQHandler is a mock of replicationDLQHandler interface
 type MockreplicationDLQHandler struct {
 	ctrl     *gomock.Controller
 	recorder *MockreplicationDLQHandlerMockRecorder
 }
 
-// MockreplicationDLQHandlerMockRecorder is the mock recorder for MockreplicationDLQHandler.
+// MockreplicationDLQHandlerMockRecorder is the mock recorder for MockreplicationDLQHandler
 type MockreplicationDLQHandlerMockRecorder struct {
 	mock *MockreplicationDLQHandler
 }
 
-// NewMockreplicationDLQHandler creates a new mock instance.
+// NewMockreplicationDLQHandler creates a new mock instance
 func NewMockreplicationDLQHandler(ctrl *gomock.Controller) *MockreplicationDLQHandler {
 	mock := &MockreplicationDLQHandler{ctrl: ctrl}
 	mock.recorder = &MockreplicationDLQHandlerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockreplicationDLQHandler) EXPECT() *MockreplicationDLQHandlerMockRecorder {
 	return m.recorder
 }
 
-// getMessages mocks base method.
+// getMessages mocks base method
 func (m *MockreplicationDLQHandler) getMessages(ctx context.Context, sourceCluster string, lastMessageID int64, pageSize int, pageToken []byte) ([]*repication.ReplicationTask, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getMessages", ctx, sourceCluster, lastMessageID, pageSize, pageToken)
@@ -69,13 +69,27 @@ func (m *MockreplicationDLQHandler) getMessages(ctx context.Context, sourceClust
 	return ret0, ret1, ret2
 }
 
-// getMessages indicates an expected call of getMessages.
+// getMessages indicates an expected call of getMessages
 func (mr *MockreplicationDLQHandlerMockRecorder) getMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getMessages", reflect.TypeOf((*MockreplicationDLQHandler)(nil).getMessages), ctx, sourceCluster, lastMessageID, pageSize, pageToken)
 }
 
-// mergeMessages mocks base method.
+// purgeMessages mocks base method
+func (m *MockreplicationDLQHandler) purgeMessages(sourceCluster string, lastMessageID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "purgeMessages", sourceCluster, lastMessageID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// purgeMessages indicates an expected call of purgeMessages
+func (mr *MockreplicationDLQHandlerMockRecorder) purgeMessages(sourceCluster, lastMessageID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "purgeMessages", reflect.TypeOf((*MockreplicationDLQHandler)(nil).purgeMessages), sourceCluster, lastMessageID)
+}
+
+// mergeMessages mocks base method
 func (m *MockreplicationDLQHandler) mergeMessages(ctx context.Context, sourceCluster string, lastMessageID int64, pageSize int, pageToken []byte) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "mergeMessages", ctx, sourceCluster, lastMessageID, pageSize, pageToken)
@@ -84,22 +98,8 @@ func (m *MockreplicationDLQHandler) mergeMessages(ctx context.Context, sourceClu
 	return ret0, ret1
 }
 
-// mergeMessages indicates an expected call of mergeMessages.
+// mergeMessages indicates an expected call of mergeMessages
 func (mr *MockreplicationDLQHandlerMockRecorder) mergeMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "mergeMessages", reflect.TypeOf((*MockreplicationDLQHandler)(nil).mergeMessages), ctx, sourceCluster, lastMessageID, pageSize, pageToken)
-}
-
-// purgeMessages mocks base method.
-func (m *MockreplicationDLQHandler) purgeMessages(sourceCluster string, lastMessageID int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "purgeMessages", sourceCluster, lastMessageID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// purgeMessages indicates an expected call of purgeMessages.
-func (mr *MockreplicationDLQHandlerMockRecorder) purgeMessages(sourceCluster, lastMessageID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "purgeMessages", reflect.TypeOf((*MockreplicationDLQHandler)(nil).purgeMessages), sourceCluster, lastMessageID)
 }

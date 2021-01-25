@@ -34,30 +34,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockEngineFactory is a mock of EngineFactory interface.
+// MockEngineFactory is a mock of EngineFactory interface
 type MockEngineFactory struct {
 	ctrl     *gomock.Controller
 	recorder *MockEngineFactoryMockRecorder
 }
 
-// MockEngineFactoryMockRecorder is the mock recorder for MockEngineFactory.
+// MockEngineFactoryMockRecorder is the mock recorder for MockEngineFactory
 type MockEngineFactoryMockRecorder struct {
 	mock *MockEngineFactory
 }
 
-// NewMockEngineFactory creates a new mock instance.
+// NewMockEngineFactory creates a new mock instance
 func NewMockEngineFactory(ctrl *gomock.Controller) *MockEngineFactory {
 	mock := &MockEngineFactory{ctrl: ctrl}
 	mock.recorder = &MockEngineFactoryMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockEngineFactory) EXPECT() *MockEngineFactoryMockRecorder {
 	return m.recorder
 }
 
-// CreateEngine mocks base method.
+// CreateEngine mocks base method
 func (m *MockEngineFactory) CreateEngine(context Context) Engine {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateEngine", context)
@@ -65,7 +65,7 @@ func (m *MockEngineFactory) CreateEngine(context Context) Engine {
 	return ret0
 }
 
-// CreateEngine indicates an expected call of CreateEngine.
+// CreateEngine indicates an expected call of CreateEngine
 func (mr *MockEngineFactoryMockRecorder) CreateEngine(context interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateEngine", reflect.TypeOf((*MockEngineFactory)(nil).CreateEngine), context)

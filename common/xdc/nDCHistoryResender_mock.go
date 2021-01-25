@@ -34,30 +34,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockNDCHistoryResender is a mock of NDCHistoryResender interface.
+// MockNDCHistoryResender is a mock of NDCHistoryResender interface
 type MockNDCHistoryResender struct {
 	ctrl     *gomock.Controller
 	recorder *MockNDCHistoryResenderMockRecorder
 }
 
-// MockNDCHistoryResenderMockRecorder is the mock recorder for MockNDCHistoryResender.
+// MockNDCHistoryResenderMockRecorder is the mock recorder for MockNDCHistoryResender
 type MockNDCHistoryResenderMockRecorder struct {
 	mock *MockNDCHistoryResender
 }
 
-// NewMockNDCHistoryResender creates a new mock instance.
+// NewMockNDCHistoryResender creates a new mock instance
 func NewMockNDCHistoryResender(ctrl *gomock.Controller) *MockNDCHistoryResender {
 	mock := &MockNDCHistoryResender{ctrl: ctrl}
 	mock.recorder = &MockNDCHistoryResenderMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockNDCHistoryResender) EXPECT() *MockNDCHistoryResenderMockRecorder {
 	return m.recorder
 }
 
-// SendSingleWorkflowHistory mocks base method.
+// SendSingleWorkflowHistory mocks base method
 func (m *MockNDCHistoryResender) SendSingleWorkflowHistory(namespaceID, workflowID, runID string, startEventID, startEventVersion, endEventID, endEventVersion int64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendSingleWorkflowHistory", namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion)
@@ -65,7 +65,7 @@ func (m *MockNDCHistoryResender) SendSingleWorkflowHistory(namespaceID, workflow
 	return ret0
 }
 
-// SendSingleWorkflowHistory indicates an expected call of SendSingleWorkflowHistory.
+// SendSingleWorkflowHistory indicates an expected call of SendSingleWorkflowHistory
 func (mr *MockNDCHistoryResenderMockRecorder) SendSingleWorkflowHistory(namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendSingleWorkflowHistory", reflect.TypeOf((*MockNDCHistoryResender)(nil).SendSingleWorkflowHistory), namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion)
