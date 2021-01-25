@@ -96,7 +96,7 @@ RUN apk add --update --no-cache \
     mysql-client \
     postgresql-client \
     python2 \
-    && curl https://bootstrap.pypa.io/get-pip.py | python \
+    && curl https://bootstrap.pypa.io/2.7/get-pip.py | python \
     && pip install cqlsh
 
 ENV TEMPORAL_HOME /etc/temporal
