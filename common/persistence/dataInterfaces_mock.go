@@ -29,10 +29,11 @@
 package persistence
 
 import (
-	gomock "github.com/golang/mock/gomock"
-	v1 "go.temporal.io/server/api/enums/v1"
 	reflect "reflect"
 	time "time"
+
+	gomock "github.com/golang/mock/gomock"
+	v1 "go.temporal.io/server/api/enums/v1"
 )
 
 // MockTask is a mock of Task interface
