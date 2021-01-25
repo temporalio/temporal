@@ -260,7 +260,7 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 			attributes.HeartbeatTimeout = &runTimeout
 		}
 	}
-	attributes.HeartbeatTimeout = timestamp.MinDurationPtr(attributes.GetHeartbeatTimeout(), attributes.GetScheduleToCloseTimeout())
+	attributes.HeartbeatTimeout = timestamp.MinDurationPtr(attributes.GetHeartbeatTimeout(), attributes.GetStartToCloseTimeout())
 
 	return nil
 }
