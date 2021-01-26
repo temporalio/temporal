@@ -170,7 +170,7 @@ func (p *esProcessorImpl) Add(request *elasticsearch.BulkableRequest, visibility
 			p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", value, &ackChanWithStopwatch{}), tag.Value(key))
 		}
 
-		p.logger.Info("Adding duplicate visibility task to ES bulk processor.", tag.Value(key))
+		p.logger.Warn("Adding duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc))
 
 		// Nack existing visibility task.
 		ackChWithStopwatchExisting.addToProcessStopwatch.Stop()

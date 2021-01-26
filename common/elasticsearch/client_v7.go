@@ -51,7 +51,7 @@ func newClientV7(config *Config, logger log.Logger) (*clientV7, error) {
 
 		elastic.SetErrorLog(newErrorLogger(logger)),
 		// Uncomment next line to enable info logging also.
-		elastic.SetInfoLog(newInfoLogger(logger)),
+		// elastic.SetInfoLog(newInfoLogger(logger)),
 
 		// Disable health check so we don't block client creation (and thus temporal server startup)
 		// if the ES instance happens to be down.
