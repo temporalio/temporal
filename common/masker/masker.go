@@ -76,7 +76,7 @@ func MaskYaml(yamlStr string, fieldNamesToMask []string) string {
 func MaskStruct(strct interface{}, fieldNamesToMask []string) interface{} {
 	strctV := reflect.ValueOf(strct)
 
-	if strct == nil || strctV.IsNil() {
+	if strct == nil || (strctV.Kind() == reflect.Ptr && strctV.IsNil()) {
 		return strct
 	}
 

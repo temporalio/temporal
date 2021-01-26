@@ -59,6 +59,21 @@ func TestMaskStruct(t *testing.T) {
 	assert.Equal("login", maskedS2.(*strct).Login)
 }
 
+func TestMaskStruct_Nil(t *testing.T) {
+	assert := assert.New(t)
+
+	maskedS1 := MaskStruct(nil, DefaultFieldNames)
+	assert.Nil(maskedS1)
+
+	var nilInterface interface{}
+	maskedS2 := MaskStruct(nilInterface, DefaultFieldNames)
+	assert.Nil(maskedS2)
+
+	var nilInt *int
+	maskedS3 := MaskStruct(nilInt, DefaultFieldNames)
+	assert.Nil(maskedS3)
+}
+
 func TestMaskYaml(t *testing.T) {
 	assert := assert.New(t)
 	yaml := `persistence:
