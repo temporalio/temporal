@@ -38,6 +38,7 @@ type (
 		Username          string                  `yaml:"username"`
 		Password          string                  `yaml:"password"`
 		Indices           map[string]string       `yaml:"indices"` //nolint:govet
+		LogLevel          string                  `yaml:"logLevel"`
 		AWSRequestSigning AWSRequestSigningConfig `yaml:"aws-request-signing"`
 	}
 
