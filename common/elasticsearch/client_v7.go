@@ -242,18 +242,18 @@ func (c *clientV7) IndexGetSettings(ctx context.Context, indexName string) (map[
 
 func getLoggerOptions(logLevel string, logger log.Logger) []elastic.ClientOptionFunc {
 	switch {
-	case strings.EqualFold(logLevel, "Trace"):
+	case strings.EqualFold(logLevel, "trace"):
 		return []elastic.ClientOptionFunc{
 			elastic.SetErrorLog(newErrorLogger(logger)),
 			elastic.SetInfoLog(newInfoLogger(logger)),
 			elastic.SetTraceLog(newInfoLogger(logger)),
 		}
-	case strings.EqualFold(logLevel, "Info"):
+	case strings.EqualFold(logLevel, "info"):
 		return []elastic.ClientOptionFunc{
 			elastic.SetErrorLog(newErrorLogger(logger)),
 			elastic.SetInfoLog(newInfoLogger(logger)),
 		}
-	case strings.EqualFold(logLevel, "Error"), logLevel == "": // Default is to log errors only.
+	case strings.EqualFold(logLevel, "error"), logLevel == "": // Default is to log errors only.
 		return []elastic.ClientOptionFunc{
 			elastic.SetErrorLog(newErrorLogger(logger)),
 		}

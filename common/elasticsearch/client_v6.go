@@ -586,18 +586,18 @@ func convertV6IndicesGetSettingsResponseToV7(response *elastic6.IndicesGetSettin
 
 func getLoggerOptionsV6(logLevel string, logger log.Logger) []elastic6.ClientOptionFunc {
 	switch {
-	case strings.EqualFold(logLevel, "Trace"):
+	case strings.EqualFold(logLevel, "trace"):
 		return []elastic6.ClientOptionFunc{
 			elastic6.SetErrorLog(newErrorLogger(logger)),
 			elastic6.SetInfoLog(newInfoLogger(logger)),
 			elastic6.SetTraceLog(newInfoLogger(logger)),
 		}
-	case strings.EqualFold(logLevel, "Info"):
+	case strings.EqualFold(logLevel, "info"):
 		return []elastic6.ClientOptionFunc{
 			elastic6.SetErrorLog(newErrorLogger(logger)),
 			elastic6.SetInfoLog(newInfoLogger(logger)),
 		}
-	case strings.EqualFold(logLevel, "Error"), logLevel == "": // Default is to log errors only.
+	case strings.EqualFold(logLevel, "error"), logLevel == "": // Default is to log errors only.
 		return []elastic6.ClientOptionFunc{
 			elastic6.SetErrorLog(newErrorLogger(logger)),
 		}
