@@ -170,6 +170,8 @@ func (p *esProcessorImpl) Add(request *elasticsearch.BulkableRequest, visibility
 			p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", value, &ackChanWithStopwatch{}), tag.Value(key))
 		}
 
+		p.logger.Info("Adding duplicate visibility task to ES bulk processor.", tag.Value(key))
+
 		// Nack existing visibility task.
 		ackChWithStopwatchExisting.addToProcessStopwatch.Stop()
 		ackChWithStopwatchExisting.ackCh <- false
@@ -225,7 +227,13 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 					tag.WorkflowNamespaceID(namespaceID))
 				p.sendToAckChan(visibilityTaskKey, false)
 			default: // bulk processor will retry
-				p.logger.Info("ES request retried.", tag.ESResponseStatus(resp.Status))
+				wid, rid, namespaceID := p.getDocIDs(request)
+				p.logger.Info("ES request retried.",
+					tag.ESResponseStatus(resp.Status),
+					tag.ESResponseError(getErrorMsgFromESResp(resp)),
+					tag.WorkflowID(wid),
+					tag.WorkflowRunID(rid),
+					tag.WorkflowNamespaceID(namespaceID))
 				p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRetries)
 			}
 		}
