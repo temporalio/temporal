@@ -29,6 +29,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/activity"
@@ -44,7 +45,7 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	mmocks "go.temporal.io/server/common/metrics/mocks"
-	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
 )
 
 const (
@@ -68,6 +69,9 @@ type activitiesSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
 
+	controller     *gomock.Controller
+	mockHistoryMgr *persistence.MockHistoryManager
+
 	logger             log.Logger
 	metricsClient      *mmocks.Client
 	metricsScope       *mmocks.Scope
@@ -81,6 +85,10 @@ func TestActivitiesSuite(t *testing.T) {
 }
 
 func (s *activitiesSuite) SetupTest() {
+
+	s.controller = gomock.NewController(s.T())
+	s.mockHistoryMgr = persistence.NewMockHistoryManager(s.controller)
+
 	zapLogger := zap.NewNop()
 	s.logger = loggerimpl.NewLogger(zapLogger)
 	s.metricsClient = &mmocks.Client{}
@@ -98,6 +106,7 @@ func (s *activitiesSuite) TearDownTest() {
 	s.archiverProvider.AssertExpectations(s.T())
 	s.historyArchiver.AssertExpectations(s.T())
 	s.visibilityArchiver.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_InvalidURI() {
@@ -243,12 +252,11 @@ func (s *activitiesSuite) TestUploadHistory_Success() {
 func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryableError() {
 	s.metricsClient.On("Scope", metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
-	mockHistoryV2Manager := &mocks.HistoryV2Manager{}
-	mockHistoryV2Manager.On("DeleteHistoryBranch", mock.Anything).Return(errPersistenceNonRetryable)
+	s.mockHistoryMgr.EXPECT().DeleteHistoryBranch(gomock.Any()).Return(errPersistenceNonRetryable)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
 		MetricsClient:    s.metricsClient,
-		HistoryV2Manager: mockHistoryV2Manager,
+		HistoryV2Manager: s.mockHistoryMgr,
 	}
 	env := s.NewTestActivityEnvironment()
 	s.registerWorkflows(env)
