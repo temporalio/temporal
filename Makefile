@@ -413,7 +413,7 @@ go-generate:
 	@printf $(COLOR) "Process go:generate directives..."
 	@go generate ./...
 
-mocks: go-generate external-mocks goimports
+mocks: go-generate external-mocks
 
 ##### Auxilary #####
 gomodtidy:

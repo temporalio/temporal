@@ -36,30 +36,30 @@ import (
 	history "go.temporal.io/api/history/v1"
 )
 
-// MockworkflowResetter is a mock of workflowResetter interface
+// MockworkflowResetter is a mock of workflowResetter interface.
 type MockworkflowResetter struct {
 	ctrl     *gomock.Controller
 	recorder *MockworkflowResetterMockRecorder
 }
 
-// MockworkflowResetterMockRecorder is the mock recorder for MockworkflowResetter
+// MockworkflowResetterMockRecorder is the mock recorder for MockworkflowResetter.
 type MockworkflowResetterMockRecorder struct {
 	mock *MockworkflowResetter
 }
 
-// NewMockworkflowResetter creates a new mock instance
+// NewMockworkflowResetter creates a new mock instance.
 func NewMockworkflowResetter(ctrl *gomock.Controller) *MockworkflowResetter {
 	mock := &MockworkflowResetter{ctrl: ctrl}
 	mock.recorder = &MockworkflowResetterMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockworkflowResetter) EXPECT() *MockworkflowResetterMockRecorder {
 	return m.recorder
 }
 
-// resetWorkflow mocks base method
+// resetWorkflow mocks base method.
 func (m *MockworkflowResetter) resetWorkflow(ctx context.Context, namespaceID, workflowID, baseRunID string, baseBranchToken []byte, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID int64, resetRunID, resetRequestID string, currentWorkflow nDCWorkflow, resetReason string, additionalReapplyEvents []*history.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "resetWorkflow", ctx, namespaceID, workflowID, baseRunID, baseBranchToken, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID, resetRunID, resetRequestID, currentWorkflow, resetReason, additionalReapplyEvents)
@@ -67,7 +67,7 @@ func (m *MockworkflowResetter) resetWorkflow(ctx context.Context, namespaceID, w
 	return ret0
 }
 
-// resetWorkflow indicates an expected call of resetWorkflow
+// resetWorkflow indicates an expected call of resetWorkflow.
 func (mr *MockworkflowResetterMockRecorder) resetWorkflow(ctx, namespaceID, workflowID, baseRunID, baseBranchToken, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID, resetRunID, resetRequestID, currentWorkflow, resetReason, additionalReapplyEvents interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "resetWorkflow", reflect.TypeOf((*MockworkflowResetter)(nil).resetWorkflow), ctx, namespaceID, workflowID, baseRunID, baseBranchToken, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID, resetRunID, resetRequestID, currentWorkflow, resetReason, additionalReapplyEvents)

@@ -34,30 +34,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockServiceResolver is a mock of ServiceResolver interface
+// MockServiceResolver is a mock of ServiceResolver interface.
 type MockServiceResolver struct {
 	ctrl     *gomock.Controller
 	recorder *MockServiceResolverMockRecorder
 }
 
-// MockServiceResolverMockRecorder is the mock recorder for MockServiceResolver
+// MockServiceResolverMockRecorder is the mock recorder for MockServiceResolver.
 type MockServiceResolverMockRecorder struct {
 	mock *MockServiceResolver
 }
 
-// NewMockServiceResolver creates a new mock instance
+// NewMockServiceResolver creates a new mock instance.
 func NewMockServiceResolver(ctrl *gomock.Controller) *MockServiceResolver {
 	mock := &MockServiceResolver{ctrl: ctrl}
 	mock.recorder = &MockServiceResolverMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockServiceResolver) EXPECT() *MockServiceResolverMockRecorder {
 	return m.recorder
 }
 
-// Resolve mocks base method
+// Resolve mocks base method.
 func (m *MockServiceResolver) Resolve(service string) []string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resolve", service)
@@ -65,7 +65,7 @@ func (m *MockServiceResolver) Resolve(service string) []string {
 	return ret0
 }
 
-// Resolve indicates an expected call of Resolve
+// Resolve indicates an expected call of Resolve.
 func (mr *MockServiceResolverMockRecorder) Resolve(service interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resolve", reflect.TypeOf((*MockServiceResolver)(nil).Resolve), service)

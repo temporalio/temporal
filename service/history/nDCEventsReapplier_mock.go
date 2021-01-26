@@ -36,30 +36,30 @@ import (
 	history "go.temporal.io/api/history/v1"
 )
 
-// MocknDCEventsReapplier is a mock of nDCEventsReapplier interface
+// MocknDCEventsReapplier is a mock of nDCEventsReapplier interface.
 type MocknDCEventsReapplier struct {
 	ctrl     *gomock.Controller
 	recorder *MocknDCEventsReapplierMockRecorder
 }
 
-// MocknDCEventsReapplierMockRecorder is the mock recorder for MocknDCEventsReapplier
+// MocknDCEventsReapplierMockRecorder is the mock recorder for MocknDCEventsReapplier.
 type MocknDCEventsReapplierMockRecorder struct {
 	mock *MocknDCEventsReapplier
 }
 
-// NewMocknDCEventsReapplier creates a new mock instance
+// NewMocknDCEventsReapplier creates a new mock instance.
 func NewMocknDCEventsReapplier(ctrl *gomock.Controller) *MocknDCEventsReapplier {
 	mock := &MocknDCEventsReapplier{ctrl: ctrl}
 	mock.recorder = &MocknDCEventsReapplierMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MocknDCEventsReapplier) EXPECT() *MocknDCEventsReapplierMockRecorder {
 	return m.recorder
 }
 
-// reapplyEvents mocks base method
+// reapplyEvents mocks base method.
 func (m *MocknDCEventsReapplier) reapplyEvents(ctx context.Context, msBuilder mutableState, historyEvents []*history.HistoryEvent, runID string) ([]*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "reapplyEvents", ctx, msBuilder, historyEvents, runID)
@@ -68,7 +68,7 @@ func (m *MocknDCEventsReapplier) reapplyEvents(ctx context.Context, msBuilder mu
 	return ret0, ret1
 }
 
-// reapplyEvents indicates an expected call of reapplyEvents
+// reapplyEvents indicates an expected call of reapplyEvents.
 func (mr *MocknDCEventsReapplierMockRecorder) reapplyEvents(ctx, msBuilder, historyEvents, runID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "reapplyEvents", reflect.TypeOf((*MocknDCEventsReapplier)(nil).reapplyEvents), ctx, msBuilder, historyEvents, runID)
