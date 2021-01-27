@@ -33,6 +33,15 @@ import (
 )
 
 type (
+	DbKind int
+)
+
+const (
+	DbKindMain DbKind = iota
+	DbKindVisibility
+)
+
+type (
 	// Plugin defines the interface for any SQL database that needs to implement
 	Plugin interface {
 		CreateDB(cfg *config.SQL, r resolver.ServiceResolver) (DB, error)
@@ -106,8 +115,7 @@ type (
 	AdminDB interface {
 		AdminCRUD
 		PluginName() string
-		ExpectedVersion() string
-		ExpectedVisibilityVersion() string
+		ExpectedVersion(dbKind DbKind) string
 		Close() error
 	}
 

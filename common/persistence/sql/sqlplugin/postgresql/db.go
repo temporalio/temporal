@@ -96,11 +96,13 @@ func (pdb *db) PluginName() string {
 }
 
 // ExpectedVersion returns expected version.
-func (pdb *db) ExpectedVersion() string {
-	return postgresqlschema.Version
-}
-
-// ExpectedVisibilityVersion returns expected visibility version.
-func (pdb *db) ExpectedVisibilityVersion() string {
-	return postgresqlschema.VisibilityVersion
+func (mdb *db) ExpectedVersion(dbKind sqlplugin.DbKind) string {
+	switch dbKind {
+	case sqlplugin.DbKindMain:
+		return postgresqlschema.Version
+	case sqlplugin.DbKindVisibility:
+		return postgresqlschema.VisibilityVersion
+	default:
+		return ""
+	}
 }

@@ -97,11 +97,13 @@ func (mdb *db) PluginName() string {
 }
 
 // ExpectedVersion returns expected version.
-func (mdb *db) ExpectedVersion() string {
-	return mysqlschema.Version
-}
-
-// ExpectedVisibilityVersion returns expected visibility version.
-func (mdb *db) ExpectedVisibilityVersion() string {
-	return mysqlschema.VisibilityVersion
+func (mdb *db) ExpectedVersion(dbKind sqlplugin.DbKind) string {
+	switch dbKind {
+	case sqlplugin.DbKindMain:
+		return mysqlschema.Version
+	case sqlplugin.DbKindVisibility:
+		return mysqlschema.VisibilityVersion
+	default:
+		return ""
+	}
 }

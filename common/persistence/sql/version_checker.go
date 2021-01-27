@@ -25,7 +25,12 @@
 package sql
 
 import (
+	"context"
+
+	"golang.org/x/sync/errgroup"
+
 	"go.temporal.io/server/common/persistence/schema"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 )
@@ -37,31 +42,48 @@ func VerifyCompatibleVersion(
 	r resolver.ServiceResolver,
 ) error {
 
+	g, _ := errgroup.WithContext(context.Background())
+	g.Go(func() error {
+		return checkMainDatabase(cfg, r)
+	})
+	g.Go(func() error {
+		return checkVisibilityDatabase(cfg, r)
+	})
+
+	return g.Wait()
+}
+
+func checkMainDatabase(
+	cfg config.Persistence,
+	r resolver.ServiceResolver,
+) error {
 	ds, ok := cfg.DataStores[cfg.DefaultStore]
 	if ok && ds.SQL != nil {
-		db, err := NewSQLAdminDB(ds.SQL, r)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = db.Close() }()
-
-		err = schema.VerifyCompatibleVersion(db, ds.SQL.DatabaseName, db.ExpectedVersion())
-		if err != nil {
-			return err
-		}
-	}
-	ds, ok = cfg.DataStores[cfg.VisibilityStore]
-	if ok && ds.SQL != nil {
-		db, err := NewSQLAdminDB(ds.SQL, r)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = db.Close() }()
-
-		err = schema.VerifyCompatibleVersion(db, ds.SQL.DatabaseName, db.ExpectedVisibilityVersion())
-		if err != nil {
-			return err
-		}
+		return checkCompatibleVersion(ds.SQL, r, sqlplugin.DbKindMain)
 	}
 	return nil
+}
+
+func checkVisibilityDatabase(
+	cfg config.Persistence,
+	r resolver.ServiceResolver,
+) error {
+	ds, ok := cfg.DataStores[cfg.VisibilityStore]
+	if ok && ds.SQL != nil {
+		return checkCompatibleVersion(ds.SQL, r, sqlplugin.DbKindVisibility)
+	}
+	return nil
+}
+func checkCompatibleVersion(
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+	dbKind sqlplugin.DbKind,
+) error {
+	db, err := NewSQLAdminDB(cfg, r)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+
+	return schema.VerifyCompatibleVersion(db, cfg.DatabaseName, db.ExpectedVersion(dbKind))
 }
