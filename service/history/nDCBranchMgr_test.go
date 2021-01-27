@@ -40,7 +40,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -58,7 +57,7 @@ type (
 		mockMutableState    *MockmutableState
 		mockClusterMetadata *cluster.MockMetadata
 
-		mockHistoryV2Mgr *mocks.HistoryV2Manager
+		mockHistoryMgr *persistence.MockHistoryManager
 
 		logger log.Logger
 
@@ -94,7 +93,7 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 		NewDynamicConfigForTest(),
 	)
 
-	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
@@ -144,7 +143,7 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 	}).AnyTimes()
 
 	shardId := s.mockShard.GetShardID()
-	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
+	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
 		input.Info = ""
 		s.Equal(&persistence.ForkHistoryBranchRequest{
 			ForkBranchToken: baseBranchToken,
@@ -155,7 +154,7 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 		return true
 	})).Return(&persistence.ForkHistoryBranchResponse{
 		NewBranchToken: newBranchToken,
-	}, nil).Once()
+	}, nil).Times(1)
 
 	newIndex, err := s.nDCBranchMgr.createNewBranch(context.Background(), baseBranchToken, baseBranchLCAEventID, newVersionHistory)
 	s.Nil(err)
@@ -324,7 +323,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 	}).AnyTimes()
 
 	shardId := s.mockShard.GetShardID()
-	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
+	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
 		input.Info = ""
 		s.Equal(&persistence.ForkHistoryBranchRequest{
 			ForkBranchToken: baseBranchToken,
@@ -335,7 +334,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 		return true
 	})).Return(&persistence.ForkHistoryBranchResponse{
 		NewBranchToken: newBranchToken,
-	}, nil).Once()
+	}, nil).Times(1)
 
 	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(
 		context.Background(),

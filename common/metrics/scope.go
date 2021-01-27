@@ -122,7 +122,7 @@ func (m *metricsScope) RecordHistogramValue(id int, value float64) {
 }
 
 func (m *metricsScope) Tagged(tags ...Tag) Scope {
-	namespaceTagged := false
+	namespaceTagged := m.isNamespaceTagged
 	tagMap := make(map[string]string, len(tags))
 	for _, tag := range tags {
 		if isNamespaceTagged(tag) {

@@ -26,6 +26,7 @@ package elasticsearch
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/olivere/elastic/v7"
@@ -49,10 +50,6 @@ func newClientV7(config *Config, logger log.Logger) (*clientV7, error) {
 		elastic.SetSniff(false),
 		elastic.SetBasicAuth(config.Username, config.Password),
 
-		elastic.SetErrorLog(newErrorLogger(logger)),
-		// Uncomment next line to enable info logging also.
-		// elastic.SetInfoLog(newInfoLogger(logger)),
-
 		// Disable health check so we don't block client creation (and thus temporal server startup)
 		// if the ES instance happens to be down.
 		elastic.SetHealthcheck(false),
@@ -62,6 +59,8 @@ func newClientV7(config *Config, logger log.Logger) (*clientV7, error) {
 		// critical to ensure decode of int64 won't lose precision
 		elastic.SetDecoder(&elastic.NumberDecoder{}),
 	}
+
+	options = append(options, getLoggerOptions(config.LogLevel, logger)...)
 
 	if config.AWSRequestSigning.Enabled {
 		httpClient, err := newAWSElasticsearchHTTPClient(config.AWSRequestSigning)
@@ -239,4 +238,26 @@ func (c *clientV7) IndexPutSettings(ctx context.Context, indexName string, bodyS
 
 func (c *clientV7) IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error) {
 	return c.esClient.IndexGetSettings(indexName).Do(ctx)
+}
+
+func getLoggerOptions(logLevel string, logger log.Logger) []elastic.ClientOptionFunc {
+	switch {
+	case strings.EqualFold(logLevel, "trace"):
+		return []elastic.ClientOptionFunc{
+			elastic.SetErrorLog(newErrorLogger(logger)),
+			elastic.SetInfoLog(newInfoLogger(logger)),
+			elastic.SetTraceLog(newInfoLogger(logger)),
+		}
+	case strings.EqualFold(logLevel, "info"):
+		return []elastic.ClientOptionFunc{
+			elastic.SetErrorLog(newErrorLogger(logger)),
+			elastic.SetInfoLog(newInfoLogger(logger)),
+		}
+	case strings.EqualFold(logLevel, "error"), logLevel == "": // Default is to log errors only.
+		return []elastic.ClientOptionFunc{
+			elastic.SetErrorLog(newErrorLogger(logger)),
+		}
+	default:
+		return nil
+	}
 }

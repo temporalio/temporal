@@ -30,7 +30,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -166,9 +165,11 @@ func (p *esProcessorImpl) Add(request *elasticsearch.BulkableRequest, visibility
 	ackChWithStopwatch := newAckChanWithStopwatch(ackCh, &sw)
 	_, isDup, _ := p.mapToAckChan.PutOrDo(visibilityTaskKey, ackChWithStopwatch, func(key interface{}, value interface{}) error {
 		ackChWithStopwatchExisting, ok := value.(*ackChanWithStopwatch)
-		if !ok { // must be bug in code and bad deployment
-			p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", value, &ackChanWithStopwatch{}), tag.Value(key))
+		if !ok {
+			p.logger.Fatal(fmt.Sprintf("mapToAckChan has item of a wrong type %T (%T expected).", value, &ackChanWithStopwatch{}), tag.Value(key))
 		}
+
+		p.logger.Warn("Adding duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc))
 
 		// Nack existing visibility task.
 		ackChWithStopwatchExisting.addToProcessStopwatch.Stop()
@@ -216,16 +217,16 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 			case isResponseSuccess(resp.Status):
 				p.sendToAckChan(visibilityTaskKey, true)
 			case !isResponseRetryable(resp.Status):
-				wid, rid, namespaceID := p.getDocIDs(request)
 				p.logger.Error("ES request failed.",
 					tag.ESResponseStatus(resp.Status),
 					tag.ESResponseError(getErrorMsgFromESResp(resp)),
-					tag.WorkflowID(wid),
-					tag.WorkflowRunID(rid),
-					tag.WorkflowNamespaceID(namespaceID))
+					tag.ESRequest(request.String()))
 				p.sendToAckChan(visibilityTaskKey, false)
 			default: // bulk processor will retry
-				p.logger.Info("ES request retried.", tag.ESResponseStatus(resp.Status))
+				p.logger.Warn("ES request retried.",
+					tag.ESResponseStatus(resp.Status),
+					tag.ESResponseError(getErrorMsgFromESResp(resp)),
+					tag.ESRequest(request.String()))
 				p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRetries)
 			}
 		}
@@ -236,8 +237,8 @@ func (p *esProcessorImpl) sendToAckChan(visibilityTaskKey string, ack bool) {
 	// Use RemoveIf here to prevent race condition with de-dup logic in Add method.
 	_ = p.mapToAckChan.RemoveIf(visibilityTaskKey, func(key interface{}, value interface{}) bool {
 		ackChWithStopwatch, ok := value.(*ackChanWithStopwatch)
-		if !ok { // must be bug in code and bad deployment
-			p.logger.Fatal(fmt.Sprintf("Message has wrong type %T (%T expected).", value, &ackChanWithStopwatch{}), tag.ESKey(visibilityTaskKey))
+		if !ok {
+			p.logger.Fatal(fmt.Sprintf("mapToAckChan has item of a wrong type %T (%T expected).", value, &ackChanWithStopwatch{}), tag.ESKey(visibilityTaskKey))
 		}
 
 		ackChWithStopwatch.addToProcessStopwatch.Stop()
@@ -296,56 +297,6 @@ func (p *esProcessorImpl) getVisibilityTaskKey(request elastic.BulkableRequest) 
 	return key
 }
 
-func (p *esProcessorImpl) getDocIDs(request elastic.BulkableRequest) (workflowID string, runID string, namespaceID string) {
-	// TODO (alex): This need to be combined with getVisibilityTaskKey
-	req, err := request.Source()
-	if err != nil {
-		p.logger.Error("Get request source err.", tag.Error(err), tag.ESRequest(request.String()))
-		p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
-		return
-	}
-
-	if len(req) == 2 { // index or update requests
-		var body map[string]interface{}
-		if err := json.Unmarshal([]byte(req[1]), &body); err != nil {
-			p.logger.Error("Unmarshal index request body err.", tag.Error(err))
-			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
-			return
-		}
-
-		wID, _ := body[definition.WorkflowID]
-		workflowID, _ = wID.(string)
-
-		rID, _ := body[definition.RunID]
-		runID, _ = rID.(string)
-
-		nID, _ := body[definition.NamespaceID]
-		namespaceID, _ = nID.(string)
-	} else { // delete requests
-		var body map[string]map[string]interface{}
-		if err := json.Unmarshal([]byte(req[0]), &body); err != nil {
-			p.logger.Error("Unmarshal delete request body err.", tag.Error(err))
-			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
-			return
-		}
-
-		opMap, ok := body["delete"]
-		if !ok {
-			return
-		}
-		id, _ := opMap["_id"]
-		docID, _ := id.(string)
-		wrIDs := strings.Split(docID, delimiter)
-		if len(wrIDs) > 0 {
-			workflowID = wrIDs[0]
-		}
-		if len(wrIDs) > 1 {
-			runID = wrIDs[1]
-		}
-	}
-	return
-}
-
 // 409 - Version Conflict
 // 404 - Not Found
 func isResponseSuccess(status int) bool {
@@ -371,11 +322,10 @@ func isResponseRetryable(status int) bool {
 }
 
 func getErrorMsgFromESResp(resp *elastic.BulkResponseItem) string {
-	var errMsg string
 	if resp.Error != nil {
-		errMsg = resp.Error.Reason
+		return resp.Error.Reason
 	}
-	return errMsg
+	return ""
 }
 
 func newAckChanWithStopwatch(ackCh chan<- bool, stopwatch *tally.Stopwatch) *ackChanWithStopwatch {

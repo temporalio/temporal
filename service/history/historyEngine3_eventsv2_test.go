@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
@@ -75,7 +76,7 @@ type (
 
 		historyEngine    *historyEngineImpl
 		mockExecutionMgr *mocks.ExecutionManager
-		mockHistoryV2Mgr *mocks.HistoryV2Manager
+		mockHistoryMgr   *persistence.MockHistoryManager
 
 		config *configs.Config
 		logger log.Logger
@@ -114,7 +115,7 @@ func (s *engine3Suite) SetupTest() {
 	)
 
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
-	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockEventsCache = s.mockShard.MockEventsCache
@@ -132,7 +133,7 @@ func (s *engine3Suite) SetupTest() {
 		shard:              s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
-		historyV2Mgr:       s.mockHistoryV2Mgr,
+		historyV2Mgr:       s.mockHistoryMgr,
 		historyCache:       historyCache,
 		logger:             s.logger,
 		throttledLogger:    s.logger,
@@ -185,7 +186,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Times(1)
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{
 		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{},
 	}, nil).Once()
@@ -244,7 +245,7 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Times(1)
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&p.CreateWorkflowExecutionResponse{}, nil).Once()
 
 	requestID := uuid.New()
@@ -302,7 +303,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Times(1)
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{
 		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{},
 	}, nil).Once()
@@ -350,7 +351,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	notExistErr := serviceerror.NewNotFound("Workflow not exist")
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, notExistErr).Once()
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Times(1)
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&p.CreateWorkflowExecutionResponse{}, nil).Once()
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)

@@ -31,7 +31,7 @@ import (
 )
 
 type (
-	// Client is  the interface used to report metrics tally.
+	// Client is the interface used to report metrics tally.
 	Client interface {
 		// IncCounter increments a counter metric
 		IncCounter(scope int, counter int)

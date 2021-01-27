@@ -120,7 +120,7 @@ func NamespaceUnknownTag() Tag {
 
 // Key returns the key of the taskqueue unknown tag
 func (d taskQueueUnknownTag) Key() string {
-	return namespace
+	return taskQueue
 }
 
 // Value returns the value of the taskqueue unknown tag
