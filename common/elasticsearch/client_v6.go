@@ -27,6 +27,7 @@ package elasticsearch
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	elastic6 "github.com/olivere/elastic"
@@ -51,10 +52,6 @@ func newClientV6(config *Config, logger log.Logger) (*clientV6, error) {
 		elastic6.SetSniff(false),
 		elastic6.SetBasicAuth(config.Username, config.Password),
 
-		elastic6.SetErrorLog(newErrorLogger(logger)),
-		// Uncomment next line to enable info logging also.
-		// elastic6.SetInfoLog(newInfoLogger(logger)),
-
 		// Disable health check so we don't block client creation (and thus temporal server startup)
 		// if the ES instance happens to be down.
 		elastic6.SetHealthcheck(false),
@@ -64,6 +61,8 @@ func newClientV6(config *Config, logger log.Logger) (*clientV6, error) {
 		// critical to ensure decode of int64 won't lose precision
 		elastic6.SetDecoder(&elastic6.NumberDecoder{}),
 	}
+
+	options = append(options, getLoggerOptionsV6(config.LogLevel, logger)...)
 
 	if config.AWSRequestSigning.Enabled {
 		httpClient, err := newAWSElasticsearchHTTPClient(config.AWSRequestSigning)
@@ -582,5 +581,27 @@ func convertV6IndicesGetSettingsResponseToV7(response *elastic6.IndicesGetSettin
 	}
 	return &elastic.IndicesGetSettingsResponse{
 		Settings: response.Settings,
+	}
+}
+
+func getLoggerOptionsV6(logLevel string, logger log.Logger) []elastic6.ClientOptionFunc {
+	switch {
+	case strings.EqualFold(logLevel, "trace"):
+		return []elastic6.ClientOptionFunc{
+			elastic6.SetErrorLog(newErrorLogger(logger)),
+			elastic6.SetInfoLog(newInfoLogger(logger)),
+			elastic6.SetTraceLog(newInfoLogger(logger)),
+		}
+	case strings.EqualFold(logLevel, "info"):
+		return []elastic6.ClientOptionFunc{
+			elastic6.SetErrorLog(newErrorLogger(logger)),
+			elastic6.SetInfoLog(newInfoLogger(logger)),
+		}
+	case strings.EqualFold(logLevel, "error"), logLevel == "": // Default is to log errors only.
+		return []elastic6.ClientOptionFunc{
+			elastic6.SetErrorLog(newErrorLogger(logger)),
+		}
+	default:
+		return nil
 	}
 }
