@@ -27,9 +27,8 @@ package schema
 import (
 	"fmt"
 
+	"github.com/blang/semver/v4"
 	"github.com/urfave/cli"
-
-	"go.temporal.io/server/common/persistence/schema"
 )
 
 // VerifyCompatibleVersion ensures that the installed version is greater than or equal to the expected version.
@@ -47,7 +46,7 @@ func VerifyCompatibleVersion(
 	// rollback, the code version (expected version) would fall lower than the actual version in
 	// cassandra. This check is to allow such rollbacks since we only make backwards compatible schema
 	// changes
-	if schema.CmpVersion(version, expectedVersion) < 0 {
+	if cmpVersion(version, expectedVersion) < 0 {
 		return fmt.Errorf(
 			"version mismatch for keyspace/database: %q. Expected version: %s cannot be greater than "+
 				"Actual version: %s", dbName, expectedVersion, version,
@@ -117,11 +116,11 @@ func validateSetupConfig(config *SetupConfig) error {
 			flag(CLIOptVersion) + " but not both must be specified")
 	}
 	if !config.DisableVersioning {
-		ver, err := schema.ParseValidateVersion(config.InitialVersion)
+		ver, err := semver.ParseTolerant(config.InitialVersion)
 		if err != nil {
 			return NewConfigError("invalid " + flag(CLIOptVersion) + " argument:" + err.Error())
 		}
-		config.InitialVersion = ver
+		config.InitialVersion = ver.String()
 	}
 	return nil
 }
@@ -131,11 +130,11 @@ func validateUpdateConfig(config *UpdateConfig) error {
 		return NewConfigError("missing " + flag(CLIOptSchemaDir) + " argument ")
 	}
 	if len(config.TargetVersion) > 0 {
-		ver, err := schema.ParseValidateVersion(config.TargetVersion)
+		ver, err := semver.ParseTolerant(config.TargetVersion)
 		if err != nil {
 			return NewConfigError("invalid " + flag(CLIOptTargetVersion) + " argument:" + err.Error())
 		}
-		config.TargetVersion = ver
+		config.TargetVersion = ver.String()
 	}
 	return nil
 }

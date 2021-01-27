@@ -37,7 +37,7 @@ import (
 	"sort"
 	"strings"
 
-	"go.temporal.io/server/common/persistence/schema"
+	"github.com/blang/semver/v4"
 )
 
 type (
@@ -271,20 +271,20 @@ func readManifest(dirPath string) (*manifest, error) {
 		return nil, err
 	}
 
-	currVer, err := schema.ParseValidateVersion(manifest.CurrVersion)
+	currVer, err := semver.ParseTolerant(manifest.CurrVersion)
 	if err != nil {
 		return nil, fmt.Errorf("invalid CurrVersion in manifest")
 	}
-	manifest.CurrVersion = currVer
+	manifest.CurrVersion = currVer.String()
 
-	minVer, err := schema.ParseValidateVersion(manifest.MinCompatibleVersion)
+	minVer, err := semver.ParseTolerant(manifest.MinCompatibleVersion)
 	if err != nil {
 		return nil, err
 	}
 	if len(manifest.MinCompatibleVersion) == 0 {
 		return nil, fmt.Errorf("invalid MinCompatibleVersion in manifest")
 	}
-	manifest.MinCompatibleVersion = minVer
+	manifest.MinCompatibleVersion = minVer.String()
 
 	if len(manifest.SchemaUpdateCqlFiles) == 0 {
 		return nil, fmt.Errorf("manifest missing SchemaUpdateCqlFiles")
@@ -316,7 +316,7 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 
 	hasEndVer := len(endVer) > 0
 
-	if hasEndVer && schema.CmpVersion(startVer, endVer) >= 0 {
+	if hasEndVer && cmpVersion(startVer, endVer) >= 0 {
 		return nil, fmt.Errorf("startVer (%v) must be less than endVer (%v)", startVer, endVer)
 	}
 
@@ -332,7 +332,7 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 
 		dirname := dir.Name()
 
-		if _, err := schema.ParseValidateVersion(dirname); err != nil {
+		if _, err := semver.ParseTolerant(dirname); err != nil {
 			continue
 		}
 
@@ -340,14 +340,14 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 
 		if len(highestVer) == 0 {
 			highestVer = ver
-		} else if schema.CmpVersion(ver, highestVer) > 0 {
+		} else if cmpVersion(ver, highestVer) > 0 {
 			highestVer = ver
 		}
 
 		highcmp := 0
-		lowcmp := schema.CmpVersion(ver, startVer)
+		lowcmp := cmpVersion(ver, startVer)
 		if hasEndVer {
-			highcmp = schema.CmpVersion(ver, endVer)
+			highcmp = cmpVersion(ver, endVer)
 		}
 
 		if lowcmp <= 0 || highcmp > 0 {
@@ -366,7 +366,7 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 	// when endVer is empty and no result is found, then the highest version
 	// found must be equal to startVer, else return error
 	if !hasEndVer && len(result) == 0 {
-		if len(highestVer) == 0 || schema.CmpVersion(startVer, highestVer) != 0 {
+		if len(highestVer) == 0 || cmpVersion(startVer, highestVer) != 0 {
 			return nil, fmt.Errorf("no subdirs found with version >= %v", startVer)
 		}
 		return result, nil
@@ -399,7 +399,7 @@ func (v byVersion) Len() int {
 func (v byVersion) Less(i, j int) bool {
 	v1 := dirToVersion(v[i])
 	v2 := dirToVersion(v[j])
-	return schema.CmpVersion(v1, v2) < 0
+	return cmpVersion(v1, v2) < 0
 }
 
 func (v byVersion) Swap(i, j int) {
