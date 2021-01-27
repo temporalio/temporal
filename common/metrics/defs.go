@@ -1889,7 +1889,7 @@ const (
 
 // Matching metrics enum
 const (
-	PollSuccessPerTaskQueueCounter = iota + NumCommonMetrics
+	PollSuccessPerTaskQueueCounter = iota + NumHistoryMetrics
 	PollTimeoutPerTaskQueueCounter
 	PollSuccessWithSyncPerTaskQueueCounter
 	LeaseRequestPerTaskQueueCounter
@@ -1921,7 +1921,7 @@ const (
 
 // Worker metrics enum
 const (
-	ReplicatorMessages = iota + NumCommonMetrics
+	ReplicatorMessages = iota + NumMatchingMetrics
 	ReplicatorFailures
 	ReplicatorMessagesDropped
 	ReplicatorLatency
@@ -2309,6 +2309,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ESBulkProcessorCorruptedData:  {metricName: "es_bulk_processor_corrupted_data"},
 		ESBulkProcessorRequestLatency: {metricName: "es_bulk_processor_request_latency", metricType: Timer},
 		ESInvalidSearchAttribute:      {metricName: "es_invalid_search_attribute"},
+
+		ParentClosePolicyProcessorSuccess:  {metricName: "parent_close_policy_processor_requests", metricType: Counter},
+		ParentClosePolicyProcessorFailures: {metricName: "parent_close_policy_processor_errors", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessPerTaskQueueCounter:            {metricName: "poll_success_per_tl", metricRollupName: "poll_success"},
