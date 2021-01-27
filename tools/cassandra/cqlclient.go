@@ -35,7 +35,6 @@ import (
 
 	"go.temporal.io/server/common/auth"
 	ccassandra "go.temporal.io/server/common/cassandra"
-	pschema "go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/tools/common/schema"
@@ -48,7 +47,6 @@ type (
 		timeout       time.Duration
 		session       *gocql.Session
 		clusterConfig *gocql.ClusterConfig
-		versionReader pschema.VersionReader
 	}
 	// CQLClientConfig contains the configuration for cql client
 	CQLClientConfig struct {
@@ -65,6 +63,7 @@ type (
 )
 
 var errNoHosts = errors.New("Cassandra Hosts list is empty or malformed")
+var errGetSchemaVersion = errors.New("Failed to get current schema version from cassandra")
 
 const (
 	defaultTimeout  = 30 // Timeout in seconds
@@ -73,6 +72,7 @@ const (
 )
 
 const (
+	readSchemaVersionCQL        = `SELECT curr_version from schema_version where keyspace_name=?`
 	listTablesCQL               = `SELECT table_name from system_schema.tables where keyspace_name=?`
 	listTypesCQL                = `SELECT type_name from system_schema.types where keyspace_name=?`
 	writeSchemaVersionCQL       = `INSERT into schema_version(keyspace_name, creation_time, curr_version, min_compatible_version) VALUES (?,?,?,?)`
@@ -192,7 +192,21 @@ func (client *cqlClient) CreateSchemaVersionTables() error {
 
 // ReadSchemaVersion returns the current schema version for the Keyspace
 func (client *cqlClient) ReadSchemaVersion() (string, error) {
-	return client.versionReader.ReadSchemaVersion()
+	query := client.session.Query(readSchemaVersionCQL, client.clusterConfig.Keyspace)
+	// when querying the DB schema version, override to local quorum
+	// in case Cassandra node down (compared to using ALL)
+	query.SetConsistency(gocql.LocalQuorum)
+
+	iter := query.Iter()
+	var version string
+	if !iter.Scan(&version) {
+		iter.Close()
+		return "", errGetSchemaVersion
+	}
+	if err := iter.Close(); err != nil {
+		return "", err
+	}
+	return version, nil
 }
 
 // UpdateShemaVersion updates the schema version for the Keyspace
