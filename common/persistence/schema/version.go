@@ -37,7 +37,7 @@ func VerifyCompatibleVersion(
 	expectedVersion string,
 ) error {
 
-	version, err := versionReader.ReadSchemaVersion()
+	version, err := versionReader.ReadSchemaVersion(dbName)
 	if err != nil {
 		return fmt.Errorf("unable to read DB schema version keyspace/database: %s error: %v", dbName, err.Error())
 	}

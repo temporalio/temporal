@@ -74,7 +74,7 @@ func checkCompatibleVersion(
 	}
 	defer session.Close()
 
-	schemaVersionReader := NewSchemaVersionReader(session, cfg.Keyspace)
+	schemaVersionReader := NewSchemaVersionReader(session)
 
 	return schema.VerifyCompatibleVersion(schemaVersionReader, cfg.Keyspace, expectedVersion)
 }

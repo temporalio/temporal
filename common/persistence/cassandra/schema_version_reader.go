@@ -12,8 +12,7 @@ const (
 
 type (
 	SchemaVersionReader struct {
-		session  *gocql.Session
-		keyspace string
+		session *gocql.Session
 	}
 )
 
@@ -21,16 +20,15 @@ var (
 	ErrGetSchemaVersion = errors.New("failed to get current schema version from cassandra")
 )
 
-func NewSchemaVersionReader(session *gocql.Session, keyspace string) *SchemaVersionReader {
+func NewSchemaVersionReader(session *gocql.Session) *SchemaVersionReader {
 	return &SchemaVersionReader{
-		keyspace: keyspace,
-		session:  session,
+		session: session,
 	}
 }
 
 // ReadSchemaVersion returns the current schema version for the Keyspace
-func (svr *SchemaVersionReader) ReadSchemaVersion() (string, error) {
-	query := svr.session.Query(readSchemaVersionCQL, svr.keyspace)
+func (svr *SchemaVersionReader) ReadSchemaVersion(keyspace string) (string, error) {
+	query := svr.session.Query(readSchemaVersionCQL, keyspace)
 	// when querying the DB schema version, override to local quorum
 	// in case Cassandra node down (compared to using ALL)
 	query.SetConsistency(gocql.LocalQuorum)

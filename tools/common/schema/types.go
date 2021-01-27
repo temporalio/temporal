@@ -27,8 +27,6 @@ package schema
 import (
 	"fmt"
 	"regexp"
-
-	"go.temporal.io/server/common/persistence/schema"
 )
 
 type (
@@ -57,13 +55,14 @@ type (
 	// DB is the database interface that's required to be implemented
 	// for the schema-tool to work
 	DB interface {
-		schema.VersionReader
 		// Exec executes a cql statement
 		Exec(stmt string, args ...interface{}) error
 		// DropAllTables drops all tables
 		DropAllTables() error
 		// CreateSchemaVersionTables sets up the schema version tables
 		CreateSchemaVersionTables() error
+		// ReadSchemaVersion returns the current schema version for the keyspace
+		ReadSchemaVersion() (string, error)
 		// UpdateSchemaVersion updates the schema version for the keyspace
 		UpdateSchemaVersion(newVersion string, minCompatibleVersion string) error
 		// WriteSchemaUpdateLog adds an entry to the schema update history table

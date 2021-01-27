@@ -106,6 +106,8 @@ type (
 	AdminDB interface {
 		AdminCRUD
 		PluginName() string
+		ExpectedVersion() string
+		ExpectedVisibilityVersion() string
 		Close() error
 	}
 

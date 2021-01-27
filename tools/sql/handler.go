@@ -36,8 +36,8 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/service/config"
-	mysqlversion "go.temporal.io/server/schema/mysql"
-	posrgresqlversion "go.temporal.io/server/schema/postgresql"
+	mysqlschema "go.temporal.io/server/schema/mysql"
+	postgresqlschema "go.temporal.io/server/schema/postgresql"
 	"go.temporal.io/server/tools/common/schema"
 )
 
@@ -51,12 +51,12 @@ func VerifyCompatibleVersion(
 	if ok && ds.SQL != nil {
 		switch ds.SQL.PluginName {
 		case mysql.PluginName:
-			err := CheckCompatibleVersion(*ds.SQL, mysqlversion.Version)
+			err := CheckCompatibleVersion(*ds.SQL, mysqlschema.Version)
 			if err != nil {
 				return err
 			}
 		case postgresql.PluginName:
-			err := CheckCompatibleVersion(*ds.SQL, posrgresqlversion.Version)
+			err := CheckCompatibleVersion(*ds.SQL, postgresqlschema.Version)
 			if err != nil {
 				return err
 			}
@@ -68,12 +68,12 @@ func VerifyCompatibleVersion(
 	if ok && ds.SQL != nil {
 		switch ds.SQL.PluginName {
 		case mysql.PluginName:
-			err := CheckCompatibleVersion(*ds.SQL, mysqlversion.VisibilityVersion)
+			err := CheckCompatibleVersion(*ds.SQL, mysqlschema.VisibilityVersion)
 			if err != nil {
 				return err
 			}
 		case postgresql.PluginName:
-			err := CheckCompatibleVersion(*ds.SQL, posrgresqlversion.VisibilityVersion)
+			err := CheckCompatibleVersion(*ds.SQL, postgresqlschema.VisibilityVersion)
 			if err != nil {
 				return err
 			}
