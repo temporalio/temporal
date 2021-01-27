@@ -433,7 +433,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		VisibilityProcessorEnablePriorityTaskProcessor:         dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnablePriorityTaskProcessor, false),
 		VisibilityProcessorVisibilityArchivalTimeLimit:         dc.GetDurationProperty(dynamicconfig.VisibilityProcessorVisibilityArchivalTimeLimit, 200*time.Millisecond),
 
-		VisibilityQueue:            dc.GetStringProperty(dynamicconfig.VisibilityQueue, common.VisibilityQueueInternalWithDualProcessor),
+		VisibilityQueue:            dc.GetStringProperty(dynamicconfig.VisibilityQueue, common.VisibilityQueueInternal),
 		VisibilityProcessorEnabled: dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnabled, true),
 
 		ValidSearchAttributes:             dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
