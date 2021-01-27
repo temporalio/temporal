@@ -26,7 +26,6 @@ package schema
 
 import (
 	"fmt"
-	"io/ioutil"
 	"regexp"
 	"strconv"
 	"strings"
@@ -38,11 +37,32 @@ var versionStrRegex = regexp.MustCompile(`^v\d+(\.\d+)?$`)
 // represents names of the form x.x where minor version is always single digit
 var versionNumRegex = regexp.MustCompile(`^\d+(\.\d+)?$`)
 
-// cmpVersion compares two version strings
+// VerifyCompatibleVersion ensures that the installed version is greater than or equal to the expected version.
+func VerifyCompatibleVersion(
+	versionReader VersionReader,
+	dbName string,
+	expectedVersion string,
+) error {
+
+	version, err := versionReader.ReadSchemaVersion()
+	if err != nil {
+		return fmt.Errorf("unable to read DB schema version keyspace/database: %s error: %v", dbName, err.Error())
+	}
+	// In most cases, the versions should match. However if after a schema upgrade there is a code
+	// rollback, the code version (expected version) would fall lower than the actual version in
+	// cassandra. This check is to allow such rollbacks since we only make backwards compatible schema
+	// changes
+	if CmpVersion(version, expectedVersion) < 0 {
+		return fmt.Errorf("version mismatch for keyspace/database: %q. Expected version: %s cannot be greater than Actual version: %s", dbName, expectedVersion, version)
+	}
+	return nil
+}
+
+// CmpVersion compares two version strings
 // returns 0 if a == b
 // returns < 0 if a < b
 // returns > 0 if a > b
-func cmpVersion(a, b string) int {
+func CmpVersion(a, b string) int {
 
 	aMajor, aMinor, _ := parseVersion(a)
 	bMajor, bMinor, _ := parseVersion(b)
@@ -86,7 +106,7 @@ func parseVersion(ver string) (major int, minor int, err error) {
 
 // parseValidateVersion validates that the given input conforms to either of vx.x or x.x and
 // returns x.x on success
-func parseValidateVersion(ver string) (string, error) {
+func ParseValidateVersion(ver string) (string, error) {
 	if len(ver) == 0 {
 		return "", fmt.Errorf("version is empty")
 	}
@@ -97,31 +117,4 @@ func parseValidateVersion(ver string) (string, error) {
 		return "", fmt.Errorf("invalid version, expected format is x.x")
 	}
 	return ver, nil
-}
-
-// getExpectedVersion gets the latest version from the schema directory
-func getExpectedVersion(dir string) (string, error) {
-	subdirs, err := ioutil.ReadDir(dir)
-	if err != nil {
-		return "", err
-	}
-
-	var result string
-	for _, subdir := range subdirs {
-		if !subdir.IsDir() {
-			continue
-		}
-		dirname := subdir.Name()
-		if !versionStrRegex.MatchString(dirname) {
-			continue
-		}
-		ver := dirToVersion(dirname)
-		if len(result) == 0 || cmpVersion(ver, result) > 0 {
-			result = ver
-		}
-	}
-	if len(result) == 0 {
-		return "", fmt.Errorf("no valid schemas found in dir: %s", dir)
-	}
-	return result, nil
 }

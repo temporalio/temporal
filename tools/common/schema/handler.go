@@ -28,6 +28,8 @@ import (
 	"fmt"
 
 	"github.com/urfave/cli"
+
+	"go.temporal.io/server/common/persistence/schema"
 )
 
 // VerifyCompatibleVersion ensures that the installed version is greater than or equal to the expected version.
@@ -45,7 +47,7 @@ func VerifyCompatibleVersion(
 	// rollback, the code version (expected version) would fall lower than the actual version in
 	// cassandra. This check is to allow such rollbacks since we only make backwards compatible schema
 	// changes
-	if cmpVersion(version, expectedVersion) < 0 {
+	if schema.CmpVersion(version, expectedVersion) < 0 {
 		return fmt.Errorf(
 			"version mismatch for keyspace/database: %q. Expected version: %s cannot be greater than "+
 				"Actual version: %s", dbName, expectedVersion, version,
@@ -115,7 +117,7 @@ func validateSetupConfig(config *SetupConfig) error {
 			flag(CLIOptVersion) + " but not both must be specified")
 	}
 	if !config.DisableVersioning {
-		ver, err := parseValidateVersion(config.InitialVersion)
+		ver, err := schema.ParseValidateVersion(config.InitialVersion)
 		if err != nil {
 			return NewConfigError("invalid " + flag(CLIOptVersion) + " argument:" + err.Error())
 		}
@@ -129,7 +131,7 @@ func validateUpdateConfig(config *UpdateConfig) error {
 		return NewConfigError("missing " + flag(CLIOptSchemaDir) + " argument ")
 	}
 	if len(config.TargetVersion) > 0 {
-		ver, err := parseValidateVersion(config.TargetVersion)
+		ver, err := schema.ParseValidateVersion(config.TargetVersion)
 		if err != nil {
 			return NewConfigError("invalid " + flag(CLIOptTargetVersion) + " argument:" + err.Error())
 		}

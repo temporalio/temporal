@@ -67,27 +67,27 @@ func (s *VersionTestSuite) TestParseVersion() {
 
 func (s *VersionTestSuite) TestCmpVersion() {
 
-	s.Equal(0, cmpVersion("0", "0"))
-	s.Equal(0, cmpVersion("999", "999"))
-	s.Equal(0, cmpVersion("0.0", "0.0"))
-	s.Equal(0, cmpVersion("0.999", "0.999"))
-	s.Equal(0, cmpVersion("99.888", "99.888"))
+	s.Equal(0, CmpVersion("0", "0"))
+	s.Equal(0, CmpVersion("999", "999"))
+	s.Equal(0, CmpVersion("0.0", "0.0"))
+	s.Equal(0, CmpVersion("0.999", "0.999"))
+	s.Equal(0, CmpVersion("99.888", "99.888"))
 
-	s.True(cmpVersion("0.1", "0") > 0)
-	s.True(cmpVersion("0.5", "0.1") > 0)
-	s.True(cmpVersion("1.1", "0.1") > 0)
-	s.True(cmpVersion("1.1", "0.9") > 0)
-	s.True(cmpVersion("1.1", "1.0") > 0)
+	s.True(CmpVersion("0.1", "0") > 0)
+	s.True(CmpVersion("0.5", "0.1") > 0)
+	s.True(CmpVersion("1.1", "0.1") > 0)
+	s.True(CmpVersion("1.1", "0.9") > 0)
+	s.True(CmpVersion("1.1", "1.0") > 0)
 
-	s.True(cmpVersion("0", "0.1") < 0)
-	s.True(cmpVersion("0.1", "0.5") < 0)
-	s.True(cmpVersion("0.1", "1.1") < 0)
-	s.True(cmpVersion("0.9", "1.1") < 0)
-	s.True(cmpVersion("1.0", "1.1") < 0)
+	s.True(CmpVersion("0", "0.1") < 0)
+	s.True(CmpVersion("0.1", "0.5") < 0)
+	s.True(CmpVersion("0.1", "1.1") < 0)
+	s.True(CmpVersion("0.9", "1.1") < 0)
+	s.True(CmpVersion("1.0", "1.1") < 0)
 
-	s.True(cmpVersion("0.1a", "0.5") < 0)
-	s.True(cmpVersion("0.1", "0.5a") > 0)
-	s.True(cmpVersion("ab", "cd") == 0)
+	s.True(CmpVersion("0.1a", "0.5") < 0)
+	s.True(CmpVersion("0.1", "0.5a") > 0)
+	s.True(CmpVersion("ab", "cd") == 0)
 }
 
 func (s *VersionTestSuite) TestParseValidateVersion() {
@@ -106,7 +106,7 @@ func (s *VersionTestSuite) TestParseValidateVersion() {
 }
 
 func (s *VersionTestSuite) execParseValidateTest(input string, output string, isErr bool) {
-	ver, err := parseValidateVersion(input)
+	ver, err := ParseValidateVersion(input)
 	if isErr {
 		s.NotNil(err)
 		return
@@ -124,39 +124,6 @@ func (s *VersionTestSuite) execParseTest(input string, expMajor int, expMinor in
 	s.Nil(err)
 	s.Equal(expMajor, maj)
 	s.Equal(expMinor, min)
-}
-
-func (s *VersionTestSuite) TestGetExpectedVersion() {
-	s.T().Skip()
-	flags := []struct {
-		dirs     []string
-		expected string
-		err      string
-	}{
-		{[]string{"1.0"}, "1.0", ""},
-		{[]string{"1.0", "2.0"}, "2.0", ""},
-		{[]string{"abc"}, "", "no valid schemas"},
-	}
-	for _, flag := range flags {
-		s.expectedVersionTest(flag.expected, flag.dirs, flag.err)
-	}
-}
-
-func (s *VersionTestSuite) expectedVersionTest(expected string, dirs []string, errStr string) {
-	tmpDir, err := ioutil.TempDir("", "version_test")
-	s.NoError(err)
-	defer os.RemoveAll(tmpDir)
-
-	for _, dir := range dirs {
-		s.createSchemaForVersion(tmpDir, dir)
-	}
-	v, err := getExpectedVersion(tmpDir)
-	if len(errStr) == 0 {
-		s.Equal(expected, v)
-	} else {
-		s.Error(err)
-		s.Contains(err.Error(), errStr)
-	}
 }
 
 func (s *VersionTestSuite) createSchemaForVersion(subdir string, v string) {

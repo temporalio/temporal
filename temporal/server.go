@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
@@ -60,7 +61,6 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
-	"go.temporal.io/server/tools/cassandra"
 	"go.temporal.io/server/tools/sql"
 )
 
@@ -353,7 +353,7 @@ func (s *Server) getServiceParams(
 // Validates configuration of dependencies
 func (s *Server) validate() error {
 	// cassandra schema version validation
-	if err := cassandra.VerifyCompatibleVersion(s.so.config.Persistence); err != nil {
+	if err := cassandra.VerifyCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver); err != nil {
 		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
 	}
 	// sql schema version validation
