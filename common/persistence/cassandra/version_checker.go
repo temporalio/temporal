@@ -22,7 +22,7 @@ func VerifyCompatibleVersion(
 ) error {
 	g, _ := errgroup.WithContext(context.Background())
 	g.Go(func() error {
-		return checkTemporalKeyspace(cfg, r)
+		return checkMainKeyspace(cfg, r)
 	})
 	g.Go(func() error {
 		return checkVisibilityKeyspace(cfg, r)
@@ -31,7 +31,7 @@ func VerifyCompatibleVersion(
 	return g.Wait()
 }
 
-func checkTemporalKeyspace(
+func checkMainKeyspace(
 	cfg config.Persistence,
 	r resolver.ServiceResolver,
 ) error {
@@ -74,5 +74,7 @@ func checkCompatibleVersion(
 	}
 	defer session.Close()
 
-	return schema.VerifyCompatibleVersion(NewSchemaVersionReader(session, cfg.Keyspace), cfg.Keyspace, expectedVersion)
+	schemaVersionReader := NewSchemaVersionReader(session, cfg.Keyspace)
+
+	return schema.VerifyCompatibleVersion(schemaVersionReader, cfg.Keyspace, expectedVersion)
 }
