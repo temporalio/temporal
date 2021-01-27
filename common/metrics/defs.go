@@ -1703,6 +1703,9 @@ const (
 	VersionCheckFailedCount
 	VersionCheckLatency
 
+	ParentClosePolicyProcessorSuccess
+	ParentClosePolicyProcessorFailures
+
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
 
@@ -1889,7 +1892,7 @@ const (
 
 // Matching metrics enum
 const (
-	PollSuccessPerTaskQueueCounter = iota + NumCommonMetrics
+	PollSuccessPerTaskQueueCounter = iota + NumHistoryMetrics
 	PollTimeoutPerTaskQueueCounter
 	PollSuccessWithSyncPerTaskQueueCounter
 	LeaseRequestPerTaskQueueCounter
@@ -1921,7 +1924,7 @@ const (
 
 // Worker metrics enum
 const (
-	ReplicatorMessages = iota + NumCommonMetrics
+	ReplicatorMessages = iota + NumMatchingMetrics
 	ReplicatorFailures
 	ReplicatorMessagesDropped
 	ReplicatorLatency
@@ -1974,8 +1977,6 @@ const (
 	HistoryScavengerSuccessCount
 	HistoryScavengerErrorCount
 	HistoryScavengerSkipCount
-	ParentClosePolicyProcessorSuccess
-	ParentClosePolicyProcessorFailures
 	NamespaceReplicationEnqueueDLQCount
 
 	NumWorkerMetrics
@@ -2069,8 +2070,12 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		VersionCheckFailedCount:                                   {metricName: "version_check_failed", metricType: Counter},
 		VersionCheckRequestFailedCount:                            {metricName: "version_check_request_failed", metricType: Counter},
 		VersionCheckLatency:                                       {metricName: "version_check_latency", metricType: Timer},
-		MatchingClientForwardedCounter:                            {metricName: "forwarded", metricType: Counter},
-		MatchingClientInvalidTaskQueueName:                        {metricName: "invalid_task_queue_name", metricType: Counter},
+
+		ParentClosePolicyProcessorSuccess:  {metricName: "parent_close_policy_processor_requests", metricType: Counter},
+		ParentClosePolicyProcessorFailures: {metricName: "parent_close_policy_processor_errors", metricType: Counter},
+
+		MatchingClientForwardedCounter:     {metricName: "forwarded", metricType: Counter},
+		MatchingClientInvalidTaskQueueName: {metricName: "invalid_task_queue_name", metricType: Counter},
 
 		NamespaceReplicationTaskAckLevelGauge: {metricName: "namespace_replication_task_ack_level", metricType: Gauge},
 		NamespaceReplicationDLQAckLevelGauge:  {metricName: "namespace_dlq_ack_level", metricType: Gauge},
@@ -2392,8 +2397,6 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryScavengerSuccessCount:                  {metricName: "scavenger_success", metricType: Counter},
 		HistoryScavengerErrorCount:                    {metricName: "scavenger_errors", metricType: Counter},
 		HistoryScavengerSkipCount:                     {metricName: "scavenger_skips", metricType: Counter},
-		ParentClosePolicyProcessorSuccess:             {metricName: "parent_close_policy_processor_requests", metricType: Counter},
-		ParentClosePolicyProcessorFailures:            {metricName: "parent_close_policy_processor_errors", metricType: Counter},
 		NamespaceReplicationEnqueueDLQCount:           {metricName: "namespace_replication_dlq_enqueue_requests", metricType: Counter},
 	},
 }
