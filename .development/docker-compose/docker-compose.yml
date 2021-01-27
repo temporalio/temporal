@@ -90,7 +90,7 @@ services:
     volumes:
       - ./grafana/provisioning/:/etc/grafana/provisioning/
   temporal-web:
-    image: temporalio/web:1.4.1
+    image: temporalio/web:1.6.0
     container_name: temporal-dev-web
 
 networks:
