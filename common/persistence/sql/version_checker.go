@@ -74,6 +74,7 @@ func checkVisibilityDatabase(
 	}
 	return nil
 }
+
 func checkCompatibleVersion(
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
