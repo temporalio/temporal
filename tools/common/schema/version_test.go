@@ -46,7 +46,7 @@ func (s *VersionTestSuite) SetupTest() {
 	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 }
 
-func (s *VersionTestSuite) Test_cmpVersion() {
+func (s *VersionTestSuite) TestCmpVersion() {
 
 	s.Equal(0, cmpVersion("0", "0"))
 	s.Equal(0, cmpVersion("999", "999"))
@@ -69,4 +69,29 @@ func (s *VersionTestSuite) Test_cmpVersion() {
 	s.True(cmpVersion("0.1a", "0.5") < 0)
 	s.True(cmpVersion("0.1", "0.5a") > 0)
 	s.True(cmpVersion("ab", "cd") == 0)
+}
+
+func (s *VersionTestSuite) TestParseValidateVersion() {
+
+	inputs := []string{"0", "1000", "9999", "0.1", "0.9", "99.9", "100.8"}
+	for _, in := range inputs {
+		s.execParseValidateTest(in, in, false)
+		s.execParseValidateTest("v"+in, in, false)
+	}
+
+	errInputs := []string{"1.2a", "ab", "5.11a"}
+	for _, in := range errInputs {
+		s.execParseValidateTest(in, "", true)
+		s.execParseValidateTest("v"+in, "", true)
+	}
+}
+
+func (s *VersionTestSuite) execParseValidateTest(input string, output string, isErr bool) {
+	ver, err := parseValidateVersion(input)
+	if isErr {
+		s.NotNil(err)
+		return
+	}
+	s.Nil(err)
+	s.Equal(output, ver)
 }

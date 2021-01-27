@@ -36,8 +36,6 @@ import (
 	"log"
 	"sort"
 	"strings"
-
-	"github.com/blang/semver/v4"
 )
 
 type (
@@ -271,20 +269,20 @@ func readManifest(dirPath string) (*manifest, error) {
 		return nil, err
 	}
 
-	currVer, err := semver.ParseTolerant(manifest.CurrVersion)
+	currVer, err := parseValidateVersion(manifest.CurrVersion)
 	if err != nil {
 		return nil, fmt.Errorf("invalid CurrVersion in manifest")
 	}
-	manifest.CurrVersion = currVer.String()
+	manifest.CurrVersion = currVer
 
-	minVer, err := semver.ParseTolerant(manifest.MinCompatibleVersion)
+	minVer, err := parseValidateVersion(manifest.MinCompatibleVersion)
 	if err != nil {
 		return nil, err
 	}
 	if len(manifest.MinCompatibleVersion) == 0 {
 		return nil, fmt.Errorf("invalid MinCompatibleVersion in manifest")
 	}
-	manifest.MinCompatibleVersion = minVer.String()
+	manifest.MinCompatibleVersion = minVer
 
 	if len(manifest.SchemaUpdateCqlFiles) == 0 {
 		return nil, fmt.Errorf("manifest missing SchemaUpdateCqlFiles")
@@ -332,7 +330,7 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 
 		dirname := dir.Name()
 
-		if _, err := semver.ParseTolerant(dirname); err != nil {
+		if !versionStrRegex.MatchString(dirname) {
 			continue
 		}
 

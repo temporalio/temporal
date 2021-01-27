@@ -27,7 +27,6 @@ package schema
 import (
 	"fmt"
 
-	"github.com/blang/semver/v4"
 	"github.com/urfave/cli"
 )
 
@@ -116,11 +115,11 @@ func validateSetupConfig(config *SetupConfig) error {
 			flag(CLIOptVersion) + " but not both must be specified")
 	}
 	if !config.DisableVersioning {
-		ver, err := semver.ParseTolerant(config.InitialVersion)
+		ver, err := parseValidateVersion(config.InitialVersion)
 		if err != nil {
 			return NewConfigError("invalid " + flag(CLIOptVersion) + " argument:" + err.Error())
 		}
-		config.InitialVersion = ver.String()
+		config.InitialVersion = ver
 	}
 	return nil
 }
@@ -130,11 +129,11 @@ func validateUpdateConfig(config *UpdateConfig) error {
 		return NewConfigError("missing " + flag(CLIOptSchemaDir) + " argument ")
 	}
 	if len(config.TargetVersion) > 0 {
-		ver, err := semver.ParseTolerant(config.TargetVersion)
+		ver, err := parseValidateVersion(config.TargetVersion)
 		if err != nil {
 			return NewConfigError("invalid " + flag(CLIOptTargetVersion) + " argument:" + err.Error())
 		}
-		config.TargetVersion = ver.String()
+		config.TargetVersion = ver
 	}
 	return nil
 }
