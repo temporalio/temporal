@@ -25,8 +25,6 @@
 package schema
 
 import (
-	"io/ioutil"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -46,23 +44,6 @@ func TestVersionTestSuite(t *testing.T) {
 
 func (s *VersionTestSuite) SetupTest() {
 	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-}
-
-func (s *VersionTestSuite) TestParseVersion() {
-	s.execParseTest("", 0, 0, false)
-	s.execParseTest("0", 0, 0, false)
-	s.execParseTest("99", 99, 0, false)
-	s.execParseTest("0.0", 0, 0, false)
-	s.execParseTest("0.9", 0, 9, false)
-	s.execParseTest("0.10", 0, 10, false)
-	s.execParseTest("1.0", 1, 0, false)
-	s.execParseTest("9999.0", 9999, 0, false)
-	s.execParseTest("999.999", 999, 999, false)
-	s.execParseTest("88.88.88", 88, 88, false)
-	s.execParseTest("a.b", 0, 0, true)
-	s.execParseTest("1.5a", 0, 0, true)
-	s.execParseTest("5.b", 0, 0, true)
-	s.execParseTest("golang", 0, 0, true)
 }
 
 func (s *VersionTestSuite) TestCmpVersion() {
@@ -113,55 +94,4 @@ func (s *VersionTestSuite) execParseValidateTest(input string, output string, is
 	}
 	s.Nil(err)
 	s.Equal(output, ver)
-}
-
-func (s *VersionTestSuite) execParseTest(input string, expMajor int, expMinor int, isErr bool) {
-	maj, min, err := parseVersion(input)
-	if isErr {
-		s.NotNil(err)
-		return
-	}
-	s.Nil(err)
-	s.Equal(expMajor, maj)
-	s.Equal(expMinor, min)
-}
-
-func (s *VersionTestSuite) TestGetExpectedVersion() {
-	s.T().Skip()
-	flags := []struct {
-		dirs     []string
-		expected string
-		err      string
-	}{
-		{[]string{"1.0"}, "1.0", ""},
-		{[]string{"1.0", "2.0"}, "2.0", ""},
-		{[]string{"abc"}, "", "no valid schemas"},
-	}
-	for _, flag := range flags {
-		s.expectedVersionTest(flag.expected, flag.dirs, flag.err)
-	}
-}
-
-func (s *VersionTestSuite) expectedVersionTest(expected string, dirs []string, errStr string) {
-	tmpDir, err := ioutil.TempDir("", "version_test")
-	s.NoError(err)
-	defer os.RemoveAll(tmpDir)
-
-	for _, dir := range dirs {
-		s.createSchemaForVersion(tmpDir, dir)
-	}
-	v, err := getExpectedVersion(tmpDir)
-	if len(errStr) == 0 {
-		s.Equal(expected, v)
-	} else {
-		s.Error(err)
-		s.Contains(err.Error(), errStr)
-	}
-}
-
-func (s *VersionTestSuite) createSchemaForVersion(subdir string, v string) {
-	vDir := subdir + "/v" + v
-	s.NoError(os.Mkdir(vDir, os.FileMode(0744)))
-	cqlFile := vDir + "/tmp.cql"
-	s.NoError(ioutil.WriteFile(cqlFile, []byte{}, os.FileMode(0644)))
 }

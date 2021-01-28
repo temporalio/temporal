@@ -31,6 +31,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	mysqlschema "go.temporal.io/server/schema/mysql"
 )
 
 // db represents a logical connection to mysql database
@@ -93,4 +94,16 @@ func (mdb *db) Close() error {
 // PluginName returns the name of the mysql plugin
 func (mdb *db) PluginName() string {
 	return PluginName
+}
+
+// ExpectedVersion returns expected version.
+func (mdb *db) ExpectedVersion(dbKind sqlplugin.DbKind) string {
+	switch dbKind {
+	case sqlplugin.DbKindMain:
+		return mysqlschema.Version
+	case sqlplugin.DbKindVisibility:
+		return mysqlschema.VisibilityVersion
+	default:
+		return ""
+	}
 }

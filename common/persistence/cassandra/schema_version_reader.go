@@ -22,42 +22,49 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package schema
+package cassandra
 
 import (
-	"fmt"
-	"regexp"
+	"errors"
 
-	"github.com/blang/semver/v4"
+	"github.com/gocql/gocql"
 )
 
-// represents names of the form vx.x where x.x is a (major, minor) version pair
-var versionStrRegex = regexp.MustCompile(`^v\d+(\.\d+)?$`)
+const (
+	readSchemaVersionCQL = `SELECT curr_version from schema_version where keyspace_name=?`
+)
 
-// represents names of the form x.x where minor version is always single digit
-var versionNumRegex = regexp.MustCompile(`^\d+(\.\d+)?$`)
+type (
+	SchemaVersionReader struct {
+		session *gocql.Session
+	}
+)
 
-// cmpVersion compares two version strings
-// returns 0 if a == b
-// returns < 0 if a < b
-// returns > 0 if a > b
-func cmpVersion(a, b string) int {
-	aParsed, _ := semver.ParseTolerant(a)
-	bParsed, _ := semver.ParseTolerant(b)
-	return aParsed.Compare(bParsed)
+var (
+	ErrGetSchemaVersion = errors.New("failed to get current schema version from cassandra")
+)
+
+func NewSchemaVersionReader(session *gocql.Session) *SchemaVersionReader {
+	return &SchemaVersionReader{
+		session: session,
+	}
 }
 
-// parseValidateVersion validates that the given input conforms to either of vx.x or x.x and
-// returns x.x on success
-func parseValidateVersion(ver string) (string, error) {
-	if len(ver) == 0 {
-		return "", fmt.Errorf("version is empty")
+// ReadSchemaVersion returns the current schema version for the Keyspace
+func (svr *SchemaVersionReader) ReadSchemaVersion(keyspace string) (string, error) {
+	query := svr.session.Query(readSchemaVersionCQL, keyspace)
+	// when querying the DB schema version, override to local quorum
+	// in case Cassandra node down (compared to using ALL)
+	query.SetConsistency(gocql.LocalQuorum)
+
+	iter := query.Iter()
+	var version string
+	if !iter.Scan(&version) {
+		_ = iter.Close()
+		return "", ErrGetSchemaVersion
 	}
-	if versionStrRegex.MatchString(ver) {
-		return ver[1:], nil
+	if err := iter.Close(); err != nil {
+		return "", err
 	}
-	if !versionNumRegex.MatchString(ver) {
-		return "", fmt.Errorf("invalid version, expected format is x.x")
-	}
-	return ver, nil
+	return version, nil
 }

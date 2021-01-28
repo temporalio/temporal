@@ -51,6 +51,7 @@ type (
 		Overwrite         bool // overwrite previous data
 		DisableVersioning bool // do not use schema versioning
 	}
+
 	// DB is the database interface that's required to be implemented
 	// for the schema-tool to work
 	DB interface {
