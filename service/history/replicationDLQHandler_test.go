@@ -30,7 +30,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -43,7 +42,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
@@ -63,7 +61,7 @@ type (
 		adminClient      *adminservicemock.MockAdminServiceClient
 		clusterMetadata  *cluster.MockMetadata
 		executionManager *persistence.MockExecutionManager
-		shardManager     *mocks.ShardManager
+		shardManager     *persistence.MockShardManager
 		taskExecutor     *MockreplicationTaskExecutor
 		taskExecutors    map[string]replicationTaskExecutor
 		sourceCluster    string
@@ -203,7 +201,7 @@ func (s *replicationDLQHandlerSuite) TestPurgeMessages() {
 			InclusiveEndTaskID:   lastMessageID,
 		}).Return(nil).Times(1)
 
-	s.shardManager.On("UpdateShard", mock.Anything).Return(nil)
+	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
 	err := s.replicationMessageHandler.purgeMessages(s.sourceCluster, lastMessageID)
 	s.NoError(err)
 }
@@ -277,7 +275,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 		InclusiveEndTaskID:   lastMessageID,
 	}).Return(nil).Times(1)
 
-	s.shardManager.On("UpdateShard", mock.Anything).Return(nil)
+	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
 
 	token, err := s.replicationMessageHandler.mergeMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)

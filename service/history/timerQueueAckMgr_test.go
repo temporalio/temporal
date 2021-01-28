@@ -37,13 +37,11 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -58,7 +56,7 @@ type (
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockExecutionMgr *persistence.MockExecutionManager
-		mockShardMgr     *mocks.ShardManager
+		mockShardMgr     *persistence.MockShardManager
 
 		logger           log.Logger
 		clusterName      string
@@ -74,7 +72,7 @@ type (
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockExecutionMgr *persistence.MockExecutionManager
-		mockShardMgr     *mocks.ShardManager
+		mockShardMgr     *persistence.MockShardManager
 
 		logger                   log.Logger
 		namespaceID              string
@@ -471,14 +469,14 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.False(moreTasks)
 
 	// we are not testing shard context
-	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
 	timerSequenceID1 := timerKeyFromTimePtr(timer1.VisibilityTime, timer1.GetTaskId())
 	s.timerQueueAckMgr.completeTimerTask(timer1)
 	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID1])
 	_ = s.timerQueueAckMgr.updateAckLevel()
 	s.Equal(timer1.VisibilityTime.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
 
-	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
 	timerSequenceID3 := timerKeyFromTimePtr(timer3.VisibilityTime, timer3.GetTaskId())
 	s.timerQueueAckMgr.completeTimerTask(timer3)
 	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID3])
@@ -487,7 +485,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.Equal(timer1.VisibilityTime.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
 
 	// we are not testing shard context
-	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
 	timerSequenceID2 := timerKeyFromTimePtr(timer2.VisibilityTime, timer2.GetTaskId())
 	s.timerQueueAckMgr.completeTimerTask(timer2)
 	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID2])
@@ -773,7 +771,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	timerSequenceID2 := timerKeyFromTimePtr(timer2.VisibilityTime, timer2.GetTaskId())
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer2)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID2])
-	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
 	case <-s.timerQueueFailoverAckMgr.getFinishedChan():
@@ -784,7 +782,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	timerSequenceID3 := timerKeyFromTimePtr(timer3.VisibilityTime, timer3.GetTaskId())
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer3)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID3])
-	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
 	case <-s.timerQueueFailoverAckMgr.getFinishedChan():
@@ -795,7 +793,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	timerSequenceID1 := timerKeyFromTimePtr(timer1.VisibilityTime, timer1.GetTaskId())
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer1)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID1])
-	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
 	case <-s.timerQueueFailoverAckMgr.getFinishedChan():

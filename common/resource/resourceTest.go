@@ -99,7 +99,7 @@ type (
 		TaskMgr                   *mocks.TaskManager
 		VisibilityMgr             *mocks.VisibilityManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
-		ShardMgr                  *mocks.ShardManager
+		ShardMgr                  *persistence.MockShardManager
 		HistoryMgr                *persistence.MockHistoryManager
 		ExecutionMgr              *persistence.MockExecutionManager
 		PersistenceBean           *persistenceClient.MockBean
@@ -146,7 +146,7 @@ func NewTest(
 	metadataMgr := &mocks.MetadataManager{}
 	taskMgr := &mocks.TaskManager{}
 	visibilityMgr := &mocks.VisibilityManager{}
-	shardMgr := &mocks.ShardManager{}
+	shardMgr := persistence.NewMockShardManager(controller)
 	historyMgr := persistence.NewMockHistoryManager(controller)
 	executionMgr := persistence.NewMockExecutionManager(controller)
 	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
@@ -455,5 +455,4 @@ func (s *Test) Finish(
 	s.MetadataMgr.AssertExpectations(t)
 	s.TaskMgr.AssertExpectations(t)
 	s.VisibilityMgr.AssertExpectations(t)
-	s.ShardMgr.AssertExpectations(t)
 }
