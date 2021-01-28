@@ -37,7 +37,6 @@ import (
 	"strings"
 
 	"go.temporal.io/server/common/auth"
-	"go.temporal.io/server/common/log/tag"
 
 	"github.com/Shopify/sarama"
 	temporalKafkaClient "github.com/temporalio/kafka-client"
@@ -66,11 +65,7 @@ var _ Client = (*kafkaClient)(nil)
 // NewKafkaClient is used to create an instance of KafkaClient
 func NewKafkaClient(kc *KafkaConfig, metricsClient metrics.Client, zLogger *zap.Logger, logger log.Logger, metricScope tally.Scope,
 	checkCluster, checkApp bool) Client {
-	err := kc.Validate(checkCluster, checkApp)
-	if err != nil {
-		logger.Warn("Wrong Kafka config.", tag.Error(err))
-		return nil
-	}
+	kc.Validate(checkCluster, checkApp)
 
 	// mapping from cluster name to list of broker ip addresses
 	brokers := map[string][]string{}

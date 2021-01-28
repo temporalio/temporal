@@ -70,59 +70,44 @@ type (
 )
 
 // Validate will validate config for kafka
-func (k *KafkaConfig) Validate(checkCluster bool, checkApp bool) error {
+func (k *KafkaConfig) Validate(checkCluster bool, checkApp bool) {
 	if len(k.Clusters) == 0 {
-		return fmt.Errorf("empty Kafka cluster config")
+		panic("Empty Kafka Cluster Config")
 	}
 	if len(k.Topics) == 0 {
-		return fmt.Errorf("empty topics config")
+		panic("Empty Topics Config")
 	}
 
-	validateTopicsFn := func(topic string) error {
+	validateTopicsFn := func(topic string) {
 		if topic == "" {
-			return fmt.Errorf("empty topic name")
+			panic("Empty Topic Name")
 		} else if topicConfig, ok := k.Topics[topic]; !ok {
-			return fmt.Errorf("missing topic config for topic %v", topic)
+			panic(fmt.Sprintf("Missing Topic Config for Topic %v", topic))
 		} else if clusterConfig, ok := k.Clusters[topicConfig.Cluster]; !ok {
-			return fmt.Errorf("missing Kafka cluster config for cluster %v", topicConfig.Cluster)
+			panic(fmt.Sprintf("Missing Kafka Cluster Config for Cluster %v", topicConfig.Cluster))
 		} else if len(clusterConfig.Brokers) == 0 {
-			return fmt.Errorf("missing Kafka brokers config for cluster %v", topicConfig.Cluster)
+			panic(fmt.Sprintf("Missing Kafka Brokers Config for Cluster %v", topicConfig.Cluster))
 		}
-		return nil
 	}
 
 	if checkCluster {
 		if len(k.ClusterToTopic) == 0 {
-			return fmt.Errorf("empty cluster to topics config")
+			panic("Empty Cluster To Topics Config")
 		}
 		for _, topics := range k.ClusterToTopic {
-			err := validateTopicsFn(topics.Topic)
-			if err != nil {
-				return err
-			}
-			err = validateTopicsFn(topics.DLQTopic)
-			if err != nil {
-				return err
-			}
+			validateTopicsFn(topics.Topic)
+			validateTopicsFn(topics.DLQTopic)
 		}
 	}
 	if checkApp {
 		if len(k.Applications) == 0 {
-			return fmt.Errorf("empty applications config")
+			panic("Empty Applications Config")
 		}
 		for _, topics := range k.Applications {
-			err := validateTopicsFn(topics.Topic)
-			if err != nil {
-				return err
-			}
-			err = validateTopicsFn(topics.DLQTopic)
-			if err != nil {
-				return err
-			}
+			validateTopicsFn(topics.Topic)
+			validateTopicsFn(topics.DLQTopic)
 		}
 	}
-
-	return nil
 }
 
 func (k *KafkaConfig) getTopicsForTemporalCluster(temporalCluster string) TopicList {
