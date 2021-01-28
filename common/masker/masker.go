@@ -37,19 +37,8 @@ var (
 	DefaultYAMLFieldNames = []string{"password", "keyData"}
 )
 
-func maskMap(m map[string]interface{}, fns map[string]struct{}) {
-	for key, value := range m {
-		if _, ok := fns[key]; ok {
-			m[key] = passwordMask
-		}
-
-		if m, ok := value.(map[string]interface{}); ok {
-			maskMap(m, fns)
-		}
-	}
-}
-
 // MaskYaml replace password values with mask and returns copy of the string.
+// Does recursive replacement for entire yamlStr.
 func MaskYaml(yamlStr string, fieldNamesToMask []string) string {
 	fns := make(map[string]struct{}, len(fieldNamesToMask))
 	for _, fieldName := range fieldNamesToMask {
@@ -71,8 +60,8 @@ func MaskYaml(yamlStr string, fieldNamesToMask []string) string {
 	return string(strBytes)
 }
 
-// MaskStruct replace password values with mask and returns copy of the cfg.
-// Original cfg value is not modified.
+// MaskStruct replace password values with mask and returns copy of the strct.
+// Original strct value is not modified. Doesn't go recursively through strct properties.
 func MaskStruct(strct interface{}, fieldNamesToMask []string) interface{} {
 	strctV := reflect.ValueOf(strct)
 
@@ -103,4 +92,16 @@ func pointerTo(val interface{}) reflect.Value {
 	valPtr := reflect.New(reflect.TypeOf(val))
 	valPtr.Elem().Set(reflect.ValueOf(val))
 	return valPtr
+}
+
+func maskMap(m map[string]interface{}, fns map[string]struct{}) {
+	for key, value := range m {
+		if _, ok := fns[key]; ok {
+			m[key] = passwordMask
+		}
+
+		if valueMap, ok := value.(map[string]interface{}); ok {
+			maskMap(valueMap, fns)
+		}
+	}
 }
