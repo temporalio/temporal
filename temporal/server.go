@@ -290,8 +290,12 @@ func (s *Server) getServiceParams(
 		dynamicconfig.AdvancedVisibilityWritingMode,
 		common.GetDefaultAdvancedVisibilityWritingMode(s.so.config.Persistence.IsAdvancedVisibilityConfigExist()),
 	)()
+	visibilityQueue := dc.GetStringProperty(
+		dynamicconfig.VisibilityQueue,
+		common.VisibilityQueueInternal,
+	)()
 	isAdvancedVisEnabled := advancedVisMode != common.AdvancedVisibilityWritingModeOff
-	if isAdvancedVisEnabled {
+	if isAdvancedVisEnabled && (visibilityQueue == common.VisibilityQueueKafka || visibilityQueue == common.VisibilityQueueInternalWithDualProcessor) {
 		params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), s.logger, metricsScope, false, isAdvancedVisEnabled)
 	} else {
 		params.MessagingClient = nil
