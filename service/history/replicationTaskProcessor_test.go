@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 )
@@ -76,7 +75,7 @@ type (
 		mockReplicationTaskExecutor *MockreplicationTaskExecutor
 		mockReplicationTaskFetcher  *MockReplicationTaskFetcher
 
-		mockExecutionManager *mocks.ExecutionManager
+		mockExecutionManager *persistence.MockExecutionManager
 
 		config      *configs.Config
 		requestChan chan *replicationTaskRequest
@@ -250,7 +249,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationDLQTask_SyncActivit
 		},
 	}
 
-	s.mockExecutionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(request).Return(nil)
 	err := s.replicationTaskProcessor.handleReplicationDLQTask(request)
 	s.NoError(err)
 }
@@ -273,7 +272,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationDLQTask_History() {
 		},
 	}
 
-	s.mockExecutionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(request).Return(nil)
 	err := s.replicationTaskProcessor.handleReplicationDLQTask(request)
 	s.NoError(err)
 }
@@ -373,7 +372,7 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 	s.NoError(err)
 
 	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID - 1
-	s.mockExecutionManager.On("RangeCompleteReplicationTask", &persistence.RangeCompleteReplicationTaskRequest{
+	s.mockExecutionManager.EXPECT().RangeCompleteReplicationTask(&persistence.RangeCompleteReplicationTaskRequest{
 		InclusiveEndTaskID: ackedTaskID,
 	}).Return(nil).Times(1)
 	err = s.replicationTaskProcessor.cleanupReplicationTasks()

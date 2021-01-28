@@ -68,7 +68,7 @@ type (
 		mockShard  *shard.ContextTest
 
 		mockVisibilityMgr *mocks.VisibilityManager
-		mockExecutionMgr  *mocks.ExecutionManager
+		mockExecutionMgr  *persistence.MockExecutionManager
 
 		logger                      log.Logger
 		namespaceID                 string
@@ -233,7 +233,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionClosedV2", mock.Anything).Return(nil).Once()
 
 	err = s.visibilityQueueTaskExecutor.execute(visibilityTask, true)
@@ -283,7 +283,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionStartedV2", s.createRecordWorkflowExecutionStartedRequest(s.namespace, event, visibiltyTask, mutableState, backoff, taskQueueName)).Once().Return(nil)
 
 	err = s.visibilityQueueTaskExecutor.execute(visibiltyTask, true)
@@ -329,7 +329,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.On("UpsertWorkflowExecutionV2", s.createUpsertWorkflowSearchAttributesRequest(s.namespace, event, visibilityTask, mutableState, taskQueueName)).Once().Return(nil)
 
 	err = s.visibilityQueueTaskExecutor.execute(visibilityTask, true)

@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -66,6 +65,7 @@ type (
 		*require.Assertions
 
 		controller               *gomock.Controller
+		mockExecutionMgr         *persistence.MockExecutionManager
 		mockShard                *shard.ContextTest
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
@@ -74,8 +74,6 @@ type (
 		mockClusterMetadata      *cluster.MockMetadata
 		mockAdminClient          *adminservicemock.MockAdminServiceClient
 		mockNDCHistoryResender   *xdc.MockNDCHistoryResender
-
-		mockExecutionMgr *mocks.ExecutionManager
 
 		logger               log.Logger
 		namespaceID          string
@@ -254,7 +252,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
@@ -338,10 +336,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 
 	event = addTimerFiredEvent(mutableState, timerID)
 	// Flush buffered events so real IDs get assigned
-	mutableState.FlushBufferedEvents()
+	_ = mutableState.FlushBufferedEvents()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
@@ -409,10 +407,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 
 	event = addTimerFiredEvent(mutableState, timerID1)
 	// Flush buffered events so real IDs get assigned
-	mutableState.FlushBufferedEvents()
+	_ = mutableState.FlushBufferedEvents()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
@@ -479,7 +477,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
@@ -572,10 +570,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 
 	completeEvent := addActivityTaskCompletedEvent(mutableState, scheduledEvent.GetEventId(), startedEvent.GetEventId(), nil, identity)
 	// Flush buffered events so real IDs get assigned
-	mutableState.FlushBufferedEvents()
+	_ = mutableState.FlushBufferedEvents()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, completeEvent.GetEventId(), completeEvent.GetVersion())
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
@@ -621,7 +619,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbea
 		timerTimeout, timerTimeout, timerTimeout, heartbeatTimerTimeout)
 	startedEvent := addActivityTaskStartedEvent(mutableState, scheduledEvent.GetEventId(), identity)
 	// Flush buffered events so real IDs get assigned
-	mutableState.FlushBufferedEvents()
+	_ = mutableState.FlushBufferedEvents()
 
 	timerSequence := newTimerSequence(s.timeSource, mutableState)
 	mutableState.insertTimerTasks = nil
@@ -645,7 +643,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbea
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, startedEvent.GetEventId(), startedEvent.GetVersion())
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
@@ -723,11 +721,11 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 
 	completeEvent1 := addActivityTaskCompletedEvent(mutableState, scheduledEvent1.GetEventId(), startedEvent1.GetEventId(), nil, identity)
 	// Flush buffered events so real IDs get assigned
-	mutableState.FlushBufferedEvents()
+	_ = mutableState.FlushBufferedEvents()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, completeEvent1.GetEventId(), completeEvent1.GetVersion())
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
-	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.MatchedBy(func(input *persistence.UpdateWorkflowExecutionRequest) bool {
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Times(1)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(mock.MatchedBy(func(input *persistence.UpdateWorkflowExecutionRequest) bool {
 		s.Equal(1, len(input.UpdateWorkflowMutation.TimerTasks))
 		s.Equal(1, len(input.UpdateWorkflowMutation.UpsertActivityInfos))
 		mutableState.executionInfo.LastUpdateTime = input.UpdateWorkflowMutation.ExecutionInfo.LastUpdateTime
@@ -764,7 +762,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 			NewWorkflowSnapshot: nil,
 		}, input)
 		return true
-	})).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
+	})).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
@@ -781,7 +779,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 	taskQueueName := "some random task queue"
 
 	mutableState := newMutableStateBuilderWithVersionHistoriesForTest(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
-	mutableState.UpdateCurrentVersion(s.version, false)
+	_ = mutableState.UpdateCurrentVersion(s.version, false)
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -800,7 +798,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 	di := addWorkflowTaskScheduledEvent(mutableState)
 	startedEvent := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	// Flush buffered events so real IDs get assigned
-	mutableState.FlushBufferedEvents()
+	_ = mutableState.FlushBufferedEvents()
 	nextEventID := startedEvent.GetEventId()
 
 	protoTime := s.now
@@ -819,7 +817,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, startedEvent.GetEventId(), startedEvent.GetVersion())
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
@@ -908,7 +906,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Succ
 	di.StartedID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 	// Flush buffered events so real IDs get assigned
-	mutableState.FlushBufferedEvents()
+	_ = mutableState.FlushBufferedEvents()
 
 	protoTime := s.now
 	s.NoError(err)
@@ -926,7 +924,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Succ
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
@@ -959,7 +957,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 	s.Nil(err)
 
 	// Flush buffered events so real IDs get assigned
-	mutableState.FlushBufferedEvents()
+	_ = mutableState.FlushBufferedEvents()
 	nextEventID := event.GetEventId()
 
 	protoTaskTime := s.now
@@ -976,7 +974,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
@@ -1034,7 +1032,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Suc
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
 	// Flush buffered events so real IDs get assigned
-	mutableState.FlushBufferedEvents()
+	_ = mutableState.FlushBufferedEvents()
 
 	protoTaskTime := s.now
 	s.NoError(err)
@@ -1050,7 +1048,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Suc
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
@@ -1087,7 +1085,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 	di.StartedID = startEvent.GetEventId()
 	completionEvent := addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 	// Flush buffered events so real IDs get assigned
-	mutableState.FlushBufferedEvents()
+	_ = mutableState.FlushBufferedEvents()
 	nextEventID := completionEvent.GetEventId()
 
 	protoTaskTime := s.now
@@ -1105,7 +1103,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, completionEvent.GetEventId(), completionEvent.GetVersion())
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
@@ -1167,7 +1165,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
 	// Flush buffered events so real IDs get assigned
-	mutableState.FlushBufferedEvents()
+	_ = mutableState.FlushBufferedEvents()
 
 	protoTaskTime := s.now
 	s.NoError(err)
@@ -1184,7 +1182,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
