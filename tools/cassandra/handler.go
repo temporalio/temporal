@@ -25,19 +25,18 @@
 package cassandra
 
 import (
+	"context"
 	"fmt"
 	"log"
 
 	"github.com/urfave/cli"
+	"golang.org/x/sync/errgroup"
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/schema/cassandra"
 	"go.temporal.io/server/tools/common/schema"
-
-	"golang.org/x/net/context"
-	"golang.org/x/sync/errgroup"
 )
 
 const defaultNumReplicas = 1

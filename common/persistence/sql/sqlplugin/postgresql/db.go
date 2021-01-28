@@ -31,6 +31,7 @@ import (
 	"github.com/lib/pq"
 
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	postgresqlschema "go.temporal.io/server/schema/postgresql"
 )
 
 // db represents a logical connection to mysql database
@@ -92,4 +93,16 @@ func (pdb *db) Close() error {
 // PluginName returns the name of the mysql plugin
 func (pdb *db) PluginName() string {
 	return PluginName
+}
+
+// ExpectedVersion returns expected version.
+func (mdb *db) ExpectedVersion(dbKind sqlplugin.DbKind) string {
+	switch dbKind {
+	case sqlplugin.DbKindMain:
+		return postgresqlschema.Version
+	case sqlplugin.DbKindVisibility:
+		return postgresqlschema.VisibilityVersion
+	default:
+		return ""
+	}
 }

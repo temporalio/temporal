@@ -48,7 +48,9 @@ import (
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
@@ -60,8 +62,6 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
-	"go.temporal.io/server/tools/cassandra"
-	"go.temporal.io/server/tools/sql"
 )
 
 type (
@@ -347,21 +347,22 @@ func (s *Server) getServiceParams(
 	}
 
 	params.PersistenceServiceResolver = s.so.persistenceServiceResolver
-	if params.PersistenceServiceResolver == nil {
-		params.PersistenceServiceResolver = resolver.NewNoopResolver()
-	}
 
 	return &params, nil
 }
 
 // Validates configuration of dependencies
 func (s *Server) validate() error {
+	if s.so.persistenceServiceResolver == nil {
+		s.so.persistenceServiceResolver = resolver.NewNoopResolver()
+	}
+
 	// cassandra schema version validation
-	if err := cassandra.VerifyCompatibleVersion(s.so.config.Persistence); err != nil {
+	if err := cassandra.VerifyCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver); err != nil {
 		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
 	}
 	// sql schema version validation
-	if err := sql.VerifyCompatibleVersion(s.so.config.Persistence); err != nil {
+	if err := sql.VerifyCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver); err != nil {
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
 	}
 
@@ -379,14 +380,9 @@ func (s *Server) validate() error {
 func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collection) error {
 	logger := s.logger.WithTags(tag.ComponentMetadataInitializer)
 
-	persistenceServiceResolver := s.so.persistenceServiceResolver
-	if persistenceServiceResolver == nil {
-		persistenceServiceResolver = resolver.NewNoopResolver()
-	}
-
 	factory := persistenceClient.NewFactory(
 		&s.so.config.Persistence,
-		persistenceServiceResolver,
+		s.so.persistenceServiceResolver,
 		dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 3000),
 		nil,
 		s.so.config.ClusterMetadata.CurrentClusterName,

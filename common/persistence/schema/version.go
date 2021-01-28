@@ -26,38 +26,29 @@ package schema
 
 import (
 	"fmt"
-	"regexp"
 
 	"github.com/blang/semver/v4"
 )
 
-// represents names of the form vx.x where x.x is a (major, minor) version pair
-var versionStrRegex = regexp.MustCompile(`^v\d+(\.\d+)?$`)
+// VerifyCompatibleVersion ensures that the installed version is greater than or equal to the expected version.
+func VerifyCompatibleVersion(
+	versionReader VersionReader,
+	dbName string,
+	expectedVersion string,
+) error {
 
-// represents names of the form x.x where minor version is always single digit
-var versionNumRegex = regexp.MustCompile(`^\d+(\.\d+)?$`)
+	version, err := versionReader.ReadSchemaVersion(dbName)
+	if err != nil {
+		return fmt.Errorf("unable to read DB schema version keyspace/database: %s error: %v", dbName, err.Error())
+	}
+	// In most cases, the versions should match. However if after a schema upgrade there is a code
+	// rollback, the code version (expected version) would fall lower than the actual version in
+	// Cassandra. This check to allow such rollbacks since we only make backwards compatible schema changes.
+	versionParsed, _ := semver.ParseTolerant(version)
+	expectedVersionParsed, _ := semver.ParseTolerant(expectedVersion)
 
-// cmpVersion compares two version strings
-// returns 0 if a == b
-// returns < 0 if a < b
-// returns > 0 if a > b
-func cmpVersion(a, b string) int {
-	aParsed, _ := semver.ParseTolerant(a)
-	bParsed, _ := semver.ParseTolerant(b)
-	return aParsed.Compare(bParsed)
-}
-
-// parseValidateVersion validates that the given input conforms to either of vx.x or x.x and
-// returns x.x on success
-func parseValidateVersion(ver string) (string, error) {
-	if len(ver) == 0 {
-		return "", fmt.Errorf("version is empty")
+	if versionParsed.LT(expectedVersionParsed) {
+		return fmt.Errorf("version mismatch for keyspace/database: %q. Expected version: %s cannot be greater than Actual version: %s", dbName, expectedVersion, version)
 	}
-	if versionStrRegex.MatchString(ver) {
-		return ver[1:], nil
-	}
-	if !versionNumRegex.MatchString(ver) {
-		return "", fmt.Errorf("invalid version, expected format is x.x")
-	}
-	return ver, nil
+	return nil
 }
