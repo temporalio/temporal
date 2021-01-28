@@ -41,8 +41,6 @@ CREATE TABLE executions (
   signal_map_encoding            text,
   signal_requested               set<uuid>,
   buffered_events_list           list<frozen<serialized_event_batch>>,
-  replication_metadata           blob, -- Contains versions for replicationState
-  replication_metadata_encoding  text,
   workflow_last_write_version    bigint,
   workflow_state                 int,
   checksum                       blob,
@@ -140,8 +138,6 @@ CREATE TABLE cluster_metadata (
   metadata_partition      int,
   data                    blob,
   data_encoding           text,
-  immutable_data          blob,
-  immutable_data_encoding text,
   version                 bigint,
   PRIMARY KEY  (metadata_partition)
 ) WITH COMPACTION = {
