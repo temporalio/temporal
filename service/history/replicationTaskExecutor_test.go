@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -71,7 +70,6 @@ type (
 		mockClientBean     *client.MockBean
 		adminClient        *adminservicemock.MockAdminServiceClient
 		clusterMetadata    *cluster.MockMetadata
-		executionManager   *mocks.ExecutionManager
 		nDCHistoryResender *xdc.MockNDCHistoryResender
 
 		replicationTaskHandler *replicationTaskExecutorImpl
@@ -116,7 +114,6 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 	s.mockClientBean = s.mockResource.ClientBean
 	s.adminClient = s.mockResource.RemoteAdminClient
 	s.clusterMetadata = s.mockResource.ClusterMetadata
-	s.executionManager = s.mockResource.ExecutionMgr
 	s.nDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 
 	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)

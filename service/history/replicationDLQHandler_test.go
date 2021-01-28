@@ -62,7 +62,7 @@ type (
 		mockClientBean   *client.MockBean
 		adminClient      *adminservicemock.MockAdminServiceClient
 		clusterMetadata  *cluster.MockMetadata
-		executionManager *mocks.ExecutionManager
+		executionManager *persistence.MockExecutionManager
 		shardManager     *mocks.ShardManager
 		taskExecutor     *MockreplicationTaskExecutor
 		taskExecutors    map[string]replicationTaskExecutor
@@ -172,7 +172,7 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 		},
 	}
 
-	s.executionManager.On("GetReplicationTasksFromDLQ", &persistence.GetReplicationTasksFromDLQRequest{
+	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
 		SourceClusterName: s.sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
 			ReadLevel:     persistence.EmptyQueueMessageID,
@@ -196,7 +196,7 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 func (s *replicationDLQHandlerSuite) TestPurgeMessages() {
 	lastMessageID := int64(1)
 
-	s.executionManager.On("RangeDeleteReplicationTaskFromDLQ",
+	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
 			SourceClusterName:    s.sourceCluster,
 			ExclusiveBeginTaskID: persistence.EmptyQueueMessageID,
@@ -255,7 +255,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 		},
 	}
 
-	s.executionManager.On("GetReplicationTasksFromDLQ", &persistence.GetReplicationTasksFromDLQRequest{
+	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
 		SourceClusterName: s.sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
 			ReadLevel:     persistence.EmptyQueueMessageID,
@@ -271,7 +271,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
 		}, nil)
 	s.taskExecutor.EXPECT().execute(remoteTask, true).Return(0, nil).Times(1)
-	s.executionManager.On("RangeDeleteReplicationTaskFromDLQ", &persistence.RangeDeleteReplicationTaskFromDLQRequest{
+	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(&persistence.RangeDeleteReplicationTaskFromDLQRequest{
 		SourceClusterName:    s.sourceCluster,
 		ExclusiveBeginTaskID: persistence.EmptyQueueMessageID,
 		InclusiveEndTaskID:   lastMessageID,

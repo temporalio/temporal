@@ -55,7 +55,7 @@ type (
 		mockWorkflowExecutionContext *MockworkflowExecutionContext
 		mockMutableState             *MockmutableState
 
-		mockExecutionManager  *mocks.ExecutionManager
+		mockExecutionManager  *persistence.MockExecutionManager
 		mockVisibilityManager *mocks.VisibilityManager
 		mockHistoryMgr        *persistence.MockHistoryManager
 		mockArchivalClient    *archiver.ClientMock
@@ -144,13 +144,13 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestDeleteWorkflow_NoErr() {
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testGlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionManager.On("AddTasks", mock.Anything).Return(nil).Once()
+	s.mockExecutionManager.EXPECT().AddTasks(gomock.Any()).Return(nil).Times(1)
 	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any()).Times(1)
 	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any()).Times(1)
 	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any()).Times(1)
 
-	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
-	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any()).Return(nil).Times(1)
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any()).Return(nil).Times(1)
 	s.mockHistoryMgr.EXPECT().DeleteHistoryBranch(gomock.Any()).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil).Times(1)
 
@@ -169,13 +169,13 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestArchiveHistory_NoErr_InlineArchi
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testGlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionManager.On("AddTasks", mock.Anything).Return(nil).Once()
+	s.mockExecutionManager.EXPECT().AddTasks(gomock.Any()).Return(nil).Times(1)
 	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any()).Times(1)
 	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any()).Times(1)
 	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any()).Times(1)
 
-	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
-	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any()).Return(nil).Times(1)
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any()).Return(nil).Times(1)
 
 	s.mockArchivalClient.On("Archive", mock.Anything, mock.MatchedBy(func(req *archiver.ClientRequest) bool {
 		return req.CallerService == common.HistoryServiceName && req.AttemptArchiveInline && req.ArchiveRequest.Targets[0] == archiver.ArchiveTargetHistory

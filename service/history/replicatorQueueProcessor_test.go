@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -63,7 +62,7 @@ type (
 		mockMutableState    *MockmutableState
 		mockClusterMetadata *cluster.MockMetadata
 
-		mockExecutionMgr *mocks.ExecutionManager
+		mockExecutionMgr *persistence.MockExecutionManager
 		mockHistoryMgr   *persistence.MockHistoryManager
 
 		logger log.Logger
@@ -138,7 +137,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
-	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
