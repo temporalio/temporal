@@ -106,7 +106,7 @@ persistence:
         {{- if eq $es "true" }}
         es-visibility:
             elasticsearch:
-                version: { { default .Env.ES_VERSION "" } }
+                version: {{ default .Env.ES_VERSION "" }}
                 url:
                     scheme: {{ default .Env.ES_SCHEME "http" }}
                     host: "{{ default .Env.ES_SEEDS "" }}:{{ default .Env.ES_PORT "9200" }}"
