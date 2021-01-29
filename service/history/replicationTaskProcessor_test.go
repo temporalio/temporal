@@ -30,7 +30,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
@@ -356,7 +355,7 @@ func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_History() {
 
 func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Noop() {
 	ackedTaskID := int64(12345)
-	s.mockResource.ShardMgr.On("UpdateShard", mock.Anything).Return(nil).Times(1)
+	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
 	err := s.mockShard.UpdateClusterReplicationLevel(cluster.TestAlternativeClusterName, ackedTaskID)
 	s.NoError(err)
 
@@ -367,7 +366,7 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Noop() {
 
 func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 	ackedTaskID := int64(12345)
-	s.mockResource.ShardMgr.On("UpdateShard", mock.Anything).Return(nil).Times(1)
+	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
 	err := s.mockShard.UpdateClusterReplicationLevel(cluster.TestAlternativeClusterName, ackedTaskID)
 	s.NoError(err)
 
