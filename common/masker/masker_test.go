@@ -90,7 +90,8 @@ func TestMaskYaml(t *testing.T) {
         user: "temporal"
         password: "secret"`
 
-	maskedYaml := MaskYaml(yaml, DefaultYAMLFieldNames)
+	maskedYaml, err := MaskYaml(yaml, DefaultYAMLFieldNames)
+	assert.NoError(err)
 	assert.True(strings.Contains(yaml, "secret"))
 	assert.False(strings.Contains(maskedYaml, "secret"))
 	assert.True(strings.Contains(maskedYaml, "******"))

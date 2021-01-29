@@ -39,7 +39,7 @@ var (
 
 // MaskYaml replace password values with mask and returns copy of the string.
 // Does recursive replacement for entire yamlStr.
-func MaskYaml(yamlStr string, fieldNamesToMask []string) string {
+func MaskYaml(yamlStr string, fieldNamesToMask []string) (string, error) {
 	fns := make(map[string]struct{}, len(fieldNamesToMask))
 	for _, fieldName := range fieldNamesToMask {
 		fns[fieldName] = struct{}{}
@@ -48,16 +48,16 @@ func MaskYaml(yamlStr string, fieldNamesToMask []string) string {
 	var parsedYaml map[string]interface{}
 	err := yaml.Unmarshal([]byte(yamlStr), &parsedYaml)
 	if err != nil {
-		return yamlStr
+		return yamlStr, err
 	}
 
 	maskMap(parsedYaml, fns)
 
 	strBytes, err := yaml.Marshal(parsedYaml)
 	if err != nil {
-		return yamlStr
+		return yamlStr, err
 	}
-	return string(strBytes)
+	return string(strBytes), nil
 }
 
 // MaskStruct replace password values with mask and returns copy of the strct.

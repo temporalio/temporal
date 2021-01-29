@@ -540,7 +540,8 @@ func (c *Config) String() string {
 	encoder := yaml.NewEncoder(&buf)
 	encoder.SetIndent(2)
 	_ = encoder.Encode(c)
-	return masker.MaskYaml(buf.String(), masker.DefaultYAMLFieldNames)
+	maskedYaml, _ := masker.MaskYaml(buf.String(), masker.DefaultYAMLFieldNames)
+	return maskedYaml
 }
 
 func (r *GroupTLS) IsEnabled() bool {
