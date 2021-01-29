@@ -80,5 +80,6 @@ require (
 	gopkg.in/square/go-jose.v2 v2.5.1
 	gopkg.in/validator.v2 v2.0.0-20200605151824-2b28d334fa05
 	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.0-20210106172901-c476de37821d
 	honnef.co/go/tools v0.1.0 // indirect
 )
