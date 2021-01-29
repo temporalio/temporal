@@ -88,7 +88,7 @@ type (
 		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
 
 		mockProducer           *persistence.MockNamespaceReplicationQueue
-		mockMetadataMgr        *mocks.MetadataManager
+		mockMetadataMgr        *persistence.MockMetadataManager
 		mockHistoryMgr         *persistence.MockHistoryManager
 		mockVisibilityMgr      *mocks.VisibilityManager
 		mockArchivalMetadata   *archiver.MockArchivalMetadata
@@ -537,7 +537,7 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Failure_InvalidArchivalURI(
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
-	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
 	s.mockHistoryArchiver.On("ValidateURI", mock.Anything).Return(nil)
 	s.mockVisibilityArchiver.On("ValidateURI", mock.Anything).Return(errors.New("invalid URI"))
 	s.mockArchiverProvider.On("GetHistoryArchiver", mock.Anything, mock.Anything).Return(s.mockHistoryArchiver, nil)
@@ -561,8 +561,8 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Success_EnabledWithNoArchiv
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", testHistoryArchivalURI))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", testVisibilityArchivalURI))
-	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
-	s.mockMetadataMgr.On("CreateNamespace", mock.Anything).Return(&persistence.CreateNamespaceResponse{
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any()).Return(&persistence.CreateNamespaceResponse{
 		ID: testNamespaceID,
 	}, nil)
 	s.mockHistoryArchiver.On("ValidateURI", mock.Anything).Return(nil)
@@ -583,8 +583,8 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Success_EnabledWithArchival
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "invalidURI"))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "invalidURI"))
-	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
-	s.mockMetadataMgr.On("CreateNamespace", mock.Anything).Return(&persistence.CreateNamespaceResponse{
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any()).Return(&persistence.CreateNamespaceResponse{
 		ID: testNamespaceID,
 	}, nil)
 	s.mockHistoryArchiver.On("ValidateURI", mock.Anything).Return(nil)
@@ -610,8 +610,8 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Success_ClusterNotConfigure
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewDisabledArchvialConfig())
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewDisabledArchvialConfig())
-	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
-	s.mockMetadataMgr.On("CreateNamespace", mock.Anything).Return(&persistence.CreateNamespaceResponse{
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any()).Return(&persistence.CreateNamespaceResponse{
 		ID: testNamespaceID,
 	}, nil)
 
@@ -633,8 +633,8 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Success_NotEnabled() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
-	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
-	s.mockMetadataMgr.On("CreateNamespace", mock.Anything).Return(&persistence.CreateNamespaceResponse{
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any()).Return(&persistence.CreateNamespaceResponse{
 		ID: testNamespaceID,
 	}, nil)
 
@@ -650,7 +650,7 @@ func (s *workflowHandlerSuite) TestDescribeNamespace_Success_ArchivalDisabled() 
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_DISABLED, URI: ""},
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_DISABLED, URI: ""},
 	)
-	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any()).Return(getNamespaceResp, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -673,7 +673,7 @@ func (s *workflowHandlerSuite) TestDescribeNamespace_Success_ArchivalEnabled() {
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_ENABLED, URI: testHistoryArchivalURI},
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_ENABLED, URI: testVisibilityArchivalURI},
 	)
-	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any()).Return(getNamespaceResp, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -692,14 +692,14 @@ func (s *workflowHandlerSuite) TestDescribeNamespace_Success_ArchivalEnabled() {
 }
 
 func (s *workflowHandlerSuite) TestUpdateNamespace_Failure_UpdateExistingArchivalURI() {
-	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
+	s.mockMetadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
 	}, nil)
 	getNamespaceResp := persistenceGetNamespaceResponse(
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_ENABLED, URI: testHistoryArchivalURI},
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_ENABLED, URI: testVisibilityArchivalURI},
 	)
-	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any()).Return(getNamespaceResp, nil)
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.On("ValidateURI", mock.Anything).Return(nil)
@@ -718,14 +718,14 @@ func (s *workflowHandlerSuite) TestUpdateNamespace_Failure_UpdateExistingArchiva
 }
 
 func (s *workflowHandlerSuite) TestUpdateNamespace_Failure_InvalidArchivalURI() {
-	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
+	s.mockMetadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
 	}, nil)
 	getNamespaceResp := persistenceGetNamespaceResponse(
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_DISABLED, URI: ""},
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_DISABLED, URI: ""},
 	)
-	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any()).Return(getNamespaceResp, nil)
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.On("ValidateURI", mock.Anything).Return(errors.New("invalid URI"))
 	s.mockArchiverProvider.On("GetHistoryArchiver", mock.Anything, mock.Anything).Return(s.mockHistoryArchiver, nil)
@@ -743,15 +743,15 @@ func (s *workflowHandlerSuite) TestUpdateNamespace_Failure_InvalidArchivalURI() 
 }
 
 func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArchivalDisabledWithoutSettingURI() {
-	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
+	s.mockMetadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
 	}, nil)
 	getNamespaceResp := persistenceGetNamespaceResponse(
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_ENABLED, URI: testHistoryArchivalURI},
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_ENABLED, URI: testVisibilityArchivalURI},
 	)
-	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
-	s.mockMetadataMgr.On("UpdateNamespace", mock.Anything).Return(nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any()).Return(getNamespaceResp, nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any()).Return(nil)
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
@@ -780,14 +780,14 @@ func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArch
 }
 
 func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ClusterNotConfiguredForArchival() {
-	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
+	s.mockMetadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
 	}, nil)
 	getNamespaceResp := persistenceGetNamespaceResponse(
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_ENABLED, URI: "some random history URI"},
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_ENABLED, URI: "some random visibility URI"},
 	)
-	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any()).Return(getNamespaceResp, nil)
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewDisabledArchvialConfig())
@@ -807,15 +807,15 @@ func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ClusterNotConfiguredF
 }
 
 func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArchivalDisabledWithSettingBucket() {
-	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
+	s.mockMetadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
 	}, nil)
 	getNamespaceResp := persistenceGetNamespaceResponse(
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_ENABLED, URI: testHistoryArchivalURI},
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_ENABLED, URI: testVisibilityArchivalURI},
 	)
-	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
-	s.mockMetadataMgr.On("UpdateNamespace", mock.Anything).Return(nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any()).Return(getNamespaceResp, nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any()).Return(nil)
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
@@ -844,14 +844,14 @@ func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArch
 }
 
 func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToEnabled() {
-	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
+	s.mockMetadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
 	}, nil)
 	getNamespaceResp := persistenceGetNamespaceResponse(
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_ENABLED, URI: testHistoryArchivalURI},
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_ENABLED, URI: testVisibilityArchivalURI},
 	)
-	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any()).Return(getNamespaceResp, nil)
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
@@ -880,15 +880,15 @@ func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToEnab
 }
 
 func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalNeverEnabledToEnabled() {
-	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
+	s.mockMetadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
 	}, nil)
 	getNamespaceResp := persistenceGetNamespaceResponse(
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_DISABLED, URI: ""},
 		&namespace.ArchivalState{State: enumspb.ARCHIVAL_STATE_DISABLED, URI: ""},
 	)
-	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
-	s.mockMetadataMgr.On("UpdateNamespace", mock.Anything).Return(nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any()).Return(getNamespaceResp, nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any()).Return(nil)
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
