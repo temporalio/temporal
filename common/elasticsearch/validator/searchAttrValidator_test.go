@@ -64,6 +64,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 
 	intPayload, err := payload.Encode(1)
 	s.NoError(err)
+	intPayload.Metadata["type"] = []byte("Int")
 	fields := map[string]*commonpb.Payload{
 		"CustomIntField": intPayload,
 	}
@@ -93,6 +94,9 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 		"CustomStringField": payload.EncodeString("1"),
 		"CustomBoolField":   payload.EncodeString("123"),
 	}
+	fields["CustomStringField"].Metadata["type"] = []byte("String")
+	fields["CustomBoolField"].Metadata["type"] = []byte("Bool")
+
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("123 is not a valid search attribute value for key CustomBoolField", err.Error())
@@ -102,6 +106,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	fields = map[string]*commonpb.Payload{
 		"CustomIntField": intArrayPayload,
 	}
+	fields["CustomIntField"].Metadata["type"] = []byte("Int")
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.NoError(err)
@@ -116,6 +121,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	fields = map[string]*commonpb.Payload{
 		"CustomKeywordField": payload.EncodeString("123456"),
 	}
+	fields["CustomKeywordField"].Metadata["type"] = []byte("Keyword")
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("size limit exceed for key CustomKeywordField", err.Error())
@@ -124,6 +130,8 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 		"CustomKeywordField": payload.EncodeString("123"),
 		"CustomStringField":  payload.EncodeString("12"),
 	}
+	fields["CustomKeywordField"].Metadata["type"] = []byte("Keyword")
+	fields["CustomStringField"].Metadata["type"] = []byte("String")
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("total size 44 exceed limit", err.Error())
