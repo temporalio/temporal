@@ -15,6 +15,12 @@ const (
 	MetadataType = "type"
 )
 
+var (
+	ErrMissingMetadataType           = errors.New("search attribute metadata doesn't have value type")
+	ErrInvalidMetadataType           = errors.New("search attribute metadata has invalid value type")
+	ErrInvalidMetadataIndexValueType = errors.New("search attribute metadata has invalid index value type")
+)
+
 // ConvertDynamicConfigTypeToIndexedValueType takes dynamicConfigType as interface{} and convert to IndexedValueType.
 // This func is because different implementation of dynamic config client may have different type of dynamicConfigType
 // and to support backward compatibility.
@@ -50,12 +56,12 @@ func ConvertDynamicConfigToIndexedValueTypes(validSearchAttributes map[string]in
 func Decode(value *commonpb.Payload) (interface{}, error) {
 	valueTypeMetadata, metadataHasValueType := value.Metadata[MetadataType]
 	if !metadataHasValueType {
-		return nil, errors.New("search attribute metadata doesn't have value type")
+		return nil, ErrMissingMetadataType
 	}
 
 	valueType, isValidValueType := enumspb.IndexedValueType_value[string(valueTypeMetadata)]
 	if !isValidValueType {
-		return nil, fmt.Errorf("metadata has invalid value type: %s", string(valueTypeMetadata))
+		return nil, fmt.Errorf("%w: %s", ErrInvalidMetadataType, string(valueTypeMetadata))
 	}
 
 	switch enumspb.IndexedValueType(valueType) {
@@ -100,7 +106,7 @@ func Decode(value *commonpb.Payload) (interface{}, error) {
 		}
 		return val, nil
 	default:
-		return nil, fmt.Errorf("invalid index value type: %v", valueType)
+		return nil, fmt.Errorf("%w: %v", ErrInvalidMetadataIndexValueType, valueType)
 	}
 }
 
@@ -116,17 +122,14 @@ func SetType(searchAttributes *commonpb.SearchAttributes, validSearchAttributes 
 		if metadataHasValueType {
 			continue
 		}
-
 		valueType, isValidSearchAttribute := validSearchAttributes[searchAttributeName]
 		if !isValidSearchAttribute {
 			continue
 		}
-
 		valueTypeString, isValidValueType := enumspb.IndexedValueType_name[int32(valueType)]
 		if !isValidValueType {
 			continue
 		}
-
 		searchAttributePayload.Metadata[MetadataType] = []byte(valueTypeString)
 	}
 }
