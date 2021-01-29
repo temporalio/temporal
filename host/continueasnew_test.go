@@ -65,7 +65,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
 	}
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{"CustomKeywordField": payload.EncodeString(`"1"`)},
+		IndexedFields: map[string]*commonpb.Payload{"CustomKeywordField": payload.EncodeString("random keyword")},
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -149,7 +149,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
 	s.Equal(header, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(memo, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Memo)
-	s.Equal(searchAttr, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().SearchAttributes)
+	s.Equal(searchAttr.GetIndexedFields()["CustomKeywordField"].GetData(), lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["CustomKeywordField"].GetData())
 }
 
 func (s *integrationSuite) TestContinueAsNewRun_Timeout() {

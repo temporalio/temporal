@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 const (
@@ -1023,14 +1024,19 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 }
 
 func getUpsertSearchAttributes() *commonpb.SearchAttributes {
-	attrValBytes1, _ := payload.Encode("another string")
-	attrValBytes2, _ := payload.Encode(123)
-	binaryChecksums, _ := payload.Encode([]string{"binary-v1", "binary-v2"})
+	stringAttrPayload, _ := payload.Encode("another string")
+	stringAttrPayload.Metadata[searchattribute.MetadataType] = []byte(enumspb.IndexedValueType_name[int32(enumspb.INDEXED_VALUE_TYPE_STRING)])
+
+	intAttrPayload, _ := payload.Encode(123)
+	intAttrPayload.Metadata[searchattribute.MetadataType] = []byte(enumspb.IndexedValueType_name[int32(enumspb.INDEXED_VALUE_TYPE_INT)])
+	binaryChecksumsPayload, _ := payload.Encode([]string{"binary-v1", "binary-v2"})
+	binaryChecksumsPayload.Metadata[searchattribute.MetadataType] = []byte(enumspb.IndexedValueType_name[int32(enumspb.INDEXED_VALUE_TYPE_KEYWORD)])
+
 	upsertSearchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			definition.CustomStringField: attrValBytes1,
-			definition.CustomIntField:    attrValBytes2,
-			definition.BinaryChecksums:   binaryChecksums,
+			definition.CustomStringField: stringAttrPayload,
+			definition.CustomIntField:    intAttrPayload,
+			definition.BinaryChecksums:   binaryChecksumsPayload,
 		},
 	}
 	return upsertSearchAttr
