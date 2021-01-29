@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -805,7 +806,7 @@ func (v *esVisibilityStore) getFieldType(fieldName string) enumspb.IndexedValueT
 	if !ok {
 		v.logger.Error("Unknown fieldName, validation should be done in frontend already", tag.Value(fieldName))
 	}
-	return common.ConvertIndexedValueTypeToProtoType(fieldType, v.logger)
+	return searchattribute.ConvertDynamicConfigTypeToIndexedValueType(fieldType)
 }
 
 func shouldSearchAfter(token *esVisibilityPageToken) bool {

@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -454,6 +455,10 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
 		return nil, wh.error(errRequestIDTooLong, scope)
 	}
+
+	searchattribute.SetType(
+		request.GetSearchAttributes(),
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(wh.config.ValidSearchAttributes()))
 
 	if err := wh.searchAttributesValidator.ValidateSearchAttributes(request.SearchAttributes, namespace); err != nil {
 		return nil, wh.error(err, scope)
@@ -2174,6 +2179,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(err, scope)
 	}
 
+	searchattribute.SetType(
+		request.GetSearchAttributes(),
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(wh.config.ValidSearchAttributes()))
+
 	if err := wh.searchAttributesValidator.ValidateSearchAttributes(request.SearchAttributes, namespace); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2830,7 +2839,7 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 
 	keys := wh.config.ValidSearchAttributes()
 	resp := &workflowservice.GetSearchAttributesResponse{
-		Keys: wh.convertIndexedKeyToProto(keys),
+		Keys: searchattribute.ConvertDynamicConfigToIndexedValueTypes(keys),
 	}
 	return resp, nil
 }
@@ -3684,14 +3693,6 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		NextPageToken: resp.NextPageToken,
 		Archived:      true,
 	}, nil
-}
-
-func (wh *WorkflowHandler) convertIndexedKeyToProto(keys map[string]interface{}) map[string]enumspb.IndexedValueType {
-	converted := make(map[string]enumspb.IndexedValueType)
-	for k, v := range keys {
-		converted[k] = common.ConvertIndexedValueTypeToProtoType(v, wh.GetLogger())
-	}
-	return converted
 }
 
 func (wh *WorkflowHandler) isListRequestPageSizeTooLarge(pageSize int32, namespace string) bool {

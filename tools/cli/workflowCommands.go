@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/searchattribute"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
@@ -59,7 +60,6 @@ import (
 	"go.temporal.io/sdk/client"
 
 	clispb "go.temporal.io/server/api/cli/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/payload"
@@ -938,32 +938,51 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes,
 	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *clispb.SearchAttributes {
 
-	if searchAttributes == nil || len(searchAttributes.GetIndexedFields()) == 0 {
+	if len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil
 	}
 
 	result := &clispb.SearchAttributes{
 		IndexedFields: map[string]string{},
 	}
-	ctx, cancel := newContext(c)
-	defer cancel()
-	validSearchAttributes, err := wfClient.GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
-	if err != nil {
-		ErrorAndExit("Error when get search attributes", err)
-	}
-	validKeys := validSearchAttributes.GetKeys()
 
-	indexedFields := searchAttributes.GetIndexedFields()
-	for k, v := range indexedFields {
-		valueType := validKeys[k]
-		deserializedValue, err := common.DeserializeSearchAttributeValue(v, valueType)
+	setSearchAttributesType(searchAttributes, wfClient, c)
+
+	for k, v := range searchAttributes.GetIndexedFields() {
+		deserializedValue, err := searchattribute.Decode(v)
 		if err != nil {
-			ErrorAndExit("Error deserializing search attribute value", err)
+			// In case of error just use raw data (which is JSON).
+			deserializedValue = string(v.GetData())
 		}
 		result.IndexedFields[k] = fmt.Sprintf("%v", deserializedValue)
 	}
 
 	return result
+}
+
+func setSearchAttributesType(searchAttributes *commonpb.SearchAttributes, wfClient workflowservice.WorkflowServiceClient, c *cli.Context) {
+	allTypesAreSet := true
+	for _, p := range searchAttributes.GetIndexedFields() {
+		if _, isTypeSet := p.Metadata[searchattribute.MetadataType]; !isTypeSet {
+			allTypesAreSet = false
+			break
+		}
+	}
+
+	if allTypesAreSet {
+		return
+	}
+
+	// For all newly created search attributes type should be set in Metadata field.
+	// Call to GetSearchAttributes is just for backward compatibility.
+	// It may fail with Unauthorized error which will be safely ignored.
+	ctx, cancel := newContext(c)
+	defer cancel()
+	validSearchAttributes, err := wfClient.GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
+	if err != nil {
+		validSearchAttributes = nil
+	}
+	searchattribute.SetType(searchAttributes, validSearchAttributes.GetKeys())
 }
 
 func convertFailure(failure *failurepb.Failure) *clispb.Failure {
