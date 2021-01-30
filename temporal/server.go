@@ -292,7 +292,7 @@ func (s *Server) getServiceParams(
 	)()
 	visibilityQueue := dc.GetStringProperty(
 		dynamicconfig.VisibilityQueue,
-		common.VisibilityQueueInternal,
+		common.VisibilityQueueInternalWithDualProcessor,
 	)()
 	isAdvancedVisEnabled := advancedVisMode != common.AdvancedVisibilityWritingModeOff
 	if isAdvancedVisEnabled && (visibilityQueue == common.VisibilityQueueKafka || visibilityQueue == common.VisibilityQueueInternalWithDualProcessor) {
