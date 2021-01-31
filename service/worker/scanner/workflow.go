@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/worker/scanner/executions"
 	"go.temporal.io/server/service/worker/scanner/history"
 	"go.temporal.io/server/service/worker/scanner/taskqueue"
@@ -42,7 +43,17 @@ import (
 
 type (
 	contextKey int
+
+	scannerCtxExecMgrFactory struct {
+		ctx scannerContext
+	}
 )
+
+func (s scannerCtxExecMgrFactory) Close() {}
+
+func (s scannerCtxExecMgrFactory) NewExecutionManager(shardID int32) (persistence.ExecutionManager, error) {
+	return s.ctx.GetExecutionManager(shardID)
+}
 
 const (
 	scannerContextKey = contextKey(0)
@@ -127,10 +138,8 @@ func HistoryScannerWorkflow(
 // ExecutionsScannerWorkflow is the workflow that runs the executions scanner background daemon
 func ExecutionsScannerWorkflow(
 	ctx workflow.Context,
-	executionsScannerWorkflowParams executions.ScannerWorkflowParams,
 ) error {
-
-	future := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, activityOptions), executionsScavengerActivityName, executionsScannerWorkflowParams)
+	future := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, activityOptions), executionsScavengerActivityName)
 	return future.Get(ctx, nil)
 }
 
@@ -164,7 +173,6 @@ func HistoryScavengerActivity(
 func TaskQueueScavengerActivity(
 	activityCtx context.Context,
 ) error {
-
 	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
 	scavenger := taskqueue.NewScavenger(ctx.GetTaskManager(), ctx.GetMetricsClient(), ctx.GetLogger())
 	ctx.GetLogger().Info("Starting task queue scavenger")
@@ -184,12 +192,18 @@ func TaskQueueScavengerActivity(
 // ExecutionsScavengerActivity is the activity that runs executions scavenger
 func ExecutionsScavengerActivity(
 	activityCtx context.Context,
-	executionsScannerWorkflowParams executions.ScannerWorkflowParams,
 ) error {
-
 	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
-	scavenger := executions.NewScavenger(executionsScannerWorkflowParams, ctx.GetFrontendClient(), ctx.GetHistoryManager(), ctx.GetMetricsClient(), ctx.GetLogger())
-	ctx.GetLogger().Info("Starting executions scavenger")
+
+	metricsClient := ctx.GetMetricsClient()
+	scavenger := executions.NewScavenger(
+		ctx.GetFrontendClient(),
+		ctx.GetHistoryManager(),
+		metricsClient,
+		ctx.GetLogger(),
+		scannerCtxExecMgrFactory{ctx}, // as persistence.ExecutionManagerFactory
+		ctx.cfg.Persistence.NumHistoryShards,
+	)
 	scavenger.Start()
 	for scavenger.Alive() {
 		activity.RecordHeartbeat(activityCtx)
