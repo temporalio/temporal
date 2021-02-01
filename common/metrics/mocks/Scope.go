@@ -28,6 +28,7 @@ package mocks
 
 import (
 	mock "github.com/stretchr/testify/mock"
+
 	metrics "go.temporal.io/server/common/metrics"
 
 	time "time"
@@ -75,6 +76,11 @@ func (_m *Scope) StartTimer(timer int) metrics.Stopwatch {
 	}
 
 	return r0
+}
+
+// RecordDistribution provides a mock function with given fields: timer, d
+func (_m *Scope) RecordDistribution(timer int, d int) {
+	_m.Called(timer, d)
 }
 
 // Tagged provides a mock function with given fields: tags
