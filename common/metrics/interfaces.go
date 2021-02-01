@@ -43,6 +43,9 @@ type (
 		// RecordTimer starts a timer for the given
 		// metric name
 		RecordTimer(scope int, timer int, d time.Duration)
+		// RecordDistribution record and emit a distribution (wrapper on top of timer) for the given
+		// metric name
+		RecordDistribution(scope int, timer int, d int)
 		// UpdateGauge reports Gauge type absolute value metric
 		UpdateGauge(scope int, gauge int, value float64)
 		// Scope return an internal scope that can be used to add additional
@@ -59,13 +62,11 @@ type (
 		// StartTimer starts a timer for the given metric name.
 		// Time will be recorded when stopwatch is stopped.
 		StartTimer(timer int) Stopwatch
-		// RecordTimer starts a timer for the given metric name
+		// RecordTimer records a timer for the given metric name
 		RecordTimer(timer int, d time.Duration)
-		// RecordHistogramDuration records a histogram duration value for the given
+		// RecordDistribution records a distribution (wrapper on top of timer) for the given
 		// metric name
-		RecordHistogramDuration(timer int, d time.Duration)
-		// RecordHistogramValue records a histogram value for the given metric name
-		RecordHistogramValue(timer int, value float64)
+		RecordDistribution(id int, d int)
 		// UpdateGauge reports Gauge type absolute value metric
 		UpdateGauge(gauge int, value float64)
 		// Tagged return an internal scope that can be used to add additional

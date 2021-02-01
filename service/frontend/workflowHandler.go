@@ -3313,8 +3313,7 @@ func (wh *WorkflowHandler) getHistory(
 		return nil, nil, err
 	}
 
-	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
-		RecordTimer(metrics.HistorySize, time.Duration(size))
+	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).RecordDistribution(metrics.HistorySize, size)
 
 	isLastPage := len(nextPageToken) == 0
 	if err := wh.verifyHistoryIsComplete(

@@ -213,7 +213,7 @@ FilterLoop:
 		if err != nil {
 			task.attempt++
 			if task.attempt > t.config.TimerTaskMaxRetryCount() {
-				scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(task.attempt))
+				scope.RecordDistribution(metrics.TaskAttemptTimer, task.attempt)
 				task.logger.Error("Critical error processing task, retrying.",
 					tag.Error(err), tag.OperationCritical, tag.TaskType(task.task.GetTaskType()))
 			}
@@ -335,7 +335,7 @@ func (t *taskProcessor) ackTaskOnce(
 	task.processor.complete(task)
 	if task.shouldProcessTask {
 		goVisibilityTime := timestamp.TimeValue(task.task.GetVisibilityTime())
-		scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(task.attempt))
+		scope.RecordDistribution(metrics.TaskAttemptTimer, task.attempt)
 		scope.RecordTimer(metrics.TaskLatency, time.Since(task.startTime))
 		scope.RecordTimer(metrics.TaskQueueLatency, time.Since(goVisibilityTime))
 	}

@@ -469,9 +469,9 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 	p.metricsClient.Scope(
 		metrics.ReplicationTaskFetcherScope,
 		metrics.TargetClusterTag(p.currentCluster),
-	).RecordTimer(
+	).RecordDistribution(
 		metrics.ReplicationTasksLag,
-		time.Duration(p.shard.GetTransferMaxReadLevel()-*minAckedTaskID),
+		int(p.shard.GetTransferMaxReadLevel()-*minAckedTaskID),
 	)
 	err := p.shard.GetExecutionManager().RangeCompleteReplicationTask(
 		&persistence.RangeCompleteReplicationTaskRequest{

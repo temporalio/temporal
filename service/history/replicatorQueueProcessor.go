@@ -145,21 +145,21 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 	p.metricsClient.Scope(
 		metrics.ReplicatorQueueProcessorScope,
 		metrics.TargetClusterTag(pollingCluster),
-	).RecordTimer(
+	).RecordDistribution(
 		metrics.ReplicationTasksLag,
-		time.Duration(p.shard.GetTransferMaxReadLevel()-readLevel),
+		int(p.shard.GetTransferMaxReadLevel()-readLevel),
 	)
 
-	p.metricsClient.RecordTimer(
+	p.metricsClient.RecordDistribution(
 		metrics.ReplicatorQueueProcessorScope,
 		metrics.ReplicationTasksFetched,
-		time.Duration(len(taskInfoList)),
+		len(taskInfoList),
 	)
 
-	p.metricsClient.RecordTimer(
+	p.metricsClient.RecordDistribution(
 		metrics.ReplicatorQueueProcessorScope,
 		metrics.ReplicationTasksReturned,
-		time.Duration(len(replicationTasks)),
+		len(replicationTasks),
 	)
 
 	return &replicationspb.ReplicationMessages{

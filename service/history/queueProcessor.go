@@ -355,7 +355,7 @@ func redispatchQueueTasks(
 	shutdownCh <-chan struct{},
 ) {
 	queueLength := redispatchQueue.Len()
-	metricsScope.RecordTimer(metrics.TaskRedispatchQueuePendingTasksTimer, time.Duration(queueLength))
+	metricsScope.RecordDistribution(metrics.TaskRedispatchQueuePendingTasksTimer, queueLength)
 	for i := 0; i != queueLength; i++ {
 		queueTask := redispatchQueue.Remove().(queueTask)
 		submitted, err := queueTaskProcessor.TrySubmit(queueTask)

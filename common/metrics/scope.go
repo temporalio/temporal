@@ -105,6 +105,18 @@ func (m *metricsScope) RecordTimer(id int, d time.Duration) {
 	}
 }
 
+func (m *metricsScope) RecordDistribution(id int, d int) {
+	dist := time.Duration(d * distributionToTimerRatio)
+	def := m.defs[id]
+	m.scope.Timer(def.metricName.String()).Record(dist)
+	switch {
+	case !def.metricRollupName.Empty():
+		m.rootScope.Timer(def.metricRollupName.String()).Record(dist)
+	case m.isNamespaceTagged:
+		m.scope.Tagged(map[string]string{namespace: namespaceAllValue}).Timer(def.metricName.String()).Record(dist)
+	}
+}
+
 func (m *metricsScope) RecordHistogramDuration(id int, value time.Duration) {
 	def := m.defs[id]
 	m.scope.Histogram(def.metricName.String(), m.getBuckets(id)).RecordDuration(value)
