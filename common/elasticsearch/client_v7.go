@@ -26,6 +26,7 @@ package elasticsearch
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"time"
 
@@ -44,11 +45,12 @@ type (
 var _ Client = (*clientV7)(nil)
 
 // newClientV7 create a ES client
-func newClientV7(config *Config, logger log.Logger) (*clientV7, error) {
+func newClientV7(config *Config, httpClient *http.Client, logger log.Logger) (*clientV7, error) {
 	options := []elastic.ClientOptionFunc{
 		elastic.SetURL(config.URL.String()),
 		elastic.SetSniff(false),
 		elastic.SetBasicAuth(config.Username, config.Password),
+		elastic.SetHttpClient(httpClient),
 
 		// Disable health check so we don't block client creation (and thus temporal server startup)
 		// if the ES instance happens to be down.
@@ -61,14 +63,6 @@ func newClientV7(config *Config, logger log.Logger) (*clientV7, error) {
 	}
 
 	options = append(options, getLoggerOptions(config.LogLevel, logger)...)
-
-	if config.AWSRequestSigning.Enabled {
-		httpClient, err := newAWSElasticsearchHTTPClient(config.AWSRequestSigning)
-		if err != nil {
-			return nil, err
-		}
-		options = append(options, elastic.SetHttpClient(httpClient))
-	}
 
 	client, err := elastic.NewClient(options...)
 	if err != nil {

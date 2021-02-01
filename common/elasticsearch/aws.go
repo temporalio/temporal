@@ -36,11 +36,15 @@ import (
 	elasticaws "github.com/olivere/elastic/aws/v4"
 )
 
-func newAWSElasticsearchHTTPClient(config AWSRequestSigningConfig) (*http.Client, error) {
+func NewAwsHttpClient(config AWSRequestSigningConfig) (*http.Client, error) {
+	if !config.Enabled {
+		return nil, nil
+	}
+
 	if config.Region == "" {
 		config.Region = os.Getenv("AWS_REGION")
 		if config.Region == "" {
-			return nil, fmt.Errorf("unable to resolve aws region for obtaining aws es signing credentials")
+			return nil, fmt.Errorf("unable to resolve AWS region for obtaining AWS Elastic signing credentials")
 		}
 	}
 
@@ -66,7 +70,7 @@ func newAWSElasticsearchHTTPClient(config AWSRequestSigningConfig) (*http.Client
 
 		awsCredentials = awsSession.Config.Credentials
 	default:
-		return nil, fmt.Errorf("unknown aws credential provider specified: %+v. Accepted options are 'static', 'environment' or 'session'", config.CredentialProvider)
+		return nil, fmt.Errorf("unknown AWS credential provider specified: %+v. Accepted options are 'static', 'environment' or 'session'", config.CredentialProvider)
 	}
 
 	return elasticaws.NewV4SigningClient(awsCredentials, config.Region), nil
