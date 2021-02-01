@@ -157,7 +157,7 @@ func (t *sequentialTaskProcessorImpl) processTaskQueue(taskqueue SequentialTaskQ
 			return
 		default:
 			queueSize := taskqueue.Len()
-			t.metricsScope.RecordTimer(metrics.SequentialTaskQueueSize, time.Duration(queueSize))
+			t.metricsScope.RecordDistribution(metrics.SequentialTaskQueueSize, queueSize)
 			if queueSize > 0 {
 				t.processTaskOnce(taskqueue)
 			} else {

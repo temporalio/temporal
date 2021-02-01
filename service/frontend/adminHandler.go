@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"sync/atomic"
-	"time"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/convert"
@@ -435,9 +434,9 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	// namespaces along with the individual namespaces stats
 	adh.GetMetricsClient().
 		Scope(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
-		RecordTimer(metrics.HistorySize, time.Duration(size))
+		RecordDistribution(metrics.HistorySize, size)
 	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
-		RecordTimer(metrics.HistorySize, time.Duration(size))
+		RecordDistribution(metrics.HistorySize, size)
 
 	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,

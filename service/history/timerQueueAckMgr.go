@@ -365,9 +365,9 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() error {
 	}
 	switch t.scope {
 	case metrics.TimerActiveQueueProcessorScope:
-		t.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerActivePendingTasksTimer, time.Duration(pendingTasks))
+		t.metricsClient.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTimerActivePendingTasksTimer, pendingTasks)
 	case metrics.TimerStandbyQueueProcessorScope:
-		t.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerStandbyPendingTasksTimer, time.Duration(pendingTasks))
+		t.metricsClient.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTimerStandbyPendingTasksTimer, pendingTasks)
 	}
 
 MoveAckLevelLoop:

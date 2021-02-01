@@ -86,6 +86,15 @@ func (r *replayMetricsClient) RecordTimer(scope int, timer int, d time.Duration)
 	r.client.RecordTimer(scope, timer, d)
 }
 
+// RecordDistribution record and emit a distribution (wrapper on top of timer) for the given
+// metric name
+func (r *replayMetricsClient) RecordDistribution(scope int, timer int, d int) {
+	if workflow.IsReplaying(r.ctx) {
+		return
+	}
+	r.client.RecordDistribution(scope, timer, d)
+}
+
 // UpdateGauge reports Gauge type absolute value metric
 func (r *replayMetricsClient) UpdateGauge(scope int, gauge int, value float64) {
 	if workflow.IsReplaying(r.ctx) {
@@ -139,20 +148,13 @@ func (r *replayMetricsScope) RecordTimer(timer int, d time.Duration) {
 	r.scope.RecordTimer(timer, d)
 }
 
-// RecordHistogramDuration records a duration value in a histogram
-func (r *replayMetricsScope) RecordHistogramDuration(timer int, d time.Duration) {
+// RecordDistribution records a distribution (wrapper on top of timer) for the given
+// metric name
+func (r *replayMetricsScope) RecordDistribution(timer int, d int) {
 	if workflow.IsReplaying(r.ctx) {
 		return
 	}
-	r.scope.RecordHistogramDuration(timer, d)
-}
-
-// RecordHistogramValue records a value in a histogram
-func (r *replayMetricsScope) RecordHistogramValue(timer int, value float64) {
-	if workflow.IsReplaying(r.ctx) {
-		return
-	}
-	r.scope.RecordHistogramValue(timer, value)
+	r.scope.RecordDistribution(timer, d)
 }
 
 // UpdateGauge reports Gauge type absolute value metric

@@ -34,6 +34,10 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
+const (
+	distributionToTimerRatio = int(time.Millisecond / time.Nanosecond)
+)
+
 // ClientImpl is used for reporting metrics by various Temporal services
 type ClientImpl struct {
 	//parentReporter is the parent scope for the metrics
@@ -103,6 +107,14 @@ func (m *ClientImpl) StartTimer(scopeIdx int, timerIdx int) tally.Stopwatch {
 func (m *ClientImpl) RecordTimer(scopeIdx int, timerIdx int, d time.Duration) {
 	name := string(m.metricDefs[timerIdx].metricName)
 	m.childScopes[scopeIdx].Timer(name).Record(d)
+}
+
+// RecordDistribution record and emit a distribution (wrapper on top of timer) for the given
+// metric name
+func (m *ClientImpl) RecordDistribution(scopeIdx int, timerIdx int, d int) {
+	dist := time.Duration(d * distributionToTimerRatio)
+	name := string(m.metricDefs[timerIdx].metricName)
+	m.childScopes[scopeIdx].Timer(name).Record(dist)
 }
 
 // UpdateGauge reports Gauge type metric
