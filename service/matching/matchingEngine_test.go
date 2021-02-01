@@ -61,7 +61,6 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -78,11 +77,10 @@ type (
 		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *cache.MockNamespaceCache
 
-		matchingEngine       *matchingEngineImpl
-		taskManager          *testTaskManager
-		mockExecutionManager *mocks.ExecutionManager
-		logger               log.Logger
-		handlerContext       *handlerContext
+		matchingEngine *matchingEngineImpl
+		taskManager    *testTaskManager
+		logger         log.Logger
+		handlerContext *handlerContext
 		sync.Mutex
 	}
 )
@@ -120,7 +118,6 @@ func (s *matchingEngineSuite) TearDownSuite() {
 func (s *matchingEngineSuite) SetupTest() {
 	s.Lock()
 	defer s.Unlock()
-	s.mockExecutionManager = &mocks.ExecutionManager{}
 	s.controller = gomock.NewController(s.T())
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.taskManager = newTestTaskManager(s.logger)
@@ -139,7 +136,6 @@ func (s *matchingEngineSuite) SetupTest() {
 }
 
 func (s *matchingEngineSuite) TearDownTest() {
-	s.mockExecutionManager.AssertExpectations(s.T())
 	s.matchingEngine.Stop()
 	s.controller.Finish()
 }

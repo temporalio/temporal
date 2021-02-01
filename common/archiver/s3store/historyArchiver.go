@@ -211,7 +211,7 @@ func (h *historyArchiver) Archive(
 				return err
 			}
 			progress.uploadedSize += blobSize
-			scope.RecordTimer(metrics.HistoryArchiverBlobSize, time.Duration(blobSize))
+			scope.RecordDistribution(metrics.HistoryArchiverBlobSize, int(blobSize))
 		}
 
 		progress.historySize += blobSize
@@ -219,8 +219,8 @@ func (h *historyArchiver) Archive(
 		saveHistoryIteratorState(ctx, featureCatalog, historyIterator, &progress)
 	}
 
-	scope.RecordTimer(metrics.HistoryArchiverTotalUploadSize, time.Duration(progress.uploadedSize))
-	scope.RecordTimer(metrics.HistoryArchiverHistorySize, time.Duration(progress.historySize))
+	scope.RecordDistribution(metrics.HistoryArchiverTotalUploadSize, int(progress.uploadedSize))
+	scope.RecordDistribution(metrics.HistoryArchiverHistorySize, int(progress.historySize))
 	scope.IncCounter(metrics.HistoryArchiverArchiveSuccessCount)
 	return nil
 }

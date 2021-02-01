@@ -29,6 +29,7 @@ persistence:
     es-visibility:
       elasticsearch:
         version: "v7"
+        logLevel: "error"
         url:
           scheme: "http"
           host: "127.0.0.1:9200"

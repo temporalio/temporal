@@ -94,14 +94,14 @@ type (
 
 		// persistence clients
 
-		MetadataMgr               *mocks.MetadataManager
+		MetadataMgr               *persistence.MockMetadataManager
 		ClusterMetadataMgr        *mocks.MockClusterMetadataManager
 		TaskMgr                   *mocks.TaskManager
 		VisibilityMgr             *mocks.VisibilityManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
-		ShardMgr                  *mocks.ShardManager
-		HistoryMgr                *mocks.HistoryV2Manager
-		ExecutionMgr              *mocks.ExecutionManager
+		ShardMgr                  *persistence.MockShardManager
+		HistoryMgr                *persistence.MockHistoryManager
+		ExecutionMgr              *persistence.MockExecutionManager
 		PersistenceBean           *persistenceClient.MockBean
 
 		Logger log.Logger
@@ -143,12 +143,12 @@ func NewTest(
 	clientBean.EXPECT().GetRemoteAdminClient(gomock.Any()).Return(remoteAdminClient).AnyTimes()
 	clientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(remoteFrontendClient).AnyTimes()
 
-	metadataMgr := &mocks.MetadataManager{}
+	metadataMgr := persistence.NewMockMetadataManager(controller)
 	taskMgr := &mocks.TaskManager{}
 	visibilityMgr := &mocks.VisibilityManager{}
-	shardMgr := &mocks.ShardManager{}
-	historyMgr := &mocks.HistoryV2Manager{}
-	executionMgr := &mocks.ExecutionManager{}
+	shardMgr := persistence.NewMockShardManager(controller)
+	historyMgr := persistence.NewMockHistoryManager(controller)
+	executionMgr := persistence.NewMockExecutionManager(controller)
 	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
 	namespaceReplicationQueue.EXPECT().Start().AnyTimes()
 	namespaceReplicationQueue.EXPECT().Stop().AnyTimes()
@@ -452,10 +452,6 @@ func (s *Test) Finish(
 	s.ArchivalMetadata.AssertExpectations(t)
 	s.ArchiverProvider.AssertExpectations(t)
 
-	s.MetadataMgr.AssertExpectations(t)
 	s.TaskMgr.AssertExpectations(t)
 	s.VisibilityMgr.AssertExpectations(t)
-	s.ShardMgr.AssertExpectations(t)
-	s.HistoryMgr.AssertExpectations(t)
-	s.ExecutionMgr.AssertExpectations(t)
 }

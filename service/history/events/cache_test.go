@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
@@ -39,7 +40,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -48,9 +48,10 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		logger log.Logger
+		controller     *gomock.Controller
+		mockHistoryMgr *persistence.MockHistoryManager
 
-		mockEventsV2Mgr *mocks.HistoryV2Manager
+		logger log.Logger
 
 		cache *CacheImpl
 	}
@@ -70,17 +71,18 @@ func (s *eventsCacheSuite) TearDownSuite() {
 }
 
 func (s *eventsCacheSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.mockEventsV2Mgr = &mocks.HistoryV2Manager{}
+
+	s.controller = gomock.NewController(s.T())
+	s.mockHistoryMgr = persistence.NewMockHistoryManager(s.controller)
+
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.cache = s.newTestEventsCache()
 }
 
 func (s *eventsCacheSuite) TearDownTest() {
-	s.mockEventsV2Mgr.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
@@ -90,7 +92,7 @@ func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
 		16,
 		32,
 		time.Minute,
-		s.mockEventsV2Mgr,
+		s.mockHistoryMgr,
 		false,
 		s.logger,
 		metrics.NewClient(tally.NoopScope, metrics.History),
@@ -150,7 +152,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	}
 
 	shardId := int32(10)
-	s.mockEventsV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
+	s.mockHistoryMgr.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event1.GetEventId(),
 		MaxEventID:    event6.GetEventId() + 1,
@@ -177,7 +179,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 
 	shardId := int32(10)
 	expectedErr := errors.New("persistence call failed")
-	s.mockEventsV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
+	s.mockHistoryMgr.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    int64(11),
 		MaxEventID:    int64(15),
@@ -208,7 +210,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	}
 
 	shardId := int32(10)
-	s.mockEventsV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
+	s.mockHistoryMgr.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event2.GetEventId(),
 		MaxEventID:    event2.GetEventId() + 1,

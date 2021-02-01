@@ -469,9 +469,9 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 	p.metricsClient.Scope(
 		metrics.ReplicationTaskFetcherScope,
 		metrics.TargetClusterTag(p.currentCluster),
-	).RecordTimer(
+	).RecordDistribution(
 		metrics.ReplicationTasksLag,
-		time.Duration(p.shard.GetTransferMaxReadLevel()-*minAckedTaskID),
+		int(p.shard.GetTransferMaxReadLevel()-*minAckedTaskID),
 	)
 	err := p.shard.GetExecutionManager().RangeCompleteReplicationTask(
 		&persistence.RangeCompleteReplicationTaskRequest{
@@ -496,27 +496,27 @@ func (p *ReplicationTaskProcessorImpl) emitTaskMetrics(scope int, err error) {
 		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksApplied)
 	case *serviceerrors.ShardOwnershipLost:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
-		p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
+		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
 	case *serviceerror.InvalidArgument:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
-		p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
+		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
 	case *serviceerror.NamespaceNotActive:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrNamespaceNotActiveCounter)
-		p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
+		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
-		p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
+		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
 	case *serviceerror.NotFound:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrNotFoundCounter)
-		p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
+		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
 	case *serviceerror.ResourceExhausted:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
-		p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
+		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
 	case *serviceerrors.RetryReplication:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
-		p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
+		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
 	default:
-		p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
+		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
 	}
 }
 

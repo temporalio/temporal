@@ -81,6 +81,12 @@ services:
     # Use http://localhost:9090/ to access Prometheus.
     image: prom/prometheus
     container_name: temporal-dev-prometheus
+    command:
+      - "--log.level=error"
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
   grafana:
     # Use http://localhost:3000/ to access Grafana (admin/admin).
     image: grafana/grafana
@@ -90,7 +96,7 @@ services:
     volumes:
       - ./grafana/provisioning/:/etc/grafana/provisioning/
   temporal-web:
-    image: temporalio/web:1.4.1
+    image: temporalio/web:1.6.1
     container_name: temporal-dev-web
 
 networks:

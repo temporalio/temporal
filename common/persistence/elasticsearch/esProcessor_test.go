@@ -350,49 +350,6 @@ func (s *esProcessorSuite) TestHashFn() {
 	s.NotEqual(uint32(0), s.esProcessor.hashFn("test"))
 }
 
-// func (s *esProcessorSuite) getEncodedMsg(wid string, rid string, namespaceID string) []byte {
-// 	indexMsg := &indexerspb.Message{
-// 		NamespaceId: namespaceID,
-// 		WorkflowId:  wid,
-// 		RunId:       rid,
-// 	}
-// 	payload, err := s.esProcessor.msgEncoder.Encode(indexMsg)
-// 	s.NoError(err)
-// 	return payload
-// }
-//
-func (s *esProcessorSuite) TestGetDocIDs() {
-	testKey := "test-key"
-	testWid := "test-workflowID"
-	testRid := "test-runID"
-	testNamespaceid := "test-namespaceID"
-
-	request := elastic.NewBulkIndexRequest().
-		Doc(map[string]interface{}{
-			definition.VisibilityTaskKey: testKey,
-			definition.NamespaceID:       testNamespaceid,
-			definition.WorkflowID:        testWid,
-			definition.RunID:             testRid,
-		})
-
-	wid, rid, namespaceID := s.esProcessor.getDocIDs(request)
-	s.Equal(testWid, wid)
-	s.Equal(testRid, rid)
-	s.Equal(testNamespaceid, namespaceID)
-}
-
-func (s *esProcessorSuite) TestGetDocIDs_Error() {
-	testKey := "test-key"
-	request := elastic.NewBulkIndexRequest().
-		Doc(map[string]interface{}{
-			definition.VisibilityTaskKey: testKey,
-		})
-	wid, rid, namespaceID := s.esProcessor.getDocIDs(request)
-	s.Equal("", wid)
-	s.Equal("", rid)
-	s.Equal("", namespaceID)
-}
-
 func (s *esProcessorSuite) TestGetVisibilityTaskKey() {
 	request := elastic.NewBulkIndexRequest()
 	s.PanicsWithValue("VisibilityTaskKey not found", func() { s.esProcessor.getVisibilityTaskKey(request) })

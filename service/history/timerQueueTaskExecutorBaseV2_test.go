@@ -55,9 +55,9 @@ type (
 		mockWorkflowExecutionContext *MockworkflowExecutionContext
 		mockMutableState             *MockmutableState
 
-		mockExecutionManager  *mocks.ExecutionManager
+		mockExecutionManager  *persistence.MockExecutionManager
 		mockVisibilityManager *mocks.VisibilityManager
-		mockHistoryV2Manager  *mocks.HistoryV2Manager
+		mockHistoryMgr        *persistence.MockHistoryManager
 		mockArchivalClient    *archiver.ClientMock
 		mockNamespaceCache    *cache.MockNamespaceCache
 		mockClusterMetadata   *cluster.MockMetadata
@@ -102,7 +102,7 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) SetupTest() {
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockVisibilityManager = s.mockShard.Resource.VisibilityMgr
-	s.mockHistoryV2Manager = s.mockShard.Resource.HistoryMgr
+	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
 	s.mockArchivalClient = &archiver.ClientMock{}
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
@@ -114,7 +114,7 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) SetupTest() {
 		logger:         logger,
 		metricsClient:  s.mockShard.GetMetricsClient(),
 		visibilityMgr:  s.mockVisibilityManager,
-		historyV2Mgr:   s.mockHistoryV2Manager,
+		historyV2Mgr:   s.mockHistoryMgr,
 		archivalClient: s.mockArchivalClient,
 	}
 
@@ -144,14 +144,14 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestDeleteWorkflow_NoErr() {
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testGlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionManager.On("AddTasks", mock.Anything).Return(nil).Once()
+	s.mockExecutionManager.EXPECT().AddTasks(gomock.Any()).Return(nil).Times(1)
 	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any()).Times(1)
 	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any()).Times(1)
 	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any()).Times(1)
 
-	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
-	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
-	s.mockHistoryV2Manager.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any()).Return(nil).Times(1)
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any()).Return(nil).Times(1)
+	s.mockHistoryMgr.EXPECT().DeleteHistoryBranch(gomock.Any()).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil).Times(1)
 
 	err := s.timerQueueTaskExecutorBase.deleteWorkflow(task, s.mockWorkflowExecutionContext, s.mockMutableState)
@@ -169,13 +169,13 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestArchiveHistory_NoErr_InlineArchi
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testGlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionManager.On("AddTasks", mock.Anything).Return(nil).Once()
+	s.mockExecutionManager.EXPECT().AddTasks(gomock.Any()).Return(nil).Times(1)
 	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any()).Times(1)
 	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any()).Times(1)
 	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any()).Times(1)
 
-	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
-	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any()).Return(nil).Times(1)
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any()).Return(nil).Times(1)
 
 	s.mockArchivalClient.On("Archive", mock.Anything, mock.MatchedBy(func(req *archiver.ClientRequest) bool {
 		return req.CallerService == common.HistoryServiceName && req.AttemptArchiveInline && req.ArchiveRequest.Targets[0] == archiver.ArchiveTargetHistory

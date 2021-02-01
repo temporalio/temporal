@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"sync/atomic"
-	"time"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/convert"
@@ -151,9 +150,7 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
-	if err := adh.checkPermission(adh.config, request.SecurityToken); err != nil {
-		return nil, adh.error(errNoPermission, scope)
-	}
+
 	if len(request.GetSearchAttribute()) == 0 {
 		return nil, adh.error(errSearchAttributesNotSet, scope)
 	}
@@ -437,9 +434,9 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	// namespaces along with the individual namespaces stats
 	adh.GetMetricsClient().
 		Scope(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
-		RecordTimer(metrics.HistorySize, time.Duration(size))
+		RecordDistribution(metrics.HistorySize, size)
 	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
-		RecordTimer(metrics.HistorySize, time.Duration(size))
+		RecordDistribution(metrics.HistorySize, size)
 
 	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
@@ -1074,20 +1071,4 @@ func (adh *AdminHandler) convertIndexedValueTypeToESDataType(valueType enumspb.I
 	default:
 		return ""
 	}
-}
-
-func (adh *AdminHandler) checkPermission(
-	config *Config,
-	securityToken string,
-) error {
-	if config.EnableAdminProtection() {
-		if securityToken == "" {
-			return errNoPermission
-		}
-		requiredToken := config.AdminOperationToken()
-		if securityToken != requiredToken {
-			return errNoPermission
-		}
-	}
-	return nil
 }

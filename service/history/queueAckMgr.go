@@ -27,7 +27,6 @@ package history
 import (
 	"sort"
 	"sync"
-	"time"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -185,11 +184,11 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() error {
 	}
 	switch a.options.MetricScope {
 	case metrics.ReplicatorQueueProcessorScope:
-		a.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoReplicationPendingTasksTimer, time.Duration(pendingTasks))
+		a.metricsClient.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoReplicationPendingTasksTimer, pendingTasks)
 	case metrics.TransferActiveQueueProcessorScope:
-		a.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTransferActivePendingTasksTimer, time.Duration(pendingTasks))
+		a.metricsClient.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTransferActivePendingTasksTimer, pendingTasks)
 	case metrics.TransferStandbyQueueProcessorScope:
-		a.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTransferStandbyPendingTasksTimer, time.Duration(pendingTasks))
+		a.metricsClient.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTransferStandbyPendingTasksTimer, pendingTasks)
 	}
 
 MoveAckLevelLoop:

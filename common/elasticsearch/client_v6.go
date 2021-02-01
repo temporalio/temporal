@@ -27,10 +27,13 @@ package elasticsearch
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	elastic6 "github.com/olivere/elastic"
 	"github.com/olivere/elastic/v7"
+
+	"go.temporal.io/server/common/log"
 )
 
 type (
@@ -43,7 +46,7 @@ type (
 var _ Client = (*clientV6)(nil)
 
 // newClientV6 create a ES client
-func newClientV6(config *Config) (*clientV6, error) {
+func newClientV6(config *Config, logger log.Logger) (*clientV6, error) {
 	options := []elastic6.ClientOptionFunc{
 		elastic6.SetURL(config.URL.String()),
 		elastic6.SetSniff(false),
@@ -58,6 +61,8 @@ func newClientV6(config *Config) (*clientV6, error) {
 		// critical to ensure decode of int64 won't lose precision
 		elastic6.SetDecoder(&elastic6.NumberDecoder{}),
 	}
+
+	options = append(options, getLoggerOptionsV6(config.LogLevel, logger)...)
 
 	if config.AWSRequestSigning.Enabled {
 		httpClient, err := newAWSElasticsearchHTTPClient(config.AWSRequestSigning)
@@ -576,5 +581,27 @@ func convertV6IndicesGetSettingsResponseToV7(response *elastic6.IndicesGetSettin
 	}
 	return &elastic.IndicesGetSettingsResponse{
 		Settings: response.Settings,
+	}
+}
+
+func getLoggerOptionsV6(logLevel string, logger log.Logger) []elastic6.ClientOptionFunc {
+	switch {
+	case strings.EqualFold(logLevel, "trace"):
+		return []elastic6.ClientOptionFunc{
+			elastic6.SetErrorLog(newErrorLogger(logger)),
+			elastic6.SetInfoLog(newInfoLogger(logger)),
+			elastic6.SetTraceLog(newInfoLogger(logger)),
+		}
+	case strings.EqualFold(logLevel, "info"):
+		return []elastic6.ClientOptionFunc{
+			elastic6.SetErrorLog(newErrorLogger(logger)),
+			elastic6.SetInfoLog(newInfoLogger(logger)),
+		}
+	case strings.EqualFold(logLevel, "error"), logLevel == "": // Default is to log errors only.
+		return []elastic6.ClientOptionFunc{
+			elastic6.SetErrorLog(newErrorLogger(logger)),
+		}
+	default:
+		return nil
 	}
 }

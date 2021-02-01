@@ -353,7 +353,7 @@ func (t *queueTaskBase) Ack() {
 
 	t.state = task.TaskStateAcked
 	if t.shouldProcessTask {
-		t.scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(t.attempt))
+		t.scope.RecordDistribution(metrics.TaskAttemptTimer, t.attempt)
 		t.scope.RecordTimer(metrics.TaskLatency, time.Since(t.submitTime))
 		t.scope.RecordTimer(metrics.TaskQueueLatency, time.Since(timestamp.TimeValue(t.GetVisibilityTime())))
 	}

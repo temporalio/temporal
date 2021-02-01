@@ -35,7 +35,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
@@ -57,7 +56,7 @@ type (
 		namespaceEntry     *cache.NamespaceCacheEntry
 
 		mockClusterMetadata  *cluster.MockMetadata
-		mockExecutionManager *mocks.ExecutionManager
+		mockExecutionManager *persistence.MockExecutionManager
 		mockHistoryEngine    *MockEngine
 	}
 )
@@ -98,7 +97,6 @@ func (s *contextSuite) SetupTest() {
 func (s *contextSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockResource.Finish(s.T())
-	s.mockExecutionManager.AssertExpectations(s.T())
 }
 
 func (s *contextSuite) TestAddTasks_Success() {
@@ -132,7 +130,7 @@ func (s *contextSuite) TestAddTasks_Success() {
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil)
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
-	s.mockExecutionManager.On("AddTasks", addTasksRequest).Return(nil).Once()
+	s.mockExecutionManager.EXPECT().AddTasks(addTasksRequest).Return(nil).Times(1)
 	s.mockHistoryEngine.EXPECT().NotifyNewTransferTasks(transferTasks).Times(1)
 	s.mockHistoryEngine.EXPECT().NotifyNewTimerTasks(timerTasks).Times(1)
 	s.mockHistoryEngine.EXPECT().NotifyNewVisibilityTasks(visibilityTasks).Times(1)

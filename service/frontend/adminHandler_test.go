@@ -37,7 +37,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -51,7 +50,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/service/config"
@@ -68,7 +66,7 @@ type (
 		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *cache.MockNamespaceCache
 
-		mockHistoryV2Mgr *mocks.HistoryV2Manager
+		mockHistoryMgr *persistence.MockHistoryManager
 
 		namespace   string
 		namespaceID string
@@ -92,16 +90,14 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockHistoryClient = s.mockResource.HistoryClient
-	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
+	s.mockHistoryMgr = s.mockResource.HistoryMgr
 
 	params := &resource.BootstrapParams{
 		PersistenceConfig: config.Persistence{
 			NumHistoryShards: 1,
 		},
 	}
-	config := &Config{
-		EnableAdminProtection: dynamicconfig.GetBoolPropertyFn(false),
-	}
+	config := &Config{}
 	s.handler = NewAdminHandler(s.mockResource, params, config)
 	s.handler.Start()
 }
@@ -245,7 +241,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	}
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
 
-	s.mockHistoryV2Mgr.On("ReadRawHistoryBranch", mock.Anything).Return(&persistence.ReadRawHistoryBranchResponse{
+	s.mockHistoryMgr.EXPECT().ReadRawHistoryBranch(gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{},
 		NextPageToken:     []byte{},
 		Size:              0,
@@ -562,40 +558,4 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	resp, err = handler.AddSearchAttribute(ctx, esErrorTest.Request)
 	s.Equal(esErrorTest.Expected, err)
 	s.Nil(resp)
-}
-
-func (s *adminHandlerSuite) Test_AddSearchAttribute_Permission() {
-	ctx := context.Background()
-	handler := s.handler
-	handler.config = &Config{
-		EnableAdminProtection: dynamicconfig.GetBoolPropertyFn(true),
-		AdminOperationToken:   dynamicconfig.GetStringPropertyFn(common.DefaultAdminOperationToken),
-	}
-
-	type test struct {
-		Name     string
-		Request  *adminservice.AddSearchAttributeRequest
-		Expected error
-	}
-	testCases := []test{
-		{
-			Name: "unknown token",
-			Request: &adminservice.AddSearchAttributeRequest{
-				SecurityToken: "unknown",
-			},
-			Expected: errNoPermission,
-		},
-		{
-			Name: "correct token",
-			Request: &adminservice.AddSearchAttributeRequest{
-				SecurityToken: common.DefaultAdminOperationToken,
-			},
-			Expected: &serviceerror.InvalidArgument{Message: "SearchAttributes are not set on request."},
-		},
-	}
-	for _, testCase := range testCases {
-		resp, err := handler.AddSearchAttribute(ctx, testCase.Request)
-		s.Equal(testCase.Expected, err)
-		s.Nil(resp)
-	}
 }

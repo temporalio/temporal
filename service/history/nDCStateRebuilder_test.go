@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -67,8 +66,8 @@ type (
 		mockNamespaceCache  *cache.MockNamespaceCache
 		mockClusterMetadata *cluster.MockMetadata
 
-		mockHistoryV2Mgr *mocks.HistoryV2Manager
-		logger           log.Logger
+		mockHistoryMgr *persistence.MockHistoryManager
+		logger         log.Logger
 
 		namespaceID string
 		workflowID  string
@@ -101,7 +100,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 		NewDynamicConfigForTest(),
 	)
 
-	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.MockEventsCache
@@ -201,7 +200,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	pageToken := []byte("some random token")
 
 	shardId := s.mockShard.GetShardID()
-	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
+	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -212,8 +211,8 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		History:       history1,
 		NextPageToken: pageToken,
 		Size:          12345,
-	}, nil).Once()
-	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
+	}, nil).Times(1)
+	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -224,7 +223,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		History:       history2,
 		NextPageToken: nil,
 		Size:          67890,
-	}, nil).Once()
+	}, nil).Times(1)
 
 	paginationFn := s.nDCStateRebuilder.getPaginationFn(firstEventID, nextEventID, branchToken)
 	iter := collection.NewPagingIterator(paginationFn)
@@ -284,7 +283,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	historySize1 := 12345
 	historySize2 := 67890
 	shardId := s.mockShard.GetShardID()
-	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
+	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -295,8 +294,8 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		History:       history1,
 		NextPageToken: pageToken,
 		Size:          historySize1,
-	}, nil).Once()
-	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
+	}, nil).Times(1)
+	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -307,7 +306,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		History:       history2,
 		NextPageToken: nil,
 		Size:          historySize2,
-	}, nil).Once()
+	}, nil).Times(1)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: targetNamespaceID, Name: targetNamespace},

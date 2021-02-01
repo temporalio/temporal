@@ -26,10 +26,12 @@ package elasticsearch
 
 import (
 	"context"
+	"strings"
 	"time"
 
-	elastic6 "github.com/olivere/elastic"
 	"github.com/olivere/elastic/v7"
+
+	"go.temporal.io/server/common/log"
 )
 
 type (
@@ -42,7 +44,7 @@ type (
 var _ Client = (*clientV7)(nil)
 
 // newClientV7 create a ES client
-func newClientV7(config *Config) (*clientV7, error) {
+func newClientV7(config *Config, logger log.Logger) (*clientV7, error) {
 	options := []elastic.ClientOptionFunc{
 		elastic.SetURL(config.URL.String()),
 		elastic.SetSniff(false),
@@ -57,6 +59,8 @@ func newClientV7(config *Config) (*clientV7, error) {
 		// critical to ensure decode of int64 won't lose precision
 		elastic.SetDecoder(&elastic.NumberDecoder{}),
 	}
+
+	options = append(options, getLoggerOptions(config.LogLevel, logger)...)
 
 	if config.AWSRequestSigning.Enabled {
 		httpClient, err := newAWSElasticsearchHTTPClient(config.AWSRequestSigning)
@@ -152,7 +156,7 @@ func (c *clientV7) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 func (c *clientV7) PutMapping(ctx context.Context, index, root, key, valueType string) error {
 	body := c.buildPutMappingBody(root, key, valueType)
 	_, err := c.esClient.PutMapping().Index(index).BodyJson(body).Do(ctx)
-	if elastic6.IsNotFound(err) {
+	if elastic.IsNotFound(err) {
 		_, err = c.CreateIndex(ctx, index)
 		if err != nil {
 			return err
@@ -234,4 +238,26 @@ func (c *clientV7) IndexPutSettings(ctx context.Context, indexName string, bodyS
 
 func (c *clientV7) IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error) {
 	return c.esClient.IndexGetSettings(indexName).Do(ctx)
+}
+
+func getLoggerOptions(logLevel string, logger log.Logger) []elastic.ClientOptionFunc {
+	switch {
+	case strings.EqualFold(logLevel, "trace"):
+		return []elastic.ClientOptionFunc{
+			elastic.SetErrorLog(newErrorLogger(logger)),
+			elastic.SetInfoLog(newInfoLogger(logger)),
+			elastic.SetTraceLog(newInfoLogger(logger)),
+		}
+	case strings.EqualFold(logLevel, "info"):
+		return []elastic.ClientOptionFunc{
+			elastic.SetErrorLog(newErrorLogger(logger)),
+			elastic.SetInfoLog(newInfoLogger(logger)),
+		}
+	case strings.EqualFold(logLevel, "error"), logLevel == "": // Default is to log errors only.
+		return []elastic.ClientOptionFunc{
+			elastic.SetErrorLog(newErrorLogger(logger)),
+		}
+	default:
+		return nil
+	}
 }

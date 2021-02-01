@@ -26,14 +26,16 @@ package elasticsearch
 
 import (
 	"fmt"
+
+	"go.temporal.io/server/common/log"
 )
 
-func NewClient(config *Config) (Client, error) {
+func NewClient(config *Config, logger log.Logger) (Client, error) {
 	switch config.Version {
 	case "v6", "":
-		return newClientV6(config)
+		return newClientV6(config, logger)
 	case "v7":
-		return newClientV7(config)
+		return newClientV7(config, logger)
 	default:
 		return nil, fmt.Errorf("not supported ElasticSearch version: %v", config.Version)
 	}

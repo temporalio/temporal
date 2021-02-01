@@ -246,10 +246,6 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 		return nil, errInvalidRetention
 	}
 
-	if err := wh.checkPermission(wh.config, request.SecurityToken); err != nil {
-		return nil, err
-	}
-
 	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
 	}
@@ -337,13 +333,6 @@ func (wh *WorkflowHandler) UpdateNamespace(ctx context.Context, request *workflo
 		return nil, errRequestNotSet
 	}
 
-	// don't require permission for failover request
-	if !wh.isFailoverRequest(request) {
-		if err := wh.checkPermission(wh.config, request.SecurityToken); err != nil {
-			return nil, err
-		}
-	}
-
 	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
 	}
@@ -374,10 +363,6 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 
 	if request == nil {
 		return nil, errRequestNotSet
-	}
-
-	if err := wh.checkPermission(wh.config, request.SecurityToken); err != nil {
-		return nil, err
 	}
 
 	if request.GetNamespace() == "" {
@@ -3328,8 +3313,7 @@ func (wh *WorkflowHandler) getHistory(
 		return nil, nil, err
 	}
 
-	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
-		RecordTimer(metrics.HistorySize, time.Duration(size))
+	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).RecordDistribution(metrics.HistorySize, size)
 
 	isLastPage := len(nextPageToken) == 0
 	if err := wh.verifyHistoryIsComplete(
@@ -3742,22 +3726,6 @@ func (wh *WorkflowHandler) initNamespaceRateLimiter(namespace string) quotas.Rat
 			))
 		},
 	)
-}
-
-func (wh *WorkflowHandler) checkPermission(
-	config *Config,
-	securityToken string,
-) error {
-	if config.EnableAdminProtection() {
-		if securityToken == "" {
-			return errNoPermission
-		}
-		requiredToken := config.AdminOperationToken()
-		if securityToken != requiredToken {
-			return errNoPermission
-		}
-	}
-	return nil
 }
 
 func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error, namespaceID string, taskQueueType enumspb.TaskQueueType,

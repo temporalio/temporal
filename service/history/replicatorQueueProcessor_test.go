@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -63,8 +62,8 @@ type (
 		mockMutableState    *MockmutableState
 		mockClusterMetadata *cluster.MockMetadata
 
-		mockExecutionMgr *mocks.ExecutionManager
-		mockHistoryV2Mgr *mocks.HistoryV2Manager
+		mockExecutionMgr *persistence.MockExecutionManager
+		mockHistoryMgr   *persistence.MockHistoryManager
 
 		logger log.Logger
 
@@ -104,7 +103,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
-	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
@@ -113,7 +112,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	historyCache := newHistoryCache(s.mockShard)
 
 	s.replicatorQueueProcessor = newReplicatorQueueProcessor(
-		s.mockShard, historyCache, s.mockExecutionMgr, s.mockHistoryV2Mgr, s.logger,
+		s.mockShard, historyCache, s.mockExecutionMgr, s.mockHistoryMgr, s.logger,
 	)
 }
 
@@ -138,7 +137,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
-	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,

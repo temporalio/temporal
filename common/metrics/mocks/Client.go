@@ -67,6 +67,11 @@ func (_m *Client) StartTimer(scope int, timer int) tally.Stopwatch {
 	return r0
 }
 
+// RecordDistribution provides a mock function with given fields: scope, timer, d
+func (_m *Client) RecordDistribution(scope int, timer int, d int) {
+	_m.Called(scope, timer, d)
+}
+
 // UpdateGauge provides a mock function with given fields: scope, gauge, value
 func (_m *Client) UpdateGauge(scope int, gauge int, value float64) {
 	_m.Called(scope, gauge, value)

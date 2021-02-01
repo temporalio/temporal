@@ -749,9 +749,12 @@ func (s *ContextImpl) AppendHistoryEvents(
 	defer func() {
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
 		// namespaces along with the individual namespaces stats
-		s.GetMetricsClient().RecordTimer(metrics.SessionSizeStatsScope, metrics.HistorySize, time.Duration(size))
+		s.GetMetricsClient().RecordDistribution(metrics.SessionSizeStatsScope, metrics.HistorySize, size)
 		if entry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID); err == nil && entry != nil && entry.GetInfo() != nil {
-			s.GetMetricsClient().Scope(metrics.SessionSizeStatsScope, metrics.NamespaceTag(entry.GetInfo().Name)).RecordTimer(metrics.HistorySize, time.Duration(size))
+			s.GetMetricsClient().Scope(
+				metrics.SessionSizeStatsScope,
+				metrics.NamespaceTag(entry.GetInfo().Name),
+			).RecordDistribution(metrics.HistorySize, size)
 		}
 		if size >= historySizeLogThreshold {
 			s.throttledLogger.Warn("history size threshold breached",
@@ -960,15 +963,15 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 		logger.Warn("Shard ack levels diff exceeds warn threshold.")
 	}
 
-	s.GetMetricsClient().RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTransferDiffTimer, time.Duration(diffTransferLevel))
+	s.GetMetricsClient().RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTransferDiffTimer, int(diffTransferLevel))
 	s.GetMetricsClient().RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerDiffTimer, diffTimerLevel)
 
-	s.GetMetricsClient().RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoReplicationLagTimer, time.Duration(replicationLag))
-	s.GetMetricsClient().RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTransferLagTimer, time.Duration(transferLag))
+	s.GetMetricsClient().RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoReplicationLagTimer, int(replicationLag))
+	s.GetMetricsClient().RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTransferLagTimer, int(transferLag))
 	s.GetMetricsClient().RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerLagTimer, timerLag)
 
-	s.GetMetricsClient().RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTransferFailoverInProgressTimer, time.Duration(transferFailoverInProgress))
-	s.GetMetricsClient().RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerFailoverInProgressTimer, time.Duration(timerFailoverInProgress))
+	s.GetMetricsClient().RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTransferFailoverInProgressTimer, transferFailoverInProgress)
+	s.GetMetricsClient().RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTimerFailoverInProgressTimer, timerFailoverInProgress)
 }
 
 func (s *ContextImpl) allocateTaskIDsLocked(

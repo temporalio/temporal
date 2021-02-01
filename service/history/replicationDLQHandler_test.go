@@ -30,7 +30,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -43,7 +42,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
@@ -62,8 +60,8 @@ type (
 		mockClientBean   *client.MockBean
 		adminClient      *adminservicemock.MockAdminServiceClient
 		clusterMetadata  *cluster.MockMetadata
-		executionManager *mocks.ExecutionManager
-		shardManager     *mocks.ShardManager
+		executionManager *persistence.MockExecutionManager
+		shardManager     *persistence.MockShardManager
 		taskExecutor     *MockreplicationTaskExecutor
 		taskExecutors    map[string]replicationTaskExecutor
 		sourceCluster    string
@@ -172,7 +170,7 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 		},
 	}
 
-	s.executionManager.On("GetReplicationTasksFromDLQ", &persistence.GetReplicationTasksFromDLQRequest{
+	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
 		SourceClusterName: s.sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
 			ReadLevel:     persistence.EmptyQueueMessageID,
@@ -196,14 +194,14 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 func (s *replicationDLQHandlerSuite) TestPurgeMessages() {
 	lastMessageID := int64(1)
 
-	s.executionManager.On("RangeDeleteReplicationTaskFromDLQ",
+	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
 			SourceClusterName:    s.sourceCluster,
 			ExclusiveBeginTaskID: persistence.EmptyQueueMessageID,
 			InclusiveEndTaskID:   lastMessageID,
 		}).Return(nil).Times(1)
 
-	s.shardManager.On("UpdateShard", mock.Anything).Return(nil)
+	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
 	err := s.replicationMessageHandler.purgeMessages(s.sourceCluster, lastMessageID)
 	s.NoError(err)
 }
@@ -255,7 +253,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 		},
 	}
 
-	s.executionManager.On("GetReplicationTasksFromDLQ", &persistence.GetReplicationTasksFromDLQRequest{
+	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
 		SourceClusterName: s.sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
 			ReadLevel:     persistence.EmptyQueueMessageID,
@@ -271,13 +269,13 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
 		}, nil)
 	s.taskExecutor.EXPECT().execute(remoteTask, true).Return(0, nil).Times(1)
-	s.executionManager.On("RangeDeleteReplicationTaskFromDLQ", &persistence.RangeDeleteReplicationTaskFromDLQRequest{
+	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(&persistence.RangeDeleteReplicationTaskFromDLQRequest{
 		SourceClusterName:    s.sourceCluster,
 		ExclusiveBeginTaskID: persistence.EmptyQueueMessageID,
 		InclusiveEndTaskID:   lastMessageID,
 	}).Return(nil).Times(1)
 
-	s.shardManager.On("UpdateShard", mock.Anything).Return(nil)
+	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
 
 	token, err := s.replicationMessageHandler.mergeMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)

@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/shard"
@@ -62,7 +61,7 @@ type (
 		mockWorkflowResetter *MockworkflowResetter
 		mockClusterMetadata  *cluster.MockMetadata
 
-		mockExecutionMgr *mocks.ExecutionManager
+		mockExecutionMgr *persistence.MockExecutionManager
 
 		logger         log.Logger
 		namespaceEntry *cache.NamespaceCacheEntry
@@ -239,10 +238,10 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 		workflowEvents.Events,
 	).Return(nil).Times(1)
 
-	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
-	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Once()
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Times(1)
 
 	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
@@ -323,10 +322,10 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Cl
 		RunId: runID,
 	}).AnyTimes()
 
-	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
-	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Once()
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Times(1)
 	weContext.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
 	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
@@ -380,10 +379,10 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 		RunId: runID,
 	}).AnyTimes()
 
-	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
-	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil).Once()
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil).Times(1)
 	weContext.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
 	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
@@ -436,10 +435,10 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 		RunId: runID,
 	}).AnyTimes()
 
-	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
-	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil).Once()
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil).Times(1)
 	weContext.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
 	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
@@ -456,13 +455,13 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
 
-	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-	}).Return(nil, serviceerror.NewNotFound("")).Once()
+	}).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
 	exists, err := s.transactionMgr.checkWorkflowExists(ctx, namespaceID, workflowID, runID)
 	s.NoError(err)
@@ -475,13 +474,13 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesExists() {
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
 
-	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-	}).Return(&persistence.GetWorkflowExecutionResponse{}, nil).Once()
+	}).Return(&persistence.GetWorkflowExecutionResponse{}, nil).Times(1)
 
 	exists, err := s.transactionMgr.checkWorkflowExists(ctx, namespaceID, workflowID, runID)
 	s.NoError(err)
@@ -493,10 +492,10 @@ func (s *nDCTransactionMgrSuite) TestGetWorkflowCurrentRunID_Missing() {
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 
-	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
-	}).Return(nil, serviceerror.NewNotFound("")).Once()
+	}).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
 	currentRunID, err := s.transactionMgr.getCurrentWorkflowRunID(ctx, namespaceID, workflowID)
 	s.NoError(err)
@@ -509,10 +508,10 @@ func (s *nDCTransactionMgrSuite) TestGetWorkflowCurrentRunID_Exists() {
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
 
-	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
-	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Once()
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Times(1)
 
 	currentRunID, err := s.transactionMgr.getCurrentWorkflowRunID(ctx, namespaceID, workflowID)
 	s.NoError(err)
