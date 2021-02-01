@@ -50,7 +50,6 @@ func newClientV7(config *Config, httpClient *http.Client, logger log.Logger) (*c
 		elastic.SetURL(config.URL.String()),
 		elastic.SetSniff(false),
 		elastic.SetBasicAuth(config.Username, config.Password),
-		elastic.SetHttpClient(httpClient),
 
 		// Disable health check so we don't block client creation (and thus temporal server startup)
 		// if the ES instance happens to be down.
@@ -63,6 +62,10 @@ func newClientV7(config *Config, httpClient *http.Client, logger log.Logger) (*c
 	}
 
 	options = append(options, getLoggerOptions(config.LogLevel, logger)...)
+
+	if httpClient != nil {
+		options = append(options, elastic.SetHttpClient(httpClient))
+	}
 
 	client, err := elastic.NewClient(options...)
 	if err != nil {

@@ -52,7 +52,6 @@ func newClientV6(config *Config, httpClient *http.Client, logger log.Logger) (*c
 		elastic6.SetURL(config.URL.String()),
 		elastic6.SetSniff(false),
 		elastic6.SetBasicAuth(config.Username, config.Password),
-		elastic6.SetHttpClient(httpClient),
 
 		// Disable health check so we don't block client creation (and thus temporal server startup)
 		// if the ES instance happens to be down.
@@ -65,6 +64,10 @@ func newClientV6(config *Config, httpClient *http.Client, logger log.Logger) (*c
 	}
 
 	options = append(options, getLoggerOptionsV6(config.LogLevel, logger)...)
+
+	if httpClient != nil {
+		options = append(options, elastic6.SetHttpClient(httpClient))
+	}
 
 	client, err := elastic6.NewClient(options...)
 	if err != nil {
