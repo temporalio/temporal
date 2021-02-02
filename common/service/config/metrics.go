@@ -40,7 +40,7 @@ import (
 )
 
 const (
-	ms = float64(time.Millisecond / time.Second)
+	ms = float64(time.Millisecond) / float64(time.Second)
 )
 
 // tally sanitizer options that satisfy both Prometheus and M3 restrictions.
@@ -192,6 +192,16 @@ func (c *Metrics) newStatsdScope(logger log.Logger) tally.Scope {
 // newPrometheusScope returns a new prometheus scope with
 // a default reporting interval of a second
 func (c *Metrics) newPrometheusScope(logger log.Logger) tally.Scope {
+	if len(c.Prometheus.DefaultHistogramBuckets) == 0 {
+		for _, value := range defaultHistogramBuckets {
+			c.Prometheus.DefaultHistogramBuckets = append(
+				c.Prometheus.DefaultHistogramBuckets,
+				prometheus.HistogramObjective{
+					Upper: value,
+				},
+			)
+		}
+	}
 	reporter, err := c.Prometheus.NewReporter(
 		prometheus.ConfigurationOptions{
 			Registry: prom.NewRegistry(),
