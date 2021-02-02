@@ -266,16 +266,11 @@ func ValidateConnectConfig(cfg *config.SQL, isDryRun bool) error {
 		cfg.DatabaseName = schema.DryrunDBName
 	}
 	if cfg.TLS != nil && cfg.TLS.Enabled {
-		enabledCaFile := cfg.TLS.CaFile != ""
 		enabledCertFile := cfg.TLS.CertFile != ""
 		enabledKeyFile := cfg.TLS.KeyFile != ""
 
 		if (enabledCertFile && !enabledKeyFile) || (!enabledCertFile && enabledKeyFile) {
 			return schema.NewConfigError("must have both CertFile and KeyFile set")
-		}
-
-		if !enabledCaFile && !enabledCertFile && !enabledKeyFile {
-			return schema.NewConfigError("must provide tls certs to use")
 		}
 	}
 	return nil
