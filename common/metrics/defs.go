@@ -2241,7 +2241,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ActivityInfoSize:                                  {metricName: "activity_info_size", metricType: Timer},
 		TimerInfoSize:                                     {metricName: "timer_info_size", metricType: Timer},
 		ChildInfoSize:                                     {metricName: "child_info_size", metricType: Timer},
-		SignalInfoSize:                                    {metricName: "signal_info", metricType: Timer},
+		SignalInfoSize:                                    {metricName: "signal_info_size", metricType: Timer},
 		BufferedEventsSize:                                {metricName: "buffered_events_size", metricType: Timer},
 		ActivityInfoCount:                                 {metricName: "activity_info_count", metricType: Timer},
 		TimerInfoCount:                                    {metricName: "timer_info_count", metricType: Timer},

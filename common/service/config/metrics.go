@@ -39,6 +39,10 @@ import (
 	statsdreporter "go.temporal.io/server/common/metrics/tally/statsd"
 )
 
+const (
+	ms = float64(time.Millisecond) / float64(time.Second)
+)
+
 // tally sanitizer options that satisfy both Prometheus and M3 restrictions.
 // This will rename metrics at the tally emission level, so metrics name we
 // use maybe different from what gets emitted. In the current implementation
@@ -64,6 +68,28 @@ var (
 		},
 		ReplacementCharacter: tally.DefaultReplacementCharacter,
 	}
+
+	defaultHistogramBuckets = tally.ValueBuckets([]float64{
+		1 * ms,
+		2 * ms,
+		5 * ms,
+		10 * ms,
+		20 * ms,
+		50 * ms,
+		100 * ms,
+		200 * ms,
+		500 * ms,
+		1000 * ms,
+		2000 * ms,
+		5000 * ms,
+		10000 * ms,
+		20000 * ms,
+		50000 * ms,
+		100000 * ms,
+		200000 * ms,
+		500000 * ms,
+		1000000 * ms,
+	})
 )
 
 // NewScope builds a new tally scope
@@ -96,7 +122,11 @@ func (c *Metrics) NewScope(logger log.Logger, customReporter tally.BaseStatsRepo
 }
 
 func (c *Metrics) newCustomReporterScope(logger log.Logger, customReporter tally.BaseStatsReporter) tally.Scope {
-	options := tally.ScopeOptions{Tags: c.Tags, Prefix: c.Prefix}
+	options := tally.ScopeOptions{
+		Tags:           c.Tags,
+		Prefix:         c.Prefix,
+		DefaultBuckets: defaultHistogramBuckets,
+	}
 	switch reporter := customReporter.(type) {
 	case tally.StatsReporter:
 		{
@@ -129,6 +159,7 @@ func (c *Metrics) newM3Scope(logger log.Logger) tally.Scope {
 		Tags:           c.Tags,
 		CachedReporter: reporter,
 		Prefix:         c.Prefix,
+		DefaultBuckets: defaultHistogramBuckets,
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope
@@ -149,9 +180,10 @@ func (c *Metrics) newStatsdScope(logger log.Logger) tally.Scope {
 	// Therefore, we implement Tally interface to have a statsd reporter that can support tagging
 	reporter := statsdreporter.NewReporter(statter, tallystatsdreporter.Options{})
 	scopeOpts := tally.ScopeOptions{
-		Tags:     c.Tags,
-		Reporter: reporter,
-		Prefix:   c.Prefix,
+		Tags:           c.Tags,
+		Reporter:       reporter,
+		Prefix:         c.Prefix,
+		DefaultBuckets: defaultHistogramBuckets,
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope
@@ -160,6 +192,16 @@ func (c *Metrics) newStatsdScope(logger log.Logger) tally.Scope {
 // newPrometheusScope returns a new prometheus scope with
 // a default reporting interval of a second
 func (c *Metrics) newPrometheusScope(logger log.Logger) tally.Scope {
+	if len(c.Prometheus.DefaultHistogramBuckets) == 0 {
+		for _, value := range defaultHistogramBuckets {
+			c.Prometheus.DefaultHistogramBuckets = append(
+				c.Prometheus.DefaultHistogramBuckets,
+				prometheus.HistogramObjective{
+					Upper: value,
+				},
+			)
+		}
+	}
 	reporter, err := c.Prometheus.NewReporter(
 		prometheus.ConfigurationOptions{
 			Registry: prom.NewRegistry(),
@@ -177,6 +219,7 @@ func (c *Metrics) newPrometheusScope(logger log.Logger) tally.Scope {
 		Separator:       prometheus.DefaultSeparator,
 		SanitizeOptions: &sanitizeOptions,
 		Prefix:          c.Prefix,
+		DefaultBuckets:  defaultHistogramBuckets,
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope
