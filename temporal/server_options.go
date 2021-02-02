@@ -26,6 +26,7 @@ package temporal
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/uber-go/tally"
 
@@ -37,20 +38,22 @@ import (
 
 type (
 	serverOptions struct {
-		config                     *config.Config
+		serviceNames []string
+
+		config    *config.Config
+		configDir string
+		env       string
+		zone      string
+
+		interruptCh   <-chan interface{}
+		blockingStart bool
+
 		authorizer                 authorization.Authorizer
 		tlsConfigProvider          encryption.TLSConfigProvider
 		claimMapper                authorization.ClaimMapper
 		metricsReporter            tally.BaseStatsReporter
 		persistenceServiceResolver resolver.ServiceResolver
-		configDir                  string
-		env                        string
-		zone                       string
-
-		serviceNames []string
-
-		interruptCh   <-chan interface{}
-		blockingStart bool
+		elasticseachHttpClient     *http.Client
 	}
 )
 

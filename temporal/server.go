@@ -309,9 +309,16 @@ func (s *Server) getServiceParams(
 			return nil, fmt.Errorf("unable to find advanced visibility store in config for %q key", advancedVisStoreKey)
 		}
 
-		esClient, err := elasticsearch.NewClient(advancedVisStore.ElasticSearch, s.logger)
+		if s.so.elasticseachHttpClient == nil {
+			s.so.elasticseachHttpClient, err = elasticsearch.NewAwsHttpClient(advancedVisStore.ElasticSearch.AWSRequestSigning)
+			if err != nil {
+				return nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
+			}
+		}
+
+		esClient, err := elasticsearch.NewClient(advancedVisStore.ElasticSearch, s.so.elasticseachHttpClient, s.logger)
 		if err != nil {
-			return nil, fmt.Errorf("error creating elastic search client: %v", err)
+			return nil, fmt.Errorf("unable to create Elasticsearch client: %w", err)
 		}
 		params.ESConfig = advancedVisStore.ElasticSearch
 		params.ESClient = esClient
@@ -319,7 +326,7 @@ func (s *Server) getServiceParams(
 		// verify index name
 		indexName, ok := advancedVisStore.ElasticSearch.Indices[common.VisibilityAppName]
 		if !ok || len(indexName) == 0 {
-			return nil, errors.New("elastic search config missing visibility index")
+			return nil, errors.New("visibility index in missing in Elasticsearch config")
 		}
 	}
 

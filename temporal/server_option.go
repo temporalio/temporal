@@ -25,6 +25,8 @@
 package temporal
 
 import (
+	"net/http"
+
 	"github.com/uber-go/tally"
 
 	"go.temporal.io/server/common/authorization"
@@ -97,5 +99,12 @@ func WithCustomMetricsReporter(reporter tally.BaseStatsReporter) ServerOption {
 func WithPersistenceServiceResolver(r resolver.ServiceResolver) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.persistenceServiceResolver = r
+	})
+}
+
+// Set custom persistence service resolver which will convert service name or address value from config to another a....
+func WithElasticsearchHttpClient(c *http.Client) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.elasticseachHttpClient = c
 	})
 }
