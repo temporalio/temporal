@@ -25,29 +25,19 @@
 package persistence
 
 import (
-	"sync"
+	"fmt"
 
-	enumspb "go.temporal.io/api/enums/v1"
-
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/common/tokenbucket"
-)
-
-const (
-	// To sample visibility request, open has only 1 bucket, closed has 2
-	numOfPriorityForOpen   = 1
-	numOfPriorityForClosed = 2
-	numOfPriorityForList   = 1
 )
 
 type visibilitySamplingClient struct {
-	rateLimitersForOpen   *namespaceToBucketMap
-	rateLimitersForClosed *namespaceToBucketMap
-	rateLimitersForList   *namespaceToBucketMap
+	rateLimitersForOpen   quotas.NamespaceRateLimiter
+	rateLimitersForClosed quotas.NamespaceRateLimiter
+	rateLimitersForList   quotas.NamespaceRateLimiter
 	persistence           VisibilityManager
 	config                *config.VisibilityConfig
 	metricClient          metrics.Client
@@ -57,57 +47,61 @@ type visibilitySamplingClient struct {
 var _ VisibilityManager = (*visibilitySamplingClient)(nil)
 
 // NewVisibilitySamplingClient creates a client to manage visibility with sampling
-func NewVisibilitySamplingClient(persistence VisibilityManager, config *config.VisibilityConfig, metricClient metrics.Client, logger log.Logger) VisibilityManager {
+func NewVisibilitySamplingClient(
+	persistence VisibilityManager,
+	config *config.VisibilityConfig,
+	metricClient metrics.Client,
+	logger log.Logger,
+) VisibilityManager {
+
+	var persistenceRateLimiter []quotas.RateLimiter
+	if config.MaxQPS != nil {
+		persistenceRateLimiter = append(persistenceRateLimiter, quotas.NewDefaultIncomingDynamicRateLimiter(
+			func() float64 { return float64(config.MaxQPS()) },
+		))
+	}
+
 	return &visibilitySamplingClient{
-		persistence:           persistence,
-		rateLimitersForOpen:   newNamespaceToBucketMap(),
-		rateLimitersForClosed: newNamespaceToBucketMap(),
-		rateLimitersForList:   newNamespaceToBucketMap(),
-		config:                config,
-		metricClient:          metricClient,
-		logger:                logger,
+		persistence: persistence,
+		rateLimitersForOpen: quotas.NewNamespaceMultiStageRateLimiter(
+			func(namespace string) quotas.RateLimiter {
+				return quotas.NewDefaultOutgoingDynamicRateLimiter(
+					func() float64 { return float64(config.VisibilityOpenMaxQPS(namespace)) },
+				)
+			},
+			persistenceRateLimiter,
+		),
+		rateLimitersForClosed: quotas.NewNamespaceMultiStageRateLimiter(
+			func(namespace string) quotas.RateLimiter {
+				return quotas.NewDefaultOutgoingDynamicRateLimiter(
+					func() float64 { return float64(config.VisibilityClosedMaxQPS(namespace)) },
+				)
+			},
+			persistenceRateLimiter,
+		),
+		rateLimitersForList: quotas.NewNamespaceMultiStageRateLimiter(
+			func(namespace string) quotas.RateLimiter {
+				return quotas.NewDefaultOutgoingDynamicRateLimiter(
+					func() float64 { return float64(config.VisibilityListMaxQPS(namespace)) },
+				)
+			},
+			persistenceRateLimiter,
+		),
+		config:       config,
+		metricClient: metricClient,
+		logger:       logger,
 	}
-}
-
-type namespaceToBucketMap struct {
-	sync.RWMutex
-	mappings map[string]tokenbucket.PriorityTokenBucket
-}
-
-func newNamespaceToBucketMap() *namespaceToBucketMap {
-	return &namespaceToBucketMap{
-		mappings: make(map[string]tokenbucket.PriorityTokenBucket),
-	}
-}
-
-func (m *namespaceToBucketMap) getRateLimiter(namespace string, numOfPriority, qps int) tokenbucket.PriorityTokenBucket {
-	m.RLock()
-	rateLimiter, exist := m.mappings[namespace]
-	m.RUnlock()
-
-	if exist {
-		return rateLimiter
-	}
-
-	m.Lock()
-	if rateLimiter, ok := m.mappings[namespace]; ok { // read again to ensure no duplicate create
-		m.Unlock()
-		return rateLimiter
-	}
-	rateLimiter = tokenbucket.NewFullPriorityTokenBucket(numOfPriority, qps, clock.NewRealTimeSource())
-	m.mappings[namespace] = rateLimiter
-	m.Unlock()
-	return rateLimiter
 }
 
 func (p *visibilitySamplingClient) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {
 	namespace := request.Namespace
 	namespaceID := request.NamespaceID
 
-	rateLimiter := p.rateLimitersForOpen.getRateLimiter(namespace, numOfPriorityForOpen, p.config.VisibilityOpenMaxQPS(namespace))
-	if ok, _ := rateLimiter.GetToken(0, 1); ok {
+	if ok := p.rateLimitersForOpen.Allow(namespace); ok {
 		return p.persistence.RecordWorkflowExecutionStarted(request)
 	}
+
+	fmt.Println("fail")
 
 	p.logger.Info("Request for open workflow is sampled",
 		tag.WorkflowNamespaceID(namespaceID),
@@ -124,8 +118,7 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionStartedV2(request *Rec
 	namespace := request.Namespace
 	namespaceID := request.NamespaceID
 
-	rateLimiter := p.rateLimitersForOpen.getRateLimiter(namespace, numOfPriorityForOpen, p.config.VisibilityOpenMaxQPS(namespace))
-	if ok, _ := rateLimiter.GetToken(0, 1); ok {
+	if ok := p.rateLimitersForOpen.Allow(namespace); ok {
 		return p.persistence.RecordWorkflowExecutionStartedV2(request)
 	}
 
@@ -143,10 +136,8 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionStartedV2(request *Rec
 func (p *visibilitySamplingClient) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
 	namespace := request.Namespace
 	namespaceID := request.NamespaceID
-	priority := getRequestPriority(request)
 
-	rateLimiter := p.rateLimitersForClosed.getRateLimiter(namespace, numOfPriorityForClosed, p.config.VisibilityClosedMaxQPS(namespace))
-	if ok, _ := rateLimiter.GetToken(priority, 1); ok {
+	if ok := p.rateLimitersForClosed.Allow(namespace); ok {
 		return p.persistence.RecordWorkflowExecutionClosed(request)
 	}
 
@@ -164,10 +155,8 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionClosed(request *Record
 func (p *visibilitySamplingClient) RecordWorkflowExecutionClosedV2(request *RecordWorkflowExecutionClosedRequest) error {
 	namespace := request.Namespace
 	namespaceID := request.NamespaceID
-	priority := getRequestPriority(request)
 
-	rateLimiter := p.rateLimitersForClosed.getRateLimiter(namespace, numOfPriorityForClosed, p.config.VisibilityClosedMaxQPS(namespace))
-	if ok, _ := rateLimiter.GetToken(priority, 1); ok {
+	if ok := p.rateLimitersForClosed.Allow(namespace); ok {
 		return p.persistence.RecordWorkflowExecutionClosedV2(request)
 	}
 
@@ -186,8 +175,7 @@ func (p *visibilitySamplingClient) UpsertWorkflowExecution(request *UpsertWorkfl
 	namespace := request.Namespace
 	namespaceID := request.NamespaceID
 
-	rateLimiter := p.rateLimitersForClosed.getRateLimiter(namespace, numOfPriorityForClosed, p.config.VisibilityClosedMaxQPS(namespace))
-	if ok, _ := rateLimiter.GetToken(0, 1); ok {
+	if ok := p.rateLimitersForClosed.Allow(namespace); ok {
 		return p.persistence.UpsertWorkflowExecution(request)
 	}
 
@@ -206,8 +194,7 @@ func (p *visibilitySamplingClient) UpsertWorkflowExecutionV2(request *UpsertWork
 	namespace := request.Namespace
 	namespaceID := request.NamespaceID
 
-	rateLimiter := p.rateLimitersForClosed.getRateLimiter(namespace, numOfPriorityForClosed, p.config.VisibilityClosedMaxQPS(namespace))
-	if ok, _ := rateLimiter.GetToken(0, 1); ok {
+	if ok := p.rateLimitersForClosed.Allow(namespace); ok {
 		return p.persistence.UpsertWorkflowExecutionV2(request)
 	}
 
@@ -225,8 +212,7 @@ func (p *visibilitySamplingClient) UpsertWorkflowExecutionV2(request *UpsertWork
 func (p *visibilitySamplingClient) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
 	namespace := request.Namespace
 
-	rateLimiter := p.rateLimitersForList.getRateLimiter(namespace, numOfPriorityForList, p.config.VisibilityListMaxQPS(namespace))
-	if ok, _ := rateLimiter.GetToken(0, 1); !ok {
+	if ok := p.rateLimitersForList.Allow(namespace); !ok {
 		return nil, ErrPersistenceLimitExceededForList
 	}
 
@@ -236,8 +222,7 @@ func (p *visibilitySamplingClient) ListOpenWorkflowExecutions(request *ListWorkf
 func (p *visibilitySamplingClient) ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
 	namespace := request.Namespace
 
-	rateLimiter := p.rateLimitersForList.getRateLimiter(namespace, numOfPriorityForList, p.config.VisibilityListMaxQPS(namespace))
-	if ok, _ := rateLimiter.GetToken(0, 1); !ok {
+	if ok := p.rateLimitersForList.Allow(namespace); !ok {
 		return nil, ErrPersistenceLimitExceededForList
 	}
 
@@ -247,8 +232,7 @@ func (p *visibilitySamplingClient) ListClosedWorkflowExecutions(request *ListWor
 func (p *visibilitySamplingClient) ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error) {
 	namespace := request.Namespace
 
-	rateLimiter := p.rateLimitersForList.getRateLimiter(namespace, numOfPriorityForList, p.config.VisibilityListMaxQPS(namespace))
-	if ok, _ := rateLimiter.GetToken(0, 1); !ok {
+	if ok := p.rateLimitersForList.Allow(namespace); !ok {
 		return nil, ErrPersistenceLimitExceededForList
 	}
 
@@ -258,8 +242,7 @@ func (p *visibilitySamplingClient) ListOpenWorkflowExecutionsByType(request *Lis
 func (p *visibilitySamplingClient) ListClosedWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error) {
 	namespace := request.Namespace
 
-	rateLimiter := p.rateLimitersForList.getRateLimiter(namespace, numOfPriorityForList, p.config.VisibilityListMaxQPS(namespace))
-	if ok, _ := rateLimiter.GetToken(0, 1); !ok {
+	if ok := p.rateLimitersForList.Allow(namespace); !ok {
 		return nil, ErrPersistenceLimitExceededForList
 	}
 
@@ -269,8 +252,7 @@ func (p *visibilitySamplingClient) ListClosedWorkflowExecutionsByType(request *L
 func (p *visibilitySamplingClient) ListOpenWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error) {
 	namespace := request.Namespace
 
-	rateLimiter := p.rateLimitersForList.getRateLimiter(namespace, numOfPriorityForList, p.config.VisibilityListMaxQPS(namespace))
-	if ok, _ := rateLimiter.GetToken(0, 1); !ok {
+	if ok := p.rateLimitersForList.Allow(namespace); !ok {
 		return nil, ErrPersistenceLimitExceededForList
 	}
 
@@ -280,8 +262,7 @@ func (p *visibilitySamplingClient) ListOpenWorkflowExecutionsByWorkflowID(reques
 func (p *visibilitySamplingClient) ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error) {
 	namespace := request.Namespace
 
-	rateLimiter := p.rateLimitersForList.getRateLimiter(namespace, numOfPriorityForList, p.config.VisibilityListMaxQPS(namespace))
-	if ok, _ := rateLimiter.GetToken(0, 1); !ok {
+	if ok := p.rateLimitersForList.Allow(namespace); !ok {
 		return nil, ErrPersistenceLimitExceededForList
 	}
 
@@ -291,8 +272,7 @@ func (p *visibilitySamplingClient) ListClosedWorkflowExecutionsByWorkflowID(requ
 func (p *visibilitySamplingClient) ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error) {
 	namespace := request.Namespace
 
-	rateLimiter := p.rateLimitersForList.getRateLimiter(namespace, numOfPriorityForList, p.config.VisibilityListMaxQPS(namespace))
-	if ok, _ := rateLimiter.GetToken(0, 1); !ok {
+	if ok := p.rateLimitersForList.Allow(namespace); !ok {
 		return nil, ErrPersistenceLimitExceededForList
 	}
 
@@ -329,12 +309,4 @@ func (p *visibilitySamplingClient) Close() {
 
 func (p *visibilitySamplingClient) GetName() string {
 	return p.persistence.GetName()
-}
-
-func getRequestPriority(request *RecordWorkflowExecutionClosedRequest) int {
-	priority := 0
-	if request.Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
-		priority = 1 // low priority for completed workflows
-	}
-	return priority
 }

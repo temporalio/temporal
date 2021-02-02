@@ -123,15 +123,35 @@ func (s *multiStageRateLimiterSuite) TestAllowN_NonSuccess() {
 	s.False(result)
 }
 
-func (s *multiStageRateLimiterSuite) TestAllowN_SomeSuccess() {
+func (s *multiStageRateLimiterSuite) TestAllowN_SomeSuccess_Case1() {
 	now := time.Now()
 	numToken := 2
 
 	s.firstReservation.EXPECT().OK().Return(true).AnyTimes()
+	s.firstReservation.EXPECT().DelayFrom(now).Return(time.Duration(0)).AnyTimes()
 	s.firstReservation.EXPECT().CancelAt(now).Times(1)
 	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation).Times(1)
 
 	s.secondReservation.EXPECT().OK().Return(false).AnyTimes()
+	s.secondReservation.EXPECT().DelayFrom(now).Return(time.Duration(0)).AnyTimes()
+	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation).Times(1)
+
+	result := s.rateLimiter.AllowN(now, numToken)
+	s.False(result)
+}
+
+func (s *multiStageRateLimiterSuite) TestAllowN_SomeSuccess_Case2() {
+	now := time.Now()
+	numToken := 2
+
+	s.firstReservation.EXPECT().OK().Return(true).AnyTimes()
+	s.firstReservation.EXPECT().DelayFrom(now).Return(time.Duration(0)).AnyTimes()
+	s.firstReservation.EXPECT().CancelAt(now).Times(1)
+	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation).Times(1)
+
+	s.secondReservation.EXPECT().OK().Return(true).AnyTimes()
+	s.secondReservation.EXPECT().DelayFrom(now).Return(time.Duration(1)).AnyTimes()
+	s.secondReservation.EXPECT().CancelAt(now).Times(1)
 	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation).Times(1)
 
 	result := s.rateLimiter.AllowN(now, numToken)
@@ -143,9 +163,11 @@ func (s *multiStageRateLimiterSuite) TestAllowN_AllSuccess() {
 	numToken := 2
 
 	s.firstReservation.EXPECT().OK().Return(true).AnyTimes()
+	s.firstReservation.EXPECT().DelayFrom(now).Return(time.Duration(0)).AnyTimes()
 	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation).Times(1)
 
 	s.secondReservation.EXPECT().OK().Return(true).AnyTimes()
+	s.secondReservation.EXPECT().DelayFrom(now).Return(time.Duration(0)).AnyTimes()
 	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation).Times(1)
 
 	result := s.rateLimiter.AllowN(now, numToken)

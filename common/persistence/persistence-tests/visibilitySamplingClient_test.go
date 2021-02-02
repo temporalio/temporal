@@ -73,7 +73,7 @@ func (s *VisibilitySamplingSuite) SetupTest() {
 	s.persistence = &mocks.VisibilityManager{}
 	config := &c.VisibilityConfig{
 		VisibilityOpenMaxQPS:   dynamicconfig.GetIntPropertyFilteredByNamespace(1),
-		VisibilityClosedMaxQPS: dynamicconfig.GetIntPropertyFilteredByNamespace(10),
+		VisibilityClosedMaxQPS: dynamicconfig.GetIntPropertyFilteredByNamespace(2),
 		VisibilityListMaxQPS:   dynamicconfig.GetIntPropertyFilteredByNamespace(1),
 	}
 	s.metricClient = &mmocks.Client{}

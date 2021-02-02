@@ -84,7 +84,11 @@ func (rl *MultiStageRateLimiterImpl) AllowN(now time.Time, numToken int) bool {
 
 	for _, rateLimiter := range rl.rateLimiters {
 		reservation := rateLimiter.ReserveN(now, numToken)
-		if !reservation.OK() {
+		if !reservation.OK() || reservation.DelayFrom(now) > 0 {
+			if reservation.OK() {
+				reservation.CancelAt(now)
+			}
+
 			// cancel all existing reservation
 			for _, reservation := range reservations {
 				reservation.CancelAt(now)
