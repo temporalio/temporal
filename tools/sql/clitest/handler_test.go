@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tools/common/schema"
@@ -83,30 +82,6 @@ func (s *HandlerTestSuite) TestValidateConnectConfig() {
 	s.Equal(schema.DryrunDBName, cfg.DatabaseName)
 
 	cfg.DatabaseName = "foobar"
-	s.Nil(sql.ValidateConnectConfig(cfg, false))
-	s.Nil(sql.ValidateConnectConfig(cfg, true))
-
-	cfg.TLS = &auth.TLS{}
-	cfg.TLS.Enabled = true
-	s.NotNil(sql.ValidateConnectConfig(cfg, false))
-	s.NotNil(sql.ValidateConnectConfig(cfg, true))
-
-	cfg.TLS.CaFile = "ca.pem"
-	s.Nil(sql.ValidateConnectConfig(cfg, false))
-	s.Nil(sql.ValidateConnectConfig(cfg, true))
-
-	cfg.TLS.KeyFile = "key_file"
-	cfg.TLS.CertFile = ""
-	s.NotNil(sql.ValidateConnectConfig(cfg, false))
-	s.NotNil(sql.ValidateConnectConfig(cfg, true))
-
-	cfg.TLS.KeyFile = ""
-	cfg.TLS.CertFile = "cert_file"
-	s.NotNil(sql.ValidateConnectConfig(cfg, false))
-	s.NotNil(sql.ValidateConnectConfig(cfg, true))
-
-	cfg.TLS.KeyFile = "key_file"
-	cfg.TLS.CertFile = "cert_file"
 	s.Nil(sql.ValidateConnectConfig(cfg, false))
 	s.Nil(sql.ValidateConnectConfig(cfg, true))
 }
