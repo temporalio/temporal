@@ -103,9 +103,6 @@ var (
 // Current priority order is:
 // customReporter > m3 > statsd > prometheus
 func (c *Metrics) NewScope(logger log.Logger, customReporter tally.BaseStatsReporter) tally.Scope {
-	if c == nil {
-		c = &Metrics{}
-	}
 	if customReporter != nil {
 		return c.newCustomReporterScope(logger, customReporter)
 	}

@@ -150,7 +150,7 @@ func (s *Server) Start() error {
 	)
 
 	var globalMetricsScope tally.Scope
-	if s.so.config.Global.Metrics != nil || s.so.metricsReporter != nil {
+	if s.so.config.Global.Metrics != nil {
 		globalMetricsScope = s.so.config.Global.Metrics.NewScope(s.logger, s.so.metricsReporter)
 	}
 
