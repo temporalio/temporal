@@ -25,8 +25,6 @@
 package persistence
 
 import (
-	"fmt"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -100,8 +98,6 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionStarted(request *Recor
 	if ok := p.rateLimitersForOpen.Allow(namespace); ok {
 		return p.persistence.RecordWorkflowExecutionStarted(request)
 	}
-
-	fmt.Println("fail")
 
 	p.logger.Info("Request for open workflow is sampled",
 		tag.WorkflowNamespaceID(namespaceID),
