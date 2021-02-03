@@ -40,11 +40,10 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	indexerspb "go.temporal.io/server/api/indexer/v1"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/codec"
 	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/elasticsearch/esql"
-	"go.temporal.io/server/common/tokenbucket"
+	"go.temporal.io/server/common/quotas"
 )
 
 const (
@@ -186,7 +185,9 @@ func AdminDelete(c *cli.Context) {
 	inputFileName := getRequiredOption(c, FlagInputFile)
 	batchSize := c.Int(FlagBatchSize)
 	rps := c.Int(FlagRPS)
-	ratelimiter := tokenbucket.New(rps, clock.NewRealTimeSource())
+	ratelimiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
+		func() float64 { return float64(rps) },
+	)
 
 	// This is only executed from the CLI by an admin user
 	// #nosec
@@ -202,10 +203,7 @@ func AdminDelete(c *cli.Context) {
 
 	bulkRequest := esClient.Bulk()
 	bulkConductFn := func() {
-		ok, waitTime := ratelimiter.TryConsume(1)
-		if !ok {
-			time.Sleep(waitTime)
-		}
+		_ = ratelimiter.Wait(context.Background())
 		err := bulkRequest.Do(context.Background())
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("Bulk failed, current processed row %d", i), err)
