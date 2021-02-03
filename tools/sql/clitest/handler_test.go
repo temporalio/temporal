@@ -84,23 +84,4 @@ func (s *HandlerTestSuite) TestValidateConnectConfig() {
 	cfg.DatabaseName = "foobar"
 	s.Nil(sql.ValidateConnectConfig(cfg, false))
 	s.Nil(sql.ValidateConnectConfig(cfg, true))
-
-	cfg.TLS.CaFile = "ca.pem"
-	s.Nil(sql.ValidateConnectConfig(cfg, false))
-	s.Nil(sql.ValidateConnectConfig(cfg, true))
-
-	cfg.TLS.KeyFile = "key_file"
-	cfg.TLS.CertFile = ""
-	s.NotNil(sql.ValidateConnectConfig(cfg, false))
-	s.NotNil(sql.ValidateConnectConfig(cfg, true))
-
-	cfg.TLS.KeyFile = ""
-	cfg.TLS.CertFile = "cert_file"
-	s.NotNil(sql.ValidateConnectConfig(cfg, false))
-	s.NotNil(sql.ValidateConnectConfig(cfg, true))
-
-	cfg.TLS.KeyFile = "key_file"
-	cfg.TLS.CertFile = "cert_file"
-	s.Nil(sql.ValidateConnectConfig(cfg, false))
-	s.Nil(sql.ValidateConnectConfig(cfg, true))
 }
