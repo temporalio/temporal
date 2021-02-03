@@ -105,7 +105,7 @@ func buildCLI() *cli.App {
 			},
 			Before: func(c *cli.Context) error {
 				if c.Args().Len() > 0 {
-					return cli.NewExitError("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
+					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
 				}
 				return nil
 			},
@@ -123,7 +123,7 @@ func buildCLI() *cli.App {
 
 				cfg, err := config.LoadConfig(env, configDir, zone)
 				if err != nil {
-					return cli.NewExitError(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
+					return cli.Exit(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
 				}
 
 				s := temporal.NewServer(
@@ -140,7 +140,7 @@ func buildCLI() *cli.App {
 				if err != nil {
 					return cli.NewExitError(fmt.Sprintf("Unable to start server: %v.", err), 1)
 				}
-				return cli.NewExitError("All services are stopped.", 0)
+				return cli.Exit("All services are stopped.", 0)
 			},
 		},
 	}
