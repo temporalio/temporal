@@ -150,8 +150,10 @@ func (s *Server) Start() error {
 	)
 
 	var globalMetricsScope tally.Scope
-	if s.so.config.Global.Metrics != nil {
-		globalMetricsScope = s.so.config.Global.Metrics.NewScope(s.logger, s.so.metricsReporter)
+	if s.so.metricsReporter != nil {
+		globalMetricsScope = s.so.config.Global.Metrics.NewCustomReporterScope(s.logger, s.so.metricsReporter)
+	} else if s.so.config.Global.Metrics != nil {
+		globalMetricsScope = s.so.config.Global.Metrics.NewScope(s.logger)
 	}
 
 	for _, svcName := range s.so.serviceNames {
@@ -260,7 +262,7 @@ func (s *Server) getServiceParams(
 
 	params.DCRedirectionPolicy = s.so.config.DCRedirectionPolicy
 	if metricsScope == nil {
-		metricsScope = svcCfg.Metrics.NewScope(s.logger, s.so.metricsReporter)
+		metricsScope = svcCfg.Metrics.NewScope(s.logger)
 	}
 	params.MetricsScope = metricsScope
 	metricsClient := metrics.NewClient(metricsScope, metrics.GetMetricsServiceIdx(svcName, s.logger))
