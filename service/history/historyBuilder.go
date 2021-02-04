@@ -38,6 +38,8 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -88,8 +90,9 @@ func (b *historyBuilder) AddWorkflowExecutionStartedEvent(
 	previousExecutionState *persistencespb.WorkflowExecutionState,
 	firstRunID string,
 	originalRunID string,
+	validSearchAttributes dynamicconfig.MapPropertyFn,
 ) *historypb.HistoryEvent {
-	event := b.newWorkflowExecutionStartedEvent(startTime, request, previousExecution, previousExecutionState, firstRunID, originalRunID)
+	event := b.newWorkflowExecutionStartedEvent(startTime, request, previousExecution, previousExecutionState, firstRunID, originalRunID, validSearchAttributes)
 
 	return b.addEventToHistory(event)
 }
@@ -257,8 +260,9 @@ func (b *historyBuilder) AddContinuedAsNewEvent(
 	workflowTaskCompletedEventID int64,
 	newRunID string,
 	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
+	validSearchAttributes dynamicconfig.MapPropertyFn,
 ) *historypb.HistoryEvent {
-	event := b.newWorkflowExecutionContinuedAsNewEvent(workflowTaskCompletedEventID, newRunID, attributes)
+	event := b.newWorkflowExecutionContinuedAsNewEvent(workflowTaskCompletedEventID, newRunID, attributes, validSearchAttributes)
 
 	return b.addEventToHistory(event)
 }
@@ -419,8 +423,9 @@ func (b *historyBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(
 func (b *historyBuilder) AddUpsertWorkflowSearchAttributesEvent(
 	workflowTaskCompletedEventID int64,
 	attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
+	validSearchAttributes dynamicconfig.MapPropertyFn,
 ) *historypb.HistoryEvent {
-	event := b.newUpsertWorkflowSearchAttributesEvent(workflowTaskCompletedEventID, attributes)
+	event := b.newUpsertWorkflowSearchAttributesEvent(workflowTaskCompletedEventID, attributes, validSearchAttributes)
 
 	return b.addEventToHistory(event)
 }
@@ -475,8 +480,9 @@ func (b *historyBuilder) AddWorkflowExecutionSignaledEvent(
 func (b *historyBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
+	validSearchAttributes dynamicconfig.MapPropertyFn,
 ) *historypb.HistoryEvent {
-	event := b.newStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, attributes)
+	event := b.newStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, attributes, validSearchAttributes)
 
 	return b.addEventToHistory(event)
 }
@@ -594,6 +600,7 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	previousExecutionState *persistencespb.WorkflowExecutionState,
 	firstRunID string,
 	originalRunID string,
+	validSearchAttributes dynamicconfig.MapPropertyFn,
 ) *historypb.HistoryEvent {
 	prevRunID := previousExecutionState.GetRunId()
 	resetPoints := previousExecution.GetAutoResetPoints()
@@ -632,6 +639,11 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 		attributes.ParentWorkflowExecution = parentInfo.Execution
 		attributes.ParentInitiatedEventId = parentInfo.InitiatedId
 	}
+
+	searchattribute.SetType(
+		attributes.SearchAttributes,
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(validSearchAttributes()))
+
 	historyEvent.Attributes = &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
 		WorkflowExecutionStartedEventAttributes: attributes,
 	}
@@ -1068,12 +1080,18 @@ func (b *historyBuilder) newSignalExternalWorkflowExecutionInitiatedEvent(
 func (b *historyBuilder) newUpsertWorkflowSearchAttributesEvent(
 	workflowTaskCompletedEventID int64,
 	request *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
+	validSearchAttributes dynamicconfig.MapPropertyFn,
 ) *historypb.HistoryEvent {
 	event := b.msBuilder.CreateNewHistoryEvent(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES)
 	attributes := &historypb.UpsertWorkflowSearchAttributesEventAttributes{
 		WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
-		SearchAttributes:             request.GetSearchAttributes(),
+		SearchAttributes:             request.SearchAttributes,
 	}
+
+	searchattribute.SetType(
+		attributes.SearchAttributes,
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(validSearchAttributes()))
+
 	event.Attributes = &historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes{
 		UpsertWorkflowSearchAttributesEventAttributes: attributes,
 	}
@@ -1137,6 +1155,7 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(
 	workflowTaskCompletedEventID int64,
 	newRunID string,
 	request *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
+	validSearchAttributes dynamicconfig.MapPropertyFn,
 ) *historypb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW)
 	attributes := &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
@@ -1159,6 +1178,11 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(
 	if len(request.CronSchedule) != 0 {
 		attributes.Initiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
 	}
+
+	searchattribute.SetType(
+		attributes.SearchAttributes,
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(validSearchAttributes()))
+
 	historyEvent.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
 		WorkflowExecutionContinuedAsNewEventAttributes: attributes,
 	}
@@ -1168,6 +1192,7 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(
 func (b *historyBuilder) newStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	startAttributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
+	validSearchAttributes dynamicconfig.MapPropertyFn,
 ) *historypb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED)
 	attributes := &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
@@ -1189,6 +1214,11 @@ func (b *historyBuilder) newStartChildWorkflowExecutionInitiatedEvent(
 		SearchAttributes:             startAttributes.SearchAttributes,
 		ParentClosePolicy:            startAttributes.GetParentClosePolicy(),
 	}
+
+	searchattribute.SetType(
+		attributes.SearchAttributes,
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(validSearchAttributes()))
+
 	historyEvent.Attributes = &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{
 		StartChildWorkflowExecutionInitiatedEventAttributes: attributes,
 	}

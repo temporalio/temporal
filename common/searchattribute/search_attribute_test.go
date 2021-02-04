@@ -192,11 +192,17 @@ func Test_SetTypeSkip(t *testing.T) {
 		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
 		"key2": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		"key3": enumspb.INDEXED_VALUE_TYPE_INT,
-		"key4": enumspb.IndexedValueType(100),
 	}
 
 	SetType(sa, validSearchAttributes)
 	assert.Nil(sa.GetIndexedFields()["UnknownKey"].Metadata["type"])
-	assert.Nil(sa.GetIndexedFields()["key4"].Metadata["type"])
 	assert.Equal("String", string(sa.GetIndexedFields()["key3"].Metadata["type"]))
+
+	validSearchAttributes = map[string]enumspb.IndexedValueType{
+		"key4": enumspb.IndexedValueType(100),
+	}
+
+	assert.Panics(func() {
+		SetType(sa, validSearchAttributes)
+	})
 }

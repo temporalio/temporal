@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/service/history/configs"
 )
@@ -164,7 +165,9 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "IndexedFields is empty on command.")
 
-	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{"CustomKeywordField": payload.EncodeString("bytes")}
+	saPayload := payload.EncodeString("bytes")
+	searchattribute.SetMetdataType(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{"CustomKeywordField": saPayload}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.Nil(err)
 }

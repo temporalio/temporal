@@ -68,6 +68,10 @@ func ConvertDynamicConfigTypeToIndexedValueType(dynamicConfigType interface{}) e
 }
 
 func ConvertDynamicConfigToIndexedValueTypes(validSearchAttributes map[string]interface{}) map[string]enumspb.IndexedValueType {
+	if validSearchAttributes == nil {
+		return nil
+	}
+
 	result := make(map[string]enumspb.IndexedValueType, len(validSearchAttributes))
 	for searchAttributeName, searchAttributeType := range validSearchAttributes {
 		result[searchAttributeName] = ConvertDynamicConfigTypeToIndexedValueType(searchAttributeType)
@@ -150,10 +154,14 @@ func SetType(searchAttributes *commonpb.SearchAttributes, validSearchAttributes 
 		if !isValidSearchAttribute {
 			continue
 		}
-		valueTypeString, isValidValueType := enumspb.IndexedValueType_name[int32(valueType)]
-		if !isValidValueType {
-			continue
-		}
-		searchAttributePayload.Metadata[MetadataType] = []byte(valueTypeString)
+		SetMetdataType(searchAttributePayload, valueType)
 	}
+}
+
+func SetMetdataType(p *commonpb.Payload, t enumspb.IndexedValueType) {
+	tString, isValidT := enumspb.IndexedValueType_name[int32(t)]
+	if !isValidT {
+		panic(fmt.Sprintf("unknown index value type %v", t))
+	}
+	p.Metadata[MetadataType] = []byte(tString)
 }

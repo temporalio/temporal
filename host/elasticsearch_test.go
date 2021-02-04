@@ -1025,12 +1025,13 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 
 func getUpsertSearchAttributes() *commonpb.SearchAttributes {
 	stringAttrPayload, _ := payload.Encode("another string")
-	stringAttrPayload.Metadata[searchattribute.MetadataType] = []byte(enumspb.IndexedValueType_name[int32(enumspb.INDEXED_VALUE_TYPE_STRING)])
+	searchattribute.SetMetdataType(stringAttrPayload, enumspb.INDEXED_VALUE_TYPE_STRING)
 
 	intAttrPayload, _ := payload.Encode(123)
-	intAttrPayload.Metadata[searchattribute.MetadataType] = []byte(enumspb.IndexedValueType_name[int32(enumspb.INDEXED_VALUE_TYPE_INT)])
+	searchattribute.SetMetdataType(intAttrPayload, enumspb.INDEXED_VALUE_TYPE_INT)
+
 	binaryChecksumsPayload, _ := payload.Encode([]string{"binary-v1", "binary-v2"})
-	binaryChecksumsPayload.Metadata[searchattribute.MetadataType] = []byte(enumspb.IndexedValueType_name[int32(enumspb.INDEXED_VALUE_TYPE_KEYWORD)])
+	searchattribute.SetMetdataType(binaryChecksumsPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 
 	upsertSearchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{

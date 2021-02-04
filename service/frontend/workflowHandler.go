@@ -457,7 +457,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	}
 
 	searchattribute.SetType(
-		request.GetSearchAttributes(),
+		request.SearchAttributes,
 		searchattribute.ConvertDynamicConfigToIndexedValueTypes(wh.config.ValidSearchAttributes()))
 
 	if err := wh.searchAttributesValidator.ValidateSearchAttributes(request.SearchAttributes, namespace); err != nil {
@@ -2180,7 +2180,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	searchattribute.SetType(
-		request.GetSearchAttributes(),
+		request.SearchAttributes,
 		searchattribute.ConvertDynamicConfigToIndexedValueTypes(wh.config.ValidSearchAttributes()))
 
 	if err := wh.searchAttributesValidator.ValidateSearchAttributes(request.SearchAttributes, namespace); err != nil {

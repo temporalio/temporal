@@ -1666,6 +1666,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		previousExecutionState.GetExecutionState(),
 		firstRunID,
 		execution.GetRunId(),
+		e.config.ValidSearchAttributes,
 	)
 	if err := e.ReplicateWorkflowExecutionStartedEvent(
 		parentNamespaceID,
@@ -1729,6 +1730,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
 		nil,
 		execution.GetRunId(),
 		execution.GetRunId(),
+		e.config.ValidSearchAttributes,
 	)
 
 	var parentNamespaceID string
@@ -1986,15 +1988,15 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 	exeInfo.AutoResetPoints = &workflowpb.ResetPoints{
 		Points: currResetPoints,
 	}
-	payload, err := payload.Encode(recentBinaryChecksums)
+	checksumPayload, err := payload.Encode(recentBinaryChecksums)
 	if err != nil {
 		return err
 	}
-	payload.Metadata[searchattribute.MetadataType] = []byte(enumspb.IndexedValueType_name[int32(enumspb.INDEXED_VALUE_TYPE_KEYWORD)])
+	searchattribute.SetMetdataType(checksumPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	if exeInfo.SearchAttributes == nil {
-		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload)
+		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
-	exeInfo.SearchAttributes[definition.BinaryChecksums] = payload
+	exeInfo.SearchAttributes[definition.BinaryChecksums] = checksumPayload
 	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
 		return e.taskGenerator.generateWorkflowSearchAttrTasks(timestamp.TimeValue(event.GetEventTime()))
 	}
@@ -2918,7 +2920,7 @@ func (e *mutableStateBuilder) AddUpsertWorkflowSearchAttributesEvent(
 		return nil, err
 	}
 
-	event := e.hBuilder.AddUpsertWorkflowSearchAttributesEvent(workflowTaskCompletedEventID, request)
+	event := e.hBuilder.AddUpsertWorkflowSearchAttributesEvent(workflowTaskCompletedEventID, request, e.config.ValidSearchAttributes)
 	e.ReplicateUpsertWorkflowSearchAttributesEvent(event)
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateWorkflowSearchAttrTasks(
@@ -3288,7 +3290,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 		}
 	}
 
-	continueAsNewEvent := e.hBuilder.AddContinuedAsNewEvent(workflowTaskCompletedEventID, newRunID, attributes)
+	continueAsNewEvent := e.hBuilder.AddContinuedAsNewEvent(workflowTaskCompletedEventID, newRunID, attributes, e.config.ValidSearchAttributes)
 	firstRunID := e.executionInfo.FirstExecutionRunId
 	// This is needed for backwards compatibility.  Workflow execution create with Temporal release v0.28.0 or earlier
 	// does not have FirstExecutionRunID stored as part of mutable state.  If this is not set then load it from
@@ -3391,7 +3393,7 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 		return nil, nil, err
 	}
 
-	event := e.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, attributes)
+	event := e.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, attributes, e.config.ValidSearchAttributes)
 	// Write the event to cache only on active cluster
 	e.eventsCache.PutEvent(e.executionInfo.NamespaceId, e.executionInfo.WorkflowId, e.executionState.RunId,
 		event.GetEventId(), event)

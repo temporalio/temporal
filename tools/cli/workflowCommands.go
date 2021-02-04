@@ -980,8 +980,11 @@ func setSearchAttributesType(searchAttributes *commonpb.SearchAttributes, wfClie
 	defer cancel()
 	validSearchAttributes, err := wfClient.GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
 	if err != nil {
-		validSearchAttributes = nil
+		fmt.Println(colorMagenta("Warning:"), "search attribute types are not set and unable to get search attributes info because of error:")
+		fmt.Println(err)
+		return
 	}
+
 	searchattribute.SetType(searchAttributes, validSearchAttributes.GetKeys())
 }
 
