@@ -25,7 +25,6 @@
 package matching
 
 import (
-	"errors"
 	"sync/atomic"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -69,7 +68,7 @@ type (
 )
 
 // errShutdown indicates that the task queue is shutting down
-var errShutdown = errors.New("task queue shutting down")
+var errShutdown = &persistence.ConditionFailedError{Msg: "task queue shutting down"}
 
 func newTaskWriter(tlMgr *taskQueueManagerImpl) *taskWriter {
 	return &taskWriter{
