@@ -122,11 +122,8 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scopeFunc func() m
 //  - context deadline is exceeded
 //  - task is matched and consumer returns error in response channel
 func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, error) {
-	var err error
-	var rsv quotas.Reservation
 	if !task.isForwarded() {
-		rsv, err = tm.ratelimit(ctx)
-		if err != nil {
+		if err := tm.rateLimiter.Wait(ctx); err != nil {
 			tm.scope().IncCounter(metrics.SyncThrottlePerTaskQueueCounter)
 			return false, err
 		}
@@ -137,7 +134,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 		if task.responseC != nil {
 			// if there is a response channel, block until resp is received
 			// and return error if the response contains error
-			err = <-task.responseC
+			err := <-task.responseC
 			return true, err
 		}
 		return false, nil
@@ -162,11 +159,6 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			}
 		}
 
-		if rsv != nil {
-			// there was a ratelimit token we consumed
-			// return it since we did not really do any work
-			rsv.Cancel()
-		}
 		return false, nil
 	}
 }
@@ -229,7 +221,7 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 // Returns error only when context is canceled or the ratelimit is set to zero (allow nothing)
 // The passed in context MUST NOT have a deadline associated with it
 func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask) error {
-	if _, err := tm.ratelimit(ctx); err != nil {
+	if err := tm.rateLimiter.Wait(ctx); err != nil {
 		return err
 	}
 
@@ -419,34 +411,6 @@ func (tm *TaskMatcher) fwdrAddReqTokenC() <-chan *ForwarderReqToken {
 		return noopForwarderTokenC
 	}
 	return tm.fwdr.AddReqTokenC()
-}
-
-func (tm *TaskMatcher) ratelimit(ctx context.Context) (quotas.Reservation, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-	}
-
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		if err := tm.rateLimiter.Wait(ctx); err != nil {
-			return nil, err
-		}
-		return nil, nil
-	}
-
-	rsv := tm.rateLimiter.Reserve()
-	// If we have to wait too long for reservation, give up and return
-	if !rsv.OK() || rsv.Delay() > deadline.Sub(time.Now().UTC()) {
-		if rsv.OK() { // if we were indeed given a reservation, return it before we bail out
-			rsv.Cancel()
-		}
-		return nil, errTaskqueueThrottled
-	}
-
-	time.Sleep(rsv.Delay())
-	return rsv, nil
 }
 
 func (tm *TaskMatcher) isForwardingAllowed() bool {
