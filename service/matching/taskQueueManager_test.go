@@ -55,7 +55,7 @@ func TestDeliverBufferTasks(t *testing.T) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
 			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
-			_, err := tlm.matcher.ratelimit(context.Background()) // consume the token
+			err := tlm.matcher.rateLimiter.Wait(context.Background()) // consume the token
 			assert.NoError(t, err)
 			tlm.taskReader.cancelFunc()
 		},
