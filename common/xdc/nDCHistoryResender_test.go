@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -59,15 +58,14 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller         *gomock.Controller
-		mockNamespaceCache *cache.MockNamespaceCache
-		mockAdminClient    *adminservicemock.MockAdminServiceClient
-		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
+		controller          *gomock.Controller
+		mockClusterMetadata *cluster.MockMetadata
+		mockNamespaceCache  *cache.MockNamespaceCache
+		mockAdminClient     *adminservicemock.MockAdminServiceClient
+		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
 
 		namespaceID string
 		namespace   string
-
-		mockClusterMetadata *mocks.ClusterMetadata
 
 		serializer persistence.PayloadSerializer
 		logger     log.Logger
@@ -92,13 +90,13 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockClusterMetadata.On("IsGlobalNamespaceEnabled").Return(true)
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 
 	s.namespaceID = uuid.New()
 	s.namespace = "some random namespace name"
