@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/matching"
 )
 
@@ -2121,6 +2122,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		},
 	}
 	attrValPayload := payload.EncodeString("attrVal")
+	searchattribute.SetPayloadType(attrValPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
 			"CustomKeywordField": attrValPayload,

@@ -1992,7 +1992,7 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 	if err != nil {
 		return err
 	}
-	searchattribute.SetMetdataType(checksumPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	searchattribute.SetPayloadType(checksumPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	if exeInfo.SearchAttributes == nil {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}

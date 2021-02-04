@@ -154,11 +154,11 @@ func SetType(searchAttributes *commonpb.SearchAttributes, validSearchAttributes 
 		if !isValidSearchAttribute {
 			continue
 		}
-		SetMetdataType(searchAttributePayload, valueType)
+		SetPayloadType(searchAttributePayload, valueType)
 	}
 }
 
-func SetMetdataType(p *commonpb.Payload, t enumspb.IndexedValueType) {
+func SetPayloadType(p *commonpb.Payload, t enumspb.IndexedValueType) {
 	tString, isValidT := enumspb.IndexedValueType_name[int32(t)]
 	if !isValidT {
 		panic(fmt.Sprintf("unknown index value type %v", t))

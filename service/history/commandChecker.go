@@ -509,7 +509,6 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	if err != nil {
 		return err
 	}
-
 	return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), namespaceEntry.GetInfo().Name)
 }
 

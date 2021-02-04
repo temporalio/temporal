@@ -876,10 +876,11 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		if commandCount == 0 {
 			commandCount++
 
-			attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
+			attrValPayload, _ := payload.Encode(s.testSearchAttributeVal)
+			searchattribute.SetPayloadType(attrValPayload, enumspb.INDEXED_VALUE_TYPE_STRING)
 			upsertSearchAttr := &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
-					s.testSearchAttributeKey: attrValBytes,
+					s.testSearchAttributeKey: attrValPayload,
 				},
 			}
 			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = upsertSearchAttr
@@ -1025,13 +1026,13 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 
 func getUpsertSearchAttributes() *commonpb.SearchAttributes {
 	stringAttrPayload, _ := payload.Encode("another string")
-	searchattribute.SetMetdataType(stringAttrPayload, enumspb.INDEXED_VALUE_TYPE_STRING)
+	searchattribute.SetPayloadType(stringAttrPayload, enumspb.INDEXED_VALUE_TYPE_STRING)
 
 	intAttrPayload, _ := payload.Encode(123)
-	searchattribute.SetMetdataType(intAttrPayload, enumspb.INDEXED_VALUE_TYPE_INT)
+	searchattribute.SetPayloadType(intAttrPayload, enumspb.INDEXED_VALUE_TYPE_INT)
 
 	binaryChecksumsPayload, _ := payload.Encode([]string{"binary-v1", "binary-v2"})
-	searchattribute.SetMetdataType(binaryChecksumsPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	searchattribute.SetPayloadType(binaryChecksumsPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 
 	upsertSearchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{

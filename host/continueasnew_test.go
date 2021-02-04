@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
 )
@@ -64,8 +65,13 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
 	}
+
+	searchAttrPayload := payload.EncodeString("random keyword")
+	searchattribute.SetPayloadType(searchAttrPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{"CustomKeywordField": payload.EncodeString("random keyword")},
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": searchAttrPayload,
+		},
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{

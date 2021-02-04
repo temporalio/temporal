@@ -166,7 +166,7 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	s.EqualError(err, "IndexedFields is empty on command.")
 
 	saPayload := payload.EncodeString("bytes")
-	searchattribute.SetMetdataType(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	searchattribute.SetPayloadType(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{"CustomKeywordField": saPayload}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.Nil(err)
