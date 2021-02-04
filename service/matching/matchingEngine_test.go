@@ -489,12 +489,6 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	addRequest.ScheduleId = scheduleID
 	_, err = s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 	s.Error(err)
-
-	// test race
-	tlmImpl.taskWriter.stopped = 0
-	_, err = s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
-	s.Error(err)
-	tlmImpl.taskWriter.stopped = 1 // reset it back to old value
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
