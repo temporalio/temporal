@@ -25,7 +25,6 @@
 package config
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
@@ -92,23 +91,14 @@ var (
 	})
 )
 
-// NewScope builds a new tally scope
-// for this metrics configuration
+// NewScope builds a new tally scope for this metrics configuration
 //
-// If the underlying configuration is
-// valid for multiple reporter types,
-// only one of them will be used for
-// reporting.
+// If the underlying configuration is valid for multiple reporter types,
+// only one of them will be used for reporting.
 //
 // Current priority order is:
-// customReporter > m3 > statsd > prometheus
-func (c *Metrics) NewScope(logger log.Logger, customReporter tally.BaseStatsReporter) tally.Scope {
-	if c == nil {
-		c = &Metrics{}
-	}
-	if customReporter != nil {
-		return c.newCustomReporterScope(logger, customReporter)
-	}
+// m3 > statsd > prometheus
+func (c *Metrics) NewScope(logger log.Logger) tally.Scope {
 	if c.M3 != nil {
 		return c.newM3Scope(logger)
 	}
@@ -121,28 +111,23 @@ func (c *Metrics) NewScope(logger log.Logger, customReporter tally.BaseStatsRepo
 	return tally.NoopScope
 }
 
-func (c *Metrics) newCustomReporterScope(logger log.Logger, customReporter tally.BaseStatsReporter) tally.Scope {
+func (c *Metrics) NewCustomReporterScope(logger log.Logger, customReporter tally.BaseStatsReporter) tally.Scope {
 	options := tally.ScopeOptions{
-		Tags:           c.Tags,
-		Prefix:         c.Prefix,
 		DefaultBuckets: defaultHistogramBuckets,
 	}
+	if c != nil {
+		options.Tags = c.Tags
+		options.Prefix = c.Prefix
+	}
+
 	switch reporter := customReporter.(type) {
 	case tally.StatsReporter:
-		{
-			options.Reporter = reporter
-			fmt.Println("cached")
-		}
+		options.Reporter = reporter
 	case tally.CachedStatsReporter:
-		{
-			options.CachedReporter = reporter
-			fmt.Println("cached")
-		}
+		options.CachedReporter = reporter
 	default:
-		{
-			logger.Error("Unsupported metrics reporter type.", tag.ValueType(customReporter))
-			return nil
-		}
+		logger.Error("Unsupported metrics reporter type.", tag.ValueType(customReporter))
+		return tally.NoopScope
 	}
 	scope, _ := tally.NewRootScope(options, time.Second)
 	return scope
