@@ -31,6 +31,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 
 	"go.temporal.io/api/serviceerror"
@@ -39,7 +41,8 @@ import (
 
 type handlerContext struct {
 	context.Context
-	scope metrics.Scope
+	scope  metrics.Scope
+	logger log.Logger
 }
 
 var stickyTaskQueueMetricTag = metrics.TaskQueueTag("__sticky__")
@@ -50,10 +53,18 @@ func newHandlerContext(
 	taskQueue *taskqueuepb.TaskQueue,
 	metricsClient metrics.Client,
 	metricsScope int,
+	logger log.Logger,
 ) *handlerContext {
 	return &handlerContext{
 		Context: ctx,
-		scope:   newPerTaskQueueScope(namespace, taskQueue.GetName(), taskQueue.GetKind(), metricsClient, metricsScope),
+		scope: newPerTaskQueueScope(
+			namespace,
+			taskQueue.GetName(),
+			taskQueue.GetKind(),
+			metricsClient,
+			metricsScope,
+		),
+		logger: logger,
 	}
 }
 
@@ -100,6 +111,7 @@ func (reqCtx *handlerContext) handleErr(err error) error {
 
 	switch err.(type) {
 	case *serviceerror.Internal:
+		reqCtx.logger.Error("internal error", tag.Error(err))
 		scope.IncCounter(metrics.ServiceFailuresPerTaskQueue)
 		return err
 	case *serviceerror.InvalidArgument:
@@ -125,6 +137,7 @@ func (reqCtx *handlerContext) handleErr(err error) error {
 		return err
 	default:
 		scope.IncCounter(metrics.ServiceFailuresPerTaskQueue)
+		reqCtx.logger.Error("internal error", tag.Error(err))
 		return serviceerror.NewInternal(err.Error())
 	}
 }
