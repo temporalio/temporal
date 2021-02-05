@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -86,7 +85,6 @@ type (
 )
 
 const (
-	_minBurst             = 10000
 	matchingTestNamespace = "matching-test"
 	matchingTestTaskQueue = "matching-test-taskqueue"
 )
@@ -97,25 +95,13 @@ func TestMatchingEngineSuite(t *testing.T) {
 }
 
 func (s *matchingEngineSuite) SetupSuite() {
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	http.Handle("/test/tasks", http.HandlerFunc(s.TasksHandler))
-}
-
-// Renders content of taskManager and matchingEngine when called at http://localhost:6060/test/tasks
-// Uncomment HTTP server initialization in SetupSuite method to enable.
-
-func (s *matchingEngineSuite) TasksHandler(w http.ResponseWriter, r *http.Request) {
-	s.Lock()
-	defer s.Unlock()
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprint(w, fmt.Sprintf("%v\n", s.taskManager))
-	fmt.Fprint(w, fmt.Sprintf("%v\n", s.matchingEngine))
 }
 
 func (s *matchingEngineSuite) TearDownSuite() {
 }
 
 func (s *matchingEngineSuite) SetupTest() {
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.Lock()
 	defer s.Unlock()
 	s.controller = gomock.NewController(s.T())
@@ -126,9 +112,10 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.handlerContext = newHandlerContext(
 		context.Background(),
 		matchingTestNamespace,
-		&taskqueuepb.TaskQueue{matchingTestTaskQueue, enumspb.TASK_QUEUE_KIND_NORMAL},
+		&taskqueuepb.TaskQueue{Name: matchingTestTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		metrics.NewClient(tally.NoopScope, metrics.Matching),
 		metrics.MatchingTaskQueueMgrScope,
+		log.NewNoop(),
 	)
 
 	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
@@ -291,6 +278,7 @@ func (s *matchingEngineSuite) PollWorkflowTaskQueuesResultTest() {
 			TaskQueue: stickyTaskQueue,
 			Identity:  identity},
 	})
+	s.NoError(err)
 
 	expectedResp := &matchingservice.PollWorkflowTaskQueueResponse{
 		TaskToken:              resp.TaskToken,
@@ -1147,12 +1135,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
-	var engines []*matchingEngineImpl
-
+	engines := make([]*matchingEngineImpl, engineCount)
 	for p := 0; p < engineCount; p++ {
 		e := s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 		e.config.RangeSize = rangeSize
-		engines = append(engines, e)
+		engines[p] = e
 		e.Start()
 	}
 
@@ -1298,12 +1285,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
-	var engines []*matchingEngineImpl
-
+	engines := make([]*matchingEngineImpl, engineCount)
 	for p := 0; p < engineCount; p++ {
 		e := s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 		e.config.RangeSize = rangeSize
-		engines = append(engines, e)
+		engines[p] = e
 		e.Start()
 	}
 
@@ -1824,7 +1810,6 @@ func (m *testTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueRequ
 
 // UpdateTaskQueue provides a mock function with given fields: request
 func (m *testTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueRequest) (*persistence.UpdateTaskQueueResponse, error) {
-	m.logger.Debug("UpdateTaskQueue", tag.TaskQueueInfo(request.TaskQueueInfo), tag.AckLevel(request.TaskQueueInfo.AckLevel))
 
 	tli := request.TaskQueueInfo
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(tli.GetNamespaceId(), tli.Name, tli.TaskType))
@@ -1844,7 +1829,7 @@ func (m *testTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueRe
 func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest) error {
 	m.logger.Debug("CompleteTask", tag.TaskID(request.TaskID), tag.Name(request.TaskQueue.Name), tag.WorkflowTaskQueueType(request.TaskQueue.TaskType))
 	if request.TaskID <= 0 {
-		panic(fmt.Errorf("Invalid taskID=%v", request.TaskID))
+		panic(fmt.Errorf("invalid taskID=%v", request.TaskID))
 	}
 
 	tli := request.TaskQueue
@@ -1871,7 +1856,7 @@ func (m *testTaskManager) CompleteTasksLessThan(request *persistence.CompleteTas
 	return persistence.UnknownNumRowsAffected, nil
 }
 
-func (m *testTaskManager) ListTaskQueue(request *persistence.ListTaskQueueRequest) (*persistence.ListTaskQueueResponse, error) {
+func (m *testTaskManager) ListTaskQueue(_ *persistence.ListTaskQueueRequest) (*persistence.ListTaskQueueResponse, error) {
 	return nil, fmt.Errorf("unsupported operation")
 }
 
@@ -1898,7 +1883,7 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 	for _, task := range request.Tasks {
 		m.logger.Debug("testTaskManager.CreateTask", tag.TaskID(task.GetTaskId()), tag.ShardRangeID(rangeID))
 		if task.GetTaskId() <= 0 {
-			panic(fmt.Errorf("Invalid taskID=%v", task.GetTaskId()))
+			panic(fmt.Errorf("invalid taskID=%v", task.GetTaskId()))
 		}
 
 		if tlm.rangeID != rangeID {

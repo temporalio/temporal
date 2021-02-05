@@ -27,7 +27,6 @@ package matching
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -35,6 +34,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -131,7 +131,7 @@ const (
 
 var _ taskQueueManager = (*taskQueueManagerImpl)(nil)
 
-var errRemoteSyncMatchFailed = errors.New("remote sync match failed")
+var errRemoteSyncMatchFailed = serviceerror.NewCanceled("remote sync match failed")
 
 func newTaskQueueManager(
 	e *matchingEngineImpl,
