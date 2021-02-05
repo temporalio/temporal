@@ -304,19 +304,26 @@ func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBa
 		doc[definition.Encoding] = request.Memo.GetEncodingType().String()
 	}
 
-	attr := make(map[string]interface{})
+	attr := make(map[string]interface{}, len(request.SearchAttributes.GetIndexedFields()))
 	for searchAttributeName, searchAttributePayload := range request.SearchAttributes.GetIndexedFields() {
 		if !v.isValidSearchAttribute(searchAttributeName) {
 			v.logger.Error("Unregistered field.", tag.ESField(searchAttributeName))
 			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 			continue
 		}
-		var searchAttributeValue interface{}
-		// payload.Decode will set value and type to interface{} only if search attributes are serialized using JSON.
-		err := payload.Decode(searchAttributePayload, &searchAttributeValue)
+
+		searchAttributeValue, err := searchattribute.Decode(searchAttributePayload)
 		if err != nil {
-			v.logger.Error("Error when decode search attribute payload.", tag.Error(err), tag.ESField(searchAttributeName))
-			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+			if errors.Is(err, searchattribute.ErrMissingMetadataType) {
+				// Old workflows might not have metadata type field. In this case,
+				// fall back to old plain payload.Decode which will set value and type
+				// to interface{} only if search attribute is serialized using JSON.
+				err = payload.Decode(searchAttributePayload, &searchAttributeValue)
+			}
+			if err != nil {
+				v.logger.Error("Error when decode search attribute payload.", tag.Error(err), tag.ESField(searchAttributeName))
+				v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+			}
 		}
 		attr[searchAttributeName] = searchAttributeValue
 	}

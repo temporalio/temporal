@@ -948,13 +948,17 @@ func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes,
 
 	setSearchAttributesType(searchAttributes, wfClient, c)
 
-	for k, v := range searchAttributes.GetIndexedFields() {
-		deserializedValue, err := searchattribute.Decode(v)
+	for searchAttrName, searchAttrPayload := range searchAttributes.GetIndexedFields() {
+		searchAttrValue, err := searchattribute.Decode(searchAttrPayload)
 		if err != nil {
-			// In case of error just use raw data (which is JSON).
-			deserializedValue = string(v.GetData())
+			fmt.Printf("%s: unable to decode search attribute %s value: %v",
+				colorMagenta("Warning"),
+				searchAttrName,
+				err)
+			// In case of error just use raw data (which is JSON anyway).
+			searchAttrValue = string(searchAttrPayload.GetData())
 		}
-		result.IndexedFields[k] = fmt.Sprintf("%v", deserializedValue)
+		result.IndexedFields[searchAttrName] = fmt.Sprintf("%v", searchAttrValue)
 	}
 
 	return result
@@ -980,8 +984,9 @@ func setSearchAttributesType(searchAttributes *commonpb.SearchAttributes, wfClie
 	defer cancel()
 	validSearchAttributes, err := wfClient.GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
 	if err != nil {
-		fmt.Println(colorMagenta("Warning:"), "search attribute types are not set and unable to get search attributes info because of error:")
-		fmt.Println(err)
+		fmt.Printf("%s: search attribute types are not set and unable to get search attributes info: %v",
+			colorMagenta("Warning"),
+			err)
 		return
 	}
 
