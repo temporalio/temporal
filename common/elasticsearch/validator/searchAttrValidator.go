@@ -98,7 +98,7 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 
 			sv.logger.WithTags(tag.ESKey(key), tag.Value(invalidValue), tag.WorkflowNamespace(namespace)).
 				Error("invalid search attribute value")
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not a valid search attribute value for key %s", invalidValue, key))
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%q is not a valid search attribute value for key %s", invalidValue, key))
 		}
 		// verify: key is not system reserved
 		if definition.IsSystemIndexedKey(key) {

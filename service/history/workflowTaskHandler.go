@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 )
 
@@ -642,6 +643,10 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
+	searchattribute.SetType(
+		attr.SearchAttributes,
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(handler.config.ValidSearchAttributes()))
+
 	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateContinueAsNewWorkflowExecutionAttributes(
@@ -724,6 +729,10 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		targetNamespace = targetNamespaceEntry.GetInfo().Name
 		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
+
+	searchattribute.SetType(
+		attr.SearchAttributes,
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(handler.config.ValidSearchAttributes()))
 
 	if err := handler.validateCommandAttr(
 		func() error {
@@ -838,6 +847,10 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		return serviceerror.NewInternal(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))
 	}
 	namespace := namespaceEntry.GetInfo().Name
+
+	searchattribute.SetType(
+		attr.SearchAttributes,
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(handler.config.ValidSearchAttributes()))
 
 	// valid search attributes for upsert
 	if err := handler.validateCommandAttr(

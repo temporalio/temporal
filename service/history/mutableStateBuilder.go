@@ -1666,7 +1666,6 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		previousExecutionState.GetExecutionState(),
 		firstRunID,
 		execution.GetRunId(),
-		e.config.ValidSearchAttributes,
 	)
 	if err := e.ReplicateWorkflowExecutionStartedEvent(
 		parentNamespaceID,
@@ -1730,7 +1729,6 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
 		nil,
 		execution.GetRunId(),
 		execution.GetRunId(),
-		e.config.ValidSearchAttributes,
 	)
 
 	var parentNamespaceID string
@@ -2920,7 +2918,7 @@ func (e *mutableStateBuilder) AddUpsertWorkflowSearchAttributesEvent(
 		return nil, err
 	}
 
-	event := e.hBuilder.AddUpsertWorkflowSearchAttributesEvent(workflowTaskCompletedEventID, request, e.config.ValidSearchAttributes)
+	event := e.hBuilder.AddUpsertWorkflowSearchAttributesEvent(workflowTaskCompletedEventID, request)
 	e.ReplicateUpsertWorkflowSearchAttributesEvent(event)
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.generateWorkflowSearchAttrTasks(
@@ -3290,7 +3288,11 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 		}
 	}
 
-	continueAsNewEvent := e.hBuilder.AddContinuedAsNewEvent(workflowTaskCompletedEventID, newRunID, attributes, e.config.ValidSearchAttributes)
+	searchattribute.SetType(
+		attributes.SearchAttributes,
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(e.config.ValidSearchAttributes()))
+
+	continueAsNewEvent := e.hBuilder.AddContinuedAsNewEvent(workflowTaskCompletedEventID, newRunID, attributes)
 	firstRunID := e.executionInfo.FirstExecutionRunId
 	// This is needed for backwards compatibility.  Workflow execution create with Temporal release v0.28.0 or earlier
 	// does not have FirstExecutionRunID stored as part of mutable state.  If this is not set then load it from
@@ -3393,7 +3395,7 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 		return nil, nil, err
 	}
 
-	event := e.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, attributes, e.config.ValidSearchAttributes)
+	event := e.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, attributes)
 	// Write the event to cache only on active cluster
 	e.eventsCache.PutEvent(e.executionInfo.NamespaceId, e.executionInfo.WorkflowId, e.executionState.RunId,
 		event.GetEventId(), event)
