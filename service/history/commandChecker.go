@@ -566,6 +566,10 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return err
 	}
 
+	if err := v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), targetNamespace); err != nil {
+		return err
+	}
+
 	// Inherit taskqueue from parent workflow execution if not provided on command
 	taskQueue, err := v.validateTaskQueue(attributes.TaskQueue, parentInfo.TaskQueue)
 	if err != nil {
