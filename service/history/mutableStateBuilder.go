@@ -3288,10 +3288,6 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 		}
 	}
 
-	searchattribute.SetType(
-		attributes.SearchAttributes,
-		searchattribute.ConvertDynamicConfigToIndexedValueTypes(e.config.ValidSearchAttributes()))
-
 	continueAsNewEvent := e.hBuilder.AddContinuedAsNewEvent(workflowTaskCompletedEventID, newRunID, attributes)
 	firstRunID := e.executionInfo.FirstExecutionRunId
 	// This is needed for backwards compatibility.  Workflow execution create with Temporal release v0.28.0 or earlier

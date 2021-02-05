@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/elasticsearch/validator"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -97,8 +98,13 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 	s.validator = newCommandAttrValidator(
 		s.mockNamespaceCache,
 		config,
-		log.NewNoop(),
-	)
+		validator.NewSearchAttributesValidator(
+			log.NewNoop(),
+			config.ValidSearchAttributes,
+			config.SearchAttributesNumberOfKeysLimit,
+			config.SearchAttributesSizeOfValueLimit,
+			config.SearchAttributesTotalSizeLimit,
+		))
 }
 
 func (s *commandAttrValidatorSuite) TearDownTest() {
