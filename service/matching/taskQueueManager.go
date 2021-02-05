@@ -215,7 +215,6 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
 	c.engine.removeTaskQueueManager(c.taskQueueID)
-	c.engine.removeTaskQueueManager(c.taskQueueID)
 	c.logger.Info("", tag.LifeCycleStopped)
 }
 
@@ -478,9 +477,10 @@ func (c *taskQueueManagerImpl) executeWithRetry(
 		return err
 	}
 
-	var retryCount int64
 	err = backoff.Retry(op, persistenceOperationRetryPolicy, func(err error) bool {
-		c.logger.Debug("Retry executeWithRetry as task queue range has changed", tag.AttemptCount(retryCount), tag.Error(err))
+		if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
+			return false
+		}
 		if _, ok := err.(*persistence.ConditionFailedError); ok {
 			return false
 		}
