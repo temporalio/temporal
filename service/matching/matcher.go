@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -65,8 +64,6 @@ const (
 	defaultTaskDispatchRPS    = 100000.0
 	defaultTaskDispatchRPSTTL = time.Minute
 )
-
-var errTaskqueueThrottled = errors.New("cannot add to taskqueue, limit exceeded")
 
 // newTaskMatcher returns an task matcher instance. The returned instance can be
 // used by task producers and consumers to find a match. Both sync matches and non-sync

@@ -49,6 +49,7 @@ type (
 		engine        Engine
 		config        *Config
 		metricsClient metrics.Client
+		logger        log.Logger
 		startWG       sync.WaitGroup
 		rateLimiter   quotas.RateLimiter
 	}
@@ -73,6 +74,7 @@ func NewHandler(
 		Resource:      resource,
 		config:        config,
 		metricsClient: resource.GetMetricsClient(),
+		logger:        resource.GetLogger(),
 		rateLimiter: quotas.NewDefaultIncomingDynamicRateLimiter(
 			func() float64 { return float64(config.RPS()) },
 		),
@@ -137,6 +139,7 @@ func (h *Handler) newHandlerContext(
 		taskQueue,
 		h.metricsClient,
 		scope,
+		h.logger,
 	)
 }
 
@@ -387,6 +390,7 @@ func (h *Handler) ListTaskQueuePartitions(
 		request.GetTaskQueue(),
 		h.metricsClient,
 		metrics.MatchingListTaskQueuePartitionsScope,
+		h.logger,
 	)
 
 	sw := hCtx.startProfiling(&h.startWG)
