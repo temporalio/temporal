@@ -259,7 +259,15 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
 	expectedSearchAttributes := getUpsertSearchAttributes()
-	s.Equal(expectedSearchAttributes, descResp.WorkflowExecutionInfo.GetSearchAttributes())
+	s.Equal(len(expectedSearchAttributes.GetIndexedFields()), len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()))
+	for attrName, expectedPayload := range expectedSearchAttributes.GetIndexedFields() {
+		respAttr, ok := descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()[attrName]
+		s.True(ok)
+		s.Equal(expectedPayload.GetData(), respAttr.GetData())
+		attrType, typeSet := respAttr.GetMetadata()[searchattribute.MetadataType]
+		s.True(typeSet)
+		s.True(len(attrType) > 0)
+	}
 }
 
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_PageToken() {
@@ -877,7 +885,6 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 			commandCount++
 
 			attrValPayload, _ := payload.Encode(s.testSearchAttributeVal)
-			searchattribute.SetPayloadType(attrValPayload, enumspb.INDEXED_VALUE_TYPE_STRING)
 			upsertSearchAttr := &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
 					s.testSearchAttributeKey: attrValPayload,
@@ -1026,13 +1033,8 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 
 func getUpsertSearchAttributes() *commonpb.SearchAttributes {
 	stringAttrPayload, _ := payload.Encode("another string")
-	searchattribute.SetPayloadType(stringAttrPayload, enumspb.INDEXED_VALUE_TYPE_STRING)
-
 	intAttrPayload, _ := payload.Encode(123)
-	searchattribute.SetPayloadType(intAttrPayload, enumspb.INDEXED_VALUE_TYPE_INT)
-
 	binaryChecksumsPayload, _ := payload.Encode([]string{"binary-v1", "binary-v2"})
-	searchattribute.SetPayloadType(binaryChecksumsPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 
 	upsertSearchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{

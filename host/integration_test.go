@@ -2122,7 +2122,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		},
 	}
 	attrValPayload := payload.EncodeString("attrVal")
-	searchattribute.SetPayloadType(attrValPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
 			"CustomKeywordField": attrValPayload,
@@ -2241,7 +2240,17 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(header, startedEvent.GetChildWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(header, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(memo, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetMemo())
-	s.Equal(searchAttr, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes())
+
+	s.Equal(len(searchAttr.GetIndexedFields()), len(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()))
+	for attrName, expectedPayload := range searchAttr.GetIndexedFields() {
+		eventAttr, ok := childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[attrName]
+		s.True(ok)
+		s.Equal(expectedPayload.GetData(), eventAttr.GetData())
+		attrType, typeSet := eventAttr.GetMetadata()[searchattribute.MetadataType]
+		s.True(typeSet)
+		s.True(len(attrType) > 0)
+	}
+
 	s.Equal(time.Duration(0), timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionTimeout()))
 	s.Equal(200*time.Second, timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout()))
 

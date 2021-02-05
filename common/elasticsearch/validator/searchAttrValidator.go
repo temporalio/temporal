@@ -81,7 +81,6 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 
 	totalSize := 0
 	validAttr := sv.validSearchAttributes()
-
 	for key, val := range input.GetIndexedFields() {
 		// verify: key is whitelisted
 		if !sv.isValidSearchAttributeName(key, validAttr) {

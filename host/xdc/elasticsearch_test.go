@@ -391,9 +391,7 @@ GetHistoryLoop2:
 
 func getUpsertSearchAttributes() *commonpb.SearchAttributes {
 	attrValPayload1, _ := payload.Encode("another string")
-	// searchattribute.SetPayloadType(attrValPayload1, enumspb.INDEXED_VALUE_TYPE_STRING)
 	attrValPayload2, _ := payload.Encode(123)
-	// searchattribute.SetPayloadType(attrValPayload2, enumspb.INDEXED_VALUE_TYPE_INT)
 	upsertSearchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
 			definition.CustomStringField: attrValPayload1,

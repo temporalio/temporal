@@ -65,9 +65,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
 	}
-
 	searchAttrPayload := payload.EncodeString("random keyword")
-	searchattribute.SetPayloadType(searchAttrPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
 			"CustomKeywordField": searchAttrPayload,
@@ -155,7 +153,15 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
 	s.Equal(header, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(memo, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Memo)
-	s.Equal(searchAttr.GetIndexedFields()["CustomKeywordField"].GetData(), lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["CustomKeywordField"].GetData())
+	s.Equal(len(searchAttr.GetIndexedFields()), len(lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()))
+	for attrName, expectedPayload := range searchAttr.GetIndexedFields() {
+		eventAttr, ok := lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[attrName]
+		s.True(ok)
+		s.Equal(expectedPayload.GetData(), eventAttr.GetData())
+		attrType, typeSet := eventAttr.GetMetadata()[searchattribute.MetadataType]
+		s.True(typeSet)
+		s.True(len(attrType) > 0)
+	}
 }
 
 func (s *integrationSuite) TestContinueAsNewRun_Timeout() {

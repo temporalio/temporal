@@ -632,7 +632,6 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 		attributes.ParentWorkflowExecution = parentInfo.Execution
 		attributes.ParentInitiatedEventId = parentInfo.InitiatedId
 	}
-
 	historyEvent.Attributes = &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
 		WorkflowExecutionStartedEventAttributes: attributes,
 	}
@@ -1075,7 +1074,6 @@ func (b *historyBuilder) newUpsertWorkflowSearchAttributesEvent(
 		WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 		SearchAttributes:             request.SearchAttributes,
 	}
-
 	event.Attributes = &historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes{
 		UpsertWorkflowSearchAttributesEventAttributes: attributes,
 	}
@@ -1161,7 +1159,6 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(
 	if len(request.CronSchedule) != 0 {
 		attributes.Initiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
 	}
-
 	historyEvent.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
 		WorkflowExecutionContinuedAsNewEventAttributes: attributes,
 	}
@@ -1192,7 +1189,6 @@ func (b *historyBuilder) newStartChildWorkflowExecutionInitiatedEvent(
 		SearchAttributes:             startAttributes.SearchAttributes,
 		ParentClosePolicy:            startAttributes.GetParentClosePolicy(),
 	}
-
 	historyEvent.Attributes = &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{
 		StartChildWorkflowExecutionInitiatedEventAttributes: attributes,
 	}
