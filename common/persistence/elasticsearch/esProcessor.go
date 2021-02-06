@@ -211,6 +211,15 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 		if visibilityTaskKey == "" {
 			continue
 		}
+		if i >= len(response.Items) {
+			p.logger.Error("ES request failed. Request item doesn't have corresponding response item.",
+				tag.Value(i),
+				tag.Key(visibilityTaskKey),
+				tag.ESRequest(request.String()))
+			p.sendToAckChan(visibilityTaskKey, false)
+			continue
+		}
+
 		responseItem := response.Items[i]
 		for _, resp := range responseItem {
 			switch {
