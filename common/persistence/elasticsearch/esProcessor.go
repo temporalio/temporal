@@ -197,11 +197,20 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 	if err != nil {
 		// This happens after configured retry, which means something bad happens on cluster or index
 		// When cluster back to live, processor will re-commit those failure requests
-		p.logger.Error("Error commit bulk request.", tag.Error(err))
 
+		isRetryable := isRetryableError(err)
+		p.logger.Error("Error commit bulk ES request.", tag.Error(err), tag.Bool(isRetryable))
 		for _, request := range requests {
 			p.logger.Error("ES request failed.", tag.ESRequest(request.String()))
 			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures)
+
+			if !isRetryable {
+				visibilityTaskKey := p.getVisibilityTaskKey(request)
+				if visibilityTaskKey == "" {
+					continue
+				}
+				p.sendToAckChan(visibilityTaskKey, false)
+			}
 		}
 		return
 	}
@@ -223,9 +232,9 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 		responseItem := response.Items[i]
 		for _, resp := range responseItem {
 			switch {
-			case isResponseSuccess(resp.Status):
+			case isSuccessStatus(resp.Status):
 				p.sendToAckChan(visibilityTaskKey, true)
-			case !isResponseRetryable(resp.Status):
+			case !isRetryableStatus(resp.Status):
 				p.logger.Error("ES request failed.",
 					tag.ESResponseStatus(resp.Status),
 					tag.ESResponseError(getErrorMsgFromESResp(resp)),
@@ -308,26 +317,35 @@ func (p *esProcessorImpl) getVisibilityTaskKey(request elastic.BulkableRequest) 
 
 // 409 - Version Conflict
 // 404 - Not Found
-func isResponseSuccess(status int) bool {
+func isSuccessStatus(status int) bool {
 	if status >= 200 && status < 300 || status == 409 || status == 404 {
 		return true
 	}
 	return false
 }
 
-// isResponseRetryable is complaint with elastic.BulkProcessorService.RetryItemStatusCodes
+// isRetryableStatus is complaint with elastic.BulkProcessorService.RetryItemStatusCodes
 // responses with these status will be kept in queue and retried until success
 // 408 - Request Timeout
 // 429 - Too Many Requests
 // 500 - Node not connected
 // 503 - Service Unavailable
 // 507 - Insufficient Storage
-func isResponseRetryable(status int) bool {
+func isRetryableStatus(status int) bool {
 	switch status {
 	case 408, 429, 500, 503, 507:
 		return true
 	}
 	return false
+}
+
+func isRetryableError(err error) bool {
+	switch e := err.(type) {
+	case *elastic.Error:
+		return isRetryableStatus(e.Status)
+	default:
+		return false
+	}
 }
 
 func getErrorMsgFromESResp(resp *elastic.BulkResponseItem) string {
