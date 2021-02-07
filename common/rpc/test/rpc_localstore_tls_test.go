@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/service/config"
 )
@@ -88,7 +89,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 
 	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS)
 	s.NoError(err)
-	insecureFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	insecureFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(insecureFactory)
 	s.insecureRPCFactory = i(insecureFactory)
 
@@ -197,17 +198,17 @@ func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendCha
 
 	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS)
 	s.NoError(err)
-	frontendMutualTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	frontendMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendMutualTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS)
 	s.NoError(err)
-	frontendServerTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	frontendServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendServerTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSSystemWorker.TLS)
 	s.NoError(err)
-	frontendSystemWorkerMutualTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	frontendSystemWorkerMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendSystemWorkerMutualTLSFactory)
 
 	s.frontendMutualTLSRPCFactory = f(frontendMutualTLSFactory)
@@ -297,17 +298,17 @@ func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendCh
 
 	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS)
 	s.NoError(err)
-	internodeMutualTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	internodeMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeMutualTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS)
 	s.NoError(err)
-	internodeServerTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	internodeServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeServerTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreAltMutualTLS.TLS)
 	s.NoError(err)
-	internodeMutualAltTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	internodeMutualAltTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeMutualAltTLSFactory)
 
 	s.internodeMutualTLSRPCFactory = i(internodeMutualTLSFactory)
@@ -352,11 +353,11 @@ func (s *localStoreRPCSuite) pemEncodeToFile(file string, block *pem.Block) {
 	s.NoError(err)
 }
 
-func f(r *RPCFactory) *TestFactory {
+func f(r *rpc.RPCFactory) *TestFactory {
 	return &TestFactory{serverUsage: Frontend, RPCFactory: r}
 }
 
-func i(r *RPCFactory) *TestFactory {
+func i(r *rpc.RPCFactory) *TestFactory {
 	return &TestFactory{serverUsage: Internode, RPCFactory: r}
 }
 
