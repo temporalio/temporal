@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/service/config"
 )
@@ -66,6 +67,18 @@ type localStoreRPCSuite struct {
 
 	frontendClientCertDir string
 	frontendClientChain   CertChain
+
+	membershipConfig               config.Membership
+	frontendConfigServerTLS        config.GroupTLS
+	frontendConfigMutualTLS        config.GroupTLS
+	frontendConfigPerHostOverrides config.GroupTLS
+	frontendConfigRootCAOnly       config.GroupTLS
+	frontendConfigAltRootCAOnly    config.GroupTLS
+	frontendConfigSystemWorker     config.WorkerTLS
+
+	internodeConfigMutualTLS    config.GroupTLS
+	internodeConfigServerTLS    config.GroupTLS
+	internodeConfigAltMutualTLS config.GroupTLS
 }
 
 type CertChain struct {
@@ -88,7 +101,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 
 	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS)
 	s.NoError(err)
-	insecureFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	insecureFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(insecureFactory)
 	s.insecureRPCFactory = i(insecureFactory)
 
@@ -107,107 +120,132 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	s.frontendClientCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontendClient")
 	s.NoError(err)
 	s.frontendClientChain = s.GenerateTestChain(s.frontendClientCertDir, "127.0.0.1")
+
+	s.membershipConfig = config.Membership{
+		MaxJoinDuration:  5,
+		BroadcastAddress: "127.0.0.1",
+	}
+
+	frontendConfigBase := config.GroupTLS{
+		Server: config.ServerTLS{
+			CertFile: s.frontendChain.CertPubFile,
+			KeyFile:  s.frontendChain.CertKeyFile,
+		},
+	}
+
+	s.frontendConfigServerTLS = frontendConfigBase
+	s.frontendConfigServerTLS.Client = config.ClientTLS{RootCAFiles: []string{s.frontendChain.CaPubFile}}
+
+	s.frontendConfigMutualTLS = frontendConfigBase
+	s.frontendConfigMutualTLS.Server.ClientCAFiles = []string{s.frontendClientChain.CaPubFile}
+	s.frontendConfigMutualTLS.Server.RequireClientAuth = true
+
+	s.frontendConfigPerHostOverrides = s.frontendConfigServerTLS
+	s.frontendConfigPerHostOverrides.PerHostOverrides = map[string]config.ServerTLS{
+		"localhost": {
+			CertFile:          s.frontendAltChain.CertPubFile,
+			KeyFile:           s.frontendAltChain.CertKeyFile,
+			ClientCAFiles:     []string{s.frontendAltChain.CaPubFile},
+			RequireClientAuth: true,
+		},
+	}
+	s.frontendConfigRootCAOnly = config.GroupTLS{
+		Client: config.ClientTLS{
+			RootCAData: []string{convertFileToBase64(s.frontendChain.CaPubFile)},
+		},
+	}
+	s.frontendConfigAltRootCAOnly = config.GroupTLS{
+		Server: config.ServerTLS{
+			RequireClientAuth: true,
+		},
+		Client: config.ClientTLS{
+			RootCAData: []string{convertFileToBase64(s.frontendAltChain.CaPubFile)},
+		},
+	}
+	s.frontendConfigSystemWorker = config.WorkerTLS{
+		CertFile: s.frontendClientChain.CertPubFile,
+		KeyFile:  s.frontendClientChain.CertKeyFile,
+		Client: config.ClientTLS{
+			RootCAFiles: []string{s.frontendChain.CaPubFile},
+		},
+	}
+
+	s.internodeConfigMutualTLS = config.GroupTLS{
+		Server: config.ServerTLS{
+			CertFile:          s.internodeChain.CertPubFile,
+			KeyFile:           s.internodeChain.CertKeyFile,
+			ClientCAFiles:     []string{s.internodeChain.CaPubFile},
+			RequireClientAuth: true,
+		},
+		Client: config.ClientTLS{
+			RootCAFiles: []string{s.internodeChain.CaPubFile},
+		},
+	}
+	s.internodeConfigServerTLS = config.GroupTLS{
+		Server: config.ServerTLS{
+			CertData: convertFileToBase64(s.internodeChain.CertPubFile),
+			KeyData:  convertFileToBase64(s.internodeChain.CertKeyFile),
+		},
+		Client: config.ClientTLS{
+			RootCAData: []string{convertFileToBase64(s.internodeChain.CaPubFile)},
+		},
+	}
+	s.internodeConfigAltMutualTLS = config.GroupTLS{
+		Server: config.ServerTLS{
+			CertFile:          s.frontendAltChain.CertPubFile,
+			KeyFile:           s.frontendAltChain.CertKeyFile,
+			ClientCAFiles:     []string{s.frontendAltChain.CaPubFile},
+			RequireClientAuth: true,
+		},
+		Client: config.ClientTLS{
+			RootCAFiles: []string{s.frontendAltChain.CaPubFile},
+		},
+	}
 }
 
 func (s *localStoreRPCSuite) SetupTest() {
-	s.setupInternode(s.internodeChain, s.frontendChain, s.frontendAltChain)
-	s.setupFrontend(s.internodeChain, s.frontendChain, s.frontendAltChain, s.frontendClientChain)
+	s.setupInternode()
+	s.setupFrontend()
 }
 
-func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendChain CertChain,
-	frontendAltChain CertChain, frontendClientChain CertChain) {
+func (s *localStoreRPCSuite) setupFrontend() {
+
 	localStoreServerTLS := &config.Global{
-		Membership: config.Membership{
-			MaxJoinDuration:  5,
-			BroadcastAddress: "127.0.0.1",
-		},
+		Membership: s.membershipConfig,
 		TLS: config.RootTLS{
-			Frontend: config.GroupTLS{
-				Server: config.ServerTLS{
-					CertFile: frontendChain.CertPubFile,
-					KeyFile:  frontendChain.CertKeyFile,
-				},
-				Client: config.ClientTLS{RootCAFiles: []string{frontendChain.CaPubFile}},
-			},
+			Frontend: s.frontendConfigServerTLS,
 		},
 	}
 
 	localStoreMutualTLS := &config.Global{
-		Membership: config.Membership{
-			MaxJoinDuration:  5,
-			BroadcastAddress: "127.0.0.1",
-		},
+		Membership: s.membershipConfig,
 		TLS: config.RootTLS{
-			Frontend: config.GroupTLS{
-				Server: config.ServerTLS{
-					CertFile:          frontendChain.CertPubFile,
-					KeyFile:           frontendChain.CertKeyFile,
-					ClientCAFiles:     []string{internodeChain.CaPubFile},
-					RequireClientAuth: true,
-				},
-				Client: config.ClientTLS{
-					RootCAFiles: []string{frontendChain.CaPubFile},
-				},
-				PerHostOverrides: map[string]config.ServerTLS{
-					"localhost": {
-						CertFile:          frontendAltChain.CertPubFile,
-						KeyFile:           frontendAltChain.CertKeyFile,
-						ClientCAFiles:     []string{frontendAltChain.CaPubFile},
-						RequireClientAuth: true,
-					},
-				},
-			},
+			Frontend: s.frontendConfigPerHostOverrides,
 		},
 	}
 
 	localStoreMutualTLSSystemWorker := &config.Global{
-		Membership: config.Membership{
-			MaxJoinDuration:  5,
-			BroadcastAddress: "127.0.0.1",
-		},
+		Membership: s.membershipConfig,
 		TLS: config.RootTLS{
-			Internode: config.GroupTLS{
-				Server: config.ServerTLS{
-					CertFile:          internodeChain.CertPubFile,
-					KeyFile:           internodeChain.CertKeyFile,
-					ClientCAFiles:     []string{internodeChain.CaPubFile},
-					RequireClientAuth: true,
-				},
-				Client: config.ClientTLS{
-					RootCAFiles: []string{internodeChain.CaPubFile},
-				},
-			},
-			Frontend: config.GroupTLS{
-				Server: config.ServerTLS{
-					CertFile:          frontendChain.CertPubFile,
-					KeyFile:           frontendChain.CertKeyFile,
-					RequireClientAuth: true,
-					ClientCAFiles:     []string{frontendClientChain.CaPubFile},
-				},
-			},
-			SystemWorker: config.WorkerTLS{
-				CertFile: frontendClientChain.CertPubFile,
-				KeyFile:  frontendClientChain.CertKeyFile,
-				Client: config.ClientTLS{
-					RootCAFiles: []string{frontendChain.CaPubFile},
-				},
-			},
+			Internode:    s.internodeConfigMutualTLS,
+			Frontend:     s.frontendConfigMutualTLS,
+			SystemWorker: s.frontendConfigSystemWorker,
 		},
 	}
 
 	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS)
 	s.NoError(err)
-	frontendMutualTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	frontendMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendMutualTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS)
 	s.NoError(err)
-	frontendServerTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	frontendServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendServerTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSSystemWorker.TLS)
 	s.NoError(err)
-	frontendSystemWorkerMutualTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	frontendSystemWorkerMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendSystemWorkerMutualTLSFactory)
 
 	s.frontendMutualTLSRPCFactory = f(frontendMutualTLSFactory)
@@ -215,99 +253,44 @@ func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendCha
 	s.frontendSystemWorkerMutualTLSRPCFactory = f(frontendSystemWorkerMutualTLSFactory)
 }
 
-func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendChain CertChain, frontendAltChain CertChain) {
+func (s *localStoreRPCSuite) setupInternode() {
 	localStoreServerTLS := &config.Global{
-		Membership: config.Membership{
-			MaxJoinDuration:  5,
-			BroadcastAddress: "127.0.0.1",
-		},
+		Membership: s.membershipConfig,
 		TLS: config.RootTLS{
-			Internode: config.GroupTLS{
-				Server: config.ServerTLS{
-					CertData: convertFileToBase64(internodeChain.CertPubFile),
-					KeyData:  convertFileToBase64(internodeChain.CertKeyFile),
-				},
-				Client: config.ClientTLS{
-					RootCAData: []string{convertFileToBase64(internodeChain.CaPubFile)},
-				},
-			},
-			Frontend: config.GroupTLS{
-				Client: config.ClientTLS{
-					RootCAData: []string{convertFileToBase64(frontendChain.CaPubFile)},
-				},
-			},
+			Internode: s.internodeConfigServerTLS,
+			Frontend:  s.frontendConfigRootCAOnly,
 		},
 	}
 
 	localStoreMutualTLS := &config.Global{
-		Membership: config.Membership{
-			MaxJoinDuration:  5,
-			BroadcastAddress: "127.0.0.1",
-		},
+		Membership: s.membershipConfig,
 		TLS: config.RootTLS{
-			Internode: config.GroupTLS{
-				Server: config.ServerTLS{
-					CertFile:          internodeChain.CertPubFile,
-					KeyFile:           internodeChain.CertKeyFile,
-					ClientCAFiles:     []string{internodeChain.CaPubFile},
-					RequireClientAuth: true,
-				},
-				Client: config.ClientTLS{
-					RootCAFiles: []string{internodeChain.CaPubFile},
-				},
-			},
-			Frontend: config.GroupTLS{
-				Server: config.ServerTLS{
-					RequireClientAuth: true,
-				},
-				Client: config.ClientTLS{
-					RootCAFiles: []string{frontendChain.CaPubFile},
-				},
-			},
+			Internode: s.internodeConfigMutualTLS,
+			Frontend:  s.frontendConfigRootCAOnly,
 		},
 	}
 
 	localStoreAltMutualTLS := &config.Global{
-		Membership: config.Membership{
-			MaxJoinDuration:  5,
-			BroadcastAddress: "127.0.0.1",
-		},
+		Membership: s.membershipConfig,
 		TLS: config.RootTLS{
-			Internode: config.GroupTLS{
-				Server: config.ServerTLS{
-					CertFile:          frontendAltChain.CertPubFile,
-					KeyFile:           frontendAltChain.CertKeyFile,
-					ClientCAFiles:     []string{frontendAltChain.CaPubFile},
-					RequireClientAuth: true,
-				},
-				Client: config.ClientTLS{
-					RootCAFiles: []string{frontendAltChain.CaPubFile},
-				},
-			},
-			Frontend: config.GroupTLS{
-				Server: config.ServerTLS{
-					RequireClientAuth: true,
-				},
-				Client: config.ClientTLS{
-					RootCAFiles: []string{frontendAltChain.CaPubFile},
-				},
-			},
+			Internode: s.internodeConfigAltMutualTLS,
+			Frontend:  s.frontendConfigAltRootCAOnly,
 		},
 	}
 
 	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS)
 	s.NoError(err)
-	internodeMutualTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	internodeMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeMutualTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS)
 	s.NoError(err)
-	internodeServerTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	internodeServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeServerTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreAltMutualTLS.TLS)
 	s.NoError(err)
-	internodeMutualAltTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	internodeMutualAltTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeMutualAltTLSFactory)
 
 	s.internodeMutualTLSRPCFactory = i(internodeMutualTLSFactory)
@@ -352,11 +335,11 @@ func (s *localStoreRPCSuite) pemEncodeToFile(file string, block *pem.Block) {
 	s.NoError(err)
 }
 
-func f(r *RPCFactory) *TestFactory {
+func f(r *rpc.RPCFactory) *TestFactory {
 	return &TestFactory{serverUsage: Frontend, RPCFactory: r}
 }
 
-func i(r *RPCFactory) *TestFactory {
+func i(r *rpc.RPCFactory) *TestFactory {
 	return &TestFactory{serverUsage: Internode, RPCFactory: r}
 }
 

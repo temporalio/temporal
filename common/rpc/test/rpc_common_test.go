@@ -31,6 +31,7 @@ import (
 	"strings"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/rpc"
 
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
@@ -50,7 +51,7 @@ const (
 )
 
 type TestFactory struct {
-	*RPCFactory
+	*rpc.RPCFactory
 	serverUsage ServerUsageType
 }
 
@@ -120,7 +121,7 @@ func dialHello(s suite.Suite, hostport string, clientFactory *TestFactory, serve
 	}
 
 	s.NoError(err)
-	clientConn, err := Dial(hostport, cfg)
+	clientConn, err := rpc.Dial(hostport, cfg)
 	s.NoError(err)
 	client := helloworld.NewGreeterClient(clientConn)
 
