@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 const (
@@ -161,7 +162,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		Status:             request.Status,
 		HistoryLength:      request.HistoryLength,
 		Memo:               request.Memo,
-		SearchAttributes:   convertSearchAttributesToString(request.SearchAttributes),
+		SearchAttributes:   searchattribute.Stringify(request.SearchAttributes),
 		HistoryArchivalUri: request.HistoryURI,
 	}, carchiver.GetNonRetryableErrorOption(errArchiveVisibilityNonRetryable))
 	if err == nil {

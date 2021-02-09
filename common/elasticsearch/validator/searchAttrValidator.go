@@ -133,6 +133,6 @@ func (sv *SearchAttributesValidator) isValidSearchAttributeName(searchAttributeN
 
 // isValidSearchAttributeValue return true if value has the correct representation for the attribute key
 func (sv *SearchAttributesValidator) isValidSearchAttributeValue(value *commonpb.Payload) bool {
-	_, err := searchattribute.Decode(value)
+	_, err := searchattribute.DecodeValue(value)
 	return err == nil
 }

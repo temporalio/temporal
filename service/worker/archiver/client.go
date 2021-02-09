@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -259,7 +260,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		Status:             request.ArchiveRequest.Status,
 		HistoryLength:      request.ArchiveRequest.HistoryLength,
 		Memo:               request.ArchiveRequest.Memo,
-		SearchAttributes:   convertSearchAttributesToString(request.ArchiveRequest.SearchAttributes),
+		SearchAttributes:   searchattribute.Stringify(request.ArchiveRequest.SearchAttributes),
 		HistoryArchivalUri: request.ArchiveRequest.HistoryURI,
 	})
 }

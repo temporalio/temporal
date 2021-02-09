@@ -2663,7 +2663,11 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		Query:         request.GetQuery(),
 	}
 
-	archiverResponse, err := visibilityArchiver.Query(ctx, URI, archiverRequest)
+	archiverResponse, err := visibilityArchiver.Query(
+		ctx,
+		URI,
+		archiverRequest,
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(wh.config.ValidSearchAttributes()))
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}

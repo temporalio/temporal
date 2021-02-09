@@ -29,6 +29,7 @@ package archiver
 import (
 	"context"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
@@ -133,8 +134,8 @@ type (
 		// The request includes a string field called query, which describes what kind of visibility records should be returned.
 		// For example, it can be  some SQL-like syntax query string.
 		// Your implementation is responsible for parsing and validating the query, and also returning all visibility records that match the query.
-		// Currently the maximum context timeout passed into the method is 3 minutes, so it's accetable if this method takes some time to run.
-		Query(context.Context, URI, *QueryVisibilityRequest) (*QueryVisibilityResponse, error)
+		// Currently the maximum context timeout passed into the method is 3 minutes, so it's acceptable if this method takes some time to run.
+		Query(context.Context, URI, *QueryVisibilityRequest, map[string]enumspb.IndexedValueType) (*QueryVisibilityResponse, error)
 		// ValidateURI is used to define what a valid URI for an implementation is.
 		ValidateURI(URI) error
 	}

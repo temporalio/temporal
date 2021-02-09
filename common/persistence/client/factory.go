@@ -277,7 +277,7 @@ func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
 		return nil, err
 	}
 
-	result := p.NewVisibilityManagerImpl(store, f.logger)
+	result := p.NewVisibilityManagerImpl(store, f.config.VisibilityConfig.ValidSearchAttributes, f.logger)
 	if ds.ratelimit != nil {
 		result = p.NewVisibilityPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}

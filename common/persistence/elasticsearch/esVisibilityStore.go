@@ -312,7 +312,7 @@ func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBa
 			continue
 		}
 
-		searchAttributeValue, err := searchattribute.Decode(searchAttributePayload)
+		searchAttributeValue, err := searchattribute.DecodeValue(searchAttributePayload)
 		if err != nil {
 			if errors.Is(err, searchattribute.ErrMissingMetadataType) {
 				// Old workflows might not have metadata type field. In this case,
@@ -1036,6 +1036,7 @@ func (v *esVisibilityStore) serializePageToken(token *esVisibilityPageToken) ([]
 
 func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.SearchHit) *p.VisibilityWorkflowExecutionInfo {
 	var source *visibilityRecord
+	// TODO (alex): use hit.Fields instead
 	err := json.Unmarshal(hit.Source, &source)
 	if err != nil { // log and skip error
 		v.logger.Error("unable to unmarshal search hit source",

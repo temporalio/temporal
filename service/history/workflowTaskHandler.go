@@ -643,7 +643,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	searchattribute.SetType(
+	searchattribute.SetTypes(
 		attr.SearchAttributes,
 		searchattribute.ConvertDynamicConfigToIndexedValueTypes(handler.config.ValidSearchAttributes()))
 
@@ -730,7 +730,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
 
-	searchattribute.SetType(
+	searchattribute.SetTypes(
 		attr.SearchAttributes,
 		searchattribute.ConvertDynamicConfigToIndexedValueTypes(handler.config.ValidSearchAttributes()))
 
@@ -848,7 +848,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	}
 	namespace := namespaceEntry.GetInfo().Name
 
-	searchattribute.SetType(
+	searchattribute.SetTypes(
 		attr.SearchAttributes,
 		searchattribute.ConvertDynamicConfigToIndexedValueTypes(handler.config.ValidSearchAttributes()))
 

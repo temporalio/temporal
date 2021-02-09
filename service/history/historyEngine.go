@@ -2623,7 +2623,7 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 		).IncCounter(metrics.WorkflowTaskTimeoutOverrideCount)
 	}
 
-	searchattribute.SetType(
+	searchattribute.SetTypes(
 		request.SearchAttributes,
 		searchattribute.ConvertDynamicConfigToIndexedValueTypes(e.config.ValidSearchAttributes()))
 }

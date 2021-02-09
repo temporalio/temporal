@@ -232,10 +232,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		startRequest.Memo = &commonpb.Memo{Fields: memoFields}
 	}
 
-	searchAttrFields := processSearchAttr(c)
-	if len(searchAttrFields) != 0 {
-		startRequest.SearchAttributes = &commonpb.SearchAttributes{IndexedFields: searchAttrFields}
-	}
+	startRequest.SearchAttributes = processSearchAttr(c)
 
 	startFn := func() {
 		tcCtx, cancel := newContext(c)
@@ -284,37 +281,35 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	}
 }
 
-func processSearchAttr(c *cli.Context) map[string]*commonpb.Payload {
+func processSearchAttr(c *cli.Context) *commonpb.SearchAttributes {
 	rawSearchAttrKey := c.String(FlagSearchAttributesKey)
-	var searchAttrKeys []string
-	if strings.TrimSpace(rawSearchAttrKey) != "" {
-		searchAttrKeys = trimSpace(strings.Split(rawSearchAttrKey, searchAttrInputSeparator))
+	searchAttrKeys := trimSpace(strings.Split(rawSearchAttrKey, searchAttrInputSeparator))
+	if len(searchAttrKeys) == 0 {
+		return nil
 	}
 
 	rawSearchAttrVal := c.String(FlagSearchAttributesVal)
-	var searchAttrVals []interface{}
-	if strings.TrimSpace(rawSearchAttrVal) != "" {
-		searchAttrValsStr := trimSpace(strings.Split(rawSearchAttrVal, searchAttrInputSeparator))
-
-		for _, v := range searchAttrValsStr {
-			searchAttrVals = append(searchAttrVals, convertStringToRealType(v))
-		}
+	searchAttrStrVals := trimSpace(strings.Split(rawSearchAttrVal, searchAttrInputSeparator))
+	if len(searchAttrStrVals) == 0 {
+		return nil
 	}
 
-	if len(searchAttrKeys) != len(searchAttrVals) {
+	if len(searchAttrKeys) != len(searchAttrStrVals) {
 		ErrorAndExit("Number of search attributes keys and values are not equal.", nil)
 	}
 
-	fields := map[string]*commonpb.Payload{}
-	for i, key := range searchAttrKeys {
-		val, err := payload.Encode(searchAttrVals[i])
-		if err != nil {
-			ErrorAndExit(fmt.Sprintf("Encode value %v error", val), err)
-		}
-		fields[key] = val
+	searchAttributes := make(map[string]interface{}, len(searchAttrKeys))
+	for i, searchAttrVal := range searchAttrStrVals {
+		searchAttributes[searchAttrKeys[i]] = convertStringToRealType(searchAttrVal)
 	}
 
-	return fields
+	fields, err := searchattribute.Encode(searchAttributes, nil)
+	// ErrUnableToSetMetadataType is valid error here because validSearchAttributes were not passed.
+	if !errors.Is(err, searchattribute.ErrUnableToSetMetadataType) {
+		ErrorAndExit("Encode error", err)
+	}
+
+	return &commonpb.SearchAttributes{IndexedFields: fields}
 }
 
 func processMemo(c *cli.Context) map[string]*commonpb.Payload {
@@ -370,11 +365,9 @@ func getPrintableMemo(memo *commonpb.Memo) string {
 }
 
 func getPrintableSearchAttr(searchAttr *commonpb.SearchAttributes) string {
-	buf := new(bytes.Buffer)
-	for k, v := range searchAttr.IndexedFields {
-		var decodedVal interface{}
-		_ = payload.Decode(v, &decodedVal)
-		_, _ = fmt.Fprintf(buf, "%s=%v\n", k, decodedVal)
+	var buf bytes.Buffer
+	for attrName, attrValueString := range searchattribute.Stringify(searchAttr.GetIndexedFields()) {
+		_, _ = fmt.Fprintf(&buf, "%s=%v\n", attrName, attrValueString)
 	}
 	return buf.String()
 }
@@ -942,32 +935,19 @@ func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes,
 		return nil
 	}
 
-	result := &clispb.SearchAttributes{
-		IndexedFields: map[string]string{},
-	}
-
 	setSearchAttributesType(searchAttributes, wfClient, c)
-
-	for searchAttrName, searchAttrPayload := range searchAttributes.GetIndexedFields() {
-		searchAttrValue, err := searchattribute.Decode(searchAttrPayload)
-		if err != nil {
-			fmt.Printf("%s: unable to decode search attribute %s value: %v",
-				colorMagenta("Warning"),
-				searchAttrName,
-				err)
-			// In case of error just use raw data (which is JSON anyway).
-			searchAttrValue = string(searchAttrPayload.GetData())
-		}
-		result.IndexedFields[searchAttrName] = fmt.Sprintf("%v", searchAttrValue)
+	fields := searchattribute.Stringify(searchAttributes.GetIndexedFields())
+	if fields == nil {
+		return nil
 	}
 
-	return result
+	return &clispb.SearchAttributes{IndexedFields: fields}
 }
 
 func setSearchAttributesType(searchAttributes *commonpb.SearchAttributes, wfClient workflowservice.WorkflowServiceClient, c *cli.Context) {
 	allTypesAreSet := true
 	for _, p := range searchAttributes.GetIndexedFields() {
-		if _, isTypeSet := p.Metadata[searchattribute.MetadataType]; !isTypeSet {
+		if _, typeIsSet := p.Metadata[searchattribute.MetadataType]; !typeIsSet {
 			allTypesAreSet = false
 			break
 		}
@@ -990,7 +970,7 @@ func setSearchAttributesType(searchAttributes *commonpb.SearchAttributes, wfClie
 		return
 	}
 
-	searchattribute.SetType(searchAttributes, validSearchAttributes.GetKeys())
+	searchattribute.SetTypes(searchAttributes, validSearchAttributes.GetKeys())
 }
 
 func convertFailure(failure *failurepb.Failure) *clispb.Failure {
