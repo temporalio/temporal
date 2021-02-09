@@ -311,6 +311,17 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHea
 		if err := m.msb.FlushBufferedEvents(); err != nil {
 			return nil, err
 		}
+	} else if m.msb.executionInfo.WorkflowTaskAttempt > 1 {
+		lastWriteVersion, err := m.msb.GetLastWriteVersion()
+		if err != nil {
+			return nil, err
+		}
+
+		if m.msb.GetCurrentVersion() != lastWriteVersion {
+			// during transient workflow task cannot allow version changes
+			// mark the attempt to be 1 to NOT use transient workflow task
+			m.msb.executionInfo.WorkflowTaskAttempt = 1
+		}
 	}
 
 	var newWorkflowTaskEvent *historypb.HistoryEvent
@@ -414,9 +425,9 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskStartedEvent(
 	startedID := scheduleID + 1
 	startTime := m.msb.timeSource.Now()
 	// First check to see if new events came since transient workflowTask was scheduled
-	if workflowTask.Attempt > 1 && workflowTask.ScheduleID != m.msb.GetNextEventID() {
+	if workflowTask.Attempt > 1 && (workflowTask.ScheduleID != m.msb.GetNextEventID() || workflowTask.Version != m.msb.GetCurrentVersion()) {
 		// Also create a new WorkflowTaskScheduledEvent since new events came in when it was scheduled
-		scheduleEvent := m.msb.hBuilder.AddWorkflowTaskScheduledEvent(request.GetTaskQueue(), int32(workflowTask.WorkflowTaskTimeout.Seconds()), 0)
+		scheduleEvent := m.msb.hBuilder.AddWorkflowTaskScheduledEvent(request.GetTaskQueue(), int32(workflowTask.WorkflowTaskTimeout.Seconds()), 1)
 		scheduleID = scheduleEvent.GetEventId()
 		workflowTask.Attempt = 1
 	}
