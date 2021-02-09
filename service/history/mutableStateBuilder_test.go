@@ -37,6 +37,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -49,6 +50,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/service/history/configs"
@@ -552,6 +554,81 @@ func (s *mutableStateSuite) TestEventReapplied() {
 	s.True(isReapplied)
 }
 
+func (s *mutableStateSuite) TestTransientWorkflowTaskSchedule_CurrentVersionChanged() {
+	version := int64(2000)
+	runID := uuid.New()
+	s.msBuilder = newMutableStateBuilderWithVersionHistoriesForTest(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		runID,
+	)
+	_, _ = s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
+	err := s.msBuilder.ReplicateWorkflowTaskFailedEvent()
+	s.NoError(err)
+
+	err = s.msBuilder.UpdateCurrentVersion(version+1, true)
+	s.NoError(err)
+	versionHistories := s.msBuilder.GetExecutionInfo().GetVersionHistories()
+	versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+	s.NoError(err)
+	err = versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, &historyspb.VersionHistoryItem{
+		EventId: s.msBuilder.GetNextEventID() - 1,
+		Version: version,
+	})
+	s.NoError(err)
+
+	di, err := s.msBuilder.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc())
+	s.NoError(err)
+	s.NotNil(di)
+
+	s.Equal(int32(1), s.msBuilder.GetExecutionInfo().WorkflowTaskAttempt)
+	s.Equal(0, len(s.msBuilder.GetHistoryBuilder().transientHistory))
+	s.Equal(1, len(s.msBuilder.GetHistoryBuilder().history))
+}
+
+func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged() {
+	version := int64(2000)
+	runID := uuid.New()
+	s.msBuilder = newMutableStateBuilderWithVersionHistoriesForTest(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		runID,
+	)
+	_, _ = s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
+	err := s.msBuilder.ReplicateWorkflowTaskFailedEvent()
+	s.NoError(err)
+
+	versionHistories := s.msBuilder.GetExecutionInfo().GetVersionHistories()
+	versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+	s.NoError(err)
+	err = versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, &historyspb.VersionHistoryItem{
+		EventId: s.msBuilder.GetNextEventID() - 1,
+		Version: version,
+	})
+	s.NoError(err)
+
+	di, err := s.msBuilder.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc())
+	s.NoError(err)
+	s.NotNil(di)
+
+	err = s.msBuilder.UpdateCurrentVersion(version+1, true)
+	s.NoError(err)
+
+	_, _, err = s.msBuilder.AddWorkflowTaskStartedEvent(
+		s.msBuilder.GetNextEventID(),
+		uuid.New(),
+		&workflowservice.PollWorkflowTaskQueueRequest{},
+	)
+	s.NoError(err)
+
+	s.Equal(0, len(s.msBuilder.GetHistoryBuilder().transientHistory))
+	s.Equal(2, len(s.msBuilder.GetHistoryBuilder().history))
+}
+
 func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version int64, runID string) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
 	namespaceID := testNamespaceID
 	execution := commonpb.WorkflowExecution{
@@ -706,6 +783,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	)
 	s.Nil(err)
 	s.NotNil(di)
+
+	s.msBuilder.nextEventID = eventID
 
 	return newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent
 }
