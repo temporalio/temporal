@@ -432,22 +432,22 @@ func (s *esProcessorSuite) TestGetKeyForKafkaMsg_Delete() {
 
 func (s *esProcessorSuite) TestIsResponseSuccess() {
 	for i := 200; i < 300; i++ {
-		s.True(isResponseSuccess(i))
+		s.True(isSuccessStatus(i))
 	}
 	status := []int{409, 404}
 	for _, code := range status {
-		s.True(isResponseSuccess(code))
+		s.True(isSuccessStatus(code))
 	}
 	status = []int{100, 199, 300, 400, 500, 408, 429, 503, 507}
 	for _, code := range status {
-		s.False(isResponseSuccess(code))
+		s.False(isSuccessStatus(code))
 	}
 }
 
 func (s *esProcessorSuite) TestIsResponseRetryable() {
 	status := []int{408, 429, 500, 503, 507}
 	for _, code := range status {
-		s.True(isResponseRetryable(code))
+		s.True(isRetryableStatus(code))
 	}
 }
 
