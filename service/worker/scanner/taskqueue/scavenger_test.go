@@ -30,23 +30,25 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/mock"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/mocks"
 	p "go.temporal.io/server/common/persistence"
 )
 
 type (
 	ScavengerTestSuite struct {
 		suite.Suite
+
+		controller *gomock.Controller
+		taskMgr    *p.MockTaskManager
+
 		taskQueueTable *mockTaskQueueTable
 		taskTables     map[string]*mockTaskTable
-		taskMgr        *mocks.TaskManager
 		scvgr          *Scavenger
 	}
 )
@@ -58,7 +60,8 @@ func TestScavengerTestSuite(t *testing.T) {
 }
 
 func (s *ScavengerTestSuite) SetupTest() {
-	s.taskMgr = &mocks.TaskManager{}
+	s.controller = gomock.NewController(s.T())
+	s.taskMgr = p.NewMockTaskManager(s.controller)
 	s.taskQueueTable = &mockTaskQueueTable{}
 	s.taskTables = make(map[string]*mockTaskTable)
 	zapLogger, err := zap.NewDevelopment()
@@ -69,6 +72,10 @@ func (s *ScavengerTestSuite) SetupTest() {
 	s.scvgr = NewScavenger(s.taskMgr, metrics.NewClient(tally.NoopScope, metrics.Worker), logger)
 	maxTasksPerJob = 4
 	executorPollInterval = time.Millisecond * 50
+}
+
+func (s *ScavengerTestSuite) TeardownTest() {
+	s.controller.Finish()
 }
 
 func (s *ScavengerTestSuite) TestAllExpiredTasks() {
@@ -183,31 +190,31 @@ func (s *ScavengerTestSuite) runScavenger() {
 }
 
 func (s *ScavengerTestSuite) setupTaskMgrMocks() {
-	s.taskMgr.On("ListTaskQueue", mock.Anything).Return(
-		func(req *p.ListTaskQueueRequest) *p.ListTaskQueueResponse {
+	s.taskMgr.EXPECT().ListTaskQueue(gomock.Any()).DoAndReturn(
+		func(req *p.ListTaskQueueRequest) (*p.ListTaskQueueResponse, error) {
 			items, next := s.taskQueueTable.list(req.PageToken, req.PageSize)
-			return &p.ListTaskQueueResponse{Items: items, NextPageToken: next}
-		}, nil)
-	s.taskMgr.On("DeleteTaskQueue", mock.Anything).Return(
+			return &p.ListTaskQueueResponse{Items: items, NextPageToken: next}, nil
+		}).AnyTimes()
+	s.taskMgr.EXPECT().DeleteTaskQueue(gomock.Any()).DoAndReturn(
 		func(req *p.DeleteTaskQueueRequest) error {
 			s.taskQueueTable.delete(req.TaskQueue.Name)
 			return nil
-		})
-	s.taskMgr.On("GetTasks", mock.Anything).Return(
-		func(req *p.GetTasksRequest) *p.GetTasksResponse {
+		}).AnyTimes()
+	s.taskMgr.EXPECT().GetTasks(gomock.Any()).DoAndReturn(
+		func(req *p.GetTasksRequest) (*p.GetTasksResponse, error) {
 			result := s.taskTables[req.TaskQueue].get(req.BatchSize)
-			return &p.GetTasksResponse{Tasks: result}
-		}, nil)
-	s.taskMgr.On("CompleteTasksLessThan", mock.Anything).Return(
-		func(req *p.CompleteTasksLessThanRequest) int {
-			return s.taskTables[req.TaskQueueName].deleteLessThan(req.TaskID, req.Limit)
-		}, nil)
+			return &p.GetTasksResponse{Tasks: result}, nil
+		}).AnyTimes()
+	s.taskMgr.EXPECT().CompleteTasksLessThan(gomock.Any()).DoAndReturn(
+		func(req *p.CompleteTasksLessThanRequest) (int, error) {
+			return s.taskTables[req.TaskQueueName].deleteLessThan(req.TaskID, req.Limit), nil
+		}).AnyTimes()
 }
 
 func (s *ScavengerTestSuite) setupTaskMgrMocksWithErrors() {
-	s.taskMgr.On("ListTaskQueue", mock.Anything).Return(nil, errTest).Once()
-	s.taskMgr.On("GetTasks", mock.Anything).Return(nil, errTest).Once()
-	s.taskMgr.On("CompleteTasksLessThan", mock.Anything).Return(0, errTest).Once()
-	s.taskMgr.On("DeleteTaskQueue", mock.Anything).Return(errTest).Once()
+	s.taskMgr.EXPECT().ListTaskQueue(gomock.Any()).Return(nil, errTest).Times(1)
+	s.taskMgr.EXPECT().GetTasks(gomock.Any()).Return(nil, errTest).Times(1)
+	s.taskMgr.EXPECT().CompleteTasksLessThan(gomock.Any()).Return(0, errTest).Times(1)
+	s.taskMgr.EXPECT().DeleteTaskQueue(gomock.Any()).Return(errTest).Times(1)
 	s.setupTaskMgrMocks()
 }

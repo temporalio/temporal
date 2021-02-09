@@ -80,7 +80,7 @@ func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
 	mockResource := resource.NewTest(controller, metrics.Worker)
 	defer mockResource.Finish(s.T())
 
-	mockResource.TaskMgr.On("ListTaskQueue", mock.Anything).Return(&p.ListTaskQueueResponse{}, nil)
+	mockResource.TaskMgr.EXPECT().ListTaskQueue(gomock.Any()).Return(&p.ListTaskQueueResponse{}, nil)
 	ctx := scannerContext{
 		Resource: mockResource,
 	}
