@@ -96,7 +96,7 @@ type (
 
 		MetadataMgr               *persistence.MockMetadataManager
 		ClusterMetadataMgr        *mocks.MockClusterMetadataManager
-		TaskMgr                   *mocks.TaskManager
+		TaskMgr                   *persistence.MockTaskManager
 		VisibilityMgr             *mocks.VisibilityManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		ShardMgr                  *persistence.MockShardManager
@@ -144,7 +144,7 @@ func NewTest(
 	clientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(remoteFrontendClient).AnyTimes()
 
 	metadataMgr := persistence.NewMockMetadataManager(controller)
-	taskMgr := &mocks.TaskManager{}
+	taskMgr := persistence.NewMockTaskManager(controller)
 	visibilityMgr := &mocks.VisibilityManager{}
 	shardMgr := persistence.NewMockShardManager(controller)
 	historyMgr := persistence.NewMockHistoryManager(controller)
@@ -452,6 +452,5 @@ func (s *Test) Finish(
 	s.ArchivalMetadata.AssertExpectations(t)
 	s.ArchiverProvider.AssertExpectations(t)
 
-	s.TaskMgr.AssertExpectations(t)
 	s.VisibilityMgr.AssertExpectations(t)
 }
