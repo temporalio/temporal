@@ -29,39 +29,37 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/client/frontend"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/quotas"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 type (
-	ScavengerTestSuite struct {
+	activityIDValidatorTestSuite struct {
 		suite.Suite
 	}
 )
 
-func TestScavengerTestSuite(t *testing.T) {
-	suite.Run(t, new(ScavengerTestSuite))
+func TestActivityIdValidatorTestSuite(t *testing.T) {
+	suite.Run(t, new(activityIDValidatorTestSuite))
 }
 
-func (s *ScavengerTestSuite) TestShardValidatorInitializedWithProperValues() {
-	var frontendClient frontend.Client
-	var historyDB persistence.HistoryManager
-	var metricsClient metrics.Client
-	var logger log.Logger
-	var execMgrProvider persistence.ExecutionManagerFactory
-	var numHistoryShards int32
-	scavenger := NewScavenger(
-		frontendClient,
-		historyDB,
-		metricsClient,
-		logger,
-		execMgrProvider,
-		numHistoryShards,
-	)
-	var rateLimiter quotas.RateLimiter
-	result := scavenger.shardValidatorFactory(rateLimiter).(*shardValidatorImpl)
-	s.IsType(result.validators[0], newActivityIDValidator())
+func (s *activityIDValidatorTestSuite) TestAIVTReturnsNoCorruptionWhenNoActivitiesPresent() {
+	testData := executionData{mutableState: &persistencespb.WorkflowMutableState{}}
+	result := newActivityIDValidator().validate(&testData)
+	s.True(result.isValid)
+}
+
+func (s *activityIDValidatorTestSuite) TestAIVTReturnsNoCorruptionWhenActivityIdsAreValid() {
+	testData := executionData{}
+	testData.mutableState = &persistencespb.WorkflowMutableState{
+		NextEventId: 5, ActivityInfos: map[int64]*persistencespb.ActivityInfo{1: {}, 2: {}}}
+	result := newActivityIDValidator().validate(&testData)
+	s.True(result.isValid)
+}
+
+func (s *activityIDValidatorTestSuite) TestAIVTReturnsFailureInfoOnCorruptActivityId() {
+	testData := executionData{}
+	testData.mutableState = &persistencespb.WorkflowMutableState{
+		NextEventId: 5, ActivityInfos: map[int64]*persistencespb.ActivityInfo{1: {}, 6: {}, 2: {}}}
+	result := newActivityIDValidator().validate(&testData)
+	s.False(result.isValid)
 }

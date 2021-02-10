@@ -24,24 +24,37 @@
 
 package executions
 
-import "go.temporal.io/server/service/worker/scanner/executor"
+import (
+	historypb "go.temporal.io/api/history/v1"
 
-type handlerStatus = executor.TaskStatus
-
-const (
-	handlerStatusDone  = executor.TaskStatusDone
-	handlerStatusErr   = executor.TaskStatusErr
-	handlerStatusDefer = executor.TaskStatusDefer
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
-const scannerTaskQueuePrefix = "temporal-sys-executions-scanner"
+type (
+	// executionData wraps data on execution that is suitable for running validations.
+	// Extend this structure if more data is required for new checks.
+	executionData struct {
+		mutableState  *persistencespb.WorkflowMutableState
+		history       []*historypb.HistoryEvent
+		historyBranch *persistencespb.HistoryBranch
+	}
 
-// validateHandler validates a single execution.
-// It operates in two phases: collection step and validation step.
-// During collection step information from persistence is read for this workflow execution.
-// During validation step invariants are asserted over everything that was read.
-// In the future its possible to add a third step here which will additionally take automatic recovery actions if validation failed.
-func (s *Scavenger) validateHandler(key *executionKey) handlerStatus {
-	// TODO: implement this
-	return handlerStatusDone
-}
+	// executionValidatorResult provides a summary of validation results
+	executionValidatorResult struct {
+		// true if provided executionData is valid.
+		isValid bool
+		// This would be put into metric label.
+		failureReasonTag string
+		// Detailed description. Will be added to failure long.
+		failureReasonDetailed string
+		// Extra error information
+		error error
+	}
+
+	// executionValidator Implement this interface and provide it to executions scavenger to add extra checks
+	// on executions table.
+	executionValidator interface {
+		validatorTag() string
+		validate(execData *executionData) executionValidatorResult
+	}
+)

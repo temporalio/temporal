@@ -25,69 +25,62 @@
 package executions
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/client/frontend"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/quotas"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/worker/scanner/executor"
 )
-
-type ()
 
 type (
 	// Scavenger is the type that holds the state for executions scavenger daemon
 	Scavenger struct {
-		params ScannerWorkflowParams
-		// TODO: currently frontend client does not support scan visibility records without namespace filter (need to
-		// 		chat with Bowei to understand if querying without namespace filter is an issue)? Maybe we go directly to
-		//		elasticSearch?
-		frontendClient frontend.Client // used to query visibility
-		historyDB      p.HistoryManager
-		executor       executor.Executor
-		metrics        metrics.Client
-		logger         log.Logger
-		stats          stats
-		status         int32
-		stopC          chan struct{}
-		stopWG         sync.WaitGroup
+		frontendClient        frontend.Client // used to query visibility
+		historyDB             persistence.HistoryManager
+		numHistoryShards      int32
+		executor              executor.Executor
+		metrics               metrics.Client
+		logger                log.Logger
+		status                int32
+		stopC                 chan struct{}
+		stopWG                sync.WaitGroup
+		shardValidatorFactory shardValidatorBuilder
 	}
 
-	// ScannerWorkflowParams are the parameters passed to the executions scanner workflow
-	ScannerWorkflowParams struct {
-		VisibilityQuery string // optionally can be provided to limit the scope of the scan
-
-		// add other fields here such as: bool generateReport, string outputLocation, bool runInDryMode etc...
-	}
-
-	executionKey struct {
-		namespaceID string
-		workflowID  string
-		runID       string
-	}
-
-	stats struct {
-		// TODO: include stats here that should be tracked throughout execution of scavenger
-	}
+	shardValidatorBuilder func(rateLimiter quotas.RateLimiter) shardValidator
 
 	// executorTask is a runnable task that adheres to the executor.Task interface
-	// for the scavenger, each of this task processes a single workflow execution
+	// for the scavenger, each of this task processes a single workflow mutableState
 	executorTask struct {
-		executionKey
-		scvg *Scavenger
+		shardID     int32
+		scvg        *Scavenger
+		rateLimiter quotas.RateLimiter
+	}
+
+	shardValidationReportExecutionsScanned struct {
+		TotalExecutionsCount     int64
+		CorruptedExecutionsCount int64
 	}
 )
 
+// executionValidatorResultNoCorruption is and instance of result symbolizing no failure found
+var executionValidatorResultNoCorruption = executionValidatorResult{isValid: true}
+
 var (
-	executionsBatchSize      = 32   // maximum number of executions we process concurrently
-	executionsPageSize       = 1000 // page size of executions read from visibility manager
+	executorPoolSize         = 16
+	executionsPageSize       = 1000
 	executorPollInterval     = time.Minute
 	executorMaxDeferredTasks = 10000
+	targetRPS                = 50
 )
 
 // NewScavenger returns an instance of executions scavenger daemon
@@ -101,23 +94,30 @@ var (
 //  - either all executions are processed successfully (or)
 //  - Stop() method is called to stop the scavenger
 func NewScavenger(
-	params ScannerWorkflowParams,
 	frontendClient frontend.Client,
-	historyDB p.HistoryManager,
+	historyDB persistence.HistoryManager,
 	metricsClient metrics.Client,
 	logger log.Logger,
+	execMgrFactory persistence.ExecutionManagerFactory,
+	numHistoryShards int32,
 ) *Scavenger {
 	stopC := make(chan struct{})
 	taskExecutor := executor.NewFixedSizePoolExecutor(
-		executionsBatchSize, executorMaxDeferredTasks, metricsClient, metrics.ExecutionsScavengerScope)
+		executorPoolSize, executorMaxDeferredTasks, metricsClient, metrics.ExecutionsScavengerScope)
+	shardValidatorBuilder := func(limiter quotas.RateLimiter) shardValidator {
+		return createShardValidator(
+			execMgrFactory, limiter, executionsPageSize,
+			historyDB, []executionValidator{newActivityIDValidator()})
+	}
 	return &Scavenger{
-		params:         params,
-		frontendClient: frontendClient,
-		historyDB:      historyDB,
-		metrics:        metricsClient,
-		logger:         logger,
-		stopC:          stopC,
-		executor:       taskExecutor,
+		frontendClient:        frontendClient,
+		historyDB:             historyDB,
+		metrics:               metricsClient,
+		logger:                logger,
+		stopC:                 stopC,
+		executor:              taskExecutor,
+		numHistoryShards:      numHistoryShards,
+		shardValidatorFactory: shardValidatorBuilder,
 	}
 }
 
@@ -154,12 +154,28 @@ func (s *Scavenger) Alive() bool {
 
 // run does a single run over all executions and validates them
 func (s *Scavenger) run() {
-	// TODO: implement this
-	// 1. read from visibility records from frontend.Client
-	// 2. create executionTasks
-	// 3. pass them off to the executor to run
-	// 4. wait until the executor is done
-	// 5. emit metrics on the run of scavenger
+	defer func() {
+		go s.Stop()
+		s.stopWG.Done()
+	}()
+
+	rateLimiter := getRateLimiter(targetRPS)
+	if rateLimiter == nil {
+		panic(
+			fmt.Sprintf(
+				"ExecutionsScavenger failed to initialize rate limiter with target qps %d. Aborting scan.",
+				targetRPS,
+			),
+		)
+	}
+
+	for shardID := int32(1); shardID <= s.numHistoryShards; shardID++ {
+		if !s.executor.Submit(s.newTask(shardID, rateLimiter)) {
+			return
+		}
+	}
+
+	s.awaitExecutor()
 }
 
 func (s *Scavenger) awaitExecutor() {
@@ -175,23 +191,66 @@ func (s *Scavenger) awaitExecutor() {
 	}
 }
 
-func (s *Scavenger) emitStats() {
-	// TODO: implement this, this will emit metrics after a full run of executor scavenger is finished
-}
-
-// newTask returns a new instance of an executable task which will process a single execution
-func (s *Scavenger) newTask(namespaceID, workflowID, runID string) executor.Task {
+// newTask returns a new instance of an executable task which will process a single mutableState
+func (s *Scavenger) newTask(shardID int32, rateLimiter quotas.RateLimiter) executor.Task {
 	return &executorTask{
-		executionKey: executionKey{
-			namespaceID: namespaceID,
-			workflowID:  workflowID,
-			runID:       runID,
-		},
-		scvg: s,
+		shardID:     shardID,
+		rateLimiter: rateLimiter,
+		scvg:        s,
 	}
 }
 
 // Run runs the task
 func (t *executorTask) Run() executor.TaskStatus {
-	return t.scvg.validateHandler(&t.executionKey)
+	return t.scvg.validateShardHandler(t.shardID, t.rateLimiter)
+}
+
+func (s *Scavenger) validateShardHandler(shardID int32, rateLimiter quotas.RateLimiter) executor.TaskStatus {
+	validationResult := s.shardValidatorFactory(rateLimiter).validate(shardID)
+	dumpShardValidationReport(validationResult, s.logger, s.metrics)
+	return executor.TaskStatusDone
+}
+
+func dumpShardValidationReport(report *shardValidationResult, logger log.Logger, metricClient metrics.Client) {
+	metricsScope := metricClient.Scope(metrics.ExecutionsScavengerScope)
+	metricsScope.AddCounter(metrics.ScavengerDBRequestsCount, report.TotalDBRequests)
+	metricsScope.UpdateGauge(
+		metrics.ExecutionsScavengerExecutionsCount,
+		float64(report.ScanStats.TotalExecutionsCount))
+	metricsScope.UpdateGauge(
+		metrics.ExecutionsScavengerCorruptedExecutionsCount,
+		float64(report.ScanStats.CorruptedExecutionsCount))
+
+	if !report.IsFailure {
+		return
+	}
+	if report.Error != nil {
+		failureScope := metricsScope.Tagged(
+			metrics.ValidatorTag("scavenger"),
+			metrics.FailureTag("validation_failure"),
+		)
+		failureScope.IncCounter(metrics.ScavengerValidationFailuresCount)
+		logger.Warn(
+			"Validation failed for execution.",
+			tag.ShardID(report.ShardID),
+			tag.Error(report.Error))
+	}
+	for _, executionFailure := range report.ExecutionFailures {
+		for validator, validatorFailure := range executionFailure.Failures {
+			failureScope := metricsScope.Tagged(
+				metrics.ValidatorTag(validator),
+				metrics.FailureTag(validatorFailure.failureReasonTag),
+			)
+			failureScope.IncCounter(metrics.ScavengerValidationFailuresCount)
+		}
+		logger.Warn(
+			"Validation failed for execution.",
+			tag.ShardID(report.ShardID),
+			tag.WorkflowNamespace(executionFailure.Namespace),
+			tag.WorkflowID(executionFailure.WorkflowID),
+			tag.WorkflowRunID(executionFailure.RunID),
+			tag.WorkflowBranchID(executionFailure.BranchID),
+			tag.WorkflowTreeID(executionFailure.TreeID),
+			tag.Value(executionFailure.Failures))
+	}
 }
