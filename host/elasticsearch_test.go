@@ -111,10 +111,10 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 	tl := "es-integration-start-workflow-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
+	attrPayload, _ := payload.Encode(s.testSearchAttributeVal)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			s.testSearchAttributeKey: attrValBytes,
+			s.testSearchAttributeKey: attrPayload,
 		},
 	}
 	request.SearchAttributes = searchAttr
@@ -145,7 +145,14 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.Equal(attrValBytes, openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey])
+
+	s.Equal(1, len(openExecution.GetSearchAttributes().GetIndexedFields()))
+	attrPayloadFromResponse, attrExist := openExecution.GetSearchAttributes().GetIndexedFields()[s.testSearchAttributeKey]
+	s.True(attrExist)
+	s.Equal(attrPayload.GetData(), attrPayloadFromResponse.GetData())
+	attrType, typeSet := attrPayloadFromResponse.GetMetadata()[searchattribute.MetadataType]
+	s.True(typeSet)
+	s.True(len(attrType) > 0)
 }
 
 func (s *elasticsearchIntegrationSuite) TestListWorkflow() {
