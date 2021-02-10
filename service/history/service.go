@@ -37,11 +37,13 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/masker"
 	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/service/history/configs"
@@ -157,13 +159,28 @@ func (s *Service) Start() {
 	s.Resource.Start()
 	s.handler.Start()
 
+	metricsInterceptor := interceptor.NewTelemetryInterceptor(
+		s.Resource.GetMetricsClient(),
+		metrics.HistoryAPIMetricsScopes(),
+		s.Resource.GetLogger(),
+	)
+	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
+		func() float64 { return float64(s.config.RPS()) },
+		map[string]int{},
+	)
+
 	opts, err := s.params.RPCFactory.GetInternodeGRPCServerOptions()
 	if err != nil {
 		logger.Fatal("creating grpc server options failed", tag.Error(err))
 	}
 	opts = append(
 		opts,
-		grpc.ChainUnaryInterceptor(rpc.ServiceErrorInterceptor))
+		grpc.ChainUnaryInterceptor(
+			rpc.ServiceErrorInterceptor,
+			metricsInterceptor.Intercept,
+			rateLimiterInterceptor.Intercept,
+		),
+	)
 	s.server = grpc.NewServer(opts...)
 	historyservice.RegisterHistoryServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.handler)
@@ -199,7 +216,7 @@ func (s *Service) Stop() {
 	remainingTime := s.config.ShutdownDrainDuration()
 
 	s.GetLogger().Info("ShutdownHandler: Evicting self from membership ring")
-	s.GetMembershipMonitor().EvictSelf()
+	_ = s.GetMembershipMonitor().EvictSelf()
 
 	s.GetLogger().Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	remainingTime = s.sleep(gossipPropagationDelay, remainingTime)

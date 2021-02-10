@@ -251,7 +251,10 @@ func (s *Service) Start() {
 				s.params.ClaimMapper,
 				s.params.Authorizer,
 				s.Resource.GetMetricsClient(),
-				s.GetLogger())))
+				s.GetLogger(),
+			),
+		),
+	)
 	s.server = grpc.NewServer(opts...)
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
