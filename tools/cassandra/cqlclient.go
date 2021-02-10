@@ -114,6 +114,7 @@ func NewCassandraCluster(cfg *config.Cassandra, timeoutSeconds int) (*gocql.Clus
 	}
 
 	timeout := time.Duration(timeoutSeconds) * time.Second
+	clusterCfg.ConnectTimeout = timeout
 	clusterCfg.Timeout = timeout
 	clusterCfg.ProtoVersion = cqlProtoVersion
 	clusterCfg.Consistency = cfg.Consistency.GetConsistency()
