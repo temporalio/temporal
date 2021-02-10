@@ -28,6 +28,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"go.temporal.io/sdk/activity"
@@ -47,13 +48,15 @@ var (
 	workflowTestMetrics *mmocks.Client
 	workflowTestLogger  log.Logger
 	workflowTestHandler *MockHandler
-	workflowTestPump    *PumpMock
+	workflowTestPump    *MockPump
 	workflowTestConfig  *Config
 )
 
 type workflowSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
+
+	controller *gomock.Controller
 }
 
 func (s *workflowSuite) registerWorkflows(env *testsuite.TestWorkflowEnvironment) {
@@ -70,15 +73,21 @@ func TestWorkflowSuite(t *testing.T) {
 }
 
 func (s *workflowSuite) SetupTest() {
+	s.controller = gomock.NewController(s.T())
+
 	workflowTestMetrics = &mmocks.Client{}
 	workflowTestLogger = loggerimpl.NewLogger(zap.NewNop())
-	workflowTestHandler = &MockHandler{}
-	workflowTestPump = &PumpMock{}
+	workflowTestHandler = NewMockHandler(s.controller)
+	workflowTestPump = NewMockPump(s.controller)
 	workflowTestConfig = &Config{
 		ArchiverConcurrency:           dynamicconfig.GetIntPropertyFn(0),
 		ArchivalsPerIteration:         dynamicconfig.GetIntPropertyFn(0),
 		TimeLimitPerArchivalIteration: dynamicconfig.GetDurationPropertyFn(MaxArchivalIterationTimeout()),
 	}
+}
+
+func (s *workflowSuite) TearDownTest() {
+	s.controller.Finish()
 }
 
 func (s *workflowSuite) TestArchivalWorkflow_Fail_HashesDoNotEqual() {
@@ -88,11 +97,11 @@ func (s *workflowSuite) TestArchivalWorkflow_Fail_HashesDoNotEqual() {
 	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(3)).Once()
 	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(3)).Once()
 	workflowTestMetrics.On("IncCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverPumpedNotEqualHandledCount).Once()
-	workflowTestHandler.On("Start").Once()
-	workflowTestHandler.On("Finished").Return([]uint64{9, 7, 0}).Once()
-	workflowTestPump.On("Run").Return(PumpResult{
+	workflowTestHandler.EXPECT().Start().Times(1)
+	workflowTestHandler.EXPECT().Finished().Return([]uint64{9, 7, 0}).Times(1)
+	workflowTestPump.EXPECT().Run().Return(PumpResult{
 		PumpedHashes: []uint64{8, 7, 0},
-	}).Once()
+	}).Times(1)
 
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)
@@ -112,12 +121,12 @@ func (s *workflowSuite) TestArchivalWorkflow_Exit_TimeoutWithoutSignals() {
 	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(0)).Once()
 	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(0)).Once()
 	workflowTestMetrics.On("IncCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStoppingCount).Once()
-	workflowTestHandler.On("Start").Once()
-	workflowTestHandler.On("Finished").Return([]uint64{}).Once()
-	workflowTestPump.On("Run").Return(PumpResult{
+	workflowTestHandler.EXPECT().Start().Times(1)
+	workflowTestHandler.EXPECT().Finished().Return([]uint64{}).Times(1)
+	workflowTestPump.EXPECT().Run().Return(PumpResult{
 		PumpedHashes:          []uint64{},
 		TimeoutWithoutSignals: true,
-	}).Once()
+	}).Times(1)
 
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)
@@ -134,11 +143,11 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 	workflowTestMetrics.On("StartTimer", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency).Return(metrics.NopStopwatch()).Once()
 	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(5)).Once()
 	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(5)).Once()
-	workflowTestHandler.On("Start").Once()
-	workflowTestHandler.On("Finished").Return([]uint64{1, 2, 3, 4, 5}).Once()
-	workflowTestPump.On("Run").Return(PumpResult{
+	workflowTestHandler.EXPECT().Start().Times(1)
+	workflowTestHandler.EXPECT().Finished().Return([]uint64{1, 2, 3, 4, 5}).Times(1)
+	workflowTestPump.EXPECT().Run().Return(PumpResult{
 		PumpedHashes: []uint64{1, 2, 3, 4, 5},
-	}).Once()
+	}).Times(1)
 
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)

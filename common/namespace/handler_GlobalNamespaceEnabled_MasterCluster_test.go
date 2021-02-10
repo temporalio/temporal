@@ -108,7 +108,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) SetupTest() {
 		false,
 		&config.ArchivalNamespaceDefaults{},
 	)
-	s.mockArchiverProvider = &provider.MockArchiverProvider{}
+	s.mockArchiverProvider = provider.NewMockArchiverProvider(s.controller)
 	s.handler = NewHandler(
 		s.minRetentionDays,
 		dc.GetIntPropertyFilteredByNamespace(s.maxBadBinaryCount),
@@ -123,7 +123,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) SetupTest() {
 
 func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockArchiverProvider.AssertExpectations(s.T())
 }
 
 func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterGetNamespace_LocalNamespace_InvalidCluster() {
