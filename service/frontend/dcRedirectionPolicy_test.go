@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log/loggerimpl"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -56,8 +55,9 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller         *gomock.Controller
-		mockNamespaceCache *cache.MockNamespaceCache
+		controller          *gomock.Controller
+		mockClusterMetadata *cluster.MockMetadata
+		mockNamespaceCache  *cache.MockNamespaceCache
 
 		namespace              string
 		namespaceID            string
@@ -65,8 +65,7 @@ type (
 		alternativeClusterName string
 		mockConfig             *Config
 
-		mockClusterMetadata *mocks.ClusterMetadata
-		policy              *SelectedAPIsForwardingRedirectionPolicy
+		policy *SelectedAPIsForwardingRedirectionPolicy
 	}
 )
 
@@ -129,6 +128,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
 
 	s.namespace = "some random namespace name"
@@ -140,8 +140,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 	s.Nil(err)
 
 	s.mockConfig = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), logger), 0, false)
-	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockClusterMetadata.On("IsGlobalNamespaceEnabled").Return(true)
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.policy = NewSelectedAPIsForwardingPolicy(
 		s.currentClusterName,
 		s.mockConfig,
