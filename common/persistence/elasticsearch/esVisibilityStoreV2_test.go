@@ -52,8 +52,10 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2() {
 			Memo:               p.NewDataBlob([]byte("test bytes"), enumspb.ENCODING_TYPE_PROTO3.String()),
 			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			TaskQueue:          "task-queue-name",
-			SearchAttributes: map[string]*commonpb.Payload{
-				definition.CustomStringField: payload.EncodeString("alex"),
+			SearchAttributes: &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					definition.CustomStringField: payload.EncodeString("alex"),
+				},
 			},
 		},
 	}
@@ -83,7 +85,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2() {
 
 			searchAttributes := body[definition.Attr].(map[string]interface{})
 			// %q because request has JSON encoded string.
-			s.EqualValues(request.SearchAttributes[definition.CustomStringField].Data, fmt.Sprintf("%q", searchAttributes[definition.CustomStringField]))
+			s.EqualValues(request.SearchAttributes.GetIndexedFields()[definition.CustomStringField].Data, fmt.Sprintf("%q", searchAttributes[definition.CustomStringField]))
 
 			s.Equal(es.BulkableRequestTypeIndex, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
@@ -144,8 +146,10 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2() {
 			Memo:               p.NewDataBlob([]byte("test bytes"), enumspb.ENCODING_TYPE_PROTO3.String()),
 			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 			TaskQueue:          "task-queue-name",
-			SearchAttributes: map[string]*commonpb.Payload{
-				definition.CustomStringField: payload.EncodeString("alex"),
+			SearchAttributes: &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					definition.CustomStringField: payload.EncodeString("alex"),
+				},
 			},
 		},
 		CloseTimestamp: int64(1978),

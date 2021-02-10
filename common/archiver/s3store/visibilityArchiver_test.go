@@ -64,7 +64,7 @@ type visibilityArchiverSuite struct {
 
 	container         *archiver.VisibilityBootstrapContainer
 	logger            log.Logger
-	visibilityRecords []*archiverspb.ArchiveVisibilityRequest
+	visibilityRecords []*archiverspb.VisibilityBlob
 
 	controller      *gomock.Controller
 	testArchivalURI archiver.URI
@@ -165,7 +165,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	URI, err := archiver.NewURI("wrongscheme://")
 	s.NoError(err)
-	request := &archiverspb.ArchiveVisibilityRequest{
+	request := &archiverspb.VisibilityBlob{
 		Namespace:        testNamespace,
 		NamespaceId:      testNamespaceID,
 		WorkflowId:       testWorkflowID,
@@ -183,7 +183,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 
 func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidRequest() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
-	err := visibilityArchiver.Archive(context.Background(), s.testArchivalURI, &archiverspb.ArchiveVisibilityRequest{})
+	err := visibilityArchiver.Archive(context.Background(), s.testArchivalURI, &archiverspb.VisibilityBlob{})
 	s.Error(err)
 }
 
@@ -193,7 +193,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 	err := visibilityArchiver.Archive(
 		context.Background(),
 		s.testArchivalURI,
-		&archiverspb.ArchiveVisibilityRequest{
+		&archiverspb.VisibilityBlob{
 			NamespaceId: testNamespaceID,
 		},
 		archiver.GetNonRetryableErrorOption(nonRetryableErr),
@@ -204,7 +204,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 func (s *visibilityArchiverSuite) TestArchive_Success() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	closeTimestamp := timestamp.TimeNowPtrUtc()
-	request := &archiverspb.ArchiveVisibilityRequest{
+	request := &archiverspb.VisibilityBlob{
 		NamespaceId:      testNamespaceID,
 		Namespace:        testNamespace,
 		WorkflowId:       testWorkflowID,
@@ -220,8 +220,10 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 				"testFields": payload.EncodeBytes([]byte{1, 2, 3}),
 			},
 		},
-		SearchAttributes: map[string]string{
-			"testAttribute": "456",
+		SearchAttributes: &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				"testAttribute": payload.EncodeString("456"),
+			},
 		},
 	}
 	URI, err := archiver.NewURI(testBucketURI + "/test-archive-success")
@@ -233,7 +235,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	data, err := download(context.Background(), visibilityArchiver.s3cli, URI, expectedKey)
 	s.NoError(err, expectedKey)
 
-	archivedRecord := &archiverspb.ArchiveVisibilityRequest{}
+	archivedRecord := &archiverspb.VisibilityBlob{}
 	encoder := codec.NewJSONPBEncoder()
 	err = encoder.Decode(data, archivedRecord)
 	s.NoError(err)
@@ -437,7 +439,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 	s.NoError(err)
 
 	for i, testData := range precisionTests {
-		record := archiverspb.ArchiveVisibilityRequest{
+		record := archiverspb.VisibilityBlob{
 			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
 			WorkflowId:       testWorkflowID,
@@ -517,7 +519,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	URI, err := archiver.NewURI(testBucketURI + "/archive-and-query")
 	s.NoError(err)
 	for _, record := range s.visibilityRecords {
-		err := visibilityArchiver.Archive(context.Background(), URI, (*archiverspb.ArchiveVisibilityRequest)(record))
+		err := visibilityArchiver.Archive(context.Background(), URI, (*archiverspb.VisibilityBlob)(record))
 		s.NoError(err)
 	}
 
@@ -573,7 +575,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 }
 
 func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
-	s.visibilityRecords = []*archiverspb.ArchiveVisibilityRequest{
+	s.visibilityRecords = []*archiverspb.VisibilityBlob{
 		{
 			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
@@ -614,7 +616,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 	}
 }
 
-func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(visibilityArchiver *visibilityArchiver, record *archiverspb.ArchiveVisibilityRequest) {
+func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(visibilityArchiver *visibilityArchiver, record *archiverspb.VisibilityBlob) {
 	err := visibilityArchiver.Archive(context.Background(), s.testArchivalURI, record)
 	s.Require().NoError(err)
 }

@@ -149,7 +149,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		logger.Error(carchiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason("failed to get visibility archiver"), tag.Error(err))
 		return errArchiveVisibilityNonRetryable
 	}
-	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.ArchiveVisibilityRequest{
+	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.VisibilityBlob{
 		NamespaceId:        request.NamespaceID,
 		Namespace:          request.Namespace,
 		WorkflowId:         request.WorkflowID,
@@ -161,7 +161,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		Status:             request.Status,
 		HistoryLength:      request.HistoryLength,
 		Memo:               request.Memo,
-		SearchAttributes:   convertSearchAttributesToString(request.SearchAttributes),
+		SearchAttributes:   request.SearchAttributes,
 		HistoryArchivalUri: request.HistoryURI,
 	}, carchiver.GetNonRetryableErrorOption(errArchiveVisibilityNonRetryable))
 	if err == nil {

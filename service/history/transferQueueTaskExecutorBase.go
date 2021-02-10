@@ -161,7 +161,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	taskID int64,
 	taskQueue string,
 	visibilityMemo *commonpb.Memo,
-	searchAttributes map[string]*commonpb.Payload,
+	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
 	namespace := defaultNamespace
@@ -212,7 +212,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	status enumspb.WorkflowExecutionStatus,
 	taskQueue string,
 	visibilityMemo *commonpb.Memo,
-	searchAttributes map[string]*commonpb.Payload,
+	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
 	namespace := defaultNamespace
@@ -261,7 +261,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	taskID int64,
 	visibilityMemo *commonpb.Memo,
 	taskQueue string,
-	searchAttributes map[string]*commonpb.Payload,
+	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
 	// Record closing in visibility store

@@ -282,7 +282,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	workflowStartTime := timestamp.TimeValue(startEvent.GetEventTime())
 	workflowExecutionTime := getWorkflowExecutionTime(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
-	searchAttr := executionInfo.SearchAttributes
+	searchAttr := getSearchAttributes(executionInfo.SearchAttributes)
 	namespace := mutableState.GetNamespaceEntry().GetInfo().Name
 	children := mutableState.GetPendingChildExecutionInfos()
 
@@ -696,7 +696,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 	startTimestamp := timestamp.TimeValue(startEvent.GetEventTime())
 	executionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
-	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
+	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.

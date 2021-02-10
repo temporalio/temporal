@@ -131,7 +131,7 @@ func (m *MockVisibilityArchiver) EXPECT() *MockVisibilityArchiverMockRecorder {
 }
 
 // Archive mocks base method.
-func (m *MockVisibilityArchiver) Archive(arg0 context.Context, arg1 URI, arg2 *v1.ArchiveVisibilityRequest, arg3 ...ArchiveOption) error {
+func (m *MockVisibilityArchiver) Archive(arg0 context.Context, arg1 URI, arg2 *v1.VisibilityBlob, arg3 ...ArchiveOption) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {

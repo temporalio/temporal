@@ -127,7 +127,7 @@ type (
 		// then those batched records will be lost during server restarts. This method will be invoked when the Workflow closes.
 		// Note that because of conflict resolution, it is possible for a Workflow to through the closing process multiple times,
 		// which means that this method can be invoked more than once after a Workflow closes.
-		Archive(context.Context, URI, *archiverspb.ArchiveVisibilityRequest, ...ArchiveOption) error
+		Archive(context.Context, URI, *archiverspb.VisibilityBlob, ...ArchiveOption) error
 		// Query is used to retrieve archived visibility records.
 		// Check the Get() method of the HistoryArchiver interface in Step 2 for parameters' meaning and requirements.
 		// The request includes a string field called query, which describes what kind of visibility records should be returned.

@@ -83,7 +83,7 @@ type (
 		Status           enumspb.WorkflowExecutionStatus
 		HistoryLength    int64
 		Memo             *commonpb.Memo
-		SearchAttributes map[string]*commonpb.Payload
+		SearchAttributes *commonpb.SearchAttributes
 		VisibilityURI    string
 
 		// archival targets: history and/or visibility
@@ -247,7 +247,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		return
 	}
 
-	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.ArchiveVisibilityRequest{
+	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.VisibilityBlob{
 		NamespaceId:        request.ArchiveRequest.NamespaceID,
 		Namespace:          request.ArchiveRequest.Namespace,
 		WorkflowId:         request.ArchiveRequest.WorkflowID,
@@ -259,7 +259,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		Status:             request.ArchiveRequest.Status,
 		HistoryLength:      request.ArchiveRequest.HistoryLength,
 		Memo:               request.ArchiveRequest.Memo,
-		SearchAttributes:   convertSearchAttributesToString(request.ArchiveRequest.SearchAttributes),
+		SearchAttributes:   request.ArchiveRequest.SearchAttributes,
 		HistoryArchivalUri: request.ArchiveRequest.HistoryURI,
 	})
 }

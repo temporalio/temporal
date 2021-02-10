@@ -27,12 +27,9 @@ package archiver
 import (
 	"errors"
 
-	commonpb "go.temporal.io/api/common/v1"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/payload"
 )
 
 var (
@@ -63,7 +60,7 @@ func TagLoggerWithArchiveHistoryRequestAndURI(logger log.Logger, request *Archiv
 }
 
 // TagLoggerWithArchiveVisibilityRequestAndURI tags logger with fields in the archive visibility request and the URI
-func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *archiverspb.ArchiveVisibilityRequest, URI string) log.Logger {
+func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *archiverspb.VisibilityBlob, URI string) log.Logger {
 	return logger.WithTags(
 		tag.ArchivalRequestNamespaceID(request.GetNamespaceId()),
 		tag.ArchivalRequestNamespace(request.GetNamespace()),
@@ -111,7 +108,7 @@ func ValidateGetRequest(request *GetHistoryRequest) error {
 }
 
 // ValidateVisibilityArchivalRequest validates the archive visibility request
-func ValidateVisibilityArchivalRequest(request *archiverspb.ArchiveVisibilityRequest) error {
+func ValidateVisibilityArchivalRequest(request *archiverspb.VisibilityBlob) error {
 	if request.GetNamespaceId() == "" {
 		return errEmptyNamespaceID
 	}
@@ -148,13 +145,4 @@ func ValidateQueryRequest(request *QueryVisibilityRequest) error {
 		return errEmptyQuery
 	}
 	return nil
-}
-
-// ConvertSearchAttrToPayload converts search attribute value from string back to byte array
-func ConvertSearchAttrToPayload(searchAttrStr map[string]string) map[string]*commonpb.Payload {
-	searchAttr := make(map[string]*commonpb.Payload)
-	for k, v := range searchAttrStr {
-		searchAttr[k] = payload.EncodeBytes([]byte(v))
-	}
-	return searchAttr
 }

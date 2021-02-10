@@ -29,8 +29,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-
-	"go.temporal.io/server/common/definition"
 )
 
 // Interfaces for the Visibility Store.
@@ -51,7 +49,7 @@ type (
 		ShardID            int32 // not persisted
 		Memo               *commonpb.Memo
 		TaskQueue          string
-		SearchAttributes   map[string]*commonpb.Payload
+		SearchAttributes   *commonpb.SearchAttributes
 	}
 
 	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly started execution
@@ -192,10 +190,4 @@ type (
 // NewOperationNotSupportErrorForVis create error for operation not support in visibility
 func NewOperationNotSupportErrorForVis() error {
 	return serviceerror.NewInvalidArgument("Operation not support. Please use on ElasticSearch")
-}
-
-// IsNopUpsertWorkflowRequest return whether upsert request should be no-op
-func IsNopUpsertWorkflowRequest(request *InternalUpsertWorkflowExecutionRequest) bool {
-	_, exist := request.SearchAttributes[definition.TemporalChangeVersion]
-	return exist
 }

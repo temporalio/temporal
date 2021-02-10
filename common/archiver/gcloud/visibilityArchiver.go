@@ -91,7 +91,7 @@ func NewVisibilityArchiver(container *archiver.VisibilityBootstrapContainer, con
 // The only difference is that the ArchiveOption parameter won't include an option for recording process.
 // Please make sure your implementation is lossless. If any in-memory batching mechanism is used, then those batched records will be lost during server restarts.
 // This method will be invoked when workflow closes. Note that because of conflict resolution, it is possible for a workflow to through the closing process multiple times, which means that this method can be invoked more than once after a workflow closes.
-func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiverspb.ArchiveVisibilityRequest, opts ...archiver.ArchiveOption) (err error) {
+func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiverspb.VisibilityBlob, opts ...archiver.ArchiveOption) (err error) {
 	scope := v.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	sw := scope.StartTimer(metrics.ServiceLatency)

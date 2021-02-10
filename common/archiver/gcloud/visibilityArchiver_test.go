@@ -48,7 +48,7 @@ import (
 
 const (
 	testWorkflowTypeName    = "test-workflow-type"
-	exampleVisibilityRecord = `{"namespaceId":"test-namespace-id","namespace":"test-namespace","workflowId":"test-workflow-id","runId":"test-run-id","workflowTypeName":"test-workflow-type","startTime":"2020-02-05T09:56:14.804475Z","closeTime":"2020-02-05T09:56:15.946478Z","status":"Completed","historyLength":36,"memo":null,"searchAttributes":{},"historyArchivalUri":"gs://my-bucket-cad/temporal_archival/development"}`
+	exampleVisibilityRecord = `{"namespaceId":"test-namespace-id","namespace":"test-namespace","workflowId":"test-workflow-id","runId":"test-run-id","workflowTypeName":"test-workflow-type","startTime":"2020-02-05T09:56:14.804475Z","closeTime":"2020-02-05T09:56:15.946478Z","status":"Completed","historyLength":36,"memo":null,"searchAttributes":null,"historyArchivalUri":"gs://my-bucket-cad/temporal_archival/development"}`
 )
 
 func (s *visibilityArchiverSuite) SetupTest() {
@@ -59,7 +59,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 		Logger:        loggerimpl.NewLogger(zapLogger),
 		MetricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
 	}
-	s.expectedVisibilityRecords = []*archiverspb.ArchiveVisibilityRequest{
+	s.expectedVisibilityRecords = []*archiverspb.VisibilityBlob{
 		{
 			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
@@ -87,7 +87,7 @@ type visibilityArchiverSuite struct {
 	suite.Suite
 	controller                *gomock.Controller
 	container                 *archiver.VisibilityBootstrapContainer
-	expectedVisibilityRecords []*archiverspb.ArchiveVisibilityRequest
+	expectedVisibilityRecords []*archiverspb.VisibilityBlob
 }
 
 func (s *visibilityArchiverSuite) TestValidateVisibilityURI() {
@@ -140,7 +140,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidVisibilityURI() {
 
 	visibilityArchiver := newVisibilityArchiver(s.container, storageWrapper)
 	s.NoError(err)
-	request := &archiverspb.ArchiveVisibilityRequest{
+	request := &archiverspb.VisibilityBlob{
 		NamespaceId: testNamespaceID,
 		Namespace:   testNamespace,
 		WorkflowId:  testWorkflowID,
@@ -180,7 +180,7 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 	visibilityArchiver := newVisibilityArchiver(s.container, storageWrapper)
 	s.NoError(err)
 
-	request := &archiverspb.ArchiveVisibilityRequest{
+	request := &archiverspb.VisibilityBlob{
 		Namespace:        testNamespace,
 		NamespaceId:      testNamespaceID,
 		WorkflowId:       testWorkflowID,
