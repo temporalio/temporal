@@ -244,6 +244,9 @@ clean-test-results:
 	@rm -f test.log
 	@go clean -testcache
 
+build-test:
+	@go test -exec="true" -count=0 $(TEST_DIRS)
+
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
 	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS),\
