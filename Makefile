@@ -245,6 +245,7 @@ clean-test-results:
 	@go clean -testcache
 
 build-test:
+	@printf $(COLOR) "Build tests..."
 	@go test -exec="true" -count=0 $(TEST_DIRS)
 
 unit-test: clean-test-results
