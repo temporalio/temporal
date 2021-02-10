@@ -186,7 +186,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		}
 		indexName := options.ESConfig.Indices[common.VisibilityAppName]
 		esVisibilityStore := pes.NewElasticSearchVisibilityStore(esClient, indexName, nil, esProcessor, visConfig, logger, &metricsmocks.Client{})
-		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, logger)
+		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, visConfig.ValidSearchAttributes, logger)
 	}
 	visibilityMgr := persistence.NewVisibilityManagerWrapper(testBase.VisibilityMgr, esVisibilityMgr,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(options.WorkerConfig.EnableIndexer), advancedVisibilityWritingMode)
