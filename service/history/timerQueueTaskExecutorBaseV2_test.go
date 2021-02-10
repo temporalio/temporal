@@ -29,7 +29,6 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -58,7 +57,7 @@ type (
 		mockExecutionManager  *persistence.MockExecutionManager
 		mockVisibilityManager *mocks.VisibilityManager
 		mockHistoryMgr        *persistence.MockHistoryManager
-		mockArchivalClient    *archiver.ClientMock
+		mockArchivalClient    *archiver.MockClient
 		mockNamespaceCache    *cache.MockNamespaceCache
 		mockClusterMetadata   *cluster.MockMetadata
 
@@ -103,7 +102,7 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) SetupTest() {
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockVisibilityManager = s.mockShard.Resource.VisibilityMgr
 	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
-	s.mockArchivalClient = &archiver.ClientMock{}
+	s.mockArchivalClient = archiver.NewMockClient(s.controller)
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 
@@ -130,7 +129,6 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) SetupTest() {
 func (s *timerQueueTaskExecutorBaseSuiteV2) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.Finish(s.T())
-	s.mockArchivalClient.AssertExpectations(s.T())
 }
 
 func (s *timerQueueTaskExecutorBaseSuiteV2) TestDeleteWorkflow_NoErr() {
@@ -177,11 +175,10 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestArchiveHistory_NoErr_InlineArchi
 	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any()).Return(nil).Times(1)
 	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any()).Return(nil).Times(1)
 
-	s.mockArchivalClient.On("Archive", mock.Anything, mock.MatchedBy(func(req *archiver.ClientRequest) bool {
-		return req.CallerService == common.HistoryServiceName && req.AttemptArchiveInline && req.ArchiveRequest.Targets[0] == archiver.ArchiveTargetHistory
-	})).Return(&archiver.ClientResponse{
-		HistoryArchivedInline: false,
-	}, nil)
+	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), archiverClientRequestMatcher{inline: true}).
+		Return(&archiver.ClientResponse{
+			HistoryArchivedInline: false,
+		}, nil)
 
 	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0, nil)
 	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistencespb.TimerTaskInfo{
@@ -198,12 +195,28 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestArchiveHistory_SendSignalErr() {
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil).Times(1)
 	s.mockMutableState.EXPECT().GetNextEventID().Return(int64(101)).Times(1)
 
-	s.mockArchivalClient.On("Archive", mock.Anything, mock.MatchedBy(func(req *archiver.ClientRequest) bool {
-		return req.CallerService == common.HistoryServiceName && !req.AttemptArchiveInline && req.ArchiveRequest.Targets[0] == archiver.ArchiveTargetHistory
-	})).Return(nil, errors.New("failed to send signal"))
+	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), archiverClientRequestMatcher{inline: false}).
+		Return(nil, errors.New("failed to send signal"))
 
 	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0, nil)
 	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
 	s.Error(err)
+}
+
+type (
+	archiverClientRequestMatcher struct {
+		inline bool
+	}
+)
+
+func (m archiverClientRequestMatcher) Matches(x interface{}) bool {
+	req := x.(*archiver.ClientRequest)
+	return req.CallerService == common.HistoryServiceName &&
+		req.AttemptArchiveInline == m.inline &&
+		req.ArchiveRequest.Targets[0] == archiver.ArchiveTargetHistory
+}
+
+func (m archiverClientRequestMatcher) String() string {
+	return "archiverClientRequestMatcher"
 }

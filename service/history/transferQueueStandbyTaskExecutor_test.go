@@ -629,7 +629,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewDisabledArchvialConfig())
+	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewDisabledArchvialConfig())
 
 	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
