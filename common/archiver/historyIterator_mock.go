@@ -32,63 +32,33 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-
-	archiverspb "go.temporal.io/server/api/archiver/v1"
+	archiver "go.temporal.io/server/api/archiver/v1"
 )
 
-// MockHistoryIterator is a mock of HistoryIterator interface
+// MockHistoryIterator is a mock of HistoryIterator interface.
 type MockHistoryIterator struct {
 	ctrl     *gomock.Controller
 	recorder *MockHistoryIteratorMockRecorder
 }
 
-// MockHistoryIteratorMockRecorder is the mock recorder for MockHistoryIterator
+// MockHistoryIteratorMockRecorder is the mock recorder for MockHistoryIterator.
 type MockHistoryIteratorMockRecorder struct {
 	mock *MockHistoryIterator
 }
 
-// NewMockHistoryIterator creates a new mock instance
+// NewMockHistoryIterator creates a new mock instance.
 func NewMockHistoryIterator(ctrl *gomock.Controller) *MockHistoryIterator {
 	mock := &MockHistoryIterator{ctrl: ctrl}
 	mock.recorder = &MockHistoryIteratorMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockHistoryIterator) EXPECT() *MockHistoryIteratorMockRecorder {
 	return m.recorder
 }
 
-// Next mocks base method
-func (m *MockHistoryIterator) Next() (*archiverspb.HistoryBlob, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Next")
-	ret0, _ := ret[0].(*archiverspb.HistoryBlob)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Next indicates an expected call of Next
-func (mr *MockHistoryIteratorMockRecorder) Next() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockHistoryIterator)(nil).Next))
-}
-
-// HasNext mocks base method
-func (m *MockHistoryIterator) HasNext() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasNext")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// HasNext indicates an expected call of HasNext
-func (mr *MockHistoryIteratorMockRecorder) HasNext() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasNext", reflect.TypeOf((*MockHistoryIterator)(nil).HasNext))
-}
-
-// GetState mocks base method
+// GetState mocks base method.
 func (m *MockHistoryIterator) GetState() ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetState")
@@ -97,8 +67,75 @@ func (m *MockHistoryIterator) GetState() ([]byte, error) {
 	return ret0, ret1
 }
 
-// GetState indicates an expected call of GetState
+// GetState indicates an expected call of GetState.
 func (mr *MockHistoryIteratorMockRecorder) GetState() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetState", reflect.TypeOf((*MockHistoryIterator)(nil).GetState))
+}
+
+// HasNext mocks base method.
+func (m *MockHistoryIterator) HasNext() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasNext")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasNext indicates an expected call of HasNext.
+func (mr *MockHistoryIteratorMockRecorder) HasNext() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasNext", reflect.TypeOf((*MockHistoryIterator)(nil).HasNext))
+}
+
+// Next mocks base method.
+func (m *MockHistoryIterator) Next() (*archiver.HistoryBlob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Next")
+	ret0, _ := ret[0].(*archiver.HistoryBlob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Next indicates an expected call of Next.
+func (mr *MockHistoryIteratorMockRecorder) Next() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockHistoryIterator)(nil).Next))
+}
+
+// MockSizeEstimator is a mock of SizeEstimator interface.
+type MockSizeEstimator struct {
+	ctrl     *gomock.Controller
+	recorder *MockSizeEstimatorMockRecorder
+}
+
+// MockSizeEstimatorMockRecorder is the mock recorder for MockSizeEstimator.
+type MockSizeEstimatorMockRecorder struct {
+	mock *MockSizeEstimator
+}
+
+// NewMockSizeEstimator creates a new mock instance.
+func NewMockSizeEstimator(ctrl *gomock.Controller) *MockSizeEstimator {
+	mock := &MockSizeEstimator{ctrl: ctrl}
+	mock.recorder = &MockSizeEstimatorMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSizeEstimator) EXPECT() *MockSizeEstimatorMockRecorder {
+	return m.recorder
+}
+
+// EstimateSize mocks base method.
+func (m *MockSizeEstimator) EstimateSize(v interface{}) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EstimateSize", v)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// EstimateSize indicates an expected call of EstimateSize.
+func (mr *MockSizeEstimatorMockRecorder) EstimateSize(v interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EstimateSize", reflect.TypeOf((*MockSizeEstimator)(nil).EstimateSize), v)
 }
