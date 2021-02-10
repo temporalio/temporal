@@ -33,6 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const (
@@ -69,7 +70,12 @@ func ConvertDynamicConfigTypeToIndexedValueType(dynamicConfigType interface{}) e
 }
 
 // ConvertDynamicConfigToIndexedValueTypes converts search attributes from dynamic config to typed map.
-func ConvertDynamicConfigToIndexedValueTypes(validSearchAttributes map[string]interface{}) map[string]enumspb.IndexedValueType {
+func ConvertDynamicConfigToIndexedValueTypes(validSearchAttributesFn dynamicconfig.MapPropertyFn) map[string]enumspb.IndexedValueType {
+	if validSearchAttributesFn == nil {
+		return nil
+	}
+
+	validSearchAttributes := validSearchAttributesFn()
 	if validSearchAttributes == nil {
 		return nil
 	}

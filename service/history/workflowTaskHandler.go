@@ -645,7 +645,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 
 	searchattribute.SetTypes(
 		attr.SearchAttributes,
-		searchattribute.ConvertDynamicConfigToIndexedValueTypes(handler.config.ValidSearchAttributes()))
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(handler.config.ValidSearchAttributes))
 
 	if err := handler.validateCommandAttr(
 		func() error {
@@ -732,7 +732,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 
 	searchattribute.SetTypes(
 		attr.SearchAttributes,
-		searchattribute.ConvertDynamicConfigToIndexedValueTypes(handler.config.ValidSearchAttributes()))
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(handler.config.ValidSearchAttributes))
 
 	if err := handler.validateCommandAttr(
 		func() error {
@@ -850,7 +850,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 
 	searchattribute.SetTypes(
 		attr.SearchAttributes,
-		searchattribute.ConvertDynamicConfigToIndexedValueTypes(handler.config.ValidSearchAttributes()))
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(handler.config.ValidSearchAttributes))
 
 	// valid search attributes for upsert
 	if err := handler.validateCommandAttr(

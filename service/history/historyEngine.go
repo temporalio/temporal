@@ -2625,7 +2625,7 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 
 	searchattribute.SetTypes(
 		request.SearchAttributes,
-		searchattribute.ConvertDynamicConfigToIndexedValueTypes(e.config.ValidSearchAttributes()))
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(e.config.ValidSearchAttributes))
 }
 
 func validateNamespaceUUID(

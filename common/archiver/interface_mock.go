@@ -33,7 +33,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1 "go.temporal.io/server/api/archiver/v1"
+	v1 "go.temporal.io/api/enums/v1"
+	v10 "go.temporal.io/server/api/archiver/v1"
 )
 
 // MockHistoryArchiver is a mock of HistoryArchiver interface.
@@ -131,7 +132,7 @@ func (m *MockVisibilityArchiver) EXPECT() *MockVisibilityArchiverMockRecorder {
 }
 
 // Archive mocks base method.
-func (m *MockVisibilityArchiver) Archive(arg0 context.Context, arg1 URI, arg2 *v1.VisibilityRecord, arg3 ...ArchiveOption) error {
+func (m *MockVisibilityArchiver) Archive(arg0 context.Context, arg1 URI, arg2 *v10.VisibilityRecord, arg3 ...ArchiveOption) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -150,18 +151,18 @@ func (mr *MockVisibilityArchiverMockRecorder) Archive(arg0, arg1, arg2 interface
 }
 
 // Query mocks base method.
-func (m *MockVisibilityArchiver) Query(arg0 context.Context, arg1 URI, arg2 *QueryVisibilityRequest) (*QueryVisibilityResponse, error) {
+func (m *MockVisibilityArchiver) Query(arg0 context.Context, arg1 URI, arg2 *QueryVisibilityRequest, arg3 map[string]v1.IndexedValueType) (*QueryVisibilityResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Query", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Query", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(*QueryVisibilityResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Query indicates an expected call of Query.
-func (mr *MockVisibilityArchiverMockRecorder) Query(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockVisibilityArchiverMockRecorder) Query(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockVisibilityArchiver)(nil).Query), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockVisibilityArchiver)(nil).Query), arg0, arg1, arg2, arg3)
 }
 
 // ValidateURI mocks base method.

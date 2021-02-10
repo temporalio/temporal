@@ -2667,7 +2667,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		ctx,
 		URI,
 		archiverRequest,
-		searchattribute.ConvertDynamicConfigToIndexedValueTypes(wh.config.ValidSearchAttributes()))
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(wh.config.ValidSearchAttributes))
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2817,9 +2817,8 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 		return nil, wh.error(err, scope)
 	}
 
-	keys := wh.config.ValidSearchAttributes()
 	resp := &workflowservice.GetSearchAttributesResponse{
-		Keys: searchattribute.ConvertDynamicConfigToIndexedValueTypes(keys),
+		Keys: searchattribute.ConvertDynamicConfigToIndexedValueTypes(wh.config.ValidSearchAttributes),
 	}
 	return resp, nil
 }

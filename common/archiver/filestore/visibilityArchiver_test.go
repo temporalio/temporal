@@ -340,14 +340,14 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidURI() {
 		NamespaceID: testNamespaceID,
 		PageSize:    1,
 	}
-	response, err := visibilityArchiver.Query(context.Background(), URI, request)
+	response, err := visibilityArchiver.Query(context.Background(), URI, request, nil)
 	s.Error(err)
 	s.Nil(response)
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidRequest() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
-	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, &archiver.QueryVisibilityRequest{})
+	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, &archiver.QueryVisibilityRequest{}, nil)
 	s.Error(err)
 	s.Nil(response)
 }
@@ -361,7 +361,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
 		NamespaceID: "some random namespaceID",
 		PageSize:    10,
 		Query:       "some invalid query",
-	})
+	}, nil)
 	s.Error(err)
 	s.Nil(response)
 }
@@ -379,7 +379,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_DirectoryNotExist() {
 		Query:       "parsed by mockParser",
 		PageSize:    1,
 	}
-	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, request)
+	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, request, nil)
 	s.NoError(err)
 	s.NotNil(response)
 	s.Empty(response.Executions)
@@ -400,7 +400,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
 		PageSize:      1,
 		NextPageToken: []byte{1, 2, 3},
 	}
-	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, request)
+	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, request, nil)
 	s.Error(err)
 	s.Nil(response)
 }
@@ -421,12 +421,12 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	}
 	URI, err := archiver.NewURI("file://" + s.testQueryDirectory)
 	s.NoError(err)
-	response, err := visibilityArchiver.Query(context.Background(), URI, request)
+	response, err := visibilityArchiver.Query(context.Background(), URI, request, nil)
 	s.NoError(err)
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[0]), response.Executions[0])
+	s.Equal(convertToExecutionInfo(s.visibilityRecords[0], nil), response.Executions[0])
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
@@ -445,21 +445,21 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	}
 	URI, err := archiver.NewURI("file://" + s.testQueryDirectory)
 	s.NoError(err)
-	response, err := visibilityArchiver.Query(context.Background(), URI, request)
+	response, err := visibilityArchiver.Query(context.Background(), URI, request, nil)
 	s.NoError(err)
 	s.NotNil(response)
 	s.NotNil(response.NextPageToken)
 	s.Len(response.Executions, 2)
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[0]), response.Executions[0])
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[1]), response.Executions[1])
+	s.Equal(convertToExecutionInfo(s.visibilityRecords[0], nil), response.Executions[0])
+	s.Equal(convertToExecutionInfo(s.visibilityRecords[1], nil), response.Executions[1])
 
 	request.NextPageToken = response.NextPageToken
-	response, err = visibilityArchiver.Query(context.Background(), URI, request)
+	response, err = visibilityArchiver.Query(context.Background(), URI, request, nil)
 	s.NoError(err)
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[3]), response.Executions[0])
+	s.Equal(convertToExecutionInfo(s.visibilityRecords[3], nil), response.Executions[0])
 }
 
 func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
@@ -489,15 +489,15 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	}
 	executions := []*workflowpb.WorkflowExecutionInfo{}
 	for len(executions) == 0 || request.NextPageToken != nil {
-		response, err := visibilityArchiver.Query(context.Background(), URI, request)
+		response, err := visibilityArchiver.Query(context.Background(), URI, request, nil)
 		s.NoError(err)
 		s.NotNil(response)
 		executions = append(executions, response.Executions...)
 		request.NextPageToken = response.NextPageToken
 	}
 	s.Len(executions, 2)
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[0]), executions[0])
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[1]), executions[1])
+	s.Equal(convertToExecutionInfo(s.visibilityRecords[0], nil), executions[0])
+	s.Equal(convertToExecutionInfo(s.visibilityRecords[1], nil), executions[1])
 }
 
 func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchiver {
