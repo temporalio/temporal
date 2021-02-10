@@ -739,8 +739,10 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 					ExecutionTimestamp: 0,
 					TaskID:             0,
 					Memo:               nil,
-					SearchAttributes: map[string]*commonpb.Payload{
-						definition.TemporalChangeVersion: payload.EncodeBytes([]byte("dummy")),
+					SearchAttributes: &commonpb.SearchAttributes{
+						IndexedFields: map[string]*commonpb.Payload{
+							definition.TemporalChangeVersion: payload.EncodeBytes([]byte("dummy")),
+						},
 					},
 					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
