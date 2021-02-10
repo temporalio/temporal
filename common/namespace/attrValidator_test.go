@@ -28,12 +28,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -41,9 +41,11 @@ type (
 	attrValidatorSuite struct {
 		suite.Suite
 
-		minRetentionDays    int
-		mockClusterMetadata *mocks.ClusterMetadata
-		validator           *AttrValidatorImpl
+		controller          *gomock.Controller
+		mockClusterMetadata *cluster.MockMetadata
+
+		minRetentionDays int
+		validator        *AttrValidatorImpl
 	}
 )
 
@@ -59,12 +61,15 @@ func (s *attrValidatorSuite) TearDownSuite() {
 }
 
 func (s *attrValidatorSuite) SetupTest() {
+	s.controller = gomock.NewController(s.T())
+	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
+
 	s.minRetentionDays = 1
-	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.validator = newAttrValidator(s.mockClusterMetadata, int32(s.minRetentionDays))
 }
 
 func (s *attrValidatorSuite) TearDownTest() {
+	s.controller.Finish()
 }
 
 func (s *attrValidatorSuite) TestValidateConfigRetentionPeriod() {
@@ -94,9 +99,9 @@ func (s *attrValidatorSuite) TestValidateConfigRetentionPeriod() {
 }
 
 func (s *attrValidatorSuite) TestClusterName() {
-	s.mockClusterMetadata.On("GetAllClusterInfo").Return(
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(
 		cluster.TestAllClusterInfo,
-	)
+	).AnyTimes()
 
 	err := s.validator.validateClusterName("some random foo bar")
 	s.IsType(&serviceerror.InvalidArgument{}, err)
@@ -109,12 +114,12 @@ func (s *attrValidatorSuite) TestClusterName() {
 }
 
 func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForLocalNamespace() {
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(
 		cluster.TestCurrentClusterName,
-	)
-	s.mockClusterMetadata.On("GetAllClusterInfo").Return(
+	).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(
 		cluster.TestAllClusterInfo,
-	)
+	).AnyTimes()
 
 	err := s.validator.validateNamespaceReplicationConfigForLocalNamespace(
 		&persistencespb.NamespaceReplicationConfig{
@@ -160,12 +165,12 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForLocalNames
 }
 
 func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForGlobalNamespace() {
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(
 		cluster.TestCurrentClusterName,
-	)
-	s.mockClusterMetadata.On("GetAllClusterInfo").Return(
+	).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(
 		cluster.TestAllClusterInfo,
-	)
+	).AnyTimes()
 
 	err := s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
 		&persistencespb.NamespaceReplicationConfig{

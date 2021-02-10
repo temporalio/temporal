@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -55,7 +54,7 @@ type (
 		controller *gomock.Controller
 
 		logger          log.Logger
-		clusterMetadata *mocks.ClusterMetadata
+		clusterMetadata *cluster.MockMetadata
 		metadataMgr     *persistence.MockMetadataManager
 		namespaceCache  *namespaceCache
 	}
@@ -79,7 +78,7 @@ func (s *namespaceCacheSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.clusterMetadata = &mocks.ClusterMetadata{}
+	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.metadataMgr = persistence.NewMockMetadataManager(s.controller)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.namespaceCache = NewNamespaceCache(s.metadataMgr, s.clusterMetadata, metricsClient, s.logger).(*namespaceCache)
@@ -88,7 +87,6 @@ func (s *namespaceCacheSuite) SetupTest() {
 func (s *namespaceCacheSuite) TearDownTest() {
 	s.namespaceCache.Stop()
 	s.controller.Finish()
-	s.clusterMetadata.AssertExpectations(s.T())
 }
 
 func (s *namespaceCacheSuite) TestListNamespace() {
@@ -163,7 +161,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 	pageToken := []byte("some random page token")
 
 	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil).Times(1)
-	s.clusterMetadata.On("IsGlobalNamespaceEnabled").Return(true)
+	s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.metadataMgr.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
 		PageSize:      namespaceCacheRefreshPageSize,
 		NextPageToken: nil,
@@ -256,7 +254,7 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 	namespaceNotificationVersion++
 
 	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil).Times(1)
-	s.clusterMetadata.On("IsGlobalNamespaceEnabled").Return(true)
+	s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.metadataMgr.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
 		PageSize:      namespaceCacheRefreshPageSize,
 		NextPageToken: nil,
@@ -343,7 +341,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 	namespaceNotificationVersion++
 
 	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil).Times(1)
-	s.clusterMetadata.On("IsGlobalNamespaceEnabled").Return(true)
+	s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.metadataMgr.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
 		PageSize:      namespaceCacheRefreshPageSize,
 		NextPageToken: nil,
@@ -435,7 +433,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 }
 
 func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
-	s.clusterMetadata.On("IsGlobalNamespaceEnabled").Return(true)
+	s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	namespaceNotificationVersion := int64(999999) // make this notification version really large for test
 	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil).Times(1)
 	id := uuid.NewRandom().String()
@@ -515,8 +513,8 @@ func (s *namespaceCacheSuite) buildEntryFromRecord(record *persistence.GetNamesp
 	newEntry.replicationConfig = &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: record.Namespace.ReplicationConfig.ActiveClusterName,
 	}
-	for _, cluster := range record.Namespace.ReplicationConfig.Clusters {
-		newEntry.replicationConfig.Clusters = append(newEntry.replicationConfig.Clusters, cluster)
+	for _, c := range record.Namespace.ReplicationConfig.Clusters {
+		newEntry.replicationConfig.Clusters = append(newEntry.replicationConfig.Clusters, c)
 	}
 	newEntry.configVersion = record.Namespace.ConfigVersion
 	newEntry.failoverVersion = record.Namespace.FailoverVersion
