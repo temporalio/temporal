@@ -222,7 +222,7 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 		}
 
 		docID := p.extractDocID(request)
-		responseItems, ok := responseIndex[docID]
+		responseItem, ok := responseIndex[docID]
 		if !ok {
 			p.logger.Error("ES request failed. Request item doesn't have corresponding response item.",
 				tag.Value(i),
@@ -234,32 +234,37 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 			continue
 		}
 
-		for _, responseItem := range responseItems {
-			switch {
-			case isSuccessStatus(responseItem.Status):
-				p.sendToAckChan(visibilityTaskKey, true)
-			case !isRetryableStatus(responseItem.Status):
-				p.logger.Error("ES request failed.",
-					tag.ESResponseStatus(responseItem.Status),
-					tag.ESResponseError(extractErrorReason(responseItem)),
-					tag.ESRequest(request.String()))
-				p.sendToAckChan(visibilityTaskKey, false)
-			default: // bulk processor will retry
-				p.logger.Warn("ES request retried.",
-					tag.ESResponseStatus(responseItem.Status),
-					tag.ESResponseError(extractErrorReason(responseItem)),
-					tag.ESRequest(request.String()))
-				p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRetries)
-			}
+		switch {
+		case isSuccessStatus(responseItem.Status):
+			p.sendToAckChan(visibilityTaskKey, true)
+		case !isRetryableStatus(responseItem.Status):
+			p.logger.Error("ES request failed.",
+				tag.ESResponseStatus(responseItem.Status),
+				tag.ESResponseError(extractErrorReason(responseItem)),
+				tag.ESRequest(request.String()))
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures)
+			p.sendToAckChan(visibilityTaskKey, false)
+		default: // bulk processor will retry
+			p.logger.Warn("ES request retried.",
+				tag.ESResponseStatus(responseItem.Status),
+				tag.ESResponseError(extractErrorReason(responseItem)),
+				tag.ESRequest(request.String()))
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRetries)
 		}
 	}
 }
 
-func (p *esProcessorImpl) buildResponseIndex(response *elastic.BulkResponse) map[string][]*elastic.BulkResponseItem {
-	result := make(map[string][]*elastic.BulkResponseItem)
-	for _, responseOpItemMap := range response.Items {
-		for _, responseItem := range responseOpItemMap {
-			result[responseItem.Id] = append(result[responseItem.Id], responseItem)
+func (p *esProcessorImpl) buildResponseIndex(response *elastic.BulkResponse) map[string]*elastic.BulkResponseItem {
+	result := make(map[string]*elastic.BulkResponseItem)
+	for _, operationResponseItemMap := range response.Items {
+		for _, responseItem := range operationResponseItemMap {
+			existingResponseItem, duplicateID := result[responseItem.Id]
+			// In some rare cases there might be duplicate document Ids in the same bulk.
+			// (for example, if two sequential upsert search attributes operation for the same workflow run end up being in the same bulk request)
+			// In this case, item with greater status code (error) will overwrite existing item with smaller status code.
+			if !duplicateID || existingResponseItem.Status < responseItem.Status {
+				result[responseItem.Id] = responseItem
+			}
 		}
 	}
 	return result

@@ -266,6 +266,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 	ackCh := make(chan bool, 1)
 	mapVal := newAckChanWithStopwatch(ackCh, &testStopWatch)
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
+	s.mockMetricClient.On("IncCounter", metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures).Once()
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
 	select {
 	case ack := <-ackCh:
