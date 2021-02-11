@@ -71,6 +71,7 @@ type (
 	ackChanWithStopwatch struct { // value of esProcessorImpl.mapToAckChan
 		ackCh                 chan<- bool
 		addToProcessStopwatch *tally.Stopwatch // Used to report metrics: interval between visibility task being added to bulk processor and it is processed (ack/nack).
+		//uniqueID              string
 	}
 )
 
@@ -160,7 +161,6 @@ func (p *esProcessorImpl) Add(request *elasticsearch.BulkableRequest, visibility
 	if cap(ackCh) < 1 {
 		panic("ackCh must be buffered channel (length should be 1 or more)")
 	}
-
 	sw := p.metricsClient.StartTimer(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRequestLatency)
 	ackChWithStopwatch := newAckChanWithStopwatch(ackCh, &sw)
 	_, isDup, _ := p.mapToAckChan.PutOrDo(visibilityTaskKey, ackChWithStopwatch, func(key interface{}, value interface{}) error {
@@ -205,7 +205,7 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures)
 
 			if !isRetryable {
-				visibilityTaskKey := p.getVisibilityTaskKey(request)
+				visibilityTaskKey := p.extractVisibilityTaskKey(request)
 				if visibilityTaskKey == "" {
 					continue
 				}
@@ -215,40 +215,56 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 		return
 	}
 
+	responseIndex := p.responseIndex(response)
 	for i, request := range requests {
-		visibilityTaskKey := p.getVisibilityTaskKey(request)
+		visibilityTaskKey := p.extractVisibilityTaskKey(request)
 		if visibilityTaskKey == "" {
 			continue
 		}
-		if i >= len(response.Items) {
+
+		docID := p.extractDocID(request)
+		if docID == "" {
+			continue
+		}
+
+		responseItem, ok := responseIndex[docID]
+		if !ok {
 			p.logger.Error("ES request failed. Request item doesn't have corresponding response item.",
 				tag.Value(i),
 				tag.Key(visibilityTaskKey),
+				tag.ESDocID(docID),
 				tag.ESRequest(request.String()))
 			p.sendToAckChan(visibilityTaskKey, false)
 			continue
 		}
 
-		responseItem := response.Items[i]
-		for _, resp := range responseItem {
-			switch {
-			case isSuccessStatus(resp.Status):
-				p.sendToAckChan(visibilityTaskKey, true)
-			case !isRetryableStatus(resp.Status):
-				p.logger.Error("ES request failed.",
-					tag.ESResponseStatus(resp.Status),
-					tag.ESResponseError(getErrorMsgFromESResp(resp)),
-					tag.ESRequest(request.String()))
-				p.sendToAckChan(visibilityTaskKey, false)
-			default: // bulk processor will retry
-				p.logger.Warn("ES request retried.",
-					tag.ESResponseStatus(resp.Status),
-					tag.ESResponseError(getErrorMsgFromESResp(resp)),
-					tag.ESRequest(request.String()))
-				p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRetries)
-			}
+		switch {
+		case isSuccessStatus(responseItem.Status):
+			p.sendToAckChan(visibilityTaskKey, true)
+		case !isRetryableStatus(responseItem.Status):
+			p.logger.Error("ES request failed.",
+				tag.ESResponseStatus(responseItem.Status),
+				tag.ESResponseError(extractErrorReason(responseItem)),
+				tag.ESRequest(request.String()))
+			p.sendToAckChan(visibilityTaskKey, false)
+		default: // bulk processor will retry
+			p.logger.Warn("ES request retried.",
+				tag.ESResponseStatus(responseItem.Status),
+				tag.ESResponseError(extractErrorReason(responseItem)),
+				tag.ESRequest(request.String()))
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRetries)
 		}
 	}
+}
+
+func (p *esProcessorImpl) responseIndex(response *elastic.BulkResponse) map[string]*elastic.BulkResponseItem {
+	result := make(map[string]*elastic.BulkResponseItem)
+	for _, responseItemMap := range response.Items {
+		for _, responseItem := range responseItemMap {
+			result[responseItem.Id] = responseItem
+		}
+	}
+	return result
 }
 
 func (p *esProcessorImpl) sendToAckChan(visibilityTaskKey string, ack bool) {
@@ -265,54 +281,58 @@ func (p *esProcessorImpl) sendToAckChan(visibilityTaskKey string, ack bool) {
 	})
 }
 
-func (p *esProcessorImpl) getVisibilityTaskKey(request elastic.BulkableRequest) string {
+func (p *esProcessorImpl) extractVisibilityTaskKey(request elastic.BulkableRequest) string {
 	req, err := request.Source()
 	if err != nil {
-		p.logger.Error("Get request source err.", tag.Error(err), tag.ESRequest(request.String()))
+		p.logger.Error("Unable to get ES request source.", tag.Error(err), tag.ESRequest(request.String()))
 		p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 		return ""
 	}
 
-	var key string
 	if len(req) == 2 { // index or update requests
 		var body map[string]interface{}
-		if err := json.Unmarshal([]byte(req[1]), &body); err != nil {
-			p.logger.Error("Unmarshal index request body err.", tag.Error(err))
+		if err = json.Unmarshal([]byte(req[1]), &body); err != nil {
+			p.logger.Error("Unable to unmarshal ES request body.", tag.Error(err))
 			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 			return ""
 		}
 
 		k, ok := body[definition.VisibilityTaskKey]
 		if !ok {
-			// must be bug in code and bad deployment, check processor that add es requests
 			panic("VisibilityTaskKey not found")
 		}
-		key, ok = k.(string)
-		if !ok {
-			// must be bug in code and bad deployment, check processor that add es requests
-			panic("VisibilityTaskKey is not string")
-		}
+		return k.(string)
 	} else { // delete requests
-		var body map[string]map[string]interface{}
-		if err := json.Unmarshal([]byte(req[0]), &body); err != nil {
-			p.logger.Error("Unmarshal delete request body err.", tag.Error(err))
-			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
-			return ""
-		}
-
-		opMap, ok := body["delete"]
-		if !ok {
-			// must be bug, check if dependency changed
-			panic("delete key not found in request")
-		}
-		k, ok := opMap["_id"]
-		if !ok {
-			// must be bug in code and bad deployment, check processor that add es requests
-			panic("_id not found in request opMap")
-		}
-		key, _ = k.(string)
+		return p.extractDocID(request)
 	}
-	return key
+}
+
+func (p *esProcessorImpl) extractDocID(request elastic.BulkableRequest) string {
+	req, err := request.Source()
+	if err != nil {
+		p.logger.Error("Unable to get ES request source.", tag.Error(err), tag.ESRequest(request.String()))
+		p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
+		return ""
+	}
+
+	var body map[string]map[string]interface{}
+	if err = json.Unmarshal([]byte(req[0]), &body); err != nil {
+		p.logger.Error("Unable to unmarshal ES request body.", tag.Error(err), tag.ESRequest(request.String()))
+		p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
+		return ""
+	}
+
+	// There should be only one operation "index" or "delete".
+	for _, opMap := range body {
+		_id, ok := opMap["_id"]
+		if ok {
+			return _id.(string)
+		}
+	}
+
+	p.logger.Error("Unable to extract _id from ES request.", tag.ESRequest(request.String()))
+	p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
+	return ""
 }
 
 // 409 - Version Conflict
@@ -348,7 +368,7 @@ func isRetryableError(err error) bool {
 	}
 }
 
-func getErrorMsgFromESResp(resp *elastic.BulkResponseItem) string {
+func extractErrorReason(resp *elastic.BulkResponseItem) string {
 	if resp.Error != nil {
 		return resp.Error.Reason
 	}
@@ -359,5 +379,10 @@ func newAckChanWithStopwatch(ackCh chan<- bool, stopwatch *tally.Stopwatch) *ack
 	return &ackChanWithStopwatch{
 		ackCh:                 ackCh,
 		addToProcessStopwatch: stopwatch,
+		//uniqueID:              uniqueID,
 	}
+}
+
+func uniqueDocID(index, id string) string {
+	return fmt.Sprintf("%s%s%s", index, delimiter, id)
 }
