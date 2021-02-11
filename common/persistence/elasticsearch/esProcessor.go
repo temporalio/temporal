@@ -222,11 +222,6 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 		}
 
 		docID := p.extractDocID(request)
-		if docID == "" {
-			p.sendToAckChan(visibilityTaskKey, false)
-			continue
-		}
-
 		responseItems, ok := responseIndex[docID]
 		if !ok {
 			p.logger.Error("ES request failed. Request item doesn't have corresponding response item.",
@@ -234,6 +229,7 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 				tag.Key(visibilityTaskKey),
 				tag.ESDocID(docID),
 				tag.ESRequest(request.String()))
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 			p.sendToAckChan(visibilityTaskKey, false)
 			continue
 		}
@@ -261,8 +257,8 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 
 func (p *esProcessorImpl) buildResponseIndex(response *elastic.BulkResponse) map[string][]*elastic.BulkResponseItem {
 	result := make(map[string][]*elastic.BulkResponseItem)
-	for _, responseItemMap := range response.Items {
-		for _, responseItem := range responseItemMap {
+	for _, responseOpItemMap := range response.Items {
+		for _, responseItem := range responseOpItemMap {
 			result[responseItem.Id] = append(result[responseItem.Id], responseItem)
 		}
 	}
