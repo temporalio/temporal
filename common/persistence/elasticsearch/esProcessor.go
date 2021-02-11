@@ -71,7 +71,6 @@ type (
 	ackChanWithStopwatch struct { // value of esProcessorImpl.mapToAckChan
 		ackCh                 chan<- bool
 		addToProcessStopwatch *tally.Stopwatch // Used to report metrics: interval between visibility task being added to bulk processor and it is processed (ack/nack).
-		//uniqueID              string
 	}
 )
 
@@ -381,10 +380,5 @@ func newAckChanWithStopwatch(ackCh chan<- bool, stopwatch *tally.Stopwatch) *ack
 	return &ackChanWithStopwatch{
 		ackCh:                 ackCh,
 		addToProcessStopwatch: stopwatch,
-		//uniqueID:              uniqueID,
 	}
-}
-
-func uniqueDocID(index, id string) string {
-	return fmt.Sprintf("%s%s%s", index, delimiter, id)
 }
