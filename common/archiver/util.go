@@ -63,7 +63,7 @@ func TagLoggerWithArchiveHistoryRequestAndURI(logger log.Logger, request *Archiv
 }
 
 // TagLoggerWithArchiveVisibilityRequestAndURI tags logger with fields in the archive visibility request and the URI
-func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *archiverspb.ArchiveVisibilityRequest, URI string) log.Logger {
+func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *archiverspb.VisibilityRecord, URI string) log.Logger {
 	return logger.WithTags(
 		tag.ArchivalRequestNamespaceID(request.GetNamespaceId()),
 		tag.ArchivalRequestNamespace(request.GetNamespace()),
@@ -111,7 +111,7 @@ func ValidateGetRequest(request *GetHistoryRequest) error {
 }
 
 // ValidateVisibilityArchivalRequest validates the archive visibility request
-func ValidateVisibilityArchivalRequest(request *archiverspb.ArchiveVisibilityRequest) error {
+func ValidateVisibilityArchivalRequest(request *archiverspb.VisibilityRecord) error {
 	if request.GetNamespaceId() == "" {
 		return errEmptyNamespaceID
 	}
@@ -151,10 +151,17 @@ func ValidateQueryRequest(request *QueryVisibilityRequest) error {
 }
 
 // ConvertSearchAttrToPayload converts search attribute value from string back to byte array
-func ConvertSearchAttrToPayload(searchAttrStr map[string]string) map[string]*commonpb.Payload {
-	searchAttr := make(map[string]*commonpb.Payload)
-	for k, v := range searchAttrStr {
-		searchAttr[k] = payload.EncodeBytes([]byte(v))
+func ConvertSearchAttrToPayload(searchAttrStr map[string]string) *commonpb.SearchAttributes {
+	if len(searchAttrStr) == 0 {
+		return nil
 	}
-	return searchAttr
+
+	searchAttributes := &commonpb.SearchAttributes{
+		IndexedFields: make(map[string]*commonpb.Payload),
+	}
+
+	for k, v := range searchAttrStr {
+		searchAttributes.IndexedFields[k] = payload.EncodeBytes([]byte(v))
+	}
+	return searchAttributes
 }

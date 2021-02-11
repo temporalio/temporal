@@ -475,7 +475,7 @@ type (
 		ShardID            int32
 		Memo               *commonpb.DataBlob
 		TaskQueue          string
-		SearchAttributes   map[string]*commonpb.Payload
+		SearchAttributes   *commonpb.SearchAttributes
 	}
 
 	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted

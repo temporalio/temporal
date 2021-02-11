@@ -304,7 +304,7 @@ func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBa
 	}
 
 	attr := make(map[string]interface{})
-	for searchAttributeName, searchAttributePayload := range request.SearchAttributes {
+	for searchAttributeName, searchAttributePayload := range request.SearchAttributes.GetIndexedFields() {
 		if !v.isValidSearchAttribute(searchAttributeName) {
 			v.logger.Error("Unregistered field.", tag.ESField(searchAttributeName))
 			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
@@ -1057,7 +1057,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string, taskQueue string,
 	startTimeUnixNano, executionTimeUnixNano int64, status enumspb.WorkflowExecutionStatus,
 	taskID int64, memo []byte, memoEncoding enumspb.EncodingType,
-	searchAttributes map[string]*commonpb.Payload) *indexerspb.Message {
+	searchAttributes *commonpb.SearchAttributes) *indexerspb.Message {
 
 	msgType := enumsspb.MESSAGE_TYPE_INDEX
 	fields := map[string]*indexerspb.Field{
@@ -1071,7 +1071,7 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
 		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: memoEncoding.String()}}
 	}
-	for k, v := range searchAttributes {
+	for k, v := range searchAttributes.GetIndexedFields() {
 		// TODO: current implementation assumes that payload is JSON.
 		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
 		data := v.GetData() // content must always be JSON
@@ -1092,7 +1092,7 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, workflowTypeName string,
 	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, status enumspb.WorkflowExecutionStatus,
 	historyLength int64, taskID int64, memo []byte, taskQueue string, encoding enumspb.EncodingType,
-	searchAttributes map[string]*commonpb.Payload) *indexerspb.Message {
+	searchAttributes *commonpb.SearchAttributes) *indexerspb.Message {
 
 	msgType := enumsspb.MESSAGE_TYPE_INDEX
 	fields := map[string]*indexerspb.Field{
@@ -1108,7 +1108,7 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
 		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: encoding.String()}}
 	}
-	for k, v := range searchAttributes {
+	for k, v := range searchAttributes.GetIndexedFields() {
 		// TODO: current implementation assumes that payload is JSON.
 		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
 		data := v.GetData() // content must always be JSON

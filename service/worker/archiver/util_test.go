@@ -78,9 +78,11 @@ func (s *UtilSuite) TestHashDeterminism() {
 						"memoKey2": payload.EncodeBytes([]byte{4, 5, 6}),
 					},
 				},
-				SearchAttributes: map[string]*commonpb.Payload{
-					"customKey1": payload.EncodeBytes([]byte{1, 2, 3}),
-					"customKey2": payload.EncodeBytes([]byte{4, 5, 6}),
+				SearchAttributes: &commonpb.SearchAttributes{
+					IndexedFields: map[string]*commonpb.Payload{
+						"customKey1": payload.EncodeBytes([]byte{1, 2, 3}),
+						"customKey2": payload.EncodeBytes([]byte{4, 5, 6}),
+					},
 				},
 				Targets: []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 			},

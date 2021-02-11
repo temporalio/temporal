@@ -100,9 +100,13 @@ func tagLoggerWithActivityInfo(logger log.Logger, activityInfo activity.Info) lo
 		tag.Attempt(activityInfo.Attempt))
 }
 
-func convertSearchAttributesToString(searchAttr map[string]*commonpb.Payload) map[string]string {
+func convertSearchAttributesToString(searchAttributes *commonpb.SearchAttributes) map[string]string {
+	if len(searchAttributes.GetIndexedFields()) == 0 {
+		return nil
+	}
+
 	searchAttrStr := make(map[string]string)
-	for k, v := range searchAttr {
+	for k, v := range searchAttributes.GetIndexedFields() {
 		var s string
 		_ = payload.Decode(v, &s)
 		searchAttrStr[k] = s
