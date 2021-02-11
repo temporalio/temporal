@@ -299,7 +299,9 @@ func (p *esProcessorImpl) extractVisibilityTaskKey(request elastic.BulkableReque
 
 		k, ok := body[definition.VisibilityTaskKey]
 		if !ok {
-			panic("VisibilityTaskKey not found")
+			p.logger.Error("Unable to extract VisibilityTaskKey from ES request.", tag.ESRequest(request.String()))
+			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
+			return ""
 		}
 		return k.(string)
 	} else { // delete requests

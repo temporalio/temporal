@@ -277,10 +277,15 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 
 func (s *esProcessorSuite) TestBulkAfterAction_Error() {
 	version := int64(3)
+	doc := map[string]interface{}{
+		definition.VisibilityTaskKey: "str",
+	}
+
 	request := elastic.NewBulkIndexRequest().
 		Index(testIndex).
 		Id(testID).
-		Version(version)
+		Version(version).
+		Doc(doc)
 	requests := []elastic.BulkableRequest{request}
 
 	mFailed := map[string]*elastic.BulkResponseItem{
@@ -350,15 +355,18 @@ func (s *esProcessorSuite) TestHashFn() {
 	s.NotEqual(uint32(0), s.esProcessor.hashFn("test"))
 }
 
-func (s *esProcessorSuite) TestGetVisibilityTaskKey() {
+func (s *esProcessorSuite) TestExtractVisibilityTaskKey() {
 	request := elastic.NewBulkIndexRequest()
-	s.PanicsWithValue("VisibilityTaskKey not found", func() { s.esProcessor.extractVisibilityTaskKey(request) })
+	s.mockMetricClient.On("IncCounter", metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData).Times(1)
+
+	visibilityTaskKey := s.esProcessor.extractVisibilityTaskKey(request)
+	s.Equal("", visibilityTaskKey)
 
 	m := map[string]interface{}{
 		definition.VisibilityTaskKey: 1,
 	}
 	request.Doc(m)
-	s.PanicsWithValue("VisibilityTaskKey is not string", func() { s.esProcessor.extractVisibilityTaskKey(request) })
+	s.Panics(func() { s.esProcessor.extractVisibilityTaskKey(request) })
 
 	testKey := "test-key"
 	m[definition.VisibilityTaskKey] = testKey
@@ -366,7 +374,7 @@ func (s *esProcessorSuite) TestGetVisibilityTaskKey() {
 	s.Equal(testKey, s.esProcessor.extractVisibilityTaskKey(request))
 }
 
-func (s *esProcessorSuite) TestGetKeyForKafkaMsg_Delete() {
+func (s *esProcessorSuite) TestExtractVisibilityTaskKey_Delete() {
 	request := elastic.NewBulkDeleteRequest()
 
 	// ensure compatible with dependency
@@ -379,11 +387,13 @@ func (s *esProcessorSuite) TestGetKeyForKafkaMsg_Delete() {
 	_, ok := body["delete"]
 	s.True(ok)
 
-	s.PanicsWithValue("_id not found in request opMap", func() { s.esProcessor.extractVisibilityTaskKey(request) })
+	s.mockMetricClient.On("IncCounter", metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData).Times(1)
+	key := s.esProcessor.extractVisibilityTaskKey(request)
+	s.Equal("", key)
 
 	id := "id"
 	request.Id(id)
-	key := s.esProcessor.extractVisibilityTaskKey(request)
+	key = s.esProcessor.extractVisibilityTaskKey(request)
 	s.Equal(id, key)
 }
 

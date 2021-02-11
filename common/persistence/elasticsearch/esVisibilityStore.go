@@ -287,7 +287,7 @@ func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest *es.BulkableReques
 
 func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBase, visibilityTaskKey string) map[string]interface{} {
 	doc := map[string]interface{}{
-		definition.VisibilityTaskKey: visibilityTaskKey, // processor will panic if this field is missing.
+		definition.VisibilityTaskKey: visibilityTaskKey,
 		definition.NamespaceID:       request.NamespaceID,
 		definition.WorkflowID:        request.WorkflowID,
 		definition.RunID:             request.RunID,
