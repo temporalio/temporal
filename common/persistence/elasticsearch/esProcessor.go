@@ -124,7 +124,7 @@ func (p *esProcessorImpl) Start() {
 	p.mapToAckChan = collection.NewShardedConcurrentTxMap(1024, p.hashFn)
 	p.bulkProcessor, err = p.client.RunBulkProcessor(context.Background(), p.bulkProcessorParameters)
 	if err != nil {
-		p.logger.Fatal("Unable to start Elastic Search processor.", tag.LifeCycleStartFailed, tag.Error(err))
+		p.logger.Fatal("Unable to start Elasticsearch processor.", tag.LifeCycleStartFailed, tag.Error(err))
 	}
 }
 
@@ -139,7 +139,7 @@ func (p *esProcessorImpl) Stop() {
 
 	err := p.bulkProcessor.Stop()
 	if err != nil {
-		p.logger.Fatal("Unable to stop Elastic Search processor.", tag.LifeCycleStopFailed, tag.Error(err))
+		p.logger.Fatal("Unable to stop Elasticsearch processor.", tag.LifeCycleStopFailed, tag.Error(err))
 	}
 	p.mapToAckChan = nil
 	p.bulkProcessor = nil
@@ -198,7 +198,7 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 		// When cluster back to live, processor will re-commit those failure requests
 
 		isRetryable := isRetryableError(err)
-		p.logger.Error("Error commit bulk ES request.", tag.Error(err), tag.Bool(isRetryable))
+		p.logger.Error("Unable to commit bulk ES request.", tag.Error(err), tag.Bool(isRetryable))
 		for _, request := range requests {
 			p.logger.Error("ES request failed.", tag.ESRequest(request.String()))
 			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures)
@@ -223,6 +223,7 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 
 		docID := p.extractDocID(request)
 		if docID == "" {
+			p.sendToAckChan(visibilityTaskKey, false)
 			continue
 		}
 
