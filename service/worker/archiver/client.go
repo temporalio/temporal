@@ -247,7 +247,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		return
 	}
 
-	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.VisibilityBlob{
+	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.VisibilityRecord{
 		NamespaceId:        request.ArchiveRequest.NamespaceID,
 		Namespace:          request.ArchiveRequest.Namespace,
 		WorkflowId:         request.ArchiveRequest.WorkflowID,
@@ -259,7 +259,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		Status:             request.ArchiveRequest.Status,
 		HistoryLength:      request.ArchiveRequest.HistoryLength,
 		Memo:               request.ArchiveRequest.Memo,
-		SearchAttributes:   request.ArchiveRequest.SearchAttributes,
+		SearchAttributes:   convertSearchAttributesToString(request.ArchiveRequest.SearchAttributes),
 		HistoryArchivalUri: request.ArchiveRequest.HistoryURI,
 	})
 }

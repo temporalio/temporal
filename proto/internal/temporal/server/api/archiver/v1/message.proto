@@ -50,8 +50,8 @@ message HistoryBlob  {
     repeated temporal.api.history.v1.History body = 2;
 }
 
-// ArchiveVisibilityRequest is request to Archive single workflow visibility record
-message VisibilityBlob {
+// VisibilityRecord is a single workflow visibility record in archive.
+message VisibilityRecord {
     string namespace_id = 1;
     string namespace = 2;
     string workflow_id = 3;
@@ -63,6 +63,6 @@ message VisibilityBlob {
     temporal.api.enums.v1.WorkflowExecutionStatus status = 9;
     int64 history_length = 10;
     temporal.api.common.v1.Memo memo = 11;
-    temporal.api.common.v1.SearchAttributes search_attributes = 12;
+    map<string, string> search_attributes = 12;
     string history_archival_uri = 13;
 }

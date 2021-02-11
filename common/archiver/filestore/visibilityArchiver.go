@@ -94,7 +94,7 @@ func NewVisibilityArchiver(
 func (v *visibilityArchiver) Archive(
 	ctx context.Context,
 	URI archiver.URI,
-	request *archiverspb.VisibilityBlob,
+	request *archiverspb.VisibilityRecord,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
@@ -309,7 +309,7 @@ func sortAndFilterFiles(filenames []string, token *queryVisibilityToken) ([]stri
 	return filteredFilenames, nil
 }
 
-func matchQuery(record *archiverspb.VisibilityBlob, query *parsedQuery) bool {
+func matchQuery(record *archiverspb.VisibilityRecord, query *parsedQuery) bool {
 	if record.CloseTime.Before(query.earliestCloseTime) || record.CloseTime.After(query.latestCloseTime) {
 		return false
 	}
@@ -328,7 +328,7 @@ func matchQuery(record *archiverspb.VisibilityBlob, query *parsedQuery) bool {
 	return true
 }
 
-func convertToExecutionInfo(record *archiverspb.VisibilityBlob) *workflowpb.WorkflowExecutionInfo {
+func convertToExecutionInfo(record *archiverspb.VisibilityRecord) *workflowpb.WorkflowExecutionInfo {
 	return &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
@@ -343,6 +343,6 @@ func convertToExecutionInfo(record *archiverspb.VisibilityBlob) *workflowpb.Work
 		Status:           record.Status,
 		HistoryLength:    record.HistoryLength,
 		Memo:             record.Memo,
-		SearchAttributes: record.SearchAttributes,
+		SearchAttributes: archiver.ConvertSearchAttrToPayload(record.SearchAttributes),
 	}
 }

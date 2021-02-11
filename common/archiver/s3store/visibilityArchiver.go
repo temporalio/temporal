@@ -102,7 +102,7 @@ func newVisibilityArchiver(
 func (v *visibilityArchiver) Archive(
 	ctx context.Context,
 	URI archiver.URI,
-	request *archiverspb.VisibilityBlob,
+	request *archiverspb.VisibilityRecord,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
 	scope := v.container.MetricsClient.Scope(metrics.VisibilityArchiverScope, metrics.NamespaceTag(request.Namespace))
@@ -153,7 +153,7 @@ func (v *visibilityArchiver) Archive(
 	scope.IncCounter(metrics.VisibilityArchiveSuccessCount)
 	return nil
 }
-func createIndexesToArchive(request *archiverspb.VisibilityBlob) []indexToArchive {
+func createIndexesToArchive(request *archiverspb.VisibilityRecord) []indexToArchive {
 	return []indexToArchive{
 		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyCloseTimeout, timestamp.TimeValue(request.CloseTime)},
 		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyStartTimeout, timestamp.TimeValue(request.StartTime)},

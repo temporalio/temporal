@@ -132,8 +132,8 @@ func serializeToken(token interface{}) ([]byte, error) {
 	return json.Marshal(token)
 }
 
-func decodeVisibilityRecord(data []byte) (*archiverspb.VisibilityBlob, error) {
-	record := &archiverspb.VisibilityBlob{}
+func decodeVisibilityRecord(data []byte) (*archiverspb.VisibilityRecord, error) {
+	record := &archiverspb.VisibilityRecord{}
 	encoder := codec.NewJSONPBEncoder()
 	err := encoder.Decode(data, record)
 	if err != nil {
@@ -153,7 +153,7 @@ func deserializeQueryVisibilityToken(bytes []byte) (*queryVisibilityToken, error
 	return token, err
 }
 
-func convertToExecutionInfo(record *archiverspb.VisibilityBlob) *workflowpb.WorkflowExecutionInfo {
+func convertToExecutionInfo(record *archiverspb.VisibilityRecord) *workflowpb.WorkflowExecutionInfo {
 	return &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
@@ -168,7 +168,7 @@ func convertToExecutionInfo(record *archiverspb.VisibilityBlob) *workflowpb.Work
 		Status:           record.Status,
 		HistoryLength:    record.HistoryLength,
 		Memo:             record.Memo,
-		SearchAttributes: record.SearchAttributes,
+		SearchAttributes: archiver.ConvertSearchAttrToPayload(record.SearchAttributes),
 	}
 }
 

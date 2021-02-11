@@ -59,7 +59,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 		Logger:        loggerimpl.NewLogger(zapLogger),
 		MetricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
 	}
-	s.expectedVisibilityRecords = []*archiverspb.VisibilityBlob{
+	s.expectedVisibilityRecords = []*archiverspb.VisibilityRecord{
 		{
 			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
@@ -87,7 +87,7 @@ type visibilityArchiverSuite struct {
 	suite.Suite
 	controller                *gomock.Controller
 	container                 *archiver.VisibilityBootstrapContainer
-	expectedVisibilityRecords []*archiverspb.VisibilityBlob
+	expectedVisibilityRecords []*archiverspb.VisibilityRecord
 }
 
 func (s *visibilityArchiverSuite) TestValidateVisibilityURI() {
@@ -140,7 +140,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidVisibilityURI() {
 
 	visibilityArchiver := newVisibilityArchiver(s.container, storageWrapper)
 	s.NoError(err)
-	request := &archiverspb.VisibilityBlob{
+	request := &archiverspb.VisibilityRecord{
 		NamespaceId: testNamespaceID,
 		Namespace:   testNamespace,
 		WorkflowId:  testWorkflowID,
@@ -180,7 +180,7 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 	visibilityArchiver := newVisibilityArchiver(s.container, storageWrapper)
 	s.NoError(err)
 
-	request := &archiverspb.VisibilityBlob{
+	request := &archiverspb.VisibilityRecord{
 		Namespace:        testNamespace,
 		NamespaceId:      testNamespaceID,
 		WorkflowId:       testWorkflowID,
