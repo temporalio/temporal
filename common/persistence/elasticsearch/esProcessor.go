@@ -241,6 +241,8 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 			p.logger.Error("ES request failed.",
 				tag.ESResponseStatus(responseItem.Status),
 				tag.ESResponseError(extractErrorReason(responseItem)),
+				tag.Key(visibilityTaskKey),
+				tag.ESDocID(docID),
 				tag.ESRequest(request.String()))
 			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures)
 			p.sendToAckChan(visibilityTaskKey, false)
@@ -248,6 +250,8 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 			p.logger.Warn("ES request retried.",
 				tag.ESResponseStatus(responseItem.Status),
 				tag.ESResponseError(extractErrorReason(responseItem)),
+				tag.Key(visibilityTaskKey),
+				tag.ESDocID(docID),
 				tag.ESRequest(request.String()))
 			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRetries)
 		}
