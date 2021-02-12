@@ -84,6 +84,7 @@ func Parse(searchAttributesString map[string]string, validSearchAttributes map[s
 	var lastErr error
 
 	for saName, saValString := range searchAttributesString {
+		// TODO: support nil validSearchAttributes ??
 		ivt, isValidSearchAttribute := validSearchAttributes[saName]
 		if !isValidSearchAttribute {
 			ivt = enumspb.INDEXED_VALUE_TYPE_STRING
@@ -92,7 +93,6 @@ func Parse(searchAttributesString map[string]string, validSearchAttributes map[s
 		saValPayload, err := parseValue(saValString, ivt)
 		if err != nil {
 			lastErr = err
-			continue
 		}
 		searchAttributes.IndexedFields[saName] = saValPayload
 	}
@@ -104,6 +104,7 @@ func parseValue(val string, valueType enumspb.IndexedValueType) (*commonpb.Paylo
 	var valObject interface{}
 	var err error
 	switch valueType {
+	// TODO: Array support!!!
 	case enumspb.INDEXED_VALUE_TYPE_STRING, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
 		valObject = val
 	case enumspb.INDEXED_VALUE_TYPE_INT:

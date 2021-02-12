@@ -274,7 +274,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 	}
 	searchAttributes, err := searchattribute.Encode(execution.SearchAttributes, validSearchAttributes)
 	if err != nil {
-		v.logger.Error("failed to convert search attributes",
+		v.logger.Error("failed to encode search attributes",
 			tag.WorkflowID(execution.WorkflowID),
 			tag.WorkflowRunID(execution.RunID),
 			tag.Error(err))
@@ -291,7 +291,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 		StartTime:        &execution.StartTime,
 		ExecutionTime:    &execution.ExecutionTime,
 		Memo:             memo,
-		SearchAttributes: &commonpb.SearchAttributes{IndexedFields: searchAttributes},
+		SearchAttributes: searchAttributes,
 		TaskQueue:        execution.TaskQueue,
 		Status:           execution.Status,
 	}

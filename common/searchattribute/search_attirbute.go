@@ -44,8 +44,8 @@ var (
 	ErrMissingMetadataType           = errors.New("search attribute metadata doesn't have value type")
 	ErrInvalidMetadataType           = errors.New("search attribute metadata has invalid value type")
 	ErrInvalidMetadataIndexValueType = errors.New("search attribute metadata has invalid index value type")
-	ErrUnableToSetMetadataType       = errors.New("unable to set search attribute metadata type")
 	ErrInvalidName                   = errors.New("invalid search attribute name")
+	ErrValidMapIsEmpty               = errors.New("valid search attributes map is empty")
 )
 
 // ConvertDynamicConfigTypeToIndexedValueType takes dynamicConfigType as interface{} and convert to IndexedValueType.
@@ -77,7 +77,7 @@ func ConvertDynamicConfigToIndexedValueTypes(validSearchAttributesFn dynamicconf
 	}
 
 	validSearchAttributes := validSearchAttributesFn()
-	if validSearchAttributes == nil {
+	if len(validSearchAttributes) == 0 {
 		return nil
 	}
 
@@ -158,37 +158,41 @@ func EncodeValue(val interface{}, ivt enumspb.IndexedValueType) (*commonpb.Paylo
 }
 
 // Encode encodes map of search attribute values to map of Payloads.
-func Encode(searchAttributes map[string]interface{}, validSearchAttributes map[string]enumspb.IndexedValueType) (map[string]*commonpb.Payload, error) {
+func Encode(searchAttributes map[string]interface{}, validSearchAttributes map[string]enumspb.IndexedValueType) (*commonpb.SearchAttributes, error) {
+	if len(searchAttributes) == 0 {
+		return nil, nil
+	}
+
 	indexedFields := make(map[string]*commonpb.Payload, len(searchAttributes))
 	var lastErr error
 	for attrName, attrValue := range searchAttributes {
 		valPayload, err := payload.Encode(attrValue)
 		if err != nil {
 			lastErr = err
+			indexedFields[attrName] = nil
 			continue
 		}
 
-		if validSearchAttributes == nil {
-			lastErr = fmt.Errorf("%w: %s", ErrUnableToSetMetadataType, attrName)
+		indexedFields[attrName] = valPayload
+
+		if len(validSearchAttributes) == 0 {
+			lastErr = ErrValidMapIsEmpty
 			continue
 		}
 
 		ivt, ok := validSearchAttributes[attrName]
 		if !ok {
-			lastErr = fmt.Errorf("%w: %s", ErrUnableToSetMetadataType, attrName)
-			continue
+			lastErr = fmt.Errorf("%w: %s", ErrInvalidName, attrName)
 		}
-
 		setPayloadType(valPayload, ivt)
-		indexedFields[attrName] = valPayload
 	}
-	return indexedFields, lastErr
+	return &commonpb.SearchAttributes{IndexedFields: indexedFields}, lastErr
 }
 
 // SetTypes set types for all valid search attributes which don't have it.
 // It doesn't do any validation and just skip invalid or already set fields.
 func SetTypes(searchAttributes *commonpb.SearchAttributes, validSearchAttributes map[string]enumspb.IndexedValueType) {
-	if validSearchAttributes == nil {
+	if len(validSearchAttributes) == 0 {
 		return
 	}
 

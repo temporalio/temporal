@@ -303,13 +303,14 @@ func processSearchAttr(c *cli.Context) *commonpb.SearchAttributes {
 		searchAttributes[searchAttrKeys[i]] = convertStringToRealType(searchAttrVal)
 	}
 
-	fields, err := searchattribute.Encode(searchAttributes, nil)
-	// ErrUnableToSetMetadataType is valid error here because validSearchAttributes were not passed.
-	if !errors.Is(err, searchattribute.ErrUnableToSetMetadataType) {
+	// TODO: use searchattribute.Parse() here.
+	encodedSearchAttributes, err := searchattribute.Encode(searchAttributes, nil)
+	// ErrValidMapIsEmpty is expected error here because validSearchAttributes were not passed.
+	if !errors.Is(err, searchattribute.ErrValidMapIsEmpty) {
 		ErrorAndExit("Encode error", err)
 	}
 
-	return &commonpb.SearchAttributes{IndexedFields: fields}
+	return encodedSearchAttributes
 }
 
 func processMemo(c *cli.Context) map[string]*commonpb.Payload {
@@ -966,8 +967,8 @@ func setSearchAttributesType(searchAttributes *commonpb.SearchAttributes, wfClie
 		return
 	}
 
-	// For all newly created search attributes type should be set in Metadata field.
-	// Call to GetSearchAttributes is just for backward compatibility.
+	// Server >=1.7.0 will have search attribute types in Metadata field.
+	// GetSearchAttributes call is just for case when newer tctl is used in server <1.7.0.
 	// It may fail with Unauthorized error which will be safely ignored.
 	ctx, cancel := newContext(c)
 	defer cancel()

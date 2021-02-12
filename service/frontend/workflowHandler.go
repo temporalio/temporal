@@ -3076,6 +3076,9 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, wh.error(err, scope)
 	}
 
+	searchattribute.SetTypes(response.WorkflowExecutionInfo.SearchAttributes,
+		searchattribute.ConvertDynamicConfigToIndexedValueTypes(wh.config.ValidSearchAttributes))
+
 	return &workflowservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig:       response.GetExecutionConfig(),
 		WorkflowExecutionInfo: response.GetWorkflowExecutionInfo(),
