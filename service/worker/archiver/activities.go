@@ -150,6 +150,11 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		logger.Error(carchiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason("failed to get visibility archiver"), tag.Error(err))
 		return errArchiveVisibilityNonRetryable
 	}
+	searchAttributes, err := searchattribute.Stringify(request.SearchAttributes)
+	if err != nil {
+		logger.Error("Unable to stringify search attributes.", tag.Error(err))
+	}
+
 	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.VisibilityRecord{
 		NamespaceId:        request.NamespaceID,
 		Namespace:          request.Namespace,
@@ -162,7 +167,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		Status:             request.Status,
 		HistoryLength:      request.HistoryLength,
 		Memo:               request.Memo,
-		SearchAttributes:   searchattribute.Stringify(request.SearchAttributes),
+		SearchAttributes:   searchAttributes,
 		HistoryArchivalUri: request.HistoryURI,
 	}, carchiver.GetNonRetryableErrorOption(errArchiveVisibilityNonRetryable))
 	if err == nil {

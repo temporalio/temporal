@@ -248,6 +248,10 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		return
 	}
 
+	searchAttributes, err := searchattribute.Stringify(request.ArchiveRequest.SearchAttributes)
+	if err != nil {
+		logger.Error("Unable to stringify search attributes.", tag.Error(err))
+	}
 	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.VisibilityRecord{
 		NamespaceId:        request.ArchiveRequest.NamespaceID,
 		Namespace:          request.ArchiveRequest.Namespace,
@@ -260,7 +264,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		Status:             request.ArchiveRequest.Status,
 		HistoryLength:      request.ArchiveRequest.HistoryLength,
 		Memo:               request.ArchiveRequest.Memo,
-		SearchAttributes:   searchattribute.Stringify(request.ArchiveRequest.SearchAttributes),
+		SearchAttributes:   searchAttributes,
 		HistoryArchivalUri: request.ArchiveRequest.HistoryURI,
 	})
 }

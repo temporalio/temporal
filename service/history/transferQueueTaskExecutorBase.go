@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/worker/archiver"
@@ -319,6 +320,10 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	if archiveVisibility {
 		ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
 		defer cancel()
+
+		searchattribute.SetTypes(searchAttributes,
+			searchattribute.ConvertDynamicConfigToIndexedValueTypes(t.config.ValidSearchAttributes))
+
 		_, err := t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
 			ArchiveRequest: &archiver.ArchiveRequest{
 				NamespaceID:      namespaceID,

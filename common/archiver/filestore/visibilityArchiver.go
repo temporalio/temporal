@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -230,7 +231,12 @@ func (v *visibilityArchiver) query(
 		}
 
 		if matchQuery(record, request.parsedQuery) {
-			response.Executions = append(response.Executions, convertToExecutionInfo(record, validSearchAttributes))
+			executionInfo, err := convertToExecutionInfo(record, validSearchAttributes)
+			if err != nil {
+				return nil, serviceerror.NewInternal(err.Error())
+			}
+
+			response.Executions = append(response.Executions, executionInfo)
 			if len(response.Executions) == request.pageSize {
 				if idx != len(files) {
 					newToken := &queryVisibilityToken{
@@ -336,7 +342,12 @@ func matchQuery(record *archiverspb.VisibilityRecord, query *parsedQuery) bool {
 	return true
 }
 
-func convertToExecutionInfo(record *archiverspb.VisibilityRecord, validSearchAttributes map[string]enumspb.IndexedValueType) *workflowpb.WorkflowExecutionInfo {
+func convertToExecutionInfo(record *archiverspb.VisibilityRecord, validSearchAttributes map[string]enumspb.IndexedValueType) (*workflowpb.WorkflowExecutionInfo, error) {
+	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, validSearchAttributes)
+	if err != nil {
+		return nil, err
+	}
+
 	return &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
@@ -351,6 +362,6 @@ func convertToExecutionInfo(record *archiverspb.VisibilityRecord, validSearchAtt
 		Status:           record.Status,
 		HistoryLength:    record.HistoryLength,
 		Memo:             record.Memo,
-		SearchAttributes: archiver.MustParseSearchAttributes(record.SearchAttributes, validSearchAttributes),
-	}
+		SearchAttributes: searchAttributes,
+	}, nil
 }

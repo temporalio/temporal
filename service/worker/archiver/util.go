@@ -97,17 +97,3 @@ func tagLoggerWithActivityInfo(logger log.Logger, activityInfo activity.Info) lo
 		tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
 		tag.Attempt(activityInfo.Attempt))
 }
-
-// func convertSearchAttributesToString(searchAttributes *commonpb.SearchAttributes) map[string]string {
-// 	if len(searchAttributes.GetIndexedFields()) == 0 {
-// 		return nil
-// 	}
-//
-// 	searchAttrStr := make(map[string]string)
-// 	for k, v := range searchAttributes.GetIndexedFields() {
-// 		var s string
-// 		_ = payload.Decode(v, &s)
-// 		searchAttrStr[k] = s
-// 	}
-// 	return searchAttrStr
-// }

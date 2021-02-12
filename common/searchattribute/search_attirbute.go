@@ -45,6 +45,7 @@ var (
 	ErrInvalidMetadataType           = errors.New("search attribute metadata has invalid value type")
 	ErrInvalidMetadataIndexValueType = errors.New("search attribute metadata has invalid index value type")
 	ErrUnableToSetMetadataType       = errors.New("unable to set search attribute metadata type")
+	ErrInvalidName                   = errors.New("invalid search attribute name")
 )
 
 // ConvertDynamicConfigTypeToIndexedValueType takes dynamicConfigType as interface{} and convert to IndexedValueType.

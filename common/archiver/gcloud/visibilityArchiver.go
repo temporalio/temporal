@@ -246,7 +246,11 @@ func (v *visibilityArchiver) query(
 			return nil, &serviceerror.InvalidArgument{Message: err.Error()}
 		}
 
-		response.Executions = append(response.Executions, convertToExecutionInfo(record, validSearchAttributes))
+		executionInfo, err := convertToExecutionInfo(record, validSearchAttributes)
+		if err != nil {
+			return nil, serviceerror.NewInternal(err.Error())
+		}
+		response.Executions = append(response.Executions, executionInfo)
 	}
 
 	if !completed {

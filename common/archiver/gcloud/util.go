@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 func encode(message proto.Message) ([]byte, error) {
@@ -154,7 +155,12 @@ func deserializeQueryVisibilityToken(bytes []byte) (*queryVisibilityToken, error
 	return token, err
 }
 
-func convertToExecutionInfo(record *archiverspb.VisibilityRecord, validSearchAttributes map[string]enumspb.IndexedValueType) *workflowpb.WorkflowExecutionInfo {
+func convertToExecutionInfo(record *archiverspb.VisibilityRecord, validSearchAttributes map[string]enumspb.IndexedValueType) (*workflowpb.WorkflowExecutionInfo, error) {
+	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, validSearchAttributes)
+	if err != nil {
+		return nil, err
+	}
+
 	return &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
@@ -169,8 +175,8 @@ func convertToExecutionInfo(record *archiverspb.VisibilityRecord, validSearchAtt
 		Status:           record.Status,
 		HistoryLength:    record.HistoryLength,
 		Memo:             record.Memo,
-		SearchAttributes: archiver.MustParseSearchAttributes(record.SearchAttributes, validSearchAttributes),
-	}
+		SearchAttributes: searchAttributes,
+	}, nil
 }
 
 func newRunIDPrecondition(runID string) connector.Precondition {

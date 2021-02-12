@@ -366,8 +366,15 @@ func getPrintableMemo(memo *commonpb.Memo) string {
 
 func getPrintableSearchAttr(searchAttr *commonpb.SearchAttributes) string {
 	var buf bytes.Buffer
-	for attrName, attrValueString := range searchattribute.Stringify(searchAttr.GetIndexedFields()) {
-		_, _ = fmt.Fprintf(&buf, "%s=%v\n", attrName, attrValueString)
+	searchAttributesString, err := searchattribute.Stringify(searchAttr)
+	if err != nil {
+		fmt.Printf("%s: unable to stringify search attribute: %v",
+			colorMagenta("Warning"),
+			err)
+	}
+
+	for saName, saValueString := range searchAttributesString {
+		_, _ = fmt.Fprintf(&buf, "%s=%s\n", saName, saValueString)
 	}
 	return buf.String()
 }
@@ -936,9 +943,11 @@ func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes,
 	}
 
 	setSearchAttributesType(searchAttributes, wfClient, c)
-	fields := searchattribute.Stringify(searchAttributes.GetIndexedFields())
-	if fields == nil {
-		return nil
+	fields, err := searchattribute.Stringify(searchAttributes)
+	if err != nil {
+		fmt.Printf("%s: unable to stringify search attribute: %v",
+			colorMagenta("Warning"),
+			err)
 	}
 
 	return &clispb.SearchAttributes{IndexedFields: fields}

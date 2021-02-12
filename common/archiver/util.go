@@ -27,13 +27,9 @@ package archiver
 import (
 	"errors"
 
-	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/searchattribute"
 )
 
 var (
@@ -149,14 +145,4 @@ func ValidateQueryRequest(request *QueryVisibilityRequest) error {
 		return errEmptyQuery
 	}
 	return nil
-}
-
-// MustParseSearchAttributes converts search attribute value from string back to Payload
-func MustParseSearchAttributes(searchAttributesString map[string]string, validSearchAttributes map[string]enumspb.IndexedValueType) map[string]*commonpb.Payload {
-	if len(searchAttributesString) == 0 {
-		return nil
-	}
-
-	searchAttributes, _ := searchattribute.Parse(searchAttributesString, validSearchAttributes)
-	return searchAttributes
 }
