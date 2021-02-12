@@ -37,6 +37,10 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
+const (
+	ContextKeyMetrics = "context-key-metrics"
+)
+
 type (
 	TelemetryInterceptor struct {
 		metricsClient metrics.Client
@@ -75,6 +79,7 @@ func (ti *TelemetryInterceptor) Intercept(
 	} else {
 		metricsScope = ti.metricsClient.Scope(scope).Tagged(metrics.NamespaceUnknownTag())
 	}
+	ctx = context.WithValue(ctx, ContextKeyMetrics, metricsScope)
 	metricsScope.IncCounter(metrics.ServiceRequests)
 	timer := metricsScope.StartTimer(metrics.ServiceLatency)
 	defer timer.Stop()

@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/common/metrics"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -543,9 +544,12 @@ func CheckEventBlobSizeLimit(
 	namespaceID string,
 	workflowID string,
 	runID string,
+	scope metrics.Scope,
 	logger log.Logger,
 	blobSizeViolationOperationTag tag.Tag,
 ) error {
+	scope.RecordDistribution(metrics.EventBlobSize, actualSize)
+
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob size exceeds limit.",
