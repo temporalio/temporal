@@ -426,7 +426,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[0], nil), response.Executions[0])
+	ei, err := convertToExecutionInfo(s.visibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[0])
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
@@ -450,8 +452,12 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	s.NotNil(response)
 	s.NotNil(response.NextPageToken)
 	s.Len(response.Executions, 2)
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[0], nil), response.Executions[0])
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[1], nil), response.Executions[1])
+	ei, err := convertToExecutionInfo(s.visibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[0])
+	ei, err = convertToExecutionInfo(s.visibilityRecords[1], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[1])
 
 	request.NextPageToken = response.NextPageToken
 	response, err = visibilityArchiver.Query(context.Background(), URI, request, nil)
@@ -459,7 +465,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[3], nil), response.Executions[0])
+	ei, err = convertToExecutionInfo(s.visibilityRecords[3], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[0])
 }
 
 func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
@@ -496,8 +504,12 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 		request.NextPageToken = response.NextPageToken
 	}
 	s.Len(executions, 2)
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[0], nil), executions[0])
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[1], nil), executions[1])
+	ei, err := convertToExecutionInfo(s.visibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(ei, executions[0])
+	ei, err = convertToExecutionInfo(s.visibilityRecords[1], nil)
+	s.NoError(err)
+	s.Equal(ei, executions[1])
 }
 
 func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchiver {

@@ -279,7 +279,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	s.Equal(convertToExecutionInfo(s.expectedVisibilityRecords[0], nil), response.Executions[0])
+	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[0])
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
@@ -321,8 +323,12 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	s.NotNil(response)
 	s.NotNil(response.NextPageToken)
 	s.Len(response.Executions, 2)
-	s.Equal(convertToExecutionInfo(s.expectedVisibilityRecords[0], nil), response.Executions[0])
-	s.Equal(convertToExecutionInfo(s.expectedVisibilityRecords[0], nil), response.Executions[1])
+	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[0])
+	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[1])
 
 	request.NextPageToken = response.NextPageToken
 	response, err = visibilityArchiver.Query(ctx, URI, request, nil)
@@ -330,5 +336,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	s.Equal(convertToExecutionInfo(s.expectedVisibilityRecords[0], nil), response.Executions[0])
+	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[0])
 }

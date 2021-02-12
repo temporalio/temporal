@@ -315,7 +315,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 2)
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[0], nil), response.Executions[0])
+	ei, err := convertToExecutionInfo(s.visibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(response.Executions[0], ei)
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
@@ -339,8 +341,12 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	s.NotNil(response)
 	s.NotNil(response.NextPageToken)
 	s.Len(response.Executions, 2)
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[0], nil), response.Executions[0])
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[1], nil), response.Executions[1])
+	ei, err := convertToExecutionInfo(s.visibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[0])
+	ei, err = convertToExecutionInfo(s.visibilityRecords[1], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[1])
 
 	request.NextPageToken = response.NextPageToken
 	response, err = visibilityArchiver.Query(context.Background(), URI, request, nil)
@@ -348,7 +354,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[2], nil), response.Executions[0])
+	ei, err = convertToExecutionInfo(s.visibilityRecords[2], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[0])
 }
 
 type precisionTest struct {
@@ -542,9 +550,15 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 		first = false
 	}
 	s.Len(executions, 3)
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[0], nil), executions[0])
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[1], nil), executions[1])
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[2], nil), executions[2])
+	ei, err := convertToExecutionInfo(s.visibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(ei, executions[0])
+	ei, err = convertToExecutionInfo(s.visibilityRecords[1], nil)
+	s.NoError(err)
+	s.Equal(ei, executions[1])
+	ei, err = convertToExecutionInfo(s.visibilityRecords[2], nil)
+	s.NoError(err)
+	s.Equal(ei, executions[2])
 
 	mockParser = NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
@@ -567,9 +581,15 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 		first = false
 	}
 	s.Len(executions, 3)
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[0], nil), executions[0])
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[1], nil), executions[1])
-	s.Equal(convertToExecutionInfo(s.visibilityRecords[2], nil), executions[2])
+	ei, err = convertToExecutionInfo(s.visibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(ei, executions[0])
+	ei, err = convertToExecutionInfo(s.visibilityRecords[1], nil)
+	s.NoError(err)
+	s.Equal(ei, executions[1])
+	ei, err = convertToExecutionInfo(s.visibilityRecords[2], nil)
+	s.NoError(err)
+	s.Equal(ei, executions[2])
 }
 
 func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
