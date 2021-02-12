@@ -140,7 +140,6 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 		executionInfo.NamespaceId,
 		executionInfo.WorkflowId,
 		executionState.RunId,
-		c.metricsScope.Tagged(commandTypeTag),
 		c.logger,
 		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
 	)

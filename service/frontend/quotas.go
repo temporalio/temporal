@@ -22,59 +22,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package interceptor
-
-import (
-	"context"
-	"time"
-
-	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/quotas"
-)
-
-const (
-	RateLimitDefaultToken = 1
-)
+package frontend
 
 var (
-	RateLimitServerBusy = serviceerror.NewResourceExhausted("service rate limit exceeded")
-)
+	APIRateLimitOverride = map[string]int{
+		"RecordActivityTaskHeartbeat":      0,
+		"RecordActivityTaskHeartbeatById":  0,
+		"RespondActivityTaskCompleted":     0,
+		"RespondActivityTaskCompletedById": 0,
+		"RespondActivityTaskFailed":        0,
+		"RespondActivityTaskFailedById":    0,
+		"RespondActivityTaskCanceled":      0,
+		"RespondActivityTaskCanceledById":  0,
+		"RespondQueryTaskCompleted":        0,
+		"RespondWorkflowTaskCompleted":     0,
+		"RespondWorkflowTaskFailed":        0,
+	}
 
-type (
-	RateLimitInterceptor struct {
-		rateLimiter quotas.RateLimiter
-		tokens      map[string]int
+	APICountLimitOverride = map[string]int{
+		"PollActivityTaskQueue": 1,
+		"PollWorkflowTaskQueue": 1,
 	}
 )
-
-var _ grpc.UnaryServerInterceptor = (*RateLimitInterceptor)(nil).Intercept
-
-func NewRateLimitInterceptor(
-	rate quotas.RateFn,
-	tokens map[string]int,
-) *RateLimitInterceptor {
-	return &RateLimitInterceptor{
-		rateLimiter: quotas.NewDefaultIncomingDynamicRateLimiter(rate),
-		tokens:      tokens,
-	}
-}
-
-func (i *RateLimitInterceptor) Intercept(
-	ctx context.Context,
-	req interface{},
-	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	_, methodName := splitMethodName(info.FullMethod)
-	token, ok := i.tokens[methodName]
-	if !ok {
-		token = RateLimitDefaultToken
-	}
-
-	if !i.rateLimiter.AllowN(time.Now().UTC(), token) {
-		return nil, RateLimitServerBusy
-	}
-	return handler(ctx, req)
-}

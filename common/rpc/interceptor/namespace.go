@@ -22,76 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package quotas
-
-import (
-	"go.uber.org/atomic"
-)
+package interceptor
 
 type (
-	// RateFn returns a float64 as the RPS
-	RateFn func() float64
-
-	// BurstFn returns a int as the RPS
-	BurstFn func() int
-
-	// DynamicRateImpl stores the dynamic rate per second for rate limiter
-	DynamicRateImpl struct {
-		rate *atomic.Float64
-	}
-
-	// DynamicBurstImpl stores the dynamic burst for rate limiter
-	DynamicBurstImpl struct {
-		burst *atomic.Int64
-	}
-
-	DynamicRate interface {
-		Load() float64
-		Store(rate float64)
-		RateFn() RateFn
-	}
-
-	DynamicBurst interface {
-		Load() int
-		Store(burst int)
-		BurstFn() BurstFn
+	NamespaceGetter interface {
+		GetNamespace() string
 	}
 )
 
-func NewDynamicRate(rate float64) *DynamicRateImpl {
-
-	return &DynamicRateImpl{
-		rate: atomic.NewFloat64(rate),
+func GetNamespace(req interface{}) string {
+	if namespaceGetter, ok := req.(NamespaceGetter); ok {
+		return namespaceGetter.GetNamespace()
 	}
-}
 
-func NewDynamicBurst(burst int) *DynamicBurstImpl {
-
-	return &DynamicBurstImpl{
-		burst: atomic.NewInt64(int64(burst)),
-	}
-}
-
-func (d *DynamicRateImpl) Load() float64 {
-	return d.rate.Load()
-}
-
-func (d *DynamicRateImpl) Store(rate float64) {
-	d.rate.Store(rate)
-}
-
-func (d *DynamicRateImpl) RateFn() RateFn {
-	return d.Load
-}
-
-func (d *DynamicBurstImpl) Load() int {
-	return int(d.burst.Load())
-}
-
-func (d *DynamicBurstImpl) Store(burst int) {
-	d.burst.Store(int64(burst))
-}
-
-func (d *DynamicBurstImpl) BurstFn() BurstFn {
-	return d.Load
+	return ""
 }

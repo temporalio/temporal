@@ -31,26 +31,22 @@ import (
 )
 
 type (
-	// NamespaceMultiStageRateLimiterImpl is a multi stage rate limiter
-	// special built for multi-tenancy
-	NamespaceMultiStageRateLimiterImpl struct {
+	// NamespaceRateLimiterImpl is a rate limiter special built for multi-tenancy
+	NamespaceRateLimiterImpl struct {
 		namespaceRateLimiterFn NamespaceRateLimiterFn
-		sharedRateLimiters     []RateLimiter
 
 		sync.RWMutex
 		namespaceRateLimiters map[string]RateLimiter
 	}
 )
 
-var _ NamespaceRateLimiter = (*NamespaceMultiStageRateLimiterImpl)(nil)
+var _ NamespaceRateLimiter = (*NamespaceRateLimiterImpl)(nil)
 
-func NewNamespaceMultiStageRateLimiter(
+func NewNamespaceRateLimiter(
 	namespaceRateLimiterFn NamespaceRateLimiterFn,
-	sharedRateLimiters []RateLimiter,
-) *NamespaceMultiStageRateLimiterImpl {
-	return &NamespaceMultiStageRateLimiterImpl{
+) *NamespaceRateLimiterImpl {
+	return &NamespaceRateLimiterImpl{
 		namespaceRateLimiterFn: namespaceRateLimiterFn,
-		sharedRateLimiters:     sharedRateLimiters,
 
 		namespaceRateLimiters: make(map[string]RateLimiter),
 	}
@@ -59,7 +55,7 @@ func NewNamespaceMultiStageRateLimiter(
 // Allow attempts to allow a request to go through. The method returns
 // immediately with a true or false indicating if the request can make
 // progress
-func (r *NamespaceMultiStageRateLimiterImpl) Allow(
+func (r *NamespaceRateLimiterImpl) Allow(
 	namespaceID string,
 ) bool {
 
@@ -69,7 +65,7 @@ func (r *NamespaceMultiStageRateLimiterImpl) Allow(
 // AllowN attempts to allow a request to go through. The method returns
 // immediately with a true or false indicating if the request can make
 // progress
-func (r *NamespaceMultiStageRateLimiterImpl) AllowN(
+func (r *NamespaceRateLimiterImpl) AllowN(
 	namespaceID string,
 	now time.Time,
 	numToken int,
@@ -81,7 +77,7 @@ func (r *NamespaceMultiStageRateLimiterImpl) AllowN(
 
 // Reserve returns a Reservation that indicates how long the caller
 // must wait before event happen.
-func (r *NamespaceMultiStageRateLimiterImpl) Reserve(
+func (r *NamespaceRateLimiterImpl) Reserve(
 	namespaceID string,
 ) Reservation {
 
@@ -90,7 +86,7 @@ func (r *NamespaceMultiStageRateLimiterImpl) Reserve(
 
 // ReserveN returns a Reservation that indicates how long the caller
 // must wait before event happen.
-func (r *NamespaceMultiStageRateLimiterImpl) ReserveN(
+func (r *NamespaceRateLimiterImpl) ReserveN(
 	namespaceID string,
 	now time.Time,
 	numToken int,
@@ -102,7 +98,7 @@ func (r *NamespaceMultiStageRateLimiterImpl) ReserveN(
 
 // Wait waits till the deadline for a rate limit token to allow the request
 // to go through.
-func (r *NamespaceMultiStageRateLimiterImpl) Wait(
+func (r *NamespaceRateLimiterImpl) Wait(
 	ctx context.Context,
 	namespaceID string,
 ) error {
@@ -112,7 +108,7 @@ func (r *NamespaceMultiStageRateLimiterImpl) Wait(
 
 // WaitN waits till the deadline for a rate limit token to allow the request
 // to go through.
-func (r *NamespaceMultiStageRateLimiterImpl) WaitN(
+func (r *NamespaceRateLimiterImpl) WaitN(
 	ctx context.Context,
 	namespaceID string,
 	numToken int,
@@ -122,7 +118,7 @@ func (r *NamespaceMultiStageRateLimiterImpl) WaitN(
 	return rateLimiter.WaitN(ctx, numToken)
 }
 
-func (r *NamespaceMultiStageRateLimiterImpl) getOrInitRateLimiter(
+func (r *NamespaceRateLimiterImpl) getOrInitRateLimiter(
 	namespaceID string,
 ) RateLimiter {
 	r.RLock()
@@ -132,14 +128,7 @@ func (r *NamespaceMultiStageRateLimiterImpl) getOrInitRateLimiter(
 		return rateLimiter
 	}
 
-	length := len(r.sharedRateLimiters)
-	rateLimiters := make([]RateLimiter, length+1)
-	rateLimiters[0] = r.namespaceRateLimiterFn(namespaceID)
-	for i := 0; i < length; i++ {
-		rateLimiters[i+1] = r.sharedRateLimiters[i]
-	}
-	namespaceRateLimiter := NewMultiStageRateLimiter(rateLimiters)
-
+	newRateLimiter := r.namespaceRateLimiterFn(namespaceID)
 	r.Lock()
 	defer r.Unlock()
 
@@ -147,6 +136,6 @@ func (r *NamespaceMultiStageRateLimiterImpl) getOrInitRateLimiter(
 	if ok {
 		return rateLimiter
 	}
-	r.namespaceRateLimiters[namespaceID] = namespaceRateLimiter
-	return namespaceRateLimiter
+	r.namespaceRateLimiters[namespaceID] = newRateLimiter
+	return newRateLimiter
 }

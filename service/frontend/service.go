@@ -41,36 +41,39 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 // Config represents configuration for frontend service
 type Config struct {
-	NumHistoryShards           int32
-	PersistenceMaxQPS          dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS    dynamicconfig.IntPropertyFn
-	VisibilityMaxPageSize      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableVisibilitySampling   dynamicconfig.BoolPropertyFn
-	VisibilityListMaxQPS       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableReadVisibilityFromES dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ESVisibilityListMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	ESIndexMaxResultWindow     dynamicconfig.IntPropertyFn
-	HistoryMaxPageSize         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	RPS                        dynamicconfig.IntPropertyFn
-	MaxNamespaceRPSPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
-	GlobalNamespaceRPS         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxIDLengthLimit           dynamicconfig.IntPropertyFn
-	EnableClientVersionCheck   dynamicconfig.BoolPropertyFn
-	MinRetentionDays           dynamicconfig.IntPropertyFn
-	DisallowQuery              dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration      dynamicconfig.DurationPropertyFn
+	NumHistoryShards             int32
+	PersistenceMaxQPS            dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS      dynamicconfig.IntPropertyFn
+	VisibilityMaxPageSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableVisibilitySampling     dynamicconfig.BoolPropertyFn
+	VisibilityListMaxQPS         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableReadVisibilityFromES   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ESVisibilityListMaxQPS       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ESIndexMaxResultWindow       dynamicconfig.IntPropertyFn
+	HistoryMaxPageSize           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RPS                          dynamicconfig.IntPropertyFn
+	MaxNamespaceRPSPerInstance   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceCountPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalNamespaceRPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLengthLimit             dynamicconfig.IntPropertyFn
+	EnableClientVersionCheck     dynamicconfig.BoolPropertyFn
+	MinRetentionDays             dynamicconfig.IntPropertyFn
+	DisallowQuery                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration        dynamicconfig.DurationPropertyFn
 
 	MaxBadBinaries dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -126,6 +129,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		HistoryMaxPageSize:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                    dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
 		MaxNamespaceRPSPerInstance:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 1200),
+		MaxNamespaceCountPerInstance:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceCountPerInstance, 1200),
 		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
 		MaxIDLengthLimit:                       dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		MaxBadBinaries:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxBadBinaries, namespace.MaxBadBinaries),
@@ -240,6 +244,26 @@ func (s *Service) Start() {
 		replicationMessageSink = s.GetNamespaceReplicationQueue()
 	}
 
+	metricsInterceptor := interceptor.NewTelemetryInterceptor(
+		s.Resource.GetMetricsClient(),
+		metrics.FrontendAPIMetricsScopes(),
+		s.Resource.GetLogger(),
+	)
+	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
+		func() float64 { return float64(s.config.RPS()) },
+		APIRateLimitOverride,
+	)
+	namespaceRateLimiterInterceptor := interceptor.NewNamespaceRateLimitInterceptor(
+		func(namespace string) float64 {
+			return float64(s.config.MaxNamespaceRPSPerInstance(namespace))
+		},
+		APIRateLimitOverride,
+	)
+	namespaceCountLimiterInterceptor := interceptor.NewNamespaceCountLimitInterceptor(
+		s.config.MaxNamespaceCountPerInstance,
+		APICountLimitOverride,
+	)
+
 	opts, err := s.params.RPCFactory.GetFrontendGRPCServerOptions()
 	if err != nil {
 		logger.Fatal("creating grpc server options failed", tag.Error(err))
@@ -248,6 +272,10 @@ func (s *Service) Start() {
 		opts,
 		grpc.ChainUnaryInterceptor(
 			rpc.ServiceErrorInterceptor,
+			metricsInterceptor.Intercept,
+			rateLimiterInterceptor.Intercept,
+			namespaceRateLimiterInterceptor.Intercept,
+			namespaceCountLimiterInterceptor.Intercept,
 			authorization.NewAuthorizationInterceptor(
 				s.params.ClaimMapper,
 				s.params.Authorizer,

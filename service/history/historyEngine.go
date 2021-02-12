@@ -143,8 +143,6 @@ var (
 	ErrWorkflowParent = serviceerror.NewNotFound("workflow parent does not match")
 	// ErrDeserializingToken is the error to indicate task token is invalid
 	ErrDeserializingToken = serviceerror.NewInvalidArgument("error deserializing task token")
-	// ErrCancellationAlreadyRequested is the error indicating cancellation for target workflow is already requested
-	ErrCancellationAlreadyRequested = serviceerror.NewCancellationAlreadyRequested("cancellation already requested for this workflow execution")
 	// ErrSignalsLimitExceeded is the error indicating limit reached for maximum number of signal events
 	ErrSignalsLimitExceeded = serviceerror.NewResourceExhausted("exceeded workflow execution limit for signal events")
 	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event

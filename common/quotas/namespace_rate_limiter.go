@@ -24,9 +24,15 @@
 
 package quotas
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type (
+	// NamespaceRateLimiterFn returns generate a namespace specific rate limiter
+	NamespaceRateLimiterFn func(namespaceID string) RateLimiter
+
 	// NamespaceRateLimiter corresponds to basic rate limiting functionality.
 	NamespaceRateLimiter interface {
 		// Allow attempts to allow a request to go through. The method returns
@@ -34,12 +40,25 @@ type (
 		// progress
 		Allow(namespaceID string) bool
 
+		// AllowN attempts to allow a requests to go through. The method returns
+		// immediately with a true or false indicating if the request can make
+		// progress
+		AllowN(namespaceID string, now time.Time, numToken int) bool
+
 		// Reserve returns a Reservation that indicates how long the caller
 		// must wait before event happen.
 		Reserve(namespaceID string) Reservation
 
+		// ReserveN returns a Reservation that indicates how long the caller
+		// must wait before event happen.
+		ReserveN(namespaceID string, now time.Time, numToken int) Reservation
+
 		// Wait waits till the deadline for a rate limit token to allow the request
 		// to go through.
 		Wait(ctx context.Context, namespaceID string) error
+
+		// WaitN waits till the deadline for a rate limit token to allow the request
+		// to go through.
+		WaitN(ctx context.Context, namespaceID string, numToken int) error
 	}
 )

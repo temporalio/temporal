@@ -64,7 +64,7 @@ func HistoryAPIMetricsNames() map[string]struct{} {
 }
 
 func FrontendAPIMetricsScopes() map[string]int {
-	apiNames := HistoryAPIMetricsNames()
+	apiNames := FrontendAPIMetricsNames()
 	apiNameToScope := make(map[string]int, len(apiNames))
 	for scope, name := range ScopeDefs[Frontend] {
 		if _, ok := apiNames[name.operation]; ok {

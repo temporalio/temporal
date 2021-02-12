@@ -100,7 +100,8 @@ var keys = map[Key]string{
 	FrontendESIndexMaxResultWindow:        "frontend.esIndexMaxResultWindow",
 	FrontendHistoryMaxPageSize:            "frontend.historyMaxPageSize",
 	FrontendRPS:                           "frontend.rps",
-	FrontendMaxNamespaceRPSPerInstance:    "frontend.namespacerps",
+	FrontendMaxNamespaceRPSPerInstance:    "frontend.namespaceRPS",
+	FrontendMaxNamespaceCountPerInstance:  "frontend.namespaceCount",
 	FrontendGlobalNamespaceRPS:            "frontend.globalNamespacerps",
 	FrontendHistoryMgrNumConns:            "frontend.historyMgrNumConns",
 	FrontendShutdownDrainDuration:         "frontend.shutdownDrainDuration",
@@ -403,6 +404,8 @@ const (
 	FrontendRPS
 	// FrontendMaxNamespaceRPSPerInstance is workflow namespace rate limit per second
 	FrontendMaxNamespaceRPSPerInstance
+	// FrontendMaxNamespaceCountPerInstance is workflow namespace count limit per second
+	FrontendMaxNamespaceCountPerInstance
 	// FrontendGlobalNamespaceRPS is workflow namespace rate limit per second for the whole cluster
 	FrontendGlobalNamespaceRPS
 	// FrontendHistoryMgrNumConns is for persistence cluster.NumConns
