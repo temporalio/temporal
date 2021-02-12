@@ -346,7 +346,9 @@ func (s *BeanImpl) Close() {
 	s.clusterMetadataManager.Close()
 	s.metadataManager.Close()
 	s.taskManager.Close()
-	s.visibilityManager.Close()
+	if s.visibilityManager != nil {
+		s.visibilityManager.Close()
+	}
 	s.namespaceReplicationQueue.Stop()
 	s.shardManager.Close()
 	s.historyManager.Close()
