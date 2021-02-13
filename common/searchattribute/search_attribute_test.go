@@ -65,7 +65,7 @@ func Test_ConvertDynamicConfigToIndexedValueTypes(t *testing.T) {
 		"key5s": "Bool",
 		"key6s": "Datetime",
 	}
-	result := ConvertDynamicConfigToIndexedValueTypes(dynamicconfig.GetMapPropertyFn(m))
+	result := GetTypeMap(dynamicconfig.GetMapPropertyFn(m))
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_STRING, result["key1"])
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, result["key2"])
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_INT, result["key3"])
@@ -91,7 +91,7 @@ func Test_ConvertDynamicConfigToIndexedValueTypes(t *testing.T) {
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_BOOL, result["key5s"])
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_DATETIME, result["key6s"])
 	assert.Panics(func() {
-		ConvertDynamicConfigToIndexedValueTypes(dynamicconfig.GetMapPropertyFn(map[string]interface{}{
+		GetTypeMap(dynamicconfig.GetMapPropertyFn(map[string]interface{}{
 			"invalidType": "unknown",
 		}))
 	})

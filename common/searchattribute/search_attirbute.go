@@ -45,62 +45,62 @@ var (
 	ErrInvalidMetadataType           = errors.New("search attribute metadata has invalid value type")
 	ErrInvalidMetadataIndexValueType = errors.New("search attribute metadata has invalid index value type")
 	ErrInvalidName                   = errors.New("invalid search attribute name")
+	ErrInvalidType                   = errors.New("invalid search attribute type")
 	ErrValidMapIsEmpty               = errors.New("valid search attributes map is empty")
+	ErrValueNotArray                 = errors.New("value is not an array")
 )
 
-// ConvertDynamicConfigTypeToIndexedValueType takes dynamicConfigType as interface{} and convert to IndexedValueType.
-// This func is because different implementation of dynamic config client may have different type of dynamicConfigType
-// and to support backward compatibility.
-func ConvertDynamicConfigTypeToIndexedValueType(dynamicConfigType interface{}) enumspb.IndexedValueType {
-	switch t := dynamicConfigType.(type) {
-	case float64:
-		return enumspb.IndexedValueType(t)
-	case int:
-		return enumspb.IndexedValueType(t)
-	case string:
-		if ivt, ok := enumspb.IndexedValueType_value[t]; ok {
-			return enumspb.IndexedValueType(ivt)
-		}
-	case enumspb.IndexedValueType:
-		return t
+// GetTypeMap converts search attributes types from dynamic config map to typed map.
+func GetTypeMap(validSearchAttributesFn dynamicconfig.MapPropertyFn) (map[string]enumspb.IndexedValueType, error) {
+	if validSearchAttributesFn == nil {
+		return nil, nil
+	}
+	validSearchAttributes := validSearchAttributesFn()
+	if len(validSearchAttributes) == 0 {
+		return nil, nil
 	}
 
-	// Unknown dynamicConfigType, please make sure dynamic config return correct value type.
-	// panic will be captured by logger.
-	panic(fmt.Sprintf("unknown index value type %v of type %T", dynamicConfigType, dynamicConfigType))
+	result := make(map[string]enumspb.IndexedValueType, len(validSearchAttributes))
+	for saName, saType := range validSearchAttributes {
+		var err error
+		result[saName], err = getIndexedValueType(saType)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
 }
 
-// ConvertDynamicConfigToIndexedValueTypes converts search attributes from dynamic config to typed map.
-func ConvertDynamicConfigToIndexedValueTypes(validSearchAttributesFn dynamicconfig.MapPropertyFn) map[string]enumspb.IndexedValueType {
+// GetType returns type of search attribute from dynamic config map.
+func GetType(name string, validSearchAttributesFn dynamicconfig.MapPropertyFn) (enumspb.IndexedValueType, error) {
 	if validSearchAttributesFn == nil {
-		return nil
+		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ErrValidMapIsEmpty
 	}
 
 	validSearchAttributes := validSearchAttributesFn()
 	if len(validSearchAttributes) == 0 {
-		return nil
+		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ErrValidMapIsEmpty
 	}
 
-	result := make(map[string]enumspb.IndexedValueType, len(validSearchAttributes))
-	for searchAttributeName, searchAttributeType := range validSearchAttributes {
-		result[searchAttributeName] = ConvertDynamicConfigTypeToIndexedValueType(searchAttributeType)
+	saType, isValidName := validSearchAttributes[name]
+	if !isValidName {
+		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidName, name)
 	}
-	return result
+	return getIndexedValueType(saType)
 }
 
 // DecodeValue decodes search attribute value from Payload with it's type in metadata "type" field.
-func DecodeValue(value *commonpb.Payload) (interface{}, error) {
+func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface{}, error) {
 	valueTypeMetadata, metadataHasValueType := value.Metadata[MetadataType]
-	if !metadataHasValueType {
-		return nil, ErrMissingMetadataType
+	if metadataHasValueType {
+		ivt, err := getIndexedValueType(string(valueTypeMetadata))
+		if err != nil {
+			// MetadataType field has priority over passed type.
+			t = ivt
+		}
 	}
 
-	valueType, isValidValueType := enumspb.IndexedValueType_value[string(valueTypeMetadata)]
-	if !isValidValueType {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidMetadataType, string(valueTypeMetadata))
-	}
-
-	switch enumspb.IndexedValueType(valueType) {
+	switch t {
 	case enumspb.INDEXED_VALUE_TYPE_STRING, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
 		var val string
 		if err := payload.Decode(value, &val); err != nil {
@@ -142,18 +142,18 @@ func DecodeValue(value *commonpb.Payload) (interface{}, error) {
 		}
 		return val, nil
 	default:
-		return nil, fmt.Errorf("%w: %v", ErrInvalidMetadataIndexValueType, valueType)
+		return nil, fmt.Errorf("%w: %v", ErrInvalidType, t)
 	}
 }
 
 // EncodeValue encodes search attribute value and IndexedValueType to Payload.
-func EncodeValue(val interface{}, ivt enumspb.IndexedValueType) (*commonpb.Payload, error) {
+func EncodeValue(val interface{}, t enumspb.IndexedValueType) (*commonpb.Payload, error) {
 	valPayload, err := payload.Encode(val)
 	if err != nil {
 		return nil, err
 	}
 
-	setPayloadType(valPayload, ivt)
+	setMetadataType(valPayload, t)
 	return valPayload, nil
 }
 
@@ -165,26 +165,26 @@ func Encode(searchAttributes map[string]interface{}, validSearchAttributes map[s
 
 	indexedFields := make(map[string]*commonpb.Payload, len(searchAttributes))
 	var lastErr error
-	for attrName, attrValue := range searchAttributes {
-		valPayload, err := payload.Encode(attrValue)
+	for saName, saValue := range searchAttributes {
+		valPayload, err := payload.Encode(saValue)
 		if err != nil {
 			lastErr = err
-			indexedFields[attrName] = nil
+			indexedFields[saName] = nil
 			continue
 		}
 
-		indexedFields[attrName] = valPayload
+		indexedFields[saName] = valPayload
 
 		if len(validSearchAttributes) == 0 {
 			lastErr = ErrValidMapIsEmpty
 			continue
 		}
 
-		ivt, ok := validSearchAttributes[attrName]
+		ivt, ok := validSearchAttributes[saName]
 		if !ok {
-			lastErr = fmt.Errorf("%w: %s", ErrInvalidName, attrName)
+			lastErr = fmt.Errorf("%w: %s", ErrInvalidName, saName)
 		}
-		setPayloadType(valPayload, ivt)
+		setMetadataType(valPayload, ivt)
 	}
 	return &commonpb.SearchAttributes{IndexedFields: indexedFields}, lastErr
 }
@@ -205,14 +205,54 @@ func SetTypes(searchAttributes *commonpb.SearchAttributes, validSearchAttributes
 		if !isValidSearchAttribute {
 			continue
 		}
-		setPayloadType(searchAttributePayload, valueType)
+		setMetadataType(searchAttributePayload, valueType)
 	}
 }
 
-func setPayloadType(p *commonpb.Payload, t enumspb.IndexedValueType) {
+// getIndexedValueType takes dynamicConfigType as interface{} and convert to IndexedValueType.
+// This func is because different implementation of dynamic config client may have different type of dynamicConfigType
+// and to support backward compatibility.
+func getIndexedValueType(dynamicConfigType interface{}) (enumspb.IndexedValueType, error) {
+	switch t := dynamicConfigType.(type) {
+	case float64:
+		ivt := enumspb.IndexedValueType(t)
+		if _, isValid := enumspb.IndexedValueType_name[int32(ivt)]; isValid {
+			return ivt, nil
+		}
+	case int:
+		ivt := enumspb.IndexedValueType(t)
+		if _, isValid := enumspb.IndexedValueType_name[int32(ivt)]; isValid {
+			return ivt, nil
+		}
+	case string:
+		if ivt, ok := enumspb.IndexedValueType_value[t]; ok {
+			return enumspb.IndexedValueType(ivt), nil
+		}
+	case enumspb.IndexedValueType:
+		if _, isValid := enumspb.IndexedValueType_name[int32(t)]; isValid {
+			return t, nil
+		}
+	}
+
+	return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fmt.Errorf("%w: %v of type %T", ErrInvalidType, dynamicConfigType, dynamicConfigType)
+}
+
+func setMetadataType(p *commonpb.Payload, t enumspb.IndexedValueType) {
 	tString, isValidT := enumspb.IndexedValueType_name[int32(t)]
 	if !isValidT {
 		panic(fmt.Sprintf("unknown index value type %v", t))
 	}
 	p.Metadata[MetadataType] = []byte(tString)
+}
+
+func getType(name string, validSearchAttributes map[string]enumspb.IndexedValueType) enumspb.IndexedValueType {
+	if len(validSearchAttributes) == 0 {
+		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
+	}
+
+	saType, isValidName := validSearchAttributes[name]
+	if !isValidName {
+		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
+	}
+	return saType
 }

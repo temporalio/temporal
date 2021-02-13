@@ -298,19 +298,17 @@ func processSearchAttr(c *cli.Context) *commonpb.SearchAttributes {
 		ErrorAndExit("Number of search attributes keys and values are not equal.", nil)
 	}
 
-	searchAttributes := make(map[string]interface{}, len(searchAttrKeys))
+	searchAttributesStr := make(map[string]string, len(searchAttrKeys))
 	for i, searchAttrVal := range searchAttrStrVals {
-		searchAttributes[searchAttrKeys[i]] = convertStringToRealType(searchAttrVal)
+		searchAttributesStr[searchAttrKeys[i]] = searchAttrVal
 	}
 
-	// TODO: use searchattribute.Parse() here.
-	encodedSearchAttributes, err := searchattribute.Encode(searchAttributes, nil)
-	// ErrValidMapIsEmpty is expected error here because validSearchAttributes were not passed.
-	if !errors.Is(err, searchattribute.ErrValidMapIsEmpty) {
-		ErrorAndExit("Encode error", err)
+	searchAttributes, err := searchattribute.Parse(searchAttributesStr, nil)
+	if err != nil {
+		ErrorAndExit("Unable to parse search attributes.", err)
 	}
 
-	return encodedSearchAttributes
+	return searchAttributes
 }
 
 func processMemo(c *cli.Context) map[string]*commonpb.Payload {
@@ -367,7 +365,7 @@ func getPrintableMemo(memo *commonpb.Memo) string {
 
 func getPrintableSearchAttr(searchAttr *commonpb.SearchAttributes) string {
 	var buf bytes.Buffer
-	searchAttributesString, err := searchattribute.Stringify(searchAttr)
+	searchAttributesString, err := searchattribute.Stringify(searchAttr, nil)
 	if err != nil {
 		fmt.Printf("%s: unable to stringify search attribute: %v",
 			colorMagenta("Warning"),
@@ -861,7 +859,7 @@ func describeWorkflowHelper(c *cli.Context, wid, rid string) {
 	if printRaw {
 		prettyPrintJSONObject(resp)
 	} else {
-		prettyPrintJSONObject(convertDescribeWorkflowExecutionResponse(resp, frontendClient, c))
+		prettyPrintJSONObject(convertDescribeWorkflowExecutionResponse(resp))
 	}
 }
 
@@ -887,8 +885,7 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 	table.Render()
 }
 
-func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWorkflowExecutionResponse,
-	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *clispb.DescribeWorkflowExecutionResponse {
+func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWorkflowExecutionResponse) *clispb.DescribeWorkflowExecutionResponse {
 
 	info := resp.WorkflowExecutionInfo
 	executionInfo := &clispb.WorkflowExecutionInfo{
@@ -901,7 +898,7 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 		ParentNamespaceId: info.GetParentNamespaceId(),
 		ParentExecution:   info.GetParentExecution(),
 		Memo:              info.GetMemo(),
-		SearchAttributes:  convertSearchAttributes(info.GetSearchAttributes(), wfClient, c),
+		SearchAttributes:  convertSearchAttributes(info.GetSearchAttributes()),
 		AutoResetPoints:   info.GetAutoResetPoints(),
 	}
 
@@ -936,15 +933,12 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 	}
 }
 
-func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes,
-	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *clispb.SearchAttributes {
-
+func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes) *clispb.SearchAttributes {
 	if len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil
 	}
 
-	setSearchAttributesType(searchAttributes, wfClient, c)
-	fields, err := searchattribute.Stringify(searchAttributes)
+	fields, err := searchattribute.Stringify(searchAttributes, nil)
 	if err != nil {
 		fmt.Printf("%s: unable to stringify search attribute: %v",
 			colorMagenta("Warning"),
@@ -952,35 +946,6 @@ func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes,
 	}
 
 	return &clispb.SearchAttributes{IndexedFields: fields}
-}
-
-func setSearchAttributesType(searchAttributes *commonpb.SearchAttributes, wfClient workflowservice.WorkflowServiceClient, c *cli.Context) {
-	allTypesAreSet := true
-	for _, p := range searchAttributes.GetIndexedFields() {
-		if _, typeIsSet := p.Metadata[searchattribute.MetadataType]; !typeIsSet {
-			allTypesAreSet = false
-			break
-		}
-	}
-
-	if allTypesAreSet {
-		return
-	}
-
-	// Server >=1.7.0 will have search attribute types in Metadata field.
-	// GetSearchAttributes call is just for case when newer tctl is used in server <1.7.0.
-	// It may fail with Unauthorized error which will be safely ignored.
-	ctx, cancel := newContext(c)
-	defer cancel()
-	validSearchAttributes, err := wfClient.GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
-	if err != nil {
-		fmt.Printf("%s: search attribute types are not set and unable to get search attributes info: %v",
-			colorMagenta("Warning"),
-			err)
-		return
-	}
-
-	searchattribute.SetTypes(searchAttributes, validSearchAttributes.GetKeys())
 }
 
 func convertFailure(failure *failurepb.Failure) *clispb.Failure {

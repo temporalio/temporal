@@ -238,7 +238,7 @@ func (v *visibilityManagerImpl) convertInternalGetResponse(internalResp *Interna
 	}
 
 	resp := &GetClosedWorkflowExecutionResponse{}
-	validSearchAttributes := searchattribute.ConvertDynamicConfigToIndexedValueTypes(v.validSearchAttributes)
+	validSearchAttributes := searchattribute.GetTypeMap(v.validSearchAttributes)
 	resp.Execution = v.convertVisibilityWorkflowExecutionInfo(internalResp.Execution, validSearchAttributes)
 	return resp
 }
@@ -250,7 +250,7 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 
 	resp := &ListWorkflowExecutionsResponse{}
 	resp.Executions = make([]*workflowpb.WorkflowExecutionInfo, len(internalResp.Executions))
-	validSearchAttributes := searchattribute.ConvertDynamicConfigToIndexedValueTypes(v.validSearchAttributes)
+	validSearchAttributes := searchattribute.GetTypeMap(v.validSearchAttributes)
 	for i, execution := range internalResp.Executions {
 		resp.Executions[i] = v.convertVisibilityWorkflowExecutionInfo(execution, validSearchAttributes)
 	}

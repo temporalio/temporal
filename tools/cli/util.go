@@ -29,7 +29,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -45,7 +44,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
-	"github.com/valyala/fastjson"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -850,71 +848,12 @@ func validateJSONs(str string) error {
 	}
 }
 
-// use parseBool to ensure all BOOL search attributes only be "true" or "false"
-func parseBool(str string) (bool, error) {
-	switch str {
-	case "true":
-		return true, nil
-	case "false":
-		return false, nil
-	}
-	return false, fmt.Errorf("not parseable bool value: %s", str)
-}
-
 func trimSpace(strs []string) []string {
 	result := make([]string, len(strs))
 	for i, v := range strs {
 		result[i] = strings.TrimSpace(v)
 	}
 	return result
-}
-
-func parseArray(v string) (interface{}, error) {
-	if len(v) > 0 && v[0] == '[' && v[len(v)-1] == ']' {
-		parsedValues, err := fastjson.Parse(v)
-		if err != nil {
-			return nil, err
-		}
-		arr, err := parsedValues.Array()
-		if err != nil {
-			return nil, err
-		}
-		result := make([]interface{}, len(arr))
-		for i, item := range arr {
-			s := item.String()
-			if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' { // remove addition quote from json
-				s = s[1 : len(s)-1]
-				if sTime, err := time.Parse(defaultDateTimeFormat, s); err == nil {
-					result[i] = sTime
-					continue
-				}
-			}
-			result[i] = s
-		}
-		return result, nil
-	}
-	return nil, errors.New("not array")
-}
-
-func convertStringToRealType(v string) interface{} {
-	var genVal interface{}
-	var err error
-
-	if genVal, err = strconv.ParseInt(v, 10, 64); err == nil {
-
-	} else if genVal, err = parseBool(v); err == nil {
-
-	} else if genVal, err = strconv.ParseFloat(v, 64); err == nil {
-
-	} else if genVal, err = time.Parse(defaultDateTimeFormat, v); err == nil {
-
-	} else if genVal, err = parseArray(v); err == nil {
-
-	} else {
-		genVal = v
-	}
-
-	return genVal
 }
 
 func truncate(str string) string {

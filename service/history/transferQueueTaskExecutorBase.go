@@ -322,7 +322,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		defer cancel()
 
 		searchattribute.SetTypes(searchAttributes,
-			searchattribute.ConvertDynamicConfigToIndexedValueTypes(t.config.ValidSearchAttributes))
+			searchattribute.GetTypeMap(t.config.ValidSearchAttributes))
 
 		_, err := t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
 			ArchiveRequest: &archiver.ArchiveRequest{

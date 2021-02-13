@@ -808,12 +808,11 @@ func (v *esVisibilityStore) getFieldType(fieldName string) enumspb.IndexedValueT
 	if strings.HasPrefix(fieldName, definition.Attr) {
 		fieldName = fieldName[len(definition.Attr)+1:] // remove prefix
 	}
-	validMap := v.config.ValidSearchAttributes()
-	fieldType, ok := validMap[fieldName]
-	if !ok {
-		v.logger.Error("Unknown fieldName, validation should be done in frontend already", tag.Value(fieldName))
+	fieldType, err := searchattribute.GetType(fieldName, v.config.ValidSearchAttributes)
+	if err != nil {
+		v.logger.Error("Unable to get search attribute type.", tag.Value(fieldName), tag.Error(err))
 	}
-	return searchattribute.ConvertDynamicConfigTypeToIndexedValueType(fieldType)
+	return fieldType
 }
 
 func shouldSearchAfter(token *esVisibilityPageToken) bool {
