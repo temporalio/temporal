@@ -1245,6 +1245,7 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 			ClusterReplicationLevel:      clusterReplicationLevel,
 			ReplicationDlqAckLevel:       clusterReplicationDLQLevel,
 			UpdateTime:                   shardInfo.UpdateTime,
+			VisibilityAckLevel:           shardInfo.VisibilityAckLevel,
 		},
 		TransferFailoverLevels: transferFailoverLevels,
 		TimerFailoverLevels:    timerFailoverLevels,
