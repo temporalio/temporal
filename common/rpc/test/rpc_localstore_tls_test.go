@@ -26,9 +26,11 @@ package rpc
 
 import (
 	"bytes"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -56,14 +58,18 @@ type localStoreRPCSuite struct {
 	frontendMutualTLSRPCFactory             *TestFactory
 	frontendServerTLSRPCFactory             *TestFactory
 	frontendSystemWorkerMutualTLSRPCFactory *TestFactory
+	frontendDynamicTLSFactory               *TestFactory
+	internodeDynamicTLSFactory              *TestFactory
 
-	internodeCertDir   string
-	frontendCertDir    string
-	frontendAltCertDir string
+	internodeCertDir       string
+	frontendCertDir        string
+	frontendAltCertDir     string
+	frontendRollingCertDir string
 
-	internodeChain   CertChain
-	frontendChain    CertChain
-	frontendAltChain CertChain
+	internodeChain       CertChain
+	frontendChain        CertChain
+	frontendAltChain     CertChain
+	frontendRollingCerts []*tls.Certificate
 
 	frontendClientCertDir string
 	frontendClientChain   CertChain
@@ -79,6 +85,9 @@ type localStoreRPCSuite struct {
 	internodeConfigMutualTLS    config.GroupTLS
 	internodeConfigServerTLS    config.GroupTLS
 	internodeConfigAltMutualTLS config.GroupTLS
+
+	dynamicCACertPool *x509.CertPool
+	wrongCACertPool   *x509.CertPool
 }
 
 type CertChain struct {
@@ -120,6 +129,10 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	s.frontendClientCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontendClient")
 	s.NoError(err)
 	s.frontendClientChain = s.GenerateTestChain(s.frontendClientCertDir, "127.0.0.1")
+
+	s.frontendRollingCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontendRolling")
+	s.NoError(err)
+	s.frontendRollingCerts, s.dynamicCACertPool, s.wrongCACertPool = s.GenerateTestCerts(s.frontendRollingCertDir, "127.0.0.1", 2)
 
 	s.membershipConfig = config.Membership{
 		MaxJoinDuration:  5,
@@ -251,6 +264,17 @@ func (s *localStoreRPCSuite) setupFrontend() {
 	s.frontendMutualTLSRPCFactory = f(frontendMutualTLSFactory)
 	s.frontendServerTLSRPCFactory = f(frontendServerTLSFactory)
 	s.frontendSystemWorkerMutualTLSRPCFactory = f(frontendSystemWorkerMutualTLSFactory)
+
+	dynamicConfigProvider, err := encryption.NewTestDynamicTLSConfigProvider(
+		&localStoreMutualTLS.TLS,
+		s.frontendRollingCerts,
+		s.dynamicCACertPool,
+		s.frontendRollingCerts,
+		s.dynamicCACertPool,
+		s.wrongCACertPool)
+	dynamicServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, dynamicConfigProvider)
+	s.frontendDynamicTLSFactory = f(dynamicServerTLSFactory)
+	s.internodeDynamicTLSFactory = i(dynamicServerTLSFactory)
 }
 
 func (s *localStoreRPCSuite) setupInternode() {
@@ -299,40 +323,96 @@ func (s *localStoreRPCSuite) setupInternode() {
 }
 
 func (s *localStoreRPCSuite) GenerateTestChain(tempDir string, commonName string) CertChain {
-	caCert, err := encryption.GenerateSelfSignedX509CA("undefined", nil, 512)
-	s.NoError(err)
-
-	serverCert, privKey, err := encryption.GenerateServerX509UsingCA(commonName, caCert)
-	s.NoError(err)
 
 	caPubFile := tempDir + "/ca_pub.pem"
 	certPubFile := tempDir + "/cert_pub.pem"
 	certPrivFile := tempDir + "/cert_priv.pem"
 
-	s.pemEncodeToFile(caPubFile, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: caCert.Certificate[0],
-	})
-
-	s.pemEncodeToFile(certPubFile, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: serverCert.Certificate[0],
-	})
-
-	s.pemEncodeToFile(certPrivFile, &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(privKey),
-	})
+	caCert := s.GenerateSelfSignedCA(caPubFile)
+	s.GenerateServerCert(caCert, commonName, 0, certPubFile, certPrivFile)
 
 	return CertChain{CaPubFile: caPubFile, CertPubFile: certPubFile, CertKeyFile: certPrivFile}
 }
 
+func (s *localStoreRPCSuite) GenerateTestCerts(tempDir string, commonName string, num int,
+) (certs []*tls.Certificate, caPool *x509.CertPool, wrongCAPool *x509.CertPool) {
+
+	caCert := s.GenerateSelfSignedCA(tempDir + "/ca_pub.pem")
+	caPool = s.GenerateSelfSignedCAPool(caCert)
+
+	chains := make([]*tls.Certificate, num)
+	for i := 0; i < num; i++ {
+		certPubFile := tempDir + fmt.Sprintf("/cert_pub_%d.pem", i)
+		certPrivFile := tempDir + fmt.Sprintf("/cert_priv_%d.pem", i)
+		cert := s.GenerateServerCert(caCert, commonName, int64(i+100), certPubFile, certPrivFile)
+		chains[i] = cert
+	}
+
+	wrongCACert := s.GenerateSelfSignedCA(tempDir + "/ca_pub.pem")
+	wrongCAPool = s.GenerateSelfSignedCAPool(wrongCACert)
+
+	return chains, caPool, wrongCAPool
+}
+
+func (s *localStoreRPCSuite) GenerateSelfSignedCAPool(caCert *tls.Certificate) *x509.CertPool {
+	caPEM := &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: caCert.Certificate[0],
+	}
+	caPool := x509.NewCertPool()
+	caPool.AppendCertsFromPEM(s.pemEncodeToBytes(caPEM))
+	return caPool
+}
+
+func (s *localStoreRPCSuite) GenerateSelfSignedCA(filePath string) *tls.Certificate {
+	caCert, err := encryption.GenerateSelfSignedX509CA("undefined", nil, 512)
+	s.NoError(err)
+
+	s.pemEncodeToFile(filePath, &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: caCert.Certificate[0],
+	})
+	return caCert
+}
+
+func (s *localStoreRPCSuite) GenerateServerCert(
+	caCert *tls.Certificate,
+	commonName string,
+	serialNumber int64,
+	certPubFile string,
+	certPrivFile string) *tls.Certificate {
+
+	serverCert, privKey, err := encryption.GenerateServerX509UsingCAAndSerialNumber(commonName, serialNumber, caCert)
+	s.NoError(err)
+
+	certPEM := &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: serverCert.Certificate[0],
+	}
+	s.pemEncodeToFile(certPubFile, certPEM)
+
+	keyPEM := &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(privKey),
+	}
+	s.pemEncodeToFile(certPrivFile, keyPEM)
+
+	cert, err := tls.X509KeyPair(s.pemEncodeToBytes(certPEM), s.pemEncodeToBytes(keyPEM))
+	s.NoError(err)
+	return &cert
+}
+
 func (s *localStoreRPCSuite) pemEncodeToFile(file string, block *pem.Block) {
+	bytes := s.pemEncodeToBytes(block)
+	err := ioutil.WriteFile(file, bytes, os.FileMode(0644))
+	s.NoError(err)
+}
+
+func (s *localStoreRPCSuite) pemEncodeToBytes(block *pem.Block) []byte {
 	pemBuffer := new(bytes.Buffer)
 	err := pem.Encode(pemBuffer, block)
 	s.NoError(err)
-	err = ioutil.WriteFile(file, pemBuffer.Bytes(), os.FileMode(0644))
-	s.NoError(err)
+	return pemBuffer.Bytes()
 }
 
 func f(r *rpc.RPCFactory) *TestFactory {
@@ -390,4 +470,8 @@ func (s *localStoreRPCSuite) TestServerTLSInternodeToFrontendAlt() {
 
 func (s *localStoreRPCSuite) TestMutualTLSSystemWorker() {
 	runHelloWorldTest(s.Suite, "127.0.0.1", s.frontendSystemWorkerMutualTLSRPCFactory, s.frontendSystemWorkerMutualTLSRPCFactory, true)
+}
+
+func (s *localStoreRPCSuite) TestDynamicServerTLS() {
+	runHelloWorldMultipleDials(s.Suite, "localhost", s.internodeDynamicTLSFactory, s.internodeDynamicTLSFactory, 5)
 }

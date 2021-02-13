@@ -30,6 +30,9 @@ import (
 	"math/rand"
 	"strings"
 
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
+
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/rpc"
 
@@ -111,7 +114,39 @@ func runHelloWorldTest(s suite.Suite, host string, serverFactory *TestFactory, c
 	}
 }
 
+func runHelloWorldMultipleDials(s suite.Suite, host string, serverFactory *TestFactory, clientFactory *TestFactory, nDials int) {
+	server, port := startHelloWorldServer(s, serverFactory)
+	defer server.Stop()
+
+	for i := 0; i < nDials; i++ {
+
+		tlsInfo, err := dialHelloAndGetTLSInfo(s, host+":"+port, clientFactory, serverFactory.serverUsage)
+
+		if i != 2 {
+			s.NoError(err)
+			s.NotNil(tlsInfo)
+			s.NotNil(tlsInfo.State.PeerCertificates)
+			sn := (*tlsInfo.State.PeerCertificates[0].SerialNumber).Int64()
+			s.True(sn == int64((i+1)%2+100))
+		} else {
+			// on third iteration the test cert provider returns a wrong CA cert
+			// this is how we test that CA certs are served dynamically
+			s.Error(err)
+		}
+	}
+}
+
 func dialHello(s suite.Suite, hostport string, clientFactory *TestFactory, serverType ServerUsageType) error {
+	_, err := dialHelloAndGetTLSInfo(s, hostport, clientFactory, serverType)
+	return err
+}
+
+func dialHelloAndGetTLSInfo(
+	s suite.Suite,
+	hostport string,
+	clientFactory *TestFactory,
+	serverType ServerUsageType) (*credentials.TLSInfo, error) {
+
 	var cfg *tls.Config
 	var err error
 	if serverType == Internode {
@@ -126,7 +161,10 @@ func dialHello(s suite.Suite, hostport string, clientFactory *TestFactory, serve
 	client := helloworld.NewGreeterClient(clientConn)
 
 	request := &helloworld.HelloRequest{Name: convert.Uint64ToString(rand.Uint64())}
-	reply, err := client.SayHello(context.Background(), request)
+	var reply *helloworld.HelloReply
+	peer := new(peer.Peer)
+	reply, err = client.SayHello(context.Background(), request, grpc.Peer(peer))
+	tlsInfo, _ := peer.AuthInfo.(credentials.TLSInfo)
 
 	if err == nil {
 		s.NotNil(reply)
@@ -134,6 +172,5 @@ func dialHello(s suite.Suite, hostport string, clientFactory *TestFactory, serve
 	}
 
 	_ = clientConn.Close()
-
-	return err
+	return &tlsInfo, err
 }
