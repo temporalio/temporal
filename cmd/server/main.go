@@ -126,13 +126,22 @@ func buildCLI() *cli.App {
 					return cli.Exit(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
 				}
 
+				authorizer, err := authorization.GetAuthorizerFromConfig(&cfg.Global.Authorization)
+				if err != nil {
+					cli.Exit(fmt.Sprintf("Unable to instantiate authorizer: %v.", err), 1)
+				}
+				claimMapper, err := authorization.GetClaimMapperFromConfig(cfg)
+				if err != nil {
+					cli.Exit(fmt.Sprintf("Unable to instantiate claim mapper: %v.", err), 1)
+				}
+
 				s := temporal.NewServer(
 					temporal.ForServices(services),
 					temporal.WithConfig(cfg),
 					temporal.InterruptOn(temporal.InterruptCh()),
-					temporal.WithAuthorizer(authorization.NewNoopAuthorizer()),
+					temporal.WithAuthorizer(authorizer),
 					temporal.WithClaimMapper(func(cfg *config.Config) authorization.ClaimMapper {
-						return authorization.NewNoopClaimMapper(cfg)
+						return claimMapper
 					}),
 				)
 

@@ -510,6 +510,10 @@ type (
 		// Signing key provider for validating JWT tokens
 		JWTKeyProvider       JWTKeyProvider `yaml:"jwtKeyProvider"`
 		PermissionsClaimName string         `yaml:"permissionsClaimName"`
+		// Empty string for noopAuthorizer or "default" for defaultAuthorizer
+		Authorizer string `yaml:"authorizer"`
+		// Empty string for noopClaimMapper or "default" for defaultJWTClaimMapper
+		ClaimMapper string `yaml:"claimMapper"`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider
