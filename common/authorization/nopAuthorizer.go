@@ -28,7 +28,7 @@ import "context"
 
 type noopAuthorizer struct{}
 
-// NewNoopAuthorizer creates a no-op authority
+// NewNoopAuthorizer creates a no-op authorizer
 func NewNoopAuthorizer() Authorizer {
 	return &noopAuthorizer{}
 }

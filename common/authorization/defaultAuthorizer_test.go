@@ -25,11 +25,14 @@
 package authorization
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	"go.temporal.io/server/common/service/config"
 )
 
 var (
@@ -110,4 +113,28 @@ func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceReaderAuthZ() {
 	result, err := s.authorizer.Authorize(nil, &claimsSystemReaderNamespaceUndefined, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionDeny, result.Decision)
+}
+func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigNoop() {
+	s.testGetAuthorizerFromConfig("", true, reflect.TypeOf(&noopAuthorizer{}))
+}
+func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigDefault() {
+	s.testGetAuthorizerFromConfig("default", true, reflect.TypeOf(&defaultAuthorizer{}))
+}
+func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigUnknown() {
+	s.testGetAuthorizerFromConfig("foo", false, nil)
+}
+
+func (s *defaultAuthorizerSuite) testGetAuthorizerFromConfig(name string, valid bool, authorizerType reflect.Type) {
+
+	cfg := config.Authorization{Authorizer: name}
+	auth, err := GetAuthorizerFromConfig(&cfg)
+	if valid {
+		s.NoError(err)
+		s.NotNil(auth)
+		t := reflect.TypeOf(auth)
+		s.True(t == authorizerType)
+	} else {
+		s.Error(err)
+		s.Nil(auth)
+	}
 }
