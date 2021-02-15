@@ -130,7 +130,7 @@ func buildCLI() *cli.App {
 					temporal.ForServices(services),
 					temporal.WithConfig(cfg),
 					temporal.InterruptOn(temporal.InterruptCh()),
-					temporal.WithAuthorizer(authorization.NewNopAuthorizer()),
+					temporal.WithAuthorizer(authorization.NewNoopAuthorizer()),
 					temporal.WithClaimMapper(func(cfg *config.Config) authorization.ClaimMapper {
 						return authorization.NewNoopClaimMapper(cfg)
 					}),
