@@ -172,5 +172,6 @@ func copyShardInfo(sourceInfo *persistencespb.ShardInfo) *persistencespb.ShardIn
 		ReplicationAckLevel: sourceInfo.ReplicationAckLevel,
 		StolenSinceRenew:    sourceInfo.StolenSinceRenew,
 		TimerAckLevelTime:   sourceInfo.TimerAckLevelTime,
+		VisibilityAckLevel:  sourceInfo.VisibilityAckLevel,
 	}
 }
