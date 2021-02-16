@@ -80,25 +80,29 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 	}
 
 	totalSize := 0
-	validAttr := sv.validSearchAttributes()
 	for key, val := range input.GetIndexedFields() {
 		// verify: key is whitelisted
-		if !sv.isValidSearchAttributeName(key, validAttr) {
-			sv.logger.WithTags(tag.ESKey(key), tag.WorkflowNamespace(namespace)).
-				Error("invalid search attribute key")
+		if !searchattribute.IsValid(key, sv.validSearchAttributes) {
+			sv.logger.Error("invalid search attribute key", tag.ESKey(key), tag.WorkflowNamespace(namespace))
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not valid search attribute key", key))
 		}
 		// verify: value has the correct type
-		if !sv.isValidSearchAttributeValue(val) {
+		saType, err := searchattribute.GetType(key, sv.validSearchAttributes)
+		if err != nil {
+			sv.logger.Error("invalid search attribute type", tag.ESKey(key), tag.WorkflowNamespace(namespace))
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("search attribute %s has invalid type", key))
+		}
+		_, err = searchattribute.DecodeValue(val, saType)
+		if err != nil {
 			var invalidValue interface{}
 			if err := payload.Decode(val, &invalidValue); err != nil {
 				invalidValue = fmt.Sprintf("value from %q", val.String())
 			}
 
-			sv.logger.WithTags(tag.ESKey(key), tag.Value(invalidValue), tag.WorkflowNamespace(namespace)).
-				Error("invalid search attribute value")
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%q is not a valid for search attribute %s", invalidValue, key))
+			sv.logger.Error("invalid search attribute value", tag.ESKey(key), tag.Value(invalidValue), tag.WorkflowNamespace(namespace))
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%q is not a valid value for search attribute %s", invalidValue, key))
 		}
+
 		// verify: key is not system reserved
 		if definition.IsSystemIndexedKey(key) {
 			sv.logger.WithTags(tag.ESKey(key), tag.WorkflowNamespace(namespace)).
@@ -123,16 +127,4 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 	}
 
 	return nil
-}
-
-// isValidSearchAttributeName return true if key is registered
-func (sv *SearchAttributesValidator) isValidSearchAttributeName(searchAttributeName string, validSearchAttributes map[string]interface{}) bool {
-	_, isValidKey := validSearchAttributes[searchAttributeName]
-	return isValidKey
-}
-
-// isValidSearchAttributeValue return true if value has the correct representation for the attribute key
-func (sv *SearchAttributesValidator) isValidSearchAttributeValue(value *commonpb.Payload) bool {
-	_, err := searchattribute.DecodeValue(value)
-	return err == nil
 }

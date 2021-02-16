@@ -321,10 +321,16 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
 		defer cancel()
 
-		searchattribute.SetTypes(searchAttributes,
-			searchattribute.GetTypeMap(t.config.ValidSearchAttributes))
+		validSearAttributes, err := searchattribute.GetTypeMap(t.config.ValidSearchAttributes)
+		if err != nil {
+			return err
+		}
 
-		_, err := t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
+		// Setting search attributes types here because archival client needs to stringify them
+		// and it might not have access to valid search attributes (i.e. type needs to be embedded).
+		searchattribute.SetType(searchAttributes, validSearAttributes)
+
+		_, err = t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
 			ArchiveRequest: &archiver.ArchiveRequest{
 				NamespaceID:      namespaceID,
 				Namespace:        namespace,

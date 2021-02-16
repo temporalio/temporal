@@ -41,14 +41,23 @@ const (
 )
 
 var (
-	ErrMissingMetadataType           = errors.New("search attribute metadata doesn't have value type")
-	ErrInvalidMetadataType           = errors.New("search attribute metadata has invalid value type")
-	ErrInvalidMetadataIndexValueType = errors.New("search attribute metadata has invalid index value type")
-	ErrInvalidName                   = errors.New("invalid search attribute name")
-	ErrInvalidType                   = errors.New("invalid search attribute type")
-	ErrValidMapIsEmpty               = errors.New("valid search attributes map is empty")
-	ErrValueNotArray                 = errors.New("value is not an array")
+	ErrInvalidName     = errors.New("invalid search attribute name")
+	ErrInvalidType     = errors.New("invalid search attribute type")
+	ErrValidMapIsEmpty = errors.New("valid search attributes map is empty")
 )
+
+func IsValid(name string, validSearchAttributesFn dynamicconfig.MapPropertyFn) bool {
+	if validSearchAttributesFn == nil {
+		return false
+	}
+	validSearchAttributes := validSearchAttributesFn()
+	if len(validSearchAttributes) == 0 {
+		return false
+	}
+
+	_, ok := validSearchAttributes[name]
+	return ok
+}
 
 // GetTypeMap converts search attributes types from dynamic config map to typed map.
 func GetTypeMap(validSearchAttributesFn dynamicconfig.MapPropertyFn) (map[string]enumspb.IndexedValueType, error) {
@@ -89,12 +98,14 @@ func GetType(name string, validSearchAttributesFn dynamicconfig.MapPropertyFn) (
 	return getIndexedValueType(saType)
 }
 
-// DecodeValue decodes search attribute value from Payload with it's type in metadata "type" field.
+// DecodeValue decodes search attribute value from Payload using (in order):
+// 1. type from MetadataType field,
+// 2. passed type t.
 func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface{}, error) {
 	valueTypeMetadata, metadataHasValueType := value.Metadata[MetadataType]
 	if metadataHasValueType {
 		ivt, err := getIndexedValueType(string(valueTypeMetadata))
-		if err != nil {
+		if err == nil {
 			// MetadataType field has priority over passed type.
 			t = ivt
 		}
@@ -189,9 +200,9 @@ func Encode(searchAttributes map[string]interface{}, validSearchAttributes map[s
 	return &commonpb.SearchAttributes{IndexedFields: indexedFields}, lastErr
 }
 
-// SetTypes set types for all valid search attributes which don't have it.
+// SetType set type for all valid search attributes which don't have it.
 // It doesn't do any validation and just skip invalid or already set fields.
-func SetTypes(searchAttributes *commonpb.SearchAttributes, validSearchAttributes map[string]enumspb.IndexedValueType) {
+func SetType(searchAttributes *commonpb.SearchAttributes, validSearchAttributes map[string]enumspb.IndexedValueType) {
 	if len(validSearchAttributes) == 0 {
 		return
 	}

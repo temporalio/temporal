@@ -150,7 +150,9 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		logger.Error(carchiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason("failed to get visibility archiver"), tag.Error(err))
 		return errArchiveVisibilityNonRetryable
 	}
-	searchAttributes, err := searchattribute.Stringify(request.SearchAttributes)
+
+	// Search attributes type must be embedded by caller.
+	searchAttributes, err := searchattribute.Stringify(request.SearchAttributes, nil)
 	if err != nil {
 		logger.Error("Unable to stringify search attributes.", tag.Error(err))
 	}

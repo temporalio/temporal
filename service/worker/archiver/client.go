@@ -248,7 +248,8 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		return
 	}
 
-	searchAttributes, err := searchattribute.Stringify(request.ArchiveRequest.SearchAttributes)
+	// Search attributes type must be embedded by caller.
+	searchAttributes, err := searchattribute.Stringify(request.ArchiveRequest.SearchAttributes, nil)
 	if err != nil {
 		logger.Error("Unable to stringify search attributes.", tag.Error(err))
 	}

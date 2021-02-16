@@ -25,13 +25,13 @@
 package searchattribute
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/valyala/fastjson"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -71,15 +71,13 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, validSearchAttribute
 		default:
 			switch reflect.TypeOf(saValue).Kind() {
 			case reflect.Slice, reflect.Array:
-				var b strings.Builder
-				b.WriteRune('[')
-				rv := reflect.ValueOf(saValue)
-				for i := 0; i < rv.Len(); i++ {
-					_, _ = fmt.Fprint(&b, rv.Index(i).Interface())
-					!!!!!! just use json for arrays!
-					b.WriteRune(',')
+				valBytes, err := json.Marshal(saValue)
+				if err != nil {
+					result[saName] = string(saPayload.GetData())
+					lastErr = err
+					continue
 				}
-				b.WriteRune(']')
+				result[saName] = string(valBytes)
 			default:
 				result[saName] = fmt.Sprintf("%v", saTypedValue)
 			}
@@ -109,7 +107,7 @@ func Parse(searchAttributesString map[string]string, validSearchAttributes map[s
 				saType = ivt
 			}
 		}
-		saValPayload, err := parseValue(saValString, saType)
+		saValPayload, err := parseValueOrArray(saValString, saType)
 		if err != nil {
 			lastErr = err
 		}
@@ -119,25 +117,18 @@ func Parse(searchAttributesString map[string]string, validSearchAttributes map[s
 	return searchAttributes, lastErr
 }
 
-func parseValue(valStr string, t enumspb.IndexedValueType) (*commonpb.Payload, error) {
+func parseValueOrArray(valStr string, t enumspb.IndexedValueType) (*commonpb.Payload, error) {
 	var val interface{}
 
 	if isJsonArray(valStr) {
-		arr, err := parseJsonArray(valStr)
+		var err error
+		val, err = parseJsonArray(valStr, t)
 		if err != nil {
 			return nil, err
 		}
-		parsedArr := make([]interface{}, len(arr))
-		for i, str := range arr {
-			parsedArr[i], err = parseValueType(str, t)
-			if err != nil {
-				return nil, err
-			}
-		}
-		val = parsedArr
 	} else {
 		var err error
-		val, err = parseValueType(valStr, t)
+		val, err = parseValueTyped(valStr, t)
 		if err != nil {
 			return nil, err
 		}
@@ -154,7 +145,7 @@ func parseValue(valStr string, t enumspb.IndexedValueType) (*commonpb.Payload, e
 	return valPayload, nil
 }
 
-func parseValueType(valStr string, t enumspb.IndexedValueType) (interface{}, error) {
+func parseValueTyped(valStr string, t enumspb.IndexedValueType) (interface{}, error) {
 	var val interface{}
 	var err error
 
@@ -179,49 +170,59 @@ func parseValueType(valStr string, t enumspb.IndexedValueType) (interface{}, err
 }
 
 func parseValueUnspecified(valStr string) interface{} {
-	var parsedVal interface{}
+	var val interface{}
 	var err error
 
-	if parsedVal, err = strconv.ParseInt(valStr, 10, 64); err == nil {
-	} else if parsedVal, err = strconv.ParseBool(valStr); err == nil {
-	} else if parsedVal, err = strconv.ParseFloat(valStr, 64); err == nil {
-	} else if parsedVal, err = time.Parse(time.RFC3339, valStr); err == nil {
+	if val, err = strconv.ParseInt(valStr, 10, 64); err == nil {
+	} else if val, err = strconv.ParseBool(valStr); err == nil {
+	} else if val, err = strconv.ParseFloat(valStr, 64); err == nil {
+	} else if val, err = time.Parse(time.RFC3339, valStr); err == nil {
 	} else if isJsonArray(valStr) {
-		arr, err := parseJsonArray(valStr)
+		arr, err := parseJsonArray(valStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
 		if err != nil {
-			parsedVal = valStr
+			val = valStr
 		} else {
-			parsedArr := make([]interface{}, len(arr))
-			for i, str := range arr {
-				parsedArr[i] = parseValueUnspecified(str)
-			}
-			parsedVal = parsedArr
+			val = arr
 		}
-
 	} else {
-		parsedVal = valStr
+		val = valStr
 	}
 
-	return parsedVal
+	return val
 }
 
-func isJsonArray(json string) bool {
-	json = strings.TrimSpace(json)
-	return len(json) > 0 && json[0] == '[' && json[len(json)-1] == ']'
+func isJsonArray(str string) bool {
+	str = strings.TrimSpace(str)
+	return len(str) > 0 && str[0] == '[' && str[len(str)-1] == ']'
 }
 
-func parseJsonArray(json string) ([]string, error) {
-	parsedValues, err := fastjson.Parse(json)
-	if err != nil {
-		return nil, err
+func parseJsonArray(str string, t enumspb.IndexedValueType) (interface{}, error) {
+	switch t {
+	case enumspb.INDEXED_VALUE_TYPE_STRING, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+		var result []string
+		err := json.Unmarshal([]byte(str), &result)
+		return result, err
+	case enumspb.INDEXED_VALUE_TYPE_INT:
+		var result []int64
+		err := json.Unmarshal([]byte(str), &result)
+		return result, err
+	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
+		var result []float64
+		err := json.Unmarshal([]byte(str), &result)
+		return result, err
+	case enumspb.INDEXED_VALUE_TYPE_BOOL:
+		var result []bool
+		err := json.Unmarshal([]byte(str), &result)
+		return result, err
+	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
+		var result []time.Time
+		err := json.Unmarshal([]byte(str), &result)
+		return result, err
+	case enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED:
+		var result []interface{}
+		err := json.Unmarshal([]byte(str), &result)
+		return result, err
+	default:
+		return nil, fmt.Errorf("%w: %v", ErrInvalidType, t)
 	}
-	arr, err := parsedValues.Array()
-	if err != nil {
-		return nil, err
-	}
-	result := make([]string, len(arr))
-	for i, item := range arr {
-		result[i] = string(item.MarshalTo(nil))
-	}
-	return result, nil
 }

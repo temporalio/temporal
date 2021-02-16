@@ -65,7 +65,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
@@ -2622,10 +2621,6 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 			metrics.NamespaceTag(namespace),
 		).IncCounter(metrics.WorkflowTaskTimeoutOverrideCount)
 	}
-
-	searchattribute.SetTypes(
-		request.SearchAttributes,
-		searchattribute.GetTypeMap(e.config.ValidSearchAttributes))
 }
 
 func validateNamespaceUUID(

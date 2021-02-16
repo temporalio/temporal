@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/payload"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/config"
@@ -305,36 +304,30 @@ func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBa
 	}
 
 	attr := make(map[string]interface{}, len(request.SearchAttributes.GetIndexedFields()))
-	for searchAttributeName, searchAttributePayload := range request.SearchAttributes.GetIndexedFields() {
-		if !v.isValidSearchAttribute(searchAttributeName) {
-			v.logger.Error("Unregistered field.", tag.ESField(searchAttributeName))
+	for saName, saPayload := range request.SearchAttributes.GetIndexedFields() {
+		if !searchattribute.IsValid(saName, v.config.ValidSearchAttributes) {
+			v.logger.Error("Invalid search attribute name.", tag.ESField(saName))
 			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 			continue
 		}
 
-		searchAttributeValue, err := searchattribute.DecodeValue(searchAttributePayload)
+		saType, err := searchattribute.GetType(saName, v.config.ValidSearchAttributes)
 		if err != nil {
-			if errors.Is(err, searchattribute.ErrMissingMetadataType) {
-				// Old workflows might not have metadata type field. In this case,
-				// fall back to old plain payload.Decode which will set value and type
-				// to interface{} only if search attribute is serialized using JSON.
-				err = payload.Decode(searchAttributePayload, &searchAttributeValue)
-			}
-			if err != nil {
-				v.logger.Error("Error when decode search attribute payload.", tag.Error(err), tag.ESField(searchAttributeName))
-				v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
-			}
+			v.logger.Error("Unable to get search attribute type.", tag.Error(err), tag.ESField(saName))
+			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 		}
-		attr[searchAttributeName] = searchAttributeValue
+
+		searchAttributeValue, err := searchattribute.DecodeValue(saPayload, saType)
+		if err != nil {
+			v.logger.Error("Unable to decode search attribute value from payload.", tag.Error(err), tag.ESField(saName))
+			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+		}
+
+		attr[saName] = searchAttributeValue
 	}
 	doc[definition.Attr] = attr
 
 	return doc
-}
-
-func (v *esVisibilityStore) isValidSearchAttribute(searchAttribute string) bool {
-	_, ok := v.config.ValidSearchAttributes()[searchAttribute]
-	return ok
 }
 
 func (v *esVisibilityStore) ListOpenWorkflowExecutions(

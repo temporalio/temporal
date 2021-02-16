@@ -238,7 +238,10 @@ func (v *visibilityManagerImpl) convertInternalGetResponse(internalResp *Interna
 	}
 
 	resp := &GetClosedWorkflowExecutionResponse{}
-	validSearchAttributes := searchattribute.GetTypeMap(v.validSearchAttributes)
+	validSearchAttributes, err := searchattribute.GetTypeMap(v.validSearchAttributes)
+	if err != nil {
+		v.logger.Error("Unable to build valid search attributes map", tag.Error(err))
+	}
 	resp.Execution = v.convertVisibilityWorkflowExecutionInfo(internalResp.Execution, validSearchAttributes)
 	return resp
 }
@@ -250,7 +253,10 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 
 	resp := &ListWorkflowExecutionsResponse{}
 	resp.Executions = make([]*workflowpb.WorkflowExecutionInfo, len(internalResp.Executions))
-	validSearchAttributes := searchattribute.GetTypeMap(v.validSearchAttributes)
+	validSearchAttributes, err := searchattribute.GetTypeMap(v.validSearchAttributes)
+	if err != nil {
+		v.logger.Error("Unable to build valid search attributes map", tag.Error(err))
+	}
 	for i, execution := range internalResp.Executions {
 		resp.Executions[i] = v.convertVisibilityWorkflowExecutionInfo(execution, validSearchAttributes)
 	}
