@@ -37,6 +37,7 @@ type TestDynamicTLSConfigProvider struct {
 	InternodeCertProvider       *TestDynamicCertProvider
 	InternodeClientCertProvider *TestDynamicCertProvider
 	FrontendCertProvider        *TestDynamicCertProvider
+	FrontendClientCertProvider  *TestDynamicCertProvider
 	WorkerCertProvider          *TestDynamicCertProvider
 
 	FrontendPerHostCertProviderFactory PerHostCertProviderFactory
@@ -81,6 +82,7 @@ func NewTestDynamicTLSConfigProvider(
 		InternodeCertProvider:              internodeProvider,
 		InternodeClientCertProvider:        internodeProvider,
 		FrontendCertProvider:               frontendProvider,
+		FrontendClientCertProvider:         frontendProvider,
 		WorkerCertProvider:                 frontendProvider,
 		FrontendPerHostCertProviderFactory: frontendProvider,
 		settings:                           tlsConfig,

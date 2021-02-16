@@ -475,10 +475,27 @@ func (s *localStoreRPCSuite) TestMutualTLSSystemWorker() {
 	runHelloWorldTest(s.Suite, "127.0.0.1", s.frontendSystemWorkerMutualTLSRPCFactory, s.frontendSystemWorkerMutualTLSRPCFactory, true)
 }
 
-func (s *localStoreRPCSuite) TestDynamicServerTLS() {
+func (s *localStoreRPCSuite) TestDynamicServerTLSFrontend() {
+	s.testDynamicServerTLS("127.0.0.1", true)
+}
 
+func (s *localStoreRPCSuite) TestDynamicServerTLSInternode() {
+	s.testDynamicServerTLS("127.0.0.1", false)
+}
+
+func (s *localStoreRPCSuite) TestDynamicServerTLSOverrideFrontend() {
+	s.testDynamicServerTLS("localhost", true)
+}
+
+func (s *localStoreRPCSuite) TestDynamicServerTLSOverrideInternode() {
+	s.testDynamicServerTLS("localhost", false)
+}
+
+func (s *localStoreRPCSuite) testDynamicServerTLS(host string, frontend bool) {
+
+	server, client := s.getTestFactory(frontend)
 	var index int
-	runHelloWorldMultipleDials(s.Suite, "localhost", s.internodeDynamicTLSFactory, s.internodeDynamicTLSFactory, 5,
+	runHelloWorldMultipleDials(s.Suite, host, server, client, 5,
 		func(tlsInfo *credentials.TLSInfo, err error) {
 			s.NoError(err)
 			s.NotNil(tlsInfo)
@@ -489,10 +506,28 @@ func (s *localStoreRPCSuite) TestDynamicServerTLS() {
 		})
 }
 
-func (s *localStoreRPCSuite) TestDynamicRootCA() {
+func (s *localStoreRPCSuite) TestDynamicRootCAFrontend() {
+	s.testDynamicRootCA("127.0.0.1", true)
+}
+
+func (s *localStoreRPCSuite) TestDynamicRootCAInternode() {
+	s.testDynamicRootCA("127.0.0.1", true)
+}
+
+func (s *localStoreRPCSuite) TestDynamicRootCAOverrideFrontend() {
+	s.testDynamicRootCA("localhost", true)
+}
+
+func (s *localStoreRPCSuite) TestDynamicRootCAOverrideInternode() {
+	s.testDynamicRootCA("localhost", true)
+}
+
+func (s *localStoreRPCSuite) testDynamicRootCA(host string, frontend bool) {
+
+	server, client := s.getTestFactory(frontend)
 	var index int
 	var valid = true
-	runHelloWorldMultipleDials(s.Suite, "localhost", s.internodeDynamicTLSFactory, s.internodeDynamicTLSFactory, 5,
+	runHelloWorldMultipleDials(s.Suite, host, server, client, 5,
 		func(tlsInfo *credentials.TLSInfo, err error) {
 			if valid {
 				s.NoError(err)
@@ -502,7 +537,19 @@ func (s *localStoreRPCSuite) TestDynamicRootCA() {
 			index++
 			if index == 2 {
 				s.dynamicConfigProvider.InternodeClientCertProvider.SwitchToWrongServerRootCACerts()
+				s.dynamicConfigProvider.FrontendClientCertProvider.SwitchToWrongServerRootCACerts()
 				valid = false
 			}
 		})
+}
+
+func (s *localStoreRPCSuite) getTestFactory(frontend bool) (server *TestFactory, client *TestFactory) {
+	if frontend {
+		server = s.frontendDynamicTLSFactory
+		client = s.frontendDynamicTLSFactory
+	} else {
+		server = s.internodeDynamicTLSFactory
+		client = s.internodeDynamicTLSFactory
+	}
+	return server, client
 }
