@@ -25,6 +25,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -37,6 +38,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/auth"
@@ -92,9 +94,10 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 	}
 
 	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
-		HostPort:  hostPort,
-		Namespace: namespace,
-		Logger:    log.NewSdkLogger(b.logger),
+		HostPort:        hostPort,
+		Namespace:       namespace,
+		Logger:          log.NewSdkLogger(b.logger),
+		HeadersProvider: tokenAuthProvider{cliContext: c},
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			DisableHealthCheck: true,
 			TLS:                tlsConfig,
@@ -131,7 +134,27 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 		grpcSecurityOptions = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 	}
 
-	connection, err := grpc.Dial(hostPort, grpcSecurityOptions)
+	dialOpts := []grpc.DialOption{grpcSecurityOptions}
+
+	// token was provided, so inject it into outgoing context
+	if authToken := c.GlobalString(FlagAuthorizationToken); authToken != "" {
+		dialOpts = append(dialOpts,
+			grpc.WithUnaryInterceptor(
+				func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+					ctx = metadata.AppendToOutgoingContext(ctx, "authorization", authToken)
+					return invoker(ctx, method, req, reply, cc, opts...)
+				},
+			),
+			grpc.WithStreamInterceptor(
+				func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+					ctx = metadata.AppendToOutgoingContext(ctx, "authorization", authToken)
+					return streamer(ctx, desc, cc, method, opts...)
+				},
+			),
+		)
+	}
+
+	connection, err := grpc.Dial(hostPort, dialOpts...)
 	if err != nil {
 		b.logger.Fatal("Failed to create connection", tag.Error(err))
 		return nil, err
@@ -140,7 +163,6 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 }
 
 func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
-
 	certPath := c.GlobalString(FlagTLSCertPath)
 	keyPath := c.GlobalString(FlagTLSKeyPath)
 	caPath := c.GlobalString(FlagTLSCaPath)

@@ -229,6 +229,7 @@ const (
 	FlagInputDirectory                   = "input_directory"
 	FlagAutoConfirm                      = "auto_confirm"
 	FlagVersion                          = "version"
+	FlagAuthorizationToken               = "auth_token"
 
 	FlagProtoType  = "type"
 	FlagHexData    = "hex_data"

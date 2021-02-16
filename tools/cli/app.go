@@ -94,6 +94,12 @@ func NewCliApp() *cli.App {
 			Usage:  "override for target server name",
 			EnvVar: "TEMPORAL_CLI_TLS_SERVER_NAME",
 		},
+		cli.StringFlag{
+			Name:   FlagAuthorizationToken,
+			Value:  "",
+			Usage:  "token to provide in Authorization header to server",
+			EnvVar: "TEMPORAL_CLI_AUTHORIZATION_TOKEN",
+		},
 	}
 	app.Commands = []cli.Command{
 		{
