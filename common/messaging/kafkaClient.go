@@ -309,5 +309,11 @@ func CreateTLSConfig(tlsConfig auth.TLS) (*tls.Config, error) {
 		caCertPool.AppendCertsFromPEM(pemData)
 	}
 
-	return auth.NewTLSConfigWithCertsAndCAs([]tls.Certificate{cert}, caCertPool, "", tlsConfig.EnableHostVerification), nil
+	return auth.NewDynamicTLSClientConfig(
+		func() (*tls.Certificate, error) {
+			return &cert, nil
+		},
+		caCertPool,
+		"",
+		tlsConfig.EnableHostVerification), nil
 }

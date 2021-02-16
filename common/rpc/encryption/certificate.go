@@ -93,10 +93,14 @@ func GenerateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage, ke
 }
 
 // GenerateServerX509UsingCA generates a TLS serverCert that is self-signed
-func GenerateServerX509UsingCA(commonName string, ca *tls.Certificate) (*tls.Certificate, *rsa.PrivateKey, error) {
+func GenerateServerX509UsingCAAndSerialNumber(commonName string, serialNumber int64, ca *tls.Certificate) (*tls.Certificate, *rsa.PrivateKey, error) {
 	now := time.Now().UTC()
 
-	i := mathrand.Int63n(100000000000000000)
+	i := serialNumber
+	if i == 0 {
+		i = mathrand.Int63n(100000000000000000)
+	}
+
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(i),
 		Subject: pkix.Name{
@@ -144,4 +148,9 @@ func GenerateServerX509UsingCA(commonName string, ca *tls.Certificate) (*tls.Cer
 	tlsCert.PrivateKey = privateKey
 
 	return &tlsCert, privateKey, err
+}
+
+// GenerateServerX509UsingCA generates a TLS serverCert that is self-signed
+func GenerateServerX509UsingCA(commonName string, ca *tls.Certificate) (*tls.Certificate, *rsa.PrivateKey, error) {
+	return GenerateServerX509UsingCAAndSerialNumber(commonName, 0, ca)
 }
