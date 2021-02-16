@@ -495,6 +495,8 @@ func (s *localStoreRPCSuite) testDynamicServerTLS(host string, frontend bool) {
 
 	server, client := s.getTestFactory(frontend)
 	var index int
+	s.dynamicConfigProvider.InternodeClientCertProvider.SetServerName(host)
+	s.dynamicConfigProvider.FrontendClientCertProvider.SetServerName(host)
 	runHelloWorldMultipleDials(s.Suite, host, server, client, 5,
 		func(tlsInfo *credentials.TLSInfo, err error) {
 			s.NoError(err)

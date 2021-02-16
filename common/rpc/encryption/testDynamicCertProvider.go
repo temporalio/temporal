@@ -38,6 +38,7 @@ type TestDynamicCertProvider struct {
 	serverCertIndex int
 	caCertIndex     int
 	config          *config.GroupTLS
+	serverName      string
 }
 
 var _ CertProvider = (*TestDynamicCertProvider)(nil)
@@ -55,6 +56,7 @@ func NewTestDynamicCertProvider(
 		caCerts:      caCerts,
 		wrongCACerts: wrongCACerts,
 		config:       &config,
+		serverName:   "127.0.0.1",
 	}
 }
 
@@ -81,7 +83,7 @@ func (t *TestDynamicCertProvider) FetchServerRootCAsForClient(_ bool) (*x509.Cer
 }
 
 func (t *TestDynamicCertProvider) ServerName(_ bool) string {
-	return "localhost"
+	return t.serverName
 }
 
 func (t *TestDynamicCertProvider) DisableHostVerification(_ bool) bool {
@@ -89,9 +91,16 @@ func (t *TestDynamicCertProvider) DisableHostVerification(_ bool) bool {
 }
 
 func (t *TestDynamicCertProvider) GetCertProvider(hostName string) (CertProvider, error) {
-	return t, nil
+	if hostName == "localhost" {
+		return t, nil
+	}
+	return nil, nil
 }
 
 func (t *TestDynamicCertProvider) SwitchToWrongServerRootCACerts() {
 	t.caCerts = t.wrongCACerts
+}
+
+func (t *TestDynamicCertProvider) SetServerName(serverName string) {
+	t.serverName = serverName
 }
