@@ -31,7 +31,7 @@ import (
 	"go.temporal.io/server/common/service/config"
 )
 
-type testDynamicCertProvider struct {
+type TestDynamicCertProvider struct {
 	serverCerts     []*tls.Certificate
 	caCerts         *x509.CertPool
 	wrongCACerts    *x509.CertPool
@@ -40,17 +40,17 @@ type testDynamicCertProvider struct {
 	config          *config.GroupTLS
 }
 
-var _ CertProvider = (*testDynamicCertProvider)(nil)
-var _ ClientCertProvider = (*testDynamicCertProvider)(nil)
-var _ PerHostCertProviderFactory = (*testDynamicCertProvider)(nil)
+var _ CertProvider = (*TestDynamicCertProvider)(nil)
+var _ ClientCertProvider = (*TestDynamicCertProvider)(nil)
+var _ PerHostCertProviderFactory = (*TestDynamicCertProvider)(nil)
 
 func NewTestDynamicCertProvider(
 	serverCerts []*tls.Certificate,
 	caCerts *x509.CertPool,
 	wrongCACerts *x509.CertPool,
-	config config.GroupTLS) *testDynamicCertProvider {
+	config config.GroupTLS) *TestDynamicCertProvider {
 
-	return &testDynamicCertProvider{
+	return &TestDynamicCertProvider{
 		serverCerts:  serverCerts,
 		caCerts:      caCerts,
 		wrongCACerts: wrongCACerts,
@@ -58,40 +58,40 @@ func NewTestDynamicCertProvider(
 	}
 }
 
-func (t *testDynamicCertProvider) FetchServerCertificate() (*tls.Certificate, error) {
+func (t *TestDynamicCertProvider) FetchServerCertificate() (*tls.Certificate, error) {
 	i := t.serverCertIndex % len(t.serverCerts)
 	t.serverCertIndex++
 	return t.serverCerts[i], nil
 }
 
-func (t *testDynamicCertProvider) FetchClientCAs() (*x509.CertPool, error) {
+func (t *TestDynamicCertProvider) FetchClientCAs() (*x509.CertPool, error) {
 	panic("not implemented")
 }
 
-func (t *testDynamicCertProvider) GetSettings() *config.GroupTLS {
+func (t *TestDynamicCertProvider) GetSettings() *config.GroupTLS {
 	return t.config
 }
 
-func (t *testDynamicCertProvider) FetchClientCertificate(_ bool) (*tls.Certificate, error) {
+func (t *TestDynamicCertProvider) FetchClientCertificate(_ bool) (*tls.Certificate, error) {
 	panic("not implemented")
 }
 
-func (t *testDynamicCertProvider) FetchServerRootCAsForClient(_ bool) (*x509.CertPool, error) {
-	t.caCertIndex++
-	if t.caCertIndex == 3 {
-		return t.wrongCACerts, nil
-	}
+func (t *TestDynamicCertProvider) FetchServerRootCAsForClient(_ bool) (*x509.CertPool, error) {
 	return t.caCerts, nil
 }
 
-func (t *testDynamicCertProvider) ServerName(_ bool) string {
+func (t *TestDynamicCertProvider) ServerName(_ bool) string {
 	return "localhost"
 }
 
-func (t *testDynamicCertProvider) DisableHostVerification(_ bool) bool {
+func (t *TestDynamicCertProvider) DisableHostVerification(_ bool) bool {
 	return false
 }
 
-func (t *testDynamicCertProvider) GetCertProvider(hostName string) (CertProvider, error) {
+func (t *TestDynamicCertProvider) GetCertProvider(hostName string) (CertProvider, error) {
 	return t, nil
+}
+
+func (t *TestDynamicCertProvider) SwitchToWrongServerRootCACerts() {
+	t.caCerts = t.wrongCACerts
 }

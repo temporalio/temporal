@@ -33,12 +33,12 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 
-	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/rpc"
-
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/examples/helloworld/helloworld"
+
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/rpc"
 
 	"go.temporal.io/server/common/service/config"
 )
@@ -114,25 +114,20 @@ func runHelloWorldTest(s suite.Suite, host string, serverFactory *TestFactory, c
 	}
 }
 
-func runHelloWorldMultipleDials(s suite.Suite, host string, serverFactory *TestFactory, clientFactory *TestFactory, nDials int) {
+func runHelloWorldMultipleDials(
+	s suite.Suite,
+	host string,
+	serverFactory *TestFactory,
+	clientFactory *TestFactory,
+	nDials int,
+	validator func(*credentials.TLSInfo, error)) {
+
 	server, port := startHelloWorldServer(s, serverFactory)
 	defer server.Stop()
 
 	for i := 0; i < nDials; i++ {
-
 		tlsInfo, err := dialHelloAndGetTLSInfo(s, host+":"+port, clientFactory, serverFactory.serverUsage)
-
-		if i != 2 {
-			s.NoError(err)
-			s.NotNil(tlsInfo)
-			s.NotNil(tlsInfo.State.PeerCertificates)
-			sn := (*tlsInfo.State.PeerCertificates[0].SerialNumber).Int64()
-			s.True(sn == int64((i+1)%2+100))
-		} else {
-			// on third iteration the test cert provider returns a wrong CA cert
-			// this is how we test that CA certs are served dynamically
-			s.Error(err)
-		}
+		validator(tlsInfo, err)
 	}
 }
 

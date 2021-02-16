@@ -155,34 +155,25 @@ func newServerTLSConfig(
 	perHostCertProviderFactory PerHostCertProviderFactory,
 ) (*tls.Config, error) {
 
-	var callback func(c *tls.ClientHelloInfo) (*tls.Config, error)
-
-	if perHostCertProviderFactory != nil {
-		callback = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
-			perHostCertProvider, err := perHostCertProviderFactory.GetCertProvider(c.ServerName)
-			if err != nil {
-				return nil, err
-			}
-
-			// If there are no special TLS settings for the specific host name being requested,
-			// returning nil here will fallback to the default, top-level TLS config
-			if perHostCertProvider == nil {
-				return getServerTLSConfigFromCertProvider(certProvider)
-			}
-			return getServerTLSConfigFromCertProvider(perHostCertProvider)
-		}
-	} else {
-		callback = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
-			return getServerTLSConfigFromCertProvider(certProvider)
-		}
-	}
-
 	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider)
 	if err != nil {
 		return nil, err
 	}
 
-	tlsConfig.GetConfigForClient = callback
+	tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
+		if perHostCertProviderFactory != nil {
+			perHostCertProvider, err := perHostCertProviderFactory.GetCertProvider(c.ServerName)
+			if err != nil {
+				return nil, err
+			}
+
+			if perHostCertProvider == nil {
+				return getServerTLSConfigFromCertProvider(certProvider)
+			}
+			return getServerTLSConfigFromCertProvider(perHostCertProvider)
+		}
+		return getServerTLSConfigFromCertProvider(certProvider)
+	}
 	return tlsConfig, nil
 }
 

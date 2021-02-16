@@ -96,11 +96,9 @@ func GenerateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage, ke
 func GenerateServerX509UsingCAAndSerialNumber(commonName string, serialNumber int64, ca *tls.Certificate) (*tls.Certificate, *rsa.PrivateKey, error) {
 	now := time.Now().UTC()
 
-	var i int64
-	if serialNumber == 0 {
+	i := serialNumber
+	if i == 0 {
 		i = mathrand.Int63n(100000000000000000)
-	} else {
-		i = serialNumber
 	}
 
 	template := &x509.Certificate{

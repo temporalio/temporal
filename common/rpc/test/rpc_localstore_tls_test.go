@@ -37,6 +37,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc/credentials"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
@@ -88,6 +89,8 @@ type localStoreRPCSuite struct {
 
 	dynamicCACertPool *x509.CertPool
 	wrongCACertPool   *x509.CertPool
+
+	dynamicConfigProvider *encryption.TestDynamicTLSConfigProvider
 }
 
 type CertChain struct {
@@ -265,14 +268,14 @@ func (s *localStoreRPCSuite) setupFrontend() {
 	s.frontendServerTLSRPCFactory = f(frontendServerTLSFactory)
 	s.frontendSystemWorkerMutualTLSRPCFactory = f(frontendSystemWorkerMutualTLSFactory)
 
-	dynamicConfigProvider, err := encryption.NewTestDynamicTLSConfigProvider(
+	s.dynamicConfigProvider, err = encryption.NewTestDynamicTLSConfigProvider(
 		&localStoreMutualTLS.TLS,
 		s.frontendRollingCerts,
 		s.dynamicCACertPool,
 		s.frontendRollingCerts,
 		s.dynamicCACertPool,
 		s.wrongCACertPool)
-	dynamicServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, dynamicConfigProvider)
+	dynamicServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, s.dynamicConfigProvider)
 	s.frontendDynamicTLSFactory = f(dynamicServerTLSFactory)
 	s.internodeDynamicTLSFactory = i(dynamicServerTLSFactory)
 }
@@ -473,5 +476,33 @@ func (s *localStoreRPCSuite) TestMutualTLSSystemWorker() {
 }
 
 func (s *localStoreRPCSuite) TestDynamicServerTLS() {
-	runHelloWorldMultipleDials(s.Suite, "localhost", s.internodeDynamicTLSFactory, s.internodeDynamicTLSFactory, 5)
+
+	var index int
+	runHelloWorldMultipleDials(s.Suite, "localhost", s.internodeDynamicTLSFactory, s.internodeDynamicTLSFactory, 5,
+		func(tlsInfo *credentials.TLSInfo, err error) {
+			s.NoError(err)
+			s.NotNil(tlsInfo)
+			s.NotNil(tlsInfo.State.PeerCertificates)
+			sn := (*tlsInfo.State.PeerCertificates[0].SerialNumber).Int64()
+			s.True(sn == int64((index+1)%2+100))
+			index++
+		})
+}
+
+func (s *localStoreRPCSuite) TestDynamicRootCA() {
+	var index int
+	var valid = true
+	runHelloWorldMultipleDials(s.Suite, "localhost", s.internodeDynamicTLSFactory, s.internodeDynamicTLSFactory, 5,
+		func(tlsInfo *credentials.TLSInfo, err error) {
+			if valid {
+				s.NoError(err)
+			} else {
+				s.Error(err)
+			}
+			index++
+			if index == 2 {
+				s.dynamicConfigProvider.InternodeClientCertProvider.SwitchToWrongServerRootCACerts()
+				valid = false
+			}
+		})
 }

@@ -31,15 +31,15 @@ import (
 	"go.temporal.io/server/common/service/config"
 )
 
-type testDynamicTLSConfigProvider struct {
+type TestDynamicTLSConfigProvider struct {
 	settings *config.RootTLS
 
-	internodeCertProvider       CertProvider
-	internodeClientCertProvider ClientCertProvider
-	frontendCertProvider        CertProvider
-	workerCertProvider          ClientCertProvider
+	InternodeCertProvider       *TestDynamicCertProvider
+	InternodeClientCertProvider *TestDynamicCertProvider
+	FrontendCertProvider        *TestDynamicCertProvider
+	WorkerCertProvider          *TestDynamicCertProvider
 
-	frontendPerHostCertProviderFactory PerHostCertProviderFactory
+	FrontendPerHostCertProviderFactory PerHostCertProviderFactory
 
 	internodeServerConfig *tls.Config
 	internodeClientConfig *tls.Config
@@ -47,23 +47,23 @@ type testDynamicTLSConfigProvider struct {
 	frontendClientConfig  *tls.Config
 }
 
-func (t *testDynamicTLSConfigProvider) GetInternodeServerConfig() (*tls.Config, error) {
-	return newServerTLSConfig(t.internodeCertProvider, nil)
+func (t *TestDynamicTLSConfigProvider) GetInternodeServerConfig() (*tls.Config, error) {
+	return newServerTLSConfig(t.InternodeCertProvider, nil)
 }
 
-func (t *testDynamicTLSConfigProvider) GetInternodeClientConfig() (*tls.Config, error) {
-	return newClientTLSConfig(t.internodeClientCertProvider, true, false)
+func (t *TestDynamicTLSConfigProvider) GetInternodeClientConfig() (*tls.Config, error) {
+	return newClientTLSConfig(t.InternodeClientCertProvider, true, false)
 }
 
-func (t *testDynamicTLSConfigProvider) GetFrontendServerConfig() (*tls.Config, error) {
-	return newServerTLSConfig(t.frontendCertProvider, t.frontendPerHostCertProviderFactory)
+func (t *TestDynamicTLSConfigProvider) GetFrontendServerConfig() (*tls.Config, error) {
+	return newServerTLSConfig(t.FrontendCertProvider, t.FrontendPerHostCertProviderFactory)
 }
 
-func (t *testDynamicTLSConfigProvider) GetFrontendClientConfig() (*tls.Config, error) {
-	return newClientTLSConfig(t.workerCertProvider, true, false)
+func (t *TestDynamicTLSConfigProvider) GetFrontendClientConfig() (*tls.Config, error) {
+	return newClientTLSConfig(t.WorkerCertProvider, true, false)
 }
 
-var _ TLSConfigProvider = (*testDynamicTLSConfigProvider)(nil)
+var _ TLSConfigProvider = (*TestDynamicTLSConfigProvider)(nil)
 
 func NewTestDynamicTLSConfigProvider(
 	tlsConfig *config.RootTLS,
@@ -72,17 +72,17 @@ func NewTestDynamicTLSConfigProvider(
 	frontendCerts []*tls.Certificate,
 	frontendCACerts *x509.CertPool,
 	wrongCACerts *x509.CertPool,
-) (TLSConfigProvider, error) {
+) (*TestDynamicTLSConfigProvider, error) {
 
 	internodeProvider := NewTestDynamicCertProvider(internodeCerts, internodeCACerts, wrongCACerts, tlsConfig.Internode)
 	frontendProvider := NewTestDynamicCertProvider(frontendCerts, frontendCACerts, wrongCACerts, tlsConfig.Frontend)
 
-	return &testDynamicTLSConfigProvider{
-		internodeCertProvider:              internodeProvider,
-		internodeClientCertProvider:        internodeProvider,
-		frontendCertProvider:               frontendProvider,
-		workerCertProvider:                 frontendProvider,
-		frontendPerHostCertProviderFactory: frontendProvider,
+	return &TestDynamicTLSConfigProvider{
+		InternodeCertProvider:              internodeProvider,
+		InternodeClientCertProvider:        internodeProvider,
+		FrontendCertProvider:               frontendProvider,
+		WorkerCertProvider:                 frontendProvider,
+		FrontendPerHostCertProviderFactory: frontendProvider,
 		settings:                           tlsConfig,
 	}, nil
 }
