@@ -2149,6 +2149,9 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 			if !isRunning || ci.StartedId == common.EmptyEventID {
 				return serviceerror.NewNotFound("Pending child execution not found.")
 			}
+			if ci.GetStartedWorkflowId() != completedExecution.GetWorkflowId() {
+				return serviceerror.NewNotFound("Pending child execution not found.")
+			}
 
 			switch completionEvent.GetEventType() {
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
