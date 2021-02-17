@@ -399,7 +399,9 @@ func (h *Impl) Stop() {
 	h.ringpopChannel.Close()
 	h.runtimeMetricsReporter.Stop()
 	h.persistenceBean.Close()
-	h.visibilityMgr.Close()
+	if h.visibilityMgr != nil {
+		h.visibilityMgr.Close()
+	}
 }
 
 // GetServiceName return service name

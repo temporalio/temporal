@@ -71,6 +71,7 @@ func NewService(
 		VisibilityOpenMaxQPS:   serviceConfig.VisibilityOpenMaxQPS,
 		VisibilityClosedMaxQPS: serviceConfig.VisibilityClosedMaxQPS,
 		EnableSampling:         serviceConfig.EnableVisibilitySampling,
+		ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
 	}
 
 	visibilityManagerInitializer := func(
