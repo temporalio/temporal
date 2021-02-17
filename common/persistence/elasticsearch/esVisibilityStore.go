@@ -311,15 +311,9 @@ func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBa
 
 	attr := make(map[string]interface{}, len(request.SearchAttributes.GetIndexedFields()))
 	for saName, saPayload := range request.SearchAttributes.GetIndexedFields() {
-		if !searchattribute.IsValid(saName, v.config.ValidSearchAttributes) {
-			v.logger.Error("Invalid search attribute name.", tag.ESField(saName))
-			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
-			continue
-		}
-
 		saType := searchattribute.GetType(saName, typeMap)
 		if saType == enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED {
-			v.logger.Error("Unable to get search attribute type.", tag.Error(err), tag.ESField(saName))
+			v.logger.Error("Invalid search attribute.", tag.Error(err), tag.ESField(saName))
 			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 		}
 

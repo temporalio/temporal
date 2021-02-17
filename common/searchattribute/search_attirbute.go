@@ -44,19 +44,6 @@ var (
 	ErrValidMapIsEmpty = errors.New("valid search attributes map is empty")
 )
 
-func IsValid(name string, validSearchAttributesFn dynamicconfig.MapPropertyFn) bool {
-	if validSearchAttributesFn == nil {
-		return false
-	}
-	validSearchAttributes := validSearchAttributesFn()
-	if len(validSearchAttributes) == 0 {
-		return false
-	}
-
-	_, ok := validSearchAttributes[name]
-	return ok
-}
-
 // GetTypeMap converts search attributes types from dynamic config map to typed map.
 func GetTypeMap(validSearchAttributesFn dynamicconfig.MapPropertyFn) (map[string]enumspb.IndexedValueType, error) {
 	if validSearchAttributesFn == nil {

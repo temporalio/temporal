@@ -25,6 +25,7 @@
 package searchattribute
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -51,7 +52,93 @@ func (s *StringifySuite) SetupTest() {
 func (s *StringifySuite) TearDownTest() {
 }
 
-func (s *StringifySuite) Test_Parse() {
+func (s *StringifySuite) Test_Stringify() {
+	typeMap := map[string]enumspb.IndexedValueType{
+		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+	}
+
+	sa, err := Encode(map[string]interface{}{
+		"key1": "val1",
+		"key2": 2,
+		"key3": true,
+	}, typeMap)
+	s.NoError(err)
+
+	saStr, err := Stringify(sa, nil)
+	s.NoError(err)
+	s.Len(saStr, 3)
+	s.Equal("val1", saStr["key1"])
+	s.Equal("2", saStr["key2"])
+	s.Equal("true", saStr["key3"])
+
+	// Clean Metadata type and use typeMap.
+	delete(sa.IndexedFields["key1"].Metadata, "type")
+	delete(sa.IndexedFields["key2"].Metadata, "type")
+	delete(sa.IndexedFields["key3"].Metadata, "type")
+
+	saStr, err = Stringify(sa, typeMap)
+	s.NoError(err)
+	s.Len(saStr, 3)
+	s.Equal("val1", saStr["key1"])
+	s.Equal("2", saStr["key2"])
+	s.Equal("true", saStr["key3"])
+
+	// Even w/o typeMap error is returned but string values are set with  raw JSON from GetData().
+	saStr, err = Stringify(sa, nil)
+	s.Error(err)
+	s.True(errors.Is(err, ErrInvalidType))
+	s.Len(saStr, 3)
+	s.Equal(`"val1"`, saStr["key1"])
+	s.Equal("2", saStr["key2"])
+	s.Equal("true", saStr["key3"])
+}
+
+func (s *StringifySuite) Test_Stringify_Array() {
+	typeMap := map[string]enumspb.IndexedValueType{
+		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+	}
+
+	sa, err := Encode(map[string]interface{}{
+		"key1": []string{"val1", "val2"},
+		"key2": []int64{2, 3, 4},
+		"key3": []bool{true, false, true},
+	}, typeMap)
+	s.NoError(err)
+
+	saStr, err := Stringify(sa, nil)
+	s.NoError(err)
+	s.Len(saStr, 3)
+	s.Equal(`["val1","val2"]`, saStr["key1"])
+	s.Equal("[2,3,4]", saStr["key2"])
+	s.Equal("[true,false,true]", saStr["key3"])
+
+	// Clean Metadata type and use typeMap.
+	delete(sa.IndexedFields["key1"].Metadata, "type")
+	delete(sa.IndexedFields["key2"].Metadata, "type")
+	delete(sa.IndexedFields["key3"].Metadata, "type")
+
+	saStr, err = Stringify(sa, typeMap)
+	s.NoError(err)
+	s.Len(saStr, 3)
+	s.Equal(`["val1","val2"]`, saStr["key1"])
+	s.Equal("[2,3,4]", saStr["key2"])
+	s.Equal("[true,false,true]", saStr["key3"])
+
+	// Even w/o typeMap error is returned but string values are set with  raw JSON from GetData().
+	saStr, err = Stringify(sa, nil)
+	s.Error(err)
+	s.True(errors.Is(err, ErrInvalidType))
+	s.Len(saStr, 3)
+	s.Equal(`["val1","val2"]`, saStr["key1"])
+	s.Equal("[2,3,4]", saStr["key2"])
+	s.Equal("[true,false,true]", saStr["key3"])
+}
+
+func (s *StringifySuite) Test_Parse_ValidTypeMap() {
 	sa, err := Parse(map[string]string{
 		"key1": "val1",
 		"key2": "2",
@@ -70,8 +157,10 @@ func (s *StringifySuite) Test_Parse() {
 	s.Equal("Int", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
 	s.Equal("true", string(sa.IndexedFields["key3"].GetData()))
 	s.Equal("Bool", string(sa.IndexedFields["key3"].GetMetadata()["type"]))
+}
 
-	sa, err = Parse(map[string]string{
+func (s *StringifySuite) Test_Parse_NilTypeMap() {
+	sa, err := Parse(map[string]string{
 		"key1": "val1",
 		"key2": "2",
 		"key3": "true",
@@ -83,23 +172,55 @@ func (s *StringifySuite) Test_Parse() {
 	s.Equal("2", string(sa.IndexedFields["key2"].GetData()))
 	s.Equal("true", string(sa.IndexedFields["key3"].GetData()))
 
-	sa, err = Parse(map[string]string{
+}
+func (s *StringifySuite) Test_Parse_WrongTypesInTypeMap() {
+	sa, err := Parse(map[string]string{
 		"key1": "val1",
 		"key2": "2",
-		"key3": "true",
 	}, map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key2": enumspb.INDEXED_VALUE_TYPE_STRING,
-		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
 	})
 
 	s.Error(err)
-	s.Len(sa.IndexedFields, 3)
+	s.Len(sa.IndexedFields, 2)
 	s.Nil(sa.IndexedFields["key1"])
 	s.Equal(`"2"`, string(sa.IndexedFields["key2"].GetData()))
 	s.Equal("String", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
-	s.Equal("true", string(sa.IndexedFields["key3"].GetData()))
-	s.Equal("Bool", string(sa.IndexedFields["key3"].GetMetadata()["type"]))
+}
+
+func (s *StringifySuite) Test_Parse_MissedFieldsInTypeMap() {
+	sa, err := Parse(map[string]string{
+		"key1": "val1",
+		"key2": "2",
+	}, map[string]enumspb.IndexedValueType{
+		"key3": enumspb.INDEXED_VALUE_TYPE_STRING,
+		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+	})
+
+	s.NoError(err)
+	s.Len(sa.IndexedFields, 2)
+	s.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
+	s.Nil(sa.IndexedFields["key1"].GetMetadata()["type"])
+	s.Equal("2", string(sa.IndexedFields["key2"].GetData()))
+	s.Equal("Int", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
+}
+
+func (s *StringifySuite) Test_Parse_Array() {
+	sa, err := Parse(map[string]string{
+		"key1": ` ["val1", "val2"] `,
+		"key2": "[2,3,4]",
+	}, map[string]enumspb.IndexedValueType{
+		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+	})
+
+	s.NoError(err)
+	s.Len(sa.IndexedFields, 2)
+	s.Equal(`["val1","val2"]`, string(sa.IndexedFields["key1"].GetData()))
+	s.Equal("String", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
+	s.Equal("[2,3,4]", string(sa.IndexedFields["key2"].GetData()))
+	s.Equal("Int", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
 }
 
 func (s *StringifySuite) Test_parseValueOrArray() {
