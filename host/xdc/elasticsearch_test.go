@@ -187,10 +187,10 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
-	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
+	attrValPayload, _ := payload.Encode(s.testSearchAttributeVal)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			s.testSearchAttributeKey: attrValBytes,
+			s.testSearchAttributeKey: attrValPayload,
 		},
 	}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
@@ -236,9 +236,10 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		}
 		s.NotNil(openExecution)
 		s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
-		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
+		searchValPayload := openExecution.GetSearchAttributes().GetIndexedFields()[s.testSearchAttributeKey]
 		var searchVal string
-		payload.Decode(searchValBytes, &searchVal)
+		err = payload.Decode(searchValPayload, &searchVal)
+		s.NoError(err)
 		s.Equal(s.testSearchAttributeVal, searchVal)
 	}
 
@@ -389,12 +390,12 @@ GetHistoryLoop2:
 }
 
 func getUpsertSearchAttributes() *commonpb.SearchAttributes {
-	attrValBytes1, _ := payload.Encode("another string")
-	attrValBytes2, _ := payload.Encode(123)
+	attrValPayload1, _ := payload.Encode("another string")
+	attrValPayload2, _ := payload.Encode(123)
 	upsertSearchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			definition.CustomStringField: attrValBytes1,
-			definition.CustomIntField:    attrValBytes2,
+			definition.CustomStringField: attrValPayload1,
+			definition.CustomIntField:    attrValPayload2,
 		},
 	}
 	return upsertSearchAttr

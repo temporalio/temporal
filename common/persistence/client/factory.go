@@ -271,6 +271,11 @@ func (f *factoryImpl) NewExecutionManager(
 
 // NewVisibilityManager returns a new visibility manager
 func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
+	visConfig := f.config.VisibilityConfig
+	if visConfig == nil {
+		return nil, nil
+	}
+
 	ds := f.datastores[storeTypeVisibility]
 	store, err := ds.factory.NewVisibilityStore()
 	if err != nil {
@@ -282,8 +287,7 @@ func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
 		result = p.NewVisibilityPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
 
-	visConfig := f.config.VisibilityConfig
-	if visConfig != nil && visConfig.EnableSampling() {
+	if visConfig.EnableSampling() {
 		result = p.NewVisibilitySamplingClient(result, visConfig, f.metricsClient, f.logger)
 	}
 	if f.metricsClient != nil {
