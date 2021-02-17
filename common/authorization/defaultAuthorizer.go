@@ -56,3 +56,5 @@ func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target 
 	}
 	return Result{Decision: DecisionAllow}, nil
 }
+
+var _ Authorizer = (*defaultAuthorizer)(nil)

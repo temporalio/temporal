@@ -29,6 +29,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -75,7 +76,6 @@ func TestDefaultClaimMapperSuite(t *testing.T) {
 	s := new(defaultClaimMapperSuite)
 	suite.Run(t, s)
 }
-
 func (s *defaultClaimMapperSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
@@ -83,7 +83,6 @@ func (s *defaultClaimMapperSuite) SetupTest() {
 	s.config = &config.Config{}
 	s.claimMapper = NewDefaultJWTClaimMapper(s.tokenGenerator, s.config)
 }
-
 func (s *defaultClaimMapperSuite) TearDownTest() {
 	s.controller.Finish()
 }
@@ -96,7 +95,6 @@ func (s *defaultClaimMapperSuite) TestTokenGenerator() {
 	s.NoError(err)
 	s.Equal(testSubject, claims["sub"])
 }
-
 func (s *defaultClaimMapperSuite) TestTokenWithNoSubject() {
 	tokenString, err := s.tokenGenerator.generateToken(
 		testSubject, permissionsAdmin, errorTestOptionNoSubject)
@@ -106,7 +104,6 @@ func (s *defaultClaimMapperSuite) TestTokenWithNoSubject() {
 	subject := claims["sub"]
 	s.Nil(subject)
 }
-
 func (s *defaultClaimMapperSuite) TestTokenWithNoKID() {
 	tokenString, err := s.tokenGenerator.generateToken(
 		testSubject, permissionsAdmin, errorTestOptionNoKID)
@@ -114,7 +111,6 @@ func (s *defaultClaimMapperSuite) TestTokenWithNoKID() {
 	_, err = parseJWT(tokenString, s.tokenGenerator)
 	s.Error(err, "malformed token - no \"kid\" header")
 }
-
 func (s *defaultClaimMapperSuite) TestTokenWithNoAlgorithm() {
 	tokenString, err := s.tokenGenerator.generateToken(
 		testSubject, permissionsAdmin, errorTestOptionNoAlgorithm)
@@ -122,7 +118,6 @@ func (s *defaultClaimMapperSuite) TestTokenWithNoAlgorithm() {
 	_, err = parseJWT(tokenString, s.tokenGenerator)
 	s.Error(err, "signing method (alg) is unspecified.")
 }
-
 func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissions() {
 	tokenString, err := s.tokenGenerator.generateToken(
 		testSubject, permissionsAdmin, errorTestOptionNoError)
@@ -141,7 +136,6 @@ func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissions() {
 	defaultRole := claims.Namespaces[defaultNamespace]
 	s.Equal(RoleReader, defaultRole)
 }
-
 func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissions() {
 	tokenString, err := s.tokenGenerator.generateToken(
 		testSubject, permissionsReaderWriterWorker, errorTestOptionNoError)
@@ -159,6 +153,32 @@ func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissions() {
 	s.Equal(1, len(claims.Namespaces))
 	defaultRole := claims.Namespaces[defaultNamespace]
 	s.Equal(RoleReader|RoleWriter|RoleWorker, defaultRole)
+}
+func (s *defaultClaimMapperSuite) TestGetClaimMapperFromConfigNoop() {
+	s.testGetClaimMapperFromConfig("", true, reflect.TypeOf(&noopClaimMapper{}))
+}
+func (s *defaultClaimMapperSuite) TestGetClaimMapperFromConfigDefault() {
+	s.testGetClaimMapperFromConfig("default", true, reflect.TypeOf(&defaultJWTClaimMapper{}))
+}
+
+func (s *defaultClaimMapperSuite) TestGetClaimMapperFromConfigUnknown() {
+	s.testGetClaimMapperFromConfig("foo", false, nil)
+}
+
+func (s *defaultClaimMapperSuite) testGetClaimMapperFromConfig(name string, valid bool, cmType reflect.Type) {
+
+	cfg := config.Config{}
+	cfg.Global.Authorization.ClaimMapper = name
+	cm, err := GetClaimMapperFromConfig(&cfg)
+	if valid {
+		s.NoError(err)
+		s.NotNil(cm)
+		t := reflect.TypeOf(cm)
+		s.True(t == cmType)
+	} else {
+		s.Error(err)
+		s.Nil(cm)
+	}
 }
 
 func AddBearer(token string) string {

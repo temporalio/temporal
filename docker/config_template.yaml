@@ -184,6 +184,15 @@ global:
             timerType: {{ default .Env.PROMETHEUS_TIMER_TYPE "histogram" }}
             listenAddress: {{ .Env.PROMETHEUS_ENDPOINT }}
     {{- end }}
+    authorization:
+        jwtKeyProvider:
+            keySourceURIs:
+                - {{ default .Env.TEMPORAL_JWT_KEY_SOURCE1 "" }}
+                - {{ default .Env.TEMPORAL_JWT_KEY_SOURCE2 "" }}
+            refreshInterval: {{ default .Env.TEMPORAL_JWT_KEY_REFRESH "1m" }}
+        permissionsClaimName: {{ default .Env.TEMPORAL_JWT_PERMISSIONS_CLAIM "permissions" }}
+        authorizer: {{ default .Env.TEMPORAL_AUTH_AUTHORIZER "" }}
+        claimMapper: {{ default .Env.TEMPORAL_AUTH_CLAIM_MAPPER "" }}
 
 {{- $temporalGrpcPort := default .Env.FRONTEND_GRPC_PORT "7233" }}
 services:
