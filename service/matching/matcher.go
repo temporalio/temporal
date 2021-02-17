@@ -71,11 +71,19 @@ const (
 func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scopeFunc func() metrics.Scope) *TaskMatcher {
 	dynamicRate := quotas.NewDynamicRate(defaultTaskDispatchRPS)
 	dynamicBurst := quotas.NewDynamicBurst(int(defaultTaskDispatchRPS))
-	limiter := quotas.NewDynamicRateLimiter(
-		dynamicRate.RateFn(),
-		dynamicBurst.BurstFn(),
-		defaultTaskDispatchRPSTTL,
-	)
+	limiter := quotas.NewMultiStageRateLimiter([]quotas.RateLimiter{
+		quotas.NewDynamicRateLimiter(
+			dynamicRate.RateFn(),
+			dynamicBurst.BurstFn(),
+			defaultTaskDispatchRPSTTL,
+		),
+		quotas.NewDefaultOutgoingDynamicRateLimiter(
+			config.AdminQueuePartitionDispatchRate,
+		),
+		quotas.NewDefaultOutgoingDynamicRateLimiter(
+			config.AdminDispatchRate,
+		),
+	})
 	return &TaskMatcher{
 		config:        config,
 		dynamicRate:   dynamicRate,
@@ -304,10 +312,10 @@ func (tm *TaskMatcher) UpdateRatelimit(rps *float64) {
 	}
 
 	rate := *rps
-	nPartitions := tm.numPartitions()
-	if rate > float64(nPartitions) {
+	nPartitions := float64(tm.numPartitions())
+	if rate > nPartitions {
 		// divide the rate equally across all partitions
-		rate = rate / float64(tm.numPartitions())
+		rate = rate / nPartitions
 	}
 
 	burst := int(rate)

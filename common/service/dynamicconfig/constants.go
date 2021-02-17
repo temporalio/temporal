@@ -58,6 +58,11 @@ var keys = map[Key]string{
 	testGetBoolPropertyFilteredByNamespaceIDKey:       "testGetBoolPropertyFilteredByNamespaceIDKey",
 	testGetBoolPropertyFilteredByTaskQueueInfoKey:     "testGetBoolPropertyFilteredByTaskQueueInfoKey",
 
+	// admin settings
+	// NOTE: admin settings are not guaranteed to be compatible across different versions
+	AdminMatchingDispatchRate:          "admin.matchingDispatchRate",
+	AdminMatchingTaskqueueDispatchRate: "admin.matchingTaskqueueDispatchRate",
+
 	// system settings
 	EnableVisibilitySampling:               "system.enableVisibilitySampling",
 	AdvancedVisibilityWritingMode:          "system.advancedVisibilityWritingMode",
@@ -324,6 +329,11 @@ const (
 	testGetDurationPropertyFilteredByTaskQueueInfoKey
 	testGetBoolPropertyFilteredByNamespaceIDKey
 	testGetBoolPropertyFilteredByTaskQueueInfoKey
+
+	// AdminMatchingDispatchRate is the max qps of any task queue for a given namespace
+	AdminMatchingDispatchRate
+	// AdminMatchingTaskqueueDispatchRate is the max qps of a task queue for a given namespace
+	AdminMatchingTaskqueueDispatchRate
 
 	// EnableVisibilitySampling is key for enable visibility sampling
 	EnableVisibilitySampling
