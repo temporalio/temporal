@@ -25,13 +25,11 @@
 package searchattribute
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/sdk/converter"
 
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/service/dynamicconfig"
@@ -97,56 +95,6 @@ func Test_GetTypeMap(t *testing.T) {
 	}))
 	assert.Error(err)
 	assert.Len(result, 0)
-}
-
-func Test_DecodeValue_Success(t *testing.T) {
-	assert := assert.New(t)
-
-	payloadStr := payload.EncodeString("qwe")
-	payloadStr.Metadata["type"] = []byte("String")
-	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
-	assert.NoError(err)
-	assert.Equal("qwe", decodedStr)
-
-	payloadInt, err := payload.Encode(123)
-	assert.NoError(err)
-	payloadInt.Metadata["type"] = []byte("Int")
-	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
-	assert.NoError(err)
-	assert.Equal(int64(123), decodedInt)
-
-	payloadBool, err := payload.Encode(true)
-	assert.NoError(err)
-	payloadBool.Metadata["type"] = []byte("Bool")
-	decodedBool, err := DecodeValue(payloadBool, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
-	assert.NoError(err)
-	assert.Equal(true, decodedBool)
-}
-
-func Test_DecodeValue_Error(t *testing.T) {
-	assert := assert.New(t)
-
-	payloadStr := payload.EncodeString("qwe")
-	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
-	assert.Error(err)
-	assert.True(errors.Is(err, ErrInvalidType))
-	assert.Nil(decodedStr)
-
-	payloadInt, err := payload.Encode(123)
-	assert.NoError(err)
-	payloadInt.Metadata["type"] = []byte("UnknownType")
-	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
-	assert.Error(err)
-	assert.True(errors.Is(err, ErrInvalidType))
-	assert.Nil(decodedInt)
-
-	payloadInt, err = payload.Encode(123)
-	assert.NoError(err)
-	payloadInt.Metadata["type"] = []byte("String")
-	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
-	assert.Error(err)
-	assert.True(errors.Is(err, converter.ErrUnableToDecode), err.Error())
-	assert.Nil(decodedInt)
 }
 
 func Test_SetType_Success(t *testing.T) {

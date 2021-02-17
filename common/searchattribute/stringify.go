@@ -89,17 +89,17 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, validSearchAttribute
 
 // Parse converts maps of search attribute JSON strings to map of search attribute Payloads.
 // validSearchAttributes can be nil (values will be parsed with strconv).
-func Parse(searchAttributesString map[string]string, validSearchAttributes map[string]enumspb.IndexedValueType) (*commonpb.SearchAttributes, error) {
-	if len(searchAttributesString) == 0 {
+func Parse(searchAttributesStr map[string]string, validSearchAttributes map[string]enumspb.IndexedValueType) (*commonpb.SearchAttributes, error) {
+	if len(searchAttributesStr) == 0 {
 		return nil, nil
 	}
 
 	searchAttributes := &commonpb.SearchAttributes{
-		IndexedFields: make(map[string]*commonpb.Payload, len(searchAttributesString)),
+		IndexedFields: make(map[string]*commonpb.Payload, len(searchAttributesStr)),
 	}
 	var lastErr error
 
-	for saName, saValString := range searchAttributesString {
+	for saName, saValStr := range searchAttributesStr {
 		saType := enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
 		if len(validSearchAttributes) > 0 {
 			ivt, isValidName := validSearchAttributes[saName]
@@ -107,7 +107,7 @@ func Parse(searchAttributesString map[string]string, validSearchAttributes map[s
 				saType = ivt
 			}
 		}
-		saValPayload, err := parseValueOrArray(saValString, saType)
+		saValPayload, err := parseValueOrArray(saValStr, saType)
 		if err != nil {
 			lastErr = err
 		}

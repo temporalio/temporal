@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
 )
@@ -153,15 +152,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
 	s.Equal(header, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(memo, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Memo)
-	s.Equal(len(searchAttr.GetIndexedFields()), len(lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()))
-	for attrName, expectedPayload := range searchAttr.GetIndexedFields() {
-		eventAttr, ok := lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[attrName]
-		s.True(ok)
-		s.Equal(expectedPayload.GetData(), eventAttr.GetData())
-		attrType, typeSet := eventAttr.GetMetadata()[searchattribute.MetadataType]
-		s.True(typeSet)
-		s.True(len(attrType) > 0)
-	}
+	s.Equal(searchAttr, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().SearchAttributes)
 }
 
 func (s *integrationSuite) TestContinueAsNewRun_Timeout() {

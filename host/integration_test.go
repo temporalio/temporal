@@ -56,7 +56,6 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/matching"
 )
 
@@ -2240,17 +2239,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(header, startedEvent.GetChildWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(header, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(memo, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetMemo())
-
-	s.Equal(len(searchAttr.GetIndexedFields()), len(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()))
-	for attrName, expectedPayload := range searchAttr.GetIndexedFields() {
-		eventAttr, ok := childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[attrName]
-		s.True(ok)
-		s.Equal(expectedPayload.GetData(), eventAttr.GetData())
-		attrType, typeSet := eventAttr.GetMetadata()[searchattribute.MetadataType]
-		s.True(typeSet)
-		s.True(len(attrType) > 0)
-	}
-
+	s.Equal(searchAttr, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes())
 	s.Equal(time.Duration(0), timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionTimeout()))
 	s.Equal(200*time.Second, timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout()))
 
