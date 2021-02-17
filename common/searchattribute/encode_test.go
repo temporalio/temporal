@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/server/common/payload"
 )
 
-func Test_DecodeValue_Success(t *testing.T) {
+func Test_DecodeValue_FromMetadata_Success(t *testing.T) {
 	assert := assert.New(t)
 
 	payloadStr := payload.EncodeString("qwe")
@@ -47,7 +47,7 @@ func Test_DecodeValue_Success(t *testing.T) {
 	payloadInt, err := payload.Encode(123)
 	assert.NoError(err)
 	payloadInt.Metadata["type"] = []byte("Int")
-	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
+	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_STRING) // MetadataType should be used anyway
 	assert.NoError(err)
 	assert.Equal(int64(123), decodedInt)
 
@@ -55,6 +55,34 @@ func Test_DecodeValue_Success(t *testing.T) {
 	assert.NoError(err)
 	payloadBool.Metadata["type"] = []byte("Bool")
 	decodedBool, err := DecodeValue(payloadBool, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
+	assert.NoError(err)
+	assert.Equal(true, decodedBool)
+}
+
+func Test_DecodeValue_FromParameter_Success(t *testing.T) {
+	assert := assert.New(t)
+
+	payloadStr := payload.EncodeString("qwe")
+	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_STRING)
+	assert.NoError(err)
+	assert.Equal("qwe", decodedStr)
+
+	payloadInt, err := payload.Encode(123)
+	assert.NoError(err)
+	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_INT)
+	assert.NoError(err)
+	assert.Equal(int64(123), decodedInt)
+
+	payloadInt, err = payload.Encode(123)
+	assert.NoError(err)
+	payloadInt.Metadata["type"] = []byte("UnknownType") // should not be used because incorrect
+	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_INT)
+	assert.NoError(err)
+	assert.Equal(int64(123), decodedInt)
+
+	payloadBool, err := payload.Encode(true)
+	assert.NoError(err)
+	decodedBool, err := DecodeValue(payloadBool, enumspb.INDEXED_VALUE_TYPE_BOOL)
 	assert.NoError(err)
 	assert.Equal(true, decodedBool)
 }
@@ -83,4 +111,78 @@ func Test_DecodeValue_Error(t *testing.T) {
 	assert.Error(err)
 	assert.True(errors.Is(err, converter.ErrUnableToDecode), err.Error())
 	assert.Nil(decodedInt)
+}
+
+func Test_EncodeValue(t *testing.T) {
+	assert := assert.New(t)
+
+	encodedPayload, err := EncodeValue(123, enumspb.INDEXED_VALUE_TYPE_INT)
+	assert.NoError(err)
+	assert.Equal("123", string(encodedPayload.GetData()))
+	assert.Equal("Int", string(encodedPayload.Metadata["type"]))
+
+	encodedPayload, err = EncodeValue("qwe", enumspb.INDEXED_VALUE_TYPE_STRING)
+	assert.NoError(err)
+	assert.Equal(`"qwe"`, string(encodedPayload.GetData()))
+	assert.Equal("String", string(encodedPayload.Metadata["type"]))
+
+}
+
+func Test_Encode_Success(t *testing.T) {
+	assert := assert.New(t)
+
+	sa, err := Encode(map[string]interface{}{
+		"key1": "val1",
+		"key2": 2,
+		"key3": true,
+	}, map[string]enumspb.IndexedValueType{
+		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+	})
+
+	assert.NoError(err)
+	assert.Len(sa.IndexedFields, 3)
+	assert.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
+	assert.Equal("String", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
+	assert.Equal("2", string(sa.IndexedFields["key2"].GetData()))
+	assert.Equal("Int", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
+	assert.Equal("true", string(sa.IndexedFields["key3"].GetData()))
+	assert.Equal("Bool", string(sa.IndexedFields["key3"].GetMetadata()["type"]))
+}
+
+func Test_Encode_Error(t *testing.T) {
+	assert := assert.New(t)
+
+	sa, err := Encode(map[string]interface{}{
+		"key1": "val1",
+		"key2": 2,
+		"key3": true,
+	}, nil)
+
+	assert.Error(err)
+	assert.True(errors.Is(err, ErrValidMapIsEmpty))
+	assert.Len(sa.IndexedFields, 3)
+	assert.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
+	assert.Equal("2", string(sa.IndexedFields["key2"].GetData()))
+	assert.Equal("true", string(sa.IndexedFields["key3"].GetData()))
+
+	sa, err = Encode(map[string]interface{}{
+		"key1": "val1",
+		"key2": 2,
+		"key3": true,
+	}, map[string]enumspb.IndexedValueType{
+		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+		"key4": enumspb.INDEXED_VALUE_TYPE_INT,
+		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+	})
+
+	assert.Error(err)
+	assert.True(errors.Is(err, ErrInvalidName))
+	assert.Len(sa.IndexedFields, 3)
+	assert.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
+	assert.Equal("String", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
+	assert.Equal("2", string(sa.IndexedFields["key2"].GetData()))
+	assert.Equal("true", string(sa.IndexedFields["key3"].GetData()))
+	assert.Equal("Bool", string(sa.IndexedFields["key3"].GetMetadata()["type"]))
 }

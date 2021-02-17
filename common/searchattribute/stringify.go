@@ -40,8 +40,8 @@ import (
 
 // Stringify converts map of search attribute Payloads to map of strings.
 // In case of error, messages is stored as value for corresponding search attribute and last error is returned.
-// validSearchAttributes can be nil (MetadataType field will be used).
-func Stringify(searchAttributes *commonpb.SearchAttributes, validSearchAttributes map[string]enumspb.IndexedValueType) (map[string]string, error) {
+// typeMap can be nil (MetadataType field will be used).
+func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap map[string]enumspb.IndexedValueType) (map[string]string, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil, nil
 	}
@@ -50,7 +50,7 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, validSearchAttribute
 	var lastErr error
 
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		saValue, err := DecodeValue(saPayload, getType(saName, validSearchAttributes))
+		saValue, err := DecodeValue(saPayload, getType(saName, typeMap))
 		if err != nil {
 			result[saName] = string(saPayload.GetData())
 			lastErr = err
@@ -88,8 +88,8 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, validSearchAttribute
 }
 
 // Parse converts maps of search attribute JSON strings to map of search attribute Payloads.
-// validSearchAttributes can be nil (values will be parsed with strconv).
-func Parse(searchAttributesStr map[string]string, validSearchAttributes map[string]enumspb.IndexedValueType) (*commonpb.SearchAttributes, error) {
+// typeMap can be nil (values will be parsed with strconv).
+func Parse(searchAttributesStr map[string]string, typeMap map[string]enumspb.IndexedValueType) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributesStr) == 0 {
 		return nil, nil
 	}
@@ -101,9 +101,9 @@ func Parse(searchAttributesStr map[string]string, validSearchAttributes map[stri
 
 	for saName, saValStr := range searchAttributesStr {
 		saType := enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
-		if len(validSearchAttributes) > 0 {
-			ivt, isValidName := validSearchAttributes[saName]
-			if isValidName {
+		if len(typeMap) > 0 {
+			ivt, isDefined := typeMap[saName]
+			if isDefined {
 				saType = ivt
 			}
 		}
@@ -139,9 +139,7 @@ func parseValueOrArray(valStr string, t enumspb.IndexedValueType) (*commonpb.Pay
 		return nil, err
 	}
 
-	if t != enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED {
-		setMetadataType(valPayload, t)
-	}
+	setMetadataType(valPayload, t)
 	return valPayload, nil
 }
 
@@ -193,7 +191,7 @@ func parseValueUnspecified(valStr string) interface{} {
 
 func isJsonArray(str string) bool {
 	str = strings.TrimSpace(str)
-	return len(str) > 0 && str[0] == '[' && str[len(str)-1] == ']'
+	return strings.HasPrefix(str, "[") && strings.HasSuffix(str, "]")
 }
 
 func parseJsonArray(str string, t enumspb.IndexedValueType) (interface{}, error) {

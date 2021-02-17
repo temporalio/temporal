@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
@@ -48,6 +49,132 @@ func (s *StringifySuite) SetupTest() {
 }
 
 func (s *StringifySuite) TearDownTest() {
+}
+
+func (s *StringifySuite) Test_Parse() {
+	sa, err := Parse(map[string]string{
+		"key1": "val1",
+		"key2": "2",
+		"key3": "true",
+	}, map[string]enumspb.IndexedValueType{
+		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+	})
+
+	s.NoError(err)
+	s.Len(sa.IndexedFields, 3)
+	s.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
+	s.Equal("String", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
+	s.Equal("2", string(sa.IndexedFields["key2"].GetData()))
+	s.Equal("Int", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
+	s.Equal("true", string(sa.IndexedFields["key3"].GetData()))
+	s.Equal("Bool", string(sa.IndexedFields["key3"].GetMetadata()["type"]))
+
+	sa, err = Parse(map[string]string{
+		"key1": "val1",
+		"key2": "2",
+		"key3": "true",
+	}, nil)
+
+	s.NoError(err)
+	s.Len(sa.IndexedFields, 3)
+	s.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
+	s.Equal("2", string(sa.IndexedFields["key2"].GetData()))
+	s.Equal("true", string(sa.IndexedFields["key3"].GetData()))
+
+	sa, err = Parse(map[string]string{
+		"key1": "val1",
+		"key2": "2",
+		"key3": "true",
+	}, map[string]enumspb.IndexedValueType{
+		"key1": enumspb.INDEXED_VALUE_TYPE_INT,
+		"key2": enumspb.INDEXED_VALUE_TYPE_STRING,
+		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+	})
+
+	s.Error(err)
+	s.Len(sa.IndexedFields, 3)
+	s.Nil(sa.IndexedFields["key1"])
+	s.Equal(`"2"`, string(sa.IndexedFields["key2"].GetData()))
+	s.Equal("String", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
+	s.Equal("true", string(sa.IndexedFields["key3"].GetData()))
+	s.Equal("Bool", string(sa.IndexedFields["key3"].GetMetadata()["type"]))
+}
+
+func (s *StringifySuite) Test_parseValueOrArray() {
+	var res *commonpb.Payload
+	var err error
+
+	// int
+	res, err = parseValueOrArray("1", enumspb.INDEXED_VALUE_TYPE_INT)
+	s.NoError(err)
+	s.Equal("Int", string(res.Metadata["type"]))
+	s.Equal("1", string(res.Data))
+
+	// array must be in JSON format.
+	res, err = parseValueOrArray(`["qwe"]`, enumspb.INDEXED_VALUE_TYPE_STRING)
+	s.NoError(err)
+	s.Equal("String", string(res.Metadata["type"]))
+	s.Equal(`["qwe"]`, string(res.Data))
+
+	// array must be in JSON format.
+	res, err = parseValueOrArray(`[qwe]`, enumspb.INDEXED_VALUE_TYPE_STRING)
+	s.Error(err)
+	s.Nil(res)
+}
+
+func (s *StringifySuite) Test_parseValueTyped() {
+	var res interface{}
+	var err error
+
+	// int
+	res, err = parseValueTyped("1", enumspb.INDEXED_VALUE_TYPE_INT)
+	s.NoError(err)
+	s.Equal(int64(1), res)
+
+	res, err = parseValueTyped("qwe", enumspb.INDEXED_VALUE_TYPE_INT)
+	s.Error(err)
+	s.Equal(int64(0), res)
+
+	// bool
+	res, err = parseValueTyped("true", enumspb.INDEXED_VALUE_TYPE_BOOL)
+	s.NoError(err)
+	s.Equal(true, res)
+	res, err = parseValueTyped("false", enumspb.INDEXED_VALUE_TYPE_BOOL)
+	s.NoError(err)
+	s.Equal(false, res)
+	res, err = parseValueTyped("qwe", enumspb.INDEXED_VALUE_TYPE_BOOL)
+	s.Error(err)
+	s.Equal(false, res)
+
+	// double
+	res, err = parseValueTyped("1.0", enumspb.INDEXED_VALUE_TYPE_DOUBLE)
+	s.NoError(err)
+	s.Equal(float64(1.0), res)
+
+	res, err = parseValueTyped("qwe", enumspb.INDEXED_VALUE_TYPE_DOUBLE)
+	s.Error(err)
+	s.Equal(float64(0), res)
+
+	// datetime
+	res, err = parseValueTyped("2019-01-01T01:01:01Z", enumspb.INDEXED_VALUE_TYPE_DATETIME)
+	s.NoError(err)
+	s.Equal(time.Date(2019, 1, 1, 1, 1, 1, 0, time.UTC), res)
+
+	res, err = parseValueTyped("qwe", enumspb.INDEXED_VALUE_TYPE_DATETIME)
+	s.Error(err)
+	s.Equal(time.Time{}, res)
+
+	// string
+	res, err = parseValueTyped("test string", enumspb.INDEXED_VALUE_TYPE_STRING)
+	s.NoError(err)
+	s.Equal("test string", res)
+
+	// unspecified
+	res, err = parseValueTyped("test string", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
+	s.NoError(err)
+	s.Equal("test string", res)
 }
 
 func (s *StringifySuite) Test_parseValueUnspecified() {
@@ -78,6 +205,17 @@ func (s *StringifySuite) Test_parseValueUnspecified() {
 	// string
 	res = parseValueUnspecified("test string")
 	s.Equal("test string", res)
+}
+
+func (s *StringifySuite) Test_isJsonArray() {
+	s.True(isJsonArray("[1,2,3]"))
+	s.True(isJsonArray("  [1,2,3] "))
+	s.True(isJsonArray(`  ["1","2","3"] `))
+	s.True(isJsonArray("[]"))
+	s.False(isJsonArray("["))
+	s.False(isJsonArray("]"))
+	s.False(isJsonArray("qwe"))
+	s.False(isJsonArray("123"))
 }
 
 func (s *StringifySuite) Test_parseJsonArray() {

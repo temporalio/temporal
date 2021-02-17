@@ -105,7 +105,7 @@ func EncodeValue(val interface{}, t enumspb.IndexedValueType) (*commonpb.Payload
 }
 
 // Encode encodes map of search attribute values to map of Payloads.
-func Encode(searchAttributes map[string]interface{}, validSearchAttributes map[string]enumspb.IndexedValueType) (*commonpb.SearchAttributes, error) {
+func Encode(searchAttributes map[string]interface{}, typeMap map[string]enumspb.IndexedValueType) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributes) == 0 {
 		return nil, nil
 	}
@@ -122,13 +122,13 @@ func Encode(searchAttributes map[string]interface{}, validSearchAttributes map[s
 
 		indexedFields[saName] = valPayload
 
-		if len(validSearchAttributes) == 0 {
+		if len(typeMap) == 0 {
 			lastErr = ErrValidMapIsEmpty
 			continue
 		}
 
-		ivt, ok := validSearchAttributes[saName]
-		if !ok {
+		ivt, isDefined := typeMap[saName]
+		if !isDefined {
 			lastErr = fmt.Errorf("%w: %s", ErrInvalidName, saName)
 		}
 		setMetadataType(valPayload, ivt)
