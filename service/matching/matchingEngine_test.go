@@ -594,7 +594,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	// Set a short long poll expiration so we don't have to wait too long for 0 throttling cases
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(50 * time.Millisecond)
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
 
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
