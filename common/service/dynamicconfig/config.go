@@ -101,7 +101,7 @@ type FloatPropertyFn func(opts ...FilterOption) float64
 // FloatPropertyFnWithShardIDFilter is a wrapper to get float property from dynamic config with shardID as filter
 type FloatPropertyFnWithShardIDFilter func(shardID int32) float64
 
-// FloatPropertyFnWithTaskQueueInfoFilters is a wrapper to get int property from dynamic config with three filters: namespace, taskQueue, taskType
+// FloatPropertyFnWithTaskQueueInfoFilters is a wrapper to get float property from dynamic config with three filters: namespace, taskQueue, taskType
 type FloatPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64
 
 // DurationPropertyFn is a wrapper to get duration property from dynamic config
@@ -289,7 +289,7 @@ func (c *Collection) GetFloatPropertyFilteredByTaskQueueInfo(key Key, defaultVal
 			}
 		}
 
-		c.logValue(key, val, defaultValue, intCompareEquals)
+		c.logValue(key, val, defaultValue, float64CompareEquals)
 		return val
 	}
 }
