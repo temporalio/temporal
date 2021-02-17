@@ -38,9 +38,10 @@ import (
 	"go.temporal.io/server/common/payload"
 )
 
-// Stringify converts map of search attribute Payloads to map of strings.
-// In case of error, messages is stored as value for corresponding search attribute and last error is returned.
-// typeMap can be nil (MetadataType field will be used).
+// Stringify converts search attributes to map of strings.
+// In case of error, it will continue to next search attribute and return last error.
+// typeMap can be nil (type from MetadataType field will be used).
+// Single values are converted using strconv and arrays using json.Marshal.
 func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap map[string]enumspb.IndexedValueType) (map[string]string, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil, nil
@@ -50,8 +51,10 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap map[string]e
 	var lastErr error
 
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		saValue, err := DecodeValue(saPayload, GetType(saName, typeMap))
+		saType, _ := GetType(saName, typeMap)
+		saValue, err := DecodeValue(saPayload, saType)
 		if err != nil {
+			// If DecodeValue failed, save error and use raw JSON from Data field.
 			result[saName] = string(saPayload.GetData())
 			lastErr = err
 			continue
@@ -87,8 +90,9 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap map[string]e
 	return result, lastErr
 }
 
-// Parse converts maps of search attribute JSON strings to map of search attribute Payloads.
-// typeMap can be nil (values will be parsed with strconv).
+// Parse converts maps of search attribute strings to search attributes.
+// typeMap can be nil (values will be parsed with strconv and MetadataType field won't be set).
+// Single values are parsed using strconv and arrays using json.Unmarshal.
 func Parse(searchAttributesStr map[string]string, typeMap map[string]enumspb.IndexedValueType) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributesStr) == 0 {
 		return nil, nil

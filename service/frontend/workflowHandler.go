@@ -3089,7 +3089,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	if err != nil {
 		return nil, wh.error(fmt.Errorf("uable to build valid search attributes map: %w", err), scope)
 	}
-	searchattribute.SetType(response.WorkflowExecutionInfo.SearchAttributes, validSearchAttributes)
+	searchattribute.ApplyTypeMap(response.WorkflowExecutionInfo.SearchAttributes, validSearchAttributes)
 
 	return &workflowservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig:       response.GetExecutionConfig(),

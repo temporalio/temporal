@@ -40,7 +40,7 @@ import (
 func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface{}, error) {
 	valueTypeMetadata, metadataHasValueType := value.Metadata[MetadataType]
 	if metadataHasValueType {
-		ivt, err := getIndexedValueType(string(valueTypeMetadata))
+		ivt, err := convertDynamicConfigType(string(valueTypeMetadata))
 		if err == nil {
 			// MetadataType field has priority over passed type.
 			t = ivt
@@ -121,17 +121,12 @@ func Encode(searchAttributes map[string]interface{}, typeMap map[string]enumspb.
 		}
 
 		indexedFields[saName] = valPayload
-
-		if len(typeMap) == 0 {
-			lastErr = ErrValidMapIsEmpty
+		saType, err := GetType(saName, typeMap)
+		if err != nil {
+			lastErr = err
 			continue
 		}
-
-		ivt, isDefined := typeMap[saName]
-		if !isDefined {
-			lastErr = fmt.Errorf("%w: %s", ErrInvalidName, saName)
-		}
-		setMetadataType(valPayload, ivt)
+		setMetadataType(valPayload, saType)
 	}
 	return &commonpb.SearchAttributes{IndexedFields: indexedFields}, lastErr
 }

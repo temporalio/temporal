@@ -25,6 +25,7 @@
 package searchattribute
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -111,20 +112,27 @@ func Test_GetType(t *testing.T) {
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
 	}
 
-	ivt := GetType("key1", typeMap)
+	ivt, err := GetType("key1", typeMap)
+	assert.NoError(err)
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_STRING, ivt)
-	ivt = GetType("key2", typeMap)
+	ivt, err = GetType("key2", typeMap)
+	assert.NoError(err)
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_INT, ivt)
-	ivt = GetType("key3", typeMap)
+	ivt, err = GetType("key3", typeMap)
+	assert.NoError(err)
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_BOOL, ivt)
 
-	ivt = GetType("key1", nil)
+	ivt, err = GetType("key1", nil)
+	assert.Error(err)
+	assert.True(errors.Is(err, ErrTypeMapIsEmpty))
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
-	ivt = GetType("key4", typeMap)
+	ivt, err = GetType("key4", typeMap)
+	assert.Error(err)
+	assert.True(errors.Is(err, ErrInvalidName))
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
 }
 
-func Test_SetType_Success(t *testing.T) {
+func Test_ApplyTypeMap_Success(t *testing.T) {
 	assert := assert.New(t)
 
 	payloadInt, err := payload.Encode(123)
@@ -145,13 +153,13 @@ func Test_SetType_Success(t *testing.T) {
 		"key4": enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 	}
 
-	SetType(sa, validSearchAttributes)
+	ApplyTypeMap(sa, validSearchAttributes)
 	assert.Equal("String", string(sa.GetIndexedFields()["key1"].Metadata["type"]))
 	assert.Equal("Keyword", string(sa.GetIndexedFields()["key2"].Metadata["type"]))
 	assert.Equal("Int", string(sa.GetIndexedFields()["key3"].Metadata["type"]))
 }
 
-func Test_SetType_Skip(t *testing.T) {
+func Test_ApplyTypeMap_Skip(t *testing.T) {
 	assert := assert.New(t)
 
 	payloadInt, err := payload.Encode(123)
@@ -172,7 +180,7 @@ func Test_SetType_Skip(t *testing.T) {
 		"key3": enumspb.INDEXED_VALUE_TYPE_INT,
 	}
 
-	SetType(sa, validSearchAttributes)
+	ApplyTypeMap(sa, validSearchAttributes)
 	assert.Nil(sa.GetIndexedFields()["UnknownKey"].Metadata["type"])
 	assert.Equal("String", string(sa.GetIndexedFields()["key3"].Metadata["type"]))
 
@@ -181,6 +189,6 @@ func Test_SetType_Skip(t *testing.T) {
 	}
 
 	assert.Panics(func() {
-		SetType(sa, validSearchAttributes)
+		ApplyTypeMap(sa, validSearchAttributes)
 	})
 }

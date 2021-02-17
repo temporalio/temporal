@@ -161,7 +161,7 @@ func Test_Encode_Error(t *testing.T) {
 	}, nil)
 
 	assert.Error(err)
-	assert.True(errors.Is(err, ErrValidMapIsEmpty))
+	assert.True(errors.Is(err, ErrTypeMapIsEmpty))
 	assert.Len(sa.IndexedFields, 3)
 	assert.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
 	assert.Equal("2", string(sa.IndexedFields["key2"].GetData()))

@@ -328,7 +328,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 
 		// Setting search attributes types here because archival client needs to stringify them
 		// and it might not have access to valid search attributes (i.e. type needs to be embedded).
-		searchattribute.SetType(searchAttributes, validSearAttributes)
+		searchattribute.ApplyTypeMap(searchAttributes, validSearAttributes)
 
 		_, err = t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
 			ArchiveRequest: &archiver.ArchiveRequest{

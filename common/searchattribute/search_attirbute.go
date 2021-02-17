@@ -39,12 +39,12 @@ const (
 )
 
 var (
-	ErrInvalidName     = errors.New("invalid search attribute name")
-	ErrInvalidType     = errors.New("invalid search attribute type")
-	ErrValidMapIsEmpty = errors.New("valid search attributes map is empty")
+	ErrInvalidName    = errors.New("invalid search attribute name")
+	ErrInvalidType    = errors.New("invalid search attribute type")
+	ErrTypeMapIsEmpty = errors.New("search attributes type map is empty")
 )
 
-// GetTypeMap converts search attributes types from dynamic config map to typed map.
+// GetTypeMap converts search attributes types from dynamic config map to type map.
 func GetTypeMap(validSearchAttributesFn dynamicconfig.MapPropertyFn) (map[string]enumspb.IndexedValueType, error) {
 	if validSearchAttributesFn == nil {
 		return nil, nil
@@ -57,7 +57,7 @@ func GetTypeMap(validSearchAttributesFn dynamicconfig.MapPropertyFn) (map[string
 	result := make(map[string]enumspb.IndexedValueType, len(validSearchAttributes))
 	for saName, saType := range validSearchAttributes {
 		var err error
-		result[saName], err = getIndexedValueType(saType)
+		result[saName], err = convertDynamicConfigType(saType)
 		if err != nil {
 			return nil, err
 		}
@@ -66,21 +66,21 @@ func GetTypeMap(validSearchAttributesFn dynamicconfig.MapPropertyFn) (map[string
 }
 
 // GetType returns type of search attribute from type map.
-func GetType(name string, typeMap map[string]enumspb.IndexedValueType) enumspb.IndexedValueType {
+func GetType(name string, typeMap map[string]enumspb.IndexedValueType) (enumspb.IndexedValueType, error) {
 	if len(typeMap) == 0 {
-		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
+		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ErrTypeMapIsEmpty
 	}
 
 	saType, isDefined := typeMap[name]
 	if !isDefined {
-		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
+		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidName, name)
 	}
-	return saType
+	return saType, nil
 }
 
-// SetType set type for all valid search attributes which don't have it.
+// ApplyTypeMap set type for all valid search attributes which don't have it.
 // It doesn't do any validation and just skip invalid or already set fields.
-func SetType(searchAttributes *commonpb.SearchAttributes, typeMap map[string]enumspb.IndexedValueType) {
+func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap map[string]enumspb.IndexedValueType) {
 	if len(typeMap) == 0 {
 		return
 	}
@@ -98,10 +98,10 @@ func SetType(searchAttributes *commonpb.SearchAttributes, typeMap map[string]enu
 	}
 }
 
-// getIndexedValueType takes dynamicConfigType as interface{} and convert to IndexedValueType.
-// This func is because different implementation of dynamic config client may have different type of dynamicConfigType
+// convertDynamicConfigType takes dynamicConfigType as interface{} and convert to IndexedValueType.
+// This func is needed because different implementation of dynamic config client may have different type of dynamicConfigType
 // and to support backward compatibility.
-func getIndexedValueType(dynamicConfigType interface{}) (enumspb.IndexedValueType, error) {
+func convertDynamicConfigType(dynamicConfigType interface{}) (enumspb.IndexedValueType, error) {
 	switch t := dynamicConfigType.(type) {
 	case float64:
 		ivt := enumspb.IndexedValueType(t)

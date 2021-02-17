@@ -188,7 +188,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 	}
 	// Setting search attributes types here because archival client needs to stringify them
 	// and it might not have access to valid search attributes (i.e. type needs to be embedded).
-	searchattribute.SetType(req.ArchiveRequest.SearchAttributes, validSearAttributes)
+	searchattribute.ApplyTypeMap(req.ArchiveRequest.SearchAttributes, validSearAttributes)
 
 	ctx, cancel := context.WithTimeout(context.Background(), t.config.TimerProcessorArchivalTimeLimit())
 	defer cancel()
