@@ -42,18 +42,17 @@ type (
 		ShutdownDrainDuration   dynamicconfig.DurationPropertyFn
 
 		// taskQueueManager configuration
-		RangeSize                      int64
-		GetTasksBatchSize              dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		UpdateAckInterval              dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
-		IdleTaskqueueCheckInterval     dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
-		MaxTaskqueueIdleTime           dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
-		NumTaskqueueWritePartitions    dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		NumTaskqueueReadPartitions     dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		TaskqueuePartitionDispatchRate dynamicconfig.FloatPropertyFnWithTaskQueueInfoFilters
-		ForwarderMaxOutstandingPolls   dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		ForwarderMaxOutstandingTasks   dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		ForwarderMaxRatePerSecond      dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		ForwarderMaxChildrenPerNode    dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		RangeSize                    int64
+		GetTasksBatchSize            dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		UpdateAckInterval            dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		IdleTaskqueueCheckInterval   dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		MaxTaskqueueIdleTime         dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		NumTaskqueueWritePartitions  dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		NumTaskqueueReadPartitions   dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		ForwarderMaxOutstandingPolls dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		ForwarderMaxOutstandingTasks dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		ForwarderMaxRatePerSecond    dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		ForwarderMaxChildrenPerNode  dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
@@ -65,6 +64,9 @@ type (
 		MaxTaskBatchSize                dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 
 		ThrottledLogRPS dynamicconfig.IntPropertyFn
+
+		AdminMatchingDispatchRate          dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		AdminMatchingTaskqueueDispatchRate dynamicconfig.FloatPropertyFnWithTaskQueueInfoFilters
 	}
 
 	forwarderConfig struct {
@@ -91,7 +93,9 @@ type (
 		MaxTaskBatchSize                func() int
 		NumWritePartitions              func() int
 		NumReadPartitions               func() int
-		PartitionDispatchRate           func() float64
+
+		AdminDispatchRate               func() float64
+		AdminQueuePartitionDispatchRate func() float64
 	}
 )
 
@@ -115,12 +119,14 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		ThrottledLogRPS:                 dc.GetIntProperty(dynamicconfig.MatchingThrottledLogRPS, 20),
 		NumTaskqueueWritePartitions:     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingNumTaskqueueWritePartitions, dynamicconfig.DefaultNumTaskQueuePartitions),
 		NumTaskqueueReadPartitions:      dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingNumTaskqueueReadPartitions, dynamicconfig.DefaultNumTaskQueuePartitions),
-		TaskqueuePartitionDispatchRate:  dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingTaskqueuePartitionDispatchRate, 2000),
 		ForwarderMaxOutstandingPolls:    dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxOutstandingPolls, 1),
 		ForwarderMaxOutstandingTasks:    dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 1),
 		ForwarderMaxRatePerSecond:       dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxRatePerSecond, 10),
 		ForwarderMaxChildrenPerNode:     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
 		ShutdownDrainDuration:           dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0),
+
+		AdminMatchingDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingDispatchRate, 1000000),
+		AdminMatchingTaskqueueDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingTaskqueueDispatchRate, 4000),
 	}
 }
 
@@ -175,8 +181,11 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespaceCache cache.Na
 		},
 		NumWritePartitions: writePartition,
 		NumReadPartitions:  readPartition,
-		PartitionDispatchRate: func() float64 {
-			return config.TaskqueuePartitionDispatchRate(namespace, taskQueueName, taskType) / float64(readPartition())
+		AdminDispatchRate: func() float64 {
+			return config.AdminMatchingDispatchRate(namespace)
+		},
+		AdminQueuePartitionDispatchRate: func() float64 {
+			return config.AdminMatchingTaskqueueDispatchRate(namespace, taskQueueName, taskType) / float64(readPartition())
 		},
 		forwarderConfig: forwarderConfig{
 			ForwarderMaxOutstandingPolls: func() int {

@@ -58,6 +58,11 @@ var keys = map[Key]string{
 	testGetBoolPropertyFilteredByNamespaceIDKey:       "testGetBoolPropertyFilteredByNamespaceIDKey",
 	testGetBoolPropertyFilteredByTaskQueueInfoKey:     "testGetBoolPropertyFilteredByTaskQueueInfoKey",
 
+	// admin settings
+	// NOTE: admin settings are not guaranteed to be compatible across different versions
+	AdminMatchingDispatchRate:          "admin.matchingDispatchRate",
+	AdminMatchingTaskqueueDispatchRate: "admin.matchingTaskqueueDispatchRate",
+
 	// system settings
 	EnableVisibilitySampling:               "system.enableVisibilitySampling",
 	AdvancedVisibilityWritingMode:          "system.advancedVisibilityWritingMode",
@@ -130,7 +135,6 @@ var keys = map[Key]string{
 	MatchingThrottledLogRPS:                 "matching.throttledLogRPS",
 	MatchingNumTaskqueueWritePartitions:     "matching.numTaskqueueWritePartitions",
 	MatchingNumTaskqueueReadPartitions:      "matching.numTaskqueueReadPartitions",
-	MatchingTaskqueuePartitionDispatchRate:  "matching.taskqueuePartitionDispatchRate",
 	MatchingForwarderMaxOutstandingPolls:    "matching.forwarderMaxOutstandingPolls",
 	MatchingForwarderMaxOutstandingTasks:    "matching.forwarderMaxOutstandingTasks",
 	MatchingForwarderMaxRatePerSecond:       "matching.forwarderMaxRatePerSecond",
@@ -326,6 +330,11 @@ const (
 	testGetBoolPropertyFilteredByNamespaceIDKey
 	testGetBoolPropertyFilteredByTaskQueueInfoKey
 
+	// AdminMatchingDispatchRate is the max qps of any task queue for a given namespace
+	AdminMatchingDispatchRate
+	// AdminMatchingTaskqueueDispatchRate is the max qps of a task queue for a given namespace
+	AdminMatchingTaskqueueDispatchRate
+
 	// EnableVisibilitySampling is key for enable visibility sampling
 	EnableVisibilitySampling
 	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
@@ -462,8 +471,6 @@ const (
 	MatchingNumTaskqueueWritePartitions
 	// MatchingNumTaskqueueReadPartitions is the number of read partitions for a task queue
 	MatchingNumTaskqueueReadPartitions
-	// MatchingTaskqueuePartitionDispatchRate is the max qps of task queue partition
-	MatchingTaskqueuePartitionDispatchRate
 	// MatchingForwarderMaxOutstandingPolls is the max number of inflight polls from the forwarder
 	MatchingForwarderMaxOutstandingPolls
 	// MatchingForwarderMaxOutstandingTasks is the max number of inflight addTask/queryTask from the forwarder

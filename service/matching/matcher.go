@@ -78,7 +78,10 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scopeFunc func() m
 			defaultTaskDispatchRPSTTL,
 		),
 		quotas.NewDefaultOutgoingDynamicRateLimiter(
-			config.PartitionDispatchRate,
+			config.AdminQueuePartitionDispatchRate,
+		),
+		quotas.NewDefaultOutgoingDynamicRateLimiter(
+			config.AdminDispatchRate,
 		),
 	})
 	return &TaskMatcher{
