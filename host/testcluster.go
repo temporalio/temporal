@@ -240,7 +240,6 @@ func newPProfInitializerImpl(logger log.Logger, port int) common.PProfInitialize
 }
 
 func setupShards(testBase persistencetests.TestBase, numHistoryShards int32, logger log.Logger) {
-	// shard 0 is always created, we create additional shards if needed
 	for shardID := int32(1); shardID <= numHistoryShards; shardID++ {
 		err := testBase.CreateShard(int32(shardID), "", 0)
 		if err != nil {

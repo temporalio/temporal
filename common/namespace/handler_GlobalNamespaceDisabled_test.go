@@ -108,7 +108,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) SetupTest() {
 		false,
 		&config.ArchivalNamespaceDefaults{},
 	)
-	s.mockArchiverProvider = &provider.MockArchiverProvider{}
+	s.mockArchiverProvider = provider.NewMockArchiverProvider(s.controller)
 	s.handler = NewHandler(
 		s.minRetentionDays,
 		dc.GetIntPropertyFilteredByNamespace(s.maxBadBinaryCount),
@@ -123,7 +123,6 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) SetupTest() {
 
 func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockArchiverProvider.AssertExpectations(s.T())
 }
 
 func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_InvalidGlobalNamespace() {

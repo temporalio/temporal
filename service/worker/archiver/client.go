@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination client_mock.go
+
 package archiver
 
 import (
@@ -81,7 +83,7 @@ type (
 		Status           enumspb.WorkflowExecutionStatus
 		HistoryLength    int64
 		Memo             *commonpb.Memo
-		SearchAttributes map[string]*commonpb.Payload
+		SearchAttributes *commonpb.SearchAttributes
 		VisibilityURI    string
 
 		// archival targets: history and/or visibility
@@ -245,7 +247,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		return
 	}
 
-	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.ArchiveVisibilityRequest{
+	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.VisibilityRecord{
 		NamespaceId:        request.ArchiveRequest.NamespaceID,
 		Namespace:          request.ArchiveRequest.Namespace,
 		WorkflowId:         request.ArchiveRequest.WorkflowID,

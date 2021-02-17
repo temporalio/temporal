@@ -40,19 +40,11 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
-	"go.temporal.io/server/service/worker/scanner/executions"
 )
 
 const (
 	// scannerStartUpDelay is to let services warm up
 	scannerStartUpDelay = time.Second * 4
-)
-
-var (
-	defaultExecutionsScannerParams = executions.ScannerWorkflowParams{
-		// fullExecutionsScanDefaultQuery indicates the visibility scanner should scan through all open workflows
-		VisibilityQuery: "SELECT * from elasticSearch.executions WHERE state IS open", // TODO: depending on if we go straight to ES or through frontend this query will look different
-	}
 )
 
 type (
@@ -124,8 +116,8 @@ func (s *Scanner) Start() error {
 
 	var workerTaskQueueNames []string
 	if s.context.cfg.ExecutionsScannerEnabled() {
+		go s.startWorkflowWithRetry(executionsScannerWFStartOptions, executionsScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, executionsScannerTaskQueueName)
-		go s.startWorkflowWithRetry(executionsScannerWFStartOptions, executionsScannerWFTypeName, defaultExecutionsScannerParams)
 	}
 
 	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskQueueScannerEnabled() {
@@ -167,7 +159,7 @@ func (s *Scanner) startWorkflowWithRetry(
 	policy.SetMaximumInterval(time.Minute)
 	policy.SetExpirationInterval(backoff.NoInterval)
 	err := backoff.Retry(func() error {
-		return s.startWorkflow(s.context.GetSDKClient(), options, workflowType, workflowArgs)
+		return s.startWorkflow(s.context.GetSDKClient(), options, workflowType, workflowArgs...)
 	}, policy, func(err error) bool {
 		return true
 	})
@@ -184,7 +176,7 @@ func (s *Scanner) startWorkflow(
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	_, err := client.ExecuteWorkflow(ctx, options, workflowType, workflowArgs)
+	_, err := client.ExecuteWorkflow(ctx, options, workflowType, workflowArgs...)
 	cancel()
 	if err != nil {
 		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); ok {

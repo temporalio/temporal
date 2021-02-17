@@ -50,8 +50,8 @@ message HistoryBlob  {
     repeated temporal.api.history.v1.History body = 2;
 }
 
-// ArchiveVisibilityRequest is request to Archive single workflow visibility record
-message ArchiveVisibilityRequest {
+// VisibilityRecord is a single workflow visibility record in archive.
+message VisibilityRecord {
     string namespace_id = 1;
     string namespace = 2;
     string workflow_id = 3;

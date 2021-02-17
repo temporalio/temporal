@@ -173,7 +173,7 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 	executionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	// TODO (alex): remove copy?
-	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
+	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	executionStatus := executionState.GetStatus()
 	taskQueue := executionInfo.TaskQueue
 
@@ -224,7 +224,7 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 	status enumspb.WorkflowExecutionStatus,
 	taskQueue string,
 	visibilityMemo *commonpb.Memo,
-	searchAttributes map[string]*commonpb.Payload,
+	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
 	namespace := defaultNamespace
@@ -277,7 +277,7 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 	status enumspb.WorkflowExecutionStatus,
 	taskQueue string,
 	visibilityMemo *commonpb.Memo,
-	searchAttributes map[string]*commonpb.Payload,
+	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
 	namespace := defaultNamespace
@@ -367,7 +367,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	workflowStartTime := timestamp.TimeValue(startEvent.GetEventTime())
 	workflowExecutionTime := getWorkflowExecutionTime(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
-	searchAttr := executionInfo.SearchAttributes
+	searchAttr := getSearchAttributes(executionInfo.SearchAttributes)
 	taskQueue := executionInfo.TaskQueue
 
 	// release the context lock since we no longer need mutable state builder and
@@ -403,7 +403,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	taskID int64,
 	visibilityMemo *commonpb.Memo,
 	taskQueue string,
-	searchAttributes map[string]*commonpb.Payload,
+	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
 	// Record closing in visibility store
@@ -499,6 +499,16 @@ func getWorkflowMemo(
 		return nil
 	}
 	return &commonpb.Memo{Fields: memoFields}
+}
+
+func getSearchAttributes(
+	indexedFields map[string]*commonpb.Payload,
+) *commonpb.SearchAttributes {
+
+	if indexedFields == nil {
+		return nil
+	}
+	return &commonpb.SearchAttributes{IndexedFields: indexedFields}
 }
 
 func copySearchAttributes(

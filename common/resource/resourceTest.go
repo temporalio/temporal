@@ -184,8 +184,8 @@ func NewTest(
 		TimeSource:        clock.NewRealTimeSource(),
 		PayloadSerializer: persistence.NewPayloadSerializer(),
 		MetricsClient:     metrics.NewClient(scope, serviceMetricsIndex),
-		ArchivalMetadata:  &archiver.MockArchivalMetadata{},
-		ArchiverProvider:  &provider.MockArchiverProvider{},
+		ArchivalMetadata:  archiver.NewMockArchivalMetadata(controller),
+		ArchiverProvider:  provider.NewMockArchiverProvider(controller),
 
 		// membership infos
 
@@ -449,8 +449,5 @@ func (s *Test) GetGRPCListener() net.Listener {
 func (s *Test) Finish(
 	t mock.TestingT,
 ) {
-	s.ArchivalMetadata.AssertExpectations(t)
-	s.ArchiverProvider.AssertExpectations(t)
-
 	s.VisibilityMgr.AssertExpectations(t)
 }

@@ -252,7 +252,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		workflowStartTime := timestamp.TimeValue(startEvent.GetEventTime())
 		workflowExecutionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
 		visibilityMemo := getWorkflowMemo(executionInfo.Memo)
-		searchAttr := executionInfo.SearchAttributes
+		searchAttr := getSearchAttributes(executionInfo.SearchAttributes)
 
 		lastWriteVersion, err := mutableState.GetLastWriteVersion()
 		if err != nil {
@@ -459,7 +459,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 	startTime := timestamp.TimeValue(startEvent.GetEventTime())
 	executionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
-	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
+	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 
 	if isRecordStart {
 		return t.recordWorkflowStarted(

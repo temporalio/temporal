@@ -158,8 +158,8 @@ func encodeHistories(histories []*historypb.History) ([]byte, error) {
 	return encoder.EncodeHistories(histories)
 }
 
-func decodeVisibilityRecord(data []byte) (*archiverspb.ArchiveVisibilityRequest, error) {
-	record := &archiverspb.ArchiveVisibilityRequest{}
+func decodeVisibilityRecord(data []byte) (*archiverspb.VisibilityRecord, error) {
+	record := &archiverspb.VisibilityRecord{}
 	encoder := codec.NewJSONPBEncoder()
 	err := encoder.Decode(data, record)
 	if err != nil {

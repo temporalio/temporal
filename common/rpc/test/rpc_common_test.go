@@ -30,12 +30,15 @@ import (
 	"math/rand"
 	"strings"
 
-	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/rpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/examples/helloworld/helloworld"
+
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/rpc"
 
 	"go.temporal.io/server/common/service/config"
 )
@@ -111,7 +114,34 @@ func runHelloWorldTest(s suite.Suite, host string, serverFactory *TestFactory, c
 	}
 }
 
+func runHelloWorldMultipleDials(
+	s suite.Suite,
+	host string,
+	serverFactory *TestFactory,
+	clientFactory *TestFactory,
+	nDials int,
+	validator func(*credentials.TLSInfo, error)) {
+
+	server, port := startHelloWorldServer(s, serverFactory)
+	defer server.Stop()
+
+	for i := 0; i < nDials; i++ {
+		tlsInfo, err := dialHelloAndGetTLSInfo(s, host+":"+port, clientFactory, serverFactory.serverUsage)
+		validator(tlsInfo, err)
+	}
+}
+
 func dialHello(s suite.Suite, hostport string, clientFactory *TestFactory, serverType ServerUsageType) error {
+	_, err := dialHelloAndGetTLSInfo(s, hostport, clientFactory, serverType)
+	return err
+}
+
+func dialHelloAndGetTLSInfo(
+	s suite.Suite,
+	hostport string,
+	clientFactory *TestFactory,
+	serverType ServerUsageType) (*credentials.TLSInfo, error) {
+
 	var cfg *tls.Config
 	var err error
 	if serverType == Internode {
@@ -126,7 +156,10 @@ func dialHello(s suite.Suite, hostport string, clientFactory *TestFactory, serve
 	client := helloworld.NewGreeterClient(clientConn)
 
 	request := &helloworld.HelloRequest{Name: convert.Uint64ToString(rand.Uint64())}
-	reply, err := client.SayHello(context.Background(), request)
+	var reply *helloworld.HelloReply
+	peer := new(peer.Peer)
+	reply, err = client.SayHello(context.Background(), request, grpc.Peer(peer))
+	tlsInfo, _ := peer.AuthInfo.(credentials.TLSInfo)
 
 	if err == nil {
 		s.NotNil(reply)
@@ -134,6 +167,5 @@ func dialHello(s suite.Suite, hostport string, clientFactory *TestFactory, serve
 	}
 
 	_ = clientConn.Close()
-
-	return err
+	return &tlsInfo, err
 }

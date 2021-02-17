@@ -15,10 +15,10 @@ persistence:
         {{- if eq $db "cassandra" }}
         default:
             cassandra:
-                hosts: {{ default .Env.CASSANDRA_SEEDS "" }}
-                keyspace: {{ default .Env.KEYSPACE "temporal" }}
-                user: {{ default .Env.CASSANDRA_USER "" }}
-                password: {{ default .Env.CASSANDRA_PASSWORD "" }}
+                hosts: "{{ default .Env.CASSANDRA_SEEDS "" }}"
+                keyspace: "{{ default .Env.KEYSPACE "temporal" }}"
+                user: "{{ default .Env.CASSANDRA_USER "" }}"
+                password: "{{ default .Env.CASSANDRA_PASSWORD "" }}"
                 port: {{ default .Env.CASSANDRA_PORT "9042" }}
                 maxConns: {{ default .Env.CASSANDRA_MAX_CONNS "20" }}
                 tls:
@@ -33,10 +33,10 @@ persistence:
 
         visibility:
             cassandra:
-                hosts: {{ default .Env.CASSANDRA_SEEDS "" }}
-                keyspace: {{ default .Env.VISIBILITY_KEYSPACE "temporal_visibility" }}
-                user: {{ default .Env.CASSANDRA_USER "" }}
-                password: {{ default .Env.CASSANDRA_PASSWORD "" }}
+                hosts: "{{ default .Env.CASSANDRA_SEEDS "" }}"
+                keyspace: "{{ default .Env.VISIBILITY_KEYSPACE "temporal_visibility" }}"
+                user: "{{ default .Env.CASSANDRA_USER "" }}"
+                password: "{{ default .Env.CASSANDRA_PASSWORD "" }}"
                 port: {{ default .Env.CASSANDRA_PORT "9042" }}
                 maxConns: {{ default .Env.CASSANDRA_MAX_CONNS "10" }}
                 tls:
@@ -52,14 +52,14 @@ persistence:
         default:
             sql:
                 pluginName: "mysql"
-                databaseName: {{ default .Env.DBNAME "temporal" }}
+                databaseName: "{{ default .Env.DBNAME "temporal" }}"
                 connectAddr: "{{ default .Env.MYSQL_SEEDS "" }}:{{ default .Env.DB_PORT "3306" }}"
                 connectProtocol: "tcp"
-                user: {{ default .Env.MYSQL_USER "" }}
-                password: {{ default .Env.MYSQL_PWD "" }}
+                user: "{{ default .Env.MYSQL_USER "" }}"
+                password: "{{ default .Env.MYSQL_PWD "" }}"
                 {{- if .Env.MYSQL_TX_ISOLATION_COMPAT }}
                 connectAttributes:
-                    tx_isolation: 'READ-COMMITTED'
+                    tx_isolation: "'READ-COMMITTED'"
                 {{- end }}
                 maxConns: {{ default .Env.SQL_MAX_CONNS "20" }}
                 maxIdleConns: {{ default .Env.SQL_MAX_IDLE_CONNS "20" }}
@@ -67,14 +67,14 @@ persistence:
         visibility:
             sql:
                 pluginName: "mysql"
-                databaseName: {{ default .Env.VISIBILITY_DBNAME "temporal_visibility" }}
+                databaseName: "{{ default .Env.VISIBILITY_DBNAME "temporal_visibility" }}"
                 connectAddr: "{{ default .Env.MYSQL_SEEDS "" }}:{{ default .Env.DB_PORT "3306" }}"
                 connectProtocol: "tcp"
-                user: {{ default .Env.MYSQL_USER "" }}
-                password: {{ default .Env.MYSQL_PWD "" }}
+                user: "{{ default .Env.MYSQL_USER "" }}"
+                password: "{{ default .Env.MYSQL_PWD "" }}"
                 {{- if .Env.MYSQL_TX_ISOLATION_COMPAT }}
                 connectAttributes:
-                    tx_isolation: 'READ-COMMITTED'
+                    tx_isolation: "'READ-COMMITTED'"
                 {{- end }}
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "10" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "10" }}
@@ -83,22 +83,22 @@ persistence:
         default:
             sql:
                 pluginName: "postgres"
-                databaseName: {{ default .Env.DBNAME "temporal" }}
+                databaseName: "{{ default .Env.DBNAME "temporal" }}"
                 connectAddr: "{{ default .Env.POSTGRES_SEEDS "" }}:{{ default .Env.DB_PORT "5432" }}"
                 connectProtocol: "tcp"
-                user: {{ default .Env.POSTGRES_USER "" }}
-                password: {{ default .Env.POSTGRES_PWD "" }}
+                user: "{{ default .Env.POSTGRES_USER "" }}"
+                password: "{{ default .Env.POSTGRES_PWD "" }}"
                 maxConns: {{ default .Env.SQL_MAX_CONNS "20" }}
                 maxIdleConns: {{ default .Env.SQL_MAX_IDLE_CONNS "20" }}
                 maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "1h" }}
         visibility:
             sql:
                 pluginName: "postgres"
-                databaseName: {{ default .Env.VISIBILITY_DBNAME "temporal_visibility" }}
+                databaseName: "{{ default .Env.VISIBILITY_DBNAME "temporal_visibility" }}"
                 connectAddr: "{{ default .Env.POSTGRES_SEEDS "" }}:{{ default .Env.DB_PORT "5432" }}"
                 connectProtocol: "tcp"
-                user: {{ default .Env.POSTGRES_USER "" }}
-                password: {{ default .Env.POSTGRES_PWD "" }}
+                user: "{{ default .Env.POSTGRES_USER "" }}"
+                password: "{{ default .Env.POSTGRES_PWD "" }}"
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "10" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "10" }}
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
@@ -110,10 +110,10 @@ persistence:
                 url:
                     scheme: {{ default .Env.ES_SCHEME "http" }}
                     host: "{{ default .Env.ES_SEEDS "" }}:{{ default .Env.ES_PORT "9200" }}"
-                username: {{ default .Env.ES_USER "" }}
-                password: {{ default .Env.ES_PWD "" }}
+                username: "{{ default .Env.ES_USER "" }}"
+                password: "{{ default .Env.ES_PWD "" }}"
                 indices:
-                    visibility: {{ default .Env.ES_VIS_INDEX "temporal-visibility-dev" }} 
+                    visibility: "{{ default .Env.ES_VIS_INDEX "temporal-visibility-dev" }}"
         {{- end }}
 
 global:
@@ -275,5 +275,5 @@ publicClient:
     hostPort: {{ default .Env.PUBLIC_FRONTEND_ADDRESS $defaultPublicHostPost }}
 
 dynamicConfigClient:
-    filepath: {{ default .Env.DYNAMIC_CONFIG_FILE_PATH "/etc/temporal/config/dynamicconfig" }}
+    filepath: "{{ default .Env.DYNAMIC_CONFIG_FILE_PATH "/etc/temporal/config/dynamicconfig" }}"
     pollInterval: "60s"

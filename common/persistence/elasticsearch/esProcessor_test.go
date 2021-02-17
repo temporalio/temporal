@@ -266,6 +266,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 	ackCh := make(chan bool, 1)
 	mapVal := newAckChanWithStopwatch(ackCh, &testStopWatch)
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
+	s.mockMetricClient.On("IncCounter", metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures).Once()
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
 	select {
 	case ack := <-ackCh:
@@ -277,10 +278,15 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 
 func (s *esProcessorSuite) TestBulkAfterAction_Error() {
 	version := int64(3)
+	doc := map[string]interface{}{
+		definition.VisibilityTaskKey: "str",
+	}
+
 	request := elastic.NewBulkIndexRequest().
 		Index(testIndex).
 		Id(testID).
-		Version(version)
+		Version(version).
+		Doc(doc)
 	requests := []elastic.BulkableRequest{request}
 
 	mFailed := map[string]*elastic.BulkResponseItem{
@@ -350,23 +356,26 @@ func (s *esProcessorSuite) TestHashFn() {
 	s.NotEqual(uint32(0), s.esProcessor.hashFn("test"))
 }
 
-func (s *esProcessorSuite) TestGetVisibilityTaskKey() {
+func (s *esProcessorSuite) TestExtractVisibilityTaskKey() {
 	request := elastic.NewBulkIndexRequest()
-	s.PanicsWithValue("VisibilityTaskKey not found", func() { s.esProcessor.getVisibilityTaskKey(request) })
+	s.mockMetricClient.On("IncCounter", metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData).Times(1)
+
+	visibilityTaskKey := s.esProcessor.extractVisibilityTaskKey(request)
+	s.Equal("", visibilityTaskKey)
 
 	m := map[string]interface{}{
 		definition.VisibilityTaskKey: 1,
 	}
 	request.Doc(m)
-	s.PanicsWithValue("VisibilityTaskKey is not string", func() { s.esProcessor.getVisibilityTaskKey(request) })
+	s.Panics(func() { s.esProcessor.extractVisibilityTaskKey(request) })
 
 	testKey := "test-key"
 	m[definition.VisibilityTaskKey] = testKey
 	request.Doc(m)
-	s.Equal(testKey, s.esProcessor.getVisibilityTaskKey(request))
+	s.Equal(testKey, s.esProcessor.extractVisibilityTaskKey(request))
 }
 
-func (s *esProcessorSuite) TestGetKeyForKafkaMsg_Delete() {
+func (s *esProcessorSuite) TestExtractVisibilityTaskKey_Delete() {
 	request := elastic.NewBulkDeleteRequest()
 
 	// ensure compatible with dependency
@@ -379,39 +388,41 @@ func (s *esProcessorSuite) TestGetKeyForKafkaMsg_Delete() {
 	_, ok := body["delete"]
 	s.True(ok)
 
-	s.PanicsWithValue("_id not found in request opMap", func() { s.esProcessor.getVisibilityTaskKey(request) })
+	s.mockMetricClient.On("IncCounter", metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData).Times(1)
+	key := s.esProcessor.extractVisibilityTaskKey(request)
+	s.Equal("", key)
 
 	id := "id"
 	request.Id(id)
-	key := s.esProcessor.getVisibilityTaskKey(request)
+	key = s.esProcessor.extractVisibilityTaskKey(request)
 	s.Equal(id, key)
 }
 
 func (s *esProcessorSuite) TestIsResponseSuccess() {
 	for i := 200; i < 300; i++ {
-		s.True(isResponseSuccess(i))
+		s.True(isSuccessStatus(i))
 	}
 	status := []int{409, 404}
 	for _, code := range status {
-		s.True(isResponseSuccess(code))
+		s.True(isSuccessStatus(code))
 	}
 	status = []int{100, 199, 300, 400, 500, 408, 429, 503, 507}
 	for _, code := range status {
-		s.False(isResponseSuccess(code))
+		s.False(isSuccessStatus(code))
 	}
 }
 
 func (s *esProcessorSuite) TestIsResponseRetryable() {
 	status := []int{408, 429, 500, 503, 507}
 	for _, code := range status {
-		s.True(isResponseRetryable(code))
+		s.True(isRetryableStatus(code))
 	}
 }
 
-func (s *esProcessorSuite) TestGetErrorMsgFromESResp() {
+func (s *esProcessorSuite) TestErrorReasonFromResponse() {
 	reason := "error reason"
 	resp := &elastic.BulkResponseItem{Status: 400}
-	s.Equal("", getErrorMsgFromESResp(resp))
+	s.Equal("", extractErrorReason(resp))
 	resp.Error = &elastic.ErrorDetails{Reason: reason}
-	s.Equal(reason, getErrorMsgFromESResp(resp))
+	s.Equal(reason, extractErrorReason(resp))
 }
