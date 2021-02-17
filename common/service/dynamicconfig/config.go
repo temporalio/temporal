@@ -101,6 +101,9 @@ type FloatPropertyFn func(opts ...FilterOption) float64
 // FloatPropertyFnWithShardIDFilter is a wrapper to get float property from dynamic config with shardID as filter
 type FloatPropertyFnWithShardIDFilter func(shardID int32) float64
 
+// FloatPropertyFnWithTaskQueueInfoFilters is a wrapper to get int property from dynamic config with three filters: namespace, taskQueue, taskType
+type FloatPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64
+
 // DurationPropertyFn is a wrapper to get duration property from dynamic config
 type DurationPropertyFn func(opts ...FilterOption) time.Duration
 
@@ -256,6 +259,37 @@ func (c *Collection) GetFloat64PropertyFilteredByShardID(key Key, defaultValue f
 			c.logError(key, err)
 		}
 		c.logValue(key, val, defaultValue, float64CompareEquals)
+		return val
+	}
+}
+
+// GetFloatPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's an integer
+func (c *Collection) GetFloatPropertyFilteredByTaskQueueInfo(key Key, defaultValue float64) FloatPropertyFnWithTaskQueueInfoFilters {
+	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64 {
+		val := defaultValue
+		var err error
+
+		filterMaps := []map[Filter]interface{}{
+			getFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue), TaskTypeFilter(taskType)),
+			getFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue)),
+		}
+
+		for _, filterMap := range filterMaps {
+			val, err = c.client.GetFloatValue(
+				key,
+				filterMap,
+				defaultValue,
+			)
+			if err != nil {
+				c.logError(key, err)
+			}
+
+			if val != defaultValue {
+				break
+			}
+		}
+
+		c.logValue(key, val, defaultValue, intCompareEquals)
 		return val
 	}
 }

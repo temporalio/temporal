@@ -130,6 +130,7 @@ var keys = map[Key]string{
 	MatchingThrottledLogRPS:                 "matching.throttledLogRPS",
 	MatchingNumTaskqueueWritePartitions:     "matching.numTaskqueueWritePartitions",
 	MatchingNumTaskqueueReadPartitions:      "matching.numTaskqueueReadPartitions",
+	MatchingTaskqueuePartitionDispatchRate:  "matching.taskqueuePartitionDispatchRate",
 	MatchingForwarderMaxOutstandingPolls:    "matching.forwarderMaxOutstandingPolls",
 	MatchingForwarderMaxOutstandingTasks:    "matching.forwarderMaxOutstandingTasks",
 	MatchingForwarderMaxRatePerSecond:       "matching.forwarderMaxRatePerSecond",
@@ -461,6 +462,8 @@ const (
 	MatchingNumTaskqueueWritePartitions
 	// MatchingNumTaskqueueReadPartitions is the number of read partitions for a task queue
 	MatchingNumTaskqueueReadPartitions
+	// MatchingTaskqueuePartitionDispatchRate is the max qps of task queue partition
+	MatchingTaskqueuePartitionDispatchRate
 	// MatchingForwarderMaxOutstandingPolls is the max number of inflight polls from the forwarder
 	MatchingForwarderMaxOutstandingPolls
 	// MatchingForwarderMaxOutstandingTasks is the max number of inflight addTask/queryTask from the forwarder
