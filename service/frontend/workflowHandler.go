@@ -95,7 +95,6 @@ type (
 		versionChecker                  headers.VersionChecker
 		namespaceHandler                namespace.Handler
 		visibilityQueryValidator        *validator.VisibilityQueryValidator
-		searchAttributesValidator       *validator.SearchAttributesValidator
 		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
 	}
 
@@ -131,14 +130,7 @@ func NewWorkflowHandler(
 			resource.GetArchivalMetadata(),
 			resource.GetArchiverProvider(),
 		),
-		visibilityQueryValidator: validator.NewQueryValidator(config.ValidSearchAttributes),
-		searchAttributesValidator: validator.NewSearchAttributesValidator(
-			resource.GetLogger(),
-			config.ValidSearchAttributes,
-			config.SearchAttributesNumberOfKeysLimit,
-			config.SearchAttributesSizeOfValueLimit,
-			config.SearchAttributesTotalSizeLimit,
-		),
+		visibilityQueryValidator:        validator.NewQueryValidator(config.ValidSearchAttributes),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 	}
 
@@ -453,10 +445,6 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 
 	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
 		return nil, wh.error(errRequestIDTooLong, scope)
-	}
-
-	if err := wh.searchAttributesValidator.ValidateSearchAttributes(request.SearchAttributes, namespace); err != nil {
-		return nil, wh.error(err, scope)
 	}
 
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
@@ -2171,10 +2159,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	if err := backoff.ValidateSchedule(request.GetCronSchedule()); err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	if err := wh.searchAttributesValidator.ValidateSearchAttributes(request.SearchAttributes, namespace); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
