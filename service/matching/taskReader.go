@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"runtime"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -36,6 +35,10 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/worker/scanner/taskqueue"
+)
+
+const (
+	taskReaderOfferThrottleWait = time.Second
 )
 
 type (
@@ -110,7 +113,7 @@ dispatchLoop:
 				// this should never happen unless there is a bug - don't drop the task
 				tr.scope().IncCounter(metrics.BufferThrottlePerTaskQueueCounter)
 				tr.logger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
-				runtime.Gosched()
+				time.Sleep(taskReaderOfferThrottleWait)
 			}
 		case <-tr.dispatcherShutdownC:
 			break dispatchLoop

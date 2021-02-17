@@ -64,6 +64,9 @@ type (
 		MaxTaskBatchSize                dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 
 		ThrottledLogRPS dynamicconfig.IntPropertyFn
+
+		AdminMatchingDispatchRate          dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		AdminMatchingTaskqueueDispatchRate dynamicconfig.FloatPropertyFnWithTaskQueueInfoFilters
 	}
 
 	forwarderConfig struct {
@@ -90,6 +93,9 @@ type (
 		MaxTaskBatchSize                func() int
 		NumWritePartitions              func() int
 		NumReadPartitions               func() int
+
+		AdminDispatchRate               func() float64
+		AdminQueuePartitionDispatchRate func() float64
 	}
 )
 
@@ -118,6 +124,9 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		ForwarderMaxRatePerSecond:       dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxRatePerSecond, 10),
 		ForwarderMaxChildrenPerNode:     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
 		ShutdownDrainDuration:           dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0),
+
+		AdminMatchingDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingDispatchRate, 1000000),
+		AdminMatchingTaskqueueDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingTaskqueueDispatchRate, 4000),
 	}
 }
 
@@ -130,6 +139,14 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespaceCache cache.Na
 	namespace := namespaceEntry.GetInfo().Name
 	taskQueueName := id.name
 	taskType := id.taskType
+
+	writePartition := func() int {
+		return common.MaxInt(1, config.NumTaskqueueWritePartitions(namespace, taskQueueName, taskType))
+	}
+	readPartition := func() int {
+		return common.MaxInt(1, config.NumTaskqueueReadPartitions(namespace, taskQueueName, taskType))
+	}
+
 	return &taskQueueConfig{
 		RangeSize: config.RangeSize,
 		GetTasksBatchSize: func() int {
@@ -162,11 +179,13 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespaceCache cache.Na
 		MaxTaskBatchSize: func() int {
 			return config.MaxTaskBatchSize(namespace, taskQueueName, taskType)
 		},
-		NumWritePartitions: func() int {
-			return common.MaxInt(1, config.NumTaskqueueWritePartitions(namespace, taskQueueName, taskType))
+		NumWritePartitions: writePartition,
+		NumReadPartitions:  readPartition,
+		AdminDispatchRate: func() float64 {
+			return config.AdminMatchingDispatchRate(namespace)
 		},
-		NumReadPartitions: func() int {
-			return common.MaxInt(1, config.NumTaskqueueReadPartitions(namespace, taskQueueName, taskType))
+		AdminQueuePartitionDispatchRate: func() float64 {
+			return config.AdminMatchingTaskqueueDispatchRate(namespace, taskQueueName, taskType) / float64(readPartition())
 		},
 		forwarderConfig: forwarderConfig{
 			ForwarderMaxOutstandingPolls: func() int {
