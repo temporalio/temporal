@@ -62,7 +62,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/service/dynamicconfig"
 	dc "go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -1519,7 +1518,7 @@ func (s *workflowHandlerSuite) setupTokenNamespaceTest(tokenNamespace string, en
 	s.mockHistoryClient.EXPECT().RespondWorkflowTaskFailed(ctx, gomock.Any()).Return(nil, nil).AnyTimes()
 	s.mockMatchingClient.EXPECT().RespondQueryTaskCompleted(ctx, gomock.Any()).Return(nil, nil).AnyTimes()
 	cfg := s.newConfig()
-	cfg.EnableTokenNamespaceEnforcement = dynamicconfig.GetBoolPropertyFn(enforce)
+	cfg.EnableTokenNamespaceEnforcement = dc.GetBoolPropertyFn(enforce)
 	return s.getWorkflowHandler(cfg)
 }
 
