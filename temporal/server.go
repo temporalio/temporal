@@ -347,7 +347,7 @@ func (s *Server) getServiceParams(
 	if s.so.authorizer != nil {
 		params.Authorizer = s.so.authorizer
 	} else {
-		params.Authorizer = authorization.NewNopAuthorizer()
+		params.Authorizer = authorization.NewNoopAuthorizer()
 	}
 	if s.so.claimMapper != nil {
 		params.ClaimMapper = s.so.claimMapper

@@ -26,13 +26,13 @@ package authorization
 
 import "context"
 
-type nopAuthority struct{}
+type noopAuthorizer struct{}
 
-// NewNopAuthorizer creates a no-op authority
-func NewNopAuthorizer() Authorizer {
-	return &nopAuthority{}
+// NewNoopAuthorizer creates a no-op authorizer
+func NewNoopAuthorizer() Authorizer {
+	return &noopAuthorizer{}
 }
 
-func (a *nopAuthority) Authorize(_ context.Context, _ *Claims, _ *CallTarget) (Result, error) {
+func (a *noopAuthorizer) Authorize(_ context.Context, _ *Claims, _ *CallTarget) (Result, error) {
 	return Result{Decision: DecisionAllow}, nil
 }

@@ -26,7 +26,13 @@
 
 package authorization
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"go.temporal.io/server/common/service/config"
+)
 
 const (
 	// DecisionDeny means auth decision is deny
@@ -68,4 +74,15 @@ type Authorizer interface {
 
 type requestWithNamespace interface {
 	GetNamespace() string
+}
+
+func GetAuthorizerFromConfig(config *config.Authorization) (Authorizer, error) {
+
+	switch strings.ToLower(config.Authorizer) {
+	case "":
+		return NewNoopAuthorizer(), nil
+	case "default":
+		return NewDefaultAuthorizer(), nil
+	}
+	return nil, fmt.Errorf("unknown authorizer: %s", config.Authorizer)
 }

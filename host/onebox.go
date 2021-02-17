@@ -389,7 +389,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	params.ArchiverProvider = c.archiverProvider
 	params.ESConfig = c.esConfig
 	params.ESClient = c.esClient
-	params.Authorizer = authorization.NewNopAuthorizer()
+	params.Authorizer = authorization.NewNoopAuthorizer()
 
 	var err error
 	params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
