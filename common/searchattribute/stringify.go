@@ -50,7 +50,7 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap map[string]e
 	var lastErr error
 
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		saValue, err := DecodeValue(saPayload, getType(saName, typeMap))
+		saValue, err := DecodeValue(saPayload, GetType(saName, typeMap))
 		if err != nil {
 			result[saName] = string(saPayload.GetData())
 			lastErr = err

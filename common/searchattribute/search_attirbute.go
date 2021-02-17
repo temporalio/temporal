@@ -78,22 +78,17 @@ func GetTypeMap(validSearchAttributesFn dynamicconfig.MapPropertyFn) (map[string
 	return result, nil
 }
 
-// GetType returns type of search attribute from dynamic config map.
-func GetType(name string, validSearchAttributesFn dynamicconfig.MapPropertyFn) (enumspb.IndexedValueType, error) {
-	if validSearchAttributesFn == nil {
-		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ErrValidMapIsEmpty
+// GetType returns type of search attribute from type map.
+func GetType(name string, typeMap map[string]enumspb.IndexedValueType) enumspb.IndexedValueType {
+	if len(typeMap) == 0 {
+		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
 	}
 
-	validSearchAttributes := validSearchAttributesFn()
-	if len(validSearchAttributes) == 0 {
-		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ErrValidMapIsEmpty
+	saType, isDefined := typeMap[name]
+	if !isDefined {
+		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
 	}
-
-	saType, isValidName := validSearchAttributes[name]
-	if !isValidName {
-		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidName, name)
-	}
-	return getIndexedValueType(saType)
+	return saType
 }
 
 // SetType set type for all valid search attributes which don't have it.
@@ -154,16 +149,4 @@ func setMetadataType(p *commonpb.Payload, t enumspb.IndexedValueType) {
 		panic(fmt.Sprintf("unknown index value type %v", t))
 	}
 	p.Metadata[MetadataType] = []byte(tString)
-}
-
-func getType(name string, typeMap map[string]enumspb.IndexedValueType) enumspb.IndexedValueType {
-	if len(typeMap) == 0 {
-		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
-	}
-
-	saType, isDefined := typeMap[name]
-	if !isDefined {
-		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
-	}
-	return saType
 }

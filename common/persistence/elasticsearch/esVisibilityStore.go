@@ -303,6 +303,12 @@ func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBa
 		doc[definition.Encoding] = request.Memo.GetEncodingType().String()
 	}
 
+	typeMap, err := searchattribute.GetTypeMap(v.config.ValidSearchAttributes)
+	if err != nil {
+		v.logger.Error("Unable to parse search attributes from config.", tag.Error(err))
+		v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+	}
+
 	attr := make(map[string]interface{}, len(request.SearchAttributes.GetIndexedFields()))
 	for saName, saPayload := range request.SearchAttributes.GetIndexedFields() {
 		if !searchattribute.IsValid(saName, v.config.ValidSearchAttributes) {
@@ -311,8 +317,8 @@ func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBa
 			continue
 		}
 
-		saType, err := searchattribute.GetType(saName, v.config.ValidSearchAttributes)
-		if err != nil {
+		saType := searchattribute.GetType(saName, typeMap)
+		if saType == enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED {
 			v.logger.Error("Unable to get search attribute type.", tag.Error(err), tag.ESField(saName))
 			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 		}
@@ -801,8 +807,13 @@ func (v *esVisibilityStore) getFieldType(fieldName string) enumspb.IndexedValueT
 	if strings.HasPrefix(fieldName, definition.Attr) {
 		fieldName = fieldName[len(definition.Attr)+1:] // remove prefix
 	}
-	fieldType, err := searchattribute.GetType(fieldName, v.config.ValidSearchAttributes)
+	typeMap, err := searchattribute.GetTypeMap(v.config.ValidSearchAttributes)
 	if err != nil {
+		v.logger.Error("Unable to parse search attributes from config.", tag.Error(err))
+	}
+
+	fieldType := searchattribute.GetType(fieldName, typeMap)
+	if fieldType == enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED {
 		v.logger.Error("Unable to get search attribute type.", tag.Value(fieldName), tag.Error(err))
 	}
 	return fieldType

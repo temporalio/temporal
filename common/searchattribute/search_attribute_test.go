@@ -105,36 +105,22 @@ func Test_GetTypeMap(t *testing.T) {
 
 func Test_GetType(t *testing.T) {
 	assert := assert.New(t)
-	ivt, err := GetType("key1", dynamicconfig.GetMapPropertyFn(map[string]interface{}{
+	typeMap := map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
-	}))
-	assert.NoError(err)
+		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+	}
+
+	ivt := GetType("key1", typeMap)
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_STRING, ivt)
+	ivt = GetType("key2", typeMap)
+	assert.Equal(enumspb.INDEXED_VALUE_TYPE_INT, ivt)
+	ivt = GetType("key3", typeMap)
+	assert.Equal(enumspb.INDEXED_VALUE_TYPE_BOOL, ivt)
 
-	ivt, err = GetType("key1", dynamicconfig.GetMapPropertyFn(map[string]interface{}{
-		"key1": 1,
-	}))
-	assert.NoError(err)
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_STRING, ivt)
-
-	ivt, err = GetType("key1", dynamicconfig.GetMapPropertyFn(map[string]interface{}{
-		"key1": "Unknown",
-	}))
-	assert.Error(err)
+	ivt = GetType("key1", nil)
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
-
-	ivt, err = GetType("key1", dynamicconfig.GetMapPropertyFn(map[string]interface{}{
-		"key2": enumspb.INDEXED_VALUE_TYPE_STRING,
-	}))
-	assert.Error(err)
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
-
-	ivt, err = GetType("key1", dynamicconfig.GetMapPropertyFn(nil))
-	assert.Error(err)
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
-
-	ivt, err = GetType("key1", nil)
-	assert.Error(err)
+	ivt = GetType("key4", typeMap)
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
 }
 

@@ -28,6 +28,7 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/definition"
@@ -80,17 +81,17 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 	}
 
 	totalSize := 0
+	typeMap, err := searchattribute.GetTypeMap(sv.validSearchAttributes)
+	if err != nil {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse search attributes from config: %v", err))
+	}
+
 	for key, val := range input.GetIndexedFields() {
 		// verify: key is whitelisted
-		if !searchattribute.IsValid(key, sv.validSearchAttributes) {
+		saType := searchattribute.GetType(key, typeMap)
+		if saType == enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED {
 			sv.logger.Error("invalid search attribute key", tag.ESKey(key), tag.WorkflowNamespace(namespace))
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not valid search attribute key", key))
-		}
-		// verify: value has the correct type
-		saType, err := searchattribute.GetType(key, sv.validSearchAttributes)
-		if err != nil {
-			sv.logger.Error("invalid search attribute type", tag.ESKey(key), tag.WorkflowNamespace(namespace))
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("search attribute %s has invalid type", key))
 		}
 		_, err = searchattribute.DecodeValue(val, saType)
 		if err != nil {
