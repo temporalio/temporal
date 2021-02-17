@@ -1072,7 +1072,7 @@ func (b *historyBuilder) newUpsertWorkflowSearchAttributesEvent(
 	event := b.msBuilder.CreateNewHistoryEvent(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES)
 	attributes := &historypb.UpsertWorkflowSearchAttributesEventAttributes{
 		WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
-		SearchAttributes:             request.SearchAttributes,
+		SearchAttributes:             request.GetSearchAttributes(),
 	}
 	event.Attributes = &historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes{
 		UpsertWorkflowSearchAttributesEventAttributes: attributes,
