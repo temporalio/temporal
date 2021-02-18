@@ -101,8 +101,6 @@ const (
 	CLIOptDisableVersioning = "disable-versioning"
 	// CLIOptTargetVersion is the cli option for target version
 	CLIOptTargetVersion = "version"
-	// CLIOptDryrun is the cli option for enabling dryrun
-	CLIOptDryrun = "dryrun"
 	// CLIOptSchemaDir is the cli option for schema directory
 	CLIOptSchemaDir = "schema-dir"
 	// CLIOptReplicationFactor is the cli option for replication factor
@@ -142,8 +140,6 @@ const (
 	CLIFlagDisableVersioning = CLIOptDisableVersioning + ", d"
 	// CLIFlagTargetVersion is the cli flag for target version
 	CLIFlagTargetVersion = CLIOptTargetVersion + ", v"
-	// CLIFlagDryrun is the cli flag for dryrun
-	CLIFlagDryrun = CLIOptDryrun + ", y"
 	// CLIFlagSchemaDir is the cli flag for schema directory
 	CLIFlagSchemaDir = CLIOptSchemaDir + ", d"
 	// CLIFlagReplicationFactor is the cli flag for replication factor
@@ -166,9 +162,6 @@ const (
 	// CLIFlagTLSEnableHostVerification enables tls host verification (tls must be enabled)
 	CLIFlagTLSEnableHostVerification = "tls-enable-host-verification"
 )
-
-// DryrunDBName is the db name used for dryrun
-const DryrunDBName = "_temporal_dryrun_"
 
 var rmspaceRegex = regexp.MustCompile(`\s+`)
 

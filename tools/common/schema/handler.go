@@ -57,7 +57,6 @@ func Update(cli *cli.Context, db DB) error {
 func newUpdateConfig(cli *cli.Context) (*UpdateConfig, error) {
 	config := new(UpdateConfig)
 	config.SchemaDir = cli.String(CLIOptSchemaDir)
-	config.IsDryRun = cli.Bool(CLIOptDryrun)
 	config.TargetVersion = cli.String(CLIOptTargetVersion)
 
 	if err := validateUpdateConfig(config); err != nil {
