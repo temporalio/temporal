@@ -33,7 +33,6 @@ import (
 
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/environment"
-	"go.temporal.io/server/tools/common/schema"
 	"go.temporal.io/server/tools/sql"
 )
 

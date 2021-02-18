@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/environment"
-	"go.temporal.io/server/tools/common/schema"
 )
 
 type (
