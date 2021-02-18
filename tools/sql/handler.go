@@ -197,10 +197,9 @@ func ValidateConnectConfig(cfg *config.SQL, isDryRun bool) error {
 	if len(host) == 0 {
 		return schema.NewConfigError("missing sql endpoint argument " + flag(schema.CLIOptEndpoint))
 	}
-	if cfg.DatabaseName == "" {
-		if !isDryRun {
-			return schema.NewConfigError("missing " + flag(schema.CLIOptDatabase) + " argument")
-		}
+	if cfg.DatabaseName == "" && !isDryRun {
+		return schema.NewConfigError("missing " + flag(schema.CLIOptDatabase) + " argument")
+	} else if isDryRun {
 		cfg.DatabaseName = schema.DryrunDBName
 	}
 
