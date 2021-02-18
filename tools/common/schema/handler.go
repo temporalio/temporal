@@ -25,34 +25,8 @@
 package schema
 
 import (
-	"fmt"
-
 	"github.com/urfave/cli"
 )
-
-// VerifyCompatibleVersion ensures that the installed version is greater than or equal to the expected version.
-func VerifyCompatibleVersion(
-	db DB,
-	dbName string,
-	expectedVersion string,
-) error {
-
-	version, err := db.ReadSchemaVersion()
-	if err != nil {
-		return fmt.Errorf("unable to read DB schema version keyspace/database: %s error: %v", dbName, err.Error())
-	}
-	// In most cases, the versions should match. However if after a schema upgrade there is a code
-	// rollback, the code version (expected version) would fall lower than the actual version in
-	// cassandra. This check is to allow such rollbacks since we only make backwards compatible schema
-	// changes
-	if cmpVersion(version, expectedVersion) < 0 {
-		return fmt.Errorf(
-			"version mismatch for keyspace/database: %q. Expected version: %s cannot be greater than "+
-				"Actual version: %s", dbName, expectedVersion, version,
-		)
-	}
-	return nil
-}
 
 // SetupFromConfig sets up schema tables based on the given config
 func SetupFromConfig(config *SetupConfig, db DB) error {

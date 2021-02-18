@@ -33,71 +33,9 @@ import (
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/auth"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/service/config"
-	mysqlschema "go.temporal.io/server/schema/mysql"
-	postgresqlschema "go.temporal.io/server/schema/postgresql"
 	"go.temporal.io/server/tools/common/schema"
 )
-
-// VerifyCompatibleVersion ensures that the installed version of temporal and visibility
-// is greater than or equal to the expected version.
-func VerifyCompatibleVersion(
-	cfg config.Persistence,
-) error {
-
-	ds, ok := cfg.DataStores[cfg.DefaultStore]
-	if ok && ds.SQL != nil {
-		switch ds.SQL.PluginName {
-		case mysql.PluginName:
-			err := CheckCompatibleVersion(*ds.SQL, mysqlschema.Version)
-			if err != nil {
-				return err
-			}
-		case postgresql.PluginName:
-			err := CheckCompatibleVersion(*ds.SQL, postgresqlschema.Version)
-			if err != nil {
-				return err
-			}
-		default:
-			panic(fmt.Sprintf("unknown sql store drier: %v", ds.SQL.PluginName))
-		}
-	}
-	ds, ok = cfg.DataStores[cfg.VisibilityStore]
-	if ok && ds.SQL != nil {
-		switch ds.SQL.PluginName {
-		case mysql.PluginName:
-			err := CheckCompatibleVersion(*ds.SQL, mysqlschema.VisibilityVersion)
-			if err != nil {
-				return err
-			}
-		case postgresql.PluginName:
-			err := CheckCompatibleVersion(*ds.SQL, postgresqlschema.VisibilityVersion)
-			if err != nil {
-				return err
-			}
-		default:
-			panic(fmt.Sprintf("unknown sql store drier: %v", ds.SQL.PluginName))
-		}
-	}
-	return nil
-}
-
-// CheckCompatibleVersion check the version compatibility
-func CheckCompatibleVersion(
-	cfg config.SQL,
-	expectedVersion string,
-) error {
-	connection, err := NewConnection(&cfg)
-
-	if err != nil {
-		return fmt.Errorf("unable to create SQL connection: %v", err.Error())
-	}
-	defer connection.Close()
-
-	return schema.VerifyCompatibleVersion(connection, cfg.DatabaseName, expectedVersion)
-}
 
 // setupSchema executes the setupSchemaTask
 // using the given command line arguments

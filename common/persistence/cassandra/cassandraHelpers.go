@@ -27,7 +27,6 @@ package cassandra
 import (
 	"fmt"
 	"io/ioutil"
-	"os"
 	"strings"
 
 	"github.com/gocql/gocql"
@@ -35,8 +34,8 @@ import (
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/tools/cassandra"
-	"go.temporal.io/server/tools/common/schema"
+	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/service/config"
 )
 
 const cassandraPersistenceName = "cassandra"
@@ -80,50 +79,37 @@ func loadCassandraSchema(
 	hosts []string,
 	port int,
 	keyspace string,
-	override bool,
 	tls *auth.TLS,
 ) (err error) {
 
-	tmpFile, err := ioutil.TempFile("", "_temporal_")
+	session, err := NewSession(config.Cassandra{
+		Hosts:    strings.Join(hosts, ","),
+		Port:     port,
+		Keyspace: keyspace,
+		TLS:      tls,
+	}, resolver.NewNoopResolver())
 	if err != nil {
-		return fmt.Errorf("error creating tmp file:%v", err.Error())
+		return err
 	}
-	defer os.Remove(tmpFile.Name())
 
 	for _, file := range fileNames {
-		// Flagged for potential file inclusion via variable. No user supplied input is included here - this just reads
-		// schema files.
+		// This is only used in tests. Excluding it from security scanners
 		// #nosec
 		content, err := ioutil.ReadFile(dir + "/" + file)
 		if err != nil {
 			return fmt.Errorf("error reading contents of file %v:%v", file, err.Error())
 		}
-		_, err = tmpFile.WriteString(string(content) + "\n")
-		if err != nil {
-			return fmt.Errorf("error writing string to file, err: %v", err.Error())
+		for _, stmt := range strings.Split(string(content), ";") {
+			stmt = strings.TrimSpace(stmt)
+			if stmt == "" {
+				continue
+			}
+			err = session.Query(stmt).Exec()
+			if err != nil {
+				return fmt.Errorf("error loading schema from %v: %v", file, err.Error())
+			}
 		}
-	}
 
-	tmpFile.Close()
-
-	config := &cassandra.SetupSchemaConfig{
-		CQLClientConfig: cassandra.CQLClientConfig{
-			Hosts:    strings.Join(hosts, ","),
-			Port:     port,
-			Timeout:  30,
-			Keyspace: keyspace,
-			TLS:      tls,
-		},
-		SetupConfig: schema.SetupConfig{
-			SchemaFilePath:    tmpFile.Name(),
-			Overwrite:         override,
-			DisableVersioning: true,
-		},
 	}
-
-	err = cassandra.SetupSchema(config)
-	if err != nil {
-		err = fmt.Errorf("error loading schema:%v", err.Error())
-	}
-	return
+	return nil
 }
