@@ -40,9 +40,9 @@ import (
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -342,12 +342,12 @@ func (s *Test) GetFrontendClient() workflowservice.WorkflowServiceClient {
 }
 
 // GetMatchingRawClient for testing
-func (s *Test) GetMatchingRawClient() matching.Client {
+func (s *Test) GetMatchingRawClient() matchingservice.MatchingServiceClient {
 	return s.MatchingClient
 }
 
 // GetMatchingClient for testing
-func (s *Test) GetMatchingClient() matching.Client {
+func (s *Test) GetMatchingClient() matchingservice.MatchingServiceClient {
 	return s.MatchingClient
 }
 

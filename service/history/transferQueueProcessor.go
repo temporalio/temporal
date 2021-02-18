@@ -34,7 +34,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -69,7 +69,7 @@ type (
 		metricsClient            metrics.Client
 		historyService           *historyEngineImpl
 		visibilityMgr            persistence.VisibilityManager
-		matchingClient           matching.Client
+		matchingClient           matchingservice.MatchingServiceClient
 		historyClient            historyservice.HistoryServiceClient
 		ackLevel                 int64
 		logger                   log.Logger
@@ -86,7 +86,7 @@ func newTransferQueueProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager,
-	matchingClient matching.Client,
+	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,

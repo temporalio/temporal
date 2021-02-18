@@ -35,9 +35,9 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
-	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common/cluster"
 )
 
@@ -46,8 +46,8 @@ type (
 	Bean interface {
 		GetHistoryClient() historyservice.HistoryServiceClient
 		SetHistoryClient(client historyservice.HistoryServiceClient)
-		GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error)
-		SetMatchingClient(client matching.Client)
+		GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error)
+		SetMatchingClient(client matchingservice.MatchingServiceClient)
 		GetFrontendClient() workflowservice.WorkflowServiceClient
 		SetFrontendClient(client workflowservice.WorkflowServiceClient)
 		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
@@ -124,15 +124,15 @@ func (h *clientBeanImpl) SetHistoryClient(
 	h.historyClient = client
 }
 
-func (h *clientBeanImpl) GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error) {
+func (h *clientBeanImpl) GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error) {
 	if client := h.matchingClient.Load(); client != nil {
-		return client.(matching.Client), nil
+		return client.(matchingservice.MatchingServiceClient), nil
 	}
 	return h.lazyInitMatchingClient(namespaceIDToName)
 }
 
 func (h *clientBeanImpl) SetMatchingClient(
-	client matching.Client,
+	client matchingservice.MatchingServiceClient,
 ) {
 	h.matchingClient.Store(client)
 }
@@ -185,11 +185,11 @@ func (h *clientBeanImpl) SetRemoteFrontendClient(
 	h.remoteFrontendClients[cluster] = client
 }
 
-func (h *clientBeanImpl) lazyInitMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error) {
+func (h *clientBeanImpl) lazyInitMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error) {
 	h.Lock()
 	defer h.Unlock()
 	if cached := h.matchingClient.Load(); cached != nil {
-		return cached.(matching.Client), nil
+		return cached.(matchingservice.MatchingServiceClient), nil
 	}
 	client, err := h.factory.NewMatchingClient(namespaceIDToName)
 	if err != nil {

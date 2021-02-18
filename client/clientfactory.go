@@ -51,11 +51,11 @@ type (
 	// Factory can be used to create RPC clients for temporal services
 	Factory interface {
 		NewHistoryClient() (historyservice.HistoryServiceClient, error)
-		NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error)
+		NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error)
 		NewFrontendClient(rpcAddress string) (workflowservice.WorkflowServiceClient, error)
 
 		NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error)
-		NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
+		NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matchingservice.MatchingServiceClient, error)
 		NewFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (workflowservice.WorkflowServiceClient, error)
 		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) (adminservice.AdminServiceClient, error)
 	}
@@ -96,7 +96,7 @@ func (cf *rpcClientFactory) NewHistoryClient() (historyservice.HistoryServiceCli
 	return cf.NewHistoryClientWithTimeout(history.DefaultTimeout)
 }
 
-func (cf *rpcClientFactory) NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error) {
+func (cf *rpcClientFactory) NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error) {
 	return cf.NewMatchingClientWithTimeout(namespaceIDToName, matching.DefaultTimeout, matching.DefaultLongPollTimeout)
 }
 
@@ -134,7 +134,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	namespaceIDToName NamespaceIDToNameFunc,
 	timeout time.Duration,
 	longPollTimeout time.Duration,
-) (matching.Client, error) {
+) (matchingservice.MatchingServiceClient, error) {
 	resolver, err := cf.monitor.GetResolver(common.MatchingServiceName)
 	if err != nil {
 		return nil, err

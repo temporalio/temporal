@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
@@ -75,7 +74,7 @@ type (
 	matchingEngineImpl struct {
 		taskManager          persistence.TaskManager
 		historyService       historyservice.HistoryServiceClient
-		matchingClient       matching.Client
+		matchingClient       matchingservice.MatchingServiceClient
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
 		metricsClient        metrics.Client
@@ -109,7 +108,7 @@ var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed im
 // NewEngine creates an instance of matching engine
 func NewEngine(taskManager persistence.TaskManager,
 	historyService historyservice.HistoryServiceClient,
-	matchingClient matching.Client,
+	matchingClient matchingservice.MatchingServiceClient,
 	config *Config,
 	logger log.Logger,
 	metricsClient metrics.Client,

@@ -29,8 +29,8 @@ import (
 
 	"github.com/pborman/uuid"
 
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -55,7 +55,7 @@ type (
 func newTimerQueueActiveProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
-	matchingClient matching.Client,
+	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
@@ -149,7 +149,7 @@ func newTimerQueueFailoverProcessor(
 	standbyClusterName string,
 	minLevel time.Time,
 	maxLevel time.Time,
-	matchingClient matching.Client,
+	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,

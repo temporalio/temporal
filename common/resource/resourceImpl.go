@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
@@ -104,8 +105,8 @@ type (
 		sdkClient         sdkclient.Client
 		frontendRawClient workflowservice.WorkflowServiceClient
 		frontendClient    workflowservice.WorkflowServiceClient
-		matchingRawClient matching.Client
-		matchingClient    matching.Client
+		matchingRawClient matchingservice.MatchingServiceClient
+		matchingClient    matchingservice.MatchingServiceClient
 		historyRawClient  historyservice.HistoryServiceClient
 		historyClient     historyservice.HistoryServiceClient
 		clientBean        client.Bean
@@ -508,12 +509,12 @@ func (h *Impl) GetFrontendClient() workflowservice.WorkflowServiceClient {
 }
 
 // GetMatchingRawClient return matching client without retry policy
-func (h *Impl) GetMatchingRawClient() matching.Client {
+func (h *Impl) GetMatchingRawClient() matchingservice.MatchingServiceClient {
 	return h.matchingRawClient
 }
 
 // GetMatchingClient return matching client with retry policy
-func (h *Impl) GetMatchingClient() matching.Client {
+func (h *Impl) GetMatchingClient() matchingservice.MatchingServiceClient {
 	return h.matchingClient
 }
 

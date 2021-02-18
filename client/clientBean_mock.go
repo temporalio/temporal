@@ -36,7 +36,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	matching "go.temporal.io/server/client/matching"
+	"go.temporal.io/server/api/matchingservice/v1"
 )
 
 // MockBean is a mock of Bean interface.
@@ -91,10 +91,10 @@ func (mr *MockBeanMockRecorder) GetHistoryClient() *gomock.Call {
 }
 
 // GetMatchingClient mocks base method.
-func (m *MockBean) GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error) {
+func (m *MockBean) GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMatchingClient", namespaceIDToName)
-	ret0, _ := ret[0].(matching.Client)
+	ret0, _ := ret[0].(matchingservice.MatchingServiceClient)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -158,7 +158,7 @@ func (mr *MockBeanMockRecorder) SetHistoryClient(client interface{}) *gomock.Cal
 }
 
 // SetMatchingClient mocks base method.
-func (m *MockBean) SetMatchingClient(client matching.Client) {
+func (m *MockBean) SetMatchingClient(client matchingservice.MatchingServiceClient) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetMatchingClient", client)
 }

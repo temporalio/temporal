@@ -32,8 +32,8 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -83,8 +83,8 @@ type (
 		GetSDKClient() sdkclient.Client
 		GetFrontendRawClient() workflowservice.WorkflowServiceClient
 		GetFrontendClient() workflowservice.WorkflowServiceClient
-		GetMatchingRawClient() matching.Client
-		GetMatchingClient() matching.Client
+		GetMatchingRawClient() matchingservice.MatchingServiceClient
+		GetMatchingClient() matchingservice.MatchingServiceClient
 		GetHistoryRawClient() historyservice.HistoryServiceClient
 		GetHistoryClient() historyservice.HistoryServiceClient
 		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient

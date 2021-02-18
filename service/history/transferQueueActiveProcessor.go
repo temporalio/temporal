@@ -28,8 +28,8 @@ import (
 	"github.com/pborman/uuid"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -59,7 +59,7 @@ func newTransferQueueActiveProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager,
-	matchingClient matching.Client,
+	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	taskAllocator taskAllocator,
 	queueTaskProcessor queueTaskProcessor,
@@ -175,7 +175,7 @@ func newTransferQueueFailoverProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager,
-	matchingClient matching.Client,
+	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	namespaceIDs map[string]struct{},
 	standbyClusterName string,
