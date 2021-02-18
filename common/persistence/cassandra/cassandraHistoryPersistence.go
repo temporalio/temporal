@@ -116,31 +116,32 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 		}
 	}
 
-	var err error
-	if request.IsNewBranch {
-		h.sortAncestors(branchInfo.Ancestors)
-		treeInfoDataBlob, err := serialization.HistoryTreeInfoToBlob(&persistenceblobs.HistoryTreeInfo{
-			BranchInfo: branchInfo,
-			ForkTime:   timestamp.TimeNowPtrUtc(),
-			Info:       request.Info,
-		})
-
+	if !request.IsNewBranch {
+		query := h.session.Query(v2templateUpsertData,
+			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding.String())
+		err := query.Exec()
 		if err != nil {
 			return convertCommonErrors("AppendHistoryNodes", err)
 		}
-
-		batch := h.session.NewBatch(gocql.LoggedBatch)
-		batch.Query(v2templateInsertTree,
-			branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.Encoding.String())
-		batch.Query(v2templateUpsertData,
-			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding.String())
-		err = h.session.ExecuteBatch(batch)
-	} else {
-		query := h.session.Query(v2templateUpsertData,
-			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding.String())
-		err = query.Exec()
+		return nil
 	}
 
+	h.sortAncestors(branchInfo.Ancestors)
+	treeInfoDataBlob, err := serialization.HistoryTreeInfoToBlob(&persistenceblobs.HistoryTreeInfo{
+		BranchInfo: branchInfo,
+		ForkTime:   timestamp.TimeNowPtrUtc(),
+		Info:       request.Info,
+	})
+	if err != nil {
+		return convertCommonErrors("AppendHistoryNodes", err)
+	}
+
+	batch := h.session.NewBatch(gocql.LoggedBatch)
+	batch.Query(v2templateInsertTree,
+		branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.Encoding.String())
+	batch.Query(v2templateUpsertData,
+		branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding.String())
+	err = h.session.ExecuteBatch(batch)
 	if err != nil {
 		return convertCommonErrors("AppendHistoryNodes", err)
 	}
