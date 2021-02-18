@@ -32,11 +32,10 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	"go.temporal.io/api/workflowservice/v1"
-
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
+	v1 "go.temporal.io/api/workflowservice/v1"
+	v10 "go.temporal.io/server/api/adminservice/v1"
+	v11 "go.temporal.io/server/api/historyservice/v1"
+	v12 "go.temporal.io/server/api/matchingservice/v1"
 )
 
 // MockBean is a mock of Bean interface.
@@ -63,10 +62,10 @@ func (m *MockBean) EXPECT() *MockBeanMockRecorder {
 }
 
 // GetFrontendClient mocks base method.
-func (m *MockBean) GetFrontendClient() workflowservice.WorkflowServiceClient {
+func (m *MockBean) GetFrontendClient() v1.WorkflowServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFrontendClient")
-	ret0, _ := ret[0].(workflowservice.WorkflowServiceClient)
+	ret0, _ := ret[0].(v1.WorkflowServiceClient)
 	return ret0
 }
 
@@ -77,10 +76,10 @@ func (mr *MockBeanMockRecorder) GetFrontendClient() *gomock.Call {
 }
 
 // GetHistoryClient mocks base method.
-func (m *MockBean) GetHistoryClient() historyservice.HistoryServiceClient {
+func (m *MockBean) GetHistoryClient() v11.HistoryServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetHistoryClient")
-	ret0, _ := ret[0].(historyservice.HistoryServiceClient)
+	ret0, _ := ret[0].(v11.HistoryServiceClient)
 	return ret0
 }
 
@@ -91,10 +90,10 @@ func (mr *MockBeanMockRecorder) GetHistoryClient() *gomock.Call {
 }
 
 // GetMatchingClient mocks base method.
-func (m *MockBean) GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error) {
+func (m *MockBean) GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (v12.MatchingServiceClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMatchingClient", namespaceIDToName)
-	ret0, _ := ret[0].(matchingservice.MatchingServiceClient)
+	ret0, _ := ret[0].(v12.MatchingServiceClient)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -106,10 +105,10 @@ func (mr *MockBeanMockRecorder) GetMatchingClient(namespaceIDToName interface{})
 }
 
 // GetRemoteAdminClient mocks base method.
-func (m *MockBean) GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient {
+func (m *MockBean) GetRemoteAdminClient(cluster string) v10.AdminServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRemoteAdminClient", cluster)
-	ret0, _ := ret[0].(adminservice.AdminServiceClient)
+	ret0, _ := ret[0].(v10.AdminServiceClient)
 	return ret0
 }
 
@@ -120,10 +119,10 @@ func (mr *MockBeanMockRecorder) GetRemoteAdminClient(cluster interface{}) *gomoc
 }
 
 // GetRemoteFrontendClient mocks base method.
-func (m *MockBean) GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient {
+func (m *MockBean) GetRemoteFrontendClient(cluster string) v1.WorkflowServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRemoteFrontendClient", cluster)
-	ret0, _ := ret[0].(workflowservice.WorkflowServiceClient)
+	ret0, _ := ret[0].(v1.WorkflowServiceClient)
 	return ret0
 }
 
@@ -134,7 +133,7 @@ func (mr *MockBeanMockRecorder) GetRemoteFrontendClient(cluster interface{}) *go
 }
 
 // SetFrontendClient mocks base method.
-func (m *MockBean) SetFrontendClient(client workflowservice.WorkflowServiceClient) {
+func (m *MockBean) SetFrontendClient(client v1.WorkflowServiceClient) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetFrontendClient", client)
 }
@@ -146,7 +145,7 @@ func (mr *MockBeanMockRecorder) SetFrontendClient(client interface{}) *gomock.Ca
 }
 
 // SetHistoryClient mocks base method.
-func (m *MockBean) SetHistoryClient(client historyservice.HistoryServiceClient) {
+func (m *MockBean) SetHistoryClient(client v11.HistoryServiceClient) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetHistoryClient", client)
 }
@@ -158,7 +157,7 @@ func (mr *MockBeanMockRecorder) SetHistoryClient(client interface{}) *gomock.Cal
 }
 
 // SetMatchingClient mocks base method.
-func (m *MockBean) SetMatchingClient(client matchingservice.MatchingServiceClient) {
+func (m *MockBean) SetMatchingClient(client v12.MatchingServiceClient) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetMatchingClient", client)
 }
@@ -170,7 +169,7 @@ func (mr *MockBeanMockRecorder) SetMatchingClient(client interface{}) *gomock.Ca
 }
 
 // SetRemoteAdminClient mocks base method.
-func (m *MockBean) SetRemoteAdminClient(cluster string, client adminservice.AdminServiceClient) {
+func (m *MockBean) SetRemoteAdminClient(cluster string, client v10.AdminServiceClient) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetRemoteAdminClient", cluster, client)
 }
@@ -182,7 +181,7 @@ func (mr *MockBeanMockRecorder) SetRemoteAdminClient(cluster, client interface{}
 }
 
 // SetRemoteFrontendClient mocks base method.
-func (m *MockBean) SetRemoteFrontendClient(cluster string, client workflowservice.WorkflowServiceClient) {
+func (m *MockBean) SetRemoteFrontendClient(cluster string, client v1.WorkflowServiceClient) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetRemoteFrontendClient", cluster, client)
 }
