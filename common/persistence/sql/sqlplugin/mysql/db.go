@@ -26,16 +26,21 @@ package mysql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 
+	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	mysqlschema "go.temporal.io/server/schema/mysql"
 )
 
 // db represents a logical connection to mysql database
 type db struct {
+	dbKind sqlplugin.DbKind
+	dbName string
+
 	db        *sqlx.DB
 	tx        *sqlx.Tx
 	conn      sqlplugin.Conn
@@ -57,8 +62,18 @@ func (mdb *db) IsDupEntryError(err error) bool {
 
 // newDB returns an instance of DB, which is a logical
 // connection to the underlying mysql database
-func newDB(xdb *sqlx.DB, tx *sqlx.Tx) *db {
-	mdb := &db{db: xdb, tx: tx}
+func newDB(
+	dbKind sqlplugin.DbKind,
+	dbName string,
+	xdb *sqlx.DB,
+	tx *sqlx.Tx,
+) *db {
+	mdb := &db{
+		dbKind: dbKind,
+		dbName: dbName,
+		db:     xdb,
+		tx:     tx,
+	}
 	mdb.conn = xdb
 	if tx != nil {
 		mdb.conn = tx
@@ -73,7 +88,7 @@ func (mdb *db) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newDB(mdb.db, xtx), nil
+	return newDB(mdb.dbKind, mdb.dbName, mdb.db, xtx), nil
 }
 
 // Commit commits a previously started transaction
@@ -97,13 +112,19 @@ func (mdb *db) PluginName() string {
 }
 
 // ExpectedVersion returns expected version.
-func (mdb *db) ExpectedVersion(dbKind sqlplugin.DbKind) string {
-	switch dbKind {
+func (mdb *db) ExpectedVersion() string {
+	switch mdb.dbKind {
 	case sqlplugin.DbKindMain:
 		return mysqlschema.Version
 	case sqlplugin.DbKindVisibility:
 		return mysqlschema.VisibilityVersion
 	default:
-		return ""
+		panic(fmt.Sprintf("unknown db kind %v", mdb.dbKind))
 	}
+}
+
+// VerifyVersion verify schema version is up to date
+func (mdb *db) VerifyVersion() error {
+	expectedVersion := mdb.ExpectedVersion()
+	return schema.VerifyCompatibleVersion(mdb, mdb.dbName, expectedVersion)
 }

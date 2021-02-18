@@ -29,6 +29,8 @@ import (
 	"fmt"
 	"sync"
 
+	"golang.org/x/sync/errgroup"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
@@ -38,7 +40,6 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
-	"golang.org/x/sync/errgroup"
 )
 
 type (

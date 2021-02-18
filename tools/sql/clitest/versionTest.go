@@ -27,15 +27,15 @@ package clitest
 import (
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"os"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
+	persistencesql "go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/tools/sql"
@@ -133,25 +133,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		},
 		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
 	}
-	s.NoError(sql.VerifyCompatibleVersion(cfg))
-}
-
-// TestCheckCompatibleVersion test
-func (s *VersionTestSuite) TestCheckCompatibleVersion() {
-	flags := []struct {
-		expectedVersion string
-		actualVersion   string
-		errStr          string
-		expectedFail    bool
-	}{
-		{"2.0", "1.0", "version mismatch", false},
-		{"1.0", "1.0", "", false},
-		{"1.0", "2.0", "", false},
-		{"1.0", "abc", "unable to read DB schema version", false},
-	}
-	for _, flag := range flags {
-		s.runCheckCompatibleVersion(flag.expectedVersion, flag.actualVersion, flag.errStr, flag.expectedFail)
-	}
+	s.NoError(persistencesql.VerifyCompatibleVersion(cfg, resolver.NewNoopResolver()))
 }
 
 func (s *VersionTestSuite) createDatabase(database string) func() {
@@ -164,62 +146,6 @@ func (s *VersionTestSuite) createDatabase(database string) func() {
 		connection.Close()
 	}
 }
-
-func (s *VersionTestSuite) runCheckCompatibleVersion(
-	expected string, actual string, errStr string, expectedFail bool,
-) {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	database := fmt.Sprintf("version_test_%v", r.Int63())
-	defer s.createDatabase(database)()
-
-	dir := "check_version"
-	tmpDir, err := ioutil.TempDir("", dir)
-	s.NoError(err)
-	defer os.RemoveAll(tmpDir)
-
-	subdir := tmpDir + "/" + database
-	s.NoError(os.Mkdir(subdir, os.FileMode(0744)))
-
-	s.createSchemaForVersion(subdir, actual)
-	if expected != actual {
-		s.createSchemaForVersion(subdir, expected)
-	}
-
-	sqlFile := subdir + "/v" + actual + "/tmp.sql"
-	s.NoError(sql.RunTool([]string{
-		"./tool",
-		"-ep", s.host,
-		"-p", s.port,
-		"-u", testUser,
-		"-pw", testPassword,
-		"-db", database,
-		"-pl", s.pluginName,
-		"-q",
-		"setup-schema",
-		"-f", sqlFile,
-		"-version", actual,
-		"-o",
-	}))
-	if expectedFail {
-		os.RemoveAll(subdir + "/v" + actual)
-	}
-
-	cfg := config.SQL{
-		ConnectAddr:  fmt.Sprintf("%v:%v", s.host, s.port),
-		User:         testUser,
-		Password:     testPassword,
-		PluginName:   s.pluginName,
-		DatabaseName: database,
-	}
-	err = sql.CheckCompatibleVersion(cfg, expected)
-	if len(errStr) > 0 {
-		s.Error(err)
-		s.Contains(err.Error(), errStr)
-	} else {
-		s.NoError(err)
-	}
-}
-
 func (s *VersionTestSuite) createSchemaForVersion(subdir string, v string) {
 	vDir := subdir + "/v" + v
 	s.NoError(os.Mkdir(vDir, os.FileMode(0744)))
