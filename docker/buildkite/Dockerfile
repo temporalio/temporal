@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       time \
       protobuf-compiler \
       && rm -rf /var/lib/apt/lists/* \
-      && curl https://bootstrap.pypa.io/get-pip.py | python \
+      && curl https://bootstrap.pypa.io/2.7/get-pip.py | python \
       && pip install PyYAML==3.13 \
       && go get -u github.com/axw/gocov/gocov \
       && go get -u github.com/mattn/goveralls \
