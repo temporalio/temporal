@@ -6,7 +6,7 @@ services:
     ports:
       - "9042:9042"
   temporal:
-    image: temporalio/auto-setup:${SERVER_TAG:-1.0.0}
+    image: temporalio/auto-setup:${SERVER_TAG:-1.0.1}
     ports:
       - "7233:7233"
     volumes:
@@ -17,7 +17,7 @@ services:
     depends_on:
       - cassandra
   temporal-admin-tools:
-    image: temporalio/admin-tools:${SERVER_TAG:-1.0.0}
+    image: temporalio/admin-tools:${SERVER_TAG:-1.0.1}
     stdin_open: true
     tty: true
     environment:
