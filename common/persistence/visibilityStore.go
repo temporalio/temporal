@@ -238,11 +238,11 @@ func (v *visibilityManagerImpl) convertInternalGetResponse(internalResp *Interna
 	}
 
 	resp := &GetClosedWorkflowExecutionResponse{}
-	validSearchAttributes, err := searchattribute.GetTypeMap(v.validSearchAttributes)
+	saTypeMap, err := searchattribute.GetTypeMap(v.validSearchAttributes)
 	if err != nil {
 		v.logger.Error("Unable to build valid search attributes map", tag.Error(err))
 	}
-	resp.Execution = v.convertVisibilityWorkflowExecutionInfo(internalResp.Execution, validSearchAttributes)
+	resp.Execution = v.convertVisibilityWorkflowExecutionInfo(internalResp.Execution, saTypeMap)
 	return resp
 }
 
@@ -253,19 +253,19 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 
 	resp := &ListWorkflowExecutionsResponse{}
 	resp.Executions = make([]*workflowpb.WorkflowExecutionInfo, len(internalResp.Executions))
-	validSearchAttributes, err := searchattribute.GetTypeMap(v.validSearchAttributes)
+	saTypeMap, err := searchattribute.GetTypeMap(v.validSearchAttributes)
 	if err != nil {
 		v.logger.Error("Unable to build valid search attributes map", tag.Error(err))
 	}
 	for i, execution := range internalResp.Executions {
-		resp.Executions[i] = v.convertVisibilityWorkflowExecutionInfo(execution, validSearchAttributes)
+		resp.Executions[i] = v.convertVisibilityWorkflowExecutionInfo(execution, saTypeMap)
 	}
 
 	resp.NextPageToken = internalResp.NextPageToken
 	return resp
 }
 
-func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo, validSearchAttributes map[string]enumspb.IndexedValueType) *workflowpb.WorkflowExecutionInfo {
+func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo, saTypeMap map[string]enumspb.IndexedValueType) *workflowpb.WorkflowExecutionInfo {
 	// special handling of ExecutionTime for cron or retry
 	if execution.ExecutionTime.UnixNano() == 0 {
 		execution.ExecutionTime = execution.StartTime
@@ -278,7 +278,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 			tag.WorkflowRunID(execution.RunID),
 			tag.Error(err))
 	}
-	searchAttributes, err := searchattribute.Encode(execution.SearchAttributes, validSearchAttributes)
+	searchAttributes, err := searchattribute.Encode(execution.SearchAttributes, saTypeMap)
 	if err != nil {
 		v.logger.Error("failed to encode search attributes",
 			tag.WorkflowID(execution.WorkflowID),

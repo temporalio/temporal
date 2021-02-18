@@ -151,7 +151,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		return errArchiveVisibilityNonRetryable
 	}
 
-	// Search attributes type must be embedded by caller.
+	// It is safe to pass nil to typeMap here because search attributes type must be embedded by caller.
 	searchAttributes, err := searchattribute.Stringify(request.SearchAttributes, nil)
 	if err != nil {
 		logger.Error("Unable to stringify search attributes.", tag.Error(err))

@@ -262,8 +262,8 @@ func contextExpired(ctx context.Context) bool {
 	}
 }
 
-func convertToExecutionInfo(record *archiverspb.VisibilityRecord, validSearchAttributes map[string]enumspb.IndexedValueType) (*workflowpb.WorkflowExecutionInfo, error) {
-	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, validSearchAttributes)
+func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap map[string]enumspb.IndexedValueType) (*workflowpb.WorkflowExecutionInfo, error) {
+	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, saTypeMap)
 	if err != nil {
 		return nil, err
 	}

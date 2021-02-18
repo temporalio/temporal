@@ -145,7 +145,7 @@ func (v *visibilityArchiver) Query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *archiver.QueryVisibilityRequest,
-	validSearchAttributes map[string]enumspb.IndexedValueType,
+	saTypeMap map[string]enumspb.IndexedValueType,
 ) (*archiver.QueryVisibilityResponse, error) {
 	if err := v.ValidateURI(URI); err != nil {
 		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidURI.Error())
@@ -173,7 +173,7 @@ func (v *visibilityArchiver) Query(
 			nextPageToken: request.NextPageToken,
 			parsedQuery:   parsedQuery,
 		},
-		validSearchAttributes,
+		saTypeMap,
 	)
 }
 
@@ -181,7 +181,7 @@ func (v *visibilityArchiver) query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *queryVisibilityRequest,
-	validSearchAttributes map[string]enumspb.IndexedValueType,
+	saTypeMap map[string]enumspb.IndexedValueType,
 ) (*archiver.QueryVisibilityResponse, error) {
 	var token *queryVisibilityToken
 	if request.nextPageToken != nil {
@@ -231,7 +231,7 @@ func (v *visibilityArchiver) query(
 		}
 
 		if matchQuery(record, request.parsedQuery) {
-			executionInfo, err := convertToExecutionInfo(record, validSearchAttributes)
+			executionInfo, err := convertToExecutionInfo(record, saTypeMap)
 			if err != nil {
 				return nil, serviceerror.NewInternal(err.Error())
 			}
@@ -342,8 +342,8 @@ func matchQuery(record *archiverspb.VisibilityRecord, query *parsedQuery) bool {
 	return true
 }
 
-func convertToExecutionInfo(record *archiverspb.VisibilityRecord, validSearchAttributes map[string]enumspb.IndexedValueType) (*workflowpb.WorkflowExecutionInfo, error) {
-	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, validSearchAttributes)
+func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap map[string]enumspb.IndexedValueType) (*workflowpb.WorkflowExecutionInfo, error) {
+	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, saTypeMap)
 	if err != nil {
 		return nil, err
 	}

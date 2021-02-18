@@ -182,13 +182,13 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 		req.AttemptArchiveInline = true
 	}
 
-	validSearAttributes, err := searchattribute.GetTypeMap(t.config.ValidSearchAttributes)
+	saTypeMap, err := searchattribute.GetTypeMap(t.config.ValidSearchAttributes)
 	if err != nil {
 		return err
 	}
 	// Setting search attributes types here because archival client needs to stringify them
-	// and it might not have access to valid search attributes (i.e. type needs to be embedded).
-	searchattribute.ApplyTypeMap(req.ArchiveRequest.SearchAttributes, validSearAttributes)
+	// and it might not have access to typeMap (i.e. type needs to be embedded).
+	searchattribute.ApplyTypeMap(req.ArchiveRequest.SearchAttributes, saTypeMap)
 
 	ctx, cancel := context.WithTimeout(context.Background(), t.config.TimerProcessorArchivalTimeLimit())
 	defer cancel()

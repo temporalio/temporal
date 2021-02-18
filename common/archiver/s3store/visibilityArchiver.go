@@ -167,7 +167,7 @@ func (v *visibilityArchiver) Query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *archiver.QueryVisibilityRequest,
-	validSearchAttributes map[string]enumspb.IndexedValueType,
+	saTypeMap map[string]enumspb.IndexedValueType,
 ) (*archiver.QueryVisibilityResponse, error) {
 
 	if err := softValidateURI(URI); err != nil {
@@ -192,7 +192,7 @@ func (v *visibilityArchiver) Query(
 			nextPageToken: request.NextPageToken,
 			parsedQuery:   parsedQuery,
 		},
-		validSearchAttributes,
+		saTypeMap,
 	)
 }
 
@@ -200,7 +200,7 @@ func (v *visibilityArchiver) query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *queryVisibilityRequest,
-	validSearchAttributes map[string]enumspb.IndexedValueType,
+	saTypeMap map[string]enumspb.IndexedValueType,
 ) (*archiver.QueryVisibilityResponse, error) {
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()
@@ -252,7 +252,7 @@ func (v *visibilityArchiver) query(
 		if err != nil {
 			return nil, serviceerror.NewInternal(err.Error())
 		}
-		executionInfo, err := convertToExecutionInfo(record, validSearchAttributes)
+		executionInfo, err := convertToExecutionInfo(record, saTypeMap)
 		if err != nil {
 			return nil, serviceerror.NewInternal(err.Error())
 		}
