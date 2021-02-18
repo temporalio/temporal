@@ -85,19 +85,13 @@ const (
 func newCommandAttrValidator(
 	namespaceCache cache.NamespaceCache,
 	config *configs.Config,
-	logger log.Logger,
+	searchAttributesValidator *validator.SearchAttributesValidator,
 ) *commandAttrValidator {
 	return &commandAttrValidator{
-		namespaceCache:   namespaceCache,
-		config:           config,
-		maxIDLengthLimit: config.MaxIDLengthLimit(),
-		searchAttributesValidator: validator.NewSearchAttributesValidator(
-			logger,
-			config.ValidSearchAttributes,
-			config.SearchAttributesNumberOfKeysLimit,
-			config.SearchAttributesSizeOfValueLimit,
-			config.SearchAttributesTotalSizeLimit,
-		),
+		namespaceCache:                  namespaceCache,
+		config:                          config,
+		maxIDLengthLimit:                config.MaxIDLengthLimit(),
+		searchAttributesValidator:       searchAttributesValidator,
 		getDefaultActivityRetrySettings: config.DefaultActivityRetryPolicy,
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 	}
@@ -569,6 +563,10 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	}
 
 	if err := backoff.ValidateSchedule(attributes.GetCronSchedule()); err != nil {
+		return err
+	}
+
+	if err := v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), targetNamespace); err != nil {
 		return err
 	}
 
