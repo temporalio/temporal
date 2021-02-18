@@ -195,10 +195,9 @@ func validateCQLClientConfig(config *CQLClientConfig, isDryRun bool) error {
 	if len(config.Hosts) == 0 {
 		return schema.NewConfigError("missing cassandra endpoint argument " + flag(schema.CLIOptEndpoint))
 	}
-	if config.Keyspace == "" {
-		if !isDryRun {
-			return schema.NewConfigError("missing " + flag(schema.CLIOptKeyspace) + " argument ")
-		}
+	if config.Keyspace == "" && !isDryRun {
+		return schema.NewConfigError("missing " + flag(schema.CLIOptKeyspace) + " argument ")
+	} else if isDryRun {
 		config.Keyspace = schema.DryrunDBName
 	}
 	if config.Port == 0 {
