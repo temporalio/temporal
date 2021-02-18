@@ -34,9 +34,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
-	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common/cluster"
 )
@@ -44,8 +44,8 @@ import (
 type (
 	// Bean in an collection of clients
 	Bean interface {
-		GetHistoryClient() history.Client
-		SetHistoryClient(client history.Client)
+		GetHistoryClient() historyservice.HistoryServiceClient
+		SetHistoryClient(client historyservice.HistoryServiceClient)
 		GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error)
 		SetMatchingClient(client matching.Client)
 		GetFrontendClient() workflowservice.WorkflowServiceClient
@@ -59,7 +59,7 @@ type (
 	clientBeanImpl struct {
 		sync.Mutex
 		currentCluster        string
-		historyClient         history.Client
+		historyClient         historyservice.HistoryServiceClient
 		matchingClient        atomic.Value
 		remoteAdminClients    map[string]adminservice.AdminServiceClient
 		remoteFrontendClients map[string]workflowservice.WorkflowServiceClient
@@ -114,12 +114,12 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 	}, nil
 }
 
-func (h *clientBeanImpl) GetHistoryClient() history.Client {
+func (h *clientBeanImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return h.historyClient
 }
 
 func (h *clientBeanImpl) SetHistoryClient(
-	client history.Client,
+	client historyservice.HistoryServiceClient,
 ) {
 	h.historyClient = client
 }

@@ -50,11 +50,11 @@ const (
 type (
 	// Factory can be used to create RPC clients for temporal services
 	Factory interface {
-		NewHistoryClient() (history.Client, error)
+		NewHistoryClient() (historyservice.HistoryServiceClient, error)
 		NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error)
 		NewFrontendClient(rpcAddress string) (workflowservice.WorkflowServiceClient, error)
 
-		NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error)
+		NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error)
 		NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
 		NewFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (workflowservice.WorkflowServiceClient, error)
 		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) (adminservice.AdminServiceClient, error)
@@ -92,7 +92,7 @@ func NewRPCClientFactory(
 	}
 }
 
-func (cf *rpcClientFactory) NewHistoryClient() (history.Client, error) {
+func (cf *rpcClientFactory) NewHistoryClient() (historyservice.HistoryServiceClient, error) {
 	return cf.NewHistoryClientWithTimeout(history.DefaultTimeout)
 }
 
@@ -104,7 +104,7 @@ func (cf *rpcClientFactory) NewFrontendClient(rpcAddress string) (workflowservic
 	return cf.NewFrontendClientWithTimeout(rpcAddress, frontend.DefaultTimeout, frontend.DefaultLongPollTimeout)
 }
 
-func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error) {
+func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error) {
 	resolver, err := cf.monitor.GetResolver(common.HistoryServiceName)
 	if err != nil {
 		return nil, err

@@ -33,16 +33,16 @@ import (
 	"go.temporal.io/server/common/backoff"
 )
 
-var _ Client = (*retryableClient)(nil)
+var _ historyservice.HistoryServiceClient = (*retryableClient)(nil)
 
 type retryableClient struct {
-	client      Client
+	client      historyservice.HistoryServiceClient
 	policy      backoff.RetryPolicy
 	isRetryable backoff.IsRetryable
 }
 
-// NewRetryableClient creates a new instance of Client with retry policy
-func NewRetryableClient(client Client, policy backoff.RetryPolicy, isRetryable backoff.IsRetryable) Client {
+// NewRetryableClient creates a new instance of historyservice.HistoryServiceClient with retry policy
+func NewRetryableClient(client historyservice.HistoryServiceClient, policy backoff.RetryPolicy, isRetryable backoff.IsRetryable) historyservice.HistoryServiceClient {
 	return &retryableClient{
 		client:      client,
 		policy:      policy,

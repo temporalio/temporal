@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
-	history "go.temporal.io/server/client/history"
+	"go.temporal.io/server/api/historyservice/v1"
 	matching "go.temporal.io/server/client/matching"
 )
 
@@ -77,10 +77,10 @@ func (mr *MockBeanMockRecorder) GetFrontendClient() *gomock.Call {
 }
 
 // GetHistoryClient mocks base method.
-func (m *MockBean) GetHistoryClient() history.Client {
+func (m *MockBean) GetHistoryClient() historyservice.HistoryServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetHistoryClient")
-	ret0, _ := ret[0].(history.Client)
+	ret0, _ := ret[0].(historyservice.HistoryServiceClient)
 	return ret0
 }
 
@@ -146,7 +146,7 @@ func (mr *MockBeanMockRecorder) SetFrontendClient(client interface{}) *gomock.Ca
 }
 
 // SetHistoryClient mocks base method.
-func (m *MockBean) SetHistoryClient(client history.Client) {
+func (m *MockBean) SetHistoryClient(client historyservice.HistoryServiceClient) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetHistoryClient", client)
 }

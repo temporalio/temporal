@@ -41,7 +41,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
-var _ Client = (*clientImpl)(nil)
+var _ historyservice.HistoryServiceClient = (*clientImpl)(nil)
 
 const (
 	// DefaultTimeout is the default timeout used to make calls
@@ -62,7 +62,7 @@ func NewClient(
 	timeout time.Duration,
 	clients common.ClientCache,
 	logger log.Logger,
-) Client {
+) historyservice.HistoryServiceClient {
 	return &clientImpl{
 		numberOfShards:  numberOfShards,
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),

@@ -35,8 +35,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -59,7 +59,7 @@ type (
 		matchingClient          matching.Client
 		visibilityMgr           persistence.VisibilityManager
 		config                  *configs.Config
-		historyClient           history.Client
+		historyClient           historyservice.HistoryServiceClient
 		parentClosePolicyClient parentclosepolicy.Client
 	}
 )

@@ -30,7 +30,7 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
@@ -71,7 +71,7 @@ type (
 		historyService     *historyEngineImpl
 		visibilityMgr      persistence.VisibilityManager
 		matchingClient     matching.Client
-		historyClient      history.Client
+		historyClient      historyservice.HistoryServiceClient
 		ackLevel           int64
 		queueTaskProcessor queueTaskProcessor
 
@@ -86,7 +86,7 @@ func newVisibilityQueueProcessor(
 	historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,
-	historyClient history.Client,
+	historyClient historyservice.HistoryServiceClient,
 	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) *visibilityQueueProcessorImpl {

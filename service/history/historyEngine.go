@@ -175,7 +175,7 @@ func NewEngineWithShardContext(
 	shard shard.Context,
 	visibilityMgr persistence.VisibilityManager,
 	matching matching.Client,
-	historyClient history.Client,
+	historyClient historyservice.HistoryServiceClient,
 	publicClient sdkclient.Client,
 	eventNotifier events.Notifier,
 	config *configs.Config,
