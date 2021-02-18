@@ -37,15 +37,16 @@ type (
 )
 
 const (
-	DbKindMain DbKind = iota
+	DbKindUnknown DbKind = iota
+	DbKindMain
 	DbKindVisibility
 )
 
 type (
 	// Plugin defines the interface for any SQL database that needs to implement
 	Plugin interface {
-		CreateDB(cfg *config.SQL, r resolver.ServiceResolver) (DB, error)
-		CreateAdminDB(cfg *config.SQL, r resolver.ServiceResolver) (AdminDB, error)
+		CreateDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver) (DB, error)
+		CreateAdminDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver) (AdminDB, error)
 	}
 
 	// TableCRUD defines the API for interacting with the database tables
@@ -115,7 +116,8 @@ type (
 	AdminDB interface {
 		AdminCRUD
 		PluginName() string
-		ExpectedVersion(dbKind DbKind) string
+		ExpectedVersion() string
+		VerifyVersion() error
 		Close() error
 	}
 

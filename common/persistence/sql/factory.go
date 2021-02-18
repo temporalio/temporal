@@ -45,21 +45,25 @@ const (
 type (
 	// Factory vends store objects backed by MySQL
 	Factory struct {
-		cfg         config.SQL
-		dbConn      dbConn
-		clusterName string
-		logger      log.Logger
+		cfg              config.SQL
+		mainDBConn       dbConn
+		visibilityDBConn dbConn
+		clusterName      string
+		logger           log.Logger
 	}
 
 	// dbConn represents a logical mysql connection - its a
 	// wrapper around the standard sql connection pool with
 	// additional reference counting
 	dbConn struct {
-		sync.Mutex
-		sqlplugin.DB
-		refCnt   int
+		dbKind   sqlplugin.DbKind
 		cfg      *config.SQL
 		resolver resolver.ServiceResolver
+
+		sqlplugin.DB
+
+		sync.Mutex
+		refCnt int
 	}
 )
 
@@ -72,16 +76,17 @@ func NewFactory(
 	logger log.Logger,
 ) *Factory {
 	return &Factory{
-		cfg:         cfg,
-		clusterName: clusterName,
-		logger:      logger,
-		dbConn:      newRefCountedDBConn(&cfg, r),
+		cfg:              cfg,
+		clusterName:      clusterName,
+		logger:           logger,
+		mainDBConn:       newRefCountedDBConn(sqlplugin.DbKindMain, &cfg, r),
+		visibilityDBConn: newRefCountedDBConn(sqlplugin.DbKindVisibility, &cfg, r),
 	}
 }
 
 // NewTaskStore returns a new task store
 func (f *Factory) NewTaskStore() (p.TaskStore, error) {
-	conn, err := f.dbConn.get()
+	conn, err := f.mainDBConn.get()
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +95,7 @@ func (f *Factory) NewTaskStore() (p.TaskStore, error) {
 
 // NewShardStore returns a new shard store
 func (f *Factory) NewShardStore() (p.ShardStore, error) {
-	conn, err := f.dbConn.get()
+	conn, err := f.mainDBConn.get()
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +104,7 @@ func (f *Factory) NewShardStore() (p.ShardStore, error) {
 
 // NewHistoryStore returns a new history store
 func (f *Factory) NewHistoryStore() (p.HistoryStore, error) {
-	conn, err := f.dbConn.get()
+	conn, err := f.mainDBConn.get()
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +113,7 @@ func (f *Factory) NewHistoryStore() (p.HistoryStore, error) {
 
 // NewMetadataStore returns a new metadata store
 func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
-	conn, err := f.dbConn.get()
+	conn, err := f.mainDBConn.get()
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +122,7 @@ func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
 
 // NewClusterMetadataStore returns a new ClusterMetadata store
 func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
-	conn, err := f.dbConn.get()
+	conn, err := f.mainDBConn.get()
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +131,7 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 
 // NewExecutionStore returns an ExecutionStore for a given shardID
 func (f *Factory) NewExecutionStore(shardID int32) (p.ExecutionStore, error) {
-	conn, err := f.dbConn.get()
+	conn, err := f.mainDBConn.get()
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +140,7 @@ func (f *Factory) NewExecutionStore(shardID int32) (p.ExecutionStore, error) {
 
 // NewVisibilityStore returns a visibility store
 func (f *Factory) NewVisibilityStore() (p.VisibilityStore, error) {
-	conn, err := f.dbConn.get()
+	conn, err := f.visibilityDBConn.get()
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +149,7 @@ func (f *Factory) NewVisibilityStore() (p.VisibilityStore, error) {
 
 // NewQueue returns a new queue backed by sql
 func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
-	conn, err := f.dbConn.get()
+	conn, err := f.mainDBConn.get()
 	if err != nil {
 		return nil, err
 	}
@@ -154,15 +159,24 @@ func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 
 // Close closes the factory
 func (f *Factory) Close() {
-	f.dbConn.forceClose()
+	f.mainDBConn.forceClose()
+	f.visibilityDBConn.forceClose()
 }
 
 // newRefCountedDBConn returns a  logical mysql connection that
 // uses reference counting to decide when to close the
 // underlying connection object. The reference count gets incremented
 // everytime get() is called and decremented everytime Close() is called
-func newRefCountedDBConn(cfg *config.SQL, r resolver.ServiceResolver) dbConn {
-	return dbConn{cfg: cfg, resolver: r}
+func newRefCountedDBConn(
+	dbKind sqlplugin.DbKind,
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+) dbConn {
+	return dbConn{
+		dbKind:   dbKind,
+		cfg:      cfg,
+		resolver: r,
+	}
 }
 
 // get returns a mysql db connection and increments a reference count
@@ -172,7 +186,7 @@ func (c *dbConn) get() (sqlplugin.DB, error) {
 	c.Lock()
 	defer c.Unlock()
 	if c.refCnt == 0 {
-		conn, err := NewSQLDB(c.cfg, c.resolver)
+		conn, err := NewSQLDB(c.dbKind, c.cfg, c.resolver)
 		if err != nil {
 			return nil, err
 		}
