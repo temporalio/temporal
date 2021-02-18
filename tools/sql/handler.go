@@ -63,15 +63,6 @@ func updateSchema(cli *cli.Context) error {
 	if err != nil {
 		return handleErr(schema.NewConfigError(err.Error()))
 	}
-	if cfg.DatabaseName == schema.DryrunDBName {
-		if err := DoCreateDatabase(cfg, cfg.DatabaseName); err != nil {
-			return handleErr(fmt.Errorf("error creating dryrun database: %v", err))
-		}
-		defer func() {
-			err := DoDropDatabase(cfg, cfg.DatabaseName)
-			logErr(err)
-		}()
-	}
 	conn, err := NewConnection(cfg)
 	if err != nil {
 		return handleErr(err)
@@ -151,7 +142,6 @@ func parseConnectConfig(cli *cli.Context) (*config.SQL, error) {
 	cfg.Password = cli.GlobalString(schema.CLIOptPassword)
 	cfg.DatabaseName = cli.GlobalString(schema.CLIOptDatabase)
 	cfg.PluginName = cli.GlobalString(schema.CLIOptPluginName)
-	isDryRun := cli.Bool(schema.CLIOptDryrun)
 
 	if cfg.ConnectAttributes == nil {
 		cfg.ConnectAttributes = map[string]string{}
@@ -181,7 +171,7 @@ func parseConnectConfig(cli *cli.Context) (*config.SQL, error) {
 		}
 	}
 
-	if err := ValidateConnectConfig(cfg, isDryRun); err != nil {
+	if err := ValidateConnectConfig(cfg); err != nil {
 		return nil, err
 	}
 
@@ -189,7 +179,7 @@ func parseConnectConfig(cli *cli.Context) (*config.SQL, error) {
 }
 
 // ValidateConnectConfig validates params
-func ValidateConnectConfig(cfg *config.SQL, isDryRun bool) error {
+func ValidateConnectConfig(cfg *config.SQL) error {
 	host, _, err := net.SplitHostPort(cfg.ConnectAddr)
 	if err != nil {
 		return schema.NewConfigError("invalid host and port " + cfg.ConnectAddr)
@@ -197,10 +187,8 @@ func ValidateConnectConfig(cfg *config.SQL, isDryRun bool) error {
 	if len(host) == 0 {
 		return schema.NewConfigError("missing sql endpoint argument " + flag(schema.CLIOptEndpoint))
 	}
-	if cfg.DatabaseName == "" && !isDryRun {
+	if cfg.DatabaseName == "" {
 		return schema.NewConfigError("missing " + flag(schema.CLIOptDatabase) + " argument")
-	} else if isDryRun {
-		cfg.DatabaseName = schema.DryrunDBName
 	}
 
 	return nil
