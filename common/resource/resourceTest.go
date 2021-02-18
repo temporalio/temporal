@@ -36,11 +36,11 @@ import (
 	sdkmocks "go.temporal.io/sdk/mocks"
 	"go.uber.org/zap"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
@@ -364,7 +364,7 @@ func (s *Test) GetHistoryClient() history.Client {
 // GetRemoteAdminClient for testing
 func (s *Test) GetRemoteAdminClient(
 	cluster string,
-) admin.Client {
+) adminservice.AdminServiceClient {
 
 	return s.RemoteAdminClient
 }

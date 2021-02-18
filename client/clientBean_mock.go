@@ -34,7 +34,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	"go.temporal.io/api/workflowservice/v1"
 
-	admin "go.temporal.io/server/client/admin"
+	"go.temporal.io/server/api/adminservice/v1"
 	history "go.temporal.io/server/client/history"
 	matching "go.temporal.io/server/client/matching"
 )
@@ -106,10 +106,10 @@ func (mr *MockBeanMockRecorder) GetMatchingClient(namespaceIDToName interface{})
 }
 
 // GetRemoteAdminClient mocks base method.
-func (m *MockBean) GetRemoteAdminClient(cluster string) admin.Client {
+func (m *MockBean) GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRemoteAdminClient", cluster)
-	ret0, _ := ret[0].(admin.Client)
+	ret0, _ := ret[0].(adminservice.AdminServiceClient)
 	return ret0
 }
 
@@ -170,7 +170,7 @@ func (mr *MockBeanMockRecorder) SetMatchingClient(client interface{}) *gomock.Ca
 }
 
 // SetRemoteAdminClient mocks base method.
-func (m *MockBean) SetRemoteAdminClient(cluster string, client admin.Client) {
+func (m *MockBean) SetRemoteAdminClient(cluster string, client adminservice.AdminServiceClient) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetRemoteAdminClient", cluster, client)
 }

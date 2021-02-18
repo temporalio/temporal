@@ -32,7 +32,6 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
@@ -56,7 +55,7 @@ const (
 func newNamespaceReplicationMessageProcessor(
 	sourceCluster string,
 	logger log.Logger,
-	remotePeer admin.Client,
+	remotePeer adminservice.AdminServiceClient,
 	metricsClient metrics.Client,
 	taskExecutor namespace.ReplicationTaskExecutor,
 	hostInfo *membership.HostInfo,
@@ -91,7 +90,7 @@ type (
 		status                    int32
 		sourceCluster             string
 		logger                    log.Logger
-		remotePeer                admin.Client
+		remotePeer                adminservice.AdminServiceClient
 		taskExecutor              namespace.ReplicationTaskExecutor
 		metricsClient             metrics.Client
 		retryPolicy               backoff.RetryPolicy

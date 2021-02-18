@@ -31,9 +31,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -50,7 +50,7 @@ type (
 		*timerQueueTaskExecutorBase
 
 		clusterName        string
-		adminClient        admin.Client
+		adminClient        adminservice.AdminServiceClient
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
 )

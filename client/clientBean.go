@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
@@ -49,8 +50,8 @@ type (
 		SetMatchingClient(client matching.Client)
 		GetFrontendClient() workflowservice.WorkflowServiceClient
 		SetFrontendClient(client workflowservice.WorkflowServiceClient)
-		GetRemoteAdminClient(cluster string) admin.Client
-		SetRemoteAdminClient(cluster string, client admin.Client)
+		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
+		SetRemoteAdminClient(cluster string, client adminservice.AdminServiceClient)
 		GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient
 		SetRemoteFrontendClient(cluster string, client workflowservice.WorkflowServiceClient)
 	}
@@ -60,7 +61,7 @@ type (
 		currentCluster        string
 		historyClient         history.Client
 		matchingClient        atomic.Value
-		remoteAdminClients    map[string]admin.Client
+		remoteAdminClients    map[string]adminservice.AdminServiceClient
 		remoteFrontendClients map[string]workflowservice.WorkflowServiceClient
 		factory               Factory
 	}
@@ -74,7 +75,7 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 		return nil, err
 	}
 
-	remoteAdminClients := map[string]admin.Client{}
+	remoteAdminClients := map[string]adminservice.AdminServiceClient{}
 	remoteFrontendClients := map[string]workflowservice.WorkflowServiceClient{}
 
 	for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
@@ -146,7 +147,7 @@ func (h *clientBeanImpl) SetFrontendClient(
 	h.remoteFrontendClients[h.currentCluster] = client
 }
 
-func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) admin.Client {
+func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient {
 	client, ok := h.remoteAdminClients[cluster]
 	if !ok {
 		panic(fmt.Sprintf(
@@ -160,7 +161,7 @@ func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) admin.Client {
 
 func (h *clientBeanImpl) SetRemoteAdminClient(
 	cluster string,
-	client admin.Client,
+	client adminservice.AdminServiceClient,
 ) {
 	h.remoteAdminClients[cluster] = client
 }

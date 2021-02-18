@@ -36,8 +36,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
@@ -529,7 +529,7 @@ func (h *Impl) GetHistoryClient() history.Client {
 // GetRemoteAdminClient return remote admin client for given cluster name
 func (h *Impl) GetRemoteAdminClient(
 	cluster string,
-) admin.Client {
+) adminservice.AdminServiceClient {
 
 	return h.clientBean.GetRemoteAdminClient(cluster)
 }
