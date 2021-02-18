@@ -31,6 +31,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
@@ -45,12 +47,12 @@ type (
 		SetHistoryClient(client history.Client)
 		GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error)
 		SetMatchingClient(client matching.Client)
-		GetFrontendClient() frontend.Client
-		SetFrontendClient(client frontend.Client)
+		GetFrontendClient() workflowservice.WorkflowServiceClient
+		SetFrontendClient(client workflowservice.WorkflowServiceClient)
 		GetRemoteAdminClient(cluster string) admin.Client
 		SetRemoteAdminClient(cluster string, client admin.Client)
-		GetRemoteFrontendClient(cluster string) frontend.Client
-		SetRemoteFrontendClient(cluster string, client frontend.Client)
+		GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient
+		SetRemoteFrontendClient(cluster string, client workflowservice.WorkflowServiceClient)
 	}
 
 	clientBeanImpl struct {
@@ -59,7 +61,7 @@ type (
 		historyClient         history.Client
 		matchingClient        atomic.Value
 		remoteAdminClients    map[string]admin.Client
-		remoteFrontendClients map[string]frontend.Client
+		remoteFrontendClients map[string]workflowservice.WorkflowServiceClient
 		factory               Factory
 	}
 )
@@ -73,7 +75,7 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 	}
 
 	remoteAdminClients := map[string]admin.Client{}
-	remoteFrontendClients := map[string]frontend.Client{}
+	remoteFrontendClients := map[string]workflowservice.WorkflowServiceClient{}
 
 	for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
 		if !info.Enabled {
@@ -134,12 +136,12 @@ func (h *clientBeanImpl) SetMatchingClient(
 	h.matchingClient.Store(client)
 }
 
-func (h *clientBeanImpl) GetFrontendClient() frontend.Client {
+func (h *clientBeanImpl) GetFrontendClient() workflowservice.WorkflowServiceClient {
 	return h.remoteFrontendClients[h.currentCluster]
 }
 
 func (h *clientBeanImpl) SetFrontendClient(
-	client frontend.Client,
+	client workflowservice.WorkflowServiceClient,
 ) {
 	h.remoteFrontendClients[h.currentCluster] = client
 }
@@ -163,7 +165,7 @@ func (h *clientBeanImpl) SetRemoteAdminClient(
 	h.remoteAdminClients[cluster] = client
 }
 
-func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.Client {
+func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient {
 	client, ok := h.remoteFrontendClients[cluster]
 	if !ok {
 		panic(fmt.Sprintf(
@@ -177,7 +179,7 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.Client
 
 func (h *clientBeanImpl) SetRemoteFrontendClient(
 	cluster string,
-	client frontend.Client,
+	client workflowservice.WorkflowServiceClient,
 ) {
 	h.remoteFrontendClients[cluster] = client
 }

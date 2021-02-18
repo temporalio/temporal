@@ -33,6 +33,7 @@ import (
 
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
+	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/client"
@@ -100,8 +101,8 @@ type (
 		// internal services clients
 
 		sdkClient         sdkclient.Client
-		frontendRawClient frontend.Client
-		frontendClient    frontend.Client
+		frontendRawClient workflowservice.WorkflowServiceClient
+		frontendClient    workflowservice.WorkflowServiceClient
 		matchingRawClient matching.Client
 		matchingClient    matching.Client
 		historyRawClient  history.Client
@@ -496,12 +497,12 @@ func (h *Impl) GetSDKClient() sdkclient.Client {
 }
 
 // GetFrontendRawClient return frontend client without retry policy
-func (h *Impl) GetFrontendRawClient() frontend.Client {
+func (h *Impl) GetFrontendRawClient() workflowservice.WorkflowServiceClient {
 	return h.frontendRawClient
 }
 
 // GetFrontendClient return frontend client with retry policy
-func (h *Impl) GetFrontendClient() frontend.Client {
+func (h *Impl) GetFrontendClient() workflowservice.WorkflowServiceClient {
 	return h.frontendClient
 }
 
@@ -536,7 +537,7 @@ func (h *Impl) GetRemoteAdminClient(
 // GetRemoteFrontendClient return remote frontend client for given cluster name
 func (h *Impl) GetRemoteFrontendClient(
 	cluster string,
-) frontend.Client {
+) workflowservice.WorkflowServiceClient {
 
 	return h.clientBean.GetRemoteFrontendClient(cluster)
 }

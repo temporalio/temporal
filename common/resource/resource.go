@@ -27,11 +27,11 @@ package resource
 import (
 	"net"
 
+	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
-	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
@@ -81,14 +81,14 @@ type (
 		// internal services clients
 
 		GetSDKClient() sdkclient.Client
-		GetFrontendRawClient() frontend.Client
-		GetFrontendClient() frontend.Client
+		GetFrontendRawClient() workflowservice.WorkflowServiceClient
+		GetFrontendClient() workflowservice.WorkflowServiceClient
 		GetMatchingRawClient() matching.Client
 		GetMatchingClient() matching.Client
 		GetHistoryRawClient() history.Client
 		GetHistoryClient() history.Client
 		GetRemoteAdminClient(cluster string) admin.Client
-		GetRemoteFrontendClient(cluster string) frontend.Client
+		GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient
 		GetClientBean() client.Bean
 
 		// persistence clients

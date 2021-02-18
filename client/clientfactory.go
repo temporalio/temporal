@@ -52,11 +52,11 @@ type (
 	Factory interface {
 		NewHistoryClient() (history.Client, error)
 		NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error)
-		NewFrontendClient(rpcAddress string) (frontend.Client, error)
+		NewFrontendClient(rpcAddress string) (workflowservice.WorkflowServiceClient, error)
 
 		NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error)
 		NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
-		NewFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
+		NewFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (workflowservice.WorkflowServiceClient, error)
 		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) (admin.Client, error)
 	}
 
@@ -100,7 +100,7 @@ func (cf *rpcClientFactory) NewMatchingClient(namespaceIDToName NamespaceIDToNam
 	return cf.NewMatchingClientWithTimeout(namespaceIDToName, matching.DefaultTimeout, matching.DefaultLongPollTimeout)
 }
 
-func (cf *rpcClientFactory) NewFrontendClient(rpcAddress string) (frontend.Client, error) {
+func (cf *rpcClientFactory) NewFrontendClient(rpcAddress string) (workflowservice.WorkflowServiceClient, error) {
 	return cf.NewFrontendClientWithTimeout(rpcAddress, frontend.DefaultTimeout, frontend.DefaultLongPollTimeout)
 }
 
@@ -171,7 +171,7 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 	rpcAddress string,
 	timeout time.Duration,
 	longPollTimeout time.Duration,
-) (frontend.Client, error) {
+) (workflowservice.WorkflowServiceClient, error) {
 	keyResolver := func(key string) (string, error) {
 		return clientKeyConnection, nil
 	}

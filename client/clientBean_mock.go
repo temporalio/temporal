@@ -32,8 +32,9 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	"go.temporal.io/api/workflowservice/v1"
+
 	admin "go.temporal.io/server/client/admin"
-	frontend "go.temporal.io/server/client/frontend"
 	history "go.temporal.io/server/client/history"
 	matching "go.temporal.io/server/client/matching"
 )
@@ -62,10 +63,10 @@ func (m *MockBean) EXPECT() *MockBeanMockRecorder {
 }
 
 // GetFrontendClient mocks base method.
-func (m *MockBean) GetFrontendClient() frontend.Client {
+func (m *MockBean) GetFrontendClient() workflowservice.WorkflowServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFrontendClient")
-	ret0, _ := ret[0].(frontend.Client)
+	ret0, _ := ret[0].(workflowservice.WorkflowServiceClient)
 	return ret0
 }
 
@@ -119,10 +120,10 @@ func (mr *MockBeanMockRecorder) GetRemoteAdminClient(cluster interface{}) *gomoc
 }
 
 // GetRemoteFrontendClient mocks base method.
-func (m *MockBean) GetRemoteFrontendClient(cluster string) frontend.Client {
+func (m *MockBean) GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRemoteFrontendClient", cluster)
-	ret0, _ := ret[0].(frontend.Client)
+	ret0, _ := ret[0].(workflowservice.WorkflowServiceClient)
 	return ret0
 }
 
@@ -133,7 +134,7 @@ func (mr *MockBeanMockRecorder) GetRemoteFrontendClient(cluster interface{}) *go
 }
 
 // SetFrontendClient mocks base method.
-func (m *MockBean) SetFrontendClient(client frontend.Client) {
+func (m *MockBean) SetFrontendClient(client workflowservice.WorkflowServiceClient) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetFrontendClient", client)
 }
@@ -181,7 +182,7 @@ func (mr *MockBeanMockRecorder) SetRemoteAdminClient(cluster, client interface{}
 }
 
 // SetRemoteFrontendClient mocks base method.
-func (m *MockBean) SetRemoteFrontendClient(cluster string, client frontend.Client) {
+func (m *MockBean) SetRemoteFrontendClient(cluster string, client workflowservice.WorkflowServiceClient) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetRemoteFrontendClient", cluster, client)
 }

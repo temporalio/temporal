@@ -29,7 +29,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/client/frontend"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -47,7 +47,7 @@ func TestScavengerTestSuite(t *testing.T) {
 }
 
 func (s *ScavengerTestSuite) TestShardValidatorInitializedWithProperValues() {
-	var frontendClient frontend.Client
+	var frontendClient workflowservice.WorkflowServiceClient
 	var historyDB persistence.HistoryManager
 	var metricsClient metrics.Client
 	var logger log.Logger

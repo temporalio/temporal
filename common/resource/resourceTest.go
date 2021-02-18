@@ -30,6 +30,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkmocks "go.temporal.io/sdk/mocks"
@@ -40,7 +41,6 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
-	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
@@ -332,12 +332,12 @@ func (s *Test) GetSDKClient() sdkclient.Client {
 }
 
 // GetFrontendRawClient for testing
-func (s *Test) GetFrontendRawClient() frontend.Client {
+func (s *Test) GetFrontendRawClient() workflowservice.WorkflowServiceClient {
 	return s.FrontendClient
 }
 
 // GetFrontendClient for testing
-func (s *Test) GetFrontendClient() frontend.Client {
+func (s *Test) GetFrontendClient() workflowservice.WorkflowServiceClient {
 	return s.FrontendClient
 }
 
@@ -372,7 +372,7 @@ func (s *Test) GetRemoteAdminClient(
 // GetRemoteFrontendClient for testing
 func (s *Test) GetRemoteFrontendClient(
 	cluster string,
-) frontend.Client {
+) workflowservice.WorkflowServiceClient {
 
 	return s.RemoteFrontendClient
 }
