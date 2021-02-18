@@ -80,7 +80,7 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 	}
 
 	totalSize := 0
-	typeMap, err := searchattribute.GetTypeMap(sv.validSearchAttributes)
+	typeMap, err := searchattribute.BuildTypeMap(sv.validSearchAttributes)
 	if err != nil {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse search attributes from config: %v", err))
 	}

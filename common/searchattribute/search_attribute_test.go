@@ -64,7 +64,7 @@ func Test_GetTypeMap(t *testing.T) {
 		"key5s": "Bool",
 		"key6s": "Datetime",
 	}
-	result, err := GetTypeMap(dynamicconfig.GetMapPropertyFn(m))
+	result, err := BuildTypeMap(dynamicconfig.GetMapPropertyFn(m))
 	assert.NoError(err)
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_STRING, result["key1"])
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, result["key2"])
@@ -91,13 +91,13 @@ func Test_GetTypeMap(t *testing.T) {
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_BOOL, result["key5s"])
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_DATETIME, result["key6s"])
 
-	result, err = GetTypeMap(dynamicconfig.GetMapPropertyFn(map[string]interface{}{
+	result, err = BuildTypeMap(dynamicconfig.GetMapPropertyFn(map[string]interface{}{
 		"key1": "UnknownType",
 	}))
 	assert.Error(err)
 	assert.Len(result, 0)
 
-	result, err = GetTypeMap(dynamicconfig.GetMapPropertyFn(map[string]interface{}{
+	result, err = BuildTypeMap(dynamicconfig.GetMapPropertyFn(map[string]interface{}{
 		"key1": enumspb.IndexedValueType(100),
 	}))
 	assert.Error(err)

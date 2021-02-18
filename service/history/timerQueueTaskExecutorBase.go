@@ -182,7 +182,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 		req.AttemptArchiveInline = true
 	}
 
-	saTypeMap, err := searchattribute.GetTypeMap(t.config.ValidSearchAttributes)
+	saTypeMap, err := searchattribute.BuildTypeMap(t.config.ValidSearchAttributes)
 	if err != nil {
 		return err
 	}

@@ -2663,7 +2663,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		Query:         request.GetQuery(),
 	}
 
-	saTypeMap, err := searchattribute.GetTypeMap(wh.config.ValidSearchAttributes)
+	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
 	if err != nil {
 		return nil, wh.error(fmt.Errorf("uable to build valid search attributes map: %w", err), scope)
 	}
@@ -2822,7 +2822,7 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 		return nil, wh.error(err, scope)
 	}
 
-	saTypeMap, err := searchattribute.GetTypeMap(wh.config.ValidSearchAttributes)
+	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
 	if err != nil {
 		return nil, wh.error(fmt.Errorf("uable to build valid search attributes map: %w", err), scope)
 	}
@@ -3085,7 +3085,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, wh.error(err, scope)
 	}
 
-	saTypeMap, err := searchattribute.GetTypeMap(wh.config.ValidSearchAttributes)
+	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
 	if err != nil {
 		return nil, wh.error(fmt.Errorf("uable to build valid search attributes map: %w", err), scope)
 	}

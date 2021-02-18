@@ -38,10 +38,11 @@ import (
 	"go.temporal.io/server/common/payload"
 )
 
-// Stringify converts search attributes to map of strings.
+// Stringify converts search attributes to map of strings using (in order):
+// 1. type from MetadataType field,
+// 2. type for typeMap (can be nil).
 // In case of error, it will continue to next search attribute and return last error.
-// typeMap can be nil (type from MetadataType field will be used).
-// Single values are converted using strconv and arrays using json.Marshal.
+// Single values are converted using strconv, arrays are converted using json.Marshal.
 func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap map[string]enumspb.IndexedValueType) (map[string]string, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil, nil
@@ -92,7 +93,8 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap map[string]e
 
 // Parse converts maps of search attribute strings to search attributes.
 // typeMap can be nil (values will be parsed with strconv and MetadataType field won't be set).
-// Single values are parsed using strconv and arrays using json.Unmarshal.
+// In case of error, it will continue to next search attribute and return last error.
+// Single values are parsed using strconv, arrays are parsed using json.Unmarshal.
 func Parse(searchAttributesStr map[string]string, typeMap map[string]enumspb.IndexedValueType) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributesStr) == 0 {
 		return nil, nil

@@ -303,27 +303,16 @@ func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBa
 		doc[definition.Encoding] = request.Memo.GetEncodingType().String()
 	}
 
-	typeMap, err := searchattribute.GetTypeMap(v.config.ValidSearchAttributes)
+	typeMap, err := searchattribute.BuildTypeMap(v.config.ValidSearchAttributes)
 	if err != nil {
 		v.logger.Error("Unable to parse search attributes from config.", tag.Error(err))
 		v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 
-	attr := make(map[string]interface{}, len(request.SearchAttributes.GetIndexedFields()))
-	for saName, saPayload := range request.SearchAttributes.GetIndexedFields() {
-		saType, err := searchattribute.GetType(saName, typeMap)
-		if err != nil {
-			v.logger.Error("Invalid search attribute.", tag.Error(err), tag.ESField(saName))
-			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
-		}
-
-		searchAttributeValue, err := searchattribute.DecodeValue(saPayload, saType)
-		if err != nil {
-			v.logger.Error("Unable to decode search attribute value from payload.", tag.Error(err), tag.ESField(saName))
-			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
-		}
-
-		attr[saName] = searchAttributeValue
+	attr, err := searchattribute.Decode(request.SearchAttributes, typeMap)
+	if err != nil {
+		v.logger.Error("Unable to decode search attributes.", tag.Error(err))
+		v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 	doc[definition.Attr] = attr
 
@@ -801,7 +790,7 @@ func (v *esVisibilityStore) getFieldType(fieldName string) enumspb.IndexedValueT
 	if strings.HasPrefix(fieldName, definition.Attr) {
 		fieldName = fieldName[len(definition.Attr)+1:] // remove prefix
 	}
-	typeMap, err := searchattribute.GetTypeMap(v.config.ValidSearchAttributes)
+	typeMap, err := searchattribute.BuildTypeMap(v.config.ValidSearchAttributes)
 	if err != nil {
 		v.logger.Error("Unable to parse search attributes from config.", tag.Error(err))
 	}

@@ -25,86 +25,15 @@
 package searchattribute
 
 import (
-	"fmt"
-	"time"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/payload"
 )
 
-// DecodeValue decodes search attribute value from Payload using (in order):
-// 1. type from MetadataType field,
-// 2. passed type t.
-func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface{}, error) {
-	valueTypeMetadata, metadataHasValueType := value.Metadata[MetadataType]
-	if metadataHasValueType {
-		ivt, err := convertDynamicConfigType(string(valueTypeMetadata))
-		if err == nil {
-			// MetadataType field has priority over passed type.
-			t = ivt
-		}
-	}
-
-	switch t {
-	case enumspb.INDEXED_VALUE_TYPE_STRING, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
-		var val string
-		if err := payload.Decode(value, &val); err != nil {
-			var listVal []string
-			err = payload.Decode(value, &listVal)
-			return listVal, err
-		}
-		return val, nil
-	case enumspb.INDEXED_VALUE_TYPE_INT:
-		var val int64
-		if err := payload.Decode(value, &val); err != nil {
-			var listVal []int64
-			err = payload.Decode(value, &listVal)
-			return listVal, err
-		}
-		return val, nil
-	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
-		var val float64
-		if err := payload.Decode(value, &val); err != nil {
-			var listVal []float64
-			err = payload.Decode(value, &listVal)
-			return listVal, err
-		}
-		return val, nil
-	case enumspb.INDEXED_VALUE_TYPE_BOOL:
-		var val bool
-		if err := payload.Decode(value, &val); err != nil {
-			var listVal []bool
-			err = payload.Decode(value, &listVal)
-			return listVal, err
-		}
-		return val, nil
-	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
-		var val time.Time
-		if err := payload.Decode(value, &val); err != nil {
-			var listVal []time.Time
-			err = payload.Decode(value, &listVal)
-			return listVal, err
-		}
-		return val, nil
-	default:
-		return nil, fmt.Errorf("%w: %v", ErrInvalidType, t)
-	}
-}
-
-// EncodeValue encodes search attribute value and IndexedValueType to Payload.
-func EncodeValue(val interface{}, t enumspb.IndexedValueType) (*commonpb.Payload, error) {
-	valPayload, err := payload.Encode(val)
-	if err != nil {
-		return nil, err
-	}
-
-	setMetadataType(valPayload, t)
-	return valPayload, nil
-}
-
-// Encode encodes map of search attribute values to map of Payloads.
+// Encode encodes map of search attribute values to search attributes.
+// typeMap can be nil (MetadataType field won't be set).
+// In case of error, it will continue to next search attribute and return last error.
 func Encode(searchAttributes map[string]interface{}, typeMap map[string]enumspb.IndexedValueType) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributes) == 0 {
 		return nil, nil
@@ -129,4 +58,33 @@ func Encode(searchAttributes map[string]interface{}, typeMap map[string]enumspb.
 		setMetadataType(valPayload, saType)
 	}
 	return &commonpb.SearchAttributes{IndexedFields: indexedFields}, lastErr
+}
+
+// Decode decodes search attributes to the map of search attribute values using (in order):
+// 1. type from MetadataType field,
+// 2. type for typeMap (can be nil).
+// In case of error, it will continue to next search attribute and return last error.
+func Decode(searchAttributes *commonpb.SearchAttributes, typeMap map[string]enumspb.IndexedValueType) (map[string]interface{}, error) {
+	if len(searchAttributes.GetIndexedFields()) == 0 {
+		return nil, nil
+	}
+
+	result := make(map[string]interface{}, len(searchAttributes.GetIndexedFields()))
+	var lastErr error
+	for saName, saPayload := range searchAttributes.GetIndexedFields() {
+		saType, err := GetType(saName, typeMap)
+		if err != nil {
+			lastErr = err
+		}
+
+		searchAttributeValue, err := DecodeValue(saPayload, saType)
+		if err != nil {
+			lastErr = err
+			result[saName] = nil
+			continue
+		}
+		result[saName] = searchAttributeValue
+	}
+
+	return result, lastErr
 }

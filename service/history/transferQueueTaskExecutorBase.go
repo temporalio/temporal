@@ -321,7 +321,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
 		defer cancel()
 
-		saTypeMap, err := searchattribute.GetTypeMap(t.config.ValidSearchAttributes)
+		saTypeMap, err := searchattribute.BuildTypeMap(t.config.ValidSearchAttributes)
 		if err != nil {
 			return err
 		}

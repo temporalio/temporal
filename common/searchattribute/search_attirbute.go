@@ -44,8 +44,8 @@ var (
 	ErrTypeMapIsEmpty = errors.New("search attributes type map is empty")
 )
 
-// GetTypeMap converts search attributes types from dynamic config map to type map.
-func GetTypeMap(validSearchAttributesFn dynamicconfig.MapPropertyFn) (map[string]enumspb.IndexedValueType, error) {
+// BuildTypeMap converts search attributes types from dynamic config map to type map.
+func BuildTypeMap(validSearchAttributesFn dynamicconfig.MapPropertyFn) (map[string]enumspb.IndexedValueType, error) {
 	if validSearchAttributesFn == nil {
 		return nil, nil
 	}
@@ -79,7 +79,7 @@ func GetType(name string, typeMap map[string]enumspb.IndexedValueType) (enumspb.
 }
 
 // ApplyTypeMap set type for all valid search attributes which don't have it.
-// It doesn't do any validation and just skip invalid or already set fields.
+// It doesn't do any validation and just skip invalid or already set search attributes.
 func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap map[string]enumspb.IndexedValueType) {
 	if len(typeMap) == 0 {
 		return
