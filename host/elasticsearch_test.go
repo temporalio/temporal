@@ -110,10 +110,10 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 	tl := "es-integration-start-workflow-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
+	attrPayload, _ := payload.Encode(s.testSearchAttributeVal)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			s.testSearchAttributeKey: attrValBytes,
+			s.testSearchAttributeKey: attrPayload,
 		},
 	}
 	request.SearchAttributes = searchAttr
@@ -144,7 +144,11 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.Equal(attrValBytes, openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey])
+
+	s.Equal(1, len(openExecution.GetSearchAttributes().GetIndexedFields()))
+	attrPayloadFromResponse, attrExist := openExecution.GetSearchAttributes().GetIndexedFields()[s.testSearchAttributeKey]
+	s.True(attrExist)
+	s.Equal(attrPayload.GetData(), attrPayloadFromResponse.GetData())
 }
 
 func (s *elasticsearchIntegrationSuite) TestListWorkflow() {
@@ -258,7 +262,12 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
 	expectedSearchAttributes := getUpsertSearchAttributes()
-	s.Equal(expectedSearchAttributes, descResp.WorkflowExecutionInfo.GetSearchAttributes())
+	s.Equal(len(expectedSearchAttributes.GetIndexedFields()), len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()))
+	for attrName, expectedPayload := range expectedSearchAttributes.GetIndexedFields() {
+		respAttr, ok := descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()[attrName]
+		s.True(ok)
+		s.Equal(expectedPayload.GetData(), respAttr.GetData())
+	}
 }
 
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_PageToken() {
@@ -875,10 +884,10 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		if commandCount == 0 {
 			commandCount++
 
-			attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
+			attrValPayload, _ := payload.Encode(s.testSearchAttributeVal)
 			upsertSearchAttr := &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
-					s.testSearchAttributeKey: attrValBytes,
+					s.testSearchAttributeKey: attrValPayload,
 				},
 			}
 			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = upsertSearchAttr
@@ -1023,14 +1032,15 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 }
 
 func getUpsertSearchAttributes() *commonpb.SearchAttributes {
-	attrValBytes1, _ := payload.Encode("another string")
-	attrValBytes2, _ := payload.Encode(123)
-	binaryChecksums, _ := payload.Encode([]string{"binary-v1", "binary-v2"})
+	stringAttrPayload, _ := payload.Encode("another string")
+	intAttrPayload, _ := payload.Encode(123)
+	binaryChecksumsPayload, _ := payload.Encode([]string{"binary-v1", "binary-v2"})
+
 	upsertSearchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			definition.CustomStringField: attrValBytes1,
-			definition.CustomIntField:    attrValBytes2,
-			definition.BinaryChecksums:   binaryChecksums,
+			definition.CustomStringField: stringAttrPayload,
+			definition.CustomIntField:    intAttrPayload,
+			definition.BinaryChecksums:   binaryChecksumsPayload,
 		},
 	}
 	return upsertSearchAttr

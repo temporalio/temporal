@@ -174,8 +174,9 @@ func NewService(
 	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.PersistenceConfig.NumHistoryShards, isAdvancedVisExistInConfig)
 
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityListMaxQPS: serviceConfig.VisibilityListMaxQPS,
-		EnableSampling:       serviceConfig.EnableVisibilitySampling,
+		VisibilityListMaxQPS:  serviceConfig.VisibilityListMaxQPS,
+		EnableSampling:        serviceConfig.EnableVisibilitySampling,
+		ValidSearchAttributes: serviceConfig.ValidSearchAttributes,
 	}
 
 	visibilityManagerInitializer := func(

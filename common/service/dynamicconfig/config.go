@@ -101,6 +101,12 @@ type FloatPropertyFn func(opts ...FilterOption) float64
 // FloatPropertyFnWithShardIDFilter is a wrapper to get float property from dynamic config with shardID as filter
 type FloatPropertyFnWithShardIDFilter func(shardID int32) float64
 
+// FloatPropertyFnWithNamespaceFilter is a wrapper to get float property from dynamic config with namespace as filter
+type FloatPropertyFnWithNamespaceFilter func(namespace string) float64
+
+// FloatPropertyFnWithTaskQueueInfoFilters is a wrapper to get float property from dynamic config with three filters: namespace, taskQueue, taskType
+type FloatPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64
+
 // DurationPropertyFn is a wrapper to get duration property from dynamic config
 type DurationPropertyFn func(opts ...FilterOption) time.Duration
 
@@ -255,6 +261,49 @@ func (c *Collection) GetFloat64PropertyFilteredByShardID(key Key, defaultValue f
 		if err != nil {
 			c.logError(key, err)
 		}
+		c.logValue(key, val, defaultValue, float64CompareEquals)
+		return val
+	}
+}
+
+// GetFloatPropertyFilteredByNamespace gets property with namespace filter and asserts that it's a float
+func (c *Collection) GetFloatPropertyFilteredByNamespace(key Key, defaultValue float64) FloatPropertyFnWithNamespaceFilter {
+	return func(namespace string) float64 {
+		val, err := c.client.GetFloatValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
+		if err != nil {
+			c.logError(key, err)
+		}
+		c.logValue(key, val, defaultValue, float64CompareEquals)
+		return val
+	}
+}
+
+// GetFloatPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's an integer
+func (c *Collection) GetFloatPropertyFilteredByTaskQueueInfo(key Key, defaultValue float64) FloatPropertyFnWithTaskQueueInfoFilters {
+	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64 {
+		val := defaultValue
+		var err error
+
+		filterMaps := []map[Filter]interface{}{
+			getFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue), TaskTypeFilter(taskType)),
+			getFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue)),
+		}
+
+		for _, filterMap := range filterMaps {
+			val, err = c.client.GetFloatValue(
+				key,
+				filterMap,
+				defaultValue,
+			)
+			if err != nil {
+				c.logError(key, err)
+			}
+
+			if val != defaultValue {
+				break
+			}
+		}
+
 		c.logValue(key, val, defaultValue, float64CompareEquals)
 		return val
 	}

@@ -46,23 +46,31 @@ func RegisterPlugin(pluginName string, plugin sqlplugin.Plugin) {
 // underlying SQL database. The returned object is to tied to a single
 // SQL database and the object can be used to perform CRUD operations on
 // the tables in the database
-func NewSQLDB(cfg *config.SQL, r resolver.ServiceResolver) (sqlplugin.DB, error) {
+func NewSQLDB(
+	dbKind sqlplugin.DbKind,
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+) (sqlplugin.DB, error) {
 	plugin, ok := supportedPlugins[cfg.PluginName]
 
 	if !ok {
 		return nil, fmt.Errorf("not supported plugin %v, only supported: %v", cfg.PluginName, supportedPlugins)
 	}
 
-	return plugin.CreateDB(cfg, r)
+	return plugin.CreateDB(dbKind, cfg, r)
 }
 
 // NewSQLAdminDB returns a AdminDB
-func NewSQLAdminDB(cfg *config.SQL, r resolver.ServiceResolver) (sqlplugin.AdminDB, error) {
+func NewSQLAdminDB(
+	dbKind sqlplugin.DbKind,
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+) (sqlplugin.AdminDB, error) {
 	plugin, ok := supportedPlugins[cfg.PluginName]
 
 	if !ok {
 		return nil, fmt.Errorf("not supported plugin %v, only supported: %v", cfg.PluginName, supportedPlugins)
 	}
 
-	return plugin.CreateAdminDB(cfg, r)
+	return plugin.CreateAdminDB(dbKind, cfg, r)
 }

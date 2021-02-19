@@ -29,7 +29,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
@@ -80,11 +79,11 @@ func checkCompatibleVersion(
 	r resolver.ServiceResolver,
 	dbKind sqlplugin.DbKind,
 ) error {
-	db, err := NewSQLAdminDB(cfg, r)
+	db, err := NewSQLAdminDB(dbKind, cfg, r)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	return schema.VerifyCompatibleVersion(db, cfg.DatabaseName, db.ExpectedVersion(dbKind))
+	return db.VerifyVersion()
 }

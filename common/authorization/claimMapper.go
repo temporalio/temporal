@@ -28,6 +28,8 @@ package authorization
 
 import (
 	"crypto/x509/pkix"
+	"fmt"
+	"strings"
 
 	"google.golang.org/grpc/credentials"
 
@@ -64,4 +66,15 @@ func NewNoopClaimMapper(_ *config.Config) ClaimMapper {
 
 func (*noopClaimMapper) GetClaims(_ *AuthInfo) (*Claims, error) {
 	return &Claims{System: RoleAdmin}, nil
+}
+
+func GetClaimMapperFromConfig(config *config.Config) (ClaimMapper, error) {
+
+	switch strings.ToLower(config.Global.Authorization.ClaimMapper) {
+	case "":
+		return NewNoopClaimMapper(config), nil
+	case "default":
+		return NewDefaultJWTClaimMapper(NewDefaultTokenKeyProvider(config), config), nil
+	}
+	return nil, fmt.Errorf("unknown claim mapper: %s", config.Global.Authorization.ClaimMapper)
 }

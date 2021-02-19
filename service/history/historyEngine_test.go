@@ -1176,7 +1176,7 @@ func (s *engineSuite) TestValidateSignalRequest() {
 		WorkflowTaskTimeout:      timestamp.DurationPtr(10 * time.Second),
 		Identity:                 "identity",
 	}
-	err := validateStartWorkflowExecutionRequest(startRequest, 999)
+	err := s.mockHistoryEngine.validateStartWorkflowExecutionRequest(startRequest, 999, testLocalNamespaceEntry.GetInfo().GetName())
 	s.Error(err, "startRequest doesn't have request id, it should error out")
 }
 

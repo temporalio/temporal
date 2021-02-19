@@ -101,7 +101,7 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 		commandAttrValidator: newCommandAttrValidator(
 			historyEngine.shard.GetNamespaceCache(),
 			historyEngine.config,
-			historyEngine.logger,
+			historyEngine.searchAttributesValidator,
 		),
 	}
 }

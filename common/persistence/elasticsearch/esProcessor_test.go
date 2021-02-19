@@ -42,7 +42,6 @@ import (
 	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
-	metricsmocks "go.temporal.io/server/common/metrics/mocks"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -51,7 +50,7 @@ type esProcessorSuite struct {
 	controller        *gomock.Controller
 	esProcessor       *esProcessorImpl
 	mockBulkProcessor *es.MockBulkProcessor
-	mockMetricClient  *metricsmocks.Client
+	mockMetricClient  *metrics.MockClient
 	mockESClient      *es.MockClient
 }
 
@@ -83,8 +82,8 @@ func (s *esProcessorSuite) SetupTest() {
 		ESProcessorBulkSize:      dynamicconfig.GetIntPropertyFn(2 << 20),
 		ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
-	s.mockMetricClient = &metricsmocks.Client{}
 
+	s.mockMetricClient = metrics.NewMockClient(s.controller)
 	s.mockBulkProcessor = es.NewMockBulkProcessor(s.controller)
 	s.mockESClient = es.NewMockClient(s.controller)
 	s.esProcessor = NewProcessor(cfg, s.mockESClient, loggerimpl.NewLogger(zapLogger), s.mockMetricClient)
@@ -96,7 +95,6 @@ func (s *esProcessorSuite) SetupTest() {
 
 func (s *esProcessorSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockMetricClient.AssertExpectations(s.T())
 }
 
 func (s *esProcessorSuite) TestNewESProcessorAndStartStop() {
@@ -108,7 +106,7 @@ func (s *esProcessorSuite) TestNewESProcessorAndStartStop() {
 		ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
 
-	p := NewProcessor(config, s.mockESClient, s.esProcessor.logger, &metricsmocks.Client{})
+	p := NewProcessor(config, s.mockESClient, s.esProcessor.logger, s.mockMetricClient)
 
 	s.mockESClient.EXPECT().RunBulkProcessor(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, input *es.BulkProcessorParameters) (es.BulkProcessor, error) {
@@ -142,7 +140,7 @@ func (s *esProcessorSuite) TestAdd() {
 	s.Equal(0, s.esProcessor.mapToAckChan.Len())
 
 	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
-	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
+	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch)
 
 	s.esProcessor.Add(request, visibilityTaskKey, ackCh)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
@@ -153,7 +151,7 @@ func (s *esProcessorSuite) TestAdd() {
 	}
 
 	// handle duplicate
-	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
+	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch)
 	s.esProcessor.Add(request, visibilityTaskKey, ackCh)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
 	select {
@@ -169,7 +167,7 @@ func (s *esProcessorSuite) TestAdd_ConcurrentAdd() {
 	key := "test-key"
 	duplicates := 100
 	ackCh := make(chan bool, duplicates-1)
-	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Times(duplicates)
+	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch).Times(duplicates)
 
 	addFunc := func(wg *sync.WaitGroup) {
 		s.esProcessor.Add(request, key, ackCh)
@@ -266,7 +264,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 	ackCh := make(chan bool, 1)
 	mapVal := newAckChanWithStopwatch(ackCh, &testStopWatch)
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
-	s.mockMetricClient.On("IncCounter", metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures).Once()
+	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures)
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
 	select {
 	case ack := <-ackCh:
@@ -303,7 +301,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Error() {
 		Items:  []map[string]*elastic.BulkResponseItem{mFailed},
 	}
 
-	s.mockMetricClient.On("IncCounter", metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures).Once()
+	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures)
 	s.esProcessor.bulkAfterAction(0, requests, response, errors.New("some error"))
 }
 
@@ -313,7 +311,7 @@ func (s *esProcessorSuite) TestAckChan() {
 	s.esProcessor.sendToAckChan(key, true)
 
 	request := &es.BulkableRequest{}
-	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
+	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch)
 	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
 	ackCh := make(chan bool, 1)
 	s.esProcessor.Add(request, key, ackCh)
@@ -336,7 +334,7 @@ func (s *esProcessorSuite) TestNackChan() {
 
 	request := &es.BulkableRequest{}
 	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
-	s.mockMetricClient.On("StartTimer", testScope, testMetric).Return(testStopWatch).Once()
+	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch)
 	ackCh := make(chan bool, 1)
 	s.esProcessor.Add(request, key, ackCh)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
@@ -358,7 +356,7 @@ func (s *esProcessorSuite) TestHashFn() {
 
 func (s *esProcessorSuite) TestExtractVisibilityTaskKey() {
 	request := elastic.NewBulkIndexRequest()
-	s.mockMetricClient.On("IncCounter", metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData).Times(1)
+	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData).Times(1)
 
 	visibilityTaskKey := s.esProcessor.extractVisibilityTaskKey(request)
 	s.Equal("", visibilityTaskKey)
@@ -388,7 +386,7 @@ func (s *esProcessorSuite) TestExtractVisibilityTaskKey_Delete() {
 	_, ok := body["delete"]
 	s.True(ok)
 
-	s.mockMetricClient.On("IncCounter", metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData).Times(1)
+	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData).Times(1)
 	key := s.esProcessor.extractVisibilityTaskKey(request)
 	s.Equal("", key)
 
