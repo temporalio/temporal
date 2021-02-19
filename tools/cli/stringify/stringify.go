@@ -110,7 +110,7 @@ func AnyToString(val interface{}, printFully bool, maxFieldLength int) string {
 			}
 
 			if b.Len() > 4 {
-				b.WriteRune(',')
+				b.WriteString(", ")
 			}
 			b.WriteString(mapKey.String())
 			b.WriteRune(':')
@@ -149,7 +149,7 @@ func AnyToString(val interface{}, printFully bool, maxFieldLength int) string {
 			}
 
 			if b.Len() > 1 {
-				b.WriteRune(',')
+				b.WriteString(", ")
 			}
 			if strings.HasSuffix(fieldName, "Reason") ||
 				strings.HasSuffix(fieldName, "Cause") ||
