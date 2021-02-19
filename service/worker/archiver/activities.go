@@ -155,6 +155,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 	searchAttributes, err := searchattribute.Stringify(request.SearchAttributes, nil)
 	if err != nil {
 		logger.Error("Unable to stringify search attributes.", tag.Error(err))
+		return err
 	}
 
 	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.VisibilityRecord{

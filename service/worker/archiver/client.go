@@ -238,22 +238,26 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		errCh <- err
 	}()
 	c.metricsScope.IncCounter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount)
-	URI, err := carchiver.NewURI(request.ArchiveRequest.VisibilityURI)
+	var uri carchiver.URI
+	uri, err = carchiver.NewURI(request.ArchiveRequest.VisibilityURI)
 	if err != nil {
 		return
 	}
 
-	visibilityArchiver, err := c.archiverProvider.GetVisibilityArchiver(URI.Scheme(), request.CallerService)
+	var visibilityArchiver carchiver.VisibilityArchiver
+	visibilityArchiver, err = c.archiverProvider.GetVisibilityArchiver(uri.Scheme(), request.CallerService)
 	if err != nil {
 		return
 	}
 
 	// It is safe to pass nil to typeMap here because search attributes type must be embedded by caller.
-	searchAttributes, err := searchattribute.Stringify(request.ArchiveRequest.SearchAttributes, nil)
+	var searchAttributes map[string]string
+	searchAttributes, err = searchattribute.Stringify(request.ArchiveRequest.SearchAttributes, nil)
 	if err != nil {
 		logger.Error("Unable to stringify search attributes.", tag.Error(err))
+		return
 	}
-	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.VisibilityRecord{
+	err = visibilityArchiver.Archive(ctx, uri, &archiverspb.VisibilityRecord{
 		NamespaceId:        request.ArchiveRequest.NamespaceID,
 		Namespace:          request.ArchiveRequest.Namespace,
 		WorkflowId:         request.ArchiveRequest.WorkflowID,
