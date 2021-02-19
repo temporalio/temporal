@@ -97,14 +97,13 @@ func (s *stringifySuite) TestAnyToString_DecodeMapValues() {
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		Memo:   &commonpb.Memo{Fields: fields},
 	}
-	s.Equal("{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:testValue}}}", AnyToString(execution, true, 0))
+	s.Equal(`{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:"testValue"}}}`, AnyToString(execution, true, 0))
 
-	fields["TestKey2"] = payload.EncodeString(`anotherTestValue`)
+	fields["TestKey2"] = payload.EncodeString("anotherTestValue")
 	execution.Memo = &commonpb.Memo{Fields: fields}
 	got := AnyToString(execution, true, 0)
-	expected := got == "{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
-		got == "{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
-	s.True(expected)
+	expected := `{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:"testValue", TestKey2:"anotherTestValue"}}}`
+	s.Equal(expected, got)
 }
 
 func (s *stringifySuite) TestIsAttributeName() {

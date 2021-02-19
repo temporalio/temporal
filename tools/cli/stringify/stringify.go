@@ -28,6 +28,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -97,27 +98,46 @@ func AnyToString(val interface{}, printFully bool, maxFieldLength int) string {
 	case reflect.Ptr:
 		return AnyToString(v.Elem().Interface(), printFully, maxFieldLength)
 	case reflect.Map:
+		type keyValuePair struct {
+			key   string
+			value string
+		}
+
+		kvPairs := make([]keyValuePair, 0, v.Len())
+		iter := v.MapRange()
+		for iter.Next() {
+			mapKey := iter.Key()
+			mapVal := iter.Value()
+			if !mapKey.CanInterface() || !mapVal.CanInterface() {
+				continue
+			}
+			mapKeyStr := AnyToString(mapKey.Interface(), true, 0)
+			if mapKeyStr == "" {
+				continue
+			}
+			mapValStr := AnyToString(mapVal.Interface(), true, 0)
+			if mapValStr == "" {
+				continue
+			}
+			kvPairs = append(kvPairs, keyValuePair{key: mapKeyStr, value: mapValStr})
+		}
+
+		if len(kvPairs) == 0 {
+			return ""
+		}
+
+		sort.Slice(kvPairs, func(i, j int) bool {
+			return strings.Compare(kvPairs[i].key, kvPairs[j].key) < 0
+		})
 		var b strings.Builder
 		b.WriteString("map{")
-		for _, mapKey := range v.MapKeys() {
-			mapVal := v.MapIndex(mapKey)
-			if !mapVal.CanInterface() {
-				continue
-			}
-			mapStr := AnyToString(mapVal.Interface(), printFully, maxFieldLength)
-			if mapStr == "" {
-				continue
-			}
-
-			if b.Len() > 4 {
+		for i, kvPair := range kvPairs {
+			b.WriteString(kvPair.key)
+			b.WriteRune(':')
+			b.WriteString(kvPair.value)
+			if i != len(kvPairs)-1 {
 				b.WriteString(", ")
 			}
-			b.WriteString(mapKey.String())
-			b.WriteRune(':')
-			b.WriteString(mapStr)
-		}
-		if b.Len() == 4 { // "map{" only
-			return ""
 		}
 		b.WriteRune('}')
 		return b.String()
