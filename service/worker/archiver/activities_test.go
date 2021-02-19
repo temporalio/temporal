@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
-	mmocks "go.temporal.io/server/common/metrics/mocks"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -73,8 +72,8 @@ type activitiesSuite struct {
 	mockHistoryMgr *persistence.MockHistoryManager
 
 	logger             log.Logger
-	metricsClient      *mmocks.Client
-	metricsScope       *mmocks.Scope
+	metricsClient      *metrics.MockClient
+	metricsScope       *metrics.MockScope
 	archiverProvider   *provider.MockArchiverProvider
 	historyArchiver    *carchiver.MockHistoryArchiver
 	visibilityArchiver *carchiver.MockVisibilityArchiver
@@ -91,24 +90,24 @@ func (s *activitiesSuite) SetupTest() {
 
 	zapLogger := zap.NewNop()
 	s.logger = loggerimpl.NewLogger(zapLogger)
-	s.metricsClient = &mmocks.Client{}
-	s.metricsScope = &mmocks.Scope{}
+	s.metricsClient = metrics.NewMockClient(s.controller)
+	s.metricsScope = metrics.NewMockScope(s.controller)
 	s.archiverProvider = provider.NewMockArchiverProvider(s.controller)
 	s.historyArchiver = carchiver.NewMockHistoryArchiver(s.controller)
 	s.visibilityArchiver = carchiver.NewMockVisibilityArchiver(s.controller)
-	s.metricsScope.On("StartTimer", metrics.ServiceLatency).Return(metrics.NewTestStopwatch()).Maybe()
-	s.metricsScope.On("RecordTimer", mock.Anything, mock.Anything).Maybe()
+	s.metricsScope.EXPECT().StartTimer(metrics.ServiceLatency).Return(metrics.NewTestStopwatch()).MinTimes(0)
+	s.metricsScope.EXPECT().RecordTimer(mock.Anything, mock.Anything).MinTimes(0)
 }
 
 func (s *activitiesSuite) TearDownTest() {
-	s.metricsClient.AssertExpectations(s.T())
-	s.metricsScope.AssertExpectations(s.T())
 	s.controller.Finish()
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_InvalidURI() {
-	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
-	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
+	s.metricsClient.EXPECT().Scope(
+		metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)},
+	).Return(s.metricsScope)
+	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverNonRetryableErrorCount)
 	container := &BootstrapContainer{
 		Logger:        s.logger,
 		MetricsClient: s.metricsClient,
@@ -133,9 +132,13 @@ func (s *activitiesSuite) TestUploadHistory_Fail_InvalidURI() {
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
-	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
-	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
-	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), common.WorkerServiceName).Return(nil, errors.New("failed to get archiver"))
+	s.metricsClient.EXPECT().Scope(
+		metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)},
+	).Return(s.metricsScope)
+	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverNonRetryableErrorCount)
+	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), common.WorkerServiceName).Return(
+		nil, errors.New("failed to get archiver"),
+	)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
 		MetricsClient:    s.metricsClient,
@@ -161,8 +164,8 @@ func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetryableError() {
-	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
-	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
+	s.metricsClient.EXPECT().Scope(metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
+	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverNonRetryableErrorCount)
 	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errUploadNonRetryable)
 	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), common.WorkerServiceName).Return(s.historyArchiver, nil)
 	container := &BootstrapContainer{
@@ -190,7 +193,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetryableError() {
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetryableError() {
-	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
+	s.metricsClient.EXPECT().Scope(metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
 	testArchiveErr := errors.New("some transient error")
 	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(testArchiveErr)
 	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), common.WorkerServiceName).Return(s.historyArchiver, nil)
@@ -219,7 +222,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetryableError() {
 }
 
 func (s *activitiesSuite) TestUploadHistory_Success() {
-	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
+	s.metricsClient.EXPECT().Scope(metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
 	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), common.WorkerServiceName).Return(s.historyArchiver, nil)
 	container := &BootstrapContainer{
@@ -247,8 +250,8 @@ func (s *activitiesSuite) TestUploadHistory_Success() {
 }
 
 func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryableError() {
-	s.metricsClient.On("Scope", metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
-	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
+	s.metricsClient.EXPECT().Scope(metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
+	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverNonRetryableErrorCount)
 	s.mockHistoryMgr.EXPECT().DeleteHistoryBranch(gomock.Any()).Return(errPersistenceNonRetryable)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
@@ -275,8 +278,8 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryabl
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_InvalidURI() {
-	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
-	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
+	s.metricsClient.EXPECT().Scope(metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
+	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverNonRetryableErrorCount)
 	container := &BootstrapContainer{
 		Logger:        s.logger,
 		MetricsClient: s.metricsClient,
@@ -298,8 +301,8 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_InvalidURI() {
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_GetArchiverError() {
-	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
-	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
+	s.metricsClient.EXPECT().Scope(metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
+	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverNonRetryableErrorCount)
 	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), common.WorkerServiceName).Return(nil, errors.New("failed to get archiver"))
 	container := &BootstrapContainer{
 		Logger:           s.logger,
@@ -323,8 +326,8 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_GetArchiverError() 
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetryableError() {
-	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
-	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
+	s.metricsClient.EXPECT().Scope(metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
+	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverNonRetryableErrorCount)
 	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errArchiveVisibilityNonRetryable)
 	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), common.WorkerServiceName).Return(s.visibilityArchiver, nil)
 	container := &BootstrapContainer{
@@ -349,7 +352,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetryable
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveRetryableError() {
-	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
+	s.metricsClient.EXPECT().Scope(metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
 	testArchiveErr := errors.New("some transient error")
 	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(testArchiveErr)
 	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), common.WorkerServiceName).Return(s.visibilityArchiver, nil)
@@ -375,7 +378,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveRetryableErr
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Success() {
-	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
+	s.metricsClient.EXPECT().Scope(metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
 	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), common.WorkerServiceName).Return(s.visibilityArchiver, nil)
 	container := &BootstrapContainer{

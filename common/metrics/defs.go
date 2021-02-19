@@ -132,10 +132,11 @@ var GoRuntimeMetrics = map[MetricName]MetricType{
 
 // Scopes enum
 const (
-	// -- Common Operation scopes --
+	UnknownScope = iota
 
+	// -- Common Operation scopes --
 	// PersistenceCreateShardScope tracks CreateShard calls made by service to persistence layer
-	PersistenceCreateShardScope = iota
+	PersistenceCreateShardScope
 	// PersistenceGetShardScope tracks GetShard calls made by service to persistence layer
 	PersistenceGetShardScope
 	// PersistenceUpdateShardScope tracks UpdateShard calls made by service to persistence layer
@@ -843,8 +844,6 @@ const (
 	HistoryRecordChildExecutionCompletedScope
 	// HistoryRequestCancelWorkflowExecutionScope tracks RequestCancelWorkflowExecution API calls received by service
 	HistoryRequestCancelWorkflowExecutionScope
-	// HistoryReplicateEventsScope tracks ReplicateEvents API calls received by service
-	HistoryReplicateEventsScope
 	// HistorySyncShardStatusScope tracks HistorySyncShardStatus API calls received by service
 	HistorySyncShardStatusScope
 	// HistorySyncActivityScope tracks HistoryActivity API calls received by service
@@ -867,6 +866,18 @@ const (
 	HistoryReapplyEventsScope
 	// HistoryRefreshWorkflowTasksScope is the scope used by refresh workflow tasks API
 	HistoryRefreshWorkflowTasksScope
+	// HistoryHistoryRemoveTaskScope is the scope used by remove task API
+	HistoryHistoryRemoveTaskScope
+	// HistoryCloseShard is the scope used by close shard API
+	HistoryCloseShard
+	// HistoryReplicateEventsV2 is the scope used by replicate events API
+	HistoryReplicateEventsV2
+	// HistoryResetStickyTaskQueue is the scope used by reset sticky task queue API
+	HistoryResetStickyTaskQueue
+	// HistoryReapplyEvents is the scope used by reapply events API
+	HistoryReapplyEvents
+	// HistoryDescribeHistoryHost is the scope used by describe history host API
+	HistoryDescribeHistoryHost
 	// TaskPriorityAssignerScope is the scope used by all metric emitted by task priority assigner
 	TaskPriorityAssignerScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
@@ -1092,6 +1103,7 @@ const (
 var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// common scope Names
 	Common: {
+		UnknownScope:                                             {operation: "Unknown"},
 		PersistenceCreateShardScope:                              {operation: "CreateShard"},
 		PersistenceGetShardScope:                                 {operation: "GetShard"},
 		PersistenceUpdateShardScope:                              {operation: "UpdateShard"},
@@ -1449,7 +1461,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryScheduleWorkflowTaskScope:                       {operation: "ScheduleWorkflowTask"},
 		HistoryRecordChildExecutionCompletedScope:              {operation: "RecordChildExecutionCompleted"},
 		HistoryRequestCancelWorkflowExecutionScope:             {operation: "RequestCancelWorkflowExecution"},
-		HistoryReplicateEventsScope:                            {operation: "ReplicateEvents"},
 		HistorySyncShardStatusScope:                            {operation: "SyncShardStatus"},
 		HistorySyncActivityScope:                               {operation: "SyncActivity"},
 		HistoryDescribeMutableStateScope:                       {operation: "DescribeMutableState"},
@@ -1461,6 +1472,12 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryShardControllerScope:                            {operation: "ShardController"},
 		HistoryReapplyEventsScope:                              {operation: "EventReapplication"},
 		HistoryRefreshWorkflowTasksScope:                       {operation: "RefreshWorkflowTasks"},
+		HistoryHistoryRemoveTaskScope:                          {operation: "RemoveTask"},
+		HistoryCloseShard:                                      {operation: "CloseShard"},
+		HistoryReplicateEventsV2:                               {operation: "ReplicateEventsV2"},
+		HistoryResetStickyTaskQueue:                            {operation: "ResetStickyTaskQueue"},
+		HistoryReapplyEvents:                                   {operation: "ReapplyEvents"},
+		HistoryDescribeHistoryHost:                             {operation: "DescribeHistoryHost"},
 		TaskPriorityAssignerScope:                              {operation: "TaskPriorityAssigner"},
 		TransferQueueProcessorScope:                            {operation: "TransferQueueProcessor"},
 		TransferActiveQueueProcessorScope:                      {operation: "TransferActiveQueueProcessor"},

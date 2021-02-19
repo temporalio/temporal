@@ -22,39 +22,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package host
 
 import (
-	"testing"
+	"time"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"github.com/uber-go/tally"
 
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (
-	HandlerTestSuite struct {
-		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
-		suite.Suite
-	}
+	noopMetricsClient struct{}
 )
 
-func TestHandlerTestSuite(t *testing.T) {
-	suite.Run(t, new(HandlerTestSuite))
+func (m noopMetricsClient) IncCounter(scope int, counter int) {}
+
+func (m noopMetricsClient) AddCounter(scope int, counter int, delta int64) {}
+
+func (m noopMetricsClient) StartTimer(scope int, timer int) tally.Stopwatch {
+	panic("Unexpected call to NoopMetricsClient StartTimer")
 }
 
-func (s *HandlerTestSuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-}
+func (m noopMetricsClient) RecordTimer(scope int, timer int, d time.Duration) {}
 
-func (s *HandlerTestSuite) TestValidateCQLClientConfig() {
-	config := new(CQLClientConfig)
-	s.NotNil(validateCQLClientConfig(config))
+func (m noopMetricsClient) RecordDistribution(scope int, timer int, d int) {}
 
-	config.Hosts = environment.GetCassandraAddress()
-	s.NotNil(validateCQLClientConfig(config))
+func (m noopMetricsClient) UpdateGauge(scope int, gauge int, value float64) {}
 
-	config.Keyspace = "foobar"
-	s.Nil(validateCQLClientConfig(config))
+func (m noopMetricsClient) Scope(scope int, tags ...metrics.Tag) metrics.Scope {
+	panic("Unexpected call to NoopMetricsClient Scope")
 }

@@ -171,10 +171,6 @@ func BuildCLIOptions() *cli.App {
 					Name:  schema.CLIFlagSchemaDir,
 					Usage: "path to directory containing versioned schema",
 				},
-				cli.BoolFlag{
-					Name:  schema.CLIFlagDryrun,
-					Usage: "do a dryrun",
-				},
 			},
 			Action: func(c *cli.Context) {
 				cliHandler(c, updateSchema)

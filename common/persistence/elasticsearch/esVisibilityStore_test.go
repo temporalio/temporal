@@ -50,7 +50,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log/loggerimpl"
-	metricsmocks "go.temporal.io/server/common/metrics/mocks"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/service/config"
@@ -66,7 +66,7 @@ type ESVisibilitySuite struct {
 	mockESClient      *es.MockClient
 	mockProducer      *mocks.KafkaProducer
 	mockProcessor     *MockProcessor
-	mockMetricsClient *metricsmocks.Client
+	mockMetricsClient *metrics.MockClient
 }
 
 var (
@@ -115,7 +115,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 		ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
 
-	s.mockMetricsClient = &metricsmocks.Client{}
+	s.mockMetricsClient = metrics.NewMockClient(s.controller)
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.controller = gomock.NewController(s.T())
 	s.mockProcessor = NewMockProcessor(s.controller)

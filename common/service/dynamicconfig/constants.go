@@ -60,8 +60,8 @@ var keys = map[Key]string{
 
 	// admin settings
 	// NOTE: admin settings are not guaranteed to be compatible across different versions
-	AdminMatchingDispatchRate:          "admin.matchingDispatchRate",
-	AdminMatchingTaskqueueDispatchRate: "admin.matchingTaskqueueDispatchRate",
+	AdminMatchingNamespaceToPartitionDispatchRate:          "admin.matchingNamespaceToPartitionDispatchRate",
+	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate: "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
 
 	// system settings
 	EnableVisibilitySampling:               "system.enableVisibilitySampling",
@@ -330,10 +330,10 @@ const (
 	testGetBoolPropertyFilteredByNamespaceIDKey
 	testGetBoolPropertyFilteredByTaskQueueInfoKey
 
-	// AdminMatchingDispatchRate is the max qps of any task queue for a given namespace
-	AdminMatchingDispatchRate
-	// AdminMatchingTaskqueueDispatchRate is the max qps of a task queue for a given namespace
-	AdminMatchingTaskqueueDispatchRate
+	// AdminMatchingNamespaceToPartitionDispatchRate is the max qps of any task queue partition for a given namespace
+	AdminMatchingNamespaceToPartitionDispatchRate
+	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue
+	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate
 
 	// EnableVisibilitySampling is key for enable visibility sampling
 	EnableVisibilitySampling

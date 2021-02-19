@@ -65,8 +65,8 @@ type (
 
 		ThrottledLogRPS dynamicconfig.IntPropertyFn
 
-		AdminMatchingDispatchRate          dynamicconfig.FloatPropertyFnWithNamespaceFilter
-		AdminMatchingTaskqueueDispatchRate dynamicconfig.FloatPropertyFnWithTaskQueueInfoFilters
+		AdminNamespaceToPartitionDispatchRate          dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		AdminNamespaceTaskqueueToPartitionDispatchRate dynamicconfig.FloatPropertyFnWithTaskQueueInfoFilters
 	}
 
 	forwarderConfig struct {
@@ -94,8 +94,10 @@ type (
 		NumWritePartitions              func() int
 		NumReadPartitions               func() int
 
-		AdminDispatchRate               func() float64
-		AdminQueuePartitionDispatchRate func() float64
+		// partition qps = AdminNamespaceToPartitionDispatchRate(namespace)
+		AdminNamespaceToPartitionDispatchRate func() float64
+		// partition qps = AdminNamespaceTaskQueueToPartitionDispatchRate(namespace, task_queue)
+		AdminNamespaceTaskQueueToPartitionDispatchRate func() float64
 	}
 )
 
@@ -125,8 +127,8 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		ForwarderMaxChildrenPerNode:     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
 		ShutdownDrainDuration:           dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0),
 
-		AdminMatchingDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingDispatchRate, 1000000),
-		AdminMatchingTaskqueueDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingTaskqueueDispatchRate, 4000),
+		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),
+		AdminNamespaceTaskqueueToPartitionDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1000),
 	}
 }
 
@@ -181,11 +183,11 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespaceCache cache.Na
 		},
 		NumWritePartitions: writePartition,
 		NumReadPartitions:  readPartition,
-		AdminDispatchRate: func() float64 {
-			return config.AdminMatchingDispatchRate(namespace)
+		AdminNamespaceToPartitionDispatchRate: func() float64 {
+			return config.AdminNamespaceToPartitionDispatchRate(namespace)
 		},
-		AdminQueuePartitionDispatchRate: func() float64 {
-			return config.AdminMatchingTaskqueueDispatchRate(namespace, taskQueueName, taskType) / float64(readPartition())
+		AdminNamespaceTaskQueueToPartitionDispatchRate: func() float64 {
+			return config.AdminNamespaceTaskqueueToPartitionDispatchRate(namespace, taskQueueName, taskType)
 		},
 		forwarderConfig: forwarderConfig{
 			ForwarderMaxOutstandingPolls: func() int {

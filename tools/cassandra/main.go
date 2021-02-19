@@ -42,7 +42,7 @@ func RunTool(args []string) error {
 
 // SetupSchema setups the cassandra schema
 func SetupSchema(config *SetupSchemaConfig) error {
-	if err := validateCQLClientConfig(&config.CQLClientConfig, false); err != nil {
+	if err := validateCQLClientConfig(&config.CQLClientConfig); err != nil {
 		return err
 	}
 	db, err := newCQLClient(&config.CQLClientConfig)
@@ -182,10 +182,6 @@ func buildCLIOptions() *cli.App {
 				cli.StringFlag{
 					Name:  schema.CLIFlagSchemaDir,
 					Usage: "path to directory containing versioned schema",
-				},
-				cli.BoolFlag{
-					Name:  schema.CLIFlagDryrun,
-					Usage: "do a dryrun",
 				},
 			},
 			Action: func(c *cli.Context) {

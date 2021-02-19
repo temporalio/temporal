@@ -35,10 +35,12 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -100,13 +102,28 @@ func (s *Service) Start() {
 	s.Resource.Start()
 	s.handler.Start()
 
+	metricsInterceptor := interceptor.NewTelemetryInterceptor(
+		s.Resource.GetMetricsClient(),
+		metrics.MatchingAPIMetricsScopes(),
+		s.Resource.GetLogger(),
+	)
+	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
+		func() float64 { return float64(s.config.RPS()) },
+		map[string]int{},
+	)
+
 	opts, err := s.params.RPCFactory.GetInternodeGRPCServerOptions()
 	if err != nil {
 		logger.Fatal("creating grpc server options failed", tag.Error(err))
 	}
 	opts = append(
 		opts,
-		grpc.ChainUnaryInterceptor(rpc.ServiceErrorInterceptor))
+		grpc.ChainUnaryInterceptor(
+			rpc.ServiceErrorInterceptor,
+			metricsInterceptor.Intercept,
+			rateLimiterInterceptor.Intercept,
+		),
+	)
 	s.server = grpc.NewServer(opts...)
 	matchingservice.RegisterMatchingServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.handler)

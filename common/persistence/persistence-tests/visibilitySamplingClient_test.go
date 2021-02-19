@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -36,7 +37,6 @@ import (
 
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
-	mmocks "go.temporal.io/server/common/metrics/mocks"
 	"go.temporal.io/server/common/mocks"
 	p "go.temporal.io/server/common/persistence"
 	c "go.temporal.io/server/common/service/config"
@@ -46,9 +46,11 @@ import (
 type VisibilitySamplingSuite struct {
 	*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 	suite.Suite
+	controller *gomock.Controller
+
 	client       p.VisibilityManager
 	persistence  *mocks.VisibilityManager
-	metricClient *mmocks.Client
+	metricClient *metrics.MockClient
 }
 
 var (
@@ -76,13 +78,13 @@ func (s *VisibilitySamplingSuite) SetupTest() {
 		VisibilityClosedMaxQPS: dynamicconfig.GetIntPropertyFilteredByNamespace(2),
 		VisibilityListMaxQPS:   dynamicconfig.GetIntPropertyFilteredByNamespace(1),
 	}
-	s.metricClient = &mmocks.Client{}
+	s.controller = gomock.NewController(s.T())
+	s.metricClient = metrics.NewMockClient(s.controller)
 	s.client = p.NewVisibilitySamplingClient(s.persistence, config, s.metricClient, loggerimpl.NewNopLogger())
 }
 
 func (s *VisibilitySamplingSuite) TearDownTest() {
 	s.persistence.AssertExpectations(s.T())
-	s.metricClient.AssertExpectations(s.T())
 }
 
 func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionStarted() {
@@ -99,7 +101,9 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionStarted() {
 	s.NoError(s.client.RecordWorkflowExecutionStarted(request))
 
 	// no remaining tokens
-	s.metricClient.On("IncCounter", metrics.PersistenceRecordWorkflowExecutionStartedScope, metrics.PersistenceSampledCounter).Once()
+	s.metricClient.EXPECT().IncCounter(
+		metrics.PersistenceRecordWorkflowExecutionStartedScope, metrics.PersistenceSampledCounter,
+	)
 	s.NoError(s.client.RecordWorkflowExecutionStarted(request))
 }
 
@@ -129,9 +133,14 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionClosed() {
 	s.NoError(s.client.RecordWorkflowExecutionClosed(request2))
 
 	// no remaining tokens
-	s.metricClient.On("IncCounter", metrics.PersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceSampledCounter).Once()
+	s.metricClient.EXPECT().IncCounter(
+		metrics.PersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceSampledCounter,
+	)
 	s.NoError(s.client.RecordWorkflowExecutionClosed(request))
-	s.metricClient.On("IncCounter", metrics.PersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceSampledCounter).Once()
+
+	s.metricClient.EXPECT().IncCounter(
+		metrics.PersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceSampledCounter,
+	)
 	s.NoError(s.client.RecordWorkflowExecutionClosed(request2))
 }
 

@@ -22,61 +22,54 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package clitest
+package metrics
 
 import (
-	"net"
-	"strconv"
+	"fmt"
+	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/environment"
-	"go.temporal.io/server/tools/sql"
 )
 
 type (
-	// HandlerTestSuite defines a test suite
-	HandlerTestSuite struct {
-		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
+	apiMetricsSuite struct {
 		suite.Suite
-		host       string
-		port       string
-		pluginName string
+		*require.Assertions
 	}
 )
 
-// NewHandlerTestSuite returns a test suite
-func NewHandlerTestSuite(
-	host string,
-	port string,
-	pluginName string,
-) *HandlerTestSuite {
-	return &HandlerTestSuite{
-		host:       host,
-		port:       port,
-		pluginName: pluginName,
+func TestAPIMetricsSuite(t *testing.T) {
+	s := new(apiMetricsSuite)
+	suite.Run(t, s)
+}
+
+func (s *apiMetricsSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+}
+
+func (s *apiMetricsSuite) TearDownTest() {
+
+}
+
+func (s *apiMetricsSuite) TestMatchingAPIMetrics() {
+	apiNames := MatchingAPIMetricsNames()
+	apiNameToScope := MatchingAPIMetricsScopes()
+	for apiName := range apiNames {
+		if _, ok := apiNameToScope[apiName]; !ok {
+			fmt.Println(apiName)
+		}
 	}
+	s.Equal(len(apiNames), len(apiNameToScope))
 }
 
-// SetupTest setups test
-func (s *HandlerTestSuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-}
-
-// TestValidateConnectConfig test
-func (s *HandlerTestSuite) TestValidateConnectConfig() {
-	cfg := new(config.SQL)
-
-	s.NotNil(sql.ValidateConnectConfig(cfg))
-
-	cfg.ConnectAddr = net.JoinHostPort(
-		environment.GetMySQLAddress(),
-		strconv.Itoa(environment.GetMySQLPort()),
-	)
-	s.NotNil(sql.ValidateConnectConfig(cfg))
-
-	cfg.DatabaseName = "foobar"
-	s.Nil(sql.ValidateConnectConfig(cfg))
+func (s *apiMetricsSuite) TestHistoryAPIMetrics() {
+	apiNames := HistoryAPIMetricsNames()
+	apiNameToScope := HistoryAPIMetricsScopes()
+	for apiName := range apiNames {
+		if _, ok := apiNameToScope[apiName]; !ok {
+			fmt.Println(apiName)
+		}
+	}
+	s.Equal(len(apiNames), len(apiNameToScope))
 }
