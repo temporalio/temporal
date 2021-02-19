@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 )
 
@@ -51,7 +50,6 @@ type (
 		metricsClient metrics.Client
 		logger        log.Logger
 		startWG       sync.WaitGroup
-		rateLimiter   quotas.RateLimiter
 	}
 )
 
@@ -75,9 +73,6 @@ func NewHandler(
 		config:        config,
 		metricsClient: resource.GetMetricsClient(),
 		logger:        resource.GetLogger(),
-		rateLimiter: quotas.NewDefaultIncomingDynamicRateLimiter(
-			func() float64 { return float64(config.RPS()) },
-		),
 		engine: NewEngine(
 			resource.GetTaskManager(),
 			resource.GetHistoryClient(),
@@ -157,15 +152,8 @@ func (h *Handler) AddActivityTask(
 		metrics.MatchingAddActivityTaskScope,
 	)
 
-	sw := hCtx.startProfiling(&h.startWG)
-	defer sw.Stop()
-
 	if request.GetForwardedSource() != "" {
 		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return &matchingservice.AddActivityTaskResponse{}, hCtx.handleErr(errMatchingHostThrottle)
 	}
 
 	syncMatch, err := h.engine.AddActivityTask(hCtx, request)
@@ -173,7 +161,7 @@ func (h *Handler) AddActivityTask(
 		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskQueue, time.Since(startT))
 	}
 
-	return &matchingservice.AddActivityTaskResponse{}, hCtx.handleErr(err)
+	return &matchingservice.AddActivityTaskResponse{}, err
 }
 
 // AddWorkflowTask - adds a workflow task.
@@ -190,22 +178,15 @@ func (h *Handler) AddWorkflowTask(
 		metrics.MatchingAddWorkflowTaskScope,
 	)
 
-	sw := hCtx.startProfiling(&h.startWG)
-	defer sw.Stop()
-
 	if request.GetForwardedSource() != "" {
 		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return &matchingservice.AddWorkflowTaskResponse{}, hCtx.handleErr(errMatchingHostThrottle)
 	}
 
 	syncMatch, err := h.engine.AddWorkflowTask(hCtx, request)
 	if syncMatch {
 		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskQueue, time.Since(startT))
 	}
-	return &matchingservice.AddWorkflowTaskResponse{}, hCtx.handleErr(err)
+	return &matchingservice.AddWorkflowTaskResponse{}, err
 }
 
 // PollActivityTaskQueue - long poll for an activity task.
@@ -221,15 +202,8 @@ func (h *Handler) PollActivityTaskQueue(
 		metrics.MatchingPollActivityTaskQueueScope,
 	)
 
-	sw := hCtx.startProfiling(&h.startWG)
-	defer sw.Stop()
-
 	if request.GetForwardedSource() != "" {
 		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, hCtx.handleErr(errMatchingHostThrottle)
 	}
 
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
@@ -237,11 +211,11 @@ func (h *Handler) PollActivityTaskQueue(
 		"PollActivityTaskQueue",
 		h.Resource.GetThrottledLogger(),
 	); err != nil {
-		return nil, hCtx.handleErr(err)
+		return nil, err
 	}
 
 	response, err := h.engine.PollActivityTaskQueue(hCtx, request)
-	return response, hCtx.handleErr(err)
+	return response, err
 }
 
 // PollWorkflowTaskQueue - long poll for a workflow task.
@@ -257,15 +231,8 @@ func (h *Handler) PollWorkflowTaskQueue(
 		metrics.MatchingPollWorkflowTaskQueueScope,
 	)
 
-	sw := hCtx.startProfiling(&h.startWG)
-	defer sw.Stop()
-
 	if request.GetForwardedSource() != "" {
 		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, hCtx.handleErr(errMatchingHostThrottle)
 	}
 
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
@@ -273,11 +240,11 @@ func (h *Handler) PollWorkflowTaskQueue(
 		"PollWorkflowTaskQueue",
 		h.Resource.GetThrottledLogger(),
 	); err != nil {
-		return nil, hCtx.handleErr(err)
+		return nil, err
 	}
 
 	response, err := h.engine.PollWorkflowTaskQueue(hCtx, request)
-	return response, hCtx.handleErr(err)
+	return response, err
 }
 
 // QueryWorkflow queries a given workflow synchronously and return the query result.
@@ -293,19 +260,12 @@ func (h *Handler) QueryWorkflow(
 		metrics.MatchingQueryWorkflowScope,
 	)
 
-	sw := hCtx.startProfiling(&h.startWG)
-	defer sw.Stop()
-
 	if request.GetForwardedSource() != "" {
 		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
 	}
 
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, hCtx.handleErr(errMatchingHostThrottle)
-	}
-
 	response, err := h.engine.QueryWorkflow(hCtx, request)
-	return response, hCtx.handleErr(err)
+	return response, err
 }
 
 // RespondQueryTaskCompleted responds a query task completed
@@ -321,14 +281,8 @@ func (h *Handler) RespondQueryTaskCompleted(
 		metrics.MatchingRespondQueryTaskCompletedScope,
 	)
 
-	sw := hCtx.startProfiling(&h.startWG)
-	defer sw.Stop()
-
-	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	h.rateLimiter.Allow()
-
 	err := h.engine.RespondQueryTaskCompleted(hCtx, request)
-	return &matchingservice.RespondQueryTaskCompletedResponse{}, hCtx.handleErr(err)
+	return &matchingservice.RespondQueryTaskCompletedResponse{}, err
 }
 
 // CancelOutstandingPoll is used to cancel outstanding pollers
@@ -342,14 +296,8 @@ func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 		metrics.MatchingCancelOutstandingPollScope,
 	)
 
-	sw := hCtx.startProfiling(&h.startWG)
-	defer sw.Stop()
-
-	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	h.rateLimiter.Allow()
-
 	err := h.engine.CancelOutstandingPoll(hCtx, request)
-	return &matchingservice.CancelOutstandingPollResponse{}, hCtx.handleErr(err)
+	return &matchingservice.CancelOutstandingPollResponse{}, err
 }
 
 // DescribeTaskQueue returns information about the target task queue, right now this API returns the
@@ -367,15 +315,8 @@ func (h *Handler) DescribeTaskQueue(
 		metrics.MatchingDescribeTaskQueueScope,
 	)
 
-	sw := hCtx.startProfiling(&h.startWG)
-	defer sw.Stop()
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, hCtx.handleErr(errMatchingHostThrottle)
-	}
-
 	response, err := h.engine.DescribeTaskQueue(hCtx, request)
-	return response, hCtx.handleErr(err)
+	return response, err
 }
 
 // ListTaskQueuePartitions returns information about partitions for a taskQueue
@@ -393,15 +334,8 @@ func (h *Handler) ListTaskQueuePartitions(
 		h.logger,
 	)
 
-	sw := hCtx.startProfiling(&h.startWG)
-	defer sw.Stop()
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, hCtx.handleErr(errMatchingHostThrottle)
-	}
-
 	response, err := h.engine.ListTaskQueuePartitions(hCtx, request)
-	return response, hCtx.handleErr(err)
+	return response, err
 }
 
 func (h *Handler) namespaceName(id string) string {

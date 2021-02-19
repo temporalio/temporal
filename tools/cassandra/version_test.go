@@ -25,19 +25,18 @@
 package cassandra
 
 import (
-	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"path"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/environment"
@@ -94,24 +93,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		},
 		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
 	}
-	s.NoError(VerifyCompatibleVersion(cfg))
-}
-
-func (s *VersionTestSuite) TestCheckCompatibleVersion() {
-	flags := []struct {
-		expectedVersion string
-		actualVersion   string
-		errStr          string
-		expectedFail    bool
-	}{
-		{"2.0", "1.0", "version mismatch", false},
-		{"1.0", "1.0", "", false},
-		{"1.0", "2.0", "", false},
-		{"1.0", "abc", "unable to read DB schema version", false},
-	}
-	for _, flag := range flags {
-		s.runCheckCompatibleVersion(flag.expectedVersion, flag.actualVersion, flag.errStr, flag.expectedFail)
-	}
+	s.NoError(cassandra.VerifyCompatibleVersion(cfg, resolver.NewNoopResolver()))
 }
 
 func (s *VersionTestSuite) createKeyspace(keyspace string) func() {
@@ -132,50 +114,6 @@ func (s *VersionTestSuite) createKeyspace(keyspace string) func() {
 	return func() {
 		s.NoError(client.dropKeyspace(keyspace))
 		client.Close()
-	}
-}
-
-func (s *VersionTestSuite) runCheckCompatibleVersion(
-	expected string, actual string, errStr string, expectedFail bool,
-) {
-	r := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
-	keyspace := fmt.Sprintf("version_test_%v", r.Int63())
-	defer s.createKeyspace(keyspace)()
-
-	dir := "check_version"
-	tmpDir, err := ioutil.TempDir("", dir)
-	s.NoError(err)
-	defer os.RemoveAll(tmpDir)
-
-	subdir := tmpDir + "/" + keyspace
-	s.NoError(os.Mkdir(subdir, os.FileMode(0744)))
-
-	s.createSchemaForVersion(subdir, actual)
-	if expected != actual {
-		s.createSchemaForVersion(subdir, expected)
-	}
-
-	cqlFile := subdir + "/v" + actual + "/tmp.cql"
-	s.NoError(RunTool([]string{
-		"./tool", "-k", keyspace, "-q", "setup-schema", "-f", cqlFile, "-version", actual, "-o",
-	}))
-	if expectedFail {
-		os.RemoveAll(subdir + "/v" + actual)
-	}
-
-	cfg := config.Cassandra{
-		Hosts:    environment.GetCassandraAddress(),
-		Port:     environment.GetCassandraPort(),
-		User:     "",
-		Password: "",
-		Keyspace: keyspace,
-	}
-	err = checkCompatibleVersion(cfg, expected)
-	if len(errStr) > 0 {
-		s.Error(err)
-		s.Contains(err.Error(), errStr)
-	} else {
-		s.NoError(err)
 	}
 }
 

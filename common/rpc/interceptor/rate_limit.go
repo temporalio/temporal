@@ -22,39 +22,59 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package interceptor
 
 import (
-	"testing"
+	"context"
+	"time"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc"
 
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/common/quotas"
+)
+
+const (
+	RateLimitDefaultToken = 1
+)
+
+var (
+	RateLimitServerBusy = serviceerror.NewResourceExhausted("Too many outstanding requests to the service.")
 )
 
 type (
-	HandlerTestSuite struct {
-		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
-		suite.Suite
+	RateLimitInterceptor struct {
+		rateLimiter quotas.RateLimiter
+		tokens      map[string]int
 	}
 )
 
-func TestHandlerTestSuite(t *testing.T) {
-	suite.Run(t, new(HandlerTestSuite))
+var _ grpc.UnaryServerInterceptor = (*RateLimitInterceptor)(nil).Intercept
+
+func NewRateLimitInterceptor(
+	rate quotas.RateFn,
+	tokens map[string]int,
+) *RateLimitInterceptor {
+	return &RateLimitInterceptor{
+		rateLimiter: quotas.NewDefaultIncomingDynamicRateLimiter(rate),
+		tokens:      tokens,
+	}
 }
 
-func (s *HandlerTestSuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-}
+func (i *RateLimitInterceptor) Intercept(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+	_, methodName := splitMethodName(info.FullMethod)
+	token, ok := i.tokens[methodName]
+	if !ok {
+		token = RateLimitDefaultToken
+	}
 
-func (s *HandlerTestSuite) TestValidateCQLClientConfig() {
-	config := new(CQLClientConfig)
-	s.NotNil(validateCQLClientConfig(config))
-
-	config.Hosts = environment.GetCassandraAddress()
-	s.NotNil(validateCQLClientConfig(config))
-
-	config.Keyspace = "foobar"
-	s.Nil(validateCQLClientConfig(config))
+	if !i.rateLimiter.AllowN(time.Now().UTC(), token) {
+		return nil, RateLimitServerBusy
+	}
+	return handler(ctx, req)
 }

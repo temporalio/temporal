@@ -65,22 +65,30 @@ func init() {
 }
 
 // CreateDB initialize the db object
-func (p *plugin) CreateDB(cfg *config.SQL, r resolver.ServiceResolver) (sqlplugin.DB, error) {
+func (p *plugin) CreateDB(
+	dbKind sqlplugin.DbKind,
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+) (sqlplugin.DB, error) {
 	conn, err := p.createDBConnection(cfg, r)
 	if err != nil {
 		return nil, err
 	}
-	db := newDB(conn, nil)
+	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
 	return db, nil
 }
 
 // CreateAdminDB initialize the db object
-func (p *plugin) CreateAdminDB(cfg *config.SQL, r resolver.ServiceResolver) (sqlplugin.AdminDB, error) {
+func (p *plugin) CreateAdminDB(
+	dbKind sqlplugin.DbKind,
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+) (sqlplugin.AdminDB, error) {
 	conn, err := p.createDBConnection(cfg, r)
 	if err != nil {
 		return nil, err
 	}
-	db := newDB(conn, nil)
+	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
 	return db, nil
 }
 

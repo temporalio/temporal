@@ -25,17 +25,13 @@
 package cassandra
 
 import (
-	"context"
 	"fmt"
 	"log"
 
 	"github.com/urfave/cli"
-	"golang.org/x/sync/errgroup"
 
 	"go.temporal.io/server/common/auth"
-	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/environment"
-	"go.temporal.io/server/schema/cassandra"
 	"go.temporal.io/server/tools/common/schema"
 )
 
@@ -45,77 +41,6 @@ const defaultNumReplicas = 1
 type SetupSchemaConfig struct {
 	CQLClientConfig
 	schema.SetupConfig
-}
-
-// VerifyCompatibleVersion ensures that the installed version of temporal and visibility keyspaces
-// is greater than or equal to the expected version.
-// In most cases, the versions should match. However if after a schema upgrade there is a code
-// rollback, the code version (expected version) would fall lower than the actual version in
-// cassandra.
-func VerifyCompatibleVersion(
-	cfg config.Persistence,
-) error {
-	g, _ := errgroup.WithContext(context.Background())
-	g.Go(func() error {
-		return checkTemporalKeyspace(cfg)
-	})
-	g.Go(func() error {
-		return checkVisibilityKeyspace(cfg)
-	})
-
-	return g.Wait()
-}
-
-func checkTemporalKeyspace(
-	cfg config.Persistence,
-) error {
-	ds, ok := cfg.DataStores[cfg.DefaultStore]
-	if ok && ds.Cassandra != nil {
-		err := checkCompatibleVersion(*ds.Cassandra, cassandra.Version)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func checkVisibilityKeyspace(
-	cfg config.Persistence,
-) error {
-	ds, ok := cfg.DataStores[cfg.VisibilityStore]
-	if ok && ds.Cassandra != nil {
-		err := checkCompatibleVersion(*ds.Cassandra, cassandra.VisibilityVersion)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// checkCompatibleVersion check the version compatibility
-func checkCompatibleVersion(
-	cfg config.Cassandra,
-	expectedVersion string,
-) error {
-
-	client, err := newCQLClient(&CQLClientConfig{
-		Hosts:      cfg.Hosts,
-		Port:       cfg.Port,
-		User:       cfg.User,
-		Password:   cfg.Password,
-		Keyspace:   cfg.Keyspace,
-		Timeout:    defaultTimeout,
-		Datacenter: cfg.Datacenter,
-		TLS:        cfg.TLS,
-	})
-	if err != nil {
-		return fmt.Errorf("unable to create CQL Client: %v", err.Error())
-	}
-	defer client.Close()
-
-	return schema.VerifyCompatibleVersion(client, cfg.Keyspace, expectedVersion)
 }
 
 // setupSchema executes the setupSchemaTask
@@ -143,16 +68,6 @@ func updateSchema(cli *cli.Context) error {
 	config, err := newCQLClientConfig(cli)
 	if err != nil {
 		return handleErr(schema.NewConfigError(err.Error()))
-	}
-	if config.Keyspace == schema.DryrunDBName {
-		cfg := *config
-		if err := doCreateKeyspace(cfg, cfg.Keyspace); err != nil {
-			return handleErr(fmt.Errorf("error creating dryrun Keyspace: %v", err))
-		}
-		defer func() {
-			err := doDropKeyspace(cfg, cfg.Keyspace)
-			logErr(err)
-		}()
 	}
 	client, err := newCQLClient(config)
 	if err != nil {
@@ -259,22 +174,18 @@ func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
 		}
 	}
 
-	isDryRun := cli.Bool(schema.CLIOptDryrun)
-	if err := validateCQLClientConfig(config, isDryRun); err != nil {
+	if err := validateCQLClientConfig(config); err != nil {
 		return nil, err
 	}
 	return config, nil
 }
 
-func validateCQLClientConfig(config *CQLClientConfig, isDryRun bool) error {
+func validateCQLClientConfig(config *CQLClientConfig) error {
 	if len(config.Hosts) == 0 {
 		return schema.NewConfigError("missing cassandra endpoint argument " + flag(schema.CLIOptEndpoint))
 	}
 	if config.Keyspace == "" {
-		if !isDryRun {
-			return schema.NewConfigError("missing " + flag(schema.CLIOptKeyspace) + " argument ")
-		}
-		config.Keyspace = schema.DryrunDBName
+		return schema.NewConfigError("missing " + flag(schema.CLIOptKeyspace) + " argument ")
 	}
 	if config.Port == 0 {
 		config.Port = environment.GetCassandraPort()

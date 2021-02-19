@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
-	metricsmocks "go.temporal.io/server/common/metrics/mocks"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -175,7 +174,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 			ValidSearchAttributes:    dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
 		}
-		esProcessor := pes.NewProcessor(esProcessorConfig, esClient, logger, &metricsmocks.Client{})
+		esProcessor := pes.NewProcessor(esProcessorConfig, esClient, logger, &noopMetricsClient{})
 		esProcessor.Start()
 
 		visConfig := &config.VisibilityConfig{
@@ -185,7 +184,9 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 		}
 		indexName := options.ESConfig.Indices[common.VisibilityAppName]
-		esVisibilityStore := pes.NewElasticSearchVisibilityStore(esClient, indexName, nil, esProcessor, visConfig, logger, &metricsmocks.Client{})
+		esVisibilityStore := pes.NewElasticSearchVisibilityStore(
+			esClient, indexName, nil, esProcessor, visConfig, logger, &noopMetricsClient{},
+		)
 		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, visConfig.ValidSearchAttributes, logger)
 	}
 	visibilityMgr := persistence.NewVisibilityManagerWrapper(testBase.VisibilityMgr, esVisibilityMgr,

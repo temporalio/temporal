@@ -174,7 +174,7 @@ func (s *TestCluster) DropDatabase() {
 // LoadSchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
 	workflowSchemaDir := path.Join(schemaDir, "temporal")
-	err := loadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), true, nil)
+	err := loadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), nil)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		s.logger.Fatal("loadCassandraSchema", tag.Error(err))
 	}
@@ -183,7 +183,7 @@ func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
 // LoadVisibilitySchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string) {
 	workflowSchemaDir := path.Join(schemaDir, "visibility")
-	err := loadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), false, nil)
+	err := loadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), nil)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		s.logger.Fatal("loadCassandraVisibilitySchema", tag.Error(err))
 	}

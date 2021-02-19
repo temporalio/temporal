@@ -44,7 +44,7 @@ var _ schema.DB = (*Connection)(nil)
 
 // NewConnection creates a new connection to database
 func NewConnection(cfg *config.SQL) (*Connection, error) {
-	db, err := sql.NewSQLAdminDB(cfg, resolver.NewNoopResolver())
+	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
 	if err != nil {
 		return nil, err
 	}

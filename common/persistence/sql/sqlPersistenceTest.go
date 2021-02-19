@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
@@ -126,7 +127,7 @@ func (s *TestCluster) CreateDatabase() {
 	cfg2 := s.cfg
 	// NOTE need to connect with empty name to create new database
 	cfg2.DatabaseName = ""
-	db, err := NewSQLAdminDB(&cfg2, resolver.NewNoopResolver())
+	db, err := NewSQLAdminDB(sqlplugin.DbKindUnknown, &cfg2, resolver.NewNoopResolver())
 	if err != nil {
 		panic(err)
 	}
@@ -147,7 +148,7 @@ func (s *TestCluster) DropDatabase() {
 	cfg2 := s.cfg
 	// NOTE need to connect with empty name to drop the database
 	cfg2.DatabaseName = ""
-	db, err := NewSQLAdminDB(&cfg2, resolver.NewNoopResolver())
+	db, err := NewSQLAdminDB(sqlplugin.DbKindUnknown, &cfg2, resolver.NewNoopResolver())
 	if err != nil {
 		panic(err)
 	}
@@ -166,7 +167,7 @@ func (s *TestCluster) DropDatabase() {
 // LoadSchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
 	workflowSchemaDir := path.Join(schemaDir, "temporal")
-	err := s.loadDatabaseSchema(workflowSchemaDir, fileNames, true)
+	err := s.loadDatabaseSchema(workflowSchemaDir, fileNames)
 	if err != nil {
 		s.logger.Fatal("loadDatabaseSchema", tag.Error(err))
 	}
@@ -175,7 +176,7 @@ func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
 // LoadVisibilitySchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string) {
 	workflowSchemaDir := path.Join(schemaDir, "visibility")
-	err := s.loadDatabaseSchema(workflowSchemaDir, fileNames, true)
+	err := s.loadDatabaseSchema(workflowSchemaDir, fileNames)
 	if err != nil {
 		s.logger.Fatal("loadDatabaseVisibilitySchema", tag.Error(err))
 	}
@@ -199,8 +200,8 @@ func getTemporalPackageDir() (string, error) {
 }
 
 // loadDatabaseSchema loads the schema from the given .sql files on this database
-func (s *TestCluster) loadDatabaseSchema(dir string, fileNames []string, override bool) (err error) {
-	db, err := NewSQLAdminDB(&s.cfg, resolver.NewNoopResolver())
+func (s *TestCluster) loadDatabaseSchema(dir string, fileNames []string) (err error) {
+	db, err := NewSQLAdminDB(sqlplugin.DbKindUnknown, &s.cfg, resolver.NewNoopResolver())
 	if err != nil {
 		panic(err)
 	}

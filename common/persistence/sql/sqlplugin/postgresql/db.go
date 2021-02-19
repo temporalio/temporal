@@ -26,16 +26,21 @@ package postgresql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 
+	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	postgresqlschema "go.temporal.io/server/schema/postgresql"
 )
 
 // db represents a logical connection to mysql database
 type db struct {
+	dbKind sqlplugin.DbKind
+	dbName string
+
 	db        *sqlx.DB
 	tx        *sqlx.Tx
 	conn      sqlplugin.Conn
@@ -56,8 +61,18 @@ func (pdb *db) IsDupEntryError(err error) bool {
 
 // newDB returns an instance of DB, which is a logical
 // connection to the underlying postgresql database
-func newDB(xdb *sqlx.DB, tx *sqlx.Tx) *db {
-	mdb := &db{db: xdb, tx: tx}
+func newDB(
+	dbKind sqlplugin.DbKind,
+	dbName string,
+	xdb *sqlx.DB,
+	tx *sqlx.Tx,
+) *db {
+	mdb := &db{
+		dbKind: dbKind,
+		dbName: dbName,
+		db:     xdb,
+		tx:     tx,
+	}
 	mdb.conn = xdb
 	if tx != nil {
 		mdb.conn = tx
@@ -72,7 +87,7 @@ func (pdb *db) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newDB(pdb.db, xtx), nil
+	return newDB(pdb.dbKind, pdb.dbName, pdb.db, xtx), nil
 }
 
 // Commit commits a previously started transaction
@@ -96,13 +111,19 @@ func (pdb *db) PluginName() string {
 }
 
 // ExpectedVersion returns expected version.
-func (mdb *db) ExpectedVersion(dbKind sqlplugin.DbKind) string {
-	switch dbKind {
+func (pdb *db) ExpectedVersion() string {
+	switch pdb.dbKind {
 	case sqlplugin.DbKindMain:
 		return postgresqlschema.Version
 	case sqlplugin.DbKindVisibility:
 		return postgresqlschema.VisibilityVersion
 	default:
-		return ""
+		panic(fmt.Sprintf("unknown db kind %v", pdb.dbKind))
 	}
+}
+
+// VerifyVersion verify schema version is up to date
+func (pdb *db) VerifyVersion() error {
+	expectedVersion := pdb.ExpectedVersion()
+	return schema.VerifyCompatibleVersion(pdb, pdb.dbName, expectedVersion)
 }

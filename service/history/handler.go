@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/task"
@@ -69,7 +68,6 @@ type (
 		startWG                 sync.WaitGroup
 		config                  *configs.Config
 		eventNotifier           events.Notifier
-		rateLimiter             quotas.RateLimiter
 		replicationTaskFetchers ReplicationTaskFetchers
 		queueTaskProcessor      queueTaskProcessor
 	}
@@ -94,8 +92,7 @@ var (
 	errInvalidTaskType         = serviceerror.NewInvalidArgument("Invalid task type")
 	errDeserializeTaskToken    = serviceerror.NewInvalidArgument("Error to deserialize task token. Error: %v.")
 
-	errHistoryHostThrottle = serviceerror.NewResourceExhausted("History host RPS exceeded.")
-	errShuttingDown        = serviceerror.NewInternal("Shutting down")
+	errShuttingDown = serviceerror.NewInternal("Shutting down")
 )
 
 // NewHandler creates a thrift handler for the history service
@@ -108,9 +105,6 @@ func NewHandler(
 		status:          common.DaemonStatusInitialized,
 		config:          config,
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
-		rateLimiter: quotas.NewDefaultIncomingDynamicRateLimiter(
-			func() float64 { return float64(config.RPS()) },
-		),
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -256,44 +250,34 @@ func (h *Handler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServe
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
 func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *historyservice.RecordActivityTaskHeartbeatRequest) (_ *historyservice.RecordActivityTaskHeartbeatResponse, retError error) {
-
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryRecordActivityTaskHeartbeatScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	heartbeatRequest := request.HeartbeatRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(heartbeatRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
+		return nil, h.convertError(errDeserializeTaskToken.MessageArgs(err0))
 	}
 
 	err0 = validateTaskToken(taskToken)
 	if err0 != nil {
-		return nil, h.error(err0, scope, namespaceID, "")
+		return nil, h.convertError(err0)
 	}
 	workflowID := taskToken.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	response, err2 := engine.RecordActivityTaskHeartbeat(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return response, nil
@@ -301,34 +285,24 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 
 // RecordActivityTaskStarted - Record Activity Task started.
 func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *historyservice.RecordActivityTaskStartedRequest) (_ *historyservice.RecordActivityTaskStartedResponse, retError error) {
-
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
-
-	scope := metrics.HistoryRecordActivityTaskStartedScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
 
 	namespaceID := request.GetNamespaceId()
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	if request.GetNamespaceId() == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, workflowID)
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, workflowID)
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	response, err2 := engine.RecordActivityTaskStarted(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return response, nil
@@ -336,33 +310,18 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 
 // RecordWorkflowTaskStarted - Record Workflow Task started.
 func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (_ *historyservice.RecordWorkflowTaskStartedResponse, retError error) {
-
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
-	h.GetLogger().Debug("RecordWorkflowTaskStarted",
-		tag.WorkflowNamespaceID(request.GetNamespaceId()),
-		tag.WorkflowID(request.WorkflowExecution.GetWorkflowId()),
-		tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
-		tag.WorkflowScheduleID(request.GetScheduleId()))
-
-	scope := metrics.HistoryRecordWorkflowTaskStartedScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
 
 	namespaceID := request.GetNamespaceId()
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, workflowID)
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, workflowID)
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	if request.PollRequest == nil || request.PollRequest.TaskQueue.GetName() == "" {
-		return nil, h.error(errTaskQueueNotSet, scope, namespaceID, workflowID)
+		return nil, h.convertError(errTaskQueueNotSet)
 	}
 
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
@@ -373,12 +332,12 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 			tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
 			tag.WorkflowScheduleID(request.GetScheduleId()),
 		)
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	response, err2 := engine.RecordWorkflowTaskStarted(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return response, nil
@@ -386,44 +345,34 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 
 // RespondActivityTaskCompleted - records completion of an activity task
 func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *historyservice.RespondActivityTaskCompletedRequest) (_ *historyservice.RespondActivityTaskCompletedResponse, retError error) {
-
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryRespondActivityTaskCompletedScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	completeRequest := request.CompleteRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
+		return nil, h.convertError(errDeserializeTaskToken.MessageArgs(err0))
 	}
 
 	err0 = validateTaskToken(taskToken)
 	if err0 != nil {
-		return nil, h.error(err0, scope, namespaceID, "")
+		return nil, h.convertError(err0)
 	}
 	workflowID := taskToken.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	err2 := engine.RespondActivityTaskCompleted(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
@@ -434,40 +383,31 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryRespondActivityTaskFailedScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	failRequest := request.FailedRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(failRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
+		return nil, h.convertError(errDeserializeTaskToken.MessageArgs(err0))
 	}
 
 	err0 = validateTaskToken(taskToken)
 	if err0 != nil {
-		return nil, h.error(err0, scope, namespaceID, "")
+		return nil, h.convertError(err0)
 	}
 	workflowID := taskToken.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	err2 := engine.RespondActivityTaskFailed(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
@@ -478,40 +418,31 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryRespondActivityTaskCanceledScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	cancelRequest := request.CancelRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(cancelRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
+		return nil, h.convertError(errDeserializeTaskToken.MessageArgs(err0))
 	}
 
 	err0 = validateTaskToken(taskToken)
 	if err0 != nil {
-		return nil, h.error(err0, scope, namespaceID, "")
+		return nil, h.convertError(err0)
 	}
 	workflowID := taskToken.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	err2 := engine.RespondActivityTaskCanceled(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
@@ -522,27 +453,15 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryRespondWorkflowTaskCompletedScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	completeRequest := request.CompleteRequest
-	if len(completeRequest.Commands) == 0 {
-		h.GetMetricsClient().IncCounter(scope, metrics.EmptyCompletionCommandsCounter)
-	}
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
+		return nil, h.convertError(errDeserializeTaskToken.MessageArgs(err0))
 	}
 
 	h.GetLogger().Debug("RespondWorkflowTaskCompleted",
@@ -553,18 +472,18 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 
 	err0 = validateTaskToken(token)
 	if err0 != nil {
-		return nil, h.error(err0, scope, namespaceID, "")
+		return nil, h.convertError(err0)
 	}
 	workflowID := token.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	response, err2 := engine.RespondWorkflowTaskCompleted(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return response, nil
@@ -572,28 +491,18 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 
 // RespondWorkflowTaskFailed - failed response to workflow task
 func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *historyservice.RespondWorkflowTaskFailedRequest) (_ *historyservice.RespondWorkflowTaskFailedResponse, retError error) {
-
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryRespondWorkflowTaskFailedScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	failedRequest := request.FailedRequest
 	token, err0 := h.tokenSerializer.Deserialize(failedRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
+		return nil, h.convertError(errDeserializeTaskToken.MessageArgs(err0))
 	}
 
 	h.GetLogger().Debug("RespondWorkflowTaskFailed",
@@ -602,33 +511,20 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 		tag.WorkflowRunID(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
-	if failedRequest.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND {
-		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceID(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()))
-		namespace, err := h.GetNamespaceCache().GetNamespaceName(token.GetNamespaceId())
-		var namespaceTag metrics.Tag
-
-		if err == nil {
-			namespaceTag = metrics.NamespaceTag(namespace)
-		} else {
-			namespaceTag = metrics.NamespaceUnknownTag()
-		}
-
-		h.GetMetricsClient().Scope(scope, namespaceTag).IncCounter(metrics.ServiceErrNonDeterministicCounter)
-	}
 	err0 = validateTaskToken(token)
 	if err0 != nil {
-		return nil, h.error(err0, scope, namespaceID, "")
+		return nil, h.convertError(err0)
 	}
 	workflowID := token.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	err2 := engine.RespondWorkflowTaskFailed(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return &historyservice.RespondWorkflowTaskFailedResponse{}, nil
@@ -636,34 +532,24 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 
 // StartWorkflowExecution - creates a new workflow execution
 func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyservice.StartWorkflowExecutionRequest) (_ *historyservice.StartWorkflowExecutionResponse, retError error) {
-
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryStartWorkflowExecutionScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	startRequest := request.StartRequest
 	workflowID := startRequest.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	response, err2 := engine.StartWorkflowExecution(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return response, nil
@@ -749,19 +635,19 @@ func (h *Handler) DescribeMutableState(ctx context.Context, request *historyserv
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	resp, err2 := engine.DescribeMutableState(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 	return resp, nil
 }
@@ -778,23 +664,19 @@ func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.G
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	resp, err2 := engine.GetMutableState(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 	return resp, nil
 }
@@ -811,23 +693,19 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	resp, err2 := engine.PollMutableState(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 	return resp, nil
 }
@@ -844,23 +722,19 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	workflowExecution := request.Request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	resp, err2 := engine.DescribeWorkflowExecution(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 	return resp, nil
 }
@@ -881,11 +755,7 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" || request.CancelRequest.GetNamespace() == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	cancelRequest := request.CancelRequest
@@ -898,12 +768,12 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 	workflowID := cancelRequest.WorkflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	err2 := engine.RequestCancelWorkflowExecution(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return &historyservice.RequestCancelWorkflowExecutionResponse{}, nil
@@ -926,23 +796,19 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	workflowExecution := request.SignalRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	err2 := engine.SignalWorkflowExecution(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return &historyservice.SignalWorkflowExecutionResponse{}, nil
@@ -968,18 +834,14 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	signalWithStartRequest := request.SignalWithStartRequest
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	for {
@@ -1011,7 +873,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 		}
 
 		if (!isExecutionAlreadyStartedErr && !isWorkflowConditionFailedErr) || isContextDone {
-			return nil, h.error(err2, scope, namespaceID, workflowID)
+			return nil, h.convertError(err2)
 		}
 	}
 }
@@ -1033,23 +895,19 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	err2 := engine.RemoveSignalMutableState(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return &historyservice.RemoveSignalMutableStateResponse{}, nil
@@ -1072,23 +930,19 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	workflowExecution := request.TerminateRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	err2 := engine.TerminateWorkflowExecution(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return &historyservice.TerminateWorkflowExecutionResponse{}, nil
@@ -1111,23 +965,19 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	workflowExecution := request.ResetRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	resp, err2 := engine.ResetWorkflowExecution(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return resp, nil
@@ -1149,22 +999,18 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	workflowID := request.GetRequest().GetExecution().GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	resp, err2 := engine.QueryWorkflow(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return resp, nil
@@ -1189,27 +1035,23 @@ func (h *Handler) ScheduleWorkflowTask(ctx context.Context, request *historyserv
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	if request.WorkflowExecution == nil {
-		return nil, h.error(errWorkflowExecutionNotSet, scope, namespaceID, "")
+		return nil, h.convertError(errWorkflowExecutionNotSet)
 	}
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	err2 := engine.ScheduleWorkflowTask(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return &historyservice.ScheduleWorkflowTaskResponse{}, nil
@@ -1232,27 +1074,23 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	if request.WorkflowExecution == nil {
-		return nil, h.error(errWorkflowExecutionNotSet, scope, namespaceID, "")
+		return nil, h.convertError(errWorkflowExecutionNotSet)
 	}
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	err2 := engine.RecordChildExecutionCompleted(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return &historyservice.RecordChildExecutionCompletedResponse{}, nil
@@ -1278,22 +1116,18 @@ func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyserv
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	workflowID := request.Execution.GetWorkflowId()
 	engine, err := h.controller.GetEngine(namespaceID, workflowID)
 	if err != nil {
-		return nil, h.error(err, scope, namespaceID, workflowID)
+		return nil, h.convertError(err)
 	}
 
 	resp, err := engine.ResetStickyTaskQueue(ctx, request)
 	if err != nil {
-		return nil, h.error(err, scope, namespaceID, workflowID)
+		return nil, h.convertError(err)
 	}
 
 	return resp, nil
@@ -1308,30 +1142,21 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 		return nil, errShuttingDown
 	}
 
-	scope := metrics.HistoryReplicateEventsScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, namespaceID, workflowID)
+		return nil, h.convertError(err1)
 	}
 
 	err2 := engine.ReplicateEventsV2(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, namespaceID, workflowID)
+		return nil, h.convertError(err2)
 	}
 
 	return &historyservice.ReplicateEventsV2Response{}, nil
@@ -1342,40 +1167,31 @@ func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.S
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistorySyncShardStatusScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, "", "")
-	}
-
 	if request.GetSourceCluster() == "" {
-		return nil, h.error(errSourceClusterNotSet, scope, "", "")
+		return nil, h.convertError(errSourceClusterNotSet)
 	}
 
 	if request.GetShardId() == 0 {
-		return nil, h.error(errShardIDNotSet, scope, "", "")
+		return nil, h.convertError(errShardIDNotSet)
 	}
 
 	if timestamp.TimeValue(request.GetStatusTime()).IsZero() {
-		return nil, h.error(errTimestampNotSet, scope, "", "")
+		return nil, h.convertError(errTimestampNotSet)
 	}
 
 	// shard ID is already provided in the request
-	engine, err := h.controller.GetEngineForShard(int32(request.GetShardId()))
+	engine, err := h.controller.GetEngineForShard(request.GetShardId())
 	if err != nil {
-		return nil, h.error(err, scope, "", "")
+		return nil, h.convertError(err)
 	}
 
 	err = engine.SyncShardStatus(ctx, request)
 	if err != nil {
-		return nil, h.error(err, scope, "", "")
+		return nil, h.convertError(err)
 	}
 
 	return &historyservice.SyncShardStatusResponse{}, nil
@@ -1386,41 +1202,32 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistorySyncActivityScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
 	namespaceID := request.GetNamespaceId()
 	if request.GetNamespaceId() == "" || uuid.Parse(request.GetNamespaceId()) == nil {
-		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
+		return nil, h.convertError(errNamespaceNotSet)
 	}
 
 	if request.GetWorkflowId() == "" {
-		return nil, h.error(errWorkflowIDNotSet, scope, namespaceID, "")
+		return nil, h.convertError(errWorkflowIDNotSet)
 	}
 
 	if request.GetRunId() == "" || uuid.Parse(request.GetRunId()) == nil {
-		return nil, h.error(errRunIDNotValid, scope, namespaceID, "")
+		return nil, h.convertError(errRunIDNotValid)
 	}
 
 	workflowID := request.GetWorkflowId()
 	engine, err := h.controller.GetEngine(namespaceID, workflowID)
 	if err != nil {
-		return nil, h.error(err, scope, namespaceID, workflowID)
+		return nil, h.convertError(err)
 	}
 
 	err = engine.SyncActivity(ctx, request)
 	if err != nil {
-		return nil, h.error(err, scope, namespaceID, workflowID)
+		return nil, h.convertError(err)
 	}
 
 	return &historyservice.SyncActivityResponse{}, nil
@@ -1430,13 +1237,6 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyservice.GetReplicationMessagesRequest) (_ *historyservice.GetReplicationMessagesResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
-
-	h.GetLogger().Debug("Received GetReplicationMessages call.")
-
-	scope := metrics.HistoryGetReplicationMessagesScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
 
 	if h.isStopped() {
 		return nil, errShuttingDown
@@ -1489,11 +1289,6 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryGetDLQReplicationMessagesScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
@@ -1538,8 +1333,8 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 			return
 		}
 
-		for _, task := range tasks {
-			tasksChan <- task
+		for _, t := range tasks {
+			tasksChan <- t
 		}
 	}
 
@@ -1550,8 +1345,8 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 	close(tasksChan)
 
 	replicationTasks := make([]*replicationspb.ReplicationTask, 0, len(tasksChan))
-	for task := range tasksChan {
-		replicationTasks = append(replicationTasks, task)
+	for t := range tasksChan {
+		replicationTasks = append(replicationTasks, t)
 	}
 	return &historyservice.GetDLQReplicationMessagesResponse{
 		ReplicationTasks: replicationTasks,
@@ -1563,11 +1358,6 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryReapplyEventsScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
@@ -1576,7 +1366,7 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 	workflowID := request.GetRequest().GetWorkflowExecution().GetWorkflowId()
 	engine, err := h.controller.GetEngine(namespaceID, workflowID)
 	if err != nil {
-		return nil, h.error(err, scope, namespaceID, workflowID)
+		return nil, h.convertError(err)
 	}
 	// deserialize history event object
 	historyEvents, err := h.GetPayloadSerializer().DeserializeEvents(&commonpb.DataBlob{
@@ -1584,7 +1374,7 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 		Data:         request.GetRequest().GetEvents().GetData(),
 	})
 	if err != nil {
-		return nil, h.error(err, scope, namespaceID, workflowID)
+		return nil, h.convertError(err)
 	}
 
 	execution := request.GetRequest().GetWorkflowExecution()
@@ -1595,20 +1385,14 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 		execution.GetRunId(),
 		historyEvents,
 	); err != nil {
-		return nil, h.error(err, scope, namespaceID, workflowID)
+		return nil, h.convertError(err)
 	}
 	return &historyservice.ReapplyEventsResponse{}, nil
 }
 
 func (h *Handler) GetDLQMessages(ctx context.Context, request *historyservice.GetDLQMessagesRequest) (_ *historyservice.GetDLQMessagesResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-
 	h.startWG.Wait()
-
-	scope := metrics.HistoryReadDLQMessagesScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
 
 	if h.isStopped() {
 		return nil, errShuttingDown
@@ -1616,13 +1400,13 @@ func (h *Handler) GetDLQMessages(ctx context.Context, request *historyservice.Ge
 
 	engine, err := h.controller.GetEngineForShard(request.GetShardId())
 	if err != nil {
-		err = h.error(err, scope, "", "")
+		err = h.convertError(err)
 		return nil, err
 	}
 
 	resp, err := engine.GetDLQMessages(ctx, request)
 	if err != nil {
-		err = h.error(err, scope, "", "")
+		err = h.convertError(err)
 		return nil, err
 	}
 
@@ -1631,13 +1415,7 @@ func (h *Handler) GetDLQMessages(ctx context.Context, request *historyservice.Ge
 
 func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.PurgeDLQMessagesRequest) (_ *historyservice.PurgeDLQMessagesResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-
 	h.startWG.Wait()
-
-	scope := metrics.HistoryPurgeDLQMessagesScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
 
 	if h.isStopped() {
 		return nil, errShuttingDown
@@ -1645,13 +1423,13 @@ func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.
 
 	engine, err := h.controller.GetEngineForShard(request.GetShardId())
 	if err != nil {
-		err = h.error(err, scope, "", "")
+		err = h.convertError(err)
 		return nil, err
 	}
 
 	err = engine.PurgeDLQMessages(ctx, request)
 	if err != nil {
-		err = h.error(err, scope, "", "")
+		err = h.convertError(err)
 		return nil, err
 	}
 	return &historyservice.PurgeDLQMessagesResponse{}, nil
@@ -1659,27 +1437,21 @@ func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.
 
 func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.MergeDLQMessagesRequest) (_ *historyservice.MergeDLQMessagesResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-
 	h.startWG.Wait()
 
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
-	scope := metrics.HistoryMergeDLQMessagesScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	engine, err := h.controller.GetEngineForShard(request.GetShardId())
 	if err != nil {
-		err = h.error(err, scope, "", "")
+		err = h.convertError(err)
 		return nil, err
 	}
 
 	resp, err := engine.MergeDLQMessages(ctx, request)
 	if err != nil {
-		err = h.error(err, scope, "", "")
+		err = h.convertError(err)
 		return nil, err
 	}
 
@@ -1688,13 +1460,7 @@ func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.
 
 func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyservice.RefreshWorkflowTasksRequest) (_ *historyservice.RefreshWorkflowTasksResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-
 	h.startWG.Wait()
-
-	scope := metrics.HistoryRefreshWorkflowTasksScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
 
 	if h.isStopped() {
 		return nil, errShuttingDown
@@ -1705,7 +1471,7 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	workflowID := execution.GetWorkflowId()
 	engine, err := h.controller.GetEngine(namespaceID, workflowID)
 	if err != nil {
-		err = h.error(err, scope, namespaceID, workflowID)
+		err = h.convertError(err)
 		return nil, err
 	}
 
@@ -1719,7 +1485,7 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	)
 
 	if err != nil {
-		err = h.error(err, scope, namespaceID, workflowID)
+		err = h.convertError(err)
 		return nil, err
 	}
 
@@ -1748,62 +1514,6 @@ func (h *Handler) convertError(err error) error {
 		err := err.(*persistence.TransactionSizeLimitError)
 		return serviceerror.NewInvalidArgument(err.Msg)
 	}
-
-	return err
-}
-
-func (h *Handler) updateErrorMetric(
-	scope int,
-	namespaceID string,
-	workflowID string,
-	err error,
-) {
-
-	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
-		return
-	}
-
-	switch err := err.(type) {
-	case *serviceerrors.ShardOwnershipLost:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
-	case *serviceerrors.TaskAlreadyStarted:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrTaskAlreadyStartedCounter)
-	case *serviceerror.InvalidArgument:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
-	case *serviceerror.NamespaceNotActive:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
-	case *serviceerror.WorkflowExecutionAlreadyStarted:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
-	case *serviceerror.NotFound:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrNotFoundCounter)
-	case *serviceerror.CancellationAlreadyRequested:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrCancellationAlreadyRequestedCounter)
-	case *serviceerror.ResourceExhausted:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
-	case *serviceerrors.RetryReplication:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
-	case *serviceerror.Internal:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceFailures)
-		h.GetLogger().Error("Internal service error",
-			tag.Error(err),
-			tag.WorkflowID(workflowID),
-			tag.WorkflowNamespaceID(namespaceID))
-	default:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceFailures)
-		h.getLoggerWithTags(namespaceID, workflowID).Error("Uncategorized error", tag.Error(err))
-	}
-}
-
-func (h *Handler) error(
-	err error,
-	scope int,
-	namespaceID string,
-	workflowID string,
-) error {
-
-	err = h.convertError(err)
-	h.updateErrorMetric(scope, namespaceID, workflowID, err)
 
 	return err
 }
