@@ -14,4 +14,4 @@
 **Potential risks**
 
 <!-- Is this PR a hotfix candidate or require that a notification be sent to the broader community? (Yes/No) -->
-**Is hotfix?**
+**Is hotfix candidate?**
