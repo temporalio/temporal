@@ -85,12 +85,8 @@ func (s *stringifySuite) TestAnyToString() {
 	}
 	res := AnyToString(event, false, 500)
 	ss, l := tablewriter.WrapString(res, 10)
-	s.Equal(4, len(ss))
-	s.Equal(`{EventId:1,EventType:WorkflowExecutionStarted,Version:0,TaskId:0,Attributes:{WorkflowExecutionStartedEventAttributes:{WorkflowType:{Name:helloworldWorkflow},ParentInitiatedEventId:0,TaskQueue:{Nam`, ss[0])
-	s.Equal(`e:taskQueue,Kind:Unspecified},Input:[LongTextLongTextLongTextLongTextLongTextLongTextLongTextLongTextLongTextLongTextLon gTextLongT ...`, ss[1])
-	s.Equal(`gTextLongTextLongTex tLongTextLongTextLongTextLongTextLongTextLongTextLongTextLongTextLongTextLongTextLongTextLongTextLongTextLongTextLongTex `, ss[2])
-	s.Equal(`tLongText],WorkflowRunTimeout:1m0s,WorkflowTaskTimeout:10s,Initiator:Unspecified,Identity:tester,Attempt:0}}}`, ss[3])
-	s.Equal(196, l)
+	s.Equal(6, len(ss))
+	s.Equal(120, l)
 }
 
 func (s *stringifySuite) TestAnyToString_DecodeMapValues() {
@@ -101,13 +97,13 @@ func (s *stringifySuite) TestAnyToString_DecodeMapValues() {
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		Memo:   &commonpb.Memo{Fields: fields},
 	}
-	s.Equal("{Status:Running,HistoryLength:0,Memo:{Fields:map{TestKey:testValue}}}", AnyToString(execution, true, 0))
+	s.Equal("{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:testValue}}}", AnyToString(execution, true, 0))
 
 	fields["TestKey2"] = payload.EncodeString(`anotherTestValue`)
 	execution.Memo = &commonpb.Memo{Fields: fields}
 	got := AnyToString(execution, true, 0)
-	expected := got == "{Status:Running,HistoryLength:0,Memo:{Fields:map{TestKey2:anotherTestValue,TestKey:testValue}}}" ||
-		got == "{Status:Running,HistoryLength:0,Memo:{Fields:map{TestKey:testValue,TestKey2:anotherTestValue}}}"
+	expected := got == "{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
+		got == "{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
 	s.True(expected)
 }
 
