@@ -132,10 +132,11 @@ var GoRuntimeMetrics = map[MetricName]MetricType{
 
 // Scopes enum
 const (
-	// -- Common Operation scopes --
+	UnknownScope = iota
 
+	// -- Common Operation scopes --
 	// PersistenceCreateShardScope tracks CreateShard calls made by service to persistence layer
-	PersistenceCreateShardScope = iota
+	PersistenceCreateShardScope
 	// PersistenceGetShardScope tracks GetShard calls made by service to persistence layer
 	PersistenceGetShardScope
 	// PersistenceUpdateShardScope tracks UpdateShard calls made by service to persistence layer
@@ -1102,6 +1103,7 @@ const (
 var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// common scope Names
 	Common: {
+		UnknownScope:                                             {operation: "Unknown"},
 		PersistenceCreateShardScope:                              {operation: "CreateShard"},
 		PersistenceGetShardScope:                                 {operation: "GetShard"},
 		PersistenceUpdateShardScope:                              {operation: "UpdateShard"},

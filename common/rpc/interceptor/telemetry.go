@@ -26,7 +26,6 @@ package interceptor
 
 import (
 	"context"
-	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
@@ -60,63 +59,62 @@ func NewTelemetryInterceptor(
 	}
 }
 
-func (i *TelemetryInterceptor) Intercept(
+func (ti *TelemetryInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	_, methodName := SplitMethodName(info.FullMethod)
-	scope, ok := i.scopes[methodName]
-	if !ok {
-		i.logger.Error(fmt.Sprintf("unable to find scope for %v", methodName))
-	}
-	i.metricsClient.IncCounter(scope, metrics.ServiceRequests)
-	timer := i.metricsClient.StartTimer(scope, metrics.ServiceLatency)
+	_, methodName := splitMethodName(info.FullMethod)
+	// if the method name is not defined, will default to
+	// unknown scope, which carries value 0
+	scope, _ := ti.scopes[methodName]
+	ti.metricsClient.IncCounter(scope, metrics.ServiceRequests)
+	timer := ti.metricsClient.StartTimer(scope, metrics.ServiceLatency)
 	defer timer.Stop()
 
 	resp, err := handler(ctx, req)
 	if err != nil {
-		i.handleError(scope, err)
+		ti.handleError(scope, err)
 		return nil, err
 	}
 	return resp, nil
 }
 
-func (i *TelemetryInterceptor) handleError(
+func (ti *TelemetryInterceptor) handleError(
 	scope int,
 	err error,
 ) {
 
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
-		i.metricsClient.IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
+		ti.metricsClient.IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
 		return
 	}
 
 	switch err := err.(type) {
 	case *serviceerrors.ShardOwnershipLost:
-		i.metricsClient.IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
+		ti.metricsClient.IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
 	case *serviceerrors.TaskAlreadyStarted:
-		i.metricsClient.IncCounter(scope, metrics.ServiceErrTaskAlreadyStartedCounter)
+		ti.metricsClient.IncCounter(scope, metrics.ServiceErrTaskAlreadyStartedCounter)
 	case *serviceerror.InvalidArgument:
-		i.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
+		ti.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
 	case *serviceerror.NamespaceNotActive:
-		i.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
+		ti.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
-		i.metricsClient.IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
+		ti.metricsClient.IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
 	case *serviceerror.NotFound:
-		i.metricsClient.IncCounter(scope, metrics.ServiceErrNotFoundCounter)
+		ti.metricsClient.IncCounter(scope, metrics.ServiceErrNotFoundCounter)
 	case *serviceerror.CancellationAlreadyRequested:
-		i.metricsClient.IncCounter(scope, metrics.ServiceErrCancellationAlreadyRequestedCounter)
+		ti.metricsClient.IncCounter(scope, metrics.ServiceErrCancellationAlreadyRequestedCounter)
 	case *serviceerror.ResourceExhausted:
-		i.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
+		ti.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
 	case *serviceerrors.RetryReplication:
-		i.metricsClient.IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
+		ti.metricsClient.IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
 	case *serviceerror.Internal:
-		i.metricsClient.IncCounter(scope, metrics.ServiceFailures)
-		i.logger.Error("internal service error", tag.Error(err))
+		ti.metricsClient.IncCounter(scope, metrics.ServiceFailures)
+		ti.logger.Error("internal service error", tag.Error(err))
 	default:
-		i.metricsClient.IncCounter(scope, metrics.ServiceFailures)
-		i.logger.Error("uncategorized error", tag.Error(err))
+		ti.metricsClient.IncCounter(scope, metrics.ServiceFailures)
+		ti.logger.Error("uncategorized error", tag.Error(err))
 	}
 }

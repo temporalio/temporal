@@ -67,7 +67,7 @@ func (i *RateLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	_, methodName := SplitMethodName(info.FullMethod)
+	_, methodName := splitMethodName(info.FullMethod)
 	token, ok := i.tokens[methodName]
 	if !ok {
 		token = RateLimitDefaultToken
