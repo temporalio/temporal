@@ -36,12 +36,14 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 func encode(message proto.Message) ([]byte, error) {
@@ -153,7 +155,12 @@ func deserializeQueryVisibilityToken(bytes []byte) (*queryVisibilityToken, error
 	return token, err
 }
 
-func convertToExecutionInfo(record *archiverspb.VisibilityRecord) *workflowpb.WorkflowExecutionInfo {
+func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap map[string]enumspb.IndexedValueType) (*workflowpb.WorkflowExecutionInfo, error) {
+	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, saTypeMap)
+	if err != nil {
+		return nil, err
+	}
+
 	return &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
@@ -168,8 +175,8 @@ func convertToExecutionInfo(record *archiverspb.VisibilityRecord) *workflowpb.Wo
 		Status:           record.Status,
 		HistoryLength:    record.HistoryLength,
 		Memo:             record.Memo,
-		SearchAttributes: archiver.ConvertSearchAttrToPayload(record.SearchAttributes),
-	}
+		SearchAttributes: searchAttributes,
+	}, nil
 }
 
 func newRunIDPrecondition(runID string) connector.Precondition {

@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/searchattribute"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
@@ -59,7 +60,6 @@ import (
 	"go.temporal.io/sdk/client"
 
 	clispb "go.temporal.io/server/api/cli/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/payload"
@@ -232,10 +232,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		startRequest.Memo = &commonpb.Memo{Fields: memoFields}
 	}
 
-	searchAttrFields := processSearchAttr(c)
-	if len(searchAttrFields) != 0 {
-		startRequest.SearchAttributes = &commonpb.SearchAttributes{IndexedFields: searchAttrFields}
-	}
+	startRequest.SearchAttributes = processSearchAttr(c)
 
 	startFn := func() {
 		tcCtx, cancel := newContext(c)
@@ -284,37 +281,34 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	}
 }
 
-func processSearchAttr(c *cli.Context) map[string]*commonpb.Payload {
+func processSearchAttr(c *cli.Context) *commonpb.SearchAttributes {
 	rawSearchAttrKey := c.String(FlagSearchAttributesKey)
-	var searchAttrKeys []string
-	if strings.TrimSpace(rawSearchAttrKey) != "" {
-		searchAttrKeys = trimSpace(strings.Split(rawSearchAttrKey, searchAttrInputSeparator))
+	searchAttrKeys := trimSpace(strings.Split(rawSearchAttrKey, searchAttrInputSeparator))
+	if len(searchAttrKeys) == 0 {
+		return nil
 	}
 
 	rawSearchAttrVal := c.String(FlagSearchAttributesVal)
-	var searchAttrVals []interface{}
-	if strings.TrimSpace(rawSearchAttrVal) != "" {
-		searchAttrValsStr := trimSpace(strings.Split(rawSearchAttrVal, searchAttrInputSeparator))
-
-		for _, v := range searchAttrValsStr {
-			searchAttrVals = append(searchAttrVals, convertStringToRealType(v))
-		}
+	searchAttrStrVals := trimSpace(strings.Split(rawSearchAttrVal, searchAttrInputSeparator))
+	if len(searchAttrStrVals) == 0 {
+		return nil
 	}
 
-	if len(searchAttrKeys) != len(searchAttrVals) {
+	if len(searchAttrKeys) != len(searchAttrStrVals) {
 		ErrorAndExit("Number of search attributes keys and values are not equal.", nil)
 	}
 
-	fields := map[string]*commonpb.Payload{}
-	for i, key := range searchAttrKeys {
-		val, err := payload.Encode(searchAttrVals[i])
-		if err != nil {
-			ErrorAndExit(fmt.Sprintf("Encode value %v error", val), err)
-		}
-		fields[key] = val
+	searchAttributesStr := make(map[string]string, len(searchAttrKeys))
+	for i, searchAttrVal := range searchAttrStrVals {
+		searchAttributesStr[searchAttrKeys[i]] = searchAttrVal
 	}
 
-	return fields
+	searchAttributes, err := searchattribute.Parse(searchAttributesStr, nil)
+	if err != nil {
+		ErrorAndExit("Unable to parse search attributes.", err)
+	}
+
+	return searchAttributes
 }
 
 func processMemo(c *cli.Context) map[string]*commonpb.Payload {
@@ -370,11 +364,16 @@ func getPrintableMemo(memo *commonpb.Memo) string {
 }
 
 func getPrintableSearchAttr(searchAttr *commonpb.SearchAttributes) string {
-	buf := new(bytes.Buffer)
-	for k, v := range searchAttr.IndexedFields {
-		var decodedVal interface{}
-		_ = payload.Decode(v, &decodedVal)
-		_, _ = fmt.Fprintf(buf, "%s=%v\n", k, decodedVal)
+	var buf bytes.Buffer
+	searchAttributesString, err := searchattribute.Stringify(searchAttr, nil)
+	if err != nil {
+		fmt.Printf("%s: unable to stringify search attribute: %v",
+			colorMagenta("Warning"),
+			err)
+	}
+
+	for saName, saValueString := range searchAttributesString {
+		_, _ = fmt.Fprintf(&buf, "%s=%s\n", saName, saValueString)
 	}
 	return buf.String()
 }
@@ -860,7 +859,7 @@ func describeWorkflowHelper(c *cli.Context, wid, rid string) {
 	if printRaw {
 		prettyPrintJSONObject(resp)
 	} else {
-		prettyPrintJSONObject(convertDescribeWorkflowExecutionResponse(resp, frontendClient, c))
+		prettyPrintJSONObject(convertDescribeWorkflowExecutionResponse(resp))
 	}
 }
 
@@ -886,8 +885,7 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 	table.Render()
 }
 
-func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWorkflowExecutionResponse,
-	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *clispb.DescribeWorkflowExecutionResponse {
+func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWorkflowExecutionResponse) *clispb.DescribeWorkflowExecutionResponse {
 
 	info := resp.WorkflowExecutionInfo
 	executionInfo := &clispb.WorkflowExecutionInfo{
@@ -900,7 +898,7 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 		ParentNamespaceId: info.GetParentNamespaceId(),
 		ParentExecution:   info.GetParentExecution(),
 		Memo:              info.GetMemo(),
-		SearchAttributes:  convertSearchAttributes(info.GetSearchAttributes(), wfClient, c),
+		SearchAttributes:  convertSearchAttributes(info.GetSearchAttributes()),
 		AutoResetPoints:   info.GetAutoResetPoints(),
 	}
 
@@ -935,35 +933,19 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 	}
 }
 
-func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes,
-	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *clispb.SearchAttributes {
-
-	if searchAttributes == nil || len(searchAttributes.GetIndexedFields()) == 0 {
+func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes) *clispb.SearchAttributes {
+	if len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil
 	}
 
-	result := &clispb.SearchAttributes{
-		IndexedFields: map[string]string{},
-	}
-	ctx, cancel := newContext(c)
-	defer cancel()
-	validSearchAttributes, err := wfClient.GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
+	fields, err := searchattribute.Stringify(searchAttributes, nil)
 	if err != nil {
-		ErrorAndExit("Error when get search attributes", err)
-	}
-	validKeys := validSearchAttributes.GetKeys()
-
-	indexedFields := searchAttributes.GetIndexedFields()
-	for k, v := range indexedFields {
-		valueType := validKeys[k]
-		deserializedValue, err := common.DeserializeSearchAttributeValue(v, valueType)
-		if err != nil {
-			ErrorAndExit("Error deserializing search attribute value", err)
-		}
-		result.IndexedFields[k] = fmt.Sprintf("%v", deserializedValue)
+		fmt.Printf("%s: unable to stringify search attribute: %v",
+			colorMagenta("Warning"),
+			err)
 	}
 
-	return result
+	return &clispb.SearchAttributes{IndexedFields: fields}
 }
 
 func convertFailure(failure *failurepb.Failure) *clispb.Failure {

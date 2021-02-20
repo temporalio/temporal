@@ -27,12 +27,9 @@ package archiver
 import (
 	"errors"
 
-	commonpb "go.temporal.io/api/common/v1"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/payload"
 )
 
 var (
@@ -148,20 +145,4 @@ func ValidateQueryRequest(request *QueryVisibilityRequest) error {
 		return errEmptyQuery
 	}
 	return nil
-}
-
-// ConvertSearchAttrToPayload converts search attribute value from string back to byte array
-func ConvertSearchAttrToPayload(searchAttrStr map[string]string) *commonpb.SearchAttributes {
-	if len(searchAttrStr) == 0 {
-		return nil
-	}
-
-	searchAttributes := &commonpb.SearchAttributes{
-		IndexedFields: make(map[string]*commonpb.Payload),
-	}
-
-	for k, v := range searchAttrStr {
-		searchAttributes.IndexedFields[k] = payload.EncodeBytes([]byte(v))
-	}
-	return searchAttributes
 }

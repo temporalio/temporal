@@ -165,7 +165,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidVisibilityURI() {
 		Query:       "WorkflowType='type::example' AND CloseTime='2020-02-05T11:00:00Z' AND SearchPrecision='Day'",
 	}
 
-	_, err = visibilityArchiver.Query(ctx, URI, request)
+	_, err = visibilityArchiver.Query(ctx, URI, request, nil)
 	s.Error(err)
 }
 
@@ -213,7 +213,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
 		NamespaceID: "some random namespaceID",
 		PageSize:    10,
 		Query:       "some invalid query",
-	})
+	}, nil)
 	s.Error(err)
 	s.Nil(response)
 }
@@ -240,7 +240,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
 		PageSize:      1,
 		NextPageToken: []byte{1, 2, 3},
 	}
-	response, err := visibilityArchiver.Query(context.Background(), URI, request)
+	response, err := visibilityArchiver.Query(context.Background(), URI, request, nil)
 	s.Error(err)
 	s.Nil(response)
 }
@@ -274,12 +274,14 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 		Query:       "parsed by mockParser",
 	}
 
-	response, err := visibilityArchiver.Query(ctx, URI, request)
+	response, err := visibilityArchiver.Query(ctx, URI, request, nil)
 	s.NoError(err)
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	s.Equal(convertToExecutionInfo(s.expectedVisibilityRecords[0]), response.Executions[0])
+	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[0])
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
@@ -316,19 +318,25 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 		Query:       "parsed by mockParser",
 	}
 
-	response, err := visibilityArchiver.Query(ctx, URI, request)
+	response, err := visibilityArchiver.Query(ctx, URI, request, nil)
 	s.NoError(err)
 	s.NotNil(response)
 	s.NotNil(response.NextPageToken)
 	s.Len(response.Executions, 2)
-	s.Equal(convertToExecutionInfo(s.expectedVisibilityRecords[0]), response.Executions[0])
-	s.Equal(convertToExecutionInfo(s.expectedVisibilityRecords[0]), response.Executions[1])
+	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[0])
+	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[1])
 
 	request.NextPageToken = response.NextPageToken
-	response, err = visibilityArchiver.Query(ctx, URI, request)
+	response, err = visibilityArchiver.Query(ctx, URI, request, nil)
 	s.NoError(err)
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	s.Equal(convertToExecutionInfo(s.expectedVisibilityRecords[0]), response.Executions[0])
+	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], nil)
+	s.NoError(err)
+	s.Equal(ei, response.Executions[0])
 }

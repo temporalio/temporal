@@ -32,6 +32,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
@@ -166,7 +167,9 @@ func (v *visibilityArchiver) Query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *archiver.QueryVisibilityRequest,
+	saTypeMap map[string]enumspb.IndexedValueType,
 ) (*archiver.QueryVisibilityResponse, error) {
+
 	if err := softValidateURI(URI); err != nil {
 		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidURI.Error())
 	}
@@ -180,18 +183,24 @@ func (v *visibilityArchiver) Query(
 		return nil, serviceerror.NewInvalidArgument(err.Error())
 	}
 
-	return v.query(ctx, URI, &queryVisibilityRequest{
-		namespaceID:   request.NamespaceID,
-		pageSize:      request.PageSize,
-		nextPageToken: request.NextPageToken,
-		parsedQuery:   parsedQuery,
-	})
+	return v.query(
+		ctx,
+		URI,
+		&queryVisibilityRequest{
+			namespaceID:   request.NamespaceID,
+			pageSize:      request.PageSize,
+			nextPageToken: request.NextPageToken,
+			parsedQuery:   parsedQuery,
+		},
+		saTypeMap,
+	)
 }
 
 func (v *visibilityArchiver) query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *queryVisibilityRequest,
+	saTypeMap map[string]enumspb.IndexedValueType,
 ) (*archiver.QueryVisibilityResponse, error) {
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()
@@ -243,7 +252,11 @@ func (v *visibilityArchiver) query(
 		if err != nil {
 			return nil, serviceerror.NewInternal(err.Error())
 		}
-		response.Executions = append(response.Executions, convertToExecutionInfo(record))
+		executionInfo, err := convertToExecutionInfo(record, saTypeMap)
+		if err != nil {
+			return nil, serviceerror.NewInternal(err.Error())
+		}
+		response.Executions = append(response.Executions, executionInfo)
 	}
 	return response, nil
 }

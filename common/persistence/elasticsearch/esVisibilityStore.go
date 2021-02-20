@@ -54,8 +54,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/payload"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -303,30 +303,20 @@ func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBa
 		doc[definition.Encoding] = request.Memo.GetEncodingType().String()
 	}
 
-	attr := make(map[string]interface{})
-	for searchAttributeName, searchAttributePayload := range request.SearchAttributes.GetIndexedFields() {
-		if !v.isValidSearchAttribute(searchAttributeName) {
-			v.logger.Error("Unregistered field.", tag.ESField(searchAttributeName))
-			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
-			continue
-		}
-		var searchAttributeValue interface{}
-		// payload.Decode will set value and type to interface{} only if search attributes are serialized using JSON.
-		err := payload.Decode(searchAttributePayload, &searchAttributeValue)
-		if err != nil {
-			v.logger.Error("Error when decode search attribute payload.", tag.Error(err), tag.ESField(searchAttributeName))
-			v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
-		}
-		attr[searchAttributeName] = searchAttributeValue
+	typeMap, err := searchattribute.BuildTypeMap(v.config.ValidSearchAttributes)
+	if err != nil {
+		v.logger.Error("Unable to parse search attributes from config.", tag.Error(err))
+		v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+	}
+
+	attr, err := searchattribute.Decode(request.SearchAttributes, typeMap)
+	if err != nil {
+		v.logger.Error("Unable to decode search attributes.", tag.Error(err))
+		v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 	doc[definition.Attr] = attr
 
 	return doc
-}
-
-func (v *esVisibilityStore) isValidSearchAttribute(searchAttribute string) bool {
-	_, ok := v.config.ValidSearchAttributes()[searchAttribute]
-	return ok
 }
 
 func (v *esVisibilityStore) ListOpenWorkflowExecutions(
@@ -800,12 +790,16 @@ func (v *esVisibilityStore) getFieldType(fieldName string) enumspb.IndexedValueT
 	if strings.HasPrefix(fieldName, definition.Attr) {
 		fieldName = fieldName[len(definition.Attr)+1:] // remove prefix
 	}
-	validMap := v.config.ValidSearchAttributes()
-	fieldType, ok := validMap[fieldName]
-	if !ok {
-		v.logger.Error("Unknown fieldName, validation should be done in frontend already", tag.Value(fieldName))
+	typeMap, err := searchattribute.BuildTypeMap(v.config.ValidSearchAttributes)
+	if err != nil {
+		v.logger.Error("Unable to parse search attributes from config.", tag.Error(err))
 	}
-	return common.ConvertIndexedValueTypeToProtoType(fieldType, v.logger)
+
+	fieldType, err := searchattribute.GetType(fieldName, typeMap)
+	if err != nil {
+		v.logger.Error("Unable to get search attribute type.", tag.Value(fieldName), tag.Error(err))
+	}
+	return fieldType
 }
 
 func shouldSearchAfter(token *esVisibilityPageToken) bool {
@@ -1028,6 +1022,7 @@ func (v *esVisibilityStore) serializePageToken(token *esVisibilityPageToken) ([]
 
 func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.SearchHit) *p.VisibilityWorkflowExecutionInfo {
 	var source *visibilityRecord
+	// TODO (alex): use hit.Fields instead
 	err := json.Unmarshal(hit.Source, &source)
 	if err != nil { // log and skip error
 		v.logger.Error("unable to unmarshal search hit source",

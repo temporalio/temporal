@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 
@@ -180,6 +181,14 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 	if err == nil && executionStats.HistorySize < int64(t.config.TimerProcessorHistoryArchivalSizeLimit()) {
 		req.AttemptArchiveInline = true
 	}
+
+	saTypeMap, err := searchattribute.BuildTypeMap(t.config.ValidSearchAttributes)
+	if err != nil {
+		return err
+	}
+	// Setting search attributes types here because archival client needs to stringify them
+	// and it might not have access to typeMap (i.e. type needs to be embedded).
+	searchattribute.ApplyTypeMap(req.ArchiveRequest.SearchAttributes, saTypeMap)
 
 	ctx, cancel := context.WithTimeout(context.Background(), t.config.TimerProcessorArchivalTimeLimit())
 	defer cancel()

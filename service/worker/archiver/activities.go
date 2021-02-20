@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 const (
@@ -149,6 +150,14 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		logger.Error(carchiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason("failed to get visibility archiver"), tag.Error(err))
 		return errArchiveVisibilityNonRetryable
 	}
+
+	// It is safe to pass nil to typeMap here because search attributes type must be embedded by caller.
+	searchAttributes, err := searchattribute.Stringify(request.SearchAttributes, nil)
+	if err != nil {
+		logger.Error("Unable to stringify search attributes.", tag.Error(err))
+		return err
+	}
+
 	err = visibilityArchiver.Archive(ctx, URI, &archiverspb.VisibilityRecord{
 		NamespaceId:        request.NamespaceID,
 		Namespace:          request.Namespace,
@@ -161,7 +170,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		Status:             request.Status,
 		HistoryLength:      request.HistoryLength,
 		Memo:               request.Memo,
-		SearchAttributes:   convertSearchAttributesToString(request.SearchAttributes),
+		SearchAttributes:   searchAttributes,
 		HistoryArchivalUri: request.HistoryURI,
 	}, carchiver.GetNonRetryableErrorOption(errArchiveVisibilityNonRetryable))
 	if err == nil {
