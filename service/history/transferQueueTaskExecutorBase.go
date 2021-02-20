@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/worker/archiver"
@@ -319,7 +320,17 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	if archiveVisibility {
 		ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
 		defer cancel()
-		_, err := t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
+
+		saTypeMap, err := searchattribute.BuildTypeMap(t.config.ValidSearchAttributes)
+		if err != nil {
+			return err
+		}
+
+		// Setting search attributes types here because archival client needs to stringify them
+		// and it might not have access to type map (i.e. type needs to be embedded).
+		searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
+
+		_, err = t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
 			ArchiveRequest: &archiver.ArchiveRequest{
 				NamespaceID:      namespaceID,
 				Namespace:        namespace,

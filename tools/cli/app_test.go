@@ -25,12 +25,10 @@
 package cli
 
 import (
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -52,7 +50,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -713,58 +710,6 @@ func (s *cliAppSuite) TestParseTimeDateRange() {
 	}
 }
 
-func (s *cliAppSuite) TestBreakLongWords() {
-	s.Equal("111 222 333 4", breakLongWords("1112223334", 3))
-	s.Equal("111 2 223", breakLongWords("1112 223", 3))
-	s.Equal("11 122 23", breakLongWords("11 12223", 3))
-	s.Equal("111", breakLongWords("111", 3))
-	s.Equal("", breakLongWords("", 3))
-	s.Equal("111  222", breakLongWords("111 222", 3))
-}
-
-func (s *cliAppSuite) TestAnyToString() {
-	arg := strings.Repeat("LongText", 80)
-	event := &historypb.HistoryEvent{
-		EventId:   1,
-		EventType: eventType,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:        &commonpb.WorkflowType{Name: "helloworldWorkflow"},
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: "taskQueue"},
-			WorkflowRunTimeout:  timestamp.DurationPtr(60 * time.Second),
-			WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
-			Identity:            "tester",
-			Input:               payloads.EncodeString(arg),
-		}},
-	}
-	res := anyToString(event, false, defaultMaxFieldLength)
-	ss, l := tablewriter.WrapString(res, 10)
-	s.Equal(6, len(ss))
-	s.Equal(131, l)
-}
-
-func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
-	fields := map[string]*commonpb.Payload{
-		"TestKey": payload.EncodeString("testValue"),
-	}
-	execution := &workflowpb.WorkflowExecutionInfo{
-		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		Memo:   &commonpb.Memo{Fields: fields},
-	}
-	s.Equal("{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
-
-	fields["TestKey2"] = payload.EncodeString(`anotherTestValue`)
-	execution.Memo = &commonpb.Memo{Fields: fields}
-	got := anyToString(execution, true, 0)
-	expected := got == "{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
-		got == "{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
-	s.True(expected)
-}
-
-func (s *cliAppSuite) TestIsAttributeName() {
-	s.True(isAttributeName("WorkflowExecutionStartedEventAttributes"))
-	s.False(isAttributeName("workflowExecutionStartedEventAttributes"))
-}
-
 func (s *cliAppSuite) TestGetSearchAttributes() {
 	s.sdkClient.On("GetSearchAttributes", mock.Anything).Return(&workflowservice.GetSearchAttributesResponse{}, nil).Once()
 	err := s.app.Run([]string{"", "cluster", "get-search-attr"})
@@ -775,117 +720,6 @@ func (s *cliAppSuite) TestGetSearchAttributes() {
 	err = s.app.Run([]string{"", "--ns", cliTestNamespace, "cluster", "get-search-attr"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
-}
-
-func (s *cliAppSuite) TestParseBool() {
-	res, err := parseBool("true")
-	s.NoError(err)
-	s.True(res)
-
-	res, err = parseBool("false")
-	s.NoError(err)
-	s.False(res)
-
-	for _, v := range []string{"True, TRUE, False, FALSE, T, F"} {
-		res, err = parseBool(v)
-		s.Error(err)
-		s.False(res)
-	}
-}
-
-func (s *cliAppSuite) TestConvertStringToRealType() {
-	var res interface{}
-
-	// int
-	res = convertStringToRealType("1")
-	s.Equal(int64(1), res)
-
-	// bool
-	res = convertStringToRealType("true")
-	s.Equal(true, res)
-	res = convertStringToRealType("false")
-	s.Equal(false, res)
-
-	// double
-	res = convertStringToRealType("1.0")
-	s.Equal(float64(1.0), res)
-
-	// datetime
-	res = convertStringToRealType("2019-01-01T01:01:01Z")
-	s.Equal(time.Date(2019, 1, 1, 1, 1, 1, 0, time.UTC), res)
-
-	// array
-	res = convertStringToRealType(`["a", "b", "c"]`)
-	s.Equal([]interface{}{"a", "b", "c"}, res)
-
-	// string
-	res = convertStringToRealType("test string")
-	s.Equal("test string", res)
-}
-
-func (s *cliAppSuite) TestConvertArray() {
-	t1, _ := time.Parse(defaultDateTimeFormat, "2019-06-07T16:16:34-08:00")
-	t2, _ := time.Parse(defaultDateTimeFormat, "2019-06-07T17:16:34-08:00")
-	testCases := []struct {
-		name     string
-		input    string
-		expected interface{}
-	}{
-		{
-			name:     "string",
-			input:    `["a", "b", "c"]`,
-			expected: []interface{}{"a", "b", "c"},
-		},
-		{
-			name:     "int",
-			input:    `[1, 2, 3]`,
-			expected: []interface{}{"1", "2", "3"},
-		},
-		{
-			name:     "double",
-			input:    `[1.1, 2.2, 3.3]`,
-			expected: []interface{}{"1.1", "2.2", "3.3"},
-		},
-		{
-			name:     "bool",
-			input:    `["true", "false"]`,
-			expected: []interface{}{"true", "false"},
-		},
-		{
-			name:     "datetime",
-			input:    `["2019-06-07T16:16:34-08:00", "2019-06-07T17:16:34-08:00"]`,
-			expected: []interface{}{t1, t2},
-		},
-	}
-	for _, testCase := range testCases {
-		res, err := parseArray(testCase.input)
-		s.Nil(err)
-		s.Equal(testCase.expected, res)
-	}
-
-	testCases2 := []struct {
-		name     string
-		input    string
-		expected error
-	}{
-		{
-			name:  "not array",
-			input: "normal string",
-		},
-		{
-			name:  "empty string",
-			input: "",
-		},
-		{
-			name:  "not json array",
-			input: "[a, b, c]",
-		},
-	}
-	for _, testCase := range testCases2 {
-		res, err := parseArray(testCase.input)
-		s.NotNil(err)
-		s.Nil(res)
-	}
 }
 
 func historyEventIterator() sdkclient.HistoryEventIterator {

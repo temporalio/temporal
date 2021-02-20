@@ -42,7 +42,7 @@ func TestToString(t *testing.T) {
 
 	p := EncodeString("str")
 	result = ToString(p)
-	assert.Equal("str", result)
+	assert.Equal(`"str"`, result)
 
 	p, err := Encode(10)
 	assert.NoError(err)
@@ -61,7 +61,7 @@ func TestToString(t *testing.T) {
 	})
 	assert.NoError(err)
 	result = ToString(p)
-	assert.Equal(`{Bytes:MzQ1 Int:10 String:str}`, result)
+	assert.Equal(`{"Int":10,"String":"str","Bytes":"MzQ1"}`, result)
 
 	p, err = Encode(nil)
 	assert.NoError(err)

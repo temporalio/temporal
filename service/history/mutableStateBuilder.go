@@ -55,10 +55,10 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
@@ -1985,14 +1985,14 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 	exeInfo.AutoResetPoints = &workflowpb.ResetPoints{
 		Points: currResetPoints,
 	}
-	bytes, err := payload.Encode(recentBinaryChecksums)
+	checksumPayload, err := searchattribute.EncodeValue(recentBinaryChecksums, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	if err != nil {
 		return err
 	}
 	if exeInfo.SearchAttributes == nil {
-		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload)
+		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
-	exeInfo.SearchAttributes[definition.BinaryChecksums] = bytes
+	exeInfo.SearchAttributes[definition.BinaryChecksums] = checksumPayload
 	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
 		return e.taskGenerator.generateWorkflowSearchAttrTasks(timestamp.TimeValue(event.GetEventTime()))
 	}

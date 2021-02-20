@@ -48,7 +48,7 @@ func NewESVisibilityManager(
 ) p.VisibilityManager {
 
 	visibilityStore := NewElasticSearchVisibilityStore(esClient, indexName, producer, processor, cfg, log, metricsClient)
-	visibilityManager := p.NewVisibilityManagerImpl(visibilityStore, log)
+	visibilityManager := p.NewVisibilityManagerImpl(visibilityStore, cfg.ValidSearchAttributes, log)
 
 	if cfg != nil {
 		// wrap with rate limiter

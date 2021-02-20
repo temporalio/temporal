@@ -31,6 +31,7 @@ import (
 	"path/filepath"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
@@ -154,7 +155,13 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 // The request includes a string field called query, which describes what kind of visibility records should be returned. For example, it can be some SQL-like syntax query string.
 // Your implementation is responsible for parsing and validating the query, and also returning all visibility records that match the query.
 // Currently the maximum context timeout passed into the method is 3 minutes, so it's ok if this method takes a long time to run.
-func (v *visibilityArchiver) Query(ctx context.Context, URI archiver.URI, request *archiver.QueryVisibilityRequest) (*archiver.QueryVisibilityResponse, error) {
+func (v *visibilityArchiver) Query(
+	ctx context.Context,
+	URI archiver.URI,
+	request *archiver.QueryVisibilityRequest,
+	saTypeMap map[string]enumspb.IndexedValueType,
+) (*archiver.QueryVisibilityResponse, error) {
+
 	if err := v.ValidateURI(URI); err != nil {
 		return nil, &serviceerror.InvalidArgument{Message: archiver.ErrInvalidURI.Error()}
 	}
@@ -172,15 +179,26 @@ func (v *visibilityArchiver) Query(ctx context.Context, URI archiver.URI, reques
 		return &archiver.QueryVisibilityResponse{}, nil
 	}
 
-	return v.query(ctx, URI, &queryVisibilityRequest{
-		namespaceID:   request.NamespaceID,
-		pageSize:      request.PageSize,
-		nextPageToken: request.NextPageToken,
-		parsedQuery:   parsedQuery,
-	})
+	return v.query(
+		ctx,
+		URI,
+		&queryVisibilityRequest{
+			namespaceID:   request.NamespaceID,
+			pageSize:      request.PageSize,
+			nextPageToken: request.NextPageToken,
+			parsedQuery:   parsedQuery,
+		},
+		saTypeMap,
+	)
 }
 
-func (v *visibilityArchiver) query(ctx context.Context, URI archiver.URI, request *queryVisibilityRequest) (*archiver.QueryVisibilityResponse, error) {
+func (v *visibilityArchiver) query(
+	ctx context.Context,
+	URI archiver.URI,
+	request *queryVisibilityRequest,
+	saTypeMap map[string]enumspb.IndexedValueType,
+) (*archiver.QueryVisibilityResponse, error) {
+
 	token := new(queryVisibilityToken)
 	if request.nextPageToken != nil {
 		var err error
@@ -228,7 +246,11 @@ func (v *visibilityArchiver) query(ctx context.Context, URI archiver.URI, reques
 			return nil, &serviceerror.InvalidArgument{Message: err.Error()}
 		}
 
-		response.Executions = append(response.Executions, convertToExecutionInfo(record))
+		executionInfo, err := convertToExecutionInfo(record, saTypeMap)
+		if err != nil {
+			return nil, serviceerror.NewInternal(err.Error())
+		}
+		response.Executions = append(response.Executions, executionInfo)
 	}
 
 	if !completed {

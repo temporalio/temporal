@@ -35,6 +35,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -143,6 +145,7 @@ func (v *visibilityArchiver) Query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *archiver.QueryVisibilityRequest,
+	saTypeMap map[string]enumspb.IndexedValueType,
 ) (*archiver.QueryVisibilityResponse, error) {
 	if err := v.ValidateURI(URI); err != nil {
 		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidURI.Error())
@@ -161,18 +164,24 @@ func (v *visibilityArchiver) Query(
 		return &archiver.QueryVisibilityResponse{}, nil
 	}
 
-	return v.query(ctx, URI, &queryVisibilityRequest{
-		namespaceID:   request.NamespaceID,
-		pageSize:      request.PageSize,
-		nextPageToken: request.NextPageToken,
-		parsedQuery:   parsedQuery,
-	})
+	return v.query(
+		ctx,
+		URI,
+		&queryVisibilityRequest{
+			namespaceID:   request.NamespaceID,
+			pageSize:      request.PageSize,
+			nextPageToken: request.NextPageToken,
+			parsedQuery:   parsedQuery,
+		},
+		saTypeMap,
+	)
 }
 
 func (v *visibilityArchiver) query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *queryVisibilityRequest,
+	saTypeMap map[string]enumspb.IndexedValueType,
 ) (*archiver.QueryVisibilityResponse, error) {
 	var token *queryVisibilityToken
 	if request.nextPageToken != nil {
@@ -222,7 +231,12 @@ func (v *visibilityArchiver) query(
 		}
 
 		if matchQuery(record, request.parsedQuery) {
-			response.Executions = append(response.Executions, convertToExecutionInfo(record))
+			executionInfo, err := convertToExecutionInfo(record, saTypeMap)
+			if err != nil {
+				return nil, serviceerror.NewInternal(err.Error())
+			}
+
+			response.Executions = append(response.Executions, executionInfo)
 			if len(response.Executions) == request.pageSize {
 				if idx != len(files) {
 					newToken := &queryVisibilityToken{
@@ -328,7 +342,12 @@ func matchQuery(record *archiverspb.VisibilityRecord, query *parsedQuery) bool {
 	return true
 }
 
-func convertToExecutionInfo(record *archiverspb.VisibilityRecord) *workflowpb.WorkflowExecutionInfo {
+func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap map[string]enumspb.IndexedValueType) (*workflowpb.WorkflowExecutionInfo, error) {
+	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, saTypeMap)
+	if err != nil {
+		return nil, err
+	}
+
 	return &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
@@ -343,6 +362,6 @@ func convertToExecutionInfo(record *archiverspb.VisibilityRecord) *workflowpb.Wo
 		Status:           record.Status,
 		HistoryLength:    record.HistoryLength,
 		Memo:             record.Memo,
-		SearchAttributes: archiver.ConvertSearchAttrToPayload(record.SearchAttributes),
-	}
+		SearchAttributes: searchAttributes,
+	}, nil
 }

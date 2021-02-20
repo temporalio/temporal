@@ -31,14 +31,16 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
 	visibilityManagerImpl struct {
-		serializer  PayloadSerializer
-		persistence VisibilityStore
-		logger      log.Logger
+		serializer            PayloadSerializer
+		persistence           VisibilityStore
+		validSearchAttributes dynamicconfig.MapPropertyFn
+		logger                log.Logger
 	}
 )
 
@@ -48,11 +50,12 @@ const VisibilityEncoding = enumspb.ENCODING_TYPE_PROTO3
 var _ VisibilityManager = (*visibilityManagerImpl)(nil)
 
 // NewVisibilityManagerImpl returns new VisibilityManager
-func NewVisibilityManagerImpl(persistence VisibilityStore, logger log.Logger) VisibilityManager {
+func NewVisibilityManagerImpl(persistence VisibilityStore, validSearchAttributes dynamicconfig.MapPropertyFn, logger log.Logger) VisibilityManager {
 	return &visibilityManagerImpl{
-		serializer:  NewPayloadSerializer(),
-		persistence: persistence,
-		logger:      logger,
+		serializer:            NewPayloadSerializer(),
+		persistence:           persistence,
+		validSearchAttributes: validSearchAttributes,
+		logger:                logger,
 	}
 }
 
@@ -235,7 +238,11 @@ func (v *visibilityManagerImpl) convertInternalGetResponse(internalResp *Interna
 	}
 
 	resp := &GetClosedWorkflowExecutionResponse{}
-	resp.Execution = v.convertVisibilityWorkflowExecutionInfo(internalResp.Execution)
+	saTypeMap, err := searchattribute.BuildTypeMap(v.validSearchAttributes)
+	if err != nil {
+		v.logger.Error("Unable to build valid search attributes map", tag.Error(err))
+	}
+	resp.Execution = v.convertVisibilityWorkflowExecutionInfo(internalResp.Execution, saTypeMap)
 	return resp
 }
 
@@ -246,35 +253,19 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 
 	resp := &ListWorkflowExecutionsResponse{}
 	resp.Executions = make([]*workflowpb.WorkflowExecutionInfo, len(internalResp.Executions))
+	saTypeMap, err := searchattribute.BuildTypeMap(v.validSearchAttributes)
+	if err != nil {
+		v.logger.Error("Unable to build valid search attributes map", tag.Error(err))
+	}
 	for i, execution := range internalResp.Executions {
-		resp.Executions[i] = v.convertVisibilityWorkflowExecutionInfo(execution)
+		resp.Executions[i] = v.convertVisibilityWorkflowExecutionInfo(execution, saTypeMap)
 	}
 
 	resp.NextPageToken = internalResp.NextPageToken
 	return resp
 }
 
-func (v *visibilityManagerImpl) getSearchAttributes(attr map[string]interface{}) (*commonpb.SearchAttributes, error) {
-	indexedFields := make(map[string]*commonpb.Payload)
-	var err error
-	var valBytes *commonpb.Payload
-	for k, val := range attr {
-		valBytes, err = payload.Encode(val)
-		if err != nil {
-			v.logger.Error("error when encode search attributes", tag.Value(val))
-			continue
-		}
-		indexedFields[k] = valBytes
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &commonpb.SearchAttributes{
-		IndexedFields: indexedFields,
-	}, nil
-}
-
-func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo) *workflowpb.WorkflowExecutionInfo {
+func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo, saTypeMap map[string]enumspb.IndexedValueType) *workflowpb.WorkflowExecutionInfo {
 	// special handling of ExecutionTime for cron or retry
 	if execution.ExecutionTime.UnixNano() == 0 {
 		execution.ExecutionTime = execution.StartTime
@@ -287,9 +278,9 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 			tag.WorkflowRunID(execution.RunID),
 			tag.Error(err))
 	}
-	searchAttributes, err := v.getSearchAttributes(execution.SearchAttributes)
+	searchAttributes, err := searchattribute.Encode(execution.SearchAttributes, saTypeMap)
 	if err != nil {
-		v.logger.Error("failed to convert search attributes",
+		v.logger.Error("failed to encode search attributes",
 			tag.WorkflowID(execution.WorkflowID),
 			tag.WorkflowRunID(execution.RunID),
 			tag.Error(err))

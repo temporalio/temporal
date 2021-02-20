@@ -95,7 +95,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	}
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
-	s.Equal("123 is not a valid search attribute value for key CustomBoolField", err.Error())
+	s.Equal("\"123\" is not a valid value for search attribute CustomBoolField", err.Error())
 
 	intArrayPayload, err := payload.Encode([]int{1, 2})
 	s.NoError(err)

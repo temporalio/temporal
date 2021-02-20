@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 const (
@@ -149,6 +150,9 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 	attrPayloadFromResponse, attrExist := openExecution.GetSearchAttributes().GetIndexedFields()[s.testSearchAttributeKey]
 	s.True(attrExist)
 	s.Equal(attrPayload.GetData(), attrPayloadFromResponse.GetData())
+	attrType, typeSet := attrPayloadFromResponse.GetMetadata()[searchattribute.MetadataType]
+	s.True(typeSet)
+	s.True(len(attrType) > 0)
 }
 
 func (s *elasticsearchIntegrationSuite) TestListWorkflow() {
@@ -267,6 +271,9 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 		respAttr, ok := descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()[attrName]
 		s.True(ok)
 		s.Equal(expectedPayload.GetData(), respAttr.GetData())
+		attrType, typeSet := respAttr.GetMetadata()[searchattribute.MetadataType]
+		s.True(typeSet)
+		s.True(len(attrType) > 0)
 	}
 }
 
