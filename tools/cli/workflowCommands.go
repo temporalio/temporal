@@ -39,10 +39,6 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/tools/cli/stringify"
-
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
 	"github.com/urfave/cli"
@@ -63,10 +59,13 @@ import (
 	clispb "go.temporal.io/server/api/cli/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/tools/cli/stringify"
 )
 
 // ShowHistory shows the history of given workflow execution based on workflowID and runID.
