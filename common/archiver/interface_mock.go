@@ -61,10 +61,10 @@ func (m *MockHistoryArchiver) EXPECT() *MockHistoryArchiverMockRecorder {
 }
 
 // Archive mocks base method.
-func (m *MockHistoryArchiver) Archive(arg0 context.Context, arg1 URI, arg2 *ArchiveHistoryRequest, arg3 ...ArchiveOption) error {
+func (m *MockHistoryArchiver) Archive(ctx context.Context, uri URI, request *ArchiveHistoryRequest, opts ...ArchiveOption) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1, arg2}
-	for _, a := range arg3 {
+	varargs := []interface{}{ctx, uri, request}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Archive", varargs...)
@@ -73,39 +73,39 @@ func (m *MockHistoryArchiver) Archive(arg0 context.Context, arg1 URI, arg2 *Arch
 }
 
 // Archive indicates an expected call of Archive.
-func (mr *MockHistoryArchiverMockRecorder) Archive(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
+func (mr *MockHistoryArchiverMockRecorder) Archive(ctx, uri, request interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	varargs := append([]interface{}{ctx, uri, request}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Archive", reflect.TypeOf((*MockHistoryArchiver)(nil).Archive), varargs...)
 }
 
 // Get mocks base method.
-func (m *MockHistoryArchiver) Get(arg0 context.Context, arg1 URI, arg2 *GetHistoryRequest) (*GetHistoryResponse, error) {
+func (m *MockHistoryArchiver) Get(ctx context.Context, url URI, request *GetHistoryRequest) (*GetHistoryResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Get", ctx, url, request)
 	ret0, _ := ret[0].(*GetHistoryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockHistoryArchiverMockRecorder) Get(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockHistoryArchiverMockRecorder) Get(ctx, url, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockHistoryArchiver)(nil).Get), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockHistoryArchiver)(nil).Get), ctx, url, request)
 }
 
 // ValidateURI mocks base method.
-func (m *MockHistoryArchiver) ValidateURI(arg0 URI) error {
+func (m *MockHistoryArchiver) ValidateURI(uri URI) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateURI", arg0)
+	ret := m.ctrl.Call(m, "ValidateURI", uri)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ValidateURI indicates an expected call of ValidateURI.
-func (mr *MockHistoryArchiverMockRecorder) ValidateURI(arg0 interface{}) *gomock.Call {
+func (mr *MockHistoryArchiverMockRecorder) ValidateURI(uri interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateURI", reflect.TypeOf((*MockHistoryArchiver)(nil).ValidateURI), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateURI", reflect.TypeOf((*MockHistoryArchiver)(nil).ValidateURI), uri)
 }
 
 // MockVisibilityArchiver is a mock of VisibilityArchiver interface.
@@ -132,10 +132,10 @@ func (m *MockVisibilityArchiver) EXPECT() *MockVisibilityArchiverMockRecorder {
 }
 
 // Archive mocks base method.
-func (m *MockVisibilityArchiver) Archive(arg0 context.Context, arg1 URI, arg2 *v10.VisibilityRecord, arg3 ...ArchiveOption) error {
+func (m *MockVisibilityArchiver) Archive(ctx context.Context, uri URI, request *v10.VisibilityRecord, opts ...ArchiveOption) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1, arg2}
-	for _, a := range arg3 {
+	varargs := []interface{}{ctx, uri, request}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Archive", varargs...)
@@ -144,37 +144,37 @@ func (m *MockVisibilityArchiver) Archive(arg0 context.Context, arg1 URI, arg2 *v
 }
 
 // Archive indicates an expected call of Archive.
-func (mr *MockVisibilityArchiverMockRecorder) Archive(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
+func (mr *MockVisibilityArchiverMockRecorder) Archive(ctx, uri, request interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	varargs := append([]interface{}{ctx, uri, request}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Archive", reflect.TypeOf((*MockVisibilityArchiver)(nil).Archive), varargs...)
 }
 
 // Query mocks base method.
-func (m *MockVisibilityArchiver) Query(arg0 context.Context, arg1 URI, arg2 *QueryVisibilityRequest, arg3 map[string]v1.IndexedValueType) (*QueryVisibilityResponse, error) {
+func (m *MockVisibilityArchiver) Query(ctx context.Context, uri URI, request *QueryVisibilityRequest, saTypeMap map[string]v1.IndexedValueType) (*QueryVisibilityResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Query", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "Query", ctx, uri, request, saTypeMap)
 	ret0, _ := ret[0].(*QueryVisibilityResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Query indicates an expected call of Query.
-func (mr *MockVisibilityArchiverMockRecorder) Query(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockVisibilityArchiverMockRecorder) Query(ctx, uri, request, saTypeMap interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockVisibilityArchiver)(nil).Query), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockVisibilityArchiver)(nil).Query), ctx, uri, request, saTypeMap)
 }
 
 // ValidateURI mocks base method.
-func (m *MockVisibilityArchiver) ValidateURI(arg0 URI) error {
+func (m *MockVisibilityArchiver) ValidateURI(uri URI) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateURI", arg0)
+	ret := m.ctrl.Call(m, "ValidateURI", uri)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ValidateURI indicates an expected call of ValidateURI.
-func (mr *MockVisibilityArchiverMockRecorder) ValidateURI(arg0 interface{}) *gomock.Call {
+func (mr *MockVisibilityArchiverMockRecorder) ValidateURI(uri interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateURI", reflect.TypeOf((*MockVisibilityArchiver)(nil).ValidateURI), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateURI", reflect.TypeOf((*MockVisibilityArchiver)(nil).ValidateURI), uri)
 }
