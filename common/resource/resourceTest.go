@@ -30,19 +30,19 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkmocks "go.temporal.io/sdk/mocks"
 	"go.uber.org/zap"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/client/admin"
-	"go.temporal.io/server/client/frontend"
-	"go.temporal.io/server/client/history"
-	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -332,39 +332,39 @@ func (s *Test) GetSDKClient() sdkclient.Client {
 }
 
 // GetFrontendRawClient for testing
-func (s *Test) GetFrontendRawClient() frontend.Client {
+func (s *Test) GetFrontendRawClient() workflowservice.WorkflowServiceClient {
 	return s.FrontendClient
 }
 
 // GetFrontendClient for testing
-func (s *Test) GetFrontendClient() frontend.Client {
+func (s *Test) GetFrontendClient() workflowservice.WorkflowServiceClient {
 	return s.FrontendClient
 }
 
 // GetMatchingRawClient for testing
-func (s *Test) GetMatchingRawClient() matching.Client {
+func (s *Test) GetMatchingRawClient() matchingservice.MatchingServiceClient {
 	return s.MatchingClient
 }
 
 // GetMatchingClient for testing
-func (s *Test) GetMatchingClient() matching.Client {
+func (s *Test) GetMatchingClient() matchingservice.MatchingServiceClient {
 	return s.MatchingClient
 }
 
 // GetHistoryRawClient for testing
-func (s *Test) GetHistoryRawClient() history.Client {
+func (s *Test) GetHistoryRawClient() historyservice.HistoryServiceClient {
 	return s.HistoryClient
 }
 
 // GetHistoryClient for testing
-func (s *Test) GetHistoryClient() history.Client {
+func (s *Test) GetHistoryClient() historyservice.HistoryServiceClient {
 	return s.HistoryClient
 }
 
 // GetRemoteAdminClient for testing
 func (s *Test) GetRemoteAdminClient(
 	cluster string,
-) admin.Client {
+) adminservice.AdminServiceClient {
 
 	return s.RemoteAdminClient
 }
@@ -372,7 +372,7 @@ func (s *Test) GetRemoteAdminClient(
 // GetRemoteFrontendClient for testing
 func (s *Test) GetRemoteFrontendClient(
 	cluster string,
-) frontend.Client {
+) workflowservice.WorkflowServiceClient {
 
 	return s.RemoteFrontendClient
 }

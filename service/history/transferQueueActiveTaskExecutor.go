@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
-	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
@@ -60,7 +59,7 @@ type (
 	transferQueueActiveTaskExecutor struct {
 		*transferQueueTaskExecutorBase
 
-		historyClient           history.Client
+		historyClient           historyservice.HistoryServiceClient
 		parentClosePolicyClient parentclosepolicy.Client
 	}
 )

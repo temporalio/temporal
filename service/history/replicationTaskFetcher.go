@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
@@ -82,7 +81,7 @@ type (
 		config         *configs.Config
 		numWorker      int
 		logger         log.Logger
-		remotePeer     admin.Client
+		remotePeer     adminservice.AdminServiceClient
 		rateLimiter    quotas.RateLimiter
 		requestChan    chan *replicationTaskRequest
 		shutdownChan   chan struct{}
@@ -96,7 +95,7 @@ type (
 		sourceCluster  string
 		config         *configs.Config
 		logger         log.Logger
-		remotePeer     admin.Client
+		remotePeer     adminservice.AdminServiceClient
 		rateLimiter    quotas.RateLimiter
 		requestChan    chan *replicationTaskRequest
 		shutdownChan   chan struct{}
@@ -183,7 +182,7 @@ func newReplicationTaskFetcher(
 	sourceCluster string,
 	currentCluster string,
 	config *configs.Config,
-	sourceFrontend admin.Client,
+	sourceFrontend adminservice.AdminServiceClient,
 ) *ReplicationTaskFetcherImpl {
 	numWorker := config.ReplicationTaskFetcherParallelism()
 	requestChan := make(chan *replicationTaskRequest, requestChanBufferSize)
@@ -274,7 +273,7 @@ func newReplicationTaskFetcherWorker(
 	sourceCluster string,
 	currentCluster string,
 	config *configs.Config,
-	sourceFrontend admin.Client,
+	sourceFrontend adminservice.AdminServiceClient,
 	rateLimiter quotas.RateLimiter,
 	requestChan chan *replicationTaskRequest,
 	shutdownChan chan struct{},

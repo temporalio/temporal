@@ -27,13 +27,13 @@ package resource
 import (
 	"net"
 
+	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/client/admin"
-	"go.temporal.io/server/client/frontend"
-	"go.temporal.io/server/client/history"
-	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -81,14 +81,14 @@ type (
 		// internal services clients
 
 		GetSDKClient() sdkclient.Client
-		GetFrontendRawClient() frontend.Client
-		GetFrontendClient() frontend.Client
-		GetMatchingRawClient() matching.Client
-		GetMatchingClient() matching.Client
-		GetHistoryRawClient() history.Client
-		GetHistoryClient() history.Client
-		GetRemoteAdminClient(cluster string) admin.Client
-		GetRemoteFrontendClient(cluster string) frontend.Client
+		GetFrontendRawClient() workflowservice.WorkflowServiceClient
+		GetFrontendClient() workflowservice.WorkflowServiceClient
+		GetMatchingRawClient() matchingservice.MatchingServiceClient
+		GetMatchingClient() matchingservice.MatchingServiceClient
+		GetHistoryRawClient() historyservice.HistoryServiceClient
+		GetHistoryClient() historyservice.HistoryServiceClient
+		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
+		GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient
 		GetClientBean() client.Bean
 
 		// persistence clients

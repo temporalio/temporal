@@ -33,10 +33,13 @@ import (
 
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
+	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
@@ -100,12 +103,12 @@ type (
 		// internal services clients
 
 		sdkClient         sdkclient.Client
-		frontendRawClient frontend.Client
-		frontendClient    frontend.Client
-		matchingRawClient matching.Client
-		matchingClient    matching.Client
-		historyRawClient  history.Client
-		historyClient     history.Client
+		frontendRawClient workflowservice.WorkflowServiceClient
+		frontendClient    workflowservice.WorkflowServiceClient
+		matchingRawClient matchingservice.MatchingServiceClient
+		matchingClient    matchingservice.MatchingServiceClient
+		historyRawClient  historyservice.HistoryServiceClient
+		historyClient     historyservice.HistoryServiceClient
 		clientBean        client.Bean
 
 		// persistence clients
@@ -496,39 +499,39 @@ func (h *Impl) GetSDKClient() sdkclient.Client {
 }
 
 // GetFrontendRawClient return frontend client without retry policy
-func (h *Impl) GetFrontendRawClient() frontend.Client {
+func (h *Impl) GetFrontendRawClient() workflowservice.WorkflowServiceClient {
 	return h.frontendRawClient
 }
 
 // GetFrontendClient return frontend client with retry policy
-func (h *Impl) GetFrontendClient() frontend.Client {
+func (h *Impl) GetFrontendClient() workflowservice.WorkflowServiceClient {
 	return h.frontendClient
 }
 
 // GetMatchingRawClient return matching client without retry policy
-func (h *Impl) GetMatchingRawClient() matching.Client {
+func (h *Impl) GetMatchingRawClient() matchingservice.MatchingServiceClient {
 	return h.matchingRawClient
 }
 
 // GetMatchingClient return matching client with retry policy
-func (h *Impl) GetMatchingClient() matching.Client {
+func (h *Impl) GetMatchingClient() matchingservice.MatchingServiceClient {
 	return h.matchingClient
 }
 
 // GetHistoryRawClient return history client without retry policy
-func (h *Impl) GetHistoryRawClient() history.Client {
+func (h *Impl) GetHistoryRawClient() historyservice.HistoryServiceClient {
 	return h.historyRawClient
 }
 
 // GetHistoryClient return history client with retry policy
-func (h *Impl) GetHistoryClient() history.Client {
+func (h *Impl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return h.historyClient
 }
 
 // GetRemoteAdminClient return remote admin client for given cluster name
 func (h *Impl) GetRemoteAdminClient(
 	cluster string,
-) admin.Client {
+) adminservice.AdminServiceClient {
 
 	return h.clientBean.GetRemoteAdminClient(cluster)
 }
@@ -536,7 +539,7 @@ func (h *Impl) GetRemoteAdminClient(
 // GetRemoteFrontendClient return remote frontend client for given cluster name
 func (h *Impl) GetRemoteFrontendClient(
 	cluster string,
-) frontend.Client {
+) workflowservice.WorkflowServiceClient {
 
 	return h.clientBean.GetRemoteFrontendClient(cluster)
 }

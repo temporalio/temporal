@@ -35,15 +35,15 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
-var _ Client = (*metricClient)(nil)
+var _ matchingservice.MatchingServiceClient = (*metricClient)(nil)
 
 type metricClient struct {
-	client        Client
+	client        matchingservice.MatchingServiceClient
 	metricsClient metrics.Client
 }
 
-// NewMetricClient creates a new instance of Client that emits metrics
-func NewMetricClient(client Client, metricsClient metrics.Client) Client {
+// NewMetricClient creates a new instance of matchingservice.MatchingServiceClient that emits metrics
+func NewMetricClient(client matchingservice.MatchingServiceClient, metricsClient metrics.Client) matchingservice.MatchingServiceClient {
 	return &metricClient{
 		client:        client,
 		metricsClient: metricsClient,

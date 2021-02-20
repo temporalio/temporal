@@ -39,7 +39,6 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	adminClient "go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -112,7 +111,7 @@ type (
 		esConfig                         *elasticsearch.Config
 		esClient                         elasticsearch.Client
 		workerConfig                     *WorkerConfig
-		mockAdminClient                  map[string]adminClient.Client
+		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 	}
 
@@ -145,7 +144,7 @@ type (
 		ESConfig                         *elasticsearch.Config
 		ESClient                         elasticsearch.Client
 		WorkerConfig                     *WorkerConfig
-		MockAdminClient                  map[string]adminClient.Client
+		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 	}
 

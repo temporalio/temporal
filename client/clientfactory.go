@@ -50,14 +50,14 @@ const (
 type (
 	// Factory can be used to create RPC clients for temporal services
 	Factory interface {
-		NewHistoryClient() (history.Client, error)
-		NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error)
-		NewFrontendClient(rpcAddress string) (frontend.Client, error)
+		NewHistoryClient() (historyservice.HistoryServiceClient, error)
+		NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error)
+		NewFrontendClient(rpcAddress string) (workflowservice.WorkflowServiceClient, error)
 
-		NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error)
-		NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
-		NewFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
-		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) (admin.Client, error)
+		NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error)
+		NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matchingservice.MatchingServiceClient, error)
+		NewFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (workflowservice.WorkflowServiceClient, error)
+		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) (adminservice.AdminServiceClient, error)
 	}
 
 	// NamespaceIDToNameFunc maps a namespaceID to namespace name. Returns error when mapping is not possible.
@@ -92,19 +92,19 @@ func NewRPCClientFactory(
 	}
 }
 
-func (cf *rpcClientFactory) NewHistoryClient() (history.Client, error) {
+func (cf *rpcClientFactory) NewHistoryClient() (historyservice.HistoryServiceClient, error) {
 	return cf.NewHistoryClientWithTimeout(history.DefaultTimeout)
 }
 
-func (cf *rpcClientFactory) NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error) {
+func (cf *rpcClientFactory) NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error) {
 	return cf.NewMatchingClientWithTimeout(namespaceIDToName, matching.DefaultTimeout, matching.DefaultLongPollTimeout)
 }
 
-func (cf *rpcClientFactory) NewFrontendClient(rpcAddress string) (frontend.Client, error) {
+func (cf *rpcClientFactory) NewFrontendClient(rpcAddress string) (workflowservice.WorkflowServiceClient, error) {
 	return cf.NewFrontendClientWithTimeout(rpcAddress, frontend.DefaultTimeout, frontend.DefaultLongPollTimeout)
 }
 
-func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error) {
+func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error) {
 	resolver, err := cf.monitor.GetResolver(common.HistoryServiceName)
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	namespaceIDToName NamespaceIDToNameFunc,
 	timeout time.Duration,
 	longPollTimeout time.Duration,
-) (matching.Client, error) {
+) (matchingservice.MatchingServiceClient, error) {
 	resolver, err := cf.monitor.GetResolver(common.MatchingServiceName)
 	if err != nil {
 		return nil, err
@@ -171,7 +171,7 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 	rpcAddress string,
 	timeout time.Duration,
 	longPollTimeout time.Duration,
-) (frontend.Client, error) {
+) (workflowservice.WorkflowServiceClient, error) {
 	keyResolver := func(key string) (string, error) {
 		return clientKeyConnection, nil
 	}
@@ -192,7 +192,7 @@ func (cf *rpcClientFactory) NewAdminClientWithTimeout(
 	rpcAddress string,
 	timeout time.Duration,
 	largeTimeout time.Duration,
-) (admin.Client, error) {
+) (adminservice.AdminServiceClient, error) {
 	keyResolver := func(key string) (string, error) {
 		return clientKeyConnection, nil
 	}
