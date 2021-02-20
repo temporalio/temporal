@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/server/common"
 )
 
-var _ Client = (*clientImpl)(nil)
+var _ adminservice.AdminServiceClient = (*clientImpl)(nil)
 
 const (
 	// DefaultTimeout is the default timeout used to make calls
@@ -55,7 +55,7 @@ func NewClient(
 	timeout time.Duration,
 	largeTimeout time.Duration,
 	clients common.ClientCache,
-) Client {
+) adminservice.AdminServiceClient {
 	return &clientImpl{
 		timeout:      timeout,
 		largeTimeout: largeTimeout,

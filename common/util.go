@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -613,76 +612,6 @@ func IsJustOrderByClause(clause string) bool {
 	whereClause := strings.TrimSpace(clause)
 	whereClause = strings.ToLower(whereClause)
 	return strings.HasPrefix(whereClause, "order by")
-}
-
-// ConvertIndexedValueTypeToProtoType takes fieldType as interface{} and convert to IndexedValueType.
-// Because different implementation of dynamic config client may lead to different types
-func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger) enumspb.IndexedValueType {
-	switch t := fieldType.(type) {
-	case float64:
-		return enumspb.IndexedValueType(t)
-	case int:
-		return enumspb.IndexedValueType(t)
-	case string:
-		if ivt, ok := enumspb.IndexedValueType_value[t]; ok {
-			return enumspb.IndexedValueType(ivt)
-		}
-	case enumspb.IndexedValueType:
-		return t
-	}
-
-	// Unknown fieldType, please make sure dynamic config return correct value type
-	logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(fieldType))
-	return fieldType.(enumspb.IndexedValueType) // it will panic and been captured by logger
-}
-
-// DeserializeSearchAttributeValue takes json encoded search attribute value and it's type as input, then
-// unmarshal the value into a concrete type and return the value
-func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType enumspb.IndexedValueType) (interface{}, error) {
-	switch valueType {
-	case enumspb.INDEXED_VALUE_TYPE_STRING, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
-		var val string
-		if err := payload.Decode(value, &val); err != nil {
-			var listVal []string
-			err = payload.Decode(value, &listVal)
-			return listVal, err
-		}
-		return val, nil
-	case enumspb.INDEXED_VALUE_TYPE_INT:
-		var val int64
-		if err := payload.Decode(value, &val); err != nil {
-			var listVal []int64
-			err = payload.Decode(value, &listVal)
-			return listVal, err
-		}
-		return val, nil
-	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
-		var val float64
-		if err := payload.Decode(value, &val); err != nil {
-			var listVal []float64
-			err = payload.Decode(value, &listVal)
-			return listVal, err
-		}
-		return val, nil
-	case enumspb.INDEXED_VALUE_TYPE_BOOL:
-		var val bool
-		if err := payload.Decode(value, &val); err != nil {
-			var listVal []bool
-			err = payload.Decode(value, &listVal)
-			return listVal, err
-		}
-		return val, nil
-	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
-		var val time.Time
-		if err := payload.Decode(value, &val); err != nil {
-			var listVal []time.Time
-			err = payload.Decode(value, &listVal)
-			return listVal, err
-		}
-		return val, nil
-	default:
-		return nil, fmt.Errorf("error: unknown index value type [%v]", valueType)
-	}
 }
 
 // GetDefaultAdvancedVisibilityWritingMode get default advancedVisibilityWritingMode based on

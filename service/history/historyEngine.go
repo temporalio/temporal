@@ -51,7 +51,6 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/history"
-	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -113,8 +112,8 @@ type (
 		replicationTaskProcessors []ReplicationTaskProcessor
 		publicClient              sdkclient.Client
 		eventsReapplier           nDCEventsReapplier
-		matchingClient            matching.Client
-		rawMatchingClient         matching.Client
+		matchingClient            matchingservice.MatchingServiceClient
+		rawMatchingClient         matchingservice.MatchingServiceClient
 		replicationDLQHandler     replicationDLQHandler
 		searchAttributesValidator *validator.SearchAttributesValidator
 	}
@@ -172,13 +171,13 @@ var (
 func NewEngineWithShardContext(
 	shard shard.Context,
 	visibilityMgr persistence.VisibilityManager,
-	matching matching.Client,
-	historyClient history.Client,
+	matching matchingservice.MatchingServiceClient,
+	historyClient historyservice.HistoryServiceClient,
 	publicClient sdkclient.Client,
 	eventNotifier events.Notifier,
 	config *configs.Config,
 	replicationTaskFetchers ReplicationTaskFetchers,
-	rawMatchingClient matching.Client,
+	rawMatchingClient matchingservice.MatchingServiceClient,
 	queueTaskProcessor queueTaskProcessor,
 ) *historyEngineImpl {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()

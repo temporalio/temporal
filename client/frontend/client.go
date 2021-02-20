@@ -42,7 +42,7 @@ const (
 	DefaultLongPollTimeout = time.Minute * 3
 )
 
-var _ Client = (*clientImpl)(nil)
+var _ workflowservice.WorkflowServiceClient = (*clientImpl)(nil)
 
 type clientImpl struct {
 	timeout         time.Duration
@@ -55,7 +55,7 @@ func NewClient(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 	clients common.ClientCache,
-) Client {
+) workflowservice.WorkflowServiceClient {
 	return &clientImpl{
 		timeout:         timeout,
 		longPollTimeout: longPollTimeout,

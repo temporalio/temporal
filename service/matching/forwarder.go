@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 )
@@ -48,7 +47,7 @@ type (
 		cfg           *forwarderConfig
 		taskQueueID   *taskQueueID
 		taskQueueKind enumspb.TaskQueueKind
-		client        matching.Client
+		client        matchingservice.MatchingServiceClient
 
 		// token channels that vend tokens necessary to make
 		// API calls exposed by forwarder. Tokens are used
@@ -100,7 +99,7 @@ func newForwarder(
 	cfg *forwarderConfig,
 	taskQueueID *taskQueueID,
 	kind enumspb.TaskQueueKind,
-	client matching.Client,
+	client matchingservice.MatchingServiceClient,
 ) *Forwarder {
 	fwdr := &Forwarder{
 		cfg:                   cfg,

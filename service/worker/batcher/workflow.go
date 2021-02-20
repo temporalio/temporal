@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"golang.org/x/time/rate"
 
-	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -328,7 +327,7 @@ func startTaskProcessor(
 	taskCh chan taskDetail,
 	respCh chan error,
 	limiter *rate.Limiter,
-	client frontend.Client,
+	client workflowservice.WorkflowServiceClient,
 ) {
 	batcher := ctx.Value(batcherContextKey).(*Batcher)
 	for {
@@ -415,7 +414,7 @@ func processTask(
 	limiter *rate.Limiter,
 	task taskDetail,
 	batchParams BatchParams,
-	client frontend.Client,
+	client workflowservice.WorkflowServiceClient,
 	applyOnChild *bool,
 	procFn func(string, string) error,
 ) error {

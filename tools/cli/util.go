@@ -29,7 +29,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -45,7 +44,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
-	"github.com/valyala/fastjson"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -53,9 +51,9 @@ import (
 
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/tools/cli/stringify"
 )
 
 // GetHistory helper method to iterate over all pages and return complete list of history events
@@ -79,150 +77,7 @@ func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID
 // HistoryEventToString convert HistoryEvent to string
 func HistoryEventToString(e *historypb.HistoryEvent, printFully bool, maxFieldLength int) string {
 	data := getEventAttributes(e)
-	return anyToString(data, printFully, maxFieldLength)
-}
-
-func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
-	v := reflect.ValueOf(d)
-	// Time is handled separetely because we don't want to go through it fields.
-	if t, isTime := d.(time.Time); isTime {
-		if t.IsZero() {
-			return "<zero>"
-		}
-		return t.String()
-	}
-	switch v.Kind() {
-	case reflect.Ptr:
-		return anyToString(v.Elem().Interface(), printFully, maxFieldLength)
-	case reflect.Struct:
-		var buf bytes.Buffer
-		t := reflect.TypeOf(d)
-		buf.WriteString("{")
-		for i := 0; i < v.NumField(); i++ {
-			f := v.Field(i)
-			if f.Kind() == reflect.Invalid {
-				continue
-			}
-			fieldName := t.Field(i).Name
-
-			// Filter out private fields.
-			if !f.CanInterface() {
-				continue
-			}
-
-			fieldValue := valueToString(f, printFully, maxFieldLength)
-			if fieldValue == "" {
-				continue
-			}
-			if buf.Len() > 1 {
-				buf.WriteString(", ")
-			}
-			if !isAttributeName(fieldName) && !strings.HasSuffix(fieldName, "Failure") {
-				if !printFully {
-					fieldValue = trimTextAndBreakWords(fieldValue, maxFieldLength)
-				} else if maxFieldLength != 0 { // for command run workflow and observe history
-					fieldValue = trimText(fieldValue, maxFieldLength)
-				}
-			}
-			if fieldName == "Reason" ||
-				fieldName == "Cause" ||
-				strings.HasSuffix(fieldName, "Details") {
-				buf.WriteString(fmt.Sprintf("%s:%s", color.MagentaString(fieldName), fieldValue))
-			} else if strings.HasSuffix(fieldName, "Failure") {
-				buf.WriteString(fmt.Sprintf("%s:%s", color.RedString(fieldName), fieldValue))
-			} else {
-				buf.WriteString(fmt.Sprintf("%s:%s", fieldName, fieldValue))
-			}
-		}
-		buf.WriteString("}")
-		return buf.String()
-	default:
-		return fmt.Sprint(d)
-	}
-}
-
-func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string {
-	switch v.Kind() {
-	case reflect.Ptr:
-		if ps, isPayloads := v.Interface().(*commonpb.Payloads); isPayloads {
-			return payloads.ToString(ps)
-		}
-		return valueToString(v.Elem(), printFully, maxFieldLength)
-	case reflect.Struct:
-		return anyToString(v.Interface(), printFully, maxFieldLength)
-	case reflect.Invalid:
-		return ""
-	case reflect.Slice:
-		if v.Type().Elem().Kind() == reflect.Uint8 {
-			n := string(v.Bytes())
-			if n != "" && n[len(n)-1] == '\n' {
-				return fmt.Sprintf("[%v]", n[:len(n)-1])
-			}
-			return fmt.Sprintf("[%v]", n)
-		}
-		return fmt.Sprintf("[len=%d]", v.Len())
-	case reflect.Map:
-		str := "map{"
-		for i, key := range v.MapKeys() {
-			str += key.String() + ":"
-			val := v.MapIndex(key)
-			switch typedV := val.Interface().(type) {
-			case []byte:
-				str += string(typedV)
-			case *commonpb.Payload:
-				str += payload.ToString(typedV)
-			case *commonpb.Payloads:
-				for _, value := range typedV.GetPayloads() {
-					str += payload.ToString(value)
-				}
-			default:
-				str += val.String()
-			}
-			if i != len(v.MapKeys())-1 {
-				str += ", "
-			}
-		}
-		str += "}"
-		return str
-	default:
-		return fmt.Sprint(v.Interface())
-	}
-}
-
-// limit the maximum length for each field
-func trimText(input string, maxFieldLength int) string {
-	if len(input) > maxFieldLength {
-		input = fmt.Sprintf("%s ... %s", input[:maxFieldLength/2], input[(len(input)-maxFieldLength/2):])
-	}
-	return input
-}
-
-// limit the maximum length for each field, and break long words for table item correctly wrap words
-func trimTextAndBreakWords(input string, maxFieldLength int) string {
-	input = trimText(input, maxFieldLength)
-	return breakLongWords(input, maxWordLength)
-}
-
-// long words will make output in table cell looks bad,
-// break long text "ltltltltllt..." to "ltlt ltlt lt..." will make use of table autowrap so that output is pretty.
-func breakLongWords(input string, maxWordLength int) string {
-	if len(input) <= maxWordLength {
-		return input
-	}
-
-	cnt := 0
-	for i := 0; i < len(input); i++ {
-		if cnt == maxWordLength {
-			cnt = 0
-			input = input[:i] + " " + input[i:]
-			continue
-		}
-		cnt++
-		if input[i] == ' ' {
-			cnt = 0
-		}
-	}
-	return input
+	return stringify.AnyToString(data, printFully, maxFieldLength)
 }
 
 // ColorEvent takes an event and return string with color
@@ -486,16 +341,6 @@ func getEventAttributes(e *historypb.HistoryEvent) interface{} {
 		data = e
 	}
 	return data
-}
-
-func isAttributeName(name string) bool {
-	eventType := strings.TrimSuffix(name, "EventAttributes")
-
-	if _, ok := enumspb.EventType_value[eventType]; ok {
-		return true
-	}
-
-	return false
 }
 
 func getCurrentUserFromEnv() string {
@@ -850,71 +695,12 @@ func validateJSONs(str string) error {
 	}
 }
 
-// use parseBool to ensure all BOOL search attributes only be "true" or "false"
-func parseBool(str string) (bool, error) {
-	switch str {
-	case "true":
-		return true, nil
-	case "false":
-		return false, nil
-	}
-	return false, fmt.Errorf("not parseable bool value: %s", str)
-}
-
 func trimSpace(strs []string) []string {
 	result := make([]string, len(strs))
 	for i, v := range strs {
 		result[i] = strings.TrimSpace(v)
 	}
 	return result
-}
-
-func parseArray(v string) (interface{}, error) {
-	if len(v) > 0 && v[0] == '[' && v[len(v)-1] == ']' {
-		parsedValues, err := fastjson.Parse(v)
-		if err != nil {
-			return nil, err
-		}
-		arr, err := parsedValues.Array()
-		if err != nil {
-			return nil, err
-		}
-		result := make([]interface{}, len(arr))
-		for i, item := range arr {
-			s := item.String()
-			if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' { // remove addition quote from json
-				s = s[1 : len(s)-1]
-				if sTime, err := time.Parse(defaultDateTimeFormat, s); err == nil {
-					result[i] = sTime
-					continue
-				}
-			}
-			result[i] = s
-		}
-		return result, nil
-	}
-	return nil, errors.New("not array")
-}
-
-func convertStringToRealType(v string) interface{} {
-	var genVal interface{}
-	var err error
-
-	if genVal, err = strconv.ParseInt(v, 10, 64); err == nil {
-
-	} else if genVal, err = parseBool(v); err == nil {
-
-	} else if genVal, err = strconv.ParseFloat(v, 64); err == nil {
-
-	} else if genVal, err = time.Parse(defaultDateTimeFormat, v); err == nil {
-
-	} else if genVal, err = parseArray(v); err == nil {
-
-	} else {
-		genVal = v
-	}
-
-	return genVal
 }
 
 func truncate(str string) string {

@@ -31,35 +31,38 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"go.temporal.io/api/workflowservice/v1"
+
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
-	"go.temporal.io/server/client/history"
-	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common/cluster"
 )
 
 type (
 	// Bean in an collection of clients
 	Bean interface {
-		GetHistoryClient() history.Client
-		SetHistoryClient(client history.Client)
-		GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error)
-		SetMatchingClient(client matching.Client)
-		GetFrontendClient() frontend.Client
-		SetFrontendClient(client frontend.Client)
-		GetRemoteAdminClient(cluster string) admin.Client
-		SetRemoteAdminClient(cluster string, client admin.Client)
-		GetRemoteFrontendClient(cluster string) frontend.Client
-		SetRemoteFrontendClient(cluster string, client frontend.Client)
+		GetHistoryClient() historyservice.HistoryServiceClient
+		SetHistoryClient(client historyservice.HistoryServiceClient)
+		GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error)
+		SetMatchingClient(client matchingservice.MatchingServiceClient)
+		GetFrontendClient() workflowservice.WorkflowServiceClient
+		SetFrontendClient(client workflowservice.WorkflowServiceClient)
+		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
+		SetRemoteAdminClient(cluster string, client adminservice.AdminServiceClient)
+		GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient
+		SetRemoteFrontendClient(cluster string, client workflowservice.WorkflowServiceClient)
 	}
 
 	clientBeanImpl struct {
 		sync.Mutex
 		currentCluster        string
-		historyClient         history.Client
+		historyClient         historyservice.HistoryServiceClient
 		matchingClient        atomic.Value
-		remoteAdminClients    map[string]admin.Client
-		remoteFrontendClients map[string]frontend.Client
+		remoteAdminClients    map[string]adminservice.AdminServiceClient
+		remoteFrontendClients map[string]workflowservice.WorkflowServiceClient
 		factory               Factory
 	}
 )
@@ -72,8 +75,8 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 		return nil, err
 	}
 
-	remoteAdminClients := map[string]admin.Client{}
-	remoteFrontendClients := map[string]frontend.Client{}
+	remoteAdminClients := map[string]adminservice.AdminServiceClient{}
+	remoteFrontendClients := map[string]workflowservice.WorkflowServiceClient{}
 
 	for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
 		if !info.Enabled {
@@ -111,40 +114,40 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 	}, nil
 }
 
-func (h *clientBeanImpl) GetHistoryClient() history.Client {
+func (h *clientBeanImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return h.historyClient
 }
 
 func (h *clientBeanImpl) SetHistoryClient(
-	client history.Client,
+	client historyservice.HistoryServiceClient,
 ) {
 	h.historyClient = client
 }
 
-func (h *clientBeanImpl) GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error) {
+func (h *clientBeanImpl) GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error) {
 	if client := h.matchingClient.Load(); client != nil {
-		return client.(matching.Client), nil
+		return client.(matchingservice.MatchingServiceClient), nil
 	}
 	return h.lazyInitMatchingClient(namespaceIDToName)
 }
 
 func (h *clientBeanImpl) SetMatchingClient(
-	client matching.Client,
+	client matchingservice.MatchingServiceClient,
 ) {
 	h.matchingClient.Store(client)
 }
 
-func (h *clientBeanImpl) GetFrontendClient() frontend.Client {
+func (h *clientBeanImpl) GetFrontendClient() workflowservice.WorkflowServiceClient {
 	return h.remoteFrontendClients[h.currentCluster]
 }
 
 func (h *clientBeanImpl) SetFrontendClient(
-	client frontend.Client,
+	client workflowservice.WorkflowServiceClient,
 ) {
 	h.remoteFrontendClients[h.currentCluster] = client
 }
 
-func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) admin.Client {
+func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient {
 	client, ok := h.remoteAdminClients[cluster]
 	if !ok {
 		panic(fmt.Sprintf(
@@ -158,12 +161,12 @@ func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) admin.Client {
 
 func (h *clientBeanImpl) SetRemoteAdminClient(
 	cluster string,
-	client admin.Client,
+	client adminservice.AdminServiceClient,
 ) {
 	h.remoteAdminClients[cluster] = client
 }
 
-func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.Client {
+func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient {
 	client, ok := h.remoteFrontendClients[cluster]
 	if !ok {
 		panic(fmt.Sprintf(
@@ -177,16 +180,16 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.Client
 
 func (h *clientBeanImpl) SetRemoteFrontendClient(
 	cluster string,
-	client frontend.Client,
+	client workflowservice.WorkflowServiceClient,
 ) {
 	h.remoteFrontendClients[cluster] = client
 }
 
-func (h *clientBeanImpl) lazyInitMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error) {
+func (h *clientBeanImpl) lazyInitMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error) {
 	h.Lock()
 	defer h.Unlock()
 	if cached := h.matchingClient.Load(); cached != nil {
-		return cached.(matching.Client), nil
+		return cached.(matchingservice.MatchingServiceClient), nil
 	}
 	client, err := h.factory.NewMatchingClient(namespaceIDToName)
 	if err != nil {

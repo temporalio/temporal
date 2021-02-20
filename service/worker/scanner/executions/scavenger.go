@@ -30,7 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/client/frontend"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/quotas"
 
@@ -44,7 +44,7 @@ import (
 type (
 	// Scavenger is the type that holds the state for executions scavenger daemon
 	Scavenger struct {
-		frontendClient        frontend.Client // used to query visibility
+		frontendClient        workflowservice.WorkflowServiceClient // used to query visibility
 		historyDB             persistence.HistoryManager
 		numHistoryShards      int32
 		executor              executor.Executor
@@ -94,7 +94,7 @@ var (
 //  - either all executions are processed successfully (or)
 //  - Stop() method is called to stop the scavenger
 func NewScavenger(
-	frontendClient frontend.Client,
+	frontendClient workflowservice.WorkflowServiceClient,
 	historyDB persistence.HistoryManager,
 	metricsClient metrics.Client,
 	logger log.Logger,

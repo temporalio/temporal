@@ -34,15 +34,16 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	m "go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/worker/archiver"
@@ -59,7 +60,7 @@ type (
 		cache          *historyCache
 		logger         log.Logger
 		metricsClient  metrics.Client
-		matchingClient matching.Client
+		matchingClient matchingservice.MatchingServiceClient
 		visibilityMgr  persistence.VisibilityManager
 		config         *configs.Config
 	}
@@ -319,7 +320,17 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	if archiveVisibility {
 		ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
 		defer cancel()
-		_, err := t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
+
+		saTypeMap, err := searchattribute.BuildTypeMap(t.config.ValidSearchAttributes)
+		if err != nil {
+			return err
+		}
+
+		// Setting search attributes types here because archival client needs to stringify them
+		// and it might not have access to type map (i.e. type needs to be embedded).
+		searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
+
+		_, err = t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
 			ArchiveRequest: &archiver.ArchiveRequest{
 				NamespaceID:      namespaceID,
 				Namespace:        namespace,

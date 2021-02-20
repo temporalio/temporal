@@ -35,7 +35,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -72,7 +72,7 @@ type (
 		historyService           *historyEngineImpl
 		ackLevel                 timerKey
 		logger                   log.Logger
-		matchingClient           matching.Client
+		matchingClient           matchingservice.MatchingServiceClient
 		status                   int32
 		shutdownChan             chan struct{}
 		shutdownWG               sync.WaitGroup
@@ -85,7 +85,7 @@ type (
 func newTimerQueueProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
-	matchingClient matching.Client,
+	matchingClient matchingservice.MatchingServiceClient,
 	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) timerQueueProcessor {

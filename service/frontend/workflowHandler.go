@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -2443,7 +2444,16 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		Query:         request.GetQuery(),
 	}
 
-	archiverResponse, err := visibilityArchiver.Query(ctx, URI, archiverRequest)
+	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
+	if err != nil {
+		return nil, wh.error(fmt.Errorf("uable to build valid search attributes map: %w", err), scope)
+	}
+
+	archiverResponse, err := visibilityArchiver.Query(
+		ctx,
+		URI,
+		archiverRequest,
+		saTypeMap)
 	if err != nil {
 		return nil, err
 	}
@@ -2576,9 +2586,12 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 		return nil, err
 	}
 
-	keys := wh.config.ValidSearchAttributes()
+	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
+	if err != nil {
+		return nil, wh.error(fmt.Errorf("uable to build valid search attributes map: %w", err), scope)
+	}
 	resp := &workflowservice.GetSearchAttributesResponse{
-		Keys: wh.convertIndexedKeyToProto(keys),
+		Keys: saTypeMap,
 	}
 	return resp, nil
 }
@@ -2811,6 +2824,12 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	if err != nil {
 		return nil, err
 	}
+
+	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
+	if err != nil {
+		return nil, wh.error(fmt.Errorf("uable to build valid search attributes map: %w", err), scope)
+	}
+	searchattribute.ApplyTypeMap(response.WorkflowExecutionInfo.SearchAttributes, saTypeMap)
 
 	return &workflowservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig:       response.GetExecutionConfig(),
@@ -3303,14 +3322,6 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		NextPageToken: resp.NextPageToken,
 		Archived:      true,
 	}, nil
-}
-
-func (wh *WorkflowHandler) convertIndexedKeyToProto(keys map[string]interface{}) map[string]enumspb.IndexedValueType {
-	converted := make(map[string]enumspb.IndexedValueType)
-	for k, v := range keys {
-		converted[k] = common.ConvertIndexedValueTypeToProtoType(v, wh.GetLogger())
-	}
-	return converted
 }
 
 func (wh *WorkflowHandler) isListRequestPageSizeTooLarge(pageSize int32, namespace string) bool {

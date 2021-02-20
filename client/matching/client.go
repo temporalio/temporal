@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/server/common"
 )
 
-var _ Client = (*clientImpl)(nil)
+var _ matchingservice.MatchingServiceClient = (*clientImpl)(nil)
 
 const (
 	// DefaultTimeout is the default timeout used to make calls
@@ -57,7 +57,7 @@ func NewClient(
 	longPollTimeout time.Duration,
 	clients common.ClientCache,
 	lb LoadBalancer,
-) Client {
+) matchingservice.MatchingServiceClient {
 	return &clientImpl{
 		timeout:         timeout,
 		longPollTimeout: longPollTimeout,

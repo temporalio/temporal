@@ -25,8 +25,8 @@
 package history
 
 import (
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -58,7 +58,7 @@ func newTransferQueueStandbyProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager,
-	matchingClient matching.Client,
+	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	queueTaskProcessor queueTaskProcessor,

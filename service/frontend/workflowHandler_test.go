@@ -1163,7 +1163,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Success() {
 		nil,
 	), nil).AnyTimes()
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
-	s.mockVisibilityArchiver.EXPECT().Query(gomock.Any(), gomock.Any(), gomock.Any()).Return(&archiver.QueryVisibilityResponse{}, nil)
+	s.mockVisibilityArchiver.EXPECT().Query(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&archiver.QueryVisibilityResponse{}, nil)
 	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
@@ -1265,66 +1265,6 @@ func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 	countRequest.Query = query
 	_, err = wh.CountWorkflowExecutions(ctx, countRequest)
 	s.NotNil(err)
-}
-
-func (s *workflowHandlerSuite) TestConvertIndexedKeyToProto() {
-	wh := s.getWorkflowHandler(s.newConfig())
-	m := map[string]interface{}{
-		"key1":  float64(1),
-		"key2":  float64(2),
-		"key3":  float64(3),
-		"key4":  float64(4),
-		"key5":  float64(5),
-		"key6":  float64(6),
-		"key1i": 1,
-		"key2i": 2,
-		"key3i": 3,
-		"key4i": 4,
-		"key5i": 5,
-		"key6i": 6,
-		"key1t": enumspb.INDEXED_VALUE_TYPE_STRING,
-		"key2t": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"key3t": enumspb.INDEXED_VALUE_TYPE_INT,
-		"key4t": enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-		"key5t": enumspb.INDEXED_VALUE_TYPE_BOOL,
-		"key6t": enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		"key1s": "String",
-		"key2s": "Keyword",
-		"key3s": "Int",
-		"key4s": "Double",
-		"key5s": "Bool",
-		"key6s": "Datetime",
-	}
-	result := wh.convertIndexedKeyToProto(m)
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_STRING, result["key1"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, result["key2"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_INT, result["key3"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_DOUBLE, result["key4"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_BOOL, result["key5"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_DATETIME, result["key6"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_STRING, result["key1i"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, result["key2i"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_INT, result["key3i"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_DOUBLE, result["key4i"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_BOOL, result["key5i"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_DATETIME, result["key6i"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_STRING, result["key1t"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, result["key2t"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_INT, result["key3t"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_DOUBLE, result["key4t"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_BOOL, result["key5t"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_DATETIME, result["key6t"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_STRING, result["key1s"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, result["key2s"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_INT, result["key3s"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_DOUBLE, result["key4s"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_BOOL, result["key5s"])
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_DATETIME, result["key6s"])
-	s.Panics(func() {
-		wh.convertIndexedKeyToProto(map[string]interface{}{
-			"invalidType": "unknown",
-		})
-	})
 }
 
 func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {

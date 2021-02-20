@@ -61,7 +61,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	adminClient "go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
@@ -88,7 +87,7 @@ type (
 		namespaceID                 string
 		version                     int64
 		versionIncrement            int64
-		mockAdminClient             map[string]adminClient.Client
+		mockAdminClient             map[string]adminservice.AdminServiceClient
 		standByReplicationTasksChan chan *replicationspb.ReplicationTask
 		standByTaskID               int64
 	}
@@ -134,7 +133,7 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	s.standByReplicationTasksChan = make(chan *replicationspb.ReplicationTask, 100)
 
 	s.standByTaskID = 0
-	s.mockAdminClient = make(map[string]adminClient.Client)
+	s.mockAdminClient = make(map[string]adminservice.AdminServiceClient)
 	controller := gomock.NewController(s.T())
 	mockStandbyClient := adminservicemock.NewMockAdminServiceClient(controller)
 	mockStandbyClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).DoAndReturn(s.GetReplicationMessagesMock).AnyTimes()

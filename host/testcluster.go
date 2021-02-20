@@ -33,7 +33,7 @@ import (
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
-	adminClient "go.temporal.io/server/client/admin"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
@@ -85,7 +85,7 @@ type (
 		HistoryConfig         *HistoryConfig
 		ESConfig              *elasticsearch.Config
 		WorkerConfig          *WorkerConfig
-		MockAdminClient       map[string]adminClient.Client
+		MockAdminClient       map[string]adminservice.AdminServiceClient
 	}
 
 	// MessagingClientConfig is the config for messaging config
@@ -187,7 +187,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		esVisibilityStore := pes.NewElasticSearchVisibilityStore(
 			esClient, indexName, nil, esProcessor, visConfig, logger, &noopMetricsClient{},
 		)
-		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, logger)
+		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, visConfig.ValidSearchAttributes, logger)
 	}
 	visibilityMgr := persistence.NewVisibilityManagerWrapper(testBase.VisibilityMgr, esVisibilityMgr,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(options.WorkerConfig.EnableIndexer), advancedVisibilityWritingMode)
