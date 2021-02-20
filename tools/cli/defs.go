@@ -39,7 +39,6 @@ const (
 	maxOutputStringLength = 200 // max length for output string
 	maxWorkflowTypeLength = 32  // max item length for output workflow type in table
 	defaultMaxFieldLength = 500 // default max length for each attribute field
-	maxWordLength         = 120 // if text length is larger than maxWordLength, it will be inserted spaces
 
 	// regex expression for parsing time durations, shorter, longer notations and numeric value respectively
 	defaultDateTimeRangeShortRE = "^[1-9][0-9]*[smhdwMy]$"                                // eg. 1s, 20m, 300h etc.

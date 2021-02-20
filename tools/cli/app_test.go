@@ -25,12 +25,10 @@
 package cli
 
 import (
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -52,7 +50,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -711,58 +708,6 @@ func (s *cliAppSuite) TestParseTimeDateRange() {
 		s.True(te.expected.Before(parsedTime) || te.expected == parsedTime, "Case: %s. %d must be less or equal than parsed %d", te.timeStr, te.expected, parsedTime)
 		s.True(te.expected.Add(delta).After(parsedTime) || te.expected.Add(delta) == parsedTime, "Case: %s. %d must be greater or equal than parsed %d", te.timeStr, te.expected, parsedTime)
 	}
-}
-
-func (s *cliAppSuite) TestBreakLongWords() {
-	s.Equal("111 222 333 4", breakLongWords("1112223334", 3))
-	s.Equal("111 2 223", breakLongWords("1112 223", 3))
-	s.Equal("11 122 23", breakLongWords("11 12223", 3))
-	s.Equal("111", breakLongWords("111", 3))
-	s.Equal("", breakLongWords("", 3))
-	s.Equal("111  222", breakLongWords("111 222", 3))
-}
-
-func (s *cliAppSuite) TestAnyToString() {
-	arg := strings.Repeat("LongText", 80)
-	event := &historypb.HistoryEvent{
-		EventId:   1,
-		EventType: eventType,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:        &commonpb.WorkflowType{Name: "helloworldWorkflow"},
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: "taskQueue"},
-			WorkflowRunTimeout:  timestamp.DurationPtr(60 * time.Second),
-			WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
-			Identity:            "tester",
-			Input:               payloads.EncodeString(arg),
-		}},
-	}
-	res := anyToString(event, false, defaultMaxFieldLength)
-	ss, l := tablewriter.WrapString(res, 10)
-	s.Equal(6, len(ss))
-	s.Equal(131, l)
-}
-
-func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
-	fields := map[string]*commonpb.Payload{
-		"TestKey": payload.EncodeString("testValue"),
-	}
-	execution := &workflowpb.WorkflowExecutionInfo{
-		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		Memo:   &commonpb.Memo{Fields: fields},
-	}
-	s.Equal("{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
-
-	fields["TestKey2"] = payload.EncodeString(`anotherTestValue`)
-	execution.Memo = &commonpb.Memo{Fields: fields}
-	got := anyToString(execution, true, 0)
-	expected := got == "{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
-		got == "{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
-	s.True(expected)
-}
-
-func (s *cliAppSuite) TestIsAttributeName() {
-	s.True(isAttributeName("WorkflowExecutionStartedEventAttributes"))
-	s.False(isAttributeName("workflowExecutionStartedEventAttributes"))
 }
 
 func (s *cliAppSuite) TestGetSearchAttributes() {

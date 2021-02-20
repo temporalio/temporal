@@ -63,7 +63,7 @@ require (
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.temporal.io/api v1.4.0
-	go.temporal.io/sdk v1.4.0
+	go.temporal.io/sdk v1.4.2-0.20210219180512-80e324b11627
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.7.0
 	go.uber.org/multierr v1.6.0
