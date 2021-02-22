@@ -2446,7 +2446,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
 	if err != nil {
-		return nil, wh.error(fmt.Errorf("uable to build valid search attributes map: %w", err), scope)
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("uable to build valid search attributes map: %v", err))
 	}
 
 	archiverResponse, err := visibilityArchiver.Query(
@@ -2588,7 +2588,7 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 
 	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
 	if err != nil {
-		return nil, wh.error(fmt.Errorf("uable to build valid search attributes map: %w", err), scope)
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("uable to build valid search attributes map: %v", err))
 	}
 	resp := &workflowservice.GetSearchAttributesResponse{
 		Keys: saTypeMap,
@@ -2827,7 +2827,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 
 	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
 	if err != nil {
-		return nil, wh.error(fmt.Errorf("uable to build valid search attributes map: %w", err), scope)
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("uable to build valid search attributes map: %v", err))
 	}
 	searchattribute.ApplyTypeMap(response.WorkflowExecutionInfo.SearchAttributes, saTypeMap)
 
