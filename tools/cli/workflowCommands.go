@@ -282,24 +282,34 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 }
 
 func processSearchAttr(c *cli.Context) *commonpb.SearchAttributes {
-	rawSearchAttrKey := c.String(FlagSearchAttributesKey)
-	searchAttrKeys := trimSpace(strings.Split(rawSearchAttrKey, searchAttrInputSeparator))
+	sanitize := func(val string) []string {
+		trimmedVal := strings.TrimSpace(val)
+		if len(trimmedVal) == 0 {
+			return nil
+		}
+		splitVal := strings.Split(trimmedVal, searchAttrInputSeparator)
+		result := make([]string, len(splitVal))
+		for i, v := range splitVal {
+			result[i] = strings.TrimSpace(v)
+		}
+		return result
+	}
+
+	searchAttrKeys := sanitize(c.String(FlagSearchAttributesKey))
 	if len(searchAttrKeys) == 0 {
 		return nil
 	}
-
-	rawSearchAttrVal := c.String(FlagSearchAttributesVal)
-	searchAttrStrVals := trimSpace(strings.Split(rawSearchAttrVal, searchAttrInputSeparator))
-	if len(searchAttrStrVals) == 0 {
+	searchAttrVals := sanitize(c.String(FlagSearchAttributesVal))
+	if len(searchAttrVals) == 0 {
 		return nil
 	}
 
-	if len(searchAttrKeys) != len(searchAttrStrVals) {
-		ErrorAndExit("Number of search attributes keys and values are not equal.", nil)
+	if len(searchAttrKeys) != len(searchAttrVals) {
+		ErrorAndExit(fmt.Sprintf("Uneven number of search attributes keys (%d): %v and values(%d): %v.", len(searchAttrKeys), searchAttrKeys, len(searchAttrVals), searchAttrVals), nil)
 	}
 
 	searchAttributesStr := make(map[string]string, len(searchAttrKeys))
-	for i, searchAttrVal := range searchAttrStrVals {
+	for i, searchAttrVal := range searchAttrVals {
 		searchAttributesStr[searchAttrKeys[i]] = searchAttrVal
 	}
 
