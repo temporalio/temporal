@@ -126,9 +126,17 @@ func (r *nDCStateRebuilderImpl) rebuild(
 
 	// need to specially handling the first batch, to initialize mutable state & state builder
 	batch, err := iter.Next()
-	if err != nil {
+	switch err.(type) {
+	case nil:
+		// noop
+	case *serviceerror.DataLoss:
+		// log event
+		r.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(baseWorkflowIdentifier.NamespaceID), tag.WorkflowID(baseWorkflowIdentifier.WorkflowID), tag.WorkflowRunID(baseWorkflowIdentifier.RunID))
+		return nil, 0, err
+	default:
 		return nil, 0, err
 	}
+
 	firstEventBatch := batch.(*historypb.History).Events
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		namespaceEntry,
@@ -140,11 +148,23 @@ func (r *nDCStateRebuilderImpl) rebuild(
 
 	for iter.HasNext() {
 		batch, err := iter.Next()
-		if err != nil {
+		switch err.(type) {
+		case nil:
+			// noop
+		case *serviceerror.DataLoss:
+			// log event
+			r.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(baseWorkflowIdentifier.NamespaceID), tag.WorkflowID(baseWorkflowIdentifier.WorkflowID), tag.WorkflowRunID(baseWorkflowIdentifier.RunID))
+			return nil, 0, err
+		default:
 			return nil, 0, err
 		}
-		events := batch.(*historypb.History).Events
-		if err := r.applyEvents(targetWorkflowIdentifier, stateBuilder, events, requestID); err != nil {
+
+		if err := r.applyEvents(
+			targetWorkflowIdentifier,
+			stateBuilder,
+			batch.(*historypb.History).Events,
+			requestID,
+		); err != nil {
 			return nil, 0, err
 		}
 	}
