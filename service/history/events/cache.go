@@ -170,8 +170,15 @@ func (e *CacheImpl) DeleteEvent(namespaceID, workflowID, runID string, eventID i
 	e.Delete(key)
 }
 
-func (e *CacheImpl) getHistoryEventFromStore(namespaceID, workflowID, runID string, firstEventID, eventID int64,
-	branchToken []byte) (*historypb.HistoryEvent, error) {
+func (e *CacheImpl) getHistoryEventFromStore(
+	namespaceID string,
+	workflowID string,
+	runID string,
+	firstEventID int64,
+	eventID int64,
+	branchToken []byte,
+) (*historypb.HistoryEvent, error) {
+
 	e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetFromStoreScope, metrics.CacheLatency)
 	defer sw.Stop()
@@ -184,8 +191,15 @@ func (e *CacheImpl) getHistoryEventFromStore(namespaceID, workflowID, runID stri
 		NextPageToken: nil,
 		ShardID:       e.shardID,
 	})
-
-	if err != nil {
+	switch err.(type) {
+	case nil:
+		// noop
+	case *serviceerror.DataLoss:
+		// log event
+		e.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(workflowID), tag.WorkflowRunID(runID))
+		e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheFailures)
+		return nil, err
+	default:
 		e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheFailures)
 		return nil, err
 	}

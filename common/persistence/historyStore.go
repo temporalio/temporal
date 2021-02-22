@@ -347,7 +347,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 		}
 
 		if token.CurrentRangeIndex == notStartedIndex {
-			return nil, nil, 0, nil, serviceerror.NewInternal(fmt.Sprintf("branchRange is corrupted"))
+			return nil, nil, 0, nil, serviceerror.NewDataLoss("branchRange is corrupted")
 		}
 	}
 
@@ -394,7 +394,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	token.LastTransactionID = resp.LastTransactionID
 
 	// NOTE: in this method, we need to make sure eventVersion is NOT
-	// decreasing(otherwise we skip the events), eventID should be continuous(otherwise return error)
+	// decreasing(otherwise we skip the events), eventID should be contiguous(otherwise return error)
 	logger := m.logger.WithTags(tag.WorkflowBranchID(branch.BranchId), tag.WorkflowTreeID(branch.TreeId))
 
 	return dataBlobs, token, dataSize, logger, nil
@@ -423,7 +423,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 		if len(events) == 0 {
 			logger.Error("Empty events in a batch")
 			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID,
-				serviceerror.NewInternal(fmt.Sprintf("corrupted history event batch, empty events"))
+				serviceerror.NewDataLoss(fmt.Sprintf("corrupted history event batch, empty events"))
 		}
 
 		firstEvent := events[0]           // first
@@ -431,13 +431,13 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 		lastEvent := events[eventCount-1] // last
 
 		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
-			// in a single batch, version should be the same, and ID should be continuous
+			// in a single batch, version should be the same, and ID should be contiguous
 			logger.Error("Corrupted event batch",
 				tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 				tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
 				tag.Counter(eventCount))
 			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID,
-				serviceerror.NewInternal(fmt.Sprintf("corrupted history event batch, wrong version and IDs"))
+				serviceerror.NewDataLoss("corrupted history event batch, wrong version and IDs")
 		}
 
 		if firstEvent.GetVersion() < token.LastEventVersion {
@@ -456,13 +456,13 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 			// In that case we don't validate history continuousness for the first page
 			// TODO: in this case, some events returned can be invalid(stale). application layer need to make sure it won't make any problems to XDC
 			if defaultLastEventID == 0 || token.LastEventID != defaultLastEventID {
-				logger.Error("Corrupted non-continuous event batch",
+				logger.Error("Corrupted non-contiguous event batch",
 					tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 					tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
 					tag.TokenLastEventVersion(token.LastEventVersion), tag.TokenLastEventID(token.LastEventID),
 					tag.Counter(eventCount))
 				return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID,
-					serviceerror.NewInternal(fmt.Sprintf("corrupted history event batch, eventID is not continuous"))
+					serviceerror.NewDataLoss("corrupted history event batch, eventID is not contiguous")
 			}
 		}
 
