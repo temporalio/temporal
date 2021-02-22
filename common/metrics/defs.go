@@ -794,6 +794,9 @@ const (
 	FrontendResetWorkflowExecutionScope
 	// FrontendGetSearchAttributesScope is the metric scope for frontend.GetSearchAttributes
 	FrontendGetSearchAttributesScope
+	// FrontendGetClusterInfoScope is the metric scope for frontend.GetClusterInfo
+	FrontendGetClusterInfoScope
+
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope
 	// AuthorizationScope is the scope used by all metric emitted by authorization code
@@ -1424,15 +1427,16 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendCountWorkflowExecutionsScope:            {operation: "CountWorkflowExecutions"},
 		FrontendRegisterNamespaceScope:                  {operation: "RegisterNamespace"},
 		FrontendDescribeNamespaceScope:                  {operation: "DescribeNamespace"},
-		FrontendListNamespacesScope:                     {operation: "ListNamespace"},
+		FrontendListNamespacesScope:                     {operation: "ListNamespaces"},
 		FrontendUpdateNamespaceScope:                    {operation: "UpdateNamespace"},
 		FrontendDeprecateNamespaceScope:                 {operation: "DeprecateNamespace"},
 		FrontendQueryWorkflowScope:                      {operation: "QueryWorkflow"},
 		FrontendDescribeWorkflowExecutionScope:          {operation: "DescribeWorkflowExecution"},
-		FrontendListTaskQueuePartitionsScope:            {operation: "FrontendListTaskQueuePartitions"},
+		FrontendListTaskQueuePartitionsScope:            {operation: "ListTaskQueuePartitions"},
 		FrontendDescribeTaskQueueScope:                  {operation: "DescribeTaskQueue"},
 		FrontendResetStickyTaskQueueScope:               {operation: "ResetStickyTaskQueue"},
 		FrontendGetSearchAttributesScope:                {operation: "GetSearchAttributes"},
+		FrontendGetClusterInfoScope:                     {operation: "GetClusterInfo"},
 		VersionCheckScope:                               {operation: "VersionCheck"},
 		AuthorizationScope:                              {operation: "Authorization"},
 	},

@@ -49,15 +49,12 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
-	golandMapReserverNumberOfBytes = 48
-
 	retryPersistenceOperationInitialInterval    = 50 * time.Millisecond
 	retryPersistenceOperationMaxInterval        = 10 * time.Second
 	retryPersistenceOperationExpirationInterval = 30 * time.Second
@@ -77,10 +74,6 @@ const (
 	adminServiceOperationInitialInterval    = 200 * time.Millisecond
 	adminServiceOperationMaxInterval        = 5 * time.Second
 	adminServiceOperationExpirationInterval = 15 * time.Second
-
-	retryKafkaOperationInitialInterval    = 50 * time.Millisecond
-	retryKafkaOperationMaxInterval        = 10 * time.Second
-	retryKafkaOperationExpirationInterval = 30 * time.Second
 
 	retryTaskProcessingInitialInterval = 50 * time.Millisecond
 	retryTaskProcessingMaxInterval     = 100 * time.Millisecond
@@ -145,12 +138,6 @@ func AwaitWaitGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
 	}
 }
 
-// AddSecondsToBaseTime - Gets the UnixNano with given duration and base time.
-func AddSecondsToBaseTime(baseTimeInNanoSec int64, durationInSeconds int64) int64 {
-	timeOut := time.Duration(durationInSeconds) * time.Second
-	return time.Unix(0, baseTimeInNanoSec).Add(timeOut).UnixNano()
-}
-
 // CreatePersistanceRetryPolicy creates a retry policy for persistence layer operations
 func CreatePersistanceRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(retryPersistenceOperationInitialInterval)
@@ -196,15 +183,6 @@ func CreateAdminServiceRetryPolicy() backoff.RetryPolicy {
 	return policy
 }
 
-// CreateKafkaOperationRetryPolicy creates a retry policy for kafka operation
-func CreateKafkaOperationRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(retryKafkaOperationInitialInterval)
-	policy.SetMaximumInterval(retryKafkaOperationMaxInterval)
-	policy.SetExpirationInterval(retryKafkaOperationExpirationInterval)
-
-	return policy
-}
-
 // CreateTaskProcessingRetryPolicy creates a retry policy for task processing
 func CreateTaskProcessingRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(retryTaskProcessingInitialInterval)
@@ -234,11 +212,6 @@ func IsPersistenceTransientError(err error) bool {
 	return false
 }
 
-// IsKafkaTransientError check if the error is a transient kafka error
-func IsKafkaTransientError(err error) bool {
-	return true
-}
-
 // IsServiceTransientError checks if the error is a retryable error.
 func IsServiceTransientError(err error) bool {
 	return !IsServiceNonRetryableError(err)
@@ -250,8 +223,7 @@ func IsServiceNonRetryableError(err error) bool {
 	case *serviceerror.NotFound,
 		*serviceerror.InvalidArgument,
 		*serviceerror.NamespaceNotActive,
-		*serviceerror.WorkflowExecutionAlreadyStarted,
-		*serviceerror.CancellationAlreadyRequested:
+		*serviceerror.WorkflowExecutionAlreadyStarted:
 		return true
 	}
 
@@ -571,12 +543,9 @@ func CheckEventBlobSizeLimit(
 	namespaceID string,
 	workflowID string,
 	runID string,
-	scope metrics.Scope,
 	logger log.Logger,
 	blobSizeViolationOperationTag tag.Tag,
 ) error {
-	scope.RecordDistribution(metrics.EventBlobSize, actualSize)
-
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob size exceeds limit.",

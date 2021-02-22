@@ -663,7 +663,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 			namespaceID,
 			workflowID,
 			runID,
-			scope,
 			handler.throttledLogger,
 			tag.BlobSizeViolationOperation("ConsistentQuery"),
 		); err != nil {

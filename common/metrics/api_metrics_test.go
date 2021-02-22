@@ -52,6 +52,17 @@ func (s *apiMetricsSuite) TearDownTest() {
 
 }
 
+func (s *apiMetricsSuite) TestFrontendAPIMetrics() {
+	apiNames := FrontendAPIMetricsNames()
+	apiNameToScope := FrontendAPIMetricsScopes()
+	for apiName := range apiNames {
+		if _, ok := apiNameToScope[apiName]; !ok {
+			fmt.Println(apiName)
+		}
+	}
+	s.Equal(len(apiNames), len(apiNameToScope))
+}
+
 func (s *apiMetricsSuite) TestMatchingAPIMetrics() {
 	apiNames := MatchingAPIMetricsNames()
 	apiNameToScope := MatchingAPIMetricsScopes()

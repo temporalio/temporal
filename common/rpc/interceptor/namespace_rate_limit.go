@@ -35,33 +35,38 @@ import (
 )
 
 const (
-	RateLimitDefaultToken = 1
+	NamespaceRateLimitDefaultToken = 1
 )
 
 var (
-	RateLimitServerBusy = serviceerror.NewResourceExhausted("service rate limit exceeded")
+	NamespaceRateLimitServerBusy = serviceerror.NewResourceExhausted("namespace rate limit exceeded")
 )
 
 type (
-	RateLimitInterceptor struct {
-		rateLimiter quotas.RateLimiter
+	NamespaceRateLimitInterceptor struct {
+		rateLimiter quotas.NamespaceRateLimiter
 		tokens      map[string]int
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*RateLimitInterceptor)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = (*NamespaceRateLimitInterceptor)(nil).Intercept
 
-func NewRateLimitInterceptor(
-	rate quotas.RateFn,
+func NewNamespaceRateLimitInterceptor(
+	rateFn func(namespace string) float64,
 	tokens map[string]int,
-) *RateLimitInterceptor {
-	return &RateLimitInterceptor{
-		rateLimiter: quotas.NewDefaultIncomingDynamicRateLimiter(rate),
-		tokens:      tokens,
+) *NamespaceRateLimitInterceptor {
+	return &NamespaceRateLimitInterceptor{
+		rateLimiter: quotas.NewNamespaceRateLimiter(
+			func(namespace string) quotas.RateLimiter {
+				return quotas.NewDefaultIncomingDynamicRateLimiter(
+					func() float64 { return rateFn(namespace) },
+				)
+			}),
+		tokens: tokens,
 	}
 }
 
-func (i *RateLimitInterceptor) Intercept(
+func (i *NamespaceRateLimitInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
@@ -70,11 +75,12 @@ func (i *RateLimitInterceptor) Intercept(
 	_, methodName := splitMethodName(info.FullMethod)
 	token, ok := i.tokens[methodName]
 	if !ok {
-		token = RateLimitDefaultToken
+		token = NamespaceRateLimitDefaultToken
 	}
 
-	if !i.rateLimiter.AllowN(time.Now().UTC(), token) {
-		return nil, RateLimitServerBusy
+	namespace := GetNamespace(req)
+	if !i.rateLimiter.AllowN(namespace, time.Now().UTC(), token) {
+		return nil, NamespaceRateLimitServerBusy
 	}
 	return handler(ctx, req)
 }

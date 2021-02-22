@@ -957,7 +957,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_NamespaceCacheEntr
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testNamespaceID, metrics.NoopScope(metrics.Frontend))
+	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testNamespaceID)
 	s.Nil(resp)
 	s.Error(err)
 }
@@ -977,7 +977,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty()
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testNamespaceID, metrics.NoopScope(metrics.Frontend))
+	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testNamespaceID)
 	s.Nil(resp)
 	s.Error(err)
 }
@@ -997,7 +997,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testNamespaceID, metrics.NoopScope(metrics.Frontend))
+	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testNamespaceID)
 	s.Nil(resp)
 	s.Error(err)
 }
@@ -1040,7 +1040,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testNamespaceID, metrics.NoopScope(metrics.Frontend))
+	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testNamespaceID)
 	s.NoError(err)
 	s.NotNil(resp)
 	s.NotNil(resp.History)
@@ -1080,8 +1080,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	scope := metrics.NoopScope(metrics.Frontend)
-	history, token, err := wh.getHistory(scope, namespaceID, we, firstEventID, nextEventID, 0, []byte{}, nil, branchToken)
+	history, token, err := wh.getHistory(namespaceID, we, firstEventID, nextEventID, 0, []byte{}, nil, branchToken)
 	s.NoError(err)
 	s.NotNil(history)
 	s.Equal([]byte{}, token)

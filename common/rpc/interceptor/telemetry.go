@@ -69,8 +69,14 @@ func (ti *TelemetryInterceptor) Intercept(
 	// if the method name is not defined, will default to
 	// unknown scope, which carries value 0
 	scope, _ := ti.scopes[methodName]
-	ti.metricsClient.IncCounter(scope, metrics.ServiceRequests)
-	timer := ti.metricsClient.StartTimer(scope, metrics.ServiceLatency)
+	var metricsScope metrics.Scope
+	if namespace := GetNamespace(req); namespace != "" {
+		metricsScope = ti.metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespace))
+	} else {
+		metricsScope = ti.metricsClient.Scope(scope).Tagged(metrics.NamespaceUnknownTag())
+	}
+	metricsScope.IncCounter(metrics.ServiceRequests)
+	timer := metricsScope.StartTimer(metrics.ServiceLatency)
 	defer timer.Stop()
 
 	resp, err := handler(ctx, req)
@@ -104,12 +110,19 @@ func (ti *TelemetryInterceptor) handleError(
 		ti.metricsClient.IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
 	case *serviceerror.NotFound:
 		ti.metricsClient.IncCounter(scope, metrics.ServiceErrNotFoundCounter)
-	case *serviceerror.CancellationAlreadyRequested:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceErrCancellationAlreadyRequestedCounter)
 	case *serviceerror.ResourceExhausted:
 		ti.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
 	case *serviceerrors.RetryReplication:
 		ti.metricsClient.IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
+	case *serviceerror.NamespaceAlreadyExists:
+		ti.metricsClient.IncCounter(scope, metrics.ServiceErrNamespaceAlreadyExistsCounter)
+	case *serviceerror.QueryFailed:
+		ti.metricsClient.IncCounter(scope, metrics.ServiceErrQueryFailedCounter)
+	case *serviceerror.ClientVersionNotSupported:
+		ti.metricsClient.IncCounter(scope, metrics.ServiceErrClientVersionNotSupportedCounter)
+	case *serviceerror.DataLoss:
+		ti.metricsClient.IncCounter(scope, metrics.ServiceFailures)
+		ti.logger.Error("internal service error, data loss", tag.Error(err))
 	case *serviceerror.Internal:
 		ti.metricsClient.IncCounter(scope, metrics.ServiceFailures)
 		ti.logger.Error("internal service error", tag.Error(err))

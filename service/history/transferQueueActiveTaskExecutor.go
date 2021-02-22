@@ -1151,13 +1151,6 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 	}
 
 	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-
-	if _, ok := err.(*serviceerror.CancellationAlreadyRequested); ok {
-		// err is CancellationAlreadyRequested
-		// this could happen if target workflow cancellation is already requested
-		// mark as success
-		return nil
-	}
 	return err
 }
 

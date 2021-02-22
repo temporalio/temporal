@@ -26,55 +26,75 @@ package interceptor
 
 import (
 	"context"
-	"time"
+	"sync"
+	"sync/atomic"
 
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/quotas"
-)
-
-const (
-	RateLimitDefaultToken = 1
 )
 
 var (
-	RateLimitServerBusy = serviceerror.NewResourceExhausted("service rate limit exceeded")
+	NamespaceCountLimitServerBusy = serviceerror.NewResourceExhausted("namespace count limit exceeded")
 )
 
 type (
-	RateLimitInterceptor struct {
-		rateLimiter quotas.RateLimiter
-		tokens      map[string]int
+	NamespaceCountLimitInterceptor struct {
+		countFn func(namespace string) int
+		tokens  map[string]int
+
+		sync.Mutex
+		namespaceToCount map[string]*int32
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*RateLimitInterceptor)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = (*NamespaceCountLimitInterceptor)(nil).Intercept
 
-func NewRateLimitInterceptor(
-	rate quotas.RateFn,
+func NewNamespaceCountLimitInterceptor(
+	countFn func(namespace string) int,
 	tokens map[string]int,
-) *RateLimitInterceptor {
-	return &RateLimitInterceptor{
-		rateLimiter: quotas.NewDefaultIncomingDynamicRateLimiter(rate),
-		tokens:      tokens,
+) *NamespaceCountLimitInterceptor {
+	return &NamespaceCountLimitInterceptor{
+		countFn: countFn,
+		tokens:  tokens,
+
+		namespaceToCount: make(map[string]*int32),
 	}
 }
 
-func (i *RateLimitInterceptor) Intercept(
+func (i *NamespaceCountLimitInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	_, methodName := splitMethodName(info.FullMethod)
-	token, ok := i.tokens[methodName]
-	if !ok {
-		token = RateLimitDefaultToken
+	// token will default to 0
+	token, _ := i.tokens[methodName]
+	if token != 0 {
+		namespace := GetNamespace(req)
+		counter := i.counter(namespace)
+		count := atomic.AddInt32(counter, int32(token))
+		defer atomic.AddInt32(counter, -int32(token))
+
+		if int(count) > i.countFn(namespace) {
+			return nil, NamespaceCountLimitServerBusy
+		}
 	}
 
-	if !i.rateLimiter.AllowN(time.Now().UTC(), token) {
-		return nil, RateLimitServerBusy
-	}
 	return handler(ctx, req)
+}
+
+func (i *NamespaceCountLimitInterceptor) counter(
+	namespace string,
+) *int32 {
+	i.Lock()
+	defer i.Unlock()
+
+	count, ok := i.namespaceToCount[namespace]
+	if !ok {
+		counter := int32(0)
+		count = &counter
+		i.namespaceToCount[namespace] = count
+	}
+	return count
 }
