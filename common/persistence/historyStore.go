@@ -347,7 +347,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 		}
 
 		if token.CurrentRangeIndex == notStartedIndex {
-			return nil, nil, 0, nil, serviceerror.NewDataLoss(fmt.Sprintf("branchRange is corrupted"))
+			return nil, nil, 0, nil, serviceerror.NewDataLoss("branchRange is corrupted")
 		}
 	}
 
@@ -437,7 +437,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 				tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
 				tag.Counter(eventCount))
 			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID,
-				serviceerror.NewDataLoss(fmt.Sprintf("corrupted history event batch, wrong version and IDs"))
+				serviceerror.NewDataLoss("corrupted history event batch, wrong version and IDs")
 		}
 
 		if firstEvent.GetVersion() < token.LastEventVersion {
@@ -462,7 +462,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 					tag.TokenLastEventVersion(token.LastEventVersion), tag.TokenLastEventID(token.LastEventID),
 					tag.Counter(eventCount))
 				return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID,
-					serviceerror.NewDataLoss(fmt.Sprintf("corrupted history event batch, eventID is not contiguous"))
+					serviceerror.NewDataLoss("corrupted history event batch, eventID is not contiguous")
 			}
 		}
 
