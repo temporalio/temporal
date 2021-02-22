@@ -695,14 +695,6 @@ func validateJSONs(str string) error {
 	}
 }
 
-func trimSpace(strs []string) []string {
-	result := make([]string, len(strs))
-	for i, v := range strs {
-		result[i] = strings.TrimSpace(v)
-	}
-	return result
-}
-
 func truncate(str string) string {
 	if len(str) > maxOutputStringLength {
 		return str[:maxOutputStringLength]
