@@ -3009,7 +3009,8 @@ func (wh *WorkflowHandler) getRawHistory(
 func (wh *WorkflowHandler) getHistory(
 	namespaceID string,
 	execution commonpb.WorkflowExecution,
-	firstEventID, nextEventID int64,
+	firstEventID int64,
+	nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
@@ -3028,7 +3029,14 @@ func (wh *WorkflowHandler) getHistory(
 		NextPageToken: nextPageToken,
 		ShardID:       convert.Int32Ptr(shardID),
 	})
-	if err != nil {
+	switch err.(type) {
+	case nil:
+		// noop
+	case *serviceerror.DataLoss:
+		// log event
+		wh.GetLogger().Error("encounter data loss event", tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
+		return nil, nil, err
+	default:
 		return nil, nil, err
 	}
 

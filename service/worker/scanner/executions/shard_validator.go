@@ -265,7 +265,6 @@ func fetchHistoryBranch(
 
 	preconditionForDBCall(totalDBRequests, limiter)
 	history, err := historyDB.ReadHistoryBranch(readHistoryBranchReq)
-
 	if err != nil {
 		if errors.Is(err, gocql.ErrNotFound) {
 			return executionValidatorResult{
