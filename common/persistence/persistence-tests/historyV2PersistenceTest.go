@@ -442,7 +442,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 			// read to verify override success, at this point history is corrupted, missing 7/8, so we should only see 6 events
 			_, err = s.readWithError(branch, 1, 25)
-			_, ok := err.(*serviceerror.Internal)
+			_, ok := err.(*serviceerror.DataLoss)
 			s.Equal(true, ok)
 
 			events = s.read(branch, 1, 7)
