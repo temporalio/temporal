@@ -4,11 +4,7 @@ ARG TARGET=server
 ARG GOPROXY
 
 # Build Temporal binaries
-FROM golang:1.15-alpine AS builder
-
-RUN apk add --update --no-cache \
-    make \
-    git
+FROM temporalio/builder:1.0.0 AS builder
 
 # Making sure that dependency is not touched
 ENV GOFLAGS="-mod=readonly"
