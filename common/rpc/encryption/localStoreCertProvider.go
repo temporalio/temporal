@@ -25,19 +25,23 @@
 package encryption
 
 import (
+	"crypto/md5"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"sync"
+	"time"
 
 	"go.temporal.io/server/common/service/config"
 )
 
 var _ CertProvider = (*localStoreCertProvider)(nil)
 var _ ClientCertProvider = (*localStoreCertProvider)(nil)
+var _ CertExpirationChecker = (*localStoreCertProvider)(nil)
 
 type localStoreCertProvider struct {
 	sync.RWMutex
@@ -45,10 +49,12 @@ type localStoreCertProvider struct {
 	tlsSettings       *config.GroupTLS
 	workerTLSSettings *config.WorkerTLS
 
-	serverCert *tls.Certificate
-	clientCert *tls.Certificate
-	clientCAs  *x509.CertPool
-	serverCAs  *x509.CertPool
+	serverCert    *tls.Certificate
+	clientCert    *tls.Certificate
+	clientCAs     *x509.CertPool
+	serverCAs     *x509.CertPool
+	clientCACerts []*x509.Certificate // copies of certs in the clientCAs CertPool for expiration checks
+	serverCACerts []*x509.Certificate // copies of certs in the serverCAs CertPool for expiration checks
 
 	isLegacyWorkerConfig bool
 	legacyWorkerSettings *config.ClientTLS
@@ -64,45 +70,12 @@ func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, err
 }
 
 func (s *localStoreCertProvider) FetchClientCAs() (*x509.CertPool, error) {
-	if len(s.tlsSettings.Server.ClientCAFiles) == 0 && len(s.tlsSettings.Server.ClientCAData) == 0 {
-		return nil, nil
-	}
-
-	s.RLock()
-	if s.clientCAs != nil {
-		defer s.RUnlock()
-		return s.clientCAs, nil
-	}
-
-	s.RUnlock()
-	s.Lock()
-	defer s.Unlock()
-
-	if s.clientCAs != nil {
-		return s.clientCAs, nil
-	}
-
-	clientCaPoolFromFiles, err := buildCAPoolFromFiles(s.tlsSettings.Server.ClientCAFiles)
-	if err != nil {
-		return nil, err
-	}
-
-	clientCaPoolFromData, err := buildCAPoolFromData(s.tlsSettings.Server.ClientCAData)
-	if err != nil {
-		return nil, err
-	}
-
-	if clientCaPoolFromFiles != nil && clientCaPoolFromData != nil {
-		return nil, errors.New("cannot specify both clientCAFiles and clientCAData properties")
-	}
-
-	if clientCaPoolFromData != nil {
-		s.clientCAs = clientCaPoolFromData
-	} else {
-		s.clientCAs = clientCaPoolFromFiles
-	}
-
-	return s.clientCAs, nil
+	return s.fetchCAs(
+		s.tlsSettings.Server.ClientCAFiles,
+		s.tlsSettings.Server.ClientCAData,
+		&s.clientCAs,
+		&s.clientCACerts,
+		"cannot specify both clientCAFiles and clientCAData properties")
 }
 
 func (s *localStoreCertProvider) FetchServerRootCAsForClient(isWorker bool) (*x509.CertPool, error) {
@@ -110,45 +83,61 @@ func (s *localStoreCertProvider) FetchServerRootCAsForClient(isWorker bool) (*x5
 	rootCAFiles := clientSettings.RootCAFiles
 	rootCAData := clientSettings.RootCAData
 
-	if len(rootCAFiles) == 0 && len(rootCAData) == 0 {
+	return s.fetchCAs(
+		rootCAFiles,
+		rootCAData,
+		&s.serverCAs,
+		&s.serverCACerts,
+		"cannot specify both rootCAFiles and rootCAData properties")
+}
+
+func (s *localStoreCertProvider) fetchCAs(
+	files []string,
+	data []string,
+	cached **x509.CertPool,
+	certs *[]*x509.Certificate,
+	duplicateSettingsError string) (*x509.CertPool, error) {
+	if len(files) == 0 && len(data) == 0 {
 		return nil, nil
 	}
 
 	s.RLock()
-	if s.serverCAs != nil {
+	if *cached != nil {
 		defer s.RUnlock()
-		return s.serverCAs, nil
+		return *cached, nil
 	}
 
 	s.RUnlock()
 	s.Lock()
 	defer s.Unlock()
 
-	if s.serverCAs != nil {
-		return s.serverCAs, nil
+	if *cached != nil {
+		return *cached, nil
 	}
 
-	serverCAPoolFromFiles, err := buildCAPoolFromFiles(rootCAFiles)
+	clientCAPoolFromFiles, clientCACertsFromFiles, err := buildCAPoolFromFiles(files)
 	if err != nil {
 		return nil, err
 	}
 
-	serverCAPoolFromData, err := buildCAPoolFromData(rootCAData)
+	clientCaPoolFromData, clientCaCertsFromData, err := buildCAPoolFromData(data)
 	if err != nil {
 		return nil, err
 	}
 
-	if serverCAPoolFromData != nil && serverCAPoolFromFiles != nil {
-		return nil, errors.New("cannot specify both rootCAFiles and rootCAData properties")
+	if clientCAPoolFromFiles != nil && clientCaPoolFromData != nil {
+		return nil, errors.New(duplicateSettingsError)
 	}
 
-	if serverCAPoolFromData != nil {
-		s.serverCAs = serverCAPoolFromData
+	if clientCaPoolFromData != nil {
+		*cached = clientCaPoolFromData
+		*certs = clientCaCertsFromData
 	} else {
-		s.serverCAs = serverCAPoolFromFiles
+		*cached = clientCAPoolFromFiles
+		*certs = clientCACertsFromFiles
 	}
 
-	return s.serverCAs, nil
+	return *cached, nil
 }
 
 func (s *localStoreCertProvider) FetchClientCertificate(isWorker bool) (*tls.Certificate, error) {
@@ -250,58 +239,129 @@ func (s *localStoreCertProvider) getClientTLSSettings(isWorker bool) *config.Cli
 	}
 }
 
-func buildCAPoolFromData(caData []string) (*x509.CertPool, error) {
-	atLeastOneCert := false
-	caPool := x509.NewCertPool()
+func (s *localStoreCertProvider) Expiring(fromNow time.Duration) ([]CertExpirationData, []error) {
 
-	for _, ca := range caData {
-		if ca == "" {
-			continue
-		}
+	list := make([]CertExpirationData, 1)
+	errs := make([]error, 1)
+	when := time.Now().Add(fromNow)
 
-		caBytes, err := base64.StdEncoding.DecodeString(ca)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode ca cert: %v", err)
-		}
+	list, errs = checkTLSCertForExpiration(s.FetchServerCertificate, when, list, errs)
+	list, errs = checkTLSCertForExpiration(
+		func() (*tls.Certificate, error) { return s.FetchClientCertificate(false) },
+		when, list, errs)
+	list, errs = checkTLSCertForExpiration(
+		func() (*tls.Certificate, error) { return s.FetchClientCertificate(true) },
+		when, list, errs)
 
-		if !caPool.AppendCertsFromPEM(caBytes) {
-			return nil, errors.New("unknown failure constructing cert pool for ca")
-		}
-
-		atLeastOneCert = true
+	for _, cert := range s.serverCACerts {
+		list, errs = checkCertForExpiration(
+			func() (*x509.Certificate, error) { return cert, nil },
+			when, list, errs)
 	}
 
-	if !atLeastOneCert {
-		return nil, nil
-	}
-
-	return caPool, nil
+	return list, errs
 }
 
-func buildCAPoolFromFiles(caFiles []string) (*x509.CertPool, error) {
+func checkTLSCertForExpiration(
+	fetchCert func() (*tls.Certificate, error),
+	time time.Time,
+	list []CertExpirationData,
+	errors []error,
+) ([]CertExpirationData, []error) {
+
+	return checkCertForExpiration(
+		func() (*x509.Certificate, error) {
+			cert, err := fetchCert()
+			if err != nil {
+				return nil, err
+			}
+			return cert.Leaf, nil
+		},
+		time, list, errors)
+}
+
+func checkCertForExpiration(
+	fetchCert func() (*x509.Certificate, error),
+	time time.Time,
+	list []CertExpirationData,
+	errors []error,
+) ([]CertExpirationData, []error) {
+
+	cert, err := fetchCert()
+	if err != nil {
+		errors = append(errors, err)
+	}
+	if cert != nil && cert.NotAfter.Before(time) {
+		record := CertExpirationData{
+			Thumbprint: md5.Sum(cert.Raw),
+			Expiration: cert.NotAfter,
+		}
+		list = append(list, record)
+	}
+	return list, errors
+}
+
+func buildCAPoolFromData(caData []string) (*x509.CertPool, []*x509.Certificate, error) {
+
+	return buildCAPool(caData, base64.StdEncoding.DecodeString)
+}
+
+func buildCAPoolFromFiles(caFiles []string) (*x509.CertPool, []*x509.Certificate, error) {
+
+	return buildCAPool(caFiles, ioutil.ReadFile)
+}
+
+func buildCAPool(cas []string, getBytes func(item string) ([]byte, error)) (*x509.CertPool, []*x509.Certificate, error) {
 	atLeastOneCert := false
 	caPool := x509.NewCertPool()
+	certs := make([]*x509.Certificate, 1)
 
-	for _, ca := range caFiles {
+	for _, ca := range cas {
 		if ca == "" {
 			continue
 		}
 
-		caBytes, err := ioutil.ReadFile(ca)
+		caBytes, err := getBytes(ca)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read ca cert from file '%v': %v", ca, err)
+			return nil, nil, fmt.Errorf("failed to decode ca cert: %v", err)
 		}
 
 		if !caPool.AppendCertsFromPEM(caBytes) {
-			return nil, errors.New("unknown failure constructing cert pool for ca")
-		}
+			return nil, nil, errors.New("unknown failure constructing cert pool for ca")
+		} else {
 
+			cert, err := parseCert(caBytes)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to parse x509 certificate: #{err}")
+			}
+			certs = append(certs, cert)
+		}
 		atLeastOneCert = true
 	}
 
 	if !atLeastOneCert {
-		return nil, nil
+		return nil, nil, nil
+	}
+	return caPool, certs, nil
+}
+
+// logic borrowed from tls.X509KeyPair()
+func parseCert(bytes []byte) (*x509.Certificate, error) {
+
+	var certBytes [][]byte
+	for {
+		var certDERBlock *pem.Block
+		certDERBlock, bytes = pem.Decode(bytes)
+		if certDERBlock == nil {
+			break
+		}
+		if certDERBlock.Type == "CERTIFICATE" {
+			certBytes = append(certBytes, certDERBlock.Bytes)
+		}
 	}
 
-	return caPool, nil
+	if len(certBytes[0]) == 0 {
+		return nil, fmt.Errorf("failed to decode PEM certificatew data")
+	}
+	return x509.ParseCertificate(certBytes[0])
 }
