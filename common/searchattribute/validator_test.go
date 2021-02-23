@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package validator
+package searchattribute
 
 import (
 	"testing"
@@ -41,7 +41,7 @@ type searchAttributesValidatorSuite struct {
 }
 
 func TestSearchAttributesValidatorSuite(t *testing.T) {
-	s := new(searchAttributesValidatorSuite)
+	s := &searchAttributesValidatorSuite{}
 	suite.Run(t, s)
 }
 
@@ -50,7 +50,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	sizeOfValueLimit := 5
 	sizeOfTotalLimit := 20
 
-	validator := NewSearchAttributesValidator(log.NewNoop(),
+	validator := NewValidator(log.NewNoop(),
 		dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
@@ -59,7 +59,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	namespace := "namespace"
 	var attr *commonpb.SearchAttributes
 
-	err := validator.ValidateSearchAttributes(attr, namespace)
+	err := validator.Validate(attr, namespace)
 	s.Nil(err)
 
 	intPayload, err := payload.Encode(1)
@@ -70,7 +70,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	attr = &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}
-	err = validator.ValidateSearchAttributes(attr, namespace)
+	err = validator.Validate(attr, namespace)
 	s.Nil(err)
 
 	fields = map[string]*commonpb.Payload{
@@ -79,23 +79,23 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 		"CustomBoolField":    payload.EncodeString("true"),
 	}
 	attr.IndexedFields = fields
-	err = validator.ValidateSearchAttributes(attr, namespace)
-	s.Equal("number of keys 3 exceed limit", err.Error())
+	err = validator.Validate(attr, namespace)
+	s.Equal("number of search attributes 3 exceeds limit 2", err.Error())
 
 	fields = map[string]*commonpb.Payload{
 		"InvalidKey": payload.EncodeString("1"),
 	}
 	attr.IndexedFields = fields
-	err = validator.ValidateSearchAttributes(attr, namespace)
-	s.Equal("InvalidKey is not valid search attribute key", err.Error())
+	err = validator.Validate(attr, namespace)
+	s.Equal("InvalidKey is not a valid search attribute name", err.Error())
 
 	fields = map[string]*commonpb.Payload{
 		"CustomStringField": payload.EncodeString("1"),
 		"CustomBoolField":   payload.EncodeString("123"),
 	}
 	attr.IndexedFields = fields
-	err = validator.ValidateSearchAttributes(attr, namespace)
-	s.Equal("\"123\" is not a valid value for search attribute CustomBoolField", err.Error())
+	err = validator.Validate(attr, namespace)
+	s.Equal("123 is not a valid value for search attribute CustomBoolField", err.Error())
 
 	intArrayPayload, err := payload.Encode([]int{1, 2})
 	s.NoError(err)
@@ -103,28 +103,28 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 		"CustomIntField": intArrayPayload,
 	}
 	attr.IndexedFields = fields
-	err = validator.ValidateSearchAttributes(attr, namespace)
+	err = validator.Validate(attr, namespace)
 	s.NoError(err)
 
 	fields = map[string]*commonpb.Payload{
 		"StartTime": intPayload,
 	}
 	attr.IndexedFields = fields
-	err = validator.ValidateSearchAttributes(attr, namespace)
-	s.Equal("StartTime is read-only Temporal reservered attribute", err.Error())
+	err = validator.Validate(attr, namespace)
+	s.Equal("StartTime is read-only Temporal reserved search attribute", err.Error())
 
 	fields = map[string]*commonpb.Payload{
 		"CustomKeywordField": payload.EncodeString("123456"),
 	}
 	attr.IndexedFields = fields
-	err = validator.ValidateSearchAttributes(attr, namespace)
-	s.Equal("size limit exceed for key CustomKeywordField", err.Error())
+	err = validator.Validate(attr, namespace)
+	s.Equal("search attribute CustomKeywordField exceeds size limit 5", err.Error())
 
 	fields = map[string]*commonpb.Payload{
 		"CustomKeywordField": payload.EncodeString("123"),
 		"CustomStringField":  payload.EncodeString("12"),
 	}
 	attr.IndexedFields = fields
-	err = validator.ValidateSearchAttributes(attr, namespace)
-	s.Equal("total size 44 exceed limit", err.Error())
+	err = validator.Validate(attr, namespace)
+	s.Equal("total search attributes size 44 exceeds limit 20", err.Error())
 }

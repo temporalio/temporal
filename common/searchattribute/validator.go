@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package validator
+package searchattribute
 
 import (
 	"fmt"
@@ -34,12 +34,11 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
-// SearchAttributesValidator is used to validate search attributes
-type SearchAttributesValidator struct {
+// Validator is used to validate search attributes
+type Validator struct {
 	logger log.Logger
 
 	validSearchAttributes             dynamicconfig.MapPropertyFn
@@ -48,15 +47,15 @@ type SearchAttributesValidator struct {
 	searchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
-// NewSearchAttributesValidator create SearchAttributesValidator
-func NewSearchAttributesValidator(
+// NewValidator create Validator
+func NewValidator(
 	logger log.Logger,
 	validSearchAttributes dynamicconfig.MapPropertyFn,
 	searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesSizeOfValueLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesTotalSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
-) *SearchAttributesValidator {
-	return &SearchAttributesValidator{
+) *Validator {
+	return &Validator{
 		logger:                            logger,
 		validSearchAttributes:             validSearchAttributes,
 		searchAttributesNumberOfKeysLimit: searchAttributesNumberOfKeysLimit,
@@ -65,65 +64,61 @@ func NewSearchAttributesValidator(
 	}
 }
 
-// ValidateSearchAttributes validate search attributes are valid for writing and not exceed limits
-func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.SearchAttributes, namespace string) error {
-	if input == nil {
+// Validate validate search attributes are valid for writing and not exceed limits
+func (v *Validator) ValidateAndLog(searchAttributes *commonpb.SearchAttributes, namespace string) error {
+	err := v.Validate(searchAttributes, namespace)
+	v.logger.Error("Error while validating search attributes.", tag.Error(err), tag.WorkflowNamespace(namespace))
+	return err
+}
+
+// Validate validate search attributes are valid for writing and not exceed limits
+func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namespace string) error {
+	if searchAttributes == nil {
 		return nil
 	}
 
 	// verify: number of keys <= limit
-	lengthOfFields := len(input.GetIndexedFields())
-	if lengthOfFields > sv.searchAttributesNumberOfKeysLimit(namespace) {
-		sv.logger.WithTags(tag.Number(int64(lengthOfFields)), tag.WorkflowNamespace(namespace)).
-			Error("number of keys in search attributes exceed limit")
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("number of keys %d exceed limit", lengthOfFields))
+	lengthOfFields := len(searchAttributes.GetIndexedFields())
+	if lengthOfFields > v.searchAttributesNumberOfKeysLimit(namespace) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("number of search attributes %d exceeds limit %d", lengthOfFields, v.searchAttributesNumberOfKeysLimit(namespace)))
 	}
 
 	totalSize := 0
-	typeMap, err := searchattribute.BuildTypeMap(sv.validSearchAttributes)
+	typeMap, err := BuildTypeMap(v.validSearchAttributes)
 	if err != nil {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse search attributes from config: %v", err))
 	}
 
-	for key, val := range input.GetIndexedFields() {
-		// verify: key is whitelisted
-		saType, err := searchattribute.GetType(key, typeMap)
+	for saName, saPayload := range searchAttributes.GetIndexedFields() {
+		// verify: saName is whitelisted
+		saType, err := GetType(saName, typeMap)
 		if err != nil {
-			sv.logger.Error("unable to get search attribute type", tag.ESKey(key), tag.WorkflowNamespace(namespace), tag.Error(err))
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not valid search attribute key", key))
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not a valid search attribute name", saName))
 		}
-		_, err = searchattribute.DecodeValue(val, saType)
+		_, err = DecodeValue(saPayload, saType)
 		if err != nil {
 			var invalidValue interface{}
-			if err := payload.Decode(val, &invalidValue); err != nil {
-				invalidValue = fmt.Sprintf("value from %q", val.String())
+			if err := payload.Decode(saPayload, &invalidValue); err != nil {
+				invalidValue = fmt.Sprintf("value from <%s>", saPayload.String())
 			}
-
-			sv.logger.Error("invalid search attribute value", tag.ESKey(key), tag.Value(invalidValue), tag.WorkflowNamespace(namespace))
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%q is not a valid value for search attribute %s", invalidValue, key))
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not a valid value for search attribute %s", invalidValue, saName))
 		}
 
-		// verify: key is not system reserved
-		if definition.IsSystemIndexedKey(key) {
-			sv.logger.WithTags(tag.ESKey(key), tag.WorkflowNamespace(namespace)).
-				Error("illegal update of system reserved attribute")
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is read-only Temporal reservered attribute", key))
+		// verify: saName is not system reserved
+		if definition.IsSystemIndexedKey(saName) {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is read-only Temporal reserved search attribute", saName))
 		}
 		// verify: size of single value <= limit
-		dataSize := len(val.GetData())
-		if dataSize > sv.searchAttributesSizeOfValueLimit(namespace) {
-			sv.logger.WithTags(tag.ESKey(key), tag.Number(int64(dataSize)), tag.WorkflowNamespace(namespace)).
-				Error("value size of search attribute exceed limit")
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("size limit exceed for key %s", key))
+		dataSize := len(saPayload.GetData())
+		if dataSize > v.searchAttributesSizeOfValueLimit(namespace) {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("search attribute %s exceeds size limit %d", saName, v.searchAttributesSizeOfValueLimit(namespace)))
 		}
-		totalSize += len(key) + dataSize
+		totalSize += len(saName) + dataSize
 	}
 
 	// verify: total size <= limit
-	if totalSize > sv.searchAttributesTotalSizeLimit(namespace) {
-		sv.logger.WithTags(tag.Number(int64(totalSize)), tag.WorkflowNamespace(namespace)).
-			Error("total size of search attributes exceed limit")
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("total size %d exceed limit", totalSize))
+	if totalSize > v.searchAttributesTotalSizeLimit(namespace) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("total search attributes size %d exceeds limit %d", totalSize, v.searchAttributesTotalSizeLimit(namespace)))
 	}
 
 	return nil
