@@ -29,6 +29,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"sync"
+	"time"
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/service/config"
@@ -51,6 +52,9 @@ type localStoreTlsProvider struct {
 	frontendServerConfig  *tls.Config
 	frontendClientConfig  *tls.Config
 }
+
+var _ TLSConfigProvider = (*localStoreTlsProvider)(nil)
+var _ CertExpirationChecker = (*localStoreTlsProvider)(nil)
 
 func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS) (TLSConfigProvider, error) {
 	internodeProvider := &localStoreCertProvider{tlsSettings: &tlsConfig.Internode}
@@ -113,6 +117,34 @@ func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) 
 			return newServerTLSConfig(s.internodeCertProvider, nil)
 		},
 		s.internodeCertProvider.GetSettings().IsEnabled())
+}
+
+func (s *localStoreTlsProvider) Expiring(fromNow time.Duration) ([]CertExpirationData, []error) {
+
+	list := make([]CertExpirationData, 1)
+	errs := make([]error, 1)
+
+	list, errs = expiring(s.internodeCertProvider, fromNow, list, errs)
+	list, errs = expiring(s.frontendCertProvider, fromNow, list, errs)
+	list, errs = expiring(s.workerCertProvider, fromNow, list, errs)
+	list, errs = expiring(s.frontendPerHostCertProviderFactory, fromNow, list, errs)
+
+	return list, errs
+}
+
+func expiring(provider interface{}, fromNow time.Duration, list []CertExpirationData, errs []error) ([]CertExpirationData, []error) {
+
+	p, ok := provider.(CertExpirationChecker)
+	if ok {
+		l, err := p.Expiring(fromNow)
+		if len(l) != 0 {
+			list = append(list, l...)
+		}
+		if len(err) != 0 {
+			errs = append(errs, err...)
+		}
+	}
+	return list, errs
 }
 
 func (s *localStoreTlsProvider) getOrCreateConfig(
