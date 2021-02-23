@@ -121,8 +121,8 @@ func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) 
 
 func (s *localStoreTlsProvider) Expiring(fromNow time.Duration) ([]CertExpirationData, []error) {
 
-	list := make([]CertExpirationData, 1)
-	errs := make([]error, 1)
+	list := make([]CertExpirationData, 0)
+	errs := make([]error, 0)
 
 	list, errs = expiring(s.internodeCertProvider, fromNow, list, errs)
 	list, errs = expiring(s.frontendCertProvider, fromNow, list, errs)

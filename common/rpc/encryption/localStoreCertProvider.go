@@ -65,6 +65,10 @@ func (s *localStoreCertProvider) GetSettings() *config.GroupTLS {
 }
 
 func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, error) {
+
+	if s.tlsSettings == nil {
+		return nil, nil
+	}
 	return s.FetchCertificate(&s.serverCert, s.tlsSettings.Server.CertFile, s.tlsSettings.Server.CertData,
 		s.tlsSettings.Server.KeyFile, s.tlsSettings.Server.KeyData)
 }
@@ -143,10 +147,12 @@ func (s *localStoreCertProvider) fetchCAs(
 func (s *localStoreCertProvider) FetchClientCertificate(isWorker bool) (*tls.Certificate, error) {
 	if isWorker {
 		return s.fetchWorkerCertificate()
-	} else {
-		return s.FetchCertificate(&s.clientCert, s.tlsSettings.Server.CertFile, s.tlsSettings.Server.CertData,
-			s.tlsSettings.Server.KeyFile, s.tlsSettings.Server.KeyData)
 	}
+	if s.tlsSettings == nil {
+		return nil, nil
+	}
+	return s.FetchCertificate(&s.clientCert, s.tlsSettings.Server.CertFile, s.tlsSettings.Server.CertData,
+		s.tlsSettings.Server.KeyFile, s.tlsSettings.Server.KeyData)
 }
 
 func (s *localStoreCertProvider) fetchWorkerCertificate() (*tls.Certificate, error) {
@@ -154,8 +160,11 @@ func (s *localStoreCertProvider) fetchWorkerCertificate() (*tls.Certificate, err
 		return s.FetchCertificate(&s.clientCert, s.tlsSettings.Server.CertFile, s.tlsSettings.Server.CertData,
 			s.tlsSettings.Server.KeyFile, s.tlsSettings.Server.KeyData)
 	} else {
-		return s.FetchCertificate(&s.clientCert, s.workerTLSSettings.CertFile, s.workerTLSSettings.CertData,
-			s.workerTLSSettings.KeyFile, s.workerTLSSettings.KeyData)
+		if s.workerTLSSettings != nil {
+			return s.FetchCertificate(&s.clientCert, s.workerTLSSettings.CertFile, s.workerTLSSettings.CertData,
+				s.workerTLSSettings.KeyFile, s.workerTLSSettings.KeyData)
+		}
+		return nil, nil
 	}
 }
 
@@ -241,8 +250,8 @@ func (s *localStoreCertProvider) getClientTLSSettings(isWorker bool) *config.Cli
 
 func (s *localStoreCertProvider) Expiring(fromNow time.Duration) ([]CertExpirationData, []error) {
 
-	list := make([]CertExpirationData, 1)
-	errs := make([]error, 1)
+	list := make([]CertExpirationData, 0)
+	errs := make([]error, 0)
 	when := time.Now().Add(fromNow)
 
 	list, errs = checkTLSCertForExpiration(s.FetchServerCertificate, when, list, errs)
@@ -275,7 +284,10 @@ func checkTLSCertForExpiration(
 			if err != nil {
 				return nil, err
 			}
-			return cert.Leaf, nil
+			if cert == nil {
+				return nil, nil
+			}
+			return x509.ParseCertificate(cert.Certificate[0])
 		},
 		time, list, errors)
 }
