@@ -27,6 +27,7 @@ package encryption
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"time"
 
 	"go.temporal.io/server/common/service/config"
 )
@@ -58,6 +59,15 @@ type (
 	// PerHostCertProviderFactory creates a CertProvider in the context of a specific Domain.
 	PerHostCertProviderFactory interface {
 		GetCertProvider(hostName string) (CertProvider, error)
+	}
+
+	CertExpirationData struct {
+		Thumbprint [16]byte
+		Expiration time.Time
+	}
+
+	CertExpirationChecker interface {
+		Expiring(fromNow time.Duration) ([]CertExpirationData, []error)
 	}
 
 	tlsConfigConstructor func() (*tls.Config, error)
